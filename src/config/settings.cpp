@@ -1812,13 +1812,20 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         // know. Surface it on the settings-side log too so users
         // grepping `lcConfig` see the failure, and skip the aggregate
         // `settingsChanged()` emit so dirty-state trackers don't
-        // believe the write made it to disk. Roll the in-memory store
-        // back to its on-disk state (mirrors the reset() rollback
-        // below) so subsequent reads through this Settings instance
-        // return the same view as cross-process consumers reading the
-        // unmodified file — without this, the in-memory state would
-        // diverge from disk indefinitely until the next save/load
-        // cycle.
+        // believe the write made it to disk. Then try to roll the
+        // in-memory store back to its on-disk state (mirrors the
+        // reset() rollback below) so subsequent reads through this
+        // Settings instance return the same view as cross-process
+        // consumers reading the unmodified file.
+        //
+        // BEST-EFFORT, not guaranteed: load() deliberately keeps the
+        // in-memory set when it cannot read the file, and an unreadable
+        // file is a plausible reason the persist failed in the first
+        // place. In that double failure the in-memory state stays
+        // diverged from disk until the next successful save or load.
+        // Nothing better is available here — inventing a second recovery
+        // path for a store we already know we cannot write would be
+        // guessing.
         qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
                             << axisInt;
         m_ruleStore->load();

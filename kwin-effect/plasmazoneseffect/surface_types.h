@@ -485,6 +485,16 @@ struct SurfaceMultipassState
     /// cross-monitor animations).
     qint64 backdropFrameMs = -1;
 
+    /// The output rect of the last capture that wrote backdropRect.
+    ///
+    /// This, and NOT a clock, is what separates one accumulation generation from the next. A
+    /// canvas straddling two outputs is blitted once per output, and those slices must UNION
+    /// into one valid rect — but the next blit from the SAME output is a new frame of the
+    /// same window and must RESTART the rect, or a window that has moved keeps claiming
+    /// canvas it no longer captures. Outputs have independent frame clocks, so no clock can
+    /// tell those two cases apart.
+    QRectF backdropOutputRect;
+
     /// A backdrop repaint has been ASKED FOR and has not yet produced a fold.
     ///
     /// The backdrop driver is the one repaint source with no damage behind it: the scene

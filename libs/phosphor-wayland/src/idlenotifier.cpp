@@ -51,22 +51,30 @@ public:
         if (timeout.count() <= 0)
             return;
         auto* integration = LayerShellIntegration::instance();
-        if (!integration)
+        if (!integration) {
+            qCWarning(lcIdleNotifier) << "Idle notification not armed: no Wayland integration";
             return;
+        }
         auto* notifier = integration->idleNotifier();
-        if (!notifier)
+        if (!notifier) {
+            qCWarning(lcIdleNotifier) << "Idle notification not armed: compositor advertises no ext-idle-notifier";
             return;
+        }
         auto* display = integration->display();
-        if (!display)
+        if (!display) {
+            qCWarning(lcIdleNotifier) << "Idle notification not armed: no Wayland display";
             return;
+        }
         auto seats = display->inputDevices();
         if (seats.isEmpty()) {
             qCWarning(lcIdleNotifier) << "No input seat available for idle notification";
             return;
         }
         struct wl_seat* seat = seats.first()->wl_seat();
-        if (!seat)
+        if (!seat) {
+            qCWarning(lcIdleNotifier) << "Idle notification not armed: the seat has no wl_seat";
             return;
+        }
         static const struct ext_idle_notification_v1_listener listener = {
             .idled = handleIdled,
             .resumed = handleResumed,

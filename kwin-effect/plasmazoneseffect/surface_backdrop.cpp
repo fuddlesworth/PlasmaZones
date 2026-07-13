@@ -73,7 +73,6 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // rect at this capture's slice.
     const qint64 pinned = m_shaderManager.currentFrameClockMs();
     const qint64 frameStamp = pinned >= 0 ? pinned : ShaderInternal::shaderClockNowMs();
-    constexpr qint64 kAccumulationWindowMs = 50;
     // Snapshot GL state BEFORE the realloc branch's clear (which sets the clear
     // colour to transparent): the guard must capture the pristine ambient state
     // so it hands blend/viewport/scissor/clear-colour back the way it found them
@@ -142,8 +141,15 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     if (sourceLogicalF.isEmpty()) {
         return; // keep whatever another output captured
     }
-    const bool sameGeneration =
-        state.backdropFrameMs >= 0 && qAbs(frameStamp - state.backdropFrameMs) < kAccumulationWindowMs;
+    // A new generation starts when THIS OUTPUT blits again; a sibling output blitting into
+    // the same canvas joins the current one. The generation cannot be decided by a clock:
+    // outputs have independent frame clocks, which is why the wall-clock window this used to
+    // use never expired at all (16ms at 60Hz, well under the 50ms window), so backdropRect
+    // only ever grew to the union and never contracted. A window dragged half off its output
+    // then kept a valid rect covering canvas it no longer captures, the clamp stopped biting,
+    // and the overhanging band sampled a frozen reflection of where the window used to be.
+    const QRectF outputRect = viewport.renderRect();
+    const bool sameGeneration = state.backdropFrameMs >= 0 && outputRect != state.backdropOutputRect;
     if (!state.backdropFbo) {
         state.backdropTex.reset();
         state.backdropSize = QSize();
@@ -189,6 +195,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     }
     state.backdropRect = destNorm;
     state.backdropFrameMs = frameStamp;
+    state.backdropOutputRect = outputRect;
 }
 
 } // namespace PlasmaZones

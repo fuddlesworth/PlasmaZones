@@ -708,7 +708,10 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, co
 
     QVariant validated = validatePerScreenValue(key, value);
     if (!validated.isValid()) {
-        qCWarning(lcConfig) << "Unknown or invalid per-screen zone selector key:" << key;
+        // DEBUG, and the value is not echoed — the same reasoning as the autotile twin
+        // below, reached over the same bus by the same caller. Demoting one of the two and
+        // leaving the other is not a fix, it is a door left open beside a locked one.
+        qCDebug(lcConfig) << "Rejected per-screen zone selector setting" << key;
         return;
     }
 

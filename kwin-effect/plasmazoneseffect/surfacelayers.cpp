@@ -300,6 +300,16 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // byte-identical. The flag stays set until a fold that actually folds something
         // clears it — and a chain that starts varying per frame (a recompile lands, a pack
         // starts animating) stops taking this path and clears it on its next real fold.
+        //
+        // The HOVER flag is the opposite, and the two are not symmetric. Reaching here proves
+        // compositeValid survived planSurfaceFold, and planSurfaceFold clears compositeValid
+        // whenever the fold cursor differs from the folded one — so the composite provably
+        // already reflects the live cursor and the hover repaint HAS been serviced. Leaving
+        // it set deadlocked the hover driver outright: it hard-skips any window whose flag is
+        // set, so a pure iMouse chain (classified static, because iMouse is state and not a
+        // per-frame input) armed the flag once, took this path, and never hover-updated again
+        // for the rest of the session.
+        state.hoverRepaintPending = false;
         return state.compositeTex[state.finalSlot].get();
     }
 
@@ -408,6 +418,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // own sampler location being -1 must not zero the gate.
             const bool backdropAvailable = backdropUsable(state);
             const bool passHasBackdrop = pass.uBackdropLoc >= 0 && backdropAvailable;
+            bool passBackdropUnitBound = false; ///< the transparent fallback went to unit 5
             bool passAudioBound = false;
             {
                 KWin::ShaderBinder binder(pass.shader.get());
@@ -438,6 +449,20 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     glActiveTexture(GL_TEXTURE5);
                     state.backdropTex->bind();
                     glActiveTexture(GL_TEXTURE0);
+                } else if (pass.uBackdropLoc >= 0) {
+                    // DECLARED but with nothing to supply (first frame, a failed blit, a
+                    // window entirely off its output). An unset sampler2D reads unit 0, and
+                    // unit 0 holds the RUNNING COMPOSITE — so the pack would sample the
+                    // window back into itself. Every other declared-but-unbacked sampler in
+                    // this fold gets the transparent fallback and says why; uBackdrop was the
+                    // one exception, safe only because every bundled pack happens to gate on
+                    // uHasBackdrop first. A third-party pack that does not is not a bug in
+                    // the pack.
+                    pass.shader->setUniform(pass.uBackdropLoc, 5);
+                    glActiveTexture(GL_TEXTURE5);
+                    transparentFallbackTexture()->bind();
+                    glActiveTexture(GL_TEXTURE0);
+                    passBackdropUnitBound = true;
                 }
                 if (pass.uBackdropRectLoc >= 0) {
                     pass.shader->setUniform(pass.uBackdropRectLoc, state.backdropRect);
@@ -522,7 +547,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 glActiveTexture(GL_TEXTURE1 + static_cast<int>(j));
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
-            if (passHasBackdrop) {
+            if (passHasBackdrop || passBackdropUnitBound) {
                 glActiveTexture(GL_TEXTURE5);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
@@ -548,6 +573,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // bind (frost's main reads the blurred buffers, not uBackdrop).
         const bool backdropAvailable = backdropUsable(state);
         const bool mainHasBackdrop = pk->uBackdropLoc >= 0 && backdropAvailable;
+        bool mainBackdropUnitBound = false; ///< the transparent fallback went to unit 5
         bool mainAudioBound = false;
         bool mainUserTexturesBound = false;
         // Highest iChannel unit bound by the main pass, +1. Tracked rather than
@@ -625,6 +651,14 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 glActiveTexture(GL_TEXTURE5);
                 state.backdropTex->bind();
                 glActiveTexture(GL_TEXTURE0);
+            } else if (pk->uBackdropLoc >= 0) {
+                // Declared with nothing behind it — the transparent fallback, for the reason
+                // given on the buffer-pass sibling above. Unit 0 is the running composite.
+                pk->shader->setUniform(pk->uBackdropLoc, 5);
+                glActiveTexture(GL_TEXTURE5);
+                transparentFallbackTexture()->bind();
+                glActiveTexture(GL_TEXTURE0);
+                mainBackdropUnitBound = true;
             }
             if (pk->uBackdropRectLoc >= 0) {
                 pk->shader->setUniform(pk->uBackdropRectLoc, state.backdropRect);
@@ -685,7 +719,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             glActiveTexture(GL_TEXTURE1 + i);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
-        if (mainHasBackdrop) {
+        if (mainHasBackdrop || mainBackdropUnitBound) {
             glActiveTexture(GL_TEXTURE5);
             glBindTexture(GL_TEXTURE_2D, 0);
         }

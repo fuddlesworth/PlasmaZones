@@ -108,9 +108,11 @@ public Q_SLOTS:
      * Applies all values via the setter registry, saves once (synchronously), and lets
      * the config backend's change notification propagate settingsChanged.
      *
-     * An unknown key is logged as a WARNING and makes the call return false — writing a
-     * key nobody knows is a caller bug, not an optional probe — but it does not abort
-     * the batch: every key that IS known still gets applied.
+     * An unknown key makes the call return false — writing a key nobody knows is a caller
+     * bug, not an optional probe — but it does not abort the batch: every key that IS known
+     * still gets applied. It is logged at DEBUG, not warning: the key comes from whoever is
+     * on the session bus, and a warning let any process fill the daemon's log with content
+     * of its own choosing. The `false` is the real signal.
      *
      * @param settings Map of setting key -> value
      * @return true if every key was found in the registry and its setter succeeded
@@ -135,17 +137,19 @@ public Q_SLOTS:
      * instead of N sequential calls.
      *
      * Unknown keys inside @p values are passed through to the underlying
-     * Settings method, which logs a warning and no-ops — consistent with
-     * single-key behavior.
+     * Settings method, which no-ops and logs at DEBUG (the key is caller-supplied; see
+     * setSettings) — consistent with single-key behavior.
      *
      * @param screenId Virtual or physical screen identifier
-     * @param category "autotile" | "snapping" | "zoneSelector"
+     * @param category "autotile" | "snapping" | "zoneSelector". NOTE: "snapping" is
+     *                 READ-ONLY (it projects the config's per-monitor gaps), so a write to
+     *                 it is rejected and does nothing. Write those through "autotile".
      * @param values   Map of key -> value. QDBusArgument-wrapped values
      *                 from the wire are unwrapped via DBusVariantUtils
      *                 before reaching the setter.
-     * @return true if the category was recognized and the batch ran
-     *         against a concrete Settings backend; false if the category
-     *         was unknown or no concrete Settings was available.
+     * @return true if the category was recognized and writable, and the batch ran; false if
+     *         the category was unknown, or is the read-only "snapping" projection. (There is
+     *         no longer any concrete-backend check — the dispatch runs against ISettings.)
      *         Per-key failures are logged by the underlying Settings but
      *         cannot be surfaced here since the setters return void.
      */

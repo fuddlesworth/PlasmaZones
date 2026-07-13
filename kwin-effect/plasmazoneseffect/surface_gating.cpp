@@ -302,11 +302,27 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
                 // — the same reasoning the not-yet-compiled case already uses.
                 continue;
             }
+            // A repaint already ASKED FOR is not asked for again. Without this, the one-shot
+            // protects repaintHoverDecorations and this driver spins in its place: an occluded
+            // window is never painted, so its foldedCursor can never advance, so this
+            // comparison is true on every frame and drives a full repaint at vsync forever.
+            // The flag is the whole termination condition and both drivers have to honour it.
+            if (sit->second.hoverRepaintPending) {
+                continue;
+            }
             // Compare EXACTLY what the fold keys on. See foldCursorFor.
             KWin::EffectWindow* const sw = findWindowById(windowId);
+            // Same exact-id / deleted discipline as every other findWindowById consumer: the
+            // fuzzy appId fallback can resolve a same-app SIBLING for a stale id, and this
+            // window's mayAnimate would then be decided by another window entirely — a
+            // comparison that can never converge, which is a vsync repaint loop.
+            if (!sw || getWindowId(sw) != windowId || sw->isDeleted()) {
+                continue;
+            }
             if (sit->second.foldedCursor
                 != foldCursorFor(sw, sit->second.canvasGeo, decorationMayAnimate(sw),
                                  m_shaderManager.m_cachedCursorGlobal)) {
+                sit->second.hoverRepaintPending = true;
                 return true;
             }
         }

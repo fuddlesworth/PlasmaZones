@@ -44,7 +44,7 @@ namespace PlasmaZones::TestHelpers {
 /// and loosening this one is how it came to be broken repeatedly. Strip the comments and
 /// it counts only code. String literals are left alone: a key IS a string literal, so they
 /// are the one thing the scrape must still be able to see.
-QString withoutComments(const QString& src)
+inline QString withoutComments(const QString& src)
 {
     QString out;
     out.reserve(src.size());
@@ -144,7 +144,7 @@ QString withoutComments(const QString& src)
     return out;
 }
 
-QString readSource(const QString& path, QString* whyFailed)
+inline QString readSource(const QString& path, QString* whyFailed)
 {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -175,7 +175,7 @@ QString readSource(const QString& path, QString* whyFailed)
 
 /// Index of the brace/paren matching the one at @p open, or -1. String and char literals
 /// are skipped so a brace inside GLSL or a quote inside a literal cannot throw off the count.
-qsizetype matchDelimiter(const QString& s, qsizetype open, QChar closeCh)
+inline qsizetype matchDelimiter(const QString& s, qsizetype open, QChar closeCh)
 {
     const QChar openCh = s.at(open);
     int depth = 0;
@@ -205,7 +205,7 @@ qsizetype matchDelimiter(const QString& s, qsizetype open, QChar closeCh)
 
 /// Split an argument or parameter list on its TOP-LEVEL commas (a nested call, template
 /// argument list, or braced initializer keeps its own commas).
-QStringList splitTopLevel(const QString& args)
+inline QStringList splitTopLevel(const QString& args)
 {
     QStringList out;
     int depth = 0;
@@ -241,7 +241,7 @@ struct SourceFn
 /// `QString` by value, `const QString &` with the reference on the name, `QStringView`.
 /// Pinning one spelling is how a wrapper escapes discovery entirely: undiscovered, its call
 /// sites land in neither the numerator nor the denominator, and its keys simply vanish.
-QStringList keyParamsOf(const QString& params)
+inline QStringList keyParamsOf(const QString& params)
 {
     static const QRegularExpression paramRe(
         QLatin1String("(?:^|\\s)(?:const\\s+)?(QString|QStringView)\\s*&?\\s*([A-Za-z0-9_]+)\\s*$"));
@@ -256,7 +256,7 @@ QStringList keyParamsOf(const QString& params)
 }
 
 /// Every function and named lambda in @p src, with brace-matched bodies.
-QList<SourceFn> functionsIn(const QString& src)
+inline QList<SourceFn> functionsIn(const QString& src)
 {
     QList<SourceFn> fns;
     // A named lambda: `const auto f = [this](const QString& name, …) { … }`.
@@ -316,7 +316,7 @@ QList<SourceFn> functionsIn(const QString& src)
 /// @p unresolved is set when the call names a SettingProperty the constants scrape could
 /// not resolve — that is LOUD, never silent: the call has the right SHAPE, so the tally
 /// balances perfectly while the key it fetches is never compared against the registry.
-QString keyNamedBy(const QString& args, const QHash<QString, QString>& constants, QString* unresolved)
+inline QString keyNamedBy(const QString& args, const QHash<QString, QString>& constants, QString* unresolved)
 {
     static const QRegularExpression keyRe(
         QLatin1String("QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"
@@ -335,11 +335,18 @@ QString keyNamedBy(const QString& args, const QHash<QString, QString>& constants
     return resolved;
 }
 
-/// Is @p offset inside the body of any function in @p fns whose name is in @p names?
-bool insideBodyOf(const QList<SourceFn>& fns, const QSet<QString>& names, qsizetype offset)
+/// Is @p offset inside the body of a function that is BOTH a known fetcher AND actually
+/// takes a key parameter?
+///
+/// The key-parameter requirement is not decoration. Matching on the name alone lets an
+/// unrelated OVERLOAD launder a real fetch: once a wrapper `load(const QString&)` joins the
+/// set, every fetch inside any function named `load` in that file — including a `load()`
+/// that takes no key at all — is exempted as plumbing. Plumbing is a call that forwards a
+/// key it was HANDED, so a function with no key to hand cannot be doing it.
+inline bool insideBodyOf(const QList<SourceFn>& fns, const QSet<QString>& names, qsizetype offset)
 {
     for (const SourceFn& fn : fns) {
-        if (names.contains(fn.name) && offset > fn.bodyStart && offset < fn.bodyEnd) {
+        if (names.contains(fn.name) && !fn.keyParams.isEmpty() && offset > fn.bodyStart && offset < fn.bodyEnd) {
             return true;
         }
     }
@@ -374,7 +381,7 @@ bool insideBodyOf(const QList<SourceFn>& fns, const QSet<QString>& names, qsizet
 /// a fetch written in a shape this function does not know would otherwise simply not be
 /// seen, and the test would pass green on precisely the bug it exists to catch. It has done
 /// exactly that eight times.
-QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
+inline QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
 {
     const QString constantsSrc =
         readSource(QStringLiteral(PLASMAZONES_PROTOCOL_INC_DIR "/PhosphorProtocol/ServiceConstants.h"), whyFailed);
@@ -511,10 +518,18 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
     });
     const QRegularExpression callRe(
         QStringLiteral("(?<![A-Za-z0-9_])(?:%1)\\s*\\(").arg(fetcherNames.join(QLatin1Char('|'))));
-    // A SIGNATURE, not a call: a declaration or definition of a fetcher. Its parameter list
-    // names the type. A call's arguments never contain the bare token `QString` (QStringLiteral
-    // does not match — the boundary fails on the 'L').
-    static const QRegularExpression signatureRe(QLatin1String("\\bQString\\b|\\bQStringView\\b"));
+    // A SIGNATURE, not a call: a declaration or definition of a fetcher, whose argument list
+    // is a PARAMETER list. Recognised by keyParamsOf, which anchors each top-level argument
+    // and so only fires on an argument that IS `QString ident` — never on a call whose lambda
+    // body merely mentions the type.
+    //
+    // This used to search the whole argument text for the token `QString`, on the reasoning
+    // that "a call's arguments never contain it". They do. Any callback that opens with
+    // `const QString s = v.toString();` put the token inside the argument list, so the call
+    // was misread as a declaration and skipped — no key scraped, and NOTHING reported. Seven
+    // real fetches were being silently dropped by exactly that, and the test was green
+    // because all seven keys happened to be registered. Delete one registration and it would
+    // have stayed green while the setting died.
 
     QStringList keys;
     for (const QString& path : files) {
@@ -530,7 +545,7 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
                 continue;
             }
             const QString args = src.mid(paren + 1, close - paren - 1);
-            if (args.trimmed().isEmpty() || signatureRe.match(args).hasMatch()) {
+            if (args.trimmed().isEmpty() || !keyParamsOf(args).isEmpty()) {
                 continue; // the fetcher's own declaration or definition — it names no key
             }
             QString unresolved;
@@ -581,7 +596,7 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
 /// A fetcher's call sites must NAME their keys: a literal in the argument list, or a named
 /// QStringList of literals declared in the same file (the batch shape). Every element of
 /// that list must be a literal — not merely one of them.
-QStringList keysFetchedByEditor(QString* whyFailed, QStringList* unaccounted)
+inline QStringList keysFetchedByEditor(QString* whyFailed, QStringList* unaccounted)
 {
     static const QSet<QString> notSource{QStringLiteral("md"),  QStringLiteral("txt"), QStringLiteral("json"),
                                          QStringLiteral("qml"), QStringLiteral("in"),  QStringLiteral("cmake"),
@@ -666,7 +681,21 @@ QStringList keysFetchedByEditor(QString* whyFailed, QStringList* unaccounted)
     });
     const QRegularExpression callRe(
         QStringLiteral("(?<![A-Za-z0-9_])(?:%1)\\s*\\(").arg(fetcherNames.join(QLatin1Char('|'))));
-    static const QRegularExpression signatureRe(QLatin1String("\\bQString\\b|\\bQStringList\\b|\\bQVariantList\\b"));
+    // A declaration, recognised by PARAMETER SHAPE — see the note in keysFetchedByEffect.
+    // Searching the argument text for `QStringList` was even worse here than the effect's
+    // version: it made the most natural way anyone would write an inline batch fetch,
+    // querySettingsBatch(QStringList{QStringLiteral("a"), QStringLiteral("b")}), read as the
+    // helper's own declaration. Zero keys scraped, zero unaccounted, test green.
+    static const QRegularExpression declParamRe(QLatin1String(
+        "(?:^|\\s)(?:const\\s+)?(QString|QStringView|QStringList|QVariantList)\\s*&?\\s*[A-Za-z0-9_]+\\s*$"));
+    const auto isDeclaration = [](const QString& argList) {
+        for (const QString& arg : splitTopLevel(argList)) {
+            if (declParamRe.match(arg).hasMatch()) {
+                return true;
+            }
+        }
+        return false;
+    };
 
     for (const QString& path : files) {
         const QString& src = sources[path];
@@ -679,13 +708,39 @@ QStringList keysFetchedByEditor(QString* whyFailed, QStringList* unaccounted)
                 continue;
             }
             const QString args = src.mid(paren + 1, close - paren - 1);
-            if (args.trimmed().isEmpty() || signatureRe.match(args).hasMatch()) {
+            if (args.trimmed().isEmpty() || isDeclaration(args)) {
                 continue; // the helper's own declaration / definition — it names no key
             }
             if (insideBodyOf(functions[path], fetchers, m.capturedStart(0))) {
                 continue; // plumbing: one helper calling another
             }
-            // A key named right here.
+            // A BRACED list of keys, inline: querySettingsBatch({QStringLiteral("a"), ...}).
+            // Every element must be a literal, exactly as the named-list path below demands —
+            // this used to take match() rather than globalMatch() and so contributed only the
+            // FIRST key of the list, silently dropping the rest.
+            const qsizetype brace = args.indexOf(QLatin1Char('{'));
+            const qsizetype braceEnd = brace >= 0 ? matchDelimiter(args, brace, QLatin1Char('}')) : -1;
+            if (braceEnd > brace) {
+                const QStringList elements = splitTopLevel(args.mid(brace + 1, braceEnd - brace - 1));
+                for (const QString& element : elements) {
+                    const auto em = literalRe.match(element.trimmed());
+                    if (!em.hasMatch()) {
+                        *unaccounted << QStringLiteral(
+                                            "%1: an inline batch key list has an element the scrape cannot "
+                                            "read as a literal key (%2)")
+                                            .arg(QFileInfo(path).fileName(), element.trimmed());
+                        continue;
+                    }
+                    keys << em.captured(1);
+                }
+                continue;
+            }
+            // A single-key fetch: the key is the FIRST literal in the argument list. The
+            // arguments after it are the caller's fallback value, which is very often a
+            // literal too — demanding that every argument be a key would fail the test on
+            // perfectly good code, and a tripwire that cries wolf is a tripwire someone
+            // eventually loosens. That is not a hypothetical: it is how this file was broken
+            // twice.
             const auto lm = literalRe.match(args);
             if (lm.hasMatch()) {
                 keys << lm.captured(1);

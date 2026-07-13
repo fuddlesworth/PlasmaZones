@@ -183,34 +183,49 @@ public:
         Q_EMIT showZonesOnAllMonitorsChanged();
         Q_EMIT settingsChanged();
     }
-    QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode) const override
+    QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const override
     {
-        return {};
+        return m_disabledMonitors.value(static_cast<int>(mode));
     }
-    void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
+    void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override
     {
+        if (m_disabledMonitors.value(static_cast<int>(mode)) == entries) {
+            return;
+        }
+        m_disabledMonitors.insert(static_cast<int>(mode), entries);
+        Q_EMIT settingsChanged();
     }
-    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode, const QString&) const override
+    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const override
     {
-        return false;
+        return m_disabledMonitors.value(static_cast<int>(mode)).contains(screenIdOrName);
     }
-    QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode) const override
+    QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const override
     {
-        return {};
+        return m_disabledDesktops.value(static_cast<int>(mode));
     }
-    void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
+    void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override
     {
+        if (m_disabledDesktops.value(static_cast<int>(mode)) == entries) {
+            return;
+        }
+        m_disabledDesktops.insert(static_cast<int>(mode), entries);
+        Q_EMIT settingsChanged();
     }
     bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode, const QString& /*screenIdOrName*/, int) const override
     {
         return false;
     }
-    QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode) const override
+    QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const override
     {
-        return {};
+        return m_disabledActivities.value(static_cast<int>(mode));
     }
-    void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
+    void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override
     {
+        if (m_disabledActivities.value(static_cast<int>(mode)) == entries) {
+            return;
+        }
+        m_disabledActivities.insert(static_cast<int>(mode), entries);
+        Q_EMIT settingsChanged();
     }
     bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode, const QString& /*screenIdOrName*/,
                             const QString&) const override
@@ -1571,8 +1586,17 @@ public:
         // accessors stay coherent for any test that reads the JSON facade.
         return QString::fromUtf8(QJsonDocument(decorationProfileTree().toJson()).toJson(QJsonDocument::Compact));
     }
-    void setDecorationProfileTreeJson(const QString&) override
+    void setDecorationProfileTreeJson(const QString& json) override
     {
+        // Parse into the SAME tree the typed accessor exposes, so set-then-get round-trips.
+        // Dropping the value made this the one key the effect fetches by SettingProperty
+        // that no stub-backed test could move — while the comment below boasted "real
+        // storage, not no-op setters".
+        const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        if (doc.isNull() || !doc.isObject()) {
+            return;
+        }
+        setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
     }
 
     // Decorations.Performance (ISettings). Real storage, not no-op setters: the
@@ -1903,12 +1927,23 @@ public:
         Q_EMIT lockedScreensChanged();
         Q_EMIT settingsChanged();
     }
-    bool isScreenLocked(const QString&) const override
+    bool isScreenLocked(const QString& screenId) const override
     {
-        return false;
+        return m_lockedScreens.contains(screenId);
     }
-    void setScreenLocked(const QString&, bool) override
+    void setScreenLocked(const QString& screenId, bool locked) override
     {
+        const bool had = m_lockedScreens.contains(screenId);
+        if (had == locked) {
+            return;
+        }
+        if (locked) {
+            m_lockedScreens.append(screenId);
+        } else {
+            m_lockedScreens.removeAll(screenId);
+        }
+        Q_EMIT lockedScreensChanged();
+        Q_EMIT settingsChanged();
     }
     bool isContextLocked(const QString&, int, const QString&) const override
     {
@@ -1985,19 +2020,24 @@ public:
 private:
     QHash<QString, QVariantMap> m_perScreenAutotile;
     QString m_defaultLayoutId;
-    bool m_suppressDefaultLayoutAssignment = false;
+    bool m_suppressDefaultLayoutAssignment = ConfigDefaults::suppressDefaultLayoutAssignment();
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
-    bool m_snapAssistFeatureEnabled = false;
-    bool m_snapAssistEnabled = false;
-    bool m_autoAssignAllLayouts = false;
-    bool m_snappingRestoreFloatedWindowsOnLogin = true;
-    bool m_autotileRestoreFloatedWindowsOnLogin = true;
-    bool m_snapUnfloatFallbackToZone = false;
-    bool m_snappingFocusNewWindows = false;
-    bool m_snappingFocusFollowsMouse = false;
+    bool m_snapAssistFeatureEnabled = ConfigDefaults::snapAssistFeatureEnabled();
+    bool m_snapAssistEnabled = ConfigDefaults::snapAssistEnabled();
+    bool m_autoAssignAllLayouts = ConfigDefaults::autoAssignAllLayouts();
+    bool m_snappingRestoreFloatedWindowsOnLogin = ConfigDefaults::snappingRestoreFloatedWindowsOnLogin();
+    bool m_autotileRestoreFloatedWindowsOnLogin = ConfigDefaults::autotileRestoreFloatedWindowsOnLogin();
+    bool m_snapUnfloatFallbackToZone = ConfigDefaults::snapUnfloatFallbackToZone();
+    bool m_snappingFocusNewWindows = ConfigDefaults::snappingFocusNewWindows();
+    bool m_snappingFocusFollowsMouse = ConfigDefaults::snappingFocusFollowsMouse();
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
+    // Seeded from ConfigDefaults, every one of them. The nine below were already
+    // member-backed and so escaped the sweep that fixed the hardcoded getters — including
+    // BOTH snap-assist flags, which read false against a default of TRUE while the comment
+    // here claimed they had been fixed. A comment describing a fix that did not land is
+    // worse than no comment: it stops the next reader from looking.
     // Every remaining getter, member-backed and seeded from ConfigDefaults. They used to
     // return hardcoded literals with no-op setters: a value no test could move, against a
     // baseline production does not have. Fourteen disagreed with the real default outright,
@@ -2025,6 +2065,11 @@ private:
     QString m_audioInputMethod = ConfigDefaults::audioInputMethod();
     QString m_audioInputSource = ConfigDefaults::audioInputSource();
     QString m_labelFontFamily = ConfigDefaults::labelFontFamily();
+    // Per-mode disable lists, keyed by the AssignmentEntry::Mode int. Real storage: the
+    // setters used to drop the value entirely, so no test could ever disable anything.
+    QHash<int, QStringList> m_disabledMonitors;
+    QHash<int, QStringList> m_disabledDesktops;
+    QHash<int, QStringList> m_disabledActivities;
     QStringList m_lockedScreens = ConfigDefaults::lockedScreens();
     QVariantList m_autotileDragInsertTriggers = ConfigDefaults::autotileDragInsertTriggers();
     QVariantList m_snapAssistTriggers = ConfigDefaults::snapAssistTriggers();

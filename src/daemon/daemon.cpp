@@ -2495,6 +2495,11 @@ void Daemon::stop()
     // The next run starts from a fresh effect that assumes an active session. Leaving this
     // true would make the re-armed service's first publish look redundant and swallow it.
     m_publishedSessionIdle = false;
+    // And the arm-retry budget, for the same reason its two neighbours here are reset: the
+    // race it covers is a STARTUP race, so a restarted daemon needs its full budget. Spent
+    // in run 1, it would otherwise send run 2 straight to the give-up branch on the very
+    // first attempt.
+    m_idleArmRetriesLeft = kIdleArmRetries;
     // The idle service's own signals die with it, but the FOUR connections idle.cpp made
     // outlive it: the two settings signals, the bridgeRegistered push, and the debounce
     // timer (a value member, so it outlives the service too). A settings write between

@@ -483,7 +483,16 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // memory we were about to reallocate anyway.
     // When NOTHING in the chain varies per frame there is no such split — the whole
     // composite is a pure function of (capture, state), so it is cached entire.
-    plan.allStatic = plan.captureCacheable && foldablePacks > 0 && staticFoldable == foldablePacks;
+    // NO `foldablePacks > 0` term. A chain in which nothing compiles folds nothing: the
+    // capture goes straight into compositeTex[0] and is presented from there, so the
+    // composite is a pure function of the capture and is every bit as cacheable as an
+    // all-static chain — captureCacheable already argues exactly that, two dozen lines up.
+    // Requiring at least one foldable pack meant such a chain never took the cached-composite
+    // early return, so it cleared backdropRepaintPending on every fold, so a needsBackdrop
+    // driver re-armed every 33ms forever, plus a full-canvas backdrop blit per paint, for a
+    // decoration that draws nothing at all. `staticFoldable == foldablePacks` is trivially
+    // true when both are zero, which is the right answer.
+    plan.allStatic = plan.captureCacheable && staticFoldable == foldablePacks;
     // Both caches sit downstream of the capture and of the folded state.
     if (!state.captureValid || stateMoved) {
         state.prefixValid = false;

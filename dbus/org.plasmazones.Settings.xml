@@ -185,7 +185,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
             </arg>
             <arg name="category" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'."/>
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): a write to it is rejected and does nothing."/>
             </arg>
             <arg name="key" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Per-screen setting key name."/>
@@ -200,7 +200,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
             </arg>
             <arg name="category" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'."/>
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): a write to it is rejected and does nothing."/>
             </arg>
         </method>
 
@@ -214,7 +214,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
             </arg>
             <arg name="category" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'."/>
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): a write to it is rejected and does nothing."/>
             </arg>
             <arg name="values" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of per-screen setting key -> value."/>
