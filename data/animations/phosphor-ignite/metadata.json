@@ -1,54 +1,47 @@
 {
-    "id": "desktop-phosphor",
-    "name": "Desktop Phosphor",
-    "description": "Switches desktops over a circuit of light in the official Phosphor style. Signal pulses race along glowing traces in the switch direction, nodes flare as each pulse arrives, and the new desktop floods outward from every lit node behind a thin front carrying the brand gradient.",
+    "id": "phosphor-ignite",
+    "name": "Phosphor Ignition",
+    "description": "The window ignites from its centre in the Phosphor style. A plasma bloom expands outward behind a turbulent rim of brand light with soft tendrils reaching ahead of it, the image shimmers briefly where the heat has just passed, and the rim carries the gradient from cyan at the core to rose at the corners. Closing collapses the plasma back into the centre.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Reveal",
-    "appliesTo": ["desktop"],
     "fragmentShader": "effect.frag",
     "parameters": [
         {
-            "id": "followSwitch",
-            "name": "Follow Switch Direction",
-            "type": "bool",
-            "default": true
+            "id": "softness",
+            "name": "Rim Softness",
+            "type": "float",
+            "default": 0.12,
+            "min": 0.04,
+            "max": 0.3
         },
         {
-            "id": "dirX",
-            "name": "Direction X",
+            "id": "turbulence",
+            "name": "Rim Turbulence",
             "type": "float",
-            "default": 1.0,
-            "min": -1.0,
+            "default": 0.6,
+            "min": 0.0,
             "max": 1.0
         },
         {
-            "id": "dirY",
-            "name": "Direction Y",
-            "type": "float",
-            "default": 1.0,
-            "min": -1.0,
-            "max": 1.0
-        },
-        {
-            "id": "graphScale",
-            "name": "Circuit Density",
+            "id": "arms",
+            "name": "Tendril Count",
             "type": "float",
             "default": 5.0,
-            "min": 2.0,
-            "max": 12.0
+            "min": 0.0,
+            "max": 9.0
         },
         {
-            "id": "traceOpacity",
-            "name": "Trace Brightness",
+            "id": "shimmer",
+            "name": "Heat Shimmer",
             "type": "float",
-            "default": 0.7,
+            "default": 0.5,
             "min": 0.0,
             "max": 1.0
         },
         {
             "id": "glow",
-            "name": "Front Glow",
+            "name": "Rim Glow",
             "type": "float",
             "default": 1.0,
             "min": 0.0,
