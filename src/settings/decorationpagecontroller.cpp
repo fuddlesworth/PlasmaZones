@@ -236,7 +236,10 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
                     // canConvert<double>() (to 0.0), so gate on the declared
                     // type, not on convertibility.
                     const bool numeric = p.type == QLatin1String("int") || p.type == QLatin1String("float");
-                    if (numeric && p.minValue.isValid() && p.maxValue.isValid()) {
+                    // min <= max guard: qBound is UB on an inverted range, and
+                    // the declared bounds come from pack-authored metadata.
+                    if (numeric && p.minValue.isValid() && p.maxValue.isValid()
+                        && p.minValue.toDouble() <= p.maxValue.toDouble()) {
                         v = qBound(p.minValue.toDouble(), v.toDouble(), p.maxValue.toDouble());
                         // Keep integer params integral so the editor's spinbox
                         // round-trips without a fractional cast.

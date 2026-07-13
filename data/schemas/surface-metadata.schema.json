@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "urn:plasmazones:schema:surface-metadata",
     "title": "PlasmaZones Surface Shader Metadata",
-    "description": "metadata.json for a bundled or user surface (decoration) shader pack. Core identity and the parameter contract are enforced. Optional compositing and multipass keys (handlesOpacity, needsBackdrop, multipass, bufferShaders, bufferScale, animated, audio, paddingParam, vertexShader) and descriptive metadata (description, author, version, category) are allowed through.",
+    "description": "metadata.json for a bundled or user surface (decoration) shader pack. Core identity and the parameter contract are enforced. Optional compositing and multipass keys (providesBorder, providesOpacityTint, needsBackdrop, multipass, bufferShaders, bufferScale, animated, audio, paddingParam, vertexShader, and the retired handlesOpacity) and descriptive metadata (description, author, version, category) are allowed through.",
     "type": "object",
     "required": ["id", "name", "fragmentShader", "parameters"],
     "properties": {
@@ -17,6 +17,8 @@
         "animated": { "type": "boolean" },
         "audio": { "type": "boolean" },
         "handlesOpacity": { "type": "boolean" },
+        "providesBorder": { "type": "boolean" },
+        "providesOpacityTint": { "type": "boolean" },
         "needsBackdrop": { "type": "boolean" },
         "multipass": { "type": "boolean" },
         "bufferShaders": {

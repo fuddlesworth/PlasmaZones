@@ -490,6 +490,59 @@ private Q_SLOTS:
         }
     }
 
+    void testOpacityTintActions_validate()
+    {
+        // SetOpacityTintVisible shares the border bool validator.
+        QJsonObject vis;
+        vis.insert(QStringLiteral("type"), QString(ActionType::SetOpacityTintVisible));
+        vis.insert(QStringLiteral("value"), 1); // a number is NOT a bool
+        QVERIFY(!RuleAction::fromJson(vis).has_value());
+        // Explicit false is a veto over the config default, not "unset" —
+        // it must validate, mirroring SetHideTitleBar's tri-state contract.
+        vis.insert(QStringLiteral("value"), false);
+        QVERIFY(RuleAction::fromJson(vis).has_value());
+        vis.insert(QStringLiteral("value"), true);
+        QVERIFY(RuleAction::fromJson(vis).has_value());
+
+        // SetTintStrength mirrors SetOpacity's inclusive 0.0–1.0 unit range.
+        QJsonObject s;
+        s.insert(QStringLiteral("type"), QString(ActionType::SetTintStrength));
+        s.insert(QStringLiteral("value"), 1.5);
+        QVERIFY(!RuleAction::fromJson(s).has_value());
+        s.insert(QStringLiteral("value"), -0.1);
+        QVERIFY(!RuleAction::fromJson(s).has_value());
+        s.insert(QStringLiteral("value"), true); // a JSON bool is NOT a number
+        QVERIFY(!RuleAction::fromJson(s).has_value());
+        s.insert(QStringLiteral("value"), 0.0);
+        QVERIFY(RuleAction::fromJson(s).has_value());
+        s.insert(QStringLiteral("value"), 0.5);
+        QVERIFY(RuleAction::fromJson(s).has_value());
+    }
+
+    void testSetTintColor_requireHexOrAccent()
+    {
+        // Shares the border-colour validator: the hex shapes plus the accent
+        // sentinel survive load, everything else is rejected.
+        QJsonObject o;
+        o.insert(QStringLiteral("type"), QString(ActionType::SetTintColor));
+        QVERIFY(!RuleAction::fromJson(o).has_value()); // the colour is required
+        o.insert(QStringLiteral("value"), QStringLiteral("red")); // named colour rejected
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(QStringLiteral("value"), QStringLiteral("#gg0000")); // non-hex digits
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        for (const QString& good : {QStringLiteral("#abc"), QStringLiteral("#FF0000"), QStringLiteral("#80FF0000")}) {
+            o.insert(QStringLiteral("value"), good);
+            QVERIFY2(RuleAction::fromJson(o).has_value(), qPrintable(good));
+        }
+        o.insert(QStringLiteral("value"), QString(BorderColorToken::Accent));
+        const auto reloaded = RuleAction::fromJson(o);
+        QVERIFY(reloaded.has_value());
+        // Genuine round-trip: toJson→fromJson is stable, sentinel included.
+        const auto roundTripped = RuleAction::fromJson(reloaded->toJson());
+        QVERIFY(roundTripped.has_value());
+        QCOMPARE(*roundTripped, *reloaded);
+    }
+
     // ── overlay-appearance actions (context-domain) ──
 
     void testOverlayColorActions_hexOnlyNoAccent()
@@ -779,6 +832,10 @@ private Q_SLOTS:
         // value-shaped helper covers them with a valid hex colour.
         rejectsStray(ActionType::SetBorderColorActive, QJsonValue(QStringLiteral("#FF0000")));
         rejectsStray(ActionType::SetBorderColorInactive, QJsonValue(QStringLiteral("#FF0000")));
+        // The opacity+tint layer trio declares the same {Value} key set.
+        rejectsStray(ActionType::SetOpacityTintVisible, QJsonValue(true));
+        rejectsStray(ActionType::SetTintStrength, QJsonValue(0.5));
+        rejectsStray(ActionType::SetTintColor, QJsonValue(QStringLiteral("#FF0000")));
         rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
         rejectsStray(ActionType::LockContext, QJsonValue(true));

@@ -177,11 +177,12 @@ struct CompiledSurfacePack
 
     /// Pack-declared parameter uniform locations + resolved-default values.
     /// float/int/bool params pack into customParams[N], colours into
-    /// customColors[N]. The border pack declares borderWidth / cornerRadius /
-    /// useSystemAccent (customParams[0]) and active/inactive colours
-    /// (customColors[0..1]) — pushBorderUniforms overrides those slots with
-    /// the per-window rule appearance. Slots a pack does not reference
-    /// resolve to -1 and push nothing.
+    /// customColors[N]. The reserved "border" pack declares borderWidth /
+    /// cornerRadius / useSystemAccent (customParams[0]) and active/inactive
+    /// colours (customColors[0..1]); its per-window rule/config appearance
+    /// rides WindowDecoration::packParamValues, routed by param id like any
+    /// other pack override — pushBorderUniforms has no border-specific slot
+    /// writes. Slots a pack does not reference resolve to -1 and push nothing.
     std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsLoc = []() {
         std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> a;
         a.fill(-1);
@@ -338,6 +339,16 @@ struct WindowDecoration
     /// SetOpacity has no other application path: custom chains configure
     /// their own dimming through pack params (frost/glass contentOpacity).
     bool chainBakesOpacity = false;
+
+    /// The effective opacity folded into the opacity-tint layer's `opacity`
+    /// param (config default, SetOpacity rule winning); 1.0 when the layer is
+    /// off. Consumed ONLY by the fold's failed-compile fallback: if the
+    /// opacity-tint pack has no compiled shader, the fold skips it and nothing
+    /// would apply this value, so the window CAPTURE dims by it instead
+    /// (KWin's default modulating shader runs the nested draw). Single-apply
+    /// holds — the pack that owns the value never ran. Every other path reads
+    /// the value through packParamValues like any pack param.
+    double foldedOpacity = 1.0;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but

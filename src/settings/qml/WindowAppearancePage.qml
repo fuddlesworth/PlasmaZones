@@ -339,7 +339,7 @@ SettingsFlickable {
         // =================================================================
         SettingsCard {
             Layout.fillWidth: true
-            headerText: i18n("Opacity")
+            headerText: i18n("Opacity and tint")
             searchAnchor: "opacityTint"
             showToggle: true
             toggleChecked: root.ctl.showWindowOpacityTint
@@ -386,6 +386,7 @@ SettingsFlickable {
                     description: i18n("How visible matched windows stay, where 100% is fully opaque")
 
                     SettingsSlider {
+                        Accessible.name: i18n("Opacity")
                         from: 0
                         to: 100
                         value: Math.round(root.ctl.windowOpacity * 100)
@@ -404,6 +405,7 @@ SettingsFlickable {
                     description: i18n("How strongly the tint color blends over the window, where 0% keeps it untinted")
 
                     SettingsSlider {
+                        Accessible.name: i18n("Tint strength")
                         from: 0
                         to: 100
                         value: Math.round(root.ctl.windowTintStrength * 100)

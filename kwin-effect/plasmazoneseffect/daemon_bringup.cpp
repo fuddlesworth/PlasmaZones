@@ -707,15 +707,19 @@ void PlasmaZonesEffect::loadCachedSettings()
             scheduleBorderSweep();
         }
     });
+    // Both unit-range values are clamped at this D-Bus boundary: the settings
+    // side validates its own writes, but the daemon is a separate process and
+    // this effect must not trust the wire (a hand-edited config or an older
+    // daemon can answer out of range).
     loadSettingAsync(QStringLiteral("windowOpacity"), [this](const QVariant& v) {
-        const double d = v.toDouble();
+        const double d = qBound(0.0, v.toDouble(), 1.0);
         if (!qFuzzyCompare(m_windowAppearanceDefault.opacity + 1.0, d + 1.0)) {
             m_windowAppearanceDefault.opacity = d;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowTintStrength"), [this](const QVariant& v) {
-        const double d = v.toDouble();
+        const double d = qBound(0.0, v.toDouble(), 1.0);
         if (!qFuzzyCompare(m_windowAppearanceDefault.tintStrength + 1.0, d + 1.0)) {
             m_windowAppearanceDefault.tintStrength = d;
             scheduleBorderSweep();

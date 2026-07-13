@@ -429,6 +429,19 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         appearance = resolveEffectiveWindowAppearance(w, windowId);
         showBorder = appearance->showBorder.value_or(false);
         showOpacityTint = appearance->showOpacityTint.value_or(false);
+        // NO-OP LAYER GATE: an opacity-tint layer at its resting values
+        // (opacity 1.0, tint strength 0.0, and no SetOpacity rules loaded)
+        // composites to exactly the raw window, but still costs the redirect
+        // + per-frame composite fold. Drop it — the output is identical.
+        // Gated on rule PRESENCE (hasOpacityRules), not on a per-window
+        // match, so a focus-scoped SetOpacity rule doesn't churn the chain
+        // (and its composite allocations) on every focus flip; tintStrength
+        // needs no such coarsening because the appearance already folds the
+        // per-window rule slot.
+        if (showOpacityTint && appearance->tintStrength.value_or(0.0) <= 0.0 && appearance->opacity.value_or(1.0) >= 1.0
+            && !m_shaderManager.hasOpacityRules()) {
+            showOpacityTint = false;
+        }
     }
 
     // DECORATE GATE: the chain is either the plain layers (easy mode — the
@@ -523,9 +536,11 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         if (m_shaderManager.hasOpacityRules()) {
             ruleOpacity = resolveWindowOpacity(resolveRuleActions(w, windowId));
         }
+        const double effectiveOpacity =
+            ruleOpacity ? qBound(0.0, *ruleOpacity, 1.0) : qBound(0.0, appearance->opacity.value_or(1.0), 1.0);
+        wb.foldedOpacity = effectiveOpacity;
         QVariantMap otParams;
-        otParams.insert(QStringLiteral("opacity"),
-                        ruleOpacity ? qBound(0.0, *ruleOpacity, 1.0) : appearance->opacity.value_or(1.0));
+        otParams.insert(QStringLiteral("opacity"), effectiveOpacity);
         otParams.insert(QStringLiteral("tintStrength"), appearance->tintStrength.value_or(0.0));
         const QColor accentOr =
             m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9"));

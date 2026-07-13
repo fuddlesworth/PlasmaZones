@@ -300,7 +300,26 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // opacity param, or a pack's own content parameter (frost/glass
             // contentOpacity). Dimming the capture here would double-apply
             // against either.
-            captureData.setOpacity(1.0);
+            //
+            // ONE exception, fail-safe not fail-open: if the opacity-tint
+            // pack has no compiled shader, step 2 skips it and NOTHING
+            // applies the window's resolved opacity — a SetOpacity rule (or
+            // the config default) would silently render fully opaque. Dim
+            // the capture by the folded value instead: the nested draw runs
+            // KWin's default modulating shader, and the pack that owns the
+            // value never runs, so single-apply holds. The tint half of the
+            // broken pack is dropped (cosmetic); the opacity half — the part
+            // a rule commands — survives.
+            qreal captureOpacity = 1.0;
+            if (deco.chainBakesOpacity && !qFuzzyCompare(deco.foldedOpacity + 1.0, 2.0)) {
+                CompiledSurfacePack* const otPack = compiledPackLazy(QStringLiteral("opacity-tint"));
+                if (!otPack || !otPack->shader) {
+                    captureOpacity = qBound(0.0, deco.foldedOpacity, 1.0);
+                    qCWarning(lcEffect) << "opacity-tint pack unavailable — applying window opacity" << captureOpacity
+                                        << "at capture time for" << windowId;
+                }
+            }
+            captureData.setOpacity(captureOpacity);
             const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
             KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
             KWin::GLFramebuffer::popFramebuffer();

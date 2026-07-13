@@ -803,6 +803,81 @@ private Q_SLOTS:
         const QVariantMap params = c.rawProfile(path).value(QStringLiteral("parameters")).toMap();
         QVERIFY2(!params.contains(QStringLiteral("fancy-border")), "no seeding while the plain border is off");
     }
+
+    /// First direct edit at a path with NO override: prevChain falls back to
+    /// the resolved effective chain, so a pack the user was already
+    /// previewing via inheritance is not "new" and must not be seeded — the
+    /// inherited preview showed the pack's own values, and seeding would
+    /// change its look on a chain edit that kept it.
+    void setChain_inheritedPreviewPackNotReseeded()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePack(tmp.path(), QStringLiteral("fancy-border"), fancyBorderMetadata()));
+        QVERIFY(writePack(tmp.path(), QStringLiteral("glowish"), glowishMetadata()));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        TreeStubSettings settings;
+        settings.setShowWindowBorder(true);
+        settings.setWindowBorderWidth(4);
+        // Baseline carries the pack; the leaf inherits it (no direct override).
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        PhosphorSurfaceShaders::DecorationProfile baseline;
+        baseline.chain = QStringList{QStringLiteral("fancy-border")};
+        tree.setBaseline(baseline);
+        settings.setDecorationProfileTree(tree);
+
+        DecorationPageController c(&registry, &settings);
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("fancy-border"), QStringLiteral("glowish")});
+
+        const QVariantMap params = c.rawProfile(path).value(QStringLiteral("parameters")).toMap();
+        QVERIFY2(!params.contains(QStringLiteral("fancy-border")),
+                 "a pack inherited into the previous effective chain must not be seeded");
+    }
+
+    /// A providesBorder pack that declares only a subset of the shared
+    /// contract ids (the border-rgb / border-double shapes) is seeded for
+    /// exactly the ids it declares — the missing ids are skipped, not
+    /// inserted.
+    void setChain_seedSkipsUndeclaredParamIds()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QJsonObject slim{{QLatin1String("id"), QLatin1String("slim-border")},
+                               {QLatin1String("name"), QLatin1String("Slim Border")},
+                               {QLatin1String("category"), QLatin1String("Borders")},
+                               {QLatin1String("providesBorder"), true},
+                               {QLatin1String("fragmentShader"), QLatin1String("effect.frag")},
+                               {QLatin1String("parameters"),
+                                QJsonArray{QJsonObject{{QLatin1String("id"), QLatin1String("borderWidth")},
+                                                       {QLatin1String("type"), QLatin1String("int")},
+                                                       {QLatin1String("default"), 2},
+                                                       {QLatin1String("min"), 0},
+                                                       {QLatin1String("max"), 10}}}}};
+        QVERIFY(writePack(tmp.path(), QStringLiteral("slim-border"), slim));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        TreeStubSettings settings;
+        settings.setShowWindowBorder(true);
+        settings.setWindowBorderWidth(4);
+        settings.setWindowBorderRadius(6);
+        settings.setWindowBorderColorActive(QStringLiteral("#80ff0000"));
+        settings.setWindowBorderColorInactive(QStringLiteral("#80888888"));
+
+        DecorationPageController c(&registry, &settings);
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("slim-border")});
+
+        const QVariantMap params =
+            c.rawProfile(path).value(QStringLiteral("parameters")).toMap().value(QStringLiteral("slim-border")).toMap();
+        QCOMPARE(params.value(QStringLiteral("borderWidth")).toInt(), 4);
+        QVERIFY2(!params.contains(QStringLiteral("cornerRadius")), "undeclared id must not be inserted");
+        QVERIFY2(!params.contains(QStringLiteral("activeColor")), "undeclared id must not be inserted");
+        QVERIFY2(!params.contains(QStringLiteral("inactiveColor")), "undeclared id must not be inserted");
+    }
 };
 
 QTEST_MAIN(TestDecorationPageController)
