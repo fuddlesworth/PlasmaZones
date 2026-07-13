@@ -100,7 +100,7 @@ inline qreal windowSurfaceScale(const KWin::EffectWindow* w)
 /// The rect a padded decoration actually covers: the window's expanded geometry (its
 /// frame, if it reports none) grown by the chain's outer padding.
 ///
-/// One definition, because the four callers that damage this band and the one that records
+/// One definition, because the five callers that damage this band and the one that records
 /// it must agree to the pixel. They were five copies of the same six lines, and a band
 /// computed one way but damaged another leaves a stale glow behind — which is exactly the
 /// bug that put the copy in the hover driver in the first place.

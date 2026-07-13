@@ -213,10 +213,10 @@ void Settings::load()
         m_ownedRuleStore->load();
     }
 
-    // Store-backed groups (Shaders, Appearance, Ordering, Animations,
-    // Rendering, Performance, ZoneGeometry, Shortcuts, Editor, Exclusions,
-    // Display, ZoneSelector, Activation, Behavior, Autotiling) don't need
-    // explicit load calls — their getters read through m_store on demand.
+    // Every schema-declared, store-backed group (the full set buildSettingsSchema
+    // registers, e.g. Windows, Gaps, Decorations, Shaders, Animations, ...) needs no
+    // explicit load call — their getters read through m_store on demand. Enumerating the
+    // groups here just drifts as new ones are added, so it is left to the schema.
     // Per-screen override maps are not Q_PROPERTYs, so the snapshot loop above
     // doesn't cover them. Capture them around the reload so settingsChanged()
     // can fire when a reload (e.g. the daemon's reloadSettings after a Save)
