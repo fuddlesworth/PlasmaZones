@@ -12,9 +12,10 @@
 // composite as the blur family.
 //
 // Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
-// (SetOpacity is layer-backed and custom chains own their alpha), so the
-// window sample rides through undimmed; the window's own translucent
-// pixels still reveal the rain behind.
+// (SetOpacity is layer-backed and custom chains own their alpha). The pack's
+// own contentOpacity parameter fades the window content so the rain shows on
+// opaque windows; a theme's own translucent pixels reveal it the same way
+// with no parameter involved.
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the droplets light a dark glass slab instead of refracting a capture.
 //
@@ -75,6 +76,9 @@ vec3 dropLayer(vec2 st, float t) {
 
 vec4 pSurface(vec2 uv) {
     SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    // Fade the window content over the pane; the translucency it frees is
+    // filled by the rained-on glass in slabComposite below.
+    slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
     vec2 px = slab.px;
     float mask = slab.mask;
 

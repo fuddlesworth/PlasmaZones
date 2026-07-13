@@ -1,7 +1,7 @@
 {
     "id": "blur",
-    "name": "Frost",
-    "description": "Frosted glass behind the window. The scene behind the surface is blurred and lightly tinted, and shows through wherever the window itself is translucent. Lowering the Content opacity parameter fades the window content so the frost has translucency to fill.",
+    "name": "Blur",
+    "description": "A plain blur behind the window. The scene behind the surface is blurred and lightly tinted, and shows through wherever the window itself is translucent. Lowering the Content opacity parameter fades the window content so the blur has translucency to fill.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",
@@ -31,7 +31,7 @@
             "default": 8,
             "min": 0,
             "max": 32,
-            "description": "Corner rounding of the frost slab (px, match the Border pack)",
+            "description": "Corner rounding of the blur slab (px, match the Border pack)",
             "group": "Shape"
         },
         {
@@ -42,7 +42,7 @@
             "min": 0.0,
             "max": 1.0,
             "group": "Content",
-            "description": "How visible the window content stays over the frost, where 1.0 is fully opaque and 0.0 shows only the blurred backdrop"
+            "description": "How visible the window content stays over the pane, where 1.0 is fully opaque and 0.0 shows only the blurred backdrop"
         },
         {
             "id": "tintStrength",
