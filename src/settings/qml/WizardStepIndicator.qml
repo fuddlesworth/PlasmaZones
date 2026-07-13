@@ -8,6 +8,8 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
+import "FontUtils.js" as FontUtils
+
 /**
  * @brief Step indicator for multi-step wizard dialogs.
  *
@@ -50,8 +52,12 @@ RowLayout {
                 Label {
                     anchors.centerIn: parent
                     text: (stepIndicator.index + 1).toString()
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    font.weight: Font.Bold
+                    // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                    // illegal duplicate binding that fails the whole document. FontUtils
+                    // passes only the size dimension the theme font actually carries.
+                    font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                        bold: true
+                    })
                     color: stepIndicator.index <= root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     opacity: stepIndicator.index <= root.currentStep ? 1 : 0.4
                 }

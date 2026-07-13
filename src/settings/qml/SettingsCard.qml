@@ -15,8 +15,9 @@ import org.phosphor.animation
  * Features:
  *   - Subtle border highlight on hover (accent color)
  *   - Gentle upward translate on hover (-1px)
- *   - Optional collapsible content (set collapsible: true)
- *   - Smooth 200ms transitions throughout
+ *   - Optional collapsible content (set collapsible: true; use
+ *     initiallyCollapsed to start closed without binding `collapsed`)
+ *   - Motion-profile driven transitions throughout
  *
  * Usage:
  *   SettingsCard {
@@ -48,6 +49,39 @@ Item {
     // Collapse
     property bool collapsible: false
     property bool collapsed: false
+    /// Collapse state to adopt ONCE, at construction. Use this instead of
+    /// binding `collapsed` whenever the initial state derives from data that
+    /// can later change (e.g. "start collapsed if the user already has saved
+    /// items"): a live binding on `collapsed` would slam the card shut again
+    /// the moment that data changed, under the user's cursor, and the header
+    /// click writes `collapsed` imperatively anyway, which would break such a
+    /// binding on first use. Read only in Component.onCompleted, and applied
+    /// without the collapse animation, so the card simply starts closed.
+    property bool initiallyCollapsed: false
+    /// True once Component.onCompleted has run. The collapse/expand animations
+    /// are suppressed before that, so adopting `initiallyCollapsed` sets the
+    /// card's resting state instead of animating it shut on load.
+    property bool _completed: false
+    /// True while the body is interactive. Drives `enabled` on the body, which is
+    /// what keeps a shut card's controls out of the tab order.
+    ///
+    /// Set true at the START of the expand and false at the END of the collapse,
+    /// so the rows are measurable for every frame the height is non-zero. The rows
+    /// hide themselves when disabled (SettingsRow binds `visible: enabled`), so a
+    /// value derived from the ramp would drop them out of the layout while the
+    /// card was still visibly sliding.
+    property bool _bodyLive: true
+    /// How far open the body is: 0 shut, 1 fully open. The collapse animates
+    /// THIS, and the body's height stays a live binding on it times the content's
+    /// implicit height.
+    ///
+    /// Animating the height directly cannot work. The animation samples its
+    /// target when it starts, and a layout re-measure is asynchronous, so a body
+    /// whose size changed while the card was shut (SettingsRow hides itself via
+    /// `visible: enabled`, so any master toggle does exactly that) would animate
+    /// to a stale height and snap at the end. A live binding tracks the settle
+    /// instead, whenever it lands.
+    property real _expandProgress: 1
     // Header enable toggle
     property bool showToggle: false
     property bool toggleChecked: false
@@ -79,24 +113,47 @@ Item {
     signal toggleClicked(bool checked)
 
     onCollapsedChanged: {
+        // Before Component.onCompleted the card has no resting state yet, so
+        // adopting `initiallyCollapsed` must not animate — it would render the
+        // card open for a frame and then visibly slam it shut. The clip is
+        // zeroed directly below instead.
+        if (!root._completed)
+            return;
+
         if (collapsed) {
             expandAnim.stop();
+            // _bodyLive goes false at the END of the collapse (collapseAnim's
+            // trailing ScriptAction), so the rows stay measurable for the whole
+            // slide shut.
             collapseAnim.start();
         } else {
             collapseAnim.stop();
+            // Re-enable, THEN ramp, in the same tick. QQuickLayout polishes in the
+            // same frame as the animation tick, so the rows are measured before the
+            // first height sample. Deferring the start with Qt.callLater would
+            // queue a start that a same-tick collapse could not revoke, and the
+            // card would fly fully open before sliding shut.
+            root._bodyLive = true;
             expandAnim.start();
         }
     }
-    // Honour `collapsed: true` at construction time. The
-    // `onCollapsedChanged` handler above only fires on subsequent
+    // Honour `collapsed: true` (or `initiallyCollapsed: true`) at construction
+    // time. The `onCollapsedChanged` handler above only fires on subsequent
     // changes — instantiating `SettingsCard { collapsible: true;
     // collapsed: true }` would otherwise leave the contentClip
     // at its full implicitHeight (the declarative initial value)
     // and the card would render expanded despite the property.
     Component.onCompleted: {
+        // Adopt the one-shot initial state, then forget it. `collapsed` is left
+        // an ordinary writable property, so the header click owns it from here
+        // and no live binding can re-collapse the card later.
+        if (root.initiallyCollapsed)
+            root.collapsed = true;
+
+        root._completed = true;
         if (collapsed) {
-            contentClip.height = 0;
-            contentClip.opacity = 0;
+            root._expandProgress = 0;
+            root._bodyLive = false;
         }
         if (root.searchAnchor.length > 0)
             Qt.callLater(root._registerSearchAnchor);
@@ -171,7 +228,15 @@ Item {
             id: headerArea
 
             width: parent.width
-            height: headerLoader.height
+            // Zero height when there is no header. The loader still holds the
+            // default header component (it is only nulled for a CUSTOM header),
+            // so an invisible headerArea would otherwise keep its band, and both
+            // cardBg.height and contentClip's top anchor count it.
+            //
+            // A custom header is reparented UNDER the loader, which then holds no
+            // item at all: a Loader takes no height from its children, so the band
+            // has to measure the custom header itself or the body draws over it.
+            height: visible ? Math.max(headerLoader.height, root.header ? root.header.implicitHeight : 0) : 0
             visible: root.headerText.length > 0 || root.header !== null
             // Single uniform header fill: the whole header row is one proper
             // header color, distinct from the content rows below. Only the TOP
@@ -188,6 +253,23 @@ Item {
                 bottomRightRadius: 0
             }
 
+            // The disclosure control. Hiding a collapsed body takes its rows out
+            // of the focus chain, so the header itself has to be reachable and
+            // activatable, or a keyboard-only user could never open the card.
+            activeFocusOnTab: root.collapsible
+            Accessible.role: root.collapsible ? Accessible.Button : Accessible.StaticText
+            // A custom header supplies no headerText, so fall back to whatever it
+            // names itself rather than announcing an unnamed button.
+            Accessible.name: root.headerText.length > 0 ? root.headerText : (root.header && root.header.Accessible.name ? root.header.Accessible.name : "")
+            Accessible.description: root.collapsible ? (root.collapsed ? i18n("Collapsed. Activate to expand.") : i18n("Expanded. Activate to collapse.")) : ""
+            Accessible.onPressAction: root.collapsed = !root.collapsed
+            Keys.onSpacePressed: if (root.collapsible)
+                root.collapsed = !root.collapsed
+            Keys.onReturnPressed: if (root.collapsible)
+                root.collapsed = !root.collapsed
+            Keys.onEnterPressed: if (root.collapsible)
+                root.collapsed = !root.collapsed
+
             // Click to collapse/expand
             MouseArea {
                 z: -1
@@ -195,6 +277,17 @@ Item {
                 enabled: root.collapsible
                 cursorShape: root.collapsible ? Qt.PointingHandCursor : Qt.ArrowCursor
                 onClicked: root.collapsed = !root.collapsed
+            }
+
+            // Keyboard focus ring. The header is a focusable control now, so it
+            // needs to show where focus is.
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                radius: cardBg.radius
+                visible: headerArea.activeFocus
+                border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+                border.color: Kirigami.Theme.highlightColor
             }
 
             // Default header (Heading from headerText)
@@ -303,10 +396,25 @@ Item {
 
             anchors.top: headerArea.bottom
             width: parent.width
-            height: contentColumn.implicitHeight
+            // Live binding, never overwritten by an animation. See _expandProgress.
+            height: contentColumn.implicitHeight * root._expandProgress
             clip: true
-            opacity: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
-            enabled: root.showToggle ? root.toggleChecked : true
+            // The ramp is IN the binding rather than animated on top of it: a
+            // property animation does not drop the binding, so an imperative fade
+            // was re-evaluated out from under itself whenever the master toggle
+            // changed while the card was shut.
+            opacity: (root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1) * root._expandProgress
+            // Clipping a shut card to nothing still leaves its controls in the
+            // tab order, so tabbing through the page walks fields nobody can see.
+            // Disabling the body takes them out of the focus chain, and the header
+            // carries the keyboard affordance in their place.
+            //
+            // Disabling also hides the rows, because SettingsRow binds
+            // `visible: enabled`, and a hidden row stops contributing to the
+            // layout's implicit height. That re-measure is asynchronous, which is
+            // why _bodyLive is set on the way OPEN before the ramp starts and
+            // dropped on the way SHUT only once the ramp has finished.
+            enabled: (root.showToggle ? root.toggleChecked : true) && root._bodyLive
 
             Item {
                 id: contentColumn
@@ -315,23 +423,24 @@ Item {
                 implicitHeight: root.contentItem ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
             }
 
+            // Only the progress is animated. Height and opacity are both bound to
+            // it, so they move together by construction and a reversal mid-flight
+            // cannot leave one of them stranded.
             SequentialAnimation {
                 id: collapseAnim
 
                 PhosphorMotionAnimation {
-                    target: contentClip
-                    properties: "opacity"
-                    to: 0
-                    profile: "widget.fadeOut"
-                    durationOverride: Kirigami.Units.veryShortDuration * 2
-                }
-
-                PhosphorMotionAnimation {
-                    target: contentClip
-                    properties: "height"
+                    target: root
+                    properties: "_expandProgress"
                     to: 0
                     profile: "widget.accordionCollapse"
                     durationOverride: Kirigami.Units.shortDuration
+                }
+
+                ScriptAction {
+                    // Height is already 0, so the rows collapsing out of the
+                    // layout now costs nothing visible.
+                    script: root._bodyLive = false
                 }
             }
 
@@ -339,33 +448,20 @@ Item {
                 id: expandAnim
 
                 PhosphorMotionAnimation {
-                    target: contentClip
-                    properties: "height"
-                    to: contentColumn.implicitHeight
+                    target: root
+                    properties: "_expandProgress"
+                    to: 1
                     profile: "widget.accordionExpand"
                     durationOverride: Kirigami.Units.shortDuration
                 }
-
-                PhosphorMotionAnimation {
-                    target: contentClip
-                    properties: "opacity"
-                    to: root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1
-                    profile: "widget.fadeIn"
-                }
-
-                ScriptAction {
-                    script: {
-                        contentClip.height = Qt.binding(function () {
-                            return contentColumn.implicitHeight;
-                        });
-                        contentClip.opacity = Qt.binding(function () {
-                            return root.showToggle && !root.toggleChecked ? root.disabledContentOpacity : 1;
-                        });
-                    }
-                }
             }
 
+            // Smooths the master-toggle dim only. Disabled while the card is
+            // opening or closing: opacity tracks _expandProgress there, so an
+            // easing on every frame's step would drag the fade behind the slide.
             Behavior on opacity {
+                enabled: !collapseAnim.running && !expandAnim.running
+
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                     durationOverride: Kirigami.Units.shortDuration

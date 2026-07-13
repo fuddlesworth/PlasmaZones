@@ -42,6 +42,15 @@ import org.phosphor.animation
 ItemDelegate {
     id: root
 
+    // ItemDelegate defaults to Qt.NoFocus, which left every shader card out of the
+    // tab chain: opening a pack's details was mouse-only, and the focus-border
+    // branch below could never fire. AbstractButton gives Space to clicked() for
+    // free, but only Space — Return and Enter have to be wired, and they are the
+    // keys a user actually reaches for. Same trio as SettingsCard's header.
+    focusPolicy: Qt.StrongFocus
+    Keys.onReturnPressed: root.clicked()
+    Keys.onEnterPressed: root.clicked()
+
     required property var effect
     required property var bridge
     property int usagesRev: 0
@@ -115,7 +124,7 @@ ItemDelegate {
             spacing: Kirigami.Units.smallSpacing
 
             Rectangle {
-                readonly property bool _hasPreview: root.effect && root.effect.previewPath && root.effect.previewPath.length > 0
+                readonly property bool _hasPreview: !!(root.effect && root.effect.previewPath && root.effect.previewPath.length > 0)
 
                 Layout.fillWidth: true
                 Layout.preferredHeight: width * 9 / 16
@@ -158,21 +167,11 @@ ItemDelegate {
                 // class this shader targets (Geometry / Appearance / Desktop).
                 // Hidden for universal shaders so the grid only calls out the
                 // ones that behave differently.
-                Rectangle {
+                MetadataChip {
                     visible: root._typeBadge.length > 0
-                    implicitWidth: typeBadgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
-                    implicitHeight: typeBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing
-                    radius: height / 2
-                    color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
-
-                    Label {
-                        id: typeBadgeLabel
-
-                        anchors.centerIn: parent
-                        text: root._typeBadge
-                        font: Kirigami.Theme.smallFont
-                        color: Kirigami.Theme.highlightColor
-                    }
+                    text: root._typeBadge
+                    highlighted: true
+                    pill: true
                 }
 
                 Label {
@@ -229,7 +228,7 @@ ItemDelegate {
                     text: root.usageChipTextFn(_usages.length)
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
-                    ToolTip.visible: hovered.hovered && _usages.length > 0
+                    ToolTip.visible: chipHover.hovered && _usages.length > 0
                     ToolTip.text: {
                         var names = [];
                         for (var i = 0; i < _usages.length; i++)
@@ -239,7 +238,7 @@ ItemDelegate {
                     ToolTip.delay: Kirigami.Units.toolTipDelay
 
                     HoverHandler {
-                        id: hovered
+                        id: chipHover
                     }
                 }
             }

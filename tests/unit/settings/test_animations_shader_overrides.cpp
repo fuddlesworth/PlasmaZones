@@ -23,6 +23,7 @@
  */
 
 #include <QDir>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -30,6 +31,7 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include "config/settings.h"
+#include "phosphor_i18n.h"
 #include "settings/animationspagecontroller.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
@@ -537,6 +539,33 @@ private Q_SLOTS:
         QSignalSpy spy2(&c, &AnimationsPageController::pendingChangesChanged);
         QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("popup")), 0);
         QCOMPARE(spy2.count(), 0);
+    }
+
+    /// A clear that runs while the discard worker owns the pending state must
+    /// report the refusal as -1, distinct from the 0 a genuine "no descendants"
+    /// no-op returns, so a caller cannot mistake "refused, retry later" for
+    /// "nothing to clear". Same convention as clearAllOverrides.
+    void clearShaderOverrideDescendants_refusesWhileAsyncDiscardIsInFlight()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        AnimationsPageController c(&registry, &settings);
+
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup"), QStringLiteral("dissolve"), {}));
+        QVERIFY(c.setShaderOverride(QStringLiteral("popup.layoutPicker.show"), QStringLiteral("pixelate"), {}));
+
+        QSignalSpy done(&c, &AnimationsPageController::discardResult);
+        QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
+        c.asyncRevertPending(); // sets the in-flight flag synchronously
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression(QStringLiteral("clearShaderOverrideDescendants: refusing while async discard")));
+        QCOMPARE(c.clearShaderOverrideDescendants(QStringLiteral("popup")), -1);
+        QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+
+        QVERIFY(done.wait(5000));
     }
 
     /// The leaf-isolated interactive-drag path (window.movement.move) is a

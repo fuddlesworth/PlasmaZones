@@ -80,7 +80,7 @@ Rectangle {
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
             elide: Text.ElideRight
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             horizontalAlignment: Text.AlignHCenter
             maximumLineCount: 3
             opacity: 0.7

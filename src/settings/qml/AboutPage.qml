@@ -58,14 +58,13 @@ PhosphorUi.AboutPageShell {
                     horizontalPadding: Kirigami.Units.largeSpacing
                     Accessible.name: i18n("What's New")
                     onClicked: {
-                        // Defensive truthy-check: this AboutPage is also used
-                        // by the standalone phosphor-control demo, which
-                        // doesn't define `showWhatsNew`. Guard `window`
-                        // itself too — when AboutPage is hosted by the demo
-                        // (no chrome) the `window` context property may be
-                        // undefined, in which case reading `.showWhatsNew`
-                        // on it throws.
-                        if (window && window.showWhatsNew)
+                        // Defensive check: this AboutPage is also used by the
+                        // standalone phosphor-control demo, which declares no
+                        // `window` id at all. `window` is an ID lookup, not a
+                        // context property, so a bare `window && …` THROWS a
+                        // ReferenceError there before && can short-circuit;
+                        // only the typeof form degrades to false.
+                        if (typeof window !== "undefined" && window && window.showWhatsNew)
                             window.showWhatsNew();
                     }
 

@@ -3,13 +3,20 @@
 
 #pragma once
 
+// Not forward-declared: moc needs the complete type to register the
+// ShaderSetStore* Q_PROPERTY below as a pointer meta-type.
+#include "shadersetstore.h"
+
 #include <PhosphorControl/PageController.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
+
+#include <optional>
 
 namespace PhosphorSurfaceShaders {
 class SurfaceShaderRegistry;
@@ -21,7 +28,8 @@ class ISettings;
 
 /// Q_INVOKABLE surface for the "Decoration" drill-down settings pages
 /// (exposed to QML through SettingsController's `decorationPage` Q_PROPERTY;
-/// this class declares invokables + signals, no properties of its own).
+/// this class declares invokables + signals, plus the one `setsBridge`
+/// property that hands QML the decoration-set store).
 ///
 /// ## Scope: PER-SURFACE chains with walk-up inheritance
 ///
@@ -30,18 +38,25 @@ class ISettings;
 /// `PhosphorSurfaceShaders::DecorationProfileTree` — a hierarchical store
 /// of `DecorationProfile`s keyed on the dot-path surface namespace
 /// (`window.tiled`, `osd`, `popup.snapAssist`, …). Each profile carries an
-/// ordered CHAIN of surface shader packs plus the border/titlebar
-/// appearance. A baseline (global default) is overlaid by per-surface
+/// ordered CHAIN of surface shader packs. A baseline (global default) is overlaid by per-surface
 /// overrides via the tree's resolve() walk-up.
 ///
 /// ## Baseline as path ""
 ///
-/// The QML side addresses the baseline (global default) with the empty
-/// path "". Every mutator and reader special-cases "" to read/write the
-/// tree's `baseline()` rather than a per-surface override. So
-/// `resolvedProfile("")` == baseline; `setChain("", ...)` sets the
-/// baseline chain; `clearOverride("")` is rejected (the baseline can't be
-/// "inherited away").
+/// The empty path "" addresses the baseline (global default): every mutator and
+/// reader special-cases it to read or write the tree's `baseline()` rather than a
+/// per-surface override. So `resolvedProfile("")` == baseline, `setChain("", ...)`
+/// sets the baseline chain, and `clearOverride("")` is rejected (the baseline
+/// cannot be "inherited away").
+///
+/// NOTE that NO settings page binds "": the Decoration nav has no General surface
+/// page because there is no meaningful global default (borders and title bars are
+/// window-only, and the daemon surfaces default to no decoration — see
+/// settingscontroller_pageregistration.cpp). The baseline is reachable over D-Bus
+/// and from tests, and the resolve walk-up honours it, but the UI edits the
+/// category root cards ("window", "osd", "popup") instead. Decoration SETS
+/// deliberately neither capture nor apply a baseline for the same reason: an
+/// imported one could never be undone through the UI.
 ///
 /// ## Dirty tracking
 ///
@@ -57,11 +72,13 @@ class DecorationPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
+    /// The decoration-set store, bound by DecorationSetsPage as its `bridge`.
+    Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
+
 public:
-    /// @param registry Optional — when null, all `*ShaderEffects()` /
-    ///        `shaderParameters()` Q_INVOKABLEs return empty results so
-    ///        unit tests can construct the controller without a surface
-    ///        bootstrap.
+    /// @param registry Optional — when null, the `*ShaderEffects()`
+    ///        Q_INVOKABLEs return empty results so unit tests can construct
+    ///        the controller without a surface bootstrap.
     /// @param settings Optional — when null, profile getters return empty
     ///        results and mutators are no-ops.
     explicit DecorationPageController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry = nullptr,
@@ -89,10 +106,6 @@ public:
     /// isUserEffect / previewPath / parameters (QVariantList of
     /// ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
-
-    /// Just the parameters list for @p effectId — convenience for the
-    /// per-pack parameter editor.
-    Q_INVOKABLE QVariantList shaderParameters(const QString& effectId) const;
 
     // ── Surface taxonomy ──────────────────────────────────────────────────
 
@@ -188,25 +201,37 @@ public:
     /// Open (creating if needed) the user surface-pack directory in the
     /// file manager.
     Q_INVOKABLE void openUserShaderDirectory();
-    /// Every surface path whose DIRECT override's chain contains
-    /// @p effectId, as {path, label} entries sorted by label — the
-    /// browser's "Used in" chips.
+    /// Every chain that contains @p effectId, as {path, label} entries sorted
+    /// by label — the browser's "Used in" chips. That is every surface whose
+    /// DIRECT override uses it, plus a "Global default" entry (empty path) when
+    /// the baseline chain does: the baseline is a real chain the resolve walk
+    /// falls back to, so a pack used only there is still in use.
     Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
-    // ── Decoration sets (the Motion Sets twin) ──────────────────────────
-    // Named snapshots of the decoration profile tree, persisted as JSON
-    // under ~/.local/share/plasmazones/decorationsets/<slug>.json.
-    // Applying merges: the baseline (when the set captured one) and every
-    // entry replace the DIRECT profile at their path; surfaces the set
-    // does not cover keep their current overrides. All writes go through
-    // ISettings::setDecorationProfileTree, so dirty / apply / discard ride
-    // the normal staging flow.
+    /// The decoration-set store — the `bridge` ShaderSetsPage binds to.
+    /// Named snapshots of the decoration profile tree, persisted as JSON
+    /// under ~/.local/share/plasmazones/decorationsets/<slug>.json.
+    /// Applying merges: every entry replaces the DIRECT profile at its
+    /// path; surfaces the set
+    /// does not cover keep their current overrides. APPLYING a set writes
+    /// through ISettings::setDecorationProfileTree, so that write rides the
+    /// normal dirty / apply / discard staging flow. The set FILES themselves
+    /// are not staged (decoration wires no fileSnapshot hook), so no Discard
+    /// can undo a set write here. Saving over an existing set requires explicit
+    /// consent regardless of domain (see ShaderSetStore::saveCurrentAsSet). The
+    /// domain closures live in decorationpagecontroller_sets.cpp.
+    ShaderSetStore* setsBridge() const
+    {
+        return m_sets;
+    }
 
-    /// Saved sets as {name, description, slug, overrideCount} rows.
-    Q_INVOKABLE QVariantList availableDecorationSets() const;
-    Q_INVOKABLE bool applyDecorationSet(const QString& name);
-    Q_INVOKABLE bool saveCurrentAsDecorationSet(const QString& name, const QString& description);
-    Q_INVOKABLE bool removeDecorationSet(const QString& name);
+    /// Test hook: redirect the sets directory to @p dir instead of the XDG
+    /// default. Pass an empty string to restore the default. Mirrors
+    /// AnimationsPageController::setUserProfilesDirOverride, and exists for the
+    /// same reason: two test binaries resolving the same per-user qttest path
+    /// wipe each other's files under parallel ctest. Not Q_INVOKABLE — QML
+    /// callers must not redirect persistence.
+    void setSetsDirOverride(const QString& dir);
 
 Q_SIGNALS:
     /// Re-emit of `SurfaceShaderRegistry::effectsChanged` so QML can
@@ -222,17 +247,30 @@ Q_SIGNALS:
     /// failures with the concrete reason). Routed by ShaderBrowserPage.
     void toastRequested(const QString& text);
 
-    /// Emitted on any successful save/removeDecorationSet so the Sets page
-    /// refreshes its Q_INVOKABLE-loaded list.
-    void decorationSetsChanged();
-
 private:
+    /// Construct m_sets with the decoration domain closures. Called from the
+    /// constructor; defined in decorationpagecontroller_sets.cpp.
+    void initSetsStore();
+
     QString userShaderDirectoryPath() const;
     QString decorationSetsDirectoryPath() const;
-    QString decorationSetFilePath(const QString& setName) const;
 
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_registry = nullptr;
     ISettings* m_settings = nullptr;
+
+    QString m_setsDirOverride; ///< Empty = use the XDG default
+
+    /// The profile tree, parsed once per change rather than once per read.
+    /// ISettings::decorationProfileTree() rebuilds it from the config store every
+    /// call (QVariantMap to QJsonObject to fromJson), and refreshing one card
+    /// costs several reads while a slider drag costs several per frame. Invalidated
+    /// on decorationProfileTreeChanged, which is the only thing that can move it,
+    /// including a write from D-Bus or a global reload.
+    mutable std::optional<PhosphorSurfaceShaders::DecorationProfileTree> m_treeCache;
+
+    /// The tree, from cache when it is warm. Empty tree when there are no settings.
+    const PhosphorSurfaceShaders::DecorationProfileTree& tree() const;
+    ShaderSetStore* m_sets = nullptr;
 };
 
 } // namespace PlasmaZones

@@ -26,12 +26,6 @@ using PhosphorSurfaceShaders::DecorationProfileTree;
 
 namespace {
 
-/// Read the current tree from Settings (empty tree when no settings).
-DecorationProfileTree readTree(ISettings* settings)
-{
-    return settings ? settings->decorationProfileTree() : DecorationProfileTree{};
-}
-
 /// Overridden paths strictly BELOW @p path (its descendants), e.g. for
 /// "window" → every overridden "window.*". Excludes @p path itself. These are
 /// the surfaces that shadow the parent node.
@@ -97,9 +91,17 @@ void writeDirectProfile(ISettings* settings, DecorationProfileTree& tree, const 
 
 } // namespace
 
+const DecorationProfileTree& DecorationPageController::tree() const
+{
+    if (!m_treeCache.has_value()) {
+        m_treeCache = m_settings ? m_settings->decorationProfileTree() : DecorationProfileTree{};
+    }
+    return *m_treeCache;
+}
+
 DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry,
                                                    ISettings* settings, QObject* parent)
-    // "decoration-staging", not "decoration": the sidebar nav node owns the
+    // "decoration-staging", not "decorations": the sidebar nav node owns the
     // bare id (regVirtual in settingscontroller_pageregistration.cpp), and the
     // staging controller stays independently addressable — same split as
     // AnimationsPageController's "animations-staging".
@@ -114,9 +116,17 @@ DecorationPageController::DecorationPageController(PhosphorSurfaceShaders::Surfa
     if (m_settings) {
         // Re-fire profilesChanged so every visible card rebinds after a
         // global reload (Discard / Settings::load()) AND after our own
-        // mutators write the tree back.
-        connect(m_settings, &ISettings::decorationProfileTreeChanged, this, &DecorationPageController::profilesChanged);
+        // mutators write the tree back. Drop the parsed-tree cache on the same
+        // signal: it is the only thing that can move the tree, whoever wrote it.
+        connect(m_settings, &ISettings::decorationProfileTreeChanged, this, [this]() {
+            m_treeCache.reset();
+            Q_EMIT profilesChanged();
+        });
     }
+    // initSetsStore() wires profilesChanged into the store's
+    // notifyLiveStateChanged, so an edit made anywhere on the Decoration pages
+    // re-derives the `active` badge on every saved set.
+    initSetsStore();
 }
 
 DecorationPageController::~DecorationPageController() = default;
@@ -143,23 +153,11 @@ QVariantList DecorationPageController::availableShaderEffects() const
     return result;
 }
 
-QVariantList DecorationPageController::shaderParameters(const QString& effectId) const
-{
-    if (!m_registry || effectId.isEmpty() || !m_registry->hasEffect(effectId))
-        return {};
-    const auto effect = m_registry->effect(effectId);
-    QVariantList result;
-    result.reserve(effect.parameters.size());
-    for (const auto& p : effect.parameters)
-        result.append(parameterInfoToMap(p));
-    return result;
-}
-
 // ── Profile readers ─────────────────────────────────────────────────────────
 
 QVariantMap DecorationPageController::resolvedProfile(const QString& path) const
 {
-    const DecorationProfileTree tree = readTree(m_settings);
+    const DecorationProfileTree& tree = this->tree();
     // resolve("") returns the baseline (the walk terminates at "" with the
     // baseline as the accumulator), so the empty-path case is handled
     // directly by the tree's own resolve.
@@ -168,7 +166,7 @@ QVariantMap DecorationPageController::resolvedProfile(const QString& path) const
 
 QVariantMap DecorationPageController::rawProfile(const QString& path) const
 {
-    const DecorationProfileTree tree = readTree(m_settings);
+    const DecorationProfileTree& tree = this->tree();
     return profileToSparseMap(directProfileAt(tree, path));
 }
 
@@ -178,14 +176,14 @@ bool DecorationPageController::hasOverride(const QString& path) const
         return false;
     if (!PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return false;
-    return readTree(m_settings).hasOverride(path);
+    return tree().hasOverride(path);
 }
 
 // ── Chain mutators ───────────────────────────────────────────────────────────
 
 QStringList DecorationPageController::chainAt(const QString& path) const
 {
-    return readTree(m_settings).resolve(path).effectiveChain();
+    return tree().resolve(path).effectiveChain();
 }
 
 void DecorationPageController::setChain(const QString& path, const QStringList& chain)
@@ -194,7 +192,7 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
         return;
     if (!path.isEmpty() && !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return;
-    DecorationProfileTree tree = readTree(m_settings);
+    DecorationProfileTree tree = this->tree();
     DecorationProfile profile = directProfileAt(tree, path);
     // Packs newly entering the chain, for the border-seed below. The previous
     // chain is the DIRECT one when engaged, else the resolved effective chain
@@ -330,7 +328,7 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
 
 QStringList DecorationPageController::disabledPacksAt(const QString& path) const
 {
-    return readTree(m_settings).resolve(path).effectiveDisabledPacks();
+    return tree().resolve(path).effectiveDisabledPacks();
 }
 
 void DecorationPageController::setChainLayerEnabled(const QString& path, const QString& packId, bool enabled)
@@ -339,7 +337,7 @@ void DecorationPageController::setChainLayerEnabled(const QString& path, const Q
         return;
     if (!path.isEmpty() && !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return;
-    DecorationProfileTree tree = readTree(m_settings);
+    DecorationProfileTree tree = this->tree();
     DecorationProfile profile = directProfileAt(tree, path);
     // First direct edit at this path: seed from the RESOLVED value so the
     // toggle diverges from what the user was previewing instead of silently
@@ -365,7 +363,7 @@ void DecorationPageController::setChainParam(const QString& path, const QString&
         return;
     if (!path.isEmpty() && !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return;
-    DecorationProfileTree tree = readTree(m_settings);
+    DecorationProfileTree tree = this->tree();
     DecorationProfile profile = directProfileAt(tree, path);
     // Copy-mutate the {packId -> {paramId -> value}} two-level map, engaging
     // the parameters optional if it was inherited. Engaging bases on the
@@ -387,7 +385,7 @@ void DecorationPageController::setChainParams(const QString& path, const QString
         return;
     if (!path.isEmpty() && !PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return;
-    DecorationProfileTree tree = readTree(m_settings);
+    DecorationProfileTree tree = this->tree();
     DecorationProfile profile = directProfileAt(tree, path);
     // Engage-from-resolved, same rationale as setChainParam above.
     QVariantMap allParams = profile.parameters ? *profile.parameters : inheritedParamsForChain(tree, path);
@@ -412,7 +410,7 @@ bool DecorationPageController::clearOverride(const QString& path)
     // override to clear anyway, so this only tightens the contract.
     if (!PhosphorSurfaceShaders::decorationSurfaceSupported(path))
         return false;
-    DecorationProfileTree tree = readTree(m_settings);
+    DecorationProfileTree tree = this->tree();
     if (!tree.clearOverride(path))
         return false;
     m_settings->setDecorationProfileTree(tree);
@@ -423,14 +421,14 @@ int DecorationPageController::overrideDescendantCount(const QString& path) const
 {
     if (!m_settings)
         return 0;
-    return overrideDescendantsOf(readTree(m_settings), path).size();
+    return overrideDescendantsOf(tree(), path).size();
 }
 
 int DecorationPageController::clearOverrideDescendants(const QString& path)
 {
     if (!m_settings)
         return 0;
-    DecorationProfileTree tree = readTree(m_settings);
+    DecorationProfileTree tree = this->tree();
     const QStringList toClear = overrideDescendantsOf(tree, path);
     if (toClear.isEmpty())
         return 0;
