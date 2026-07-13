@@ -284,7 +284,7 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // `ShaderProfile::effectId = std::optional<QString>("")`. This is
     // the "explicit no effect" sentinel — `ShaderProfile::overlay`
     // treats it as a real value that wins over a parent's effectId,
-    // so inheritance from an ancestor (e.g. `panel` → "dissolve") is
+    // so inheritance from an ancestor (e.g. `popup` → "dissolve") is
     // BLOCKED at this path and every descendant resolves to no shader.
     // Parameters PASSED ALONGSIDE an empty effectId are preserved on
     // the disable sentinel — callers that need to clear them entirely

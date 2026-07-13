@@ -201,9 +201,11 @@ public:
     /// Open (creating if needed) the user surface-pack directory in the
     /// file manager.
     Q_INVOKABLE void openUserShaderDirectory();
-    /// Every surface path whose DIRECT override's chain contains
-    /// @p effectId, as {path, label} entries sorted by label — the
-    /// browser's "Used in" chips.
+    /// Every chain that contains @p effectId, as {path, label} entries sorted
+    /// by label — the browser's "Used in" chips. That is every surface whose
+    /// DIRECT override uses it, plus a "Global default" entry (empty path) when
+    /// the baseline chain does: the baseline is a real chain the resolve walk
+    /// falls back to, so a pack used only there is still in use.
     Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
     /// The decoration-set store — the `bridge` ShaderSetsPage binds to.

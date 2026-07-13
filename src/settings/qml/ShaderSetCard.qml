@@ -48,7 +48,10 @@ ExpandableRowDelegate {
     // a list-item role, or the row is announced as a button that does nothing when
     // activated. The actions live in the trailing controls, not on the row.
     Accessible.role: Accessible.ListItem
-    Accessible.name: row.setName
+    // Fold the Active state into the name: the pill is a plain Rectangle with no
+    // accessible role, so without this a screen reader cannot tell the applied
+    // set from any other row.
+    Accessible.name: row.isActive ? i18nc("@item accessible name of the currently applied set", "%1, active", row.setName) : row.setName
 
     // ── Header ──────────────────────────────────────────────────────────
 

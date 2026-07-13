@@ -224,9 +224,9 @@ private:
     void rollbackSnapshot(const QString& filePath);
 
     /// Atomically write @p root to @p filePath. On failure calls
-    /// notifyPendingChanges(): snapshotFile() may already have staged the
-    /// pre-edit content, so the domain's dirty state moved even though the
-    /// write did not, and the page must re-evaluate rather than keep a stale
+    /// rollbackSnapshot(): snapshotFile() may already have staged the pre-edit
+    /// content, and the write never landed, so the staging has to go back (the
+    /// rollback hook owns the resulting dirty-state signal) rather than leave
     /// flag.
     bool writeSetFile(const QString& filePath, const QJsonObject& root);
 
