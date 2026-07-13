@@ -787,6 +787,12 @@ private:
     /// session, so this starts false and the two agree from the outset.
     bool m_publishedSessionIdle = false;
 
+    /// This compositor has no ext-idle-notify-v1, established once. m_idleService is null in
+    /// that case, which is indistinguishable from "not built yet" — so start()'s re-arm,
+    /// which guards on exactly that, would rebuild and re-probe the service on every
+    /// stop()→start() cycle and log the unsupported notice again each time.
+    bool m_idleUnsupported = false;
+
     /// Every connection setupIdleService made whose SENDER outlives m_idleService: the two
     /// settings signals, bridgeRegistered, and the debounce timer (a value member). Held so
     /// stop() severs exactly these — not, say, every connection m_settings has to us, most

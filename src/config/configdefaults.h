@@ -1408,12 +1408,6 @@ public:
         return QRectF(0.0, 0.0, 1.0, 1.0);
     }
 
-    /// Tolerance for validating that virtual screen regions cover the full physical screen.
-    static constexpr qreal areaCoverageTolerance()
-    {
-        return 0.05;
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Ordering Settings
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1841,5 +1835,25 @@ static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::anim
 static_assert(ConfigDefaults::animationSequenceMode() >= ConfigDefaults::animationSequenceModeMin()
                   && ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax(),
               "ConfigDefaults::animationSequenceMode() outside declared [min, max] range");
+// The autotile five. Every OTHER constexpr accessor that declares a [min, max] was checked
+// here and these were not, for no reason anyone could name — the guard is free, and a
+// default outside its own declared slider range is a bug the compiler can simply refuse.
+// (The many non-constexpr accessors cannot be checked this way; test_configdefaults.cpp
+// covers those at runtime.)
+static_assert(ConfigDefaults::autotileInsertPosition() >= ConfigDefaults::autotileInsertPositionMin()
+                  && ConfigDefaults::autotileInsertPosition() <= ConfigDefaults::autotileInsertPositionMax(),
+              "ConfigDefaults::autotileInsertPosition() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileMasterCount() >= ConfigDefaults::autotileMasterCountMin()
+                  && ConfigDefaults::autotileMasterCount() <= ConfigDefaults::autotileMasterCountMax(),
+              "ConfigDefaults::autotileMasterCount() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileMaxWindows() >= ConfigDefaults::autotileMaxWindowsMin()
+                  && ConfigDefaults::autotileMaxWindows() <= ConfigDefaults::autotileMaxWindowsMax(),
+              "ConfigDefaults::autotileMaxWindows() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileSplitRatio() >= ConfigDefaults::autotileSplitRatioMin()
+                  && ConfigDefaults::autotileSplitRatio() <= ConfigDefaults::autotileSplitRatioMax(),
+              "ConfigDefaults::autotileSplitRatio() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileSplitRatioStep() >= ConfigDefaults::autotileSplitRatioStepMin()
+                  && ConfigDefaults::autotileSplitRatioStep() <= ConfigDefaults::autotileSplitRatioStepMax(),
+              "ConfigDefaults::autotileSplitRatioStep() outside declared [min, max] range");
 
 } // namespace PlasmaZones

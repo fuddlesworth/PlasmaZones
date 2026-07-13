@@ -251,7 +251,7 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
 
     // Decorations.Performance: may this window's chain animate right now? A chain that
     // may not is folded against a FROZEN clock, which is what lets it be cached — see
-    // packVariesPerFrame, and pausedAtSec / timeOffsetSec for why the freeze has to
+    // packVariesPerFrame, and pausedAtMs / timeOffsetMs for why the freeze has to
     // reach the uniform and not just the repaint driver.
     //
     // A window under a live shader TRANSITION always animates: the transition is the
@@ -262,66 +262,55 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     // RESUMES where it stopped. Not the shared clock: that one runs on regardless, so a
     // window that stopped for ten minutes would resume by jumping its iTime ten minutes
     // forward in a single frame, and every periodic pack would pop to an unrelated
-    // phase. The seconds it was not animating are accumulated into timeOffsetSec and
+    // phase. The time it was not animating is accumulated into timeOffsetMs and
     // subtracted out instead.
     //
     // TWO ways a window stops, and both must be accounted or the jump returns through
     // whichever was missed:
-    const float sharedNow = surfaceShaderTimeSeconds();
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    const qint64 sharedNowMs = surfaceShaderTimeMs();
     // Well clear of any real frame interval, and well under any gap a person would notice
     // as a phase jump.
     constexpr qint64 kNotPaintedGapMs = 250;
     if (plan.mayAnimate) {
-        // How long has this window NOT been animating? Two sensors, and they measure the
-        // SAME interval from different ends — so take the larger, never the sum. Adding
-        // them double-counts every span where both apply, which is the normal case, not
-        // an exotic one: a gate-paused window is precisely a window nothing is driving to
-        // repaint. Summing them subtracted each pause TWICE, so the clock walked backward
-        // by the pause duration on every idle resume and every focus return, cumulatively,
-        // until iTime went negative and anything under a sqrt() produced NaN.
-        float notAnimatingSec = 0.0f;
+        // How long has this window NOT been animating? Two sensors, and on THIS path they
+        // measure the same interval from different ends — both end at now — so take the
+        // larger, never the sum. Adding them double-counts every span where both apply,
+        // which is the normal case, not an exotic one: a gate-paused window is precisely a
+        // window nothing is driving to repaint.
+        qint64 notAnimatingMs = 0;
 
-        // GATED — Decorations.Performance paused it, and told us so. Measured from the
-        // instant the pause began.
-        if (state.pausedAtSec >= 0.0f) {
-            notAnimatingSec = sharedNow - state.pausedAtSec;
-            state.pausedAtSec = -1.0f;
+        // GATED — Decorations.Performance paused it, and told us so.
+        if (state.pausedAtMs >= 0) {
+            notAnimatingMs = sharedNowMs - state.pausedAtMs;
+            state.pausedAtMs = -1;
         }
 
         // UNPAINTED — nothing stopped it, it simply was not drawn: minimized, on another
         // desktop, fully occluded. Nobody tells us that happened, so it is inferred from
-        // the gap since the last fold. This is the far more common case, and it is why the
-        // accounting cannot hang off the pause gate alone. The threshold is well clear of
-        // any real frame interval and well under any gap a person would notice as a phase
-        // jump. lastFoldMs is stamped on BOTH terminal paths of the fold, including the
-        // cached-composite early return, so a window that IS being painted but is serving
-        // from cache never looks unpainted here.
-        constexpr qint64 kNotPaintedGapMs = 250;
+        // the gap since the last fold. lastFoldMs is stamped on BOTH terminal paths of the
+        // fold, including the cached-composite early return, so a window that IS being
+        // painted but is serving from cache never looks unpainted here.
         if (state.lastFoldMs >= 0 && nowMs - state.lastFoldMs > kNotPaintedGapMs) {
-            notAnimatingSec = std::max(notAnimatingSec, static_cast<float>(nowMs - state.lastFoldMs) / 1000.0f);
+            notAnimatingMs = std::max(notAnimatingMs, nowMs - state.lastFoldMs);
         }
-        state.timeOffsetSec += notAnimatingSec;
-    } else if (state.pausedAtSec < 0.0f) {
+        state.timeOffsetMs += notAnimatingMs;
+    } else if (state.pausedAtMs < 0) {
         // ENTERING a gated pause. Account the unpainted gap FIRST, and by ADDING it: the
-        // span [lastFold, pauseStart] is disjoint from the pause that starts now, so this
-        // is the one place the two sensors do not overlap and max() would be wrong.
-        //
-        // Without this, a window that stopped being painted and only THEN got gated (the
-        // session idles while it sits occluded or on another desktop; focus leaves a
-        // window nothing was painting) lost the whole unpainted span, because the resume
-        // only ever measures back to the pause. Its iTime jumped forward by exactly that
-        // span — the phase pop this accounting exists to prevent, arriving through the
-        // door nobody was watching.
+        // span [lastFold, pauseStart] is disjoint from the pause that starts now, so this is
+        // the one place the two sensors do not overlap and max() would be wrong. Without it,
+        // a window that stopped being painted and only THEN got gated lost the whole
+        // unpainted span, and its iTime jumped forward by exactly that much on resume.
         if (state.lastFoldMs >= 0 && nowMs - state.lastFoldMs > kNotPaintedGapMs) {
-            state.timeOffsetSec += static_cast<float>(nowMs - state.lastFoldMs) / 1000.0f;
+            state.timeOffsetMs += nowMs - state.lastFoldMs;
         }
-        state.pausedAtSec = sharedNow;
+        state.pausedAtMs = sharedNowMs;
     }
     // While paused this is pinned to the instant the pause began, so the folds that still
     // have to run (the window's own content damaged, its focus ramp moving) reproduce the
     // frame it froze on instead of drifting.
-    plan.foldTime = (plan.mayAnimate ? sharedNow : state.pausedAtSec) - state.timeOffsetSec;
+    const qint64 ownClockMs = (plan.mayAnimate ? sharedNowMs : state.pausedAtMs) - state.timeOffsetMs;
+    plan.foldTime = static_cast<float>(static_cast<double>(ownClockMs) / 1000.0);
     // A transition supplies its own restore shader and drives the window's geometry
     // frame by frame; don't trust a cached capture across it.
     //

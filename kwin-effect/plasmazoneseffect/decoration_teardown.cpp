@@ -187,14 +187,18 @@ void PlasmaZonesEffect::releaseSurfaceState(const QString& windowId, KWin::Effec
 // would be left redirected and shaded with no decoration behind it.
 void PlasmaZonesEffect::releaseDecorationGl(KWin::EffectWindow* w, int outerPadding)
 {
-    // setShader(nullptr) + unredirect makes KWin destroy the window's OffscreenData — its
-    // texture and its framebuffer. Same discipline as releaseSurfaceState: most callers
-    // reach here off the paint cycle.
-    ensureGlContextCurrent();
     if (!w || m_shaderManager.findTransition(w)) {
         // A transition owns the slot; its own teardown does the handover.
         return;
     }
+    // setShader(nullptr) + unredirect makes KWin destroy the window's OffscreenData — its
+    // texture and its framebuffer. Same discipline as releaseSurfaceState: most callers
+    // reach here off the paint cycle.
+    //
+    // AFTER the early-out, not before: the guard above costs a hash lookup and the context
+    // switch does not, and a decoration sweep over a screenful of windows hits this on every
+    // one of them.
+    ensureGlContextCurrent();
     setShader(w, nullptr);
     unredirect(w);
     // Dropping the redirect/shader on a STATIC window generates no damage of its own,

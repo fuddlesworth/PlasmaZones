@@ -33,10 +33,19 @@ namespace PlasmaZones {
 
 void Daemon::setupIdleService()
 {
-    // Re-entrant: start() calls this again after a stop(). DISCONNECT, do not merely drop
-    // the handles — clearing the list would leave the old connections live and the next run
-    // would stack duplicates on top of them, which is precisely the failure this list exists
-    // to prevent.
+    if (m_idleUnsupported) {
+        // Established on the first probe and not worth repeating: start() re-arms on a null
+        // m_idleService, and an unsupported compositor leaves it null forever, so without
+        // this every stop()→start() cycle would rebuild the service, fail the same way, and
+        // log the same notice again.
+        return;
+    }
+
+    // start() re-arms this after a stop(), and stop() has already severed these — but sever
+    // them again rather than trusting that. DISCONNECT, do not merely clear the list: a
+    // cleared list leaves the connections themselves live, so a caller who reached here with
+    // connections still standing would stack a second set on top and every settings write
+    // would fire both.
     teardownIdleConnections();
 
     // No QObject parent: the unique_ptr owns it. Passing `this` as well would be
@@ -50,6 +59,7 @@ void Daemon::setupIdleService()
         // at idleness from some other signal.
         qCInfo(lcDaemon) << "Idle notification unsupported by this compositor — "
                             "decoration PauseWhenIdle will not engage";
+        m_idleUnsupported = true;
         m_idleService.reset();
         return;
     }

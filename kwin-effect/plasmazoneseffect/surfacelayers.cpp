@@ -292,6 +292,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // test reads permanently true and drives an addRepaintFull every ~33ms for
         // the rest of the session, and the desktop can never idle.
         state.lastFoldMs = ShaderInternal::shaderClockNowMs();
+        state.backdropRepaintPending = false; // the repaint the driver asked for has landed
         return state.compositeTex[state.finalSlot].get();
     }
 
@@ -670,7 +671,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             }
             // Contract uniforms + pack params. windowId threaded in so the
             // focus-fade ramp doesn't recompute getWindowId(w) per pack.
-            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, foldTime, mayAnimate, pad, windowId);
+            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, foldTime, plan.foldCursor, pad, windowId);
             drawFullscreenQuad();
         }
         for (int i = 0; i < mainChannelsBound; ++i) {
@@ -728,6 +729,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     state.foldedOpacity = plan.foldOpacity;
     state.foldedCursor = plan.foldCursor;
     state.lastFoldMs = ShaderInternal::shaderClockNowMs();
+    state.backdropRepaintPending = false; // the repaint the driver asked for has landed
     return state.compositeTex[lastDst].get();
 }
 

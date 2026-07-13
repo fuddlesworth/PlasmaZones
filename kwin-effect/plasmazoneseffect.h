@@ -1024,8 +1024,12 @@ private:
     /// per-frame input it pushes is then frozen with the clock — see @p timeSec, and
     /// the cursor sentinel in the body. Freeze the fold or freeze its inputs, never one
     /// without the other.
+    /// @p foldCursor is the cursor the FOLD resolved (SurfaceFoldPlan::foldCursor) — a
+    /// global point, or kCursorOutside when the pointer is elsewhere or the chain is
+    /// paused. Handed in rather than re-derived, because the fold keys its cache on this
+    /// exact value and the shader must be given the same one.
     void pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
-                            const CompiledSurfacePack& pack, qreal scale, float timeSec, bool animating,
+                            const CompiledSurfacePack& pack, qreal scale, float timeSec, const QPointF& foldCursor,
                             qreal texturePaddingLogical = 0.0, const QString& windowId = {});
 
     /// The window's rule-resolved opacity, preferring the per-frame value
@@ -1156,6 +1160,10 @@ private:
     /// precision over a long session). Monotonic (steady_clock). Pushed to every
     /// pass whose shader references iTime.
     float surfaceShaderTimeSeconds();
+
+    /// The same clock as surfaceShaderTimeSeconds(), in integer milliseconds. The
+    /// per-window animation clock accounts in this domain — see SurfaceMultipassState.
+    qint64 surfaceShaderTimeMs();
     qint64 m_surfaceTimeEpochMs = -1; ///< steady-clock ms captured on the first iTime push
 
     /// True when ANY pack in @p windowId's resolved chain references iTime (main
@@ -1194,11 +1202,6 @@ private:
     /// for being driven.
     bool focusRampInFlight(const QString& windowId) const;
 
-    /// Wake every decorated window with one repaint each. Needed whenever a gate
-    /// above OPENS (a settings flip, the session resuming, the daemon dying while we
-    /// were idle): a paused chain emits no damage of its own, so it would otherwise
-    /// stay frozen on its last composite until something unrelated damaged it.
-    /// Defined in surface_gating.cpp.
     /// Make the compositor's GL context current, best-effort.
     ///
     /// Every path that DESTROYS a GL object (a shader, a texture, a framebuffer, or a
@@ -1216,6 +1219,10 @@ private:
         return KWin::effects && KWin::effects->makeOpenGLContextCurrent();
     }
 
+    /// Wake every decorated window with one repaint each. Needed whenever a gate above
+    /// OPENS (a settings flip, the session resuming, the daemon dying while we were idle):
+    /// a paused chain emits no damage of its own, so it would otherwise stay frozen on its
+    /// last composite until something unrelated damaged it. Defined in surface_gating.cpp.
     void repaintAllDecorations();
 
     /// Repaint every decorated window whose chain reads the cursor. The ONLY thing that
@@ -1379,15 +1386,15 @@ private:
     /// (re)allocation leaves the dirty flag set to retry next frame.
     bool ensureAudioSpectrumTexture();
 
-    /// Bind the session-global spectrum to kSurfaceAudioUnit and push
-    /// iAudioSpectrumSize onto the currently-bound @p shader. Pushes size 0 (and
-    /// binds nothing) when audio is not live or the pack declares no audio
-    /// locations, so getBass*() reads 0 and the pack renders static. Returns true
-    /// when it bound the texture (the caller then unbinds the unit after drawing).
-    /// Bind the CAVA spectrum for a pack. @p animating is false for a chain that
-    /// Decorations.Performance has paused, which is treated exactly like silence (bar
-    /// count 0, no texture) — a paused chain is cached, and a cached composite must not
-    /// be fed a live spectrum. See the note in surface_audio.cpp.
+    /// Bind the session-global CAVA spectrum to kSurfaceAudioUnit and push
+    /// iAudioSpectrumSize onto the currently-bound @p shader. Pushes size 0 (and binds
+    /// nothing) when audio is not live or the pack declares no audio locations, so
+    /// getBass*() reads 0 and the pack renders static. Returns true when it bound the
+    /// texture, and the caller then unbinds the unit after drawing.
+    ///
+    /// @p animating is false for a chain that Decorations.Performance has paused, which is
+    /// treated exactly like silence — a paused chain is CACHED, and a cached composite must
+    /// not be fed a live spectrum. See the note in surface_audio.cpp.
     bool bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc, bool animating);
 
     /// Resolve the DECORATION SURFACE PATH for @p windowId based on MEMBERSHIP

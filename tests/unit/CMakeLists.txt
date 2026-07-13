@@ -718,6 +718,7 @@ add_test(NAME test_dbus_contract_sync COMMAND test_dbus_contract_sync)
 add_executable(test_settings_registry_contract dbus/test_settings_registry_contract.cpp)
 target_compile_definitions(test_settings_registry_contract
                            PRIVATE PLASMAZONES_EFFECT_SRC_DIR="${CMAKE_SOURCE_DIR}/kwin-effect"
+                                   PLASMAZONES_EDITOR_SRC_DIR="${CMAKE_SOURCE_DIR}/src/editor"
                                    PLASMAZONES_PROTOCOL_INC_DIR="${CMAKE_SOURCE_DIR}/libs/phosphor-protocol/include")
 # PhosphorAnimation: the fixture builds a real PhosphorProfileRegistry, because
 # initializeRegistry() gates the motionProfileTree getter behind a non-null one — with

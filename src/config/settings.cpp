@@ -1822,7 +1822,12 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
                             << axisInt;
         m_ruleStore->load();
-        Q_EMIT(this->*signalFn)(mode);
+        // NOTHING is emitted here. The rollback puts the entry set back exactly where it
+        // started, so the value did not change and the project's emit-on-change rule says
+        // not to claim it did — and this signal is what the disable-list UIs re-read on, so
+        // firing it would have them re-read a set identical to the one they are already
+        // showing. Consumers that track the RULES specifically are covered regardless:
+        // load() emits rulesChanged(persisted=true) on its way back to the on-disk state.
         return;
     }
 

@@ -4,6 +4,7 @@
 #include "../plasmazoneseffect.h"
 #include "../compositorclock.h"
 #include "shader_internal.h"
+#include "surface_fold.h"
 #include "shader_resolve.h"
 #include "window_query.h"
 
@@ -454,22 +455,27 @@ void PlasmaZonesEffect::postPaintScreen()
             if (it->needsBackdrop) {
                 constexpr qint64 kBackdropRefoldIntervalMs = 33;
                 const auto stateIt = m_surfaceMultipass.find(it.key());
-                // NOT due when the window has never folded. lastFoldMs only advances when
-                // the fold actually runs, i.e. when KWin really paints the window — and it
-                // declines to paint one that is fully occluded by an opaque window above
-                // it. Treating "never folded" as due meant such a window was due on every
-                // frame, forever: the ~30fps backdrop refold degenerated into a per-vsync
-                // full repaint and the desktop could never idle, which is the exact shape
-                // of runaway this driver exists to bound.
+                // A repaint we have already ASKED FOR is not due again. This driver is the
+                // one repaint source with no damage behind it, and a repaint is a request,
+                // not a promise: KWin declines to paint a window fully occluded by an opaque
+                // one above it, so the fold never runs and lastFoldMs never advances. A
+                // clock-only test then says "due" again on the very next frame — a full
+                // repaint every vsync, forever, and the desktop can never idle. Which is
+                // precisely the runaway this ~30fps rate limit exists to prevent.
                 //
-                // Its first real paint runs the fold, which creates the state, and the next
-                // postPaintScreen picks the backdrop up. The hover arm refuses to drive a
-                // never-folded window for precisely this reason; the two now agree.
+                // backdropRepaintPending is armed below when we ask, and cleared by the fold
+                // when it actually runs. So an unpainted window costs ONE wasted repaint,
+                // not one per frame, and a window that is genuinely painted is unaffected —
+                // its fold clears the flag on the frame the repaint lands.
+                //
+                // A window that has never folded at all has nothing to refresh yet either;
+                // its first real paint creates the state and the next pass picks it up.
                 //
                 // Read the clock PINNED for this frame, not a live sample: every other
                 // consumer in this file reads it, so a live read here would let two windows
                 // in one frame disagree about what time it is.
                 backdropDue = stateIt != m_surfaceMultipass.end() && stateIt->second.lastFoldMs >= 0
+                    && !stateIt->second.backdropRepaintPending
                     && (frameClockMs - stateIt->second.lastFoldMs) >= kBackdropRefoldIntervalMs;
             }
             // Decorations.Performance: is this window's chain allowed to animate
@@ -507,6 +513,13 @@ void PlasmaZonesEffect::postPaintScreen()
             if (idleGated || (!focusRamping && !backdropDue && !decorationMayAnimate(sw))) {
                 continue;
             }
+            if (backdropDue) {
+                // Arm the one-shot: we are asking for this repaint now, and we will not ask
+                // again until a fold tells us it landed.
+                if (const auto sit = m_surfaceMultipass.find(it.key()); sit != m_surfaceMultipass.end()) {
+                    sit->second.backdropRepaintPending = true;
+                }
+            }
             if (backdropDue || windowSurfaceAnimates(it.key())) {
                 // Mark this repaint as OURS. addRepaintFull raises
                 // EffectWindow::windowDamaged (the signal fires on repaint
@@ -527,14 +540,7 @@ void PlasmaZonesEffect::postPaintScreen()
                 // A padded chain's margin band sits OUTSIDE the window item;
                 // per-window repaints clip to it, so damage the band at
                 // screen level (the documented addLayerRepaint pitfall).
-                if (it->outerPadding > 0) {
-                    QRectF padded = sw->expandedGeometry();
-                    if (padded.isEmpty()) {
-                        padded = sw->frameGeometry();
-                    }
-                    const int pad = it->outerPadding;
-                    KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
-                }
+                damagePaddedBand(sw, it->outerPadding);
             }
         }
     }

@@ -13,6 +13,8 @@
 
 #include "types.h"
 
+#include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/gltexture.h>
 
@@ -24,6 +26,33 @@
 #include <epoxy/gl.h>
 
 namespace PlasmaZones {
+
+/// The rect a padded decoration actually covers: the window's expanded geometry (its
+/// frame, if it reports none) grown by the chain's outer padding.
+///
+/// One definition, because the four callers that damage this band and the one that records
+/// it must agree to the pixel. They were five copies of the same six lines, and a band
+/// computed one way but damaged another leaves a stale glow behind — which is exactly the
+/// bug that put the copy in the hover driver in the first place.
+inline QRectF paddedBandRect(const KWin::EffectWindow* w, int outerPadding)
+{
+    QRectF padded = w->expandedGeometry();
+    if (padded.isEmpty()) {
+        padded = w->frameGeometry();
+    }
+    const qreal pad = outerPadding;
+    return padded.adjusted(-pad, -pad, pad, pad);
+}
+
+/// Damage the whole padded band. A no-op for an unpadded chain, whose composite never
+/// draws outside the window rect and is covered by addRepaintFull alone.
+inline void damagePaddedBand(const KWin::EffectWindow* w, int outerPadding)
+{
+    if (outerPadding <= 0 || !KWin::effects) {
+        return;
+    }
+    KWin::effects->addRepaint(KWin::RectF(paddedBandRect(w, outerPadding)));
+}
 
 /// Allocate a full-canvas RGBA8 target and the framebuffer that wraps it. False on
 /// failure, with both left null.

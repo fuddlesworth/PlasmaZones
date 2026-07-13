@@ -586,14 +586,6 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (effectId.isEmpty() || !window)
         return false;
 
-    // Everything below is GL: it compiles the pack's shader (glCreateShader /
-    // glLinkProgram), uploads its user textures (glTexImage2D), and runs the LRU eviction,
-    // whose victim's destructor is glDeleteTextures. And every caller reaches here OFF the
-    // paint cycle — a KWin window signal, a D-Bus reply, a drag ending — where the
-    // compositor's context is not current. endShaderTransition, its counterpart, has done
-    // this from the start and says why; the begin side never did.
-    ensureGlContextCurrent();
-
     // A timing curve is meaningless on the animator-driven path (durationMs == 0):
     // that leg reads its progress from the WindowAnimator, whose own profile
     // ALREADY carries the curve, so applying one here would double-ease. The
@@ -670,6 +662,18 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                             << "on a per-window event — desktop packs sample unbound uFromDesktop/uToDesktop";
         return false;
     }
+
+    // Everything below THIS point is GL: it compiles the pack's shader (glCreateShader /
+    // glLinkProgram), uploads its user textures (glTexImage2D), and runs the LRU eviction,
+    // whose victim's destructor is glDeleteTextures. And every caller reaches here OFF the
+    // paint cycle — a KWin window signal, a D-Bus reply, a drag ending — where the
+    // compositor's context is not current. endShaderTransition, its counterpart, has done
+    // this from the start and says why; the begin side never did.
+    //
+    // Placed here, BELOW the early-outs, not at the top of the function. Making a context
+    // current is not free, and the busiest caller by far is a superseded drag geometry
+    // update that turns around at one of the guards above without touching GL at all.
+    ensureGlContextCurrent();
 
     // KWin-specific default vertex stage. Hardcoded here rather than
     // loaded from `data/animations/shared/animation.vert` because that

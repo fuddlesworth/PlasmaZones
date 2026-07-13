@@ -296,8 +296,9 @@ qreal PlasmaZonesEffect::resolvedWindowOpacity(KWin::EffectWindow* w, const Wind
 }
 
 void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
-                                           const CompiledSurfacePack& pack, qreal scale, float timeSec, bool animating,
-                                           qreal texturePaddingLogical, const QString& windowId)
+                                           const CompiledSurfacePack& pack, qreal scale, float timeSec,
+                                           const QPointF& foldCursor, qreal texturePaddingLogical,
+                                           const QString& windowId)
 {
     // The caller (renderSurfaceChainComposite's per-pack fold) has already
     // resolved @p pack and @p wb, confirmed the border is applied, and bound
@@ -405,15 +406,21 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // Hover packs declare `animated: true` so the vsync repaint loop keeps
     // this fresh; there is no per-cursor-move damage path.
     if (pack.iMouseLoc >= 0) {
-        const QPointF cursorGlobal = m_shaderManager.m_cachedCursorGlobal;
+        // The cursor the FOLD resolved, not a re-derivation from a live cache. This used to
+        // be derived from an `animating` flag that a live transition WIDENS (the
+        // transition's clock and audio must run) — so a gate-PAUSED window under a
+        // transition was handed the live pointer while its cache key recorded "absent": the
+        // shader and the key disagreeing about the one value three separate comments swear
+        // they share. The fold decides it once, in foldCursorFor, and everyone downstream is
+        // handed that answer. There is nothing left here to derive it from, which is the
+        // point.
+        //
+        // kCursorOutside means the pointer is not over this window (or the chain is paused),
+        // and maps to the (-1, -1) canvas-local sentinel the packs already handle.
+        const QPointF cursorGlobal = foldCursor;
         float localX = -1.0f;
         float localY = -1.0f;
-        // A PAUSED chain reads the cursor as absent, the same way it reads the audio
-        // spectrum as silent: its composite is cached, and a cached composite fed a
-        // live cursor would jump the hover highlight to a new place on every fold the
-        // capture forced while pretending to hold still. The (-1, -1) sentinel is the
-        // shape the packs already handle (cursor outside the canvas).
-        const bool inside = animating && cursorGlobal.x() >= expanded.left() && cursorGlobal.x() < expanded.right()
+        const bool inside = cursorGlobal.x() >= expanded.left() && cursorGlobal.x() < expanded.right()
             && cursorGlobal.y() >= expanded.top() && cursorGlobal.y() < expanded.bottom();
         if (inside) {
             localX = static_cast<float>((cursorGlobal.x() - expanded.left()) * scale);

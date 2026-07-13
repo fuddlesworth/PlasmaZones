@@ -177,25 +177,34 @@ QString readSource(const QString& path, QString* whyFailed)
         *whyFailed = QStringLiteral("cannot open %1").arg(path);
         return {};
     }
-    const QString content = QString::fromUtf8(f.readAll());
-    if (content.isEmpty()) {
-        // An empty-but-readable file returns the same {} as an unopenable one, so it
-        // has to explain itself too or the caller's failure message comes out blank.
-        *whyFailed = QStringLiteral("%1 is empty").arg(path);
+    const QString stripped = withoutComments(QString::fromUtf8(f.readAll()));
+    if (stripped.isEmpty()) {
+        // Check what we RETURN, not what we read. Every caller treats {} as failure and
+        // prints *whyFailed, and a file that is entirely comments (a licence header and
+        // nothing else) reads non-empty but strips to nothing — so guarding the raw text
+        // left the caller bailing out with a blank explanation.
+        *whyFailed = QStringLiteral("%1 has no code in it").arg(path);
     }
-    return withoutComments(content);
+    return stripped;
 }
 
 /// Every setting key the effect fetches, scraped from its own sources rather than
 /// duplicated here — a hand-copied list is exactly the thing that drifts.
 ///
+/// WHAT counts as a fetch is discovered, not listed: the set is seeded with
+/// loadSettingAsync and grows to include any function that hands its own key parameter to
+/// a member of the set (the audio wrappers do exactly that). A wrapper added tomorrow is
+/// covered without touching this file, which matters because the alternative — a list of
+/// names here — is another thing to forget, and forgetting it took the numerator and the
+/// denominator out of agreement and left a wrapper's keys unchecked.
+///
 /// Every fetch must NAME its key at the call site, in one of two shapes:
 ///
-///   loadSettingAsync(QStringLiteral("key"), …)              a literal
-///   loadAudioInt / loadAudioBool(QStringLiteral("key"), …)  the audio wrappers, which
-///                                                           forward to loadSettingAsync
-///   loadSettingAsync(SettingProperty::X, …)                 a named constant, resolved
-///                                                           from ServiceConstants.h
+///   loadSettingAsync(QStringLiteral("key"), …)   a literal
+///   loadSettingAsync(SettingProperty::X, …)      a named constant, resolved from
+///                                                ServiceConstants.h
+///
+/// and so must every call to a discovered wrapper.
 ///
 /// There used to be a third shape — bind the constant to a local `kName` first, then
 /// pass the alias — and resolving an identifier back to a key is where this scrape went
@@ -232,9 +241,24 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
         *whyFailed = QStringLiteral("ServiceConstants.h has no SettingProperty namespace — did it move?");
         return {};
     }
-    // The namespace closes on a bare `}` at column 0. It contains no nested braces (it is
-    // a flat list of constants), so the first one is the end of it.
-    const qsizetype nsEnd = constantsSrc.indexOf(QLatin1String("\n}"), nsStart);
+    // Find the namespace's real end by MATCHING BRACES, not by looking for the first
+    // `\n}`. The namespace is a flat list of constants today, so the two agree — but the
+    // moment anyone nests anything in it (an inner namespace, a struct, a function body),
+    // the naive scan stops at the INNER closing brace and silently truncates the slice.
+    // Every constant below the truncation point then fails to scrape, and the declaration
+    // self-check just below turns that into a hard failure with a misleading reason.
+    qsizetype nsEnd = -1;
+    int depth = 0;
+    for (qsizetype i = constantsSrc.indexOf(QLatin1Char('{'), nsStart); i >= 0 && i < constantsSrc.size(); ++i) {
+        if (constantsSrc.at(i) == QLatin1Char('{')) {
+            ++depth;
+        } else if (constantsSrc.at(i) == QLatin1Char('}')) {
+            if (--depth == 0) {
+                nsEnd = i;
+                break;
+            }
+        }
+    }
     if (nsEnd < 0) {
         *whyFailed = QStringLiteral("SettingProperty namespace is not closed as expected");
         return {};
@@ -263,45 +287,29 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
         return {};
     }
 
-    // Any call that fetches a setting, in every shape the effect writes. Escapes
-    // rather than a raw string: a raw string inside QStringLiteral does not survive
-    // preprocessing.
-    // ANY load*() that NAMES a key. Deliberately not a list of wrapper names: that list was
-    // itself the hand-maintained part (loadAudioInt / loadAudioBool were added to it by
-    // hand), and a new wrapper forgotten from it contributed to NEITHER the numerator nor
-    // the denominator — the tally balanced and the key went unchecked. Silently. Now a
-    // wrapper is recognised by what it does, not by what it is called.
-    static const QRegularExpression fetchRe(QLatin1String(
-        "(?<![A-Za-z0-9_])load[A-Za-z0-9_]*\\(\\s*(?:this,\\s*)?(?:QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"
-        "|PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+))"));
-    // Direct calls to the PRIMITIVE that name a key. The tally below is anchored on the
-    // primitive — every fetch, through however many wrappers, funnels into it — while the
-    // scrape above is deliberately broader. Two different jobs: the scrape collects keys,
-    // the tally proves no call site was overlooked.
-    static const QRegularExpression primitiveRe(
-        QLatin1String("loadSettingAsync\\(\\s*(?:this,\\s*)?(?:QStringLiteral\\(\"[A-Za-z0-9_]+\"\\)"
-                      "|PhosphorProtocol::Service::SettingProperty::[A-Za-z0-9_]+)"));
-    // The call sites that legitimately do not name a key: they take it as a PARAMETER,
-    // because they ARE the plumbing. Each is pinned by its full declaration shape.
+    // The set of functions that FETCH a setting, discovered from the source rather than
+    // listed here. Seeded with the primitive; any function whose body passes its OWN key
+    // parameter to a member of the set joins it. That picks up the effect's forwarder and
+    // both audio wrappers today, and any wrapper written tomorrow, with no list to forget.
     //
-    // Keying these on the identifier `name` was its own silent hole. `name` is an ordinary
-    // identifier, so a genuine runtime-assembled fetch that happened to use it —
-    // `const QString name = prefix + suffix; loadSettingAsync(name, cb);` — matched, was
-    // classified a known non-fetch, and its key was never checked. The SAME fetch with the
-    // local called `key` was loud. Whether a real setting got guarded came down to what
-    // somebody named a variable.
-    static const QRegularExpression nonFetchRe(
-        QLatin1String("PlasmaZonesEffect::loadSettingAsync\\(const QString& name" // the definition
-                      "|void loadSettingAsync\\(const QString& name" // its declaration
-                      "|ClientHelpers::loadSettingAsync\\(this, name, std::forward" // its one forwarder
-                      "|loadSettingAsync\\(name, \\[this, field\\]")); // the two audio wrappers
+    // Why it must be discovered: the numerator once accepted any `load*()` while the
+    // denominator counted only the text `loadSettingAsync(`. A wrapper call site whose key
+    // was not in a recognised shape was therefore invisible to BOTH — never scraped, never
+    // counted, tally balanced, key unchecked, test green. The two sides must cover the SAME
+    // population or the tally proves nothing, and that is the hole this test has fallen into
+    // seven times.
 
     // EVERY effect source, RECURSIVELY, found at test time. A hand-written file list is a
     // list to forget, and so is a hand-written directory list: the effect already has
     // three source directories, and a fetch in a new one would simply never be opened —
     // no tally, no failure, no key checked.
+    // Every C++ extension, not just the two the effect happens to use today. A fetch moved
+    // into a .hpp or pulled into an .inl would otherwise never be opened, and an unopened
+    // file has no tally and no failure — it just quietly stops being checked.
     QStringList files;
-    QDirIterator it(QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR), {QStringLiteral("*.cpp"), QStringLiteral("*.h")},
+    QDirIterator it(QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR),
+                    {QStringLiteral("*.cpp"), QStringLiteral("*.h"), QStringLiteral("*.hpp"), QStringLiteral("*.cc"),
+                     QStringLiteral("*.cxx"), QStringLiteral("*.inl")},
                     QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
         files << it.next();
@@ -311,12 +319,99 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
         return {};
     }
 
-    QStringList keys;
+    // Read every source ONCE (comments stripped), then discover the fetcher set over the
+    // whole corpus before scanning: a wrapper may be defined in one file and called from
+    // another.
+    QHash<QString, QString> sources;
     for (const QString& path : files) {
         const QString src = readSource(path, whyFailed);
         if (src.isEmpty()) {
             return {};
         }
+        sources.insert(path, src);
+    }
+
+    // Seed: the primitive. A function JOINS the set by handing its OWN key parameter to a
+    // member of the set — which is what a wrapper is. Both shapes the effect writes are
+    // recognised, the member function and the `const auto f = [this](const QString& name`
+    // lambda, and the loop runs to a fixed point so a wrapper of a wrapper is caught too.
+    // Their key parameter names are collected as well: a fetcher call keyed on one of THOSE
+    // is plumbing, not a fetch, and that is how the tally below tells the two apart.
+    QSet<QString> fetchers{QStringLiteral("loadSettingAsync")};
+    QSet<QString> keyParams;
+    static const QRegularExpression memberRe(
+        QLatin1String("(?:[A-Za-z0-9_]+::)?([A-Za-z0-9_]+)\\(const QString& ([A-Za-z0-9_]+)"));
+    static const QRegularExpression lambdaRe(
+        QLatin1String("auto ([A-Za-z0-9_]+) = \\[[^\\]]*\\]\\(const QString& ([A-Za-z0-9_]+)"));
+    bool grew = true;
+    while (grew) {
+        grew = false;
+        for (const QString& src : std::as_const(sources)) {
+            for (const QRegularExpression* re : {&memberRe, &lambdaRe}) {
+                auto wit = re->globalMatch(src);
+                while (wit.hasNext()) {
+                    const auto m = wit.next();
+                    const QString fn = m.captured(1);
+                    const QString param = m.captured(2);
+                    if (fetchers.contains(fn)) {
+                        keyParams.insert(param); // the primitive's own declaration lands here
+                        continue;
+                    }
+                    // Does its body hand its own key parameter to something already known to
+                    // fetch? Look at the text following the signature.
+                    const QString body = src.mid(m.capturedEnd(0), 4000);
+                    for (const QString& known : std::as_const(fetchers)) {
+                        if (body.contains(known + QLatin1Char('(') + param + QLatin1Char(','))
+                            || body.contains(known + QLatin1String("(this, ") + param + QLatin1Char(','))) {
+                            fetchers.insert(fn);
+                            keyParams.insert(param);
+                            grew = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (fetchers.size() < 2) {
+        // The discovery found the seed and nothing else. Today the effect HAS wrappers, so
+        // that means the shapes moved and this scan is now blind to them — which is exactly
+        // the silent-hole failure this whole mechanism exists to prevent.
+        *whyFailed = QStringLiteral(
+            "discovered no setting-fetch wrappers beyond loadSettingAsync — the wrapper "
+            "shape has changed and their keys are no longer being checked");
+        return {};
+    }
+
+    // Longest name first: `loadSettingAsync` must not be matched as a prefix of a longer one.
+    QStringList fetcherNames(fetchers.cbegin(), fetchers.cend());
+    std::sort(fetcherNames.begin(), fetcherNames.end(), [](const QString& a, const QString& b) {
+        return a.size() != b.size() ? a.size() > b.size() : a < b;
+    });
+    QStringList paramNames(keyParams.cbegin(), keyParams.cend());
+    paramNames.sort();
+    const QString anyFetcher =
+        QStringLiteral("(?<![A-Za-z0-9_])(?:%1)\\(\\s*(?:this,\\s*)?").arg(fetcherNames.join(QLatin1Char('|')));
+
+    // NAMES a key: a literal, or a SettingProperty constant.
+    const QRegularExpression fetchRe(anyFetcher
+                                     + QLatin1String("(?:QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"
+                                                     "|PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+))"));
+    // ANY call to ANY fetcher — the denominator, drawn from the SAME population as the
+    // numerator. That is the whole point of deriving it: a fetch either names its key (and
+    // is scraped) or it does not (and is unaccounted, loudly). There is nowhere left to fall
+    // between the two, which is where a wrapper's keys used to disappear.
+    const QRegularExpression anyFetchRe(anyFetcher);
+    // Plumbing, not a fetch: the declaration and definition of a fetcher, and a forward that
+    // passes a fetcher's own key parameter through. Keyed on the parameter names discovered
+    // above, so a renamed parameter shows up as unaccounted rather than being waved through.
+    const QRegularExpression nonFetchRe(
+        anyFetcher
+        + QStringLiteral("(?:const QString& [A-Za-z0-9_]+|(?:%1)\\s*,)").arg(paramNames.join(QLatin1Char('|'))));
+
+    QStringList keys;
+    for (const QString& path : files) {
+        const QString src = sources.value(path);
 
         int scraped = 0;
         auto it = fetchRe.globalMatch(src);
@@ -342,16 +437,14 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
             ++scraped;
         }
 
-        // Every DIRECT call to the primitive must be accounted for: either it names a key
-        // (and was scraped), or it is one of the known shapes that takes the key as a
-        // parameter. A fetch written in some shape this function does not understand shows
-        // up here as unaccounted, loudly, instead of vanishing.
-        const int total = static_cast<int>(src.count(QLatin1String("loadSettingAsync(")));
-        int direct = 0;
-        auto pit = primitiveRe.globalMatch(src);
-        while (pit.hasNext()) {
-            pit.next();
-            ++direct;
+        // Every call to ANY fetcher must be accounted for: it either names a key (and was
+        // scraped just above), or it is one of the plumbing shapes that takes the key as a
+        // parameter. Anything else is unaccounted, and unaccounted is loud.
+        int total = 0;
+        auto ait = anyFetchRe.globalMatch(src);
+        while (ait.hasNext()) {
+            ait.next();
+            ++total;
         }
         int nonFetch = 0;
         auto nit = nonFetchRe.globalMatch(src);
@@ -359,10 +452,10 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
             nit.next();
             ++nonFetch;
         }
-        if (direct + nonFetch != total) {
+        if (scraped + nonFetch != total) {
             *unaccounted << QStringLiteral(
-                                "%1: %2 fetch call sites, %3 scraped, %4 known non-fetches — %5 "
-                                "unaccounted for")
+                                "%1: %2 fetcher call sites, %3 name a key, %4 plumbing — %5 unaccounted "
+                                "for")
                                 .arg(QFileInfo(path).fileName())
                                 .arg(total)
                                 .arg(scraped)
@@ -373,6 +466,129 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
 
     if (keys.isEmpty()) {
         *whyFailed = QStringLiteral("scraped 0 keys — has the call shape changed?");
+    }
+    return keys;
+}
+
+/// Every setting key the EDITOR fetches. Same contract as the effect, same failure when it
+/// breaks — the editor is a separate process reading the same registry over the same bus,
+/// and an unregistered key answers with an error, so the editor silently keeps its built-in
+/// default. That is how a gap overlay renders with the wrong inset and nothing says why.
+///
+/// The editor fetches in two shapes, and both must NAME their keys:
+///
+///   queryBoolSetting(QStringLiteral("key"), default)   one key at the call site
+///   querySettingsBatch(kSomeKeys)                      a named QStringList of literals,
+///                                                      declared in the same file
+///
+/// A batch call whose list cannot be found and read is UNACCOUNTED, not skipped: a list
+/// assembled at runtime, or moved to another TU, would otherwise take its keys out of this
+/// test's sight while leaving it green.
+QStringList keysFetchedByEditor(QString* whyFailed, QStringList* unaccounted)
+{
+    QStringList files;
+    QDirIterator it(QStringLiteral(PLASMAZONES_EDITOR_SRC_DIR),
+                    {QStringLiteral("*.cpp"), QStringLiteral("*.h"), QStringLiteral("*.hpp"), QStringLiteral("*.cc"),
+                     QStringLiteral("*.cxx"), QStringLiteral("*.inl")},
+                    QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        files << it.next();
+    }
+    if (files.isEmpty()) {
+        *whyFailed = QStringLiteral("found no editor sources under %1").arg(QLatin1String(PLASMAZONES_EDITOR_SRC_DIR));
+        return {};
+    }
+
+    // A single-key fetch: query*Setting(QStringLiteral("key"), …). The helper's own
+    // declaration and definition take the key as a `const QString&` parameter and so do not
+    // match, which is what keeps them out of the tally.
+    static const QRegularExpression directRe(
+        QLatin1String("(?<![A-Za-z0-9_])query[A-Za-z0-9_]*Setting\\(\\s*QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"));
+    static const QRegularExpression directCallRe(
+        QLatin1String("(?<![A-Za-z0-9_])query[A-Za-z0-9_]*Setting\\(\\s*(?!const QString&)"));
+    static const QRegularExpression batchRe(
+        QLatin1String("(?<![A-Za-z0-9_])querySettingsBatch\\(\\s*(?!const QStringList&)([A-Za-z0-9_]+)\\s*\\)"));
+    static const QRegularExpression batchCallRe(
+        QLatin1String("(?<![A-Za-z0-9_])querySettingsBatch\\(\\s*(?!const QStringList&)"));
+    static const QRegularExpression literalRe(QLatin1String("QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"));
+
+    QStringList keys;
+    for (const QString& path : files) {
+        const QString src = readSource(path, whyFailed);
+        if (src.isEmpty()) {
+            return {};
+        }
+
+        int direct = 0;
+        auto dit = directRe.globalMatch(src);
+        while (dit.hasNext()) {
+            keys << dit.next().captured(1);
+            ++direct;
+        }
+        int directCalls = 0;
+        auto dcit = directCallRe.globalMatch(src);
+        while (dcit.hasNext()) {
+            dcit.next();
+            ++directCalls;
+        }
+        if (direct != directCalls) {
+            *unaccounted << QStringLiteral("%1: %2 single-key fetches, %3 name their key — %4 do not")
+                                .arg(QFileInfo(path).fileName())
+                                .arg(directCalls)
+                                .arg(direct)
+                                .arg(directCalls - direct);
+        }
+
+        // Each batch call names a QStringList. Find its declaration in the same file and
+        // read the literals out of its braces.
+        int batches = 0;
+        auto bit = batchRe.globalMatch(src);
+        while (bit.hasNext()) {
+            const QString listName = bit.next().captured(1);
+            ++batches;
+            const qsizetype declPos = src.indexOf(QStringLiteral("QStringList %1 = {").arg(listName));
+            const qsizetype open = declPos >= 0 ? src.indexOf(QLatin1Char('{'), declPos) : -1;
+            const qsizetype close = open >= 0 ? src.indexOf(QLatin1Char('}'), open) : -1;
+            if (close < 0) {
+                *unaccounted << QStringLiteral(
+                                    "%1: querySettingsBatch(%2) — cannot find %2's literal key list in "
+                                    "this file, so its keys are never checked")
+                                    .arg(QFileInfo(path).fileName(), listName);
+                continue;
+            }
+            const QString body = src.mid(open, close - open);
+            auto lit = literalRe.globalMatch(body);
+            int found = 0;
+            while (lit.hasNext()) {
+                keys << lit.next().captured(1);
+                ++found;
+            }
+            if (found == 0) {
+                *unaccounted << QStringLiteral(
+                                    "%1: querySettingsBatch(%2) — %2 holds no string literals, so its keys "
+                                    "are built some other way and go unchecked")
+                                    .arg(QFileInfo(path).fileName(), listName);
+            }
+        }
+        int batchCalls = 0;
+        auto bcit = batchCallRe.globalMatch(src);
+        while (bcit.hasNext()) {
+            bcit.next();
+            ++batchCalls;
+        }
+        if (batches != batchCalls) {
+            *unaccounted << QStringLiteral(
+                                "%1: %2 batch fetches, %3 pass a named key list — %4 pass something this "
+                                "scrape cannot read")
+                                .arg(QFileInfo(path).fileName())
+                                .arg(batchCalls)
+                                .arg(batches)
+                                .arg(batchCalls - batches);
+        }
+    }
+
+    if (keys.isEmpty()) {
+        *whyFailed = QStringLiteral("scraped 0 editor keys — has the call shape changed?");
     }
     return keys;
 }
@@ -455,6 +671,41 @@ private Q_SLOTS:
                                            "register them, so getSetting answers with an error and the effect "
                                            "silently keeps its built-in default: %1. Add a REGISTER_*_SETTING line "
                                            "for each in settingsadaptor.cpp.")
+                                .arg(missing.join(QStringLiteral(", ")))));
+    }
+
+    /// The editor is a SECOND process reading the SAME registry over the same bus, and it
+    /// fails the same way: an unregistered key answers with an error and the editor keeps
+    /// its built-in default, silently. The effect had a tripwire and the editor did not, so
+    /// its two dozen keys were guarded by nothing at all.
+    void testEveryKeyTheEditorFetchesIsRegistered()
+    {
+        QString why;
+        QStringList unaccounted;
+        const QStringList fetched = keysFetchedByEditor(&why, &unaccounted);
+        QVERIFY2(!fetched.isEmpty(), qPrintable(why));
+
+        QVERIFY2(unaccounted.isEmpty(),
+                 qPrintable(QStringLiteral("Unrecognised setting-fetch call shape in the editor: %1. Teach "
+                                           "keysFetchedByEditor() the new shape, or the key it fetches goes "
+                                           "unchecked.")
+                                .arg(unaccounted.join(QStringLiteral("; ")))));
+
+        const QStringList registeredKeys = m_adaptor->getSettingKeys();
+        const QSet<QString> registered(registeredKeys.cbegin(), registeredKeys.cend());
+
+        QStringList missing;
+        for (const QString& key : fetched) {
+            if (!registered.contains(key)) {
+                missing << key;
+            }
+        }
+
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("The editor fetches these settings, but SettingsAdaptor does not register "
+                                           "them, so getSetting answers with an error and the editor silently keeps "
+                                           "its built-in default: %1. Add a REGISTER_*_SETTING line for each in "
+                                           "settingsadaptor.cpp.")
                                 .arg(missing.join(QStringLiteral(", ")))));
     }
 

@@ -35,20 +35,6 @@ namespace SettingsDbusQueries {
 QVariantMap querySettingsBatch(const QStringList& keys);
 
 /**
- * @brief Query an integer setting from the daemon via D-Bus
- * @param settingKey The setting key to query (e.g., "innerGap", "outerGap")
- * @param defaultValue Value to return if query fails or returns invalid data
- * @return The setting value, or defaultValue if unavailable
- *
- * Connects to org.plasmazones Settings interface and calls getSetting().
- * Returns defaultValue if:
- * - D-Bus connection fails
- * - Setting doesn't exist
- * - Value is negative (invalid for these settings)
- */
-int queryIntSetting(const QString& settingKey, int defaultValue);
-
-/**
  * @brief Query a boolean setting from the daemon via D-Bus
  * @param settingKey The setting key to query
  * @param defaultValue Value to return if query fails

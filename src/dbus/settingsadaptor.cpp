@@ -963,7 +963,7 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
     // string here while the unknown-key path raised would have left one of the two
     // failing silently and the other loudly, which is how the silent one survives.
     if (key.isEmpty()) {
-        qCWarning(lcDbusSettings) << "getSetting: empty key";
+        qCDebug(lcDbusSettings) << "getSetting: empty key";
         if (calledFromDBus()) {
             sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Empty setting key"));
         }
@@ -1011,14 +1011,17 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
 
 bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
 {
+    // DEBUG, not warning, and the same reasoning as getSetting's unknown-key path: the key
+    // comes from whoever is on the session bus, the caller is already told `false`, and a
+    // warning here let any process fill the daemon's log with content of its own choosing.
     if (key.isEmpty()) {
-        qCWarning(lcDbusSettings) << "setSetting: empty key";
+        qCDebug(lcDbusSettings) << "setSetting: empty key";
         return false;
     }
 
     auto it = m_setters.find(key);
     if (it == m_setters.end()) {
-        qCWarning(lcDbusSettings) << "Setting key not found:" << key;
+        qCDebug(lcDbusSettings) << "setSetting: unknown key" << key;
         return false;
     }
 
@@ -1109,7 +1112,7 @@ QVariantMap SettingsAdaptor::getSettings(const QStringList& keys)
 bool SettingsAdaptor::setSettings(const QVariantMap& settings)
 {
     if (settings.isEmpty()) {
-        qCWarning(lcDbusSettings) << "setSettings: empty map";
+        qCDebug(lcDbusSettings) << "setSettings: empty map";
         return false;
     }
     if (!m_settings) {
@@ -1138,7 +1141,7 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
                 // failing the whole batch. Only a key unknown to BOTH maps is a
                 // genuine error.
                 if (!m_getters.contains(key)) {
-                    qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
+                    qCDebug(lcDbusSettings) << "setSettings: unknown key" << key;
                     allOk = false;
                 }
                 continue;
@@ -1172,7 +1175,7 @@ QString SettingsAdaptor::getSettingSchema(const QString& key)
     QJsonObject result;
 
     if (key.isEmpty()) {
-        qCWarning(lcDbusSettings) << "getSettingSchema: empty key";
+        qCDebug(lcDbusSettings) << "getSettingSchema: empty key";
         return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
     }
 
@@ -1181,7 +1184,7 @@ QString SettingsAdaptor::getSettingSchema(const QString& key)
         result[QLatin1String("key")] = key;
         result[QLatin1String("type")] = it.value();
     } else {
-        qCWarning(lcDbusSettings) << "getSettingSchema: unknown key" << key;
+        qCDebug(lcDbusSettings) << "getSettingSchema: unknown key" << key;
     }
 
     return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
@@ -1279,7 +1282,7 @@ void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString
     }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
-        qCWarning(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
+        qCDebug(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
         return;
     }
     if (!dispatch->writable) {
@@ -1299,7 +1302,7 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QStr
     }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
-        qCWarning(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
+        qCDebug(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
         return;
     }
     if (!dispatch->writable) {
@@ -1319,7 +1322,7 @@ QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const
     }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
-        qCWarning(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
+        qCDebug(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
         return {};
     }
     return dispatch->get(screenId);
@@ -1337,7 +1340,7 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
     }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
-        qCWarning(lcDbusSettings) << "setPerScreenSettings: unknown category" << category;
+        qCDebug(lcDbusSettings) << "setPerScreenSettings: unknown category" << category;
         return false;
     }
     if (!dispatch->writable) {

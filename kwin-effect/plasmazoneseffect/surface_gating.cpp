@@ -15,6 +15,7 @@
 #include "../plasmazoneseffect.h"
 
 #include "shader_internal.h"
+#include "surface_fold.h"
 #include "types.h"
 
 #include <effect/effecthandler.h>
@@ -30,6 +31,20 @@ namespace PlasmaZones {
 // Continuous seconds for the surface `iTime` uniform, relative to an epoch
 // captured on first use so the value starts near 0 (a steady_clock value since
 // boot is large enough to lose visible sub-frame precision as a float).
+// Milliseconds since the same epoch surfaceShaderTimeSeconds() counts from.
+//
+// The per-window clock accounting works in integers: a float's resolution decays with the
+// magnitude of the epoch (after a week of uptime its ULP is four frames), and the value it
+// ultimately wants is a DIFFERENCE of two large near-equal numbers.
+qint64 PlasmaZonesEffect::surfaceShaderTimeMs()
+{
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (m_surfaceTimeEpochMs < 0) {
+        m_surfaceTimeEpochMs = nowMs;
+    }
+    return nowMs - m_surfaceTimeEpochMs;
+}
+
 float PlasmaZonesEffect::surfaceShaderTimeSeconds()
 {
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
@@ -72,14 +87,7 @@ void PlasmaZonesEffect::repaintAllDecorations()
             continue;
         }
         sw->addRepaintFull();
-        if (it->outerPadding > 0) {
-            QRectF padded = sw->expandedGeometry();
-            if (padded.isEmpty()) {
-                padded = sw->frameGeometry();
-            }
-            const int pad = it->outerPadding;
-            KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
-        }
+        damagePaddedBand(sw, it->outerPadding);
     }
 }
 
@@ -160,24 +168,23 @@ void PlasmaZonesEffect::repaintHoverDecorations(const QPointF& cursor)
         // @p cursor is the position the motion event carries. m_cachedCursorGlobal is a
         // frame stale here (prePaintScreen refreshes it) and would compare against the
         // wrong pointer.
+        // A window with NO fold state has never been painted through the chain, so there is
+        // no cached composite for a new cursor to invalidate. Skip it: it is not that the
+        // repaint would be redundant, it is that it would be answering a question nobody
+        // asked. An occluded window that never paints would otherwise take an unconditional
+        // addRepaintFull on every single motion event, forever, which is the exact cost this
+        // driver was written to avoid. Its first real paint folds it and establishes the
+        // cursor.
         const auto sit = m_surfaceMultipass.find(it.key());
-        if (sit != m_surfaceMultipass.end()
-            && sit->second.foldedCursor == foldCursorFor(sw, sit->second.canvasGeo, /*mayAnimate=*/true, cursor)) {
+        if (sit == m_surfaceMultipass.end()
+            || sit->second.foldedCursor == foldCursorFor(sw, sit->second.canvasGeo, /*mayAnimate=*/true, cursor)) {
             continue;
         }
         sw->addRepaintFull();
         // A padded chain draws OUTSIDE the window rect, and addRepaintFull clips to the
         // window item — so without this, a cursor-following glow updates its inner canvas
-        // and leaves a stale highlight in its outer band. Both sibling drivers damage the
-        // band; this one did not.
-        if (it->outerPadding > 0) {
-            QRectF padded = sw->expandedGeometry();
-            if (padded.isEmpty()) {
-                padded = sw->frameGeometry();
-            }
-            const int pad = it->outerPadding;
-            KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
-        }
+        // and leaves a stale highlight in its outer band.
+        damagePaddedBand(sw, it->outerPadding);
     }
 }
 

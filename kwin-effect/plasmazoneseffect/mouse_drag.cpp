@@ -24,7 +24,6 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
                                          Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
                                          Qt::KeyboardModifiers oldmodifiers)
 {
-    Q_UNUSED(oldpos)
     Q_UNUSED(oldmodifiers)
 
     const bool modifiersChanged = (m_currentModifiers != modifiers);

@@ -90,7 +90,12 @@ public:
     }
     void setDragActivationTriggers(const QVariantList& triggers) override
     {
+        if (m_dragActivationTriggers == triggers) {
+            return;
+        }
         m_dragActivationTriggers = triggers;
+        Q_EMIT dragActivationTriggersChanged();
+        Q_EMIT settingsChanged();
     }
     bool zoneSpanEnabled() const override
     {
@@ -448,7 +453,12 @@ public:
     }
     void setInnerGap(int v) override
     {
+        if (m_innerGap == v) {
+            return;
+        }
         m_innerGap = v;
+        Q_EMIT innerGapChanged();
+        Q_EMIT settingsChanged();
     }
     int outerGap() const override
     {
@@ -456,7 +466,12 @@ public:
     }
     void setOuterGap(int v) override
     {
+        if (m_outerGap == v) {
+            return;
+        }
         m_outerGap = v;
+        Q_EMIT outerGapChanged();
+        Q_EMIT settingsChanged();
     }
     bool usePerSideOuterGap() const override
     {
@@ -464,7 +479,12 @@ public:
     }
     void setUsePerSideOuterGap(bool v) override
     {
+        if (m_usePerSideOuterGap == v) {
+            return;
+        }
         m_usePerSideOuterGap = v;
+        Q_EMIT usePerSideOuterGapChanged();
+        Q_EMIT settingsChanged();
     }
     int outerGapTop() const override
     {
@@ -472,7 +492,12 @@ public:
     }
     void setOuterGapTop(int v) override
     {
+        if (m_outerGapTop == v) {
+            return;
+        }
         m_outerGapTop = v;
+        Q_EMIT outerGapTopChanged();
+        Q_EMIT settingsChanged();
     }
     int outerGapBottom() const override
     {
@@ -480,7 +505,12 @@ public:
     }
     void setOuterGapBottom(int v) override
     {
+        if (m_outerGapBottom == v) {
+            return;
+        }
         m_outerGapBottom = v;
+        Q_EMIT outerGapBottomChanged();
+        Q_EMIT settingsChanged();
     }
     int outerGapLeft() const override
     {
@@ -488,7 +518,12 @@ public:
     }
     void setOuterGapLeft(int v) override
     {
+        if (m_outerGapLeft == v) {
+            return;
+        }
         m_outerGapLeft = v;
+        Q_EMIT outerGapLeftChanged();
+        Q_EMIT settingsChanged();
     }
     int outerGapRight() const override
     {
@@ -496,7 +531,12 @@ public:
     }
     void setOuterGapRight(int v) override
     {
+        if (m_outerGapRight == v) {
+            return;
+        }
         m_outerGapRight = v;
+        Q_EMIT outerGapRightChanged();
+        Q_EMIT settingsChanged();
     }
 
     // Window appearance (config-backed border + title-bar defaults)
@@ -506,7 +546,12 @@ public:
     }
     void setShowWindowBorder(bool v) override
     {
+        if (m_showWindowBorder == v) {
+            return;
+        }
         m_showWindowBorder = v;
+        Q_EMIT showWindowBorderChanged();
+        Q_EMIT settingsChanged();
     }
     QString windowBorderScope() const override
     {
@@ -514,7 +559,12 @@ public:
     }
     void setWindowBorderScope(const QString& v) override
     {
+        if (m_windowBorderScope == v) {
+            return;
+        }
         m_windowBorderScope = v;
+        Q_EMIT windowBorderScopeChanged();
+        Q_EMIT settingsChanged();
     }
     int windowBorderWidth() const override
     {
@@ -522,7 +572,12 @@ public:
     }
     void setWindowBorderWidth(int v) override
     {
+        if (m_windowBorderWidth == v) {
+            return;
+        }
         m_windowBorderWidth = v;
+        Q_EMIT windowBorderWidthChanged();
+        Q_EMIT settingsChanged();
     }
     int windowBorderRadius() const override
     {
@@ -530,7 +585,12 @@ public:
     }
     void setWindowBorderRadius(int v) override
     {
+        if (m_windowBorderRadius == v) {
+            return;
+        }
         m_windowBorderRadius = v;
+        Q_EMIT windowBorderRadiusChanged();
+        Q_EMIT settingsChanged();
     }
     QString windowBorderColorActive() const override
     {
@@ -538,7 +598,12 @@ public:
     }
     void setWindowBorderColorActive(const QString& v) override
     {
+        if (m_windowBorderColorActive == v) {
+            return;
+        }
         m_windowBorderColorActive = v;
+        Q_EMIT windowBorderColorActiveChanged();
+        Q_EMIT settingsChanged();
     }
     QString windowBorderColorInactive() const override
     {
@@ -546,7 +611,12 @@ public:
     }
     void setWindowBorderColorInactive(const QString& v) override
     {
+        if (m_windowBorderColorInactive == v) {
+            return;
+        }
         m_windowBorderColorInactive = v;
+        Q_EMIT windowBorderColorInactiveChanged();
+        Q_EMIT settingsChanged();
     }
     bool hideWindowTitleBars() const override
     {
@@ -554,7 +624,12 @@ public:
     }
     void setHideWindowTitleBars(bool v) override
     {
+        if (m_hideWindowTitleBars == v) {
+            return;
+        }
         m_hideWindowTitleBars = v;
+        Q_EMIT hideWindowTitleBarsChanged();
+        Q_EMIT settingsChanged();
     }
     QString windowTitleBarScope() const override
     {
@@ -562,7 +637,12 @@ public:
     }
     void setWindowTitleBarScope(const QString& v) override
     {
+        if (m_windowTitleBarScope == v) {
+            return;
+        }
         m_windowTitleBarScope = v;
+        Q_EMIT windowTitleBarScopeChanged();
+        Q_EMIT settingsChanged();
     }
     int focusFadeDuration() const override
     {
@@ -570,7 +650,12 @@ public:
     }
     void setFocusFadeDuration(int ms) override
     {
+        if (m_focusFadeDuration == ms) {
+            return;
+        }
         m_focusFadeDuration = ms;
+        Q_EMIT focusFadeDurationChanged();
+        Q_EMIT settingsChanged();
     }
     int adjacentThreshold() const override
     {
@@ -605,10 +690,16 @@ public:
     // accessors retired in v4 (folded into unified Rule store).
     bool excludeTransientWindows() const override
     {
-        return false;
+        return m_excludeTransientWindows;
     }
-    void setExcludeTransientWindows(bool) override
+    void setExcludeTransientWindows(bool exclude) override
     {
+        if (m_excludeTransientWindows == exclude) {
+            return;
+        }
+        m_excludeTransientWindows = exclude;
+        Q_EMIT excludeTransientWindowsChanged();
+        Q_EMIT settingsChanged();
     }
     int minimumWindowWidth() const override
     {
@@ -616,7 +707,12 @@ public:
     }
     void setMinimumWindowWidth(int w) override
     {
+        if (m_minimumWindowWidth == w) {
+            return;
+        }
         m_minimumWindowWidth = w;
+        Q_EMIT minimumWindowWidthChanged();
+        Q_EMIT settingsChanged();
     }
     int minimumWindowHeight() const override
     {
@@ -624,7 +720,12 @@ public:
     }
     void setMinimumWindowHeight(int h) override
     {
+        if (m_minimumWindowHeight == h) {
+            return;
+        }
         m_minimumWindowHeight = h;
+        Q_EMIT minimumWindowHeightChanged();
+        Q_EMIT settingsChanged();
     }
 
     // Decoration window filtering — stub accessors backed by m_decoration*
@@ -1093,7 +1194,12 @@ public:
     }
     void setSnappingFocusNewWindows(bool v) override
     {
+        if (m_snappingFocusNewWindows == v) {
+            return;
+        }
         m_snappingFocusNewWindows = v;
+        Q_EMIT snappingFocusNewWindowsChanged();
+        Q_EMIT settingsChanged();
     }
     bool snappingFocusFollowsMouse() const override
     {
@@ -1101,7 +1207,12 @@ public:
     }
     void setSnappingFocusFollowsMouse(bool v) override
     {
+        if (m_snappingFocusFollowsMouse == v) {
+            return;
+        }
         m_snappingFocusFollowsMouse = v;
+        Q_EMIT snappingFocusFollowsMouseChanged();
+        Q_EMIT settingsChanged();
     }
     StickyWindowHandling autotileStickyWindowHandling() const override
     {
@@ -1401,8 +1512,15 @@ private:
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
-    int m_minimumWindowWidth = 0;
-    int m_minimumWindowHeight = 0;
+    // The window-exclusion defaults, from ConfigDefaults for the same reason the
+    // animation-filter ones below are. These three were hardcoded, and all three disagreed
+    // with production: excludeTransientWindows read false against a default of TRUE (and
+    // its setter was a no-op, so no test could even move it), and the two minimum sizes
+    // read 0 against 200x150 — so every stub-backed test of the size filter was exercising
+    // a filter that passes everything.
+    bool m_excludeTransientWindows = ConfigDefaults::excludeTransientWindows();
+    int m_minimumWindowWidth = ConfigDefaults::minimumWindowWidth();
+    int m_minimumWindowHeight = ConfigDefaults::minimumWindowHeight();
     // Animation-filter defaults routed through ConfigDefaults so a future
     // tweak to the production defaults flows into tests automatically — keeps
     // the stub from drifting into "tests pass against a stale baseline".

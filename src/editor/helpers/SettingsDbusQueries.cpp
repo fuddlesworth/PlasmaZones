@@ -67,21 +67,6 @@ QVariantMap querySettingsBatch(const QStringList& keys)
     return QVariantMap();
 }
 
-int queryIntSetting(const QString& settingKey, int defaultValue)
-{
-    const QVariant value = unwrapGetSetting(PhosphorProtocol::ClientHelpers::syncCall(
-        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("getSetting"), {settingKey}));
-    if (!value.isValid()) {
-        return defaultValue;
-    }
-    bool ok = false;
-    const int result = value.toInt(&ok);
-    if (!ok || result < 0) {
-        return defaultValue;
-    }
-    return result;
-}
-
 bool queryBoolSetting(const QString& settingKey, bool defaultValue)
 {
     const QVariant value = unwrapGetSetting(PhosphorProtocol::ClientHelpers::syncCall(

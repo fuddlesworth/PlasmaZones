@@ -400,18 +400,26 @@ struct SurfaceMultipassState
     /// or the jump comes back through whichever one was missed:
     ///
     ///   Decorations.Performance paused it (an idle session, or an unfocused window
-    ///   under "animate the focused window only"). Tracked by pausedAtSec.
+    ///   under "animate the focused window only"). Tracked by pausedAtMs.
     ///
     ///   Nothing painted it at all — minimized, on another desktop, fully occluded.
     ///   Nothing tells us that happened, so it is inferred from the GAP since the last
     ///   fold. This is the far more common case, and it is why the accounting cannot
     ///   simply hang off the pause gate.
     ///
-    ///   pausedAtSec   the shared clock when a GATED pause began; negative when running
-    ///   timeOffsetSec total seconds this window has not been animating, subtracted from
-    ///                 the shared clock to give its own
-    float pausedAtSec = -1.0f;
-    float timeOffsetSec = 0.0f;
+    ///   pausedAtMs    the shared clock when a GATED pause began; negative when running
+    ///   timeOffsetMs  total time this window has not been animating, subtracted from the
+    ///                 shared clock to give its own
+    ///
+    /// INTEGER MILLISECONDS, not float seconds. The shared clock counts from an epoch that
+    /// grows with uptime, and a float's resolution decays with magnitude: after a week the
+    /// ULP is ~62 ms, four frames, so every sin(iTime) pack would visibly step. Worse, the
+    /// value we actually want is the DIFFERENCE of two large near-equal numbers, which is
+    /// exactly where float cancellation bites. Integers represent it exactly, and the cast
+    /// to float happens once, at the uniform, on a value the offset has already brought
+    /// back down to a small number of seconds.
+    qint64 pausedAtMs = -1;
+    qint64 timeOffsetMs = 0;
 
     QStringList chainKey; ///< the chain `chainBufferTex` was allocated for
     QSize compositeSize; ///< full textureSize the composite targets were allocated for
@@ -476,6 +484,21 @@ struct SurfaceMultipassState
     /// left most of the pane clamped and visibly killed the blur during
     /// cross-monitor animations).
     qint64 backdropFrameMs = -1;
+
+    /// A backdrop repaint has been ASKED FOR and has not yet produced a fold.
+    ///
+    /// The backdrop driver is the one repaint source with no damage behind it: the scene
+    /// moves, this window does not, so nothing else will schedule the refold. It asks for
+    /// one every ~33ms. But a repaint is a REQUEST, not a promise — KWin declines to paint
+    /// a window that is fully occluded by an opaque one above it, so the fold never runs,
+    /// lastFoldMs never advances, and a clock-only test says "due" again on the very next
+    /// frame. That is a full repaint every vsync, forever, and the desktop can never idle.
+    ///
+    /// So the driver arms this when it asks, and only the fold disarms it. An unpainted
+    /// window costs exactly ONE wasted repaint instead of one per frame; a window that is
+    /// really being painted behaves exactly as before, because its fold clears the flag on
+    /// the very frame the repaint lands.
+    bool backdropRepaintPending = false;
 
     /// When the composite last folded (shader clock, ms). Rate-limits the
     /// backdrop-driven forced repaints in postPaintScreen to ~30fps, the

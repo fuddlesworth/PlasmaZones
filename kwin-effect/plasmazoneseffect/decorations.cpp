@@ -9,6 +9,7 @@
 #include "../autotilehandler.h"
 #include "../snaphandler.h"
 #include "shader_internal.h"
+#include "surface_fold.h"
 #include "shader_resolve.h"
 #include "window_query.h"
 
@@ -466,12 +467,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // the glow trails behind a dragged window. Disconnected by
     // removeWindowDecoration (updateWindowDecoration always removes first).
     if (wb.outerPadding > 0) {
-        QRectF paddedNow = w->expandedGeometry();
-        if (paddedNow.isEmpty()) {
-            paddedNow = w->frameGeometry();
-        }
-        const int pad0 = wb.outerPadding;
-        wb.lastPaddedGeo = paddedNow.adjusted(-pad0, -pad0, pad0, pad0);
+        wb.lastPaddedGeo = paddedBandRect(w, wb.outerPadding);
         const QString wid = windowId; // capture by value
         wb.paddedGeoConnection = connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
                                          [this, wid](KWin::EffectWindow* ew, const QRectF& /*oldGeo*/) {
@@ -581,14 +577,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // Padded chains paint OUTSIDE the window's expanded rect; addRepaintFull
     // (and addLayerRepaint) clip to the window item, so the margin band needs
     // screen-level damage (the documented surface-extent repaint pitfall).
-    if (wb.outerPadding > 0 && KWin::effects) {
-        QRectF padded = w->expandedGeometry();
-        if (padded.isEmpty()) {
-            padded = w->frameGeometry();
-        }
-        const int pad = wb.outerPadding;
-        KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
-    }
+    damagePaddedBand(w, wb.outerPadding);
 }
 
 void PlasmaZonesEffect::updateAllDecorations()

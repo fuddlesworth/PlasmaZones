@@ -48,7 +48,6 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // would misalign the frost silently.
     const SurfaceCanvas canvas = surfaceCanvasFor(windowRect, pad, viewport.scale());
     const QRectF logicalGeometry = canvas.logicalGeometry;
-    const qreal captureScale = canvas.captureScale;
     const QSize textureSize = canvas.textureSize;
     if (textureSize.isEmpty()) {
         return;
