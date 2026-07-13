@@ -57,6 +57,26 @@ DecorationProfile directProfileAt(const DecorationProfileTree& tree, const QStri
     return path.isEmpty() ? tree.baseline() : tree.directOverride(path);
 }
 
+/// The resolved effective parameters at @p path, filtered to the packs in the
+/// resolved effective chain. The base map for ENGAGING a direct parameters
+/// override at an inheriting path: DecorationProfile::overlay replaces the
+/// map wholesale, so engaging from empty would drop sibling packs' inherited
+/// params, while engaging unfiltered could materialize stale params for a
+/// pack an ancestor's chain edit already removed (they would silently
+/// resurrect if that pack is ever re-added).
+QVariantMap inheritedParamsForChain(const DecorationProfileTree& tree, const QString& path)
+{
+    const DecorationProfile resolved = tree.resolve(path);
+    const QStringList chain = resolved.effectiveChain();
+    const QVariantMap inherited = resolved.effectiveParameters();
+    QVariantMap out;
+    for (auto it = inherited.constBegin(); it != inherited.constEnd(); ++it) {
+        if (chain.contains(it.key()))
+            out.insert(it.key(), it.value());
+    }
+    return out;
+}
+
 /// Write @p profile back as the DIRECT profile at @p path (baseline for the
 /// empty path), then persist the whole tree through Settings.
 void writeDirectProfile(ISettings* settings, DecorationProfileTree& tree, const QString& path,
@@ -345,7 +365,7 @@ void DecorationPageController::setChainParam(const QString& path, const QString&
     // replaces the map wholesale, so a first per-param edit at an inheriting
     // path would otherwise materialize an override of just this pack and drop
     // every other pack's inherited params (same discipline as setChain's seed).
-    QVariantMap params = profile.parameters ? *profile.parameters : tree.resolve(path).effectiveParameters();
+    QVariantMap params = profile.parameters ? *profile.parameters : inheritedParamsForChain(tree, path);
     QVariantMap packParams = params.value(packId).toMap();
     packParams.insert(paramId, value);
     params.insert(packId, packParams);
@@ -362,7 +382,7 @@ void DecorationPageController::setChainParams(const QString& path, const QString
     DecorationProfileTree tree = readTree(m_settings);
     DecorationProfile profile = directProfileAt(tree, path);
     // Engage-from-resolved, same rationale as setChainParam above.
-    QVariantMap allParams = profile.parameters ? *profile.parameters : tree.resolve(path).effectiveParameters();
+    QVariantMap allParams = profile.parameters ? *profile.parameters : inheritedParamsForChain(tree, path);
     QVariantMap packParams = allParams.value(packId).toMap();
     for (auto it = params.constBegin(); it != params.constEnd(); ++it)
         packParams.insert(it.key(), it.value());

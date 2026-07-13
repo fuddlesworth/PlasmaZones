@@ -871,6 +871,34 @@ private Q_SLOTS:
         QCOMPARE(params.value(QStringLiteral("glowish")).toMap().value(QStringLiteral("intensity")).toDouble(), 5.0);
     }
 
+    /// setChainParam at an INHERITING path engages the parameters override
+    /// from the resolved effective map, so a first per-param edit for one
+    /// pack must not drop a sibling pack's inherited params (the same
+    /// wholesale-overlay hazard as the setChain seed). Params for a pack an
+    /// ancestor already removed from the chain must NOT be materialized.
+    void setChainParam_engagesFromResolvedInheritedParams()
+    {
+        TreeStubSettings settings;
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        PhosphorSurfaceShaders::DecorationProfile baseline;
+        baseline.chain = QStringList{QStringLiteral("glow"), QStringLiteral("border")};
+        baseline.parameters = QVariantMap{{QStringLiteral("glow"), QVariantMap{{QStringLiteral("glowSize"), 24}}},
+                                          {QStringLiteral("border"), QVariantMap{{QStringLiteral("borderWidth"), 3}}},
+                                          {QStringLiteral("stale-pack"), QVariantMap{{QStringLiteral("x"), 1}}}};
+        tree.setBaseline(baseline);
+        settings.setDecorationProfileTree(tree);
+
+        DecorationPageController c(nullptr, &settings);
+        const QString path = QStringLiteral("window.tiled");
+        c.setChainParam(path, QStringLiteral("glow"), QStringLiteral("glowSize"), 32);
+
+        const QVariantMap params = c.rawProfile(path).value(QStringLiteral("parameters")).toMap();
+        QCOMPARE(params.value(QStringLiteral("glow")).toMap().value(QStringLiteral("glowSize")).toInt(), 32);
+        QCOMPARE(params.value(QStringLiteral("border")).toMap().value(QStringLiteral("borderWidth")).toInt(), 3);
+        QVERIFY2(!params.contains(QStringLiteral("stale-pack")),
+                 "params for a pack outside the effective chain must not be materialized");
+    }
+
     /// A providesBorder pack that declares only a subset of the shared
     /// contract ids (the border-rgb / border-double shapes) is seeded for
     /// exactly the ids it declares — the missing ids are skipped, not

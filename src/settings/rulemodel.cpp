@@ -444,8 +444,17 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         }
         if (action.type == ActionType::SetTintStrength) {
             // Wire value is the [0,1] strength; shown as a percent to match
-            // the editor (same treatment as SetSplitRatio).
-            return PhosphorI18n::tr("Tint strength: %1%").arg(qRound(raw.toDouble() * 100.0));
+            // the editor (same treatment as SetSplitRatio). Mirror the
+            // runtime resolver's reject paths (unitDoubleSlot: non-number or
+            // out-of-range → ignored) like SetOpacity above, so the label
+            // never claims a strength the effect won't apply.
+            const QVariant rv = raw.toVariant();
+            bool ok = false;
+            const double v = rv.typeId() == QMetaType::Bool ? 0.0 : rv.toDouble(&ok);
+            if (!ok || v < 0.0 || v > 1.0) {
+                return PhosphorI18n::tr("Tint strength (invalid)");
+            }
+            return PhosphorI18n::tr("Tint strength: %1%").arg(qRound(v * 100.0));
         }
         if (action.type == ActionType::SetTintColor) {
             const QString value = raw.toString();

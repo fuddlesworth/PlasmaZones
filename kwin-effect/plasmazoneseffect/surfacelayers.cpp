@@ -5,7 +5,6 @@
 
 #include "shader_internal.h"
 #include "types.h"
-#include "window_query.h"
 
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>

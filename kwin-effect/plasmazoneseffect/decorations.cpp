@@ -13,14 +13,11 @@
 
 #include <epoxy/gl.h>
 
-#include <PhosphorAnimation/AnimationShaderContract.h>
-
 #include "../autotilehandler.h"
 #include "../snaphandler.h"
 #include "shader_internal.h"
 #include "shader_resolve.h"
 
-#include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorRules/RuleAction.h>
 

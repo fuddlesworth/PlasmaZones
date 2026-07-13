@@ -12,18 +12,8 @@
 
 #include <epoxy/gl.h>
 
-#include <PhosphorAnimation/AnimationShaderContract.h>
-
-#include "../autotilehandler.h"
-#include "../snaphandler.h"
 #include "shader_internal.h"
 #include "shader_resolve.h"
-#include "window_query.h"
-
-#include <PhosphorCompositor/AutotileState.h>
-#include <PhosphorCompositor/DecorationDefaults.h>
-#include <PhosphorProtocol/WindowTypeEnum.h>
-#include <PhosphorRules/RuleAction.h>
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
