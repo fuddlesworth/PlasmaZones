@@ -214,7 +214,27 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
     // sentinel is not a valid QColor and is skipped, leaving the pack's own
     // default colours.
     if (m_registry && (m_settings->showWindowBorder() || m_settings->showWindowOpacityTint())) {
-        QVariantMap allParams = profile.parameters.value_or(QVariantMap());
+        // Base the working map on the DIRECT override when one is engaged, else
+        // on the RESOLVED effective parameters. Seeding engages the optional
+        // (profile.parameters = allParams below), and DecorationProfile::overlay
+        // replaces the map wholesale — starting from an empty map at an
+        // inheriting path would materialize a direct override of just the
+        // seeded pack and silently drop every other pack's inherited params.
+        // Filtered to the new chain, mirroring the pruning block above (which
+        // only runs on an already-engaged optional), so packs dropped by this
+        // edit don't get their stale inherited params materialized. Same
+        // engage-from-resolved discipline as setChainLayerEnabled's disabled
+        // set.
+        QVariantMap allParams;
+        if (profile.parameters) {
+            allParams = *profile.parameters;
+        } else {
+            const QVariantMap inherited = tree.resolve(path).effectiveParameters();
+            for (auto it = inherited.constBegin(); it != inherited.constEnd(); ++it) {
+                if (chain.contains(it.key()))
+                    allParams.insert(it.key(), it.value());
+            }
+        }
         bool seeded = false;
         for (const QString& packId : chain) {
             if (prevChain.contains(packId) || !m_registry->hasEffect(packId))

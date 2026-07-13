@@ -467,12 +467,12 @@ Q_SIGNALS:
     void windowBorderColorInactiveChanged();
     void hideWindowTitleBarsChanged();
     void windowTitleBarScopeChanged();
+    void focusFadeDurationChanged();
     void showWindowOpacityTintChanged();
     void windowOpacityTintScopeChanged();
     void windowOpacityChanged();
     void windowTintStrengthChanged();
     void windowTintColorChanged();
-    void focusFadeDurationChanged();
     // Editor
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();

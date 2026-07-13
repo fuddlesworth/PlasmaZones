@@ -17,8 +17,10 @@
 // behind them (uHasBackdrop = 0), so the pack renders a translucent navy
 // slab with the same gradient shimmer and recharge sweep.
 //
-// handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
-// the pane stays solid and translucency reveals the phosphor backdrop.
+// Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
+// (SetOpacity is layer-backed and custom chains own their alpha), so the
+// window sample rides through undimmed; the window's own translucent
+// pixels still reveal the phosphor backdrop.
 
 #include <surface_multipass.glsl>
 

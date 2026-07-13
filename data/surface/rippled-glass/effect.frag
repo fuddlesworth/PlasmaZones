@@ -12,8 +12,10 @@
 // 0.3). The field drifts on iTime at p_rippleSpeed; 0 freezes it, giving the
 // static bathroom-window look.
 //
-// handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
-// the pane stays solid and translucency reveals the rippled backdrop.
+// Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
+// (SetOpacity is layer-backed and custom chains own their alpha), so the
+// window sample rides through undimmed; the window's own translucent
+// pixels still reveal the rippled backdrop.
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the pane degrades to a faint tint slab with the same corner rounding.
 

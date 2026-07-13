@@ -7,8 +7,10 @@
 // shadow and highlight colours. Same slab composite as the blur family:
 // the pane shows through wherever the window itself is translucent.
 //
-// handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
-// the pane stays solid and translucency reveals the duotone backdrop.
+// Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
+// (SetOpacity is layer-backed and custom chains own their alpha), so the
+// window sample rides through undimmed; the window's own translucent
+// pixels still reveal the duotone backdrop.
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the pack renders a still shadow-to-highlight gradient slab with the
 // same corner rounding.

@@ -451,9 +451,9 @@ inline constexpr QLatin1StringView SetBorderColorInactive{"setBorderColorInactiv
 // folds into the pack's opacity param (rule wins over the config value).
 // Custom chains do not honour it — packs dim through their own parameters
 // (frost/glass `contentOpacity`) — and neither does an undecorated window.
-// SetTintColor carries a single colour
-// param (`ActionParam::Value`): a hex string OR the `BorderColorToken::Accent`
-// sentinel, resolved to the live system accent like the border colours.
+// SetTintColor carries a single colour param (`ActionParam::Value`): a hex
+// string OR the `BorderColorToken::Accent` sentinel, resolved to the live
+// system accent like the border colours.
 inline constexpr QLatin1StringView SetOpacityTintVisible{"setOpacityTintVisible"};
 inline constexpr QLatin1StringView SetTintStrength{"setTintStrength"};
 inline constexpr QLatin1StringView SetTintColor{"setTintColor"};

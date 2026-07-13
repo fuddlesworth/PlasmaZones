@@ -837,6 +837,40 @@ private Q_SLOTS:
                  "a pack inherited into the previous effective chain must not be seeded");
     }
 
+    /// Seeding at an inheriting path must not drop OTHER packs' inherited
+    /// params: engaging the direct parameters override (which
+    /// DecorationProfile::overlay replaces wholesale) has to start from the
+    /// resolved effective map, not an empty one, or the baseline's per-pack
+    /// values vanish from the leaf the moment a providesBorder pack is added.
+    void setChain_seedPreservesInheritedParams()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePack(tmp.path(), QStringLiteral("fancy-border"), fancyBorderMetadata()));
+        QVERIFY(writePack(tmp.path(), QStringLiteral("glowish"), glowishMetadata()));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        TreeStubSettings settings;
+        settings.setShowWindowBorder(true);
+        settings.setWindowBorderWidth(4);
+        // Baseline carries glowish WITH a tuned param; the leaf inherits both.
+        PhosphorSurfaceShaders::DecorationProfileTree tree;
+        PhosphorSurfaceShaders::DecorationProfile baseline;
+        baseline.chain = QStringList{QStringLiteral("glowish")};
+        baseline.parameters = QVariantMap{{QStringLiteral("glowish"), QVariantMap{{QStringLiteral("intensity"), 5.0}}}};
+        tree.setBaseline(baseline);
+        settings.setDecorationProfileTree(tree);
+
+        DecorationPageController c(&registry, &settings);
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("glowish"), QStringLiteral("fancy-border")});
+
+        const QVariantMap params = c.rawProfile(path).value(QStringLiteral("parameters")).toMap();
+        QCOMPARE(params.value(QStringLiteral("fancy-border")).toMap().value(QStringLiteral("borderWidth")).toInt(), 4);
+        QCOMPARE(params.value(QStringLiteral("glowish")).toMap().value(QStringLiteral("intensity")).toDouble(), 5.0);
+    }
+
     /// A providesBorder pack that declares only a subset of the shared
     /// contract ids (the border-rgb / border-double shapes) is seeded for
     /// exactly the ids it declares — the missing ids are skipped, not

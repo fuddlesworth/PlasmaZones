@@ -1077,6 +1077,13 @@ private:
     int m_surfacePresentFinalLoc = -1; ///< uFinal sampler location on the present shader
     int m_surfacePresentOpacityLoc = -1; ///< uOpacity (final modulation) location on the present shader
     bool m_surfacePresentFailed = false; ///< latch a failed present-shader compile
+    /// One-shot latch for the capture-time opacity fallback warning (the
+    /// opacity-tint pack failed to compile). The condition is pack-level and
+    /// the fold runs per window per frame, so an unlatched warning would spam
+    /// the journal at vsync rate. Reset alongside the compile cache on a
+    /// registry hot-reload (effectsChanged) so a fixed pack that breaks again
+    /// warns again.
+    bool m_opacityTintFallbackWarned = false;
 
     /// Continuous seconds for the surface contract's `iTime`, relative to an
     /// epoch captured at first use (so the value starts near 0 and keeps float

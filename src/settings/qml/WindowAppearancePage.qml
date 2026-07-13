@@ -386,7 +386,7 @@ SettingsFlickable {
                     description: i18n("How visible matched windows stay, where 100% is fully opaque")
 
                     SettingsSlider {
-                        Accessible.name: i18n("Opacity")
+                        accessibleName: i18n("Opacity")
                         from: 0
                         to: 100
                         value: Math.round(root.ctl.windowOpacity * 100)
@@ -405,7 +405,7 @@ SettingsFlickable {
                     description: i18n("How strongly the tint color blends over the window, where 0% keeps it untinted")
 
                     SettingsSlider {
-                        Accessible.name: i18n("Tint strength")
+                        accessibleName: i18n("Tint strength")
                         from: 0
                         to: 100
                         value: Math.round(root.ctl.windowTintStrength * 100)
@@ -515,7 +515,7 @@ SettingsFlickable {
                     description: i18n("How long decorations take to fade between focused and unfocused. Zero switches instantly.")
 
                     SettingsSlider {
-                        Accessible.name: i18n("Focus fade duration")
+                        accessibleName: i18n("Focus fade duration")
                         from: root.ctl.focusFadeDurationMin
                         to: root.ctl.focusFadeDurationMax
                         stepSize: 10

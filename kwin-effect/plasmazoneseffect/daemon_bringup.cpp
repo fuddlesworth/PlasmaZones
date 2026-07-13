@@ -710,17 +710,23 @@ void PlasmaZonesEffect::loadCachedSettings()
     // Both unit-range values are clamped at this D-Bus boundary: the settings
     // side validates its own writes, but the daemon is a separate process and
     // this effect must not trust the wire (a hand-edited config or an older
-    // daemon can answer out of range).
+    // daemon can answer out of range). The ok-gate mirrors focusFadeDuration
+    // below: an older daemon answers an UNKNOWN key with a valid empty-string
+    // variant, and an unguarded toDouble() would coerce that to 0.0 — for
+    // opacity, a fully INVISIBLE window on version skew. Keeping the seeded
+    // default is the safe fallback.
     loadSettingAsync(QStringLiteral("windowOpacity"), [this](const QVariant& v) {
-        const double d = qBound(0.0, v.toDouble(), 1.0);
-        if (!qFuzzyCompare(m_windowAppearanceDefault.opacity + 1.0, d + 1.0)) {
+        bool ok = false;
+        const double d = qBound(0.0, v.toDouble(&ok), 1.0);
+        if (ok && !qFuzzyCompare(m_windowAppearanceDefault.opacity + 1.0, d + 1.0)) {
             m_windowAppearanceDefault.opacity = d;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowTintStrength"), [this](const QVariant& v) {
-        const double d = qBound(0.0, v.toDouble(), 1.0);
-        if (!qFuzzyCompare(m_windowAppearanceDefault.tintStrength + 1.0, d + 1.0)) {
+        bool ok = false;
+        const double d = qBound(0.0, v.toDouble(&ok), 1.0);
+        if (ok && !qFuzzyCompare(m_windowAppearanceDefault.tintStrength + 1.0, d + 1.0)) {
             m_windowAppearanceDefault.tintStrength = d;
             scheduleBorderSweep();
         }
@@ -1025,6 +1031,7 @@ void PlasmaZonesEffect::loadCachedSettings()
             KWin::effects->makeOpenGLContextCurrent();
         }
         m_compiledPacks.clear();
+        m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         updateAllDecorations();
         if (KWin::effects) {
             KWin::effects->addRepaintFull();

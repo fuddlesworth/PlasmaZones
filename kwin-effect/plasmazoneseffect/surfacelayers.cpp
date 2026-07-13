@@ -315,8 +315,14 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 CompiledSurfacePack* const otPack = compiledPackLazy(QStringLiteral("opacity-tint"));
                 if (!otPack || !otPack->shader) {
                     captureOpacity = qBound(0.0, deco.foldedOpacity, 1.0);
-                    qCWarning(lcEffect) << "opacity-tint pack unavailable — applying window opacity" << captureOpacity
-                                        << "at capture time for" << windowId;
+                    // Latched: the condition is pack-level and this fold runs
+                    // per window per frame — unlatched it would spam at vsync
+                    // rate. Cleared with the compile cache on registry reload.
+                    if (!m_opacityTintFallbackWarned) {
+                        m_opacityTintFallbackWarned = true;
+                        qCWarning(lcEffect) << "opacity-tint pack unavailable — applying window opacity"
+                                            << captureOpacity << "at capture time for" << windowId;
+                    }
                 }
             }
             captureData.setOpacity(captureOpacity);

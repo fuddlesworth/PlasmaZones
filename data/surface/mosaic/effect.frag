@@ -9,8 +9,10 @@
 // composite as the blur family: the pane shows through wherever the
 // window itself is translucent.
 //
-// handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
-// the pane stays solid and translucency reveals the mosaic.
+// Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
+// (SetOpacity is layer-backed and custom chains own their alpha), so the
+// window sample rides through undimmed; the window's own translucent
+// pixels still reveal the mosaic.
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the pack renders a still tint slab with the same corner rounding.
 

@@ -228,6 +228,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // either way.
         const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
         m_compiledPacks.clear();
+        m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         m_surfaceMultipass.clear();
         if (haveContext) {
             KWin::effects->addRepaintFull();

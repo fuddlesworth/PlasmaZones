@@ -11,8 +11,10 @@
 // hash-derived from iTime, so there is no per-frame state. Same slab
 // composite as the blur family.
 //
-// handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
-// the pane stays solid and translucency reveals the rain behind.
+// Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
+// (SetOpacity is layer-backed and custom chains own their alpha), so the
+// window sample rides through undimmed; the window's own translucent
+// pixels still reveal the rain behind.
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the droplets light a dark glass slab instead of refracting a capture.
 //
