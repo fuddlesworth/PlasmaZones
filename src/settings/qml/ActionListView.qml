@@ -8,6 +8,8 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.plasmazones.settings
 
+import "FontUtils.js" as FontUtils
+
 /**
  * @brief Read-only display of a rule's actions list — the "THEN" half of
  *        the rule preview.
@@ -378,21 +380,11 @@ ColumnLayout {
                             Layout.minimumWidth: paramRow.index === 0 ? Kirigami.Units.gridUnit * 8 : 0
                             text: paramRow.modelData.label
                             // One binding: a font.<sub> sibling next to a whole-group `font:` is an
-                            // illegal duplicate binding that fails the whole document. The theme
-                            // font carries exactly one valid size (the other reads -1, which
-                            // Qt.font warns on), so pass only the one that is set.
-                            font: {
-                                const base = Kirigami.Theme.smallFont;
-                                const props = {
-                                    family: base.family,
-                                    capitalization: Font.AllUppercase
-                                };
-                                if (base.pixelSize > 0)
-                                    props.pixelSize = base.pixelSize;
-                                else
-                                    props.pointSize = base.pointSize;
-                                return Qt.font(props);
-                            }
+                            // illegal duplicate binding that fails the whole document. FontUtils
+                            // passes only the size dimension the theme font actually carries.
+                            font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                                capitalization: Font.AllUppercase
+                            })
                             opacity: 0.55
                         }
 

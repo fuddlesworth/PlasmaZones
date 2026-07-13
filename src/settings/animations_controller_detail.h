@@ -169,14 +169,14 @@ inline QVariantMap profileToVariantMap(const PhosphorAnimation::Profile& profile
     return profile.toJson().toVariantMap();
 }
 
-/// Read the JSON object at @p path. Returns an empty object on missing
-/// file / parse error / non-object root. The `name` field is stripped so
-/// the returned map matches the QML-facing Profile shape. Parse errors
-/// are logged so silent corruption surfaces in journalctl.
 /// Ceiling on one profile file read. Shared by every reader of the
 /// hand-editable profiles dir; matches the snapshot and preset caps.
 constexpr qint64 kMaxProfileReadBytes = 4 * 1024 * 1024;
 
+/// Read the JSON object at @p path. Returns an empty object on missing
+/// file / parse error / non-object root. The `name` field is stripped so
+/// the returned map matches the QML-facing Profile shape. Parse errors
+/// are logged so silent corruption surfaces in journalctl.
 inline QJsonObject readProfileJson(const QString& path)
 {
     const QFileInfo info(path);

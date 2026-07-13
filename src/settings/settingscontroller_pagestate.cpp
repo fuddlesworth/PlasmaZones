@@ -456,6 +456,12 @@ void SettingsController::resetPage(const QString& page)
             // would leave the page half reset and reported clean. The page has
             // already toasted the reason; the user can retry once it is resolved.
             if (m_animationsPage != nullptr && m_animationsPage->clearAllOverrides() < 0) {
+                // A partial failure may have cleared and staged some overrides
+                // before the survivor; reconcile so the footer's needsSave
+                // matches the page badges (this call is not m_loading-gated,
+                // and it is a no-op for the untouched mid-discard refusal).
+                // The config keys stay un-reset; a retry finishes the job.
+                reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
                 return;
             }
             // Outside the page-controller null check: the config keys are settings

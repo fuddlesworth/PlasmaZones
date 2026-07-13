@@ -80,6 +80,24 @@ Kirigami.Dialog {
     property real previewTimeDelta: 0.016
     property int previewFrame: 0
 
+    // Build a small-theme font carrying only the size dimension the theme font
+    // actually holds (the other reads -1, which Qt.font warns on). Reads
+    // Kirigami.Theme.smallFont inside the caller's binding, so the binding
+    // stays reactive to theme font changes. Local twin of the settings app's
+    // FontUtils.js (a different QML module, so the library is not importable
+    // here).
+    function smallFontWith(extra) {
+        const base = Kirigami.Theme.smallFont;
+        const props = Object.assign({
+            family: base.family
+        }, extra);
+        if (base.pixelSize > 0)
+            props.pixelSize = base.pixelSize;
+        else
+            props.pointSize = base.pointSize;
+        return Qt.font(props);
+    }
+
     function hideShaderPreview() {
         previewAnimationTimer.stop();
         previewShaderConfig = null;
@@ -480,21 +498,11 @@ Kirigami.Dialog {
                     opacity: (root.currentShaderInfo && root.currentShaderInfo.description) ? 0.8 : 0.5
                     // One binding: a font.<sub> sibling next to a whole-group
                     // `font:` is an illegal duplicate binding that fails the
-                    // whole document. The theme font carries exactly one valid
-                    // size (the other reads -1, which Qt.font warns on), so
-                    // pass only the one that is set.
-                    font: {
-                        const base = Kirigami.Theme.smallFont;
-                        const props = {
-                            family: base.family,
-                            italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
-                        };
-                        if (base.pixelSize > 0)
-                            props.pixelSize = base.pixelSize;
-                        else
-                            props.pointSize = base.pointSize;
-                        return Qt.font(props);
-                    }
+                    // whole document. smallFontWith passes only the size
+                    // dimension the theme font actually carries.
+                    font: root.smallFontWith({
+                        italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
+                    })
                     verticalAlignment: Text.AlignTop
                 }
 
@@ -521,18 +529,9 @@ Kirigami.Dialog {
                     elide: Text.ElideRight
                     opacity: 0.5
                     // One binding, one valid size (see the description label above).
-                    font: {
-                        const base = Kirigami.Theme.smallFont;
-                        const props = {
-                            family: base.family,
-                            italic: true
-                        };
-                        if (base.pixelSize > 0)
-                            props.pixelSize = base.pixelSize;
-                        else
-                            props.pointSize = base.pointSize;
-                        return Qt.font(props);
-                    }
+                    font: root.smallFontWith({
+                        italic: true
+                    })
                 }
             }
 

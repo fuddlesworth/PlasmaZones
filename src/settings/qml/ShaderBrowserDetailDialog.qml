@@ -10,6 +10,8 @@ import org.kde.kirigami as Kirigami
 import PlasmaZones
 import org.plasmazones.common as PZCommon
 
+import "FontUtils.js" as FontUtils
+
 /**
  * @brief Detail view for a single shader effect (pack-agnostic).
  *
@@ -314,21 +316,11 @@ Kirigami.Dialog {
                             }
                             color: Kirigami.Theme.disabledTextColor
                             // One binding: a font.<sub> sibling next to a whole-group `font:` is an
-                            // illegal duplicate binding that fails the whole document. The theme
-                            // font carries exactly one valid size (the other reads -1, which
-                            // Qt.font warns on), so pass only the one that is set.
-                            font: {
-                                const base = Kirigami.Theme.smallFont;
-                                const props = {
-                                    family: base.family,
-                                    italic: true
-                                };
-                                if (base.pixelSize > 0)
-                                    props.pixelSize = base.pixelSize;
-                                else
-                                    props.pointSize = base.pointSize;
-                                return Qt.font(props);
-                            }
+                            // illegal duplicate binding that fails the whole document. FontUtils
+                            // passes only the size dimension the theme font actually carries.
+                            font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                                italic: true
+                            })
                             elide: Text.ElideRight
                         }
                     }

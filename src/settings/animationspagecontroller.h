@@ -320,7 +320,9 @@ public:
     /// Clear every shader override whose path is strictly DEEPER than
     /// @p path (i.e. paths starting with `<path>.`). Does NOT clear
     /// the override at @p path itself. Returns the number of cleared
-    /// entries. Persists the batch via a single `setShaderProfileTree`
+    /// entries (0 = nothing to clear), or -1 when refused while an
+    /// async discard owns the tree (the page toasts the reason).
+    /// Persists the batch via a single `setShaderProfileTree`
     /// write, which fires `shaderProfileTreeChanged` once and (via the
     /// constructor's broadcast lambda) one path-agnostic
     /// `shaderProfileChanged()` signal — NOT one per cleared path.

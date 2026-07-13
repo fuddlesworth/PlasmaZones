@@ -744,6 +744,46 @@ private Q_SLOTS:
 
         QVERIFY(done.wait(5000));
     }
+    /// A reset that removes SOME override files but not all is incomplete,
+    /// not a success with a smaller count: a positive return would let the
+    /// settings controller finish its reset path and declare the page clean
+    /// while an override survives on disk (resetPage guards on < 0).
+    void clearAllOverrides_reportsPartialFailureAsRefusal()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), {{QStringLiteral("duration"), 200}}));
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 300}}));
+        // Commit so the surviving file is no longer already snapshotted; the
+        // clear must then capture it fresh, which is the gate provoked below.
+        c.commitPending();
+
+        // Replace one override file with a DIRECTORY: hasOverride still
+        // reports it (QFileInfo::exists is true for a directory) but the
+        // pre-delete snapshot refuses a non-regular file, so clearOverride
+        // fails for this path while the sibling clears. Unlike chmod, this
+        // provokes the failure for root too (the Docker build runs as root).
+        const QString stuck = tmp.path() + QStringLiteral("/osd.show.json");
+        QVERIFY(QFileInfo::exists(stuck));
+        QVERIFY(QFile::remove(stuck));
+        QVERIFY(QDir().mkpath(stuck));
+        QVERIFY(QFileInfo(stuck).isDir());
+
+        QSignalSpy toastSpy(&c, &AnimationsPageController::toastRequested);
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("snapshotFileIfFirst: refusing to snapshot")));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing to delete")));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("override files could not be removed")));
+        QCOMPARE(c.clearAllOverrides(), -1);
+        QCOMPARE(toastSpy.count(), 1);
+        QCOMPARE(toastSpy.first().first().toString(), PhosphorI18n::tr("Some animation overrides could not be reset."));
+        // Partial, not refused outright: the healthy sibling WAS cleared.
+        QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
+        QVERIFY(c.hasOverride(QStringLiteral("osd.show")));
+    }
 };
 
 QTEST_MAIN(TestAnimationsMotionSets)

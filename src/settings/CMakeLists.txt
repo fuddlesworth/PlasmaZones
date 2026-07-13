@@ -342,6 +342,8 @@ qt_add_qml_module(plasmazones-settings
         # Shared group/sort infrastructure (Layouts + Rules pages)
         qml/GroupSortBar.qml
         qml/GroupSortLogic.js
+        # Shared theme-font construction (whole-group `font:` bindings)
+        qml/FontUtils.js
         qml/ZoneSelectorSection.qml
         qml/EasingPreview.qml
         qml/EasingSettings.qml

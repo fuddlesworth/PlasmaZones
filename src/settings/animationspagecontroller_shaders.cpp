@@ -401,9 +401,12 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
     if (!m_settings)
         return 0;
     if (m_asyncRevertInFlight) {
+        // -1, not 0: a caller must be able to tell "refused, try again" from
+        // "there was nothing to clear" — the clearAllOverrides convention.
         qCWarning(lcConfig) << "clearShaderOverrideDescendants: refusing while async discard is in flight; path="
                             << path;
-        return 0;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        return -1;
     }
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     const QStringList toClear = collectShaderOverrideDescendants(tree, path);
