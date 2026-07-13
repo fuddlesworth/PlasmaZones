@@ -23,9 +23,9 @@ class ISettings;
 /// plain config settings on ISettings (Windows.* and Gaps.*), so this controller
 /// forwards each value's READ/WRITE to the matching ISettings getter/setter and
 /// re-emits the ISettings::*Changed NOTIFY to QML. It also carries the CONSTANT
-/// slider bounds (border width/radius, focus fade duration, and the shared gap
-/// range) sourced from the same defaults the schema clamps against so the UI
-/// range can never drift.
+/// slider bounds (border width/radius, focus fade duration, the shared gap
+/// range, and the opacity / tint-strength unit ranges) sourced from the same
+/// defaults the schema clamps against so the UI range can never drift.
 ///
 /// Dirty tracking: the underlying values ARE Q_PROPERTY on Settings, so
 /// SettingsController's meta-object loop already wires their NOTIFY to

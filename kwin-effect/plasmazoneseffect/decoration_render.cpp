@@ -282,8 +282,9 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // draw slot (it produces the layered surface the animation composites
     // over); that is fine — this function only writes the fold's own bound
     // pack program, never the redirect slot. The border APPEARANCE is not a
-    // parameter here — it rides the pack's baked customParams/customColors,
-    // pushed below (with @p wb's per-window rule override when set).
+    // parameter here — it rides @p wb's per-window packParamValues (resolved
+    // at updateWindowDecoration time), falling back to the pack's baked
+    // customParams/customColors, pushed below.
     KWin::GLShader* shader = pack.shader.get();
 
     // The shader evaluates a rounded-rect SDF over the window FRAME to round the
