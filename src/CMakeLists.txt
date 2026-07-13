@@ -450,6 +450,7 @@ set(plasmazones_daemon_SRCS
     daemon/enginefactory.cpp
     daemon/daemon/start.cpp
     daemon/daemon/signals.cpp
+    daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
     daemon/daemon/osd.cpp
@@ -521,6 +522,7 @@ target_link_libraries(plasmazonesd
         PhosphorShortcuts::PhosphorShortcuts  # ShortcutManager / Registry / backends
         PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
         PhosphorSurfaces::PhosphorSurfaces  # managed surface lifecycle (engine, keep-alive)
+        PhosphorServiceIdle::PhosphorServiceIdle  # ext-idle-notify-v1; the daemon owns session-idle detection and pushes it to the KWin effect (a compositor SERVES that protocol, it cannot consume it)
         PhosphorOverlay::PhosphorOverlay  # per-screen shell-host + slot mechanism (Phase 2 onward)
         # Frozen-snapshot per-screen mode + disable/lock cascade façade.
         # The daemon owns a `ContextResolver` over three local adapters

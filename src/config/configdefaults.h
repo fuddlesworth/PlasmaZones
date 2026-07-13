@@ -380,7 +380,7 @@ public:
 
     // ── Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*) ──
     // The opacity analogue of the plain border: config-backed, rendered by the
-    // reserved "opacity-tint" surface pack in easy mode (no user decoration
+    // built-in "opacity-tint" surface pack in easy mode (no user decoration
     // packs), suppressed wholesale by any user pack. Defaults mirror the
     // pack's own parameter defaults (full opacity, no tint) so enabling the
     // toggle changes nothing until the user moves a slider; the tint colour
@@ -1195,6 +1195,49 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Decorations.Performance
+    //
+    // An animated pack repaints every window carrying it on every vsync. That
+    // never lets the GPU leave its top performance state — measured at ~110 W and
+    // +12 C over an idle desktop with the effect unloaded, on a GPU that is only
+    // ~45% busy. What costs is not the work per frame but that there IS work every
+    // frame, so these bound WHEN the chain animates, not how much it does.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Animate only the focused window's decoration; unfocused windows hold their
+    /// last composite. Divides the continuous redraw by the number of decorated
+    /// windows on screen. Off by default: it visibly changes what the desktop
+    /// looks like (only the window you are using shimmers), so it is the user's
+    /// call, not ours.
+    static bool decorationAnimateFocusedOnly()
+    {
+        return false;
+    }
+
+    /// Stop animating the decoration chain once the session has been idle for
+    /// decorationIdleTimeoutSec, and resume on the first input. On by default:
+    /// nobody is looking at an animation they walked away from, and this is where
+    /// most of the wasted power actually goes.
+    static bool decorationPauseWhenIdle()
+    {
+        return true;
+    }
+
+    /// Seconds of no input before decoration animation pauses.
+    static constexpr int decorationIdleTimeoutSec()
+    {
+        return 30;
+    }
+    static constexpr int decorationIdleTimeoutSecMin()
+    {
+        return 5;
+    }
+    static constexpr int decorationIdleTimeoutSecMax()
+    {
+        return 3600;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1407,12 +1450,6 @@ public:
     static QRectF defaultVirtualScreenRegion()
     {
         return QRectF(0.0, 0.0, 1.0, 1.0);
-    }
-
-    /// Tolerance for validating that virtual screen regions cover the full physical screen.
-    static constexpr qreal areaCoverageTolerance()
-    {
-        return 0.05;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1833,11 +1870,34 @@ static_assert(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDu
 static_assert(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDurationMin()
                   && ConfigDefaults::focusFadeDuration() <= ConfigDefaults::focusFadeDurationMax(),
               "ConfigDefaults::focusFadeDuration() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::decorationIdleTimeoutSec() >= ConfigDefaults::decorationIdleTimeoutSecMin()
+                  && ConfigDefaults::decorationIdleTimeoutSec() <= ConfigDefaults::decorationIdleTimeoutSecMax(),
+              "ConfigDefaults::decorationIdleTimeoutSec() outside declared [min, max] slider range");
 static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin()
                   && ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax(),
               "ConfigDefaults::animationStaggerInterval() outside declared [min, max] slider range");
 static_assert(ConfigDefaults::animationSequenceMode() >= ConfigDefaults::animationSequenceModeMin()
                   && ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax(),
               "ConfigDefaults::animationSequenceMode() outside declared [min, max] range");
+// The autotile five. Every OTHER constexpr accessor that declares a [min, max] was checked
+// here and these were not, for no reason anyone could name — the guard is free, and a
+// default outside its own declared slider range is a bug the compiler can simply refuse.
+// (The many non-constexpr accessors cannot be checked this way; test_configdefaults.cpp
+// covers those at runtime.)
+static_assert(ConfigDefaults::autotileInsertPosition() >= ConfigDefaults::autotileInsertPositionMin()
+                  && ConfigDefaults::autotileInsertPosition() <= ConfigDefaults::autotileInsertPositionMax(),
+              "ConfigDefaults::autotileInsertPosition() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileMasterCount() >= ConfigDefaults::autotileMasterCountMin()
+                  && ConfigDefaults::autotileMasterCount() <= ConfigDefaults::autotileMasterCountMax(),
+              "ConfigDefaults::autotileMasterCount() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileMaxWindows() >= ConfigDefaults::autotileMaxWindowsMin()
+                  && ConfigDefaults::autotileMaxWindows() <= ConfigDefaults::autotileMaxWindowsMax(),
+              "ConfigDefaults::autotileMaxWindows() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileSplitRatio() >= ConfigDefaults::autotileSplitRatioMin()
+                  && ConfigDefaults::autotileSplitRatio() <= ConfigDefaults::autotileSplitRatioMax(),
+              "ConfigDefaults::autotileSplitRatio() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileSplitRatioStep() >= ConfigDefaults::autotileSplitRatioStepMin()
+                  && ConfigDefaults::autotileSplitRatioStep() <= ConfigDefaults::autotileSplitRatioStepMax(),
+              "ConfigDefaults::autotileSplitRatioStep() outside declared [min, max] range");
 
 } // namespace PlasmaZones

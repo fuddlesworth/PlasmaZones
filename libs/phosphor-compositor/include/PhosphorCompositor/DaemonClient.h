@@ -71,7 +71,6 @@ public:
     void querySnappedWindows();
     void queryPendingRestoreGeometries();
     void queryVirtualScreens(const QString& screenId);
-    void querySetting(const QString& key);
     void pruneStaleWindows(const QStringList& liveWindowIds);
 
     // Daemon availability probe (async — emits daemonReady if responsive)
@@ -88,7 +87,6 @@ Q_SIGNALS:
     void pendingRestoreGeometriesReceived(const QString& json);
     void virtualScreensReceived(const QString& screenId, const PhosphorProtocol::WindowGeometryList& geometries);
 
-    void settingReceived(const QString& key, const QVariant& value);
     void settingsChanged();
     void virtualScreensChanged(const QString& screenId);
 

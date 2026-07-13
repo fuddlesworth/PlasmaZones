@@ -24,11 +24,21 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
                                          Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
                                          Qt::KeyboardModifiers oldmodifiers)
 {
-    Q_UNUSED(oldpos)
     Q_UNUSED(oldmodifiers)
 
     const bool modifiersChanged = (m_currentModifiers != modifiers);
     const bool buttonsChanged = (oldbuttons != buttons);
+
+    // Wake any hover-reactive decoration. Its repaint driver stands down once the folded
+    // cursor matches the live one (otherwise it re-folded the whole chain at vsync forever
+    // with the pointer parked), and the cursor cache it compares against is only refreshed
+    // inside prePaintScreen — so without a kick from HERE, a pointer move over a
+    // hardware-cursor plane schedules no frame, nothing notices the cursor moved, and the
+    // highlight freezes until something unrelated damages the screen. This is the only
+    // cursor-position signal the effect gets.
+    if (pos != oldpos) {
+        repaintHoverDecorations(pos);
+    }
 
     if (buttonsChanged && m_dragTracker->isDragging()) {
         qCInfo(lcEffect) << "mouseChanged buttons:" << static_cast<int>(oldbuttons) << "->"

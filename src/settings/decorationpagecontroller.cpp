@@ -146,13 +146,13 @@ QVariantList DecorationPageController::availableShaderEffects() const
     const auto effects = m_registry->availableEffects();
     result.reserve(effects.size());
     for (const auto& effect : effects) {
-        // The reserved "border" and "opacity-tint" packs render the PLAIN
-        // config/rule-owned layers; the kwin effect strips them from every
-        // user chain (tree and rule alike), so offering them in the picker
-        // would produce an entry that silently never renders. Their knobs
-        // live on the Windows appearance page instead.
-        if (effect.id == QLatin1String("border") || effect.id == QLatin1String("opacity-tint"))
-            continue;
+        // EVERY pack is offered, including "border" and "opacity-tint". Those two
+        // also back the plain config/rule-owned layers in easy mode, but that is a
+        // separate injection the effect makes ONLY when the chain has no user packs
+        // — so picking one here cannot double-apply with its plain layer. Picked
+        // into a chain they are ordinary packs that render through their OWN params
+        // (setChain seeds those from the plain setting via providesBorder /
+        // providesOpacityTint), exactly like frost's contentOpacity.
         result.append(effectToMap(effect));
     }
     return result;

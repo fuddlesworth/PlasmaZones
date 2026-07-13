@@ -202,10 +202,16 @@ void PlasmaZonesEffect::reconcileDecorationShader(const QString& windowId, KWin:
         // shader directly for single unpadded packs; retired — see drawWindow.)
         KWin::GLShader* const redirectShader = surfacePresentShader();
         if (!redirectShader) {
-            // setShader(nullptr)/unredirect are no-ops when the window was never
-            // redirected.
-            setShader(w, nullptr);
-            unredirect(w);
+            // Through releaseDecorationGl, the single owner of this teardown, rather than
+            // hand-rolling setShader(nullptr)+unredirect here. It matters on this exact
+            // path: the only non-latching way surfacePresentShader() returns null is
+            // makeOpenGLContextCurrent() having FAILED, so the context is guaranteed not
+            // current — and destroying KWin's OffscreenData (texture and framebuffer)
+            // without one is the hazard releaseDecorationGl's ensureGlContextCurrent
+            // exists to prevent. It also damages what the dead decoration was covering
+            // (this branch used to leave the stale decorated frame on screen) and honours
+            // the live-transition guard, which the hand-rolled version stole the slot from.
+            releaseDecorationGl(w, it->outerPadding);
             it->shaderApplied = false;
             return;
         }
@@ -272,7 +278,8 @@ float PlasmaZonesEffect::advanceFocusFade(const QString& windowId, bool focused)
 }
 
 void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
-                                           const CompiledSurfacePack& pack, qreal scale, qreal texturePaddingLogical,
+                                           const CompiledSurfacePack& pack, qreal scale, float timeSec,
+                                           const QPointF& foldCursor, qreal texturePaddingLogical,
                                            const QString& windowId)
 {
     // The caller (renderSurfaceChainComposite's per-pack fold) has already
@@ -356,12 +363,17 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     if (pack.uOpacityLoc >= 0) {
         shader->setUniform(pack.uOpacityLoc, 1.0f);
     }
-    // Continuous time for an animated pack. -1 (static pack, e.g. the border)
-    // pushes nothing; postPaintScreen only drives the window to repaint when a
-    // pack actually references iTime (windowSurfaceAnimates), so a static
-    // decoration neither pays this push nor forces per-frame repaints.
+    // Time for an animated pack. -1 (static pack, e.g. the border) pushes nothing;
+    // postPaintScreen only drives the window to repaint when a pack actually
+    // references iTime (windowSurfaceAnimates), so a static decoration neither pays
+    // this push nor forces per-frame repaints.
+    //
+    // The value comes from the FOLD, not from a live clock read here: a chain that
+    // Decorations.Performance has paused is folded against a frozen clock so it holds
+    // the frame it was paused on (SurfaceMultipassState::pausedAtMs / timeOffsetMs). Sampling live
+    // here would let the packs run on while the composite they draw into does not.
     if (pack.uTimeLoc >= 0) {
-        shader->setUniform(pack.uTimeLoc, surfaceShaderTimeSeconds());
+        shader->setUniform(pack.uTimeLoc, timeSec);
     }
     // Cursor position for hover-reactive packs, in the same top-down device-px
     // space as the geometry uniforms above (origin at the padded canvas's
@@ -372,11 +384,27 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // Hover packs declare `animated: true` so the vsync repaint loop keeps
     // this fresh; there is no per-cursor-move damage path.
     if (pack.iMouseLoc >= 0) {
-        const QPointF cursorGlobal = m_shaderManager.m_cachedCursorGlobal;
+        // The cursor the FOLD resolved, not a re-derivation from a live cache. This used to
+        // be derived from an `animating` flag that a live transition WIDENS (the
+        // transition's clock and audio must run) — so a gate-PAUSED window under a
+        // transition was handed the live pointer while its cache key recorded "absent": the
+        // shader and the key disagreeing about the one value three separate comments swear
+        // they share. The fold decides it once, in foldCursorFor, and everyone downstream is
+        // handed that answer. There is nothing left here to derive it from, which is the
+        // point.
+        //
+        // kCursorOutside means the pointer is not over this window (or the chain is paused),
+        // and maps to the (-1, -1) canvas-local sentinel the packs already handle.
+        const QPointF cursorGlobal = foldCursor;
         float localX = -1.0f;
         float localY = -1.0f;
-        const bool inside = cursorGlobal.x() >= expanded.left() && cursorGlobal.x() < expanded.right()
-            && cursorGlobal.y() >= expanded.top() && cursorGlobal.y() < expanded.bottom();
+        // Ask the SENTINEL, do not re-derive the containment test. foldCursorFor already ran
+        // it against the canvas the fold recorded, and the fold keyed its cache on the
+        // answer. Re-deriving it here against live geometry can only ever DISAGREE with that
+        // key — the shader would get (-1,-1) while the cache believes it baked a live
+        // pointer, which is the frozen-hover bug an earlier pass fixed, walking back in
+        // through a second spelling of the same rule.
+        const bool inside = cursorGlobal != kCursorOutside;
         if (inside) {
             localX = static_cast<float>((cursorGlobal.x() - expanded.left()) * scale);
             localY = static_cast<float>((cursorGlobal.y() - expanded.top()) * scale);
@@ -392,7 +420,7 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     }
     // Pack-declared parameters (customParams / customColors). Seed from THIS
     // window's resolved values (updateWindowDecoration fills packParamValues from
-    // the window's own DecorationProfile — for the reserved "border" base pack
+    // the window's own DecorationProfile — for the built-in "border" base pack
     // that resolution already carries the window's rule/config border
     // appearance, routed by param id like any other pack override), falling
     // back to the compiled pack's baked baseline when the registry couldn't

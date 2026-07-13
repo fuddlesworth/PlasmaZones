@@ -112,6 +112,209 @@ private Q_SLOTS:
         QCOMPARE(settings.focusFadeDuration(), ConfigDefaults::focusFadeDurationMin());
     }
 
+    /**
+     * Same clampInt contract on the decoration idle timeout
+     * (Decorations.Performance/IdleTimeoutSec). This one is load-bearing rather
+     * than cosmetic: the daemon feeds the value straight into an
+     * ext-idle-notify-v1 timeout as `value * 1000`, so an unclamped on-disk value
+     * would arm a nonsensical timer. A zero or negative timeout is dropped by the
+     * idle service, silently disabling the pause; a value at or above ~2147484
+     * would overflow the int multiply outright.
+     */
+    void testReadValidatedDecorationIdleTimeout_outOfRange_clampsToMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto perf = backend->group(ConfigDefaults::decorationsPerformanceGroup());
+            perf->writeInt(ConfigDefaults::idleTimeoutSecKey(), 999999999);
+            perf.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSecMax());
+    }
+
+    void testReadValidatedDecorationIdleTimeout_belowMin_clampsToMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto perf = backend->group(ConfigDefaults::decorationsPerformanceGroup());
+            perf->writeInt(ConfigDefaults::idleTimeoutSecKey(), -1);
+            perf.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSecMin());
+    }
+
+    /**
+     * A config with NO Decorations.Performance group at all must report the DEFAULTS,
+     * and PauseWhenIdle's default is TRUE.
+     *
+     * This pins the bug that actually shipped. Every layer of the wiring looked
+     * complete, but the key was missing from SettingsAdaptor's hand-maintained getter
+     * registry, and getSetting answered an unknown key with a valid EMPTY STRING —
+     * which QVariant::toBool() reads as false. So a default-true setting came back
+     * false on every startup: not merely disabled, INVERTED. The registry hole itself
+     * is guarded by test_settings_registry_contract; this guards the other half, that
+     * an absent key still yields the default it is supposed to.
+     */
+    void testDecorationPerformance_missingGroup_yieldsDefaults()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QVERIFY2(settings.decorationPauseWhenIdle(),
+                 "PauseWhenIdle defaults to TRUE. A false here means something is reading the absent key as a "
+                 "value rather than falling back — which is exactly how it shipped inverted once.");
+        QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
+        QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+    }
+
+    /**
+     * reset() must restore every Decorations.Performance key to its default.
+     *
+     * NOTE what this does and does not pin. It catches a reset() that no-ops, or a
+     * post-reset load() that fails to re-read. It does NOT pin the group's entry in
+     * Settings::managedGroupNames(): "Decorations.Performance" nests under
+     * root["Decorations"]["Performance"], and managedGroupNames already lists the
+     * parent "Decorations", whose delete removes the whole subtree. The explicit
+     * sub-group entry is defence-in-depth (it keeps working if the group is ever
+     * un-nested), not the thing this test guards. Mirrors the sibling
+     * testDecorationWindowFiltering_defaultsAndReset.
+     */
+    void testDecorationPerformance_defaultsAndReset()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
+        QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+
+        // Flip every key away from its default (120 is in-range and distinct from the
+        // default of 30).
+        settings.setDecorationPauseWhenIdle(false);
+        settings.setDecorationAnimateFocusedOnly(true);
+        settings.setDecorationIdleTimeoutSec(120);
+        QCOMPARE(settings.decorationPauseWhenIdle(), false);
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), true);
+        QCOMPARE(settings.decorationIdleTimeoutSec(), 120);
+
+        settings.reset();
+        QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
+        QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+    }
+
+    // =========================================================================
+    // Schema clampDouble validator (window opacity / tint strength scalars)
+    //
+    // Both are [0.0, 1.0] scalars fed straight into the effect's alpha/tint
+    // modulation. The min leg is the load-bearing one: windowOpacity defaults to
+    // 1.0 (== max) and windowTintStrength defaults to 0.0 (== min), so a
+    // clamp-to-bound and a fall-back-to-default are indistinguishable on one side.
+    // Testing the OTHER side of each proves the value snaps to the violated bound
+    // rather than the default.
+    // =========================================================================
+
+    void testReadValidatedWindowOpacity_belowMin_clampsToMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeDouble(ConfigDefaults::opacityKey(), -1.0);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        // 0.0 (min) is distinct from the 1.0 default, so a fall-back-to-default
+        // validator would fail this.
+        QCOMPARE(settings.windowOpacity(), ConfigDefaults::windowOpacityMin());
+    }
+
+    void testReadValidatedWindowOpacity_aboveMax_clampsToMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeDouble(ConfigDefaults::opacityKey(), 5.0);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowOpacity(), ConfigDefaults::windowOpacityMax());
+    }
+
+    void testReadValidatedWindowTintStrength_aboveMax_clampsToMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeDouble(ConfigDefaults::tintStrengthKey(), 5.0);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        // 1.0 (max) is distinct from the 0.0 default.
+        QCOMPARE(settings.windowTintStrength(), ConfigDefaults::windowTintStrengthMax());
+    }
+
+    void testReadValidatedWindowTintStrength_belowMin_clampsToMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeDouble(ConfigDefaults::tintStrengthKey(), -1.0);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowTintStrength(), ConfigDefaults::windowTintStrengthMin());
+    }
+
+    /**
+     * Sanity baseline: a valid mid-range value round-trips untouched, so the
+     * clamp tests above aren't masking a validator that snaps everything to a
+     * bound.
+     */
+    void testReadValidatedWindowOpacityTint_validValue_preserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeDouble(ConfigDefaults::opacityKey(), 0.5);
+            windows->writeDouble(ConfigDefaults::tintStrengthKey(), 0.5);
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowOpacity(), 0.5);
+        QCOMPARE(settings.windowTintStrength(), 0.5);
+    }
+
     // =========================================================================
     // Schema validColorOr validator (invalid color string)
     // =========================================================================
@@ -161,14 +364,16 @@ private Q_SLOTS:
             auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
             windows->writeString(ConfigDefaults::borderScopeKey(), QStringLiteral("garbage"));
             windows->writeString(ConfigDefaults::titleBarScopeKey(), QStringLiteral("garbage"));
+            windows->writeString(ConfigDefaults::opacityTintScopeKey(), QStringLiteral("garbage"));
             windows.reset();
             backend->sync();
         }
 
         Settings settings;
-        // Both scopes fall back to the schema default (=="tiled").
+        // Every closed-set scope falls back to its schema default (=="tiled").
         QCOMPARE(settings.windowBorderScope(), ConfigDefaults::windowBorderScope());
         QCOMPARE(settings.windowTitleBarScope(), ConfigDefaults::windowTitleBarScope());
+        QCOMPARE(settings.windowOpacityTintScope(), ConfigDefaults::windowOpacityTintScope());
     }
 
     /**
@@ -185,6 +390,11 @@ private Q_SLOTS:
             auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
             windows->writeString(ConfigDefaults::borderScopeKey(), QStringLiteral("normal"));
             windows->writeString(ConfigDefaults::titleBarScopeKey(), QStringLiteral("all"));
+            // opacityTintScope shares the identical closed-set validator; without a
+            // valid-token leg here a validator that wrongly snapped a legitimate
+            // "normal"/"all" for THIS key would pass, since its default is also "tiled"
+            // and so indistinguishable from a mis-snap in the garbage test above.
+            windows->writeString(ConfigDefaults::opacityTintScopeKey(), QStringLiteral("normal"));
             windows.reset();
             backend->sync();
         }
@@ -192,6 +402,7 @@ private Q_SLOTS:
         Settings settings;
         QCOMPARE(settings.windowBorderScope(), QStringLiteral("normal"));
         QCOMPARE(settings.windowTitleBarScope(), QStringLiteral("all"));
+        QCOMPARE(settings.windowOpacityTintScope(), QStringLiteral("normal"));
     }
 
     /**
@@ -235,6 +446,63 @@ private Q_SLOTS:
 
         Settings settings;
         QCOMPARE(settings.windowBorderColorActive(), QStringLiteral("accent"));
+    }
+
+    /**
+     * windowTintColor carries the identical "#AARRGGBB"-or-"accent" contract as the border
+     * colours, and a missing/mis-wired validColorOr on its key would ship silently. Pin both
+     * legs: garbage snaps to the schema default, a valid hex round-trips untouched.
+     */
+    void testReadValidatedTintColor_garbageSnaps_hexPreserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::tintColorKey(), QStringLiteral("not-a-color"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowTintColor(), ConfigDefaults::windowTintColor());
+    }
+
+    void testReadValidatedTintColor_hexPreserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::tintColorKey(), QStringLiteral("#FF3DAEE9"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowTintColor(), QStringLiteral("#FF3DAEE9"));
+    }
+
+    /**
+     * The "accent" sentinel is a valid tint-colour value (the effect resolves it to the
+     * live system colour), so validation must leave it untouched.
+     */
+    void testReadValidatedTintColor_accentPreserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::tintColorKey(), QStringLiteral("accent"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowTintColor(), QStringLiteral("accent"));
     }
 
     // =========================================================================

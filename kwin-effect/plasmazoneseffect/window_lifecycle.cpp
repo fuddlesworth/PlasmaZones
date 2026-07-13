@@ -15,6 +15,7 @@
 
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QScopeGuard>
 
 #include "../autotilehandler.h"
 #include "../snaphandler.h"
@@ -621,9 +622,14 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
         });
 
-        // Clean up the tracked screen entry when the window is destroyed
-        connect(safeW, &QObject::destroyed, this, [this, safeW]() {
-            m_trackedScreenPerWindow.remove(safeW);
+        // Clean up the tracked screen entry when the window is destroyed. Capture the RAW
+        // pointer value, not the QPointer: inside a destroyed() slot the QPointer has already
+        // been nulled, so removing `safeW` would remove the null key and leave the real entry
+        // to leak. The pointer is only ever a lookup key here, never dereferenced, so its
+        // value is exactly what remove() needs.
+        KWin::EffectWindow* const rawW = safeW;
+        connect(safeW, &QObject::destroyed, this, [this, rawW]() {
+            m_trackedScreenPerWindow.remove(rawW);
         });
 
         // Metadata mutations: KWin fires these when an app swaps its class or
@@ -1357,6 +1363,18 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     }
 }
 
+KWin::EffectWindow* PlasmaZonesEffect::findWindowByIdExact(const QString& windowId) const
+{
+    if (windowId.isEmpty()) {
+        return nullptr;
+    }
+    const auto it = m_windowIdReverse.constFind(windowId);
+    if (it != m_windowIdReverse.constEnd() && it.value() && !it.value()->isDeleted()) {
+        return it.value();
+    }
+    return nullptr;
+}
+
 KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) const
 {
     if (windowId.isEmpty()) {
@@ -1364,9 +1382,8 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
     }
 
     // O(1) exact match via reverse cache
-    auto it = m_windowIdReverse.constFind(windowId);
-    if (it != m_windowIdReverse.constEnd() && it.value() && !it.value()->isDeleted()) {
-        return it.value();
+    if (KWin::EffectWindow* const exact = findWindowByIdExact(windowId)) {
+        return exact;
     }
 
     // Fallback: appId-based fuzzy match (for cross-session restore where

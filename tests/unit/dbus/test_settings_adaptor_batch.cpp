@@ -51,11 +51,10 @@ PhosphorAnimation::Profile profileWithDuration(qreal ms)
 
 // Counting-stub: overrides one setter so the guard-fires test can
 // distinguish "setter not invoked" (guard hit) from "setter invoked,
-// returned true" (guard missed). StubSettings' getters are hard-coded
-// (setters are no-ops), so this subclass keeps the getter unchanged
-// and only adds a hit counter for setAdjacentThreshold (a registered int
-// scalar — the shared gap keys are no longer on this generic settings map
-// since their global default is rule-backed).
+// returned true" (guard missed). StubSettings' setters are real (member-backed,
+// change-guarded); this subclass adds only a hit counter for setAdjacentThreshold
+// (a registered int scalar — the shared gap keys are no longer on this generic
+// settings map since their global default is rule-backed).
 class CountingStubSettings : public StubSettings
 {
 public:
@@ -64,9 +63,19 @@ public:
     {
         ++setAdjacentThresholdCalls;
         lastAdjacentThreshold = v;
+        // Chain to the real member-backed setter so adjacentThreshold() reflects
+        // the write — otherwise the getter is pinned to the base default and a
+        // write-then-read test would silently see a stale value.
+        StubSettings::setAdjacentThreshold(v);
+    }
+    void setDefaultLayoutId(const QString& v) override
+    {
+        ++setDefaultLayoutIdCalls;
+        StubSettings::setDefaultLayoutId(v);
     }
     int setAdjacentThresholdCalls = 0;
     int lastAdjacentThreshold = -1;
+    int setDefaultLayoutIdCalls = 0;
 };
 
 class TestSettingsAdaptorBatch : public QObject
@@ -222,11 +231,26 @@ private Q_SLOTS:
         QCOMPARE(m_settings->lastAdjacentThreshold, 42);
     }
 
-    // Empty-string matches StubSettings::defaultLayoutId() default — guard fires.
-    void testSetSetting_unchangedStringScalar_returnsTrue()
+    // Empty-string matches StubSettings::defaultLayoutId() default — the value-equality
+    // guard must short-circuit WITHOUT invoking the setter. The call counter is what pins
+    // it: a return-value-only assertion cannot tell a guard-fire from a setter that ran and
+    // returned true (mirrors the int scalar guard test above).
+    void testSetSetting_unchangedStringScalar_guardShortCircuits()
     {
+        m_settings->setDefaultLayoutIdCalls = 0;
         const bool ok = m_adaptor->setSetting(QStringLiteral("defaultLayoutId"), QDBusVariant(QVariant(QString())));
         QVERIFY(ok);
+        QCOMPARE(m_settings->setDefaultLayoutIdCalls, 0);
+    }
+
+    // The changing-write counterpart: a different layout id must actually invoke the setter.
+    void testSetSetting_changedStringScalar_invokesSetter()
+    {
+        m_settings->setDefaultLayoutIdCalls = 0;
+        const bool ok =
+            m_adaptor->setSetting(QStringLiteral("defaultLayoutId"), QDBusVariant(QVariant(QStringLiteral("grid"))));
+        QVERIFY(ok);
+        QCOMPARE(m_settings->setDefaultLayoutIdCalls, 1);
     }
 
     // Composite (list-of-map) settings like dragActivationTriggers advertise
@@ -303,6 +327,49 @@ private Q_SLOTS:
         values[QStringLiteral("anyKey")] = 1;
         const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("bogus"), values);
         QVERIFY(!ok);
+    }
+
+    void testSetPerScreenSettings_readOnlySnappingCategory_returnsFalse()
+    {
+        // The 'snapping' per-screen category is a read-only projection of the config's
+        // per-monitor gaps (dispatch->writable == false). A batch WRITE to it must be
+        // rejected — the XML and header say so, and nothing pinned it.
+        QVariantMap values;
+        values[QStringLiteral("innerGap")] = 4;
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("snapping"), values);
+        QVERIFY(!ok);
+    }
+
+    void testSetPerScreenSettings_emptyMapUnknownCategory_returnsFalse()
+    {
+        // Ordering contract: an empty map is a valid no-op ONLY for a category that was
+        // first recognised as writable. The empty-map short-circuit must run AFTER the
+        // category guards, or an empty write to a bogus category reports success and the
+        // caller never learns it addressed a category that does not exist. Pins the exact
+        // regression of hoisting `if (values.isEmpty()) return true;` back above the guards.
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("bogus"), {});
+        QVERIFY(!ok);
+    }
+
+    void testSetPerScreenSettings_emptyMapReadOnlyCategory_returnsFalse()
+    {
+        // Same ordering contract for the read-only "snapping" projection: an empty write to
+        // it must be rejected, not reported as a successful no-op.
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("snapping"), {});
+        QVERIFY(!ok);
+    }
+
+    void testSetPerScreenSettings_implausibleScreenId_returnsFalse()
+    {
+        // The screenId is caller-supplied over the session bus. An empty or control-char id
+        // is refused at the boundary (shape only — a disconnected monitor's real id is still
+        // accepted) so a hostile peer cannot grow the config file one junk group at a time.
+        QVariantMap values;
+        values[QStringLiteral("masterCount")] = 2;
+        QVERIFY(!m_adaptor->setPerScreenSettings(QString(), QStringLiteral("autotile"), values));
+        QVERIFY(!m_adaptor->setPerScreenSettings(QStringLiteral("bad\nid"), QStringLiteral("autotile"), values));
+        // A plain connector name is fine.
+        QVERIFY(m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("autotile"), values));
     }
 
     void testSetPerScreenSettings_recognizedCategory_returnsTrue()

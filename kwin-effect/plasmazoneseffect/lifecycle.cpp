@@ -149,6 +149,29 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     });
     connect(&m_shaderManager.m_animationShaderRegistry,
             &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this, [this]() {
+                // Make the GL context current FIRST. This fires from the registry's file
+                // watcher, between frames, where the compositor's context is not current
+                // — and everything below is GL: endShaderTransition hands the redirect
+                // back (KWin destroys the offscreen framebuffer), and the two cache
+                // clears destroy GLShaders and GLTextures, i.e. glDeleteProgram and
+                // glDeleteTextures. Its SIBLING handler (the surface registry's, below)
+                // has done this from the start and explains why.
+                //
+                // It is NOT enough that endShaderTransition makes the context current
+                // itself: it only runs from the drain loop, once per LIVE transition, and
+                // the ordinary hot-reload (a user saves a .glsl, no window mid-animation)
+                // drains nothing at all. The cache clears below then run against no
+                // context. An earlier pass removed this call on exactly that reasoning and
+                // left this paragraph standing over the hole.
+                ensureGlContextCurrent();
+
+                // Drain UNCONDITIONALLY. Gating the drain on the context bought nothing —
+                // and worse, the residual self-heal below would notice the undrained
+                // transitions, log a CRITICAL, and then drain them anyway, which made the
+                // gate a false-alarm generator rather than a safety measure. Bailing
+                // outright, which this first did, was worse still: it left the caches
+                // populated, so a hot-reloaded pack kept rendering from its OLD compiled
+                // shader for the rest of the session.
                 QVarLengthArray<KWin::EffectWindow*, 8> windows;
                 for (auto& [w, _] : m_shaderManager.shaderTransitions())
                     windows.push_back(w);
@@ -226,11 +249,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // compositor teardown (!KWin::effects), where GL is being torn down and
         // the driver reclaims the objects regardless, so the clears are safe
         // either way.
-        const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
+        if (KWin::effects) {
+            KWin::effects->makeOpenGLContextCurrent();
+        }
         m_compiledPacks.clear();
+        m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         m_surfaceMultipass.clear();
-        if (haveContext) {
+        // Repaint whenever there is a compositor, NOT only when the context went current: a
+        // repaint is not GL work. Gating it on the make-current result meant a transient
+        // failure dropped the caches but never asked the screen to redraw, so the reloaded
+        // packs would not appear until something incidental damaged the scene.
+        if (KWin::effects) {
             KWin::effects->addRepaintFull();
         }
         // A pack reload can flip a decoration pack's `audio` metadata flag,
@@ -655,7 +685,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // Belt-and-suspenders for the not-expected case of a multipass entry
             // without a border entry (removeWindowDecoration's no-border early-return
             // would otherwise skip the FBO cleanup).
-            m_surfaceMultipass.erase(cachedId);
+            //
+            // Its own make-current, not one borrowed from the endShaderTransition above:
+            // this destroys GLTextures and GLFramebuffers, we are off the paint cycle, and
+            // the day that neighbour grows an early return this would silently become
+            // glDelete* against no context. The window is gone, so the transition guard
+            // releaseSurfaceState applies has nothing left to protect — erase directly.
+            if (m_surfaceMultipass.contains(cachedId)) {
+                ensureGlContextCurrent();
+                m_surfaceMultipass.erase(cachedId);
+            }
             // Mirror the m_pendingFrameGeometry cleanup that
             // slotWindowClosed runs (window_lifecycle.cpp). A
             // windowFrameGeometryChanged emission between
@@ -804,6 +843,20 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         qCWarning(lcEffect) << "Failed to connect to daemon motionProfileTreeChanged D-Bus signal";
     }
 
+    // Session idle. The daemon owns the detection (ext-idle-notify-v1 is a Wayland
+    // CLIENT protocol, and this effect lives inside the compositor that serves it),
+    // so the effect only ever sees the resolved boolean and pauses / resumes the
+    // decoration chain on it.
+    const bool idleConnected = QDBusConnection::sessionBus().connect(
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("sessionIdleChanged"), this,
+        SLOT(slotSessionIdleChanged(bool)));
+    if (idleConnected) {
+        qCInfo(lcEffect) << "Connected to daemon sessionIdleChanged D-Bus signal";
+    } else {
+        qCWarning(lcEffect) << "Failed to connect to daemon sessionIdleChanged D-Bus signal";
+    }
+
     // Connect to keyboard navigation D-Bus signals
     connectNavigationSignals();
 
@@ -862,6 +915,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(serviceWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon service unregistered";
         m_daemonServiceRegistered = false;
+        // Release the idle latch. m_sessionIdle is daemon-pushed state whose ONLY
+        // route back to false is a sessionIdleChanged(false) broadcast — and a
+        // restarted daemon arms a fresh ext-idle-notify-v1 notification on a seat
+        // that is already active, which never produces an idle->active edge and so
+        // never sends one. Left set, every decorated window's chain would stay
+        // frozen for the rest of the session. Repaint them so a chain paused under
+        // the latch is put back in the paint loop (a paused chain emits no damage
+        // of its own).
+        if (m_sessionIdle) {
+            m_sessionIdle = false;
+            repaintAllDecorations();
+        }
         // Drop the virtual-screen readiness immediately. The defs from the
         // previous daemon cycle are now stale; without clearing the flag here,
         // the windowFrameGeometryChanged VS-crossing detector would keep
@@ -1050,6 +1115,18 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // alive.
     disconnect(&m_shaderManager.m_animationShaderRegistry, nullptr, this, nullptr);
     disconnect(&m_surfaceShaderRegistry, nullptr, this, nullptr);
+
+    // Make the context current for the WHOLE destructor, member destruction included.
+    //
+    // The teardown calls below each make it current themselves — but only if they have
+    // something to tear down. Unload the effect with no decorated windows and no live
+    // transition (a KCM toggle on an idle desktop) and clearAllDecorations() iterates nothing,
+    // the drain loop runs zero times, and nothing makes the context current at all. Then the
+    // members go: m_compiledPacks, m_shaderCache, m_textureCache — glDeleteProgram,
+    // glDeleteTextures, glDeleteFramebuffers, against whatever context happens to be current.
+    // Making it current is sticky per-thread, so one call here covers the body and everything
+    // the members destroy afterwards.
+    ensureGlContextCurrent();
 
     // Stop the audio-spectrum provider (terminates its cava child process) and
     // sever its signal before teardown, so a late spectrumUpdated can't dispatch

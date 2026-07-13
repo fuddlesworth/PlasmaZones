@@ -55,7 +55,18 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegi
     , m_saveTimer(new QTimer(this))
     , m_motionTreeNotifyTimer(new QTimer(this))
 {
+    // The assert is the developer-facing half. The RELEASE half is the early return: every
+    // registry lambda below closes over m_settings, and the debounced save timer
+    // dereferences it outright, so a null here is a crash on the first getSetting rather
+    // than a Qt warning. The class is built to tolerate a null m_settings elsewhere (detach()
+    // exists precisely for that), so refusing to wire anything up is both safe and honest —
+    // an adaptor with no settings behind it answers nothing, which beats answering wrongly.
     Q_ASSERT(settings);
+    if (!settings) {
+        qCCritical(lcDbusSettings) << "SettingsAdaptor constructed with no settings — the D-Bus settings surface will "
+                                      "not answer";
+        return;
+    }
     initializeRegistry();
 
     // Configure debounced save timer (performance optimization)
@@ -468,8 +479,10 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
     // The full CAVA analysis parameter set (Shaders.Audio): the KWin effect
     // runs its own cava instance and pulls every knob through this map via
-    // loadSettingAsync, so each one must be registered here or the effect's
-    // loaders only ever see the unknown-key empty reply and keep defaults.
+    // loadSettingAsync, so each one must be registered here. An unregistered key
+    // answers with a D-Bus error, the effect's value callback never runs, and the
+    // knob is stuck on the effect's own built-in default with nothing to show for it
+    // but a daemon-side warning.
     REGISTER_BOOL_SETTING("audioAutosens", audioAutosens, setAudioAutosens)
     REGISTER_INT_SETTING("audioSensitivity", audioSensitivity, setAudioSensitivity)
     REGISTER_INT_SETTING("audioNoiseReduction", audioNoiseReduction, setAudioNoiseReduction)
@@ -561,6 +574,22 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("decorationMinimumWindowWidth", decorationMinimumWindowWidth, setDecorationMinimumWindowWidth)
     REGISTER_INT_SETTING("decorationMinimumWindowHeight", decorationMinimumWindowHeight,
                          setDecorationMinimumWindowHeight)
+
+    // Decoration performance (Decorations.Performance). The KWin effect fetches these
+    // by name over getSetting, which resolves through THIS registry, not through Qt
+    // property reflection — so leaving a key out here disables the setting on the
+    // effect side however complete the rest of its wiring looks. That is not
+    // hypothetical: all three of these were missing once, and because getSetting then
+    // answered an unknown key with a valid empty string, PauseWhenIdle's default of
+    // true was being read back as false on every startup. tests/unit/dbus/
+    // test_settings_registry_contract.cpp is the tripwire for the next one.
+    //
+    // decorationIdleTimeoutSec is read by the daemon directly, but registering it
+    // keeps the wire surface complete (getSettingKeys / getAllSettingSchemas
+    // enumerate this map).
+    REGISTER_BOOL_SETTING("decorationAnimateFocusedOnly", decorationAnimateFocusedOnly, setDecorationAnimateFocusedOnly)
+    REGISTER_BOOL_SETTING("decorationPauseWhenIdle", decorationPauseWhenIdle, setDecorationPauseWhenIdle)
+    REGISTER_INT_SETTING("decorationIdleTimeoutSec", decorationIdleTimeoutSec, setDecorationIdleTimeoutSec)
     // animationExcludedApplications / animationExcludedWindowClasses
     // retired in v4 — folded into ExcludeAnimations Rules; the
     // effect derives its animation exclusion rule set from the unified
@@ -948,17 +977,25 @@ QString SettingsAdaptor::getAllSettings()
 
 QDBusVariant SettingsAdaptor::getSetting(const QString& key)
 {
+    // An empty key is a caller bug in exactly the way an unknown one is, so it gets
+    // exactly the same answer (see the long note below). Handing back a valid empty
+    // string here while the unknown-key path raised would have left one of the two
+    // failing silently and the other loudly, which is how the silent one survives.
     if (key.isEmpty()) {
-        qCWarning(lcDbusSettings) << "getSetting: empty key";
-        // Return a valid but empty QDBusVariant to avoid marshalling errors
-        // (QDBusVariant() with no argument creates an invalid variant that can't be sent)
-        return QDBusVariant(QVariant(QString()));
+        qCDebug(lcDbusSettings) << "getSetting: empty key";
+        if (calledFromDBus()) {
+            sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Empty setting key"));
+        }
+        return QDBusVariant(QVariant());
     }
 
     auto it = m_getters.find(key);
     if (it != m_getters.end()) {
         QVariant value = it.value()();
-        // Ensure we never return an invalid variant - use empty string as fallback
+        // A REGISTERED key that answers with an invalid variant is a bug in that
+        // getter, not a missing registration, and the caller asked for a real setting
+        // that really exists. An empty string of the right shape keeps the reply
+        // marshallable; the warning is what surfaces the getter.
         if (!value.isValid()) {
             qCWarning(lcDbusSettings) << "Setting" << key << "returned invalid variant, using empty string";
             return QDBusVariant(QVariant(QString()));
@@ -966,22 +1003,44 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
         return QDBusVariant(value);
     }
 
-    qCWarning(lcDbusSettings) << "Setting key not found:" << key;
-    // Return a valid but empty QDBusVariant with error indicator
-    // Callers should check for empty string as "not found" indicator
-    return QDBusVariant(QVariant(QString()));
+    // An unknown key is an ERROR, not an empty value.
+    //
+    // This map is hand-maintained (the REGISTER_*_SETTING block), not derived from
+    // the metaobject, so "somebody added a setting and forgot to register it" is a
+    // live failure mode — it has already happened. While a miss answered with a
+    // valid empty string, every caller coerced it blind: QVariant("").toBool() is
+    // false, so a forgotten registration silently forced the setting off, INVERTING
+    // any default-true one, with nothing but a daemon-side warning to show for it.
+    //
+    // A real error reply makes QDBusPendingReply::isValid() false in
+    // ClientHelpers::loadSettingAsync, so the value callback never runs and the
+    // caller simply keeps its own default. Guarded once here rather than pushed out
+    // to ~50 call sites as a defensive type-check.
+    // DEBUG, matching the batch path. An unknown key is answered with a D-Bus error, which
+    // is the real signal; logging it at warning level let any process on the session bus
+    // fill the daemon's log with content of its own choosing, one key at a time.
+    qCDebug(lcDbusSettings) << "getSetting: unknown key" << key;
+    if (calledFromDBus()) {
+        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Unknown setting key: %1").arg(key));
+    }
+    // The return value is discarded once sendErrorReply has run; it matters only for
+    // a direct (non-D-Bus) call, where an invalid variant is the honest answer.
+    return QDBusVariant(QVariant());
 }
 
 bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
 {
+    // DEBUG, not warning, and the same reasoning as getSetting's unknown-key path: the key
+    // comes from whoever is on the session bus, the caller is already told `false`, and a
+    // warning here let any process fill the daemon's log with content of its own choosing.
     if (key.isEmpty()) {
-        qCWarning(lcDbusSettings) << "setSetting: empty key";
+        qCDebug(lcDbusSettings) << "setSetting: empty key";
         return false;
     }
 
     auto it = m_setters.find(key);
     if (it == m_setters.end()) {
-        qCWarning(lcDbusSettings) << "Setting key not found:" << key;
+        qCDebug(lcDbusSettings) << "setSetting: unknown key" << key;
         return false;
     }
 
@@ -1033,7 +1092,7 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
         // Use debounced save instead of immediate save (performance optimization)
         // This batches multiple rapid setting changes into a single disk write
         scheduleSave();
-        qCInfo(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
+        qCDebug(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
     } else {
         qCWarning(lcDbusSettings) << "Failed to set setting:" << key;
     }
@@ -1072,7 +1131,7 @@ QVariantMap SettingsAdaptor::getSettings(const QStringList& keys)
 bool SettingsAdaptor::setSettings(const QVariantMap& settings)
 {
     if (settings.isEmpty()) {
-        qCWarning(lcDbusSettings) << "setSettings: empty map";
+        qCDebug(lcDbusSettings) << "setSettings: empty map";
         return false;
     }
     if (!m_settings) {
@@ -1085,8 +1144,11 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
     // Block settingsChanged during the batch — each setter emits it individually,
     // which would trigger N daemon handler invocations (autotile transitions, KWin
     // effect reloads) mid-batch with partially-applied state. Block all signals
-    // during iteration, save once, then the KCM's notifyReload() triggers load()
-    // which emits settingsChanged once with all values committed.
+    // during iteration and save once, so the change reaches consumers as a single
+    // committed settingsChanged rather than N partial ones. (This used to say the
+    // KCM's notifyReload() drives the reload; it does not — the KCM writes config
+    // in-process. Nothing in this tree calls setSettings at all; it is a published
+    // D-Bus surface for external clients.)
     bool allOk = true;
     {
         QSignalBlocker blocker(m_settings);
@@ -1101,7 +1163,7 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
                 // failing the whole batch. Only a key unknown to BOTH maps is a
                 // genuine error.
                 if (!m_getters.contains(key)) {
-                    qCWarning(lcDbusSettings) << "setSettings: unknown key" << key;
+                    qCDebug(lcDbusSettings) << "setSettings: unknown key" << key;
                     allOk = false;
                 }
                 continue;
@@ -1135,7 +1197,7 @@ QString SettingsAdaptor::getSettingSchema(const QString& key)
     QJsonObject result;
 
     if (key.isEmpty()) {
-        qCWarning(lcDbusSettings) << "getSettingSchema: empty key";
+        qCDebug(lcDbusSettings) << "getSettingSchema: empty key";
         return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
     }
 
@@ -1144,7 +1206,7 @@ QString SettingsAdaptor::getSettingSchema(const QString& key)
         result[QLatin1String("key")] = key;
         result[QLatin1String("type")] = it.value();
     } else {
-        qCWarning(lcDbusSettings) << "getSettingSchema: unknown key" << key;
+        qCDebug(lcDbusSettings) << "getSettingSchema: unknown key" << key;
     }
 
     return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
@@ -1234,15 +1296,46 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
 }
 } // namespace
 
+namespace {
+
+/// Is @p screenId a plausible screen identifier, as far as this BOUNDARY can tell?
+///
+/// Shape only, deliberately. A per-screen setting is legitimately written for a monitor that
+/// is not currently connected (the config outlives the cable), so refusing an id that no live
+/// QScreen matches would break saved configuration rather than protect anything. What this
+/// does refuse is what a screen id can never be: empty, absurdly long, or carrying control
+/// characters — which is how a hostile session-bus peer would grow the config file without
+/// bound and smuggle newlines into anything that later prints one.
+///
+/// CLAUDE.md: "Input validation at system boundaries." This is that boundary: every one of
+/// the three per-screen writers is a D-Bus slot reachable by any process on the session bus.
+bool isPlausibleScreenId(const QString& screenId)
+{
+    constexpr int kMaxScreenIdLength = 256;
+    if (screenId.isEmpty() || screenId.size() > kMaxScreenIdLength) {
+        return false;
+    }
+    return std::none_of(screenId.cbegin(), screenId.cend(), [](QChar c) {
+        return c.category() == QChar::Other_Control;
+    });
+}
+
+} // namespace
+
 void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
                                           const QDBusVariant& value)
 {
     if (!m_settings) {
         return;
     }
+    if (!isPlausibleScreenId(screenId)) {
+        qCDebug(lcDbusSettings) << "setPerScreenSetting: implausible screen id (rejected at the D-Bus boundary)";
+        return;
+    }
+
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
-        qCWarning(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
+        qCDebug(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
         return;
     }
     if (!dispatch->writable) {
@@ -1260,9 +1353,14 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QStr
     if (!m_settings) {
         return;
     }
+    if (!isPlausibleScreenId(screenId)) {
+        qCDebug(lcDbusSettings) << "clearPerScreenSettings: implausible screen id (rejected at the D-Bus boundary)";
+        return;
+    }
+
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
-        qCWarning(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
+        qCDebug(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
         return;
     }
     if (!dispatch->writable) {
@@ -1282,7 +1380,7 @@ QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const
     }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
-        qCWarning(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
+        qCDebug(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
         return {};
     }
     return dispatch->get(screenId);
@@ -1290,17 +1388,16 @@ QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const
 
 bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QString& category, const QVariantMap& values)
 {
-    if (values.isEmpty()) {
-        // Empty map is a valid no-op — treat like setSettings batch and
-        // return true so callers don't need to guard for it.
-        return true;
-    }
     if (!m_settings) {
+        return false;
+    }
+    if (!isPlausibleScreenId(screenId)) {
+        qCDebug(lcDbusSettings) << "setPerScreenSettings: implausible screen id (rejected at the D-Bus boundary)";
         return false;
     }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
-        qCWarning(lcDbusSettings) << "setPerScreenSettings: unknown category" << category;
+        qCDebug(lcDbusSettings) << "setPerScreenSettings: unknown category" << category;
         return false;
     }
     if (!dispatch->writable) {
@@ -1308,6 +1405,14 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
             << "setPerScreenSettings: category" << category
             << "is read-only (a projection of config per-monitor gaps) — write via the autotile per-screen category";
         return false;
+    }
+    // An empty map is a valid no-op, so callers need not guard for it — but only AFTER the
+    // category has been validated. Short-circuiting on it first (as this did) meant an empty
+    // write to an unknown category, or to the read-only "snapping" projection, reported
+    // SUCCESS. The return value is the caller's only way to learn it wrote to the wrong
+    // category, and an empty batch is exactly when a caller is least likely to notice.
+    if (values.isEmpty()) {
+        return true;
     }
 
     for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
@@ -1324,8 +1429,10 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
     // One debounced save for the whole batch. The per-screen save path
     // coalesces multiple category updates into a single disk write.
     scheduleSave();
-    qCInfo(lcDbusSettings) << "setPerScreenSettings: batch applied" << values.size() << "keys on screen" << screenId
-                           << "category" << category;
+    // DEBUG: screenId and category are caller-supplied and unvalidated, and every bus peer
+    // can drive this in a loop. Same reasoning as the unknown-key paths above.
+    qCDebug(lcDbusSettings) << "setPerScreenSettings: batch applied" << values.size() << "keys on screen" << screenId
+                            << "category" << category;
     return true;
 }
 

@@ -639,6 +639,54 @@ void PlasmaZonesEffect::loadCachedSettings()
     // inactive colour loaders above). Re-fetched on every settingsChanged, so a
     // Window Appearance page edit takes effect without a relog. Guarded on an
     // actual value change to avoid a redundant full border rebuild per fetch.
+    // Decorations.Performance. An animated pack repaints every window carrying it
+    // on every vsync, which holds the GPU in its top performance state whatever
+    // the per-frame cost is, so these gate WHEN the chain animates. Flipping
+    // either one has to wake the paused windows back up, or a window frozen under
+    // the old setting would stay frozen until it happened to damage.
+    //
+    // Both check the variant TYPE before reading it, and that guard still earns its
+    // keep even though an unknown key now answers with a D-Bus ERROR (which skips the
+    // callback entirely, leaving our own default in place). What it defends against is
+    // a reply that ARRIVES but is not a bool: an older daemon on the other end of the
+    // bus, a mid-restart half-answer, a getter returning the invalid-variant fallback.
+    // QVariant("").toBool() is false, so an unguarded read there would force these off,
+    // which is merely redundant for a default-false setting but INVERTS the
+    // default-true PauseWhenIdle. Same guard the audio loaders below use.
+    loadSettingAsync(QStringLiteral("decorationAnimateFocusedOnly"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        const bool b = v.toBool();
+        if (m_animateFocusedOnly != b) {
+            m_animateFocusedOnly = b;
+            repaintAllDecorations();
+        }
+    });
+    loadSettingAsync(QStringLiteral("decorationPauseWhenIdle"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        const bool b = v.toBool();
+        if (m_pauseAnimationWhenIdle != b) {
+            m_pauseAnimationWhenIdle = b;
+            if (!b) {
+                // Drop any stale idle latch. The daemon publishes false on this very change
+                // (the value really moves, so its change-check passes), so this is belt and
+                // braces for a daemon that is dead or restarting — in which case nothing
+                // else would ever clear the latch and every decorated window would stay
+                // frozen. It does NOT force-publish here, and it does not clear the ladder:
+                // the ladder stays armed by design.
+                //
+                // Only ever written in the OFF direction. Writing our own mirror of the
+                // daemon's state in the ON direction would be guessing: it is the daemon
+                // that knows whether the seat is idle, and it tells us.
+                m_sessionIdle = false;
+            }
+            repaintAllDecorations();
+        }
+    });
+
     loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.showBorder != b) {
@@ -910,7 +958,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the border / decoration pass. Re-fetched on every settingsChanged, and a
     // value change schedules a full border sweep so a Decorations page edit
     // adds/removes borders on open windows live (mirroring the appearance
-    // loaders below) — unlike the animation filter, decorations are persistent
+    // loaders above) — unlike the animation filter, decorations are persistent
     // state and won't self-correct on the next window event.
     // Default true (exclude transients). Guard on isValid() so a failed reply
     // leaves the member at its `true` init rather than `toBool()`'s
@@ -1026,15 +1074,35 @@ void PlasmaZonesEffect::loadCachedSettings()
         // Per-pack param values are baked at first compile, so a tree change that
         // alters parameters[packId] requires a recompile of that pack — clear the
         // whole compiled-pack cache (it lazily recompiles on the next paint).
-        // This D-Bus reply lands between frames where the compositor GL context
-        // is not guaranteed current, and the cached packs own GLShaders plus
-        // user GLTextures whose destruction issues glDelete* — make the context
-        // current first, same discipline as the effectsChanged clear in
-        // lifecycle.cpp.
-        if (KWin::effects) {
-            KWin::effects->makeOpenGLContextCurrent();
+        // This D-Bus reply lands between frames where the compositor GL context is not
+        // guaranteed current, and the cached packs own GLShaders plus user GLTextures
+        // whose destruction issues glDelete* — make the context current first, same
+        // discipline as the effectsChanged clears in lifecycle.cpp.
+        //
+        // The result is CAPTURED, not discarded. The only false case is compositor
+        // teardown, where GL is going away and the driver reclaims the objects whatever
+        // we do, so the clear is safe either way — but a guard whose answer is thrown
+        // away is not a guard, and the comment above used to claim a discipline the code
+        // did not implement.
+        const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
+        if (!haveContext) {
+            qCWarning(lcEffect) << "Decoration pack cache cleared without a current GL context (compositor teardown?)";
         }
         m_compiledPacks.clear();
+        m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
+        // Recompiling the packs invalidates every CACHED FOLD, and updateAllDecorations
+        // is not a sufficient net for that: it skips windows with a live shader
+        // transition, and only re-resolves windows on the current desktop — so a
+        // decorated window that is both would keep compositeValid/prefixValid set and
+        // its next fold would early-return a composite baked with the OLD shader.
+        // Invalidate the folds directly. The textures stay (they are keyed on size and
+        // chain, neither of which a recompile changes) and so does the capture, which
+        // is window content and has nothing to do with the pack source.
+        for (auto& [id, surfaceState] : m_surfaceMultipass) {
+            surfaceState.compositeValid = false;
+            surfaceState.prefixValid = false;
+            surfaceState.prefixChainEnd = -1;
+        }
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         updateAllDecorations();
         if (KWin::effects) {

@@ -128,6 +128,7 @@ public:
     //   - IZoneSelectorSettings: zone selector UI configuration
     //   - IWindowBehaviorSettings: snap restore, sticky handling
     //   - IDefaultLayoutSettings: default layout ID
+    //   - IOrderingSettings: manual layout/algorithm ordering
     //   - IAnimationSettings: animation/shader-profile state + window filtering
     //
     // See settings_interfaces.h for the full API.
@@ -189,6 +190,17 @@ public:
     virtual QString decorationProfileTreeJson() const = 0;
     virtual void setDecorationProfileTreeJson(const QString& json) = 0;
 
+    // Decorations.Performance — bounds on WHEN the decoration chain animates. An
+    // animated pack repaints every window carrying it on every vsync, and that
+    // alone keeps the GPU in its top performance state regardless of how cheap the
+    // per-frame work is, so these gate the redraw rather than shrink it.
+    virtual bool decorationAnimateFocusedOnly() const = 0;
+    virtual void setDecorationAnimateFocusedOnly(bool value) = 0;
+    virtual bool decorationPauseWhenIdle() const = 0;
+    virtual void setDecorationPauseWhenIdle(bool value) = 0;
+    virtual int decorationIdleTimeoutSec() const = 0;
+    virtual void setDecorationIdleTimeoutSec(int value) = 0;
+
     // Color-import helper used by SnappingZonesController. Returns
     // an empty string on success, a user-readable error message
     // otherwise. The signature mirrors Settings::loadColorsFromFile
@@ -231,7 +243,7 @@ public:
     virtual int focusFadeDuration() const = 0;
     virtual void setFocusFadeDuration(int ms) = 0;
     // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*): the
-    // opacity analogue of the plain border, rendered by the reserved
+    // opacity analogue of the plain border, rendered by the built-in
     // "opacity-tint" surface pack and suppressed by any user decoration pack.
     // Opacity and tint strength are [0.0, 1.0]; the tint colour is an
     // #AARRGGBB hex string or the "accent" sentinel like the border colours.
@@ -610,6 +622,9 @@ Q_SIGNALS:
 
     // Surface decoration settings
     void decorationProfileTreeChanged();
+    void decorationAnimateFocusedOnlyChanged();
+    void decorationPauseWhenIdleChanged();
+    void decorationIdleTimeoutSecChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

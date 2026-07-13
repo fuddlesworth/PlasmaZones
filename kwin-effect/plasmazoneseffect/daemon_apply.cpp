@@ -26,9 +26,6 @@
 #include <QScopeGuard>
 #include <QSet>
 #include <QStringList>
-#include <QTimer>
-
-#include <utility>
 
 #include "../autotilehandler.h"
 #include "../navigationhandler.h"
@@ -153,6 +150,14 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         qCWarning(lcEffect) << "slotApplyGeometryRequested: invalid geometry" << geometry;
         return;
     }
+    // Consume the drag-to-float marker FIRST, before the minimized early-return can bypass
+    // it. The marker is a one-shot: this float-restore event is exactly the one it was
+    // waiting for, so it must be cleared whether or not we go on to apply the geometry.
+    // Consuming it only on the non-minimized path left it armed when a drag-floated window
+    // was minimized, and the next legitimate float-restore for that window was then wrongly
+    // skipped by the stale marker.
+    const bool wasDragFloated = zoneId.isEmpty() && m_dragFloatedWindowIds.remove(liveWindowId);
+
     // Skip float-restore geometry on minimized windows: when a snapped window is minimized
     // we float it (to free the zone slot), but applying the pre-tile geometry while minimized
     // would poison what KWin restores to on unminimize, causing a visible flash of the
@@ -165,7 +170,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // Skip float-restore geometry for drag-to-float: when the user drags a window
     // off the autotile layout, the daemon restores pre-autotile geometry. But the
     // user expects the window to stay where they dropped it, not snap back.
-    if (zoneId.isEmpty() && m_dragFloatedWindowIds.remove(liveWindowId)) {
+    if (wasDragFloated) {
         qCInfo(lcEffect) << "slotApplyGeometryRequested: skipping float-restore for drag-floated window:"
                          << liveWindowId;
         return;
@@ -524,157 +529,27 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
         qCWarning(lcEffect) << "slotWindowStateChanged: rejecting invalid entry —" << err;
         return;
     }
+    // Re-key to the window's LIVE id before writing, not the daemon-supplied one.
+    //
+    // ZoneCache keys on the instance UUID (extractInstanceId), and so does the IsSnapped /
+    // Zone rule-match READ — but through a cross-session restore the daemon can still hold
+    // the pre-restore UUID, so a write keyed on it files the entry under an instance id the
+    // rule matcher will never read, and a restored snapped window's IsSnapped / Zone(...)
+    // rules silently stop matching. Every other commit path already keys by the live id
+    // (slotApplyGeometryRequested spells out why). A window that cannot be resolved falls
+    // back to the daemon id — best-effort, and correct for the ordinary same-session case
+    // where the two ids are identical.
+    QString liveWindowId = windowId;
+    if (KWin::EffectWindow* const w = findWindowById(windowId)) {
+        liveWindowId = getWindowId(w);
+    }
     // Keep the effect-side zone cache current so the IsSnapped / Zone rule-match
     // fields resolve against the live placement. An empty zoneId (unsnapped /
     // floated / screen-changed) removes the entry. setWindowZone re-resolves this
     // window's rules when the zone actually changes (coalescing with the floating
     // path's invalidation when a float toggle emits both signals — see
     // flushPendingRuleInvalidations), so no separate invalidate call is needed.
-    m_navigationHandler->setWindowZone(windowId, state.zoneId);
-}
-
-void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowId)
-{
-    // Run when there are rules OR a config-default border / hidden title bar OR any
-    // decoration-tree chain could apply: all are placement-sensitive (rule scopes,
-    // appearance scope gating, and the placement-derived surface paths the tree
-    // resolves through), so a snap / unsnap / zone change must re-resolve the
-    // window's appearance. With none of them, a placement change can't change any
-    // window's appearance — skip.
-    if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()) {
-        return;
-    }
-    // Coalesce: a single float toggle emits BOTH windowFloatingChanged and
-    // windowStateChanged, so this runs twice per logical change. Accumulate the
-    // affected windowIds and flush once at the end of the event-loop turn — the
-    // match-cache clear is global (running it per call is wasteful) and the
-    // per-window border rebuild is otherwise repeated. The flush before the next
-    // paint keeps the re-resolved border / opacity visually immediate.
-    //
-    // Only the CACHED verdicts (border / opacity) need invalidation. shouldHandleWindow's
-    // exclusion query is evaluated on-demand every time it is consulted (drag start,
-    // lifecycle filtering), so a snap/float/zone change is picked up at the next natural
-    // call without eager re-filtering.
-    const bool wasEmpty = m_pendingRuleInvalidations.isEmpty();
-    m_pendingRuleInvalidations.insert(windowId);
-    if (wasEmpty) {
-        // `this` as the context object cancels the callback if the effect is torn
-        // down before the turn ends.
-        QTimer::singleShot(0, this, [this] {
-            flushPendingRuleInvalidations();
-        });
-    }
-}
-
-void PlasmaZonesEffect::flushPendingRuleInvalidations()
-{
-    const QSet<QString> windowIds = std::exchange(m_pendingRuleInvalidations, {});
-    if (windowIds.isEmpty()
-        || (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault()
-            && !hasDecorationTreeContent())) {
-        return;
-    }
-    // The match cache is keyed on (windowId, ruleSet revision); neither moves on a
-    // placement-state change, so drop it once so border / opacity rules re-resolve
-    // against the new snapped / floating / zone state.
-    m_shaderManager.animationRuleEvaluator().clearCache();
-    for (const QString& windowId : windowIds) {
-        KWin::EffectWindow* w = findWindowById(windowId);
-        if (!w) {
-            continue;
-        }
-        // findWindowById's unambiguous-appId fallback can resolve a window whose
-        // live id differs from the daemon-supplied one (stale uuid after a
-        // cross-session restore). Key ALL downstream tracking by the LIVE id —
-        // matching slotApplyGeometryRequested — or the layer reconcile below
-        // would insert its pre-rule snapshot under a key no teardown path ever
-        // removes and no live-id lookup (windowOwnKeepAbove / applyOwnLayerFlags
-        // / the next reconcile) ever finds.
-        const QString liveId = getWindowId(w);
-        // Recreate this window's border so a state-scoped border colour
-        // re-applies. Border overlays are visual-only, so build them only for a
-        // window on the current desktop — matching updateAllDecorations, which gates
-        // the same call this way to avoid building an invisible off-desktop item
-        // that the next desktop switch tears down.
-        if (w->isOnCurrentDesktop()) {
-            updateWindowDecoration(liveId, w);
-        }
-        // Re-resolve the hide-title-bar override too: a SetHideTitleBar rule
-        // scoped on a placement field (IsSnapped / IsFloating / Zone / Mode) must
-        // recompute on a snap/unsnap, otherwise a title bar hidden WHEN isSnapped
-        // stays hidden after unsnap until the next updateAllDecorations. The
-        // decoration state survives desktop switches, so reconcile it for the
-        // window regardless of which desktop it sits on (as updateAllDecorations does).
-        reconcileRuleHiddenTitleBar(liveId, w);
-        // Same for the stacking layer: a SetWindowLayer rule scoped on a
-        // placement field (IsFloating / IsTiled / IsSnapped / Zone / Mode) must
-        // re-apply on a float/snap flip — this is the trigger that makes
-        // "floating windows above tiled windows" follow the float toggle.
-        reconcileRuleWindowLayer(liveId, w);
-        // No explicit repaint is needed for opacity: it is layer-backed, so a
-        // re-resolved SetOpacity value reaches the screen through the
-        // updateWindowDecoration re-fold above, which repaints the window
-        // itself (an undecorated window carries no rule opacity at all).
-    }
-}
-
-void PlasmaZonesEffect::scheduleBorderSweep()
-{
-    if (m_borderSweepPending) {
-        return;
-    }
-    m_borderSweepPending = true;
-    // `this` as the context object cancels the callback if the effect is torn down
-    // before the turn ends.
-    QTimer::singleShot(0, this, [this] {
-        m_borderSweepPending = false;
-        updateAllDecorations();
-    });
-}
-
-void PlasmaZonesEffect::invalidateAllRuleCaches()
-{
-    if (m_shaderManager.animationRuleSet().isEmpty() && m_ruleWindowLayerSnapshots.isEmpty()) {
-        return;
-    }
-    // A bulk placement change (daemon loss clears the zone/floating caches; the
-    // daemon-ready re-seeds repopulate them) moves neither the windowId nor the
-    // ruleSet revision the match cache is keyed on, so every placement-scoped
-    // verdict would survive stale. Drop the whole cache. The clear alone
-    // revives nothing: appearance slots (opacity, tint, border colour) are
-    // FOLDED into the window's decoration at updateWindowDecoration time, so
-    // each caller pairs this sweep with its own decoration path — daemon loss
-    // tears the decorations down (clearAllDecorations), the daemon-ready
-    // re-seeds schedule a border sweep to re-fold every window against the
-    // fresh placement.
-    m_shaderManager.animationRuleEvaluator().clearCache();
-    // Window-layer rules need the same placement-scoped re-resolve, but they
-    // are EVENT-driven (during normal operation only reconcileRuleWindowLayer
-    // writes keepAbove/keepBelow; restoreAllRuleWindowLayers is
-    // destructor-only), so neither the cache clear above nor the callers'
-    // decoration paths touch them.
-    // Re-reconcile every window right here at the bulk-placement chokepoint so
-    // BOTH edges are covered: on daemon loss a `WHEN IsFloating` layer rule
-    // releases its keep-above against the cleared placement (snapshot restore)
-    // instead of stranding it for the daemon-down interval, and on the
-    // daemon-ready re-seeds (getFloatingWindows / syncZonesFromDaemon replies)
-    // it re-applies against the fresh placement even when the getAllRules
-    // refresh fails (loadRuleAnimationsFromDbus early-returns on a D-Bus or
-    // parse error without reconciling anything). NOT
-    // restoreAllRuleWindowLayers(): that unconditionally drops all snapshots,
-    // which would strand windows held by an unconditional (placement-free)
-    // layer rule — the rule sets deliberately survive daemon loss, so those
-    // must keep their applied layer. Gated on hasWindowLayerRules so a
-    // session whose rules never touch the layer skips the cache-cold
-    // per-window resolution (a lingering snapshot still sweeps to drain).
-    if (KWin::effects && (m_shaderManager.hasWindowLayerRules() || !m_ruleWindowLayerSnapshots.isEmpty())) {
-        const auto layerWindows = KWin::effects->stackingOrder();
-        for (KWin::EffectWindow* lw : layerWindows) {
-            if (lw && !lw->isDeleted()) {
-                reconcileRuleWindowLayer(getWindowId(lw), lw);
-            }
-        }
-    }
+    m_navigationHandler->setWindowZone(liveWindowId, state.zoneId);
 }
 
 void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)

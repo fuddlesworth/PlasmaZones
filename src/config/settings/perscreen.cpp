@@ -708,7 +708,10 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, co
 
     QVariant validated = validatePerScreenValue(key, value);
     if (!validated.isValid()) {
-        qCWarning(lcConfig) << "Unknown or invalid per-screen zone selector key:" << key;
+        // DEBUG, and the value is not echoed — the same reasoning as the autotile twin
+        // below, reached over the same bus by the same caller. Demoting one of the two and
+        // leaving the other is not a fix, it is a door left open beside a locked one.
+        qCDebug(lcConfig) << "Rejected per-screen zone selector setting" << key;
         return;
     }
 
@@ -820,7 +823,12 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
 
     QVariant validated = validatePerScreenAutotileValue(key, value);
     if (!validated.isValid()) {
-        qCWarning(lcConfig) << "Rejected per-screen autotile setting:" << (key + QLatin1Char('=') + value.toString());
+        // DEBUG, and the value is not echoed. Both the key and the value arrive from
+        // whoever called setPerScreenSetting on the session bus, so a warning here let any
+        // process fill the daemon's log with content of its own choosing, unbounded in
+        // length and rate. The adaptor's own logs were demoted for exactly this reason and
+        // the attacker-controlled strings simply reached a warning one frame deeper.
+        qCDebug(lcConfig) << "Rejected per-screen autotile setting" << key;
         return;
     }
 

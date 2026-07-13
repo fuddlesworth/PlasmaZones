@@ -20,6 +20,7 @@ public:
     explicit IdleNotifierSource(QObject* parent = nullptr);
 
     void setTimeout(std::chrono::milliseconds timeout) override;
+    [[nodiscard]] bool isArmed() const override;
     [[nodiscard]] std::chrono::milliseconds timeout() const override;
 
 private:

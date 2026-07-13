@@ -21,6 +21,11 @@ void IdleNotifierSource::setTimeout(std::chrono::milliseconds timeout)
     m_notifier.setTimeout(timeout);
 }
 
+bool IdleNotifierSource::isArmed() const
+{
+    return m_notifier.isArmed();
+}
+
 std::chrono::milliseconds IdleNotifierSource::timeout() const
 {
     return m_notifier.timeout();

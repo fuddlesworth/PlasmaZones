@@ -53,6 +53,10 @@ class ActivityManager;
 class VirtualDesktopManager;
 }
 
+namespace PhosphorServiceIdle {
+class IdleService;
+}
+
 // PhosphorRules::RuleSet is held as a value member below
 // (m_excludeRuleSet) — needs a complete type, so include the header
 // rather than forward-declare. RuleStore stays in the header by
@@ -276,6 +280,43 @@ private:
     void setupAnimationProfiles();
     void setupAnimationShaderEffects();
     void setupSurfaceShaderEffects();
+
+    /// Watch the session going idle and push it to the KWin effect, which pauses
+    /// decoration-chain animation on it. See m_idleService for why the daemon owns this
+    /// rather than the effect.
+    ///
+    /// Called from init(), and again from start() after a stop(). A TIMEOUT change does not
+    /// come through here — it re-arms the ladder via refreshIdleStages() — and the
+    /// PauseWhenIdle toggle re-arms nothing at all, deliberately (see idle.cpp).
+    void setupIdleService();
+
+    /// (Re)arm the idle ladder from the current timeout. A single stage, armed whenever
+    /// the compositor supports idle notification — NOT torn down when PauseWhenIdle goes
+    /// off (an empty ladder cannot tell us the seat is already idle when the user turns
+    /// the feature back on). Called from init() and whenever the timeout moves.
+    void refreshIdleStages();
+
+    /// Disconnect every connection setupIdleService made whose sender outlives the idle
+    /// service, and forget them. Used by BOTH stop() and a re-entrant setupIdleService, so
+    /// a second setup cannot stack duplicates on top of live connections.
+    void teardownIdleConnections();
+
+    /// Is the session idle, as far as decoration pausing is concerned?
+    ///
+    /// The seat being idle is a FACT (the ladder reports it whenever the compositor
+    /// supports idle notification). Pausing on it is a CHOICE (the PauseWhenIdle setting).
+    /// This is the single place the two are combined, so the toggle cannot be honoured on
+    /// one publishing path and forgotten on another.
+    [[nodiscard]] bool sessionIdleNow() const;
+
+    /// Announce the session's idle state to the KWin effect, on CHANGE only.
+    ///
+    /// The idle service can report the same state more than once, and a redundant emit
+    /// is a D-Bus broadcast that says nothing (the effect does dedupe it at its own
+    /// door, so it costs traffic rather than repaints). @p force overrides the change
+    /// check for the one case where our last published value is not the question: a
+    /// client that just (re)connected and knows nothing of it.
+    void publishSessionIdle(bool idle, bool force = false);
     /// Push the current `Settings::animationProfile()` into the registry
     /// under the shell's well-known paths. Called from
     /// `setupAnimationProfiles()` at startup and from the coalescing
@@ -722,6 +763,56 @@ private:
     /// be declared AFTER m_screenManager so the initializer-list construction
     /// order matches.
     std::unique_ptr<OverlayService> m_overlayService;
+    /// Session-idle detection for Decorations.Performance.PauseWhenIdle.
+    ///
+    /// Owned by the DAEMON, not the effect: idleness arrives over
+    /// `ext-idle-notify-v1`, which is a Wayland CLIENT protocol. The effect lives
+    /// inside the compositor, which SERVES that protocol rather than consuming it,
+    /// so it cannot watch for its own session going idle. The daemon is already a
+    /// Wayland client, so it watches and pushes the resolved boolean to the effect
+    /// over D-Bus (SettingsAdaptor::sessionIdleChanged).
+    ///
+    /// The effect pauses decoration-chain animation while idle. That is the only
+    /// lever that lets the GPU leave its top performance state: an animated pack
+    /// repaints every window carrying it on every vsync, and it is the EXISTENCE of
+    /// per-frame work, not its size, that holds the clocks up.
+    std::unique_ptr<PhosphorServiceIdle::IdleService> m_idleService;
+
+    /// Coalesces idle-ladder rebuilds. Rearming is not free and not silent — it
+    /// destroys and recreates the compositor's ext-idle-notify-v1 object, and while
+    /// the session is idle it announces a resume, which wakes every decorated window.
+    /// The "Idle after" slider writes on every step of a drag, so the rebuild is
+    /// deferred to one net reconfigure once the value settles.
+    QTimer m_idleStagesRefreshTimer;
+    static constexpr int kIdleStagesRefreshDebounceMs = 250;
+
+    /// Retry budget for an idle ladder that would not arm. The failure this covers is a
+    /// login race (the seat's input devices are not advertised yet), so it resolves in well
+    /// under a second or it is not going to resolve at all — a handful of tries a second
+    /// apart is generous. When the budget runs out the feature degrades to off, which is
+    /// what it silently did before anyone was checking.
+    static constexpr int kIdleArmRetries = 5;
+    static constexpr int kIdleArmRetryDelayMs = 1000;
+    int m_idleArmRetriesLeft = kIdleArmRetries;
+
+    /// The last idle state we announced. The effect starts up assuming an active
+    /// session, so this starts false and the two agree from the outset.
+    bool m_publishedSessionIdle = false;
+
+    /// This compositor has no ext-idle-notify-v1, established once. m_idleService is null in
+    /// that case, which is indistinguishable from "not built yet" — so start()'s re-arm,
+    /// which guards on exactly that, would rebuild and re-probe the service on every
+    /// stop()→start() cycle and log the unsupported notice again each time.
+    bool m_idleUnsupported = false;
+
+    /// Every connection setupIdleService made whose SENDER outlives m_idleService: the two
+    /// settings signals, the debounce timer (a value member), and bridgeRegistered when a
+    /// compositor bridge exists (conditional, so three or four). Held so
+    /// stop() severs exactly these — not, say, every connection m_settings has to us, most
+    /// of which are made in the constructor or init() and would never come back on a
+    /// stop()→start() cycle — and so a re-armed service cannot stack duplicates.
+    QList<QMetaObject::Connection> m_idleConnections;
+
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;

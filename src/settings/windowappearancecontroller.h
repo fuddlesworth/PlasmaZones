@@ -23,9 +23,10 @@ class ISettings;
 /// plain config settings on ISettings (Windows.* and Gaps.*), so this controller
 /// forwards each value's READ/WRITE to the matching ISettings getter/setter and
 /// re-emits the ISettings::*Changed NOTIFY to QML. It also carries the CONSTANT
-/// slider bounds (border width/radius, focus fade duration, the shared gap
-/// range, and the opacity / tint-strength unit ranges) sourced from the same
-/// defaults the schema clamps against so the UI range can never drift.
+/// slider bounds (border width/radius, focus fade duration, the decoration idle
+/// timeout, the shared gap range, and the opacity / tint-strength unit ranges)
+/// sourced from the same defaults the schema clamps against so the UI range can
+/// never drift.
 ///
 /// Dirty tracking: the underlying values ARE Q_PROPERTY on Settings, so
 /// SettingsController's meta-object loop already wires their NOTIFY to
@@ -99,6 +100,8 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
     Q_PROPERTY(int focusFadeDurationMin READ focusFadeDurationMin CONSTANT)
     Q_PROPERTY(int focusFadeDurationMax READ focusFadeDurationMax CONSTANT)
+    Q_PROPERTY(int decorationIdleTimeoutSecMin READ decorationIdleTimeoutSecMin CONSTANT)
+    Q_PROPERTY(int decorationIdleTimeoutSecMax READ decorationIdleTimeoutSecMax CONSTANT)
     Q_PROPERTY(int innerGapMin READ innerGapMin CONSTANT)
     Q_PROPERTY(int innerGapMax READ innerGapMax CONSTANT)
     Q_PROPERTY(int outerGapMin READ outerGapMin CONSTANT)
@@ -231,6 +234,14 @@ public:
     int focusFadeDurationMax() const
     {
         return ::PhosphorCompositor::DecorationDefaults::FocusFadeMsMax;
+    }
+    int decorationIdleTimeoutSecMin() const
+    {
+        return ConfigDefaults::decorationIdleTimeoutSecMin();
+    }
+    int decorationIdleTimeoutSecMax() const
+    {
+        return ConfigDefaults::decorationIdleTimeoutSecMax();
     }
     int innerGapMin() const
     {

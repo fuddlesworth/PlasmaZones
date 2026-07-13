@@ -4,6 +4,7 @@
 #include "../plasmazoneseffect.h"
 
 #include "shader_internal.h"
+#include "surface_fold.h"
 #include "types.h"
 #include "window_query.h"
 
@@ -37,18 +38,24 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // and the composite canvas are texel-aligned — a pack samples both with
     // the same uv (backdropTexel / surfaceTexel).
     const qreal pad = wb.outerPadding;
-    QRectF logicalGeometry = w->expandedGeometry();
-    if (logicalGeometry.isEmpty()) {
-        logicalGeometry = w->frameGeometry();
+    QRectF windowRect = w->expandedGeometry();
+    if (windowRect.isEmpty()) {
+        windowRect = w->frameGeometry();
     }
-    logicalGeometry.adjust(-pad, -pad, pad, pad);
-    qreal captureScale = viewport.scale();
-    constexpr qreal kMaxSurfaceDim = 8192.0;
-    const qreal longestPx = qMax(logicalGeometry.width(), logicalGeometry.height()) * captureScale;
-    if (longestPx > kMaxSurfaceDim) {
-        captureScale *= kMaxSurfaceDim / longestPx;
-    }
-    const QSize textureSize = (logicalGeometry.size() * captureScale).toSize();
+    // The SAME canvas the fold builds, from the same helper — not a second derivation that
+    // happens to agree. Texel alignment between the backdrop and the composite is what lets
+    // a pack sample both with one uv, and a drift between two copies of this arithmetic
+    // would misalign the frost silently.
+    //
+    // windowSurfaceScale(w), NOT viewport.scale(): the backdrop TEXTURE must match the
+    // composite texture, and the composite is now built at the window's pinned scale. Handing
+    // this output's scale here would size the backdrop for one output while the composite is
+    // sized for another, and on a mixed-DPI straddle the two would disagree — exactly the
+    // silent misalignment this shared helper exists to prevent. The blit below still reads
+    // through the live `viewport`; only the destination canvas is pinned.
+    const SurfaceCanvas canvas = surfaceCanvasFor(windowRect, pad, windowSurfaceScale(w));
+    const QRectF logicalGeometry = canvas.logicalGeometry;
+    const QSize textureSize = canvas.textureSize;
     if (textureSize.isEmpty()) {
         return;
     }
@@ -71,9 +78,6 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // accumulation generation: their dest slices overwrite in place and
     // the valid rect grows to the union. A stale generation restarts the
     // rect at this capture's slice.
-    const qint64 pinned = m_shaderManager.currentFrameClockMs();
-    const qint64 frameStamp = pinned >= 0 ? pinned : ShaderInternal::shaderClockNowMs();
-    constexpr qint64 kAccumulationWindowMs = 50;
     // Snapshot GL state BEFORE the realloc branch's clear (which sets the clear
     // colour to transparent): the guard must capture the pristine ambient state
     // so it hands blend/viewport/scissor/clear-colour back the way it found them
@@ -86,6 +90,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // undefined. The guard restores the ambient scissor on exit.
     glDisable(GL_SCISSOR_TEST);
     if (state.backdropSize != textureSize || !state.backdropTex) {
+        state.backdropFbo.reset();
         state.backdropTex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
         if (!state.backdropTex) {
             state.backdropSize = QSize();
@@ -95,17 +100,26 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         state.backdropTex->setWrapMode(GL_CLAMP_TO_EDGE);
         state.backdropSize = textureSize;
         state.backdropRect = QVector4D();
-        state.backdropFrameMs = -1;
+        // Fresh texture means no output has contributed to any accumulation generation yet, so
+        // reset the generation tracker alongside the rect. Harmless today (backdropUsable gates
+        // the union on the just-zeroed rect), but leaving stale output rects here would resurface
+        // the never-expiring-generation bug if that guard ever stops keying on backdropRect.
+        state.backdropGenerationOutputs.clear();
+        // Wrap the texture once, here — the per-frame capture blit below reuses it.
+        state.backdropFbo = std::make_unique<KWin::GLFramebuffer>(state.backdropTex.get());
+        if (!state.backdropFbo->valid()) {
+            state.backdropFbo.reset();
+            state.backdropTex.reset();
+            state.backdropSize = QSize();
+            return;
+        }
         // The only clear the texture ever gets: uncovered regions read
         // transparent until a capture lands there, and are never sampled
         // (backdropTexel clamps into the valid rect).
-        KWin::GLFramebuffer clearFbo(state.backdropTex.get());
-        if (clearFbo.valid()) {
-            KWin::GLFramebuffer::pushFramebuffer(&clearFbo);
-            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            KWin::GLFramebuffer::popFramebuffer();
-        }
+        KWin::GLFramebuffer::pushFramebuffer(state.backdropFbo.get());
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        KWin::GLFramebuffer::popFramebuffer();
     }
     // Where to READ the scene from. At rest that is the canvas rect itself;
     // while an animation draws the window elsewhere (animatedFrame valid),
@@ -136,14 +150,31 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     if (sourceLogicalF.isEmpty()) {
         return; // keep whatever another output captured
     }
-    const bool sameGeneration =
-        state.backdropFrameMs >= 0 && qAbs(frameStamp - state.backdropFrameMs) < kAccumulationWindowMs;
-    KWin::GLFramebuffer fbo(state.backdropTex.get());
-    if (!fbo.valid()) {
+    // A new generation starts when THIS OUTPUT blits again; a sibling output blitting into
+    // the same canvas joins the current one. The generation cannot be decided by a clock:
+    // outputs have independent frame clocks, which is why the wall-clock window this used to
+    // use never expired at all (16ms at 60Hz, well under the 50ms window), so backdropRect
+    // only ever grew to the union and never contracted. A window dragged half off its output
+    // then kept a valid rect covering canvas it no longer captures, the clamp stopped biting,
+    // and the overhanging band sampled a frozen reflection of where the window used to be.
+    const QRectF outputRect = viewport.renderRect();
+    // Has THIS output already contributed to the current generation? If so this is its next
+    // frame, and the rect restarts at this slice. If not, it is a sibling output tiling the
+    // same canvas in the same generation, and the rect unions.
+    const bool sameGeneration = !state.backdropGenerationOutputs.contains(outputRect);
+    // The generation-set mutation (clear-then-append) is deferred to AFTER a successful
+    // blit, below. Doing the clear here would leave the set emptied-but-not-re-appended on
+    // the failed-blit early return, so the NEXT frame would see this output as
+    // sameGeneration and UNION its slice with the still-stale backdropRect — reproducing,
+    // for one frame, the over-large stale-reflection band the generation set replaced. The
+    // captured `sameGeneration` bool above is what the union check uses, so deferring the
+    // set write changes nothing this frame.
+    if (!state.backdropFbo) {
         state.backdropTex.reset();
         state.backdropSize = QSize();
         return;
     }
+    KWin::GLFramebuffer& fbo = *state.backdropFbo;
     // No clear here — see the accumulation note above.
     const KWin::Rect source(qRound(sourceLogicalF.x()), qRound(sourceLogicalF.y()), qRound(sourceLogicalF.width()),
                             qRound(sourceLogicalF.height()));
@@ -158,7 +189,12 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
                        source.width() / sourceRect.width() * texW, source.height() / sourceRect.height() * texH);
     const KWin::Rect destination(qRound(destF.x()), qRound(destF.y()), qRound(destF.width()), qRound(destF.height()));
     if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
-        state.backdropRect = QVector4D();
+        // Leave backdropRect alone, exactly as the empty-source path above does. This
+        // runs once per OUTPUT, and a canvas straddling two of them accumulates their
+        // slices into one texture — so zeroing the rect here would throw away a sibling
+        // output's perfectly good capture from the same frame, drop uHasBackdrop to 0,
+        // and collapse the frost to nothing for that frame. A failed blit means THIS
+        // slice is missing, not that the others are invalid.
         return;
     }
     // Valid sub-rect in TOP-DOWN normalized coords — matches backdropTexel's
@@ -169,7 +205,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
                        static_cast<float>(destF.y() / textureSize.height()),
                        static_cast<float>(destF.width() / textureSize.width()),
                        static_cast<float>(destF.height() / textureSize.height()));
-    if (sameGeneration && state.backdropRect.z() > 0.0f && state.backdropRect.w() > 0.0f) {
+    if (sameGeneration && backdropUsable(state)) {
         const float x0 = qMin(state.backdropRect.x(), destNorm.x());
         const float y0 = qMin(state.backdropRect.y(), destNorm.y());
         const float x1 = qMax(state.backdropRect.x() + state.backdropRect.z(), destNorm.x() + destNorm.z());
@@ -177,7 +213,13 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         destNorm = QVector4D(x0, y0, x1 - x0, y1 - y0);
     }
     state.backdropRect = destNorm;
-    state.backdropFrameMs = frameStamp;
+    // Commit the generation-set write now that the blit succeeded: a fresh generation
+    // (this output starting over) clears first, a sibling in the same generation just adds
+    // itself. The failed-blit path above skipped this, leaving the set as it was.
+    if (!sameGeneration) {
+        state.backdropGenerationOutputs.clear();
+    }
+    state.backdropGenerationOutputs.append(outputRect);
 }
 
 } // namespace PlasmaZones

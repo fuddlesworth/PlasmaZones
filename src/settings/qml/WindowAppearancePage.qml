@@ -293,11 +293,11 @@ SettingsFlickable {
                             // actually draws. A stored "accent" value would otherwise
                             // coerce to black.
                             const raw = root.ctl.windowBorderColorActive;
-                            return raw === root.accentToken ? (appSettings ? appSettings.highlightColor : Kirigami.Theme.highlightColor) : raw;
+                            return raw === root.accentToken ? appSettings.highlightColor : raw;
                         }
                         onClicked: {
                             const raw = root.ctl.windowBorderColorActive;
-                            activeBorderColorDialog.selectedColor = raw === root.accentToken ? (appSettings ? appSettings.highlightColor : root.defaultBorderHex) : raw;
+                            activeBorderColorDialog.selectedColor = raw === root.accentToken ? appSettings.highlightColor : raw;
                             activeBorderColorDialog.open();
                         }
                     }
@@ -319,11 +319,11 @@ SettingsFlickable {
                             // (alpha included), not the accent, matching what the
                             // border actually draws.
                             const raw = root.ctl.windowBorderColorInactive;
-                            return raw === root.accentToken ? (appSettings ? appSettings.inactiveColor : Kirigami.Theme.highlightColor) : raw;
+                            return raw === root.accentToken ? appSettings.inactiveColor : raw;
                         }
                         onClicked: {
                             const raw = root.ctl.windowBorderColorInactive;
-                            inactiveBorderColorDialog.selectedColor = raw === root.accentToken ? (appSettings ? appSettings.inactiveColor : root.defaultBorderHex) : raw;
+                            inactiveBorderColorDialog.selectedColor = raw === root.accentToken ? appSettings.inactiveColor : raw;
                             inactiveBorderColorDialog.open();
                         }
                     }
@@ -454,11 +454,11 @@ SettingsFlickable {
                             // preview the live highlight instead of coercing the
                             // token to black.
                             const raw = root.ctl.windowTintColor;
-                            return raw === root.accentToken ? (appSettings ? appSettings.highlightColor : Kirigami.Theme.highlightColor) : raw;
+                            return raw === root.accentToken ? appSettings.highlightColor : raw;
                         }
                         onClicked: {
                             const raw = root.ctl.windowTintColor;
-                            tintColorDialog.selectedColor = raw === root.accentToken ? (appSettings ? appSettings.highlightColor : root.defaultBorderHex) : raw;
+                            tintColorDialog.selectedColor = raw === root.accentToken ? appSettings.highlightColor : raw;
                             tintColorDialog.open();
                         }
                     }
@@ -616,6 +616,77 @@ SettingsFlickable {
             onOuterGapBottomModified: value => root.ctl.writeGap(settingsController.scopeScreenName, "OuterGapBottom", value)
             onOuterGapLeftModified: value => root.ctl.writeGap(settingsController.scopeScreenName, "OuterGapLeft", value)
             onOuterGapRightModified: value => root.ctl.writeGap(settingsController.scopeScreenName, "OuterGapRight", value)
+        }
+
+        // =====================================================================
+        // PERFORMANCE CARD
+        // =====================================================================
+        // An animated decoration pack redraws every window wearing it on every
+        // frame, and that alone keeps the graphics card in its highest power
+        // state for as long as the packs are on screen. What costs is not how
+        // much each frame draws, it is that there is a frame to draw at all —
+        // so these bound WHEN decorations animate rather than how much they do.
+        // Lives here, next to the decoration settings themselves, because this is
+        // where someone looks when their fans spin up after engaging a pack.
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Performance")
+            searchAnchor: "decorationPerformance"
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Animate only the active window")
+                    searchAnchor: "decorationAnimateFocusedOnly"
+                    description: i18n("Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.")
+
+                    SettingsSwitch {
+                        checked: appSettings.decorationAnimateFocusedOnly
+                        accessibleName: i18n("Animate only the active window")
+                        // SettingsSwitch does NOT flip its own `checked` — it emits
+                        // toggled(newValue) and leaves `checked` bound to the source.
+                        // Writing `= checked` here would write back the value we
+                        // already have, so the switch would never change anything.
+                        onToggled: newValue => appSettings.decorationAnimateFocusedOnly = newValue
+                    }
+                }
+
+                SettingsRow {
+                    title: i18n("Pause while you are away")
+                    searchAnchor: "decorationPauseWhenIdle"
+                    description: i18n("Stop animating decorations once you have been idle, and start again on the first key press or mouse movement.")
+
+                    SettingsSwitch {
+                        checked: appSettings.decorationPauseWhenIdle
+                        accessibleName: i18n("Pause while you are away")
+                        onToggled: newValue => appSettings.decorationPauseWhenIdle = newValue
+                    }
+                }
+
+                SettingsRow {
+                    title: i18n("Idle after")
+                    searchAnchor: "decorationIdleTimeout"
+                    description: i18n("How long to wait with no input before decorations stop animating.")
+                    enabled: appSettings.decorationPauseWhenIdle
+
+                    SettingsSlider {
+                        accessibleName: i18n("Idle after")
+                        from: root.ctl.decorationIdleTimeoutSecMin
+                        to: root.ctl.decorationIdleTimeoutSecMax
+                        // The range runs to an hour, so a 1s step would put the
+                        // useful half-minute band inside a few pixels of track.
+                        stepSize: 5
+                        value: appSettings.decorationIdleTimeoutSec
+                        valueSuffix: " s"
+                        labelWidth: Kirigami.Units.gridUnit * 5
+                        onMoved: value => {
+                            appSettings.decorationIdleTimeoutSec = Math.round(value);
+                        }
+                    }
+                }
+            }
         }
     }
 

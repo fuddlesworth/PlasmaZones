@@ -270,8 +270,14 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         {QStringLiteral("snapping-overlay-behavior"),
          {
              {CD::snappingBehaviorGroup(), CD::toggleActivationKey()},
+             // The trigger LIST belongs to whichever page shows its picker, which is the
+             // page that owns the matching toggle. All four lists were missing from this
+             // manifest, so per-page Reset and Discard walked straight past them and left a
+             // changed trigger standing on a page the user had just reverted.
+             {CD::snappingBehaviorGroup(), CD::triggersKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::enabledKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::toggleActivationKey()},
+             {CD::snappingBehaviorZoneSpanGroup(), CD::triggersKey()},
              {CD::snappingGapsGroup(), CD::adjacentThresholdKey()},
              {CD::snappingBehaviorDisplayGroup(), CD::showOnAllMonitorsKey()},
              {CD::snappingBehaviorDisplayGroup(), CD::filterByAspectRatioKey()},
@@ -313,6 +319,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          {
              {CD::snappingBehaviorSnapAssistGroup(), CD::featureEnabledKey()},
              {CD::snappingBehaviorSnapAssistGroup(), CD::enabledKey()},
+             {CD::snappingBehaviorSnapAssistGroup(), CD::triggersKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::keepOnResolutionChangeKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::moveNewToLastZoneKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::autoAssignAllLayoutsKey()},
@@ -327,6 +334,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         {QStringLiteral("tiling-behavior"),
          {
              {CD::tilingBehaviorGroup(), CD::toggleActivationKey()},
+             {CD::tilingBehaviorGroup(), CD::triggersKey()},
              {CD::tilingBehaviorGroup(), CD::insertPositionKey()},
              {CD::tilingBehaviorGroup(), CD::respectMinimumSizeKey()},
              {CD::tilingBehaviorGroup(), CD::stickyWindowHandlingKey()},
@@ -365,6 +373,12 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::windowsAppearanceGroup(), CD::hideTitleBarsKey()},
              {CD::windowsAppearanceGroup(), CD::titleBarScopeKey()},
              {CD::windowsAppearanceGroup(), CD::focusFadeDurationKey()},
+             // Decoration performance — the Performance card on this page. Bounds
+             // WHEN the decoration chain animates, which is what decides whether
+             // the GPU can leave its top power state at all.
+             {CD::decorationsPerformanceGroup(), CD::animateFocusedOnlyKey()},
+             {CD::decorationsPerformanceGroup(), CD::pauseWhenIdleKey()},
+             {CD::decorationsPerformanceGroup(), CD::idleTimeoutSecKey()},
              {CD::windowsAppearanceGroup(), CD::showOpacityTintKey()},
              {CD::windowsAppearanceGroup(), CD::opacityTintScopeKey()},
              {CD::windowsAppearanceGroup(), CD::opacityKey()},

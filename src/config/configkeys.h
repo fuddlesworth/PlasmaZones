@@ -131,6 +131,15 @@ public:
     // Decorations.WindowFiltering sub-group is the border-pass window filter.
     P_CONFIG_GROUP(decorationsGroup, "Decorations")
 
+    // Decorations.Performance — what the decoration chain is allowed to keep
+    // redrawing. An animated pack (a drifting mote layer, an orbiting gleam)
+    // repaints every window carrying it on every vsync, which never lets the GPU
+    // leave its top performance state: measured at ~110 W and +12 C over an idle
+    // desktop with the effect unloaded, on hardware that is only ~45% busy. The
+    // cost is not the work per frame, it is that there IS work every frame — so
+    // the knobs here bound WHEN the chain animates rather than how much it does.
+    P_CONFIG_GROUP(decorationsPerformanceGroup, "Decorations.Performance")
+
     // Parent groups (for purge enumeration — covers all sub-groups)
     P_CONFIG_GROUP(shortcutsGroup, "Shortcuts")
     P_CONFIG_GROUP(editorGroup, "Editor")
@@ -339,7 +348,7 @@ public:
     P_CONFIG_KEY(borderColorActiveKey, "BorderColorActive")
     P_CONFIG_KEY(borderColorInactiveKey, "BorderColorInactive")
     P_CONFIG_KEY(focusFadeDurationKey, "FocusFadeDuration")
-    // Plain opacity+tint layer (rendered by the reserved "opacity-tint"
+    // Plain opacity+tint layer (rendered by the built-in "opacity-tint"
     // surface pack), the opacity analogue of ShowBorder/BorderScope above.
     P_CONFIG_KEY(showOpacityTintKey, "ShowOpacityTint")
     P_CONFIG_KEY(opacityTintScopeKey, "OpacityTintScope")
@@ -400,6 +409,13 @@ public:
     // serialized empty tree ({"baseline":…,"overrides":[]}, non-empty as a
     // map), whereas the animation default is a bare {}.
     P_CONFIG_KEY(decorationProfileTreeKey, "DecorationProfileTree")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Decorations.Performance
+    // ═══════════════════════════════════════════════════════════════════════════
+    P_CONFIG_KEY(animateFocusedOnlyKey, "AnimateFocusedOnly")
+    P_CONFIG_KEY(pauseWhenIdleKey, "PauseWhenIdle")
+    P_CONFIG_KEY(idleTimeoutSecKey, "IdleTimeoutSec")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps

@@ -44,8 +44,20 @@ public:
         Q_EMIT resumed();
     }
 
+    /// The real Wayland-backed source can fail to arm (no seat yet). The fake has to be able
+    /// to say so, or the machine's all-of fold over its sources is pinned by nothing.
+    [[nodiscard]] bool isArmed() const override
+    {
+        return m_armed;
+    }
+    void setArmed(bool armed)
+    {
+        m_armed = armed;
+    }
+
 private:
     std::chrono::milliseconds m_timeout{0};
+    bool m_armed = true;
 };
 
 // Records the fakes it hands out so the test can fire their edges. The fakes are
@@ -78,8 +90,10 @@ private Q_SLOTS:
     void resumeFromDeepStageResets();
     void stagesSortedByAscendingTimeout();
     void reconfigureWhileIdleResets();
+    void clearStagesWhileIdleResumes();
     void monitoringPauseDisarmsAndResumeRearms();
     void redundantSetStagesIsNoOpAndDropsInvalid();
+    void isArmedReportsLadderHealth();
 };
 
 void IdleStateMachineTest::emptyStagesStaysActive()
@@ -88,6 +102,9 @@ void IdleStateMachineTest::emptyStagesStaysActive()
     IdleStateMachine machine(rec.factory());
     machine.setStages({});
 
+    // Nothing is watching, so nothing can report. Three separate doc comments hang the
+    // daemon's arm-retry on this exact answer and not one test pinned it.
+    QVERIFY(!machine.isArmed());
     QCOMPARE(machine.currentStage(), 0);
     QVERIFY(!machine.isIdle());
     QVERIFY(machine.currentStageName().isEmpty());
@@ -214,6 +231,38 @@ void IdleStateMachineTest::reconfigureWhileIdleResets()
     QCOMPARE(machine.currentStageName(), QStringLiteral("sleep"));
 }
 
+// Emptying the ladder WHILE IDLE must resume, not just disarm.
+//
+// reconfigureWhileIdleResets above only covers replacing one ladder with another. This pins
+// the library's contract for clearing it: an empty ladder means "nothing is being watched",
+// and a machine that stayed latched at idle would report an idleness it can no longer
+// observe. So the state machine resumes on the way down, and an optimisation that skipped
+// rebuild() for an empty ladder would break that silently with no other test noticing.
+//
+// Deliberately NOT justified by "this is what the PlasmaZones daemon does when the user
+// turns pause-when-idle off". It is not — the daemon leaves its ladder armed for exactly
+// the reason this test describes, because an empty ladder cannot tell it the seat went idle
+// while the feature was off (see src/daemon/daemon/idle.cpp). Citing a consumer that behaves
+// the opposite way would be an argument for reintroducing the bug that design avoids.
+void IdleStateMachineTest::clearStagesWhileIdleResumes()
+{
+    RecordingFactory rec;
+    IdleStateMachine machine(rec.factory());
+
+    machine.setStages({{QStringLiteral("decorations"), 30s}});
+    rec.created.at(0)->fireIdle();
+    QCOMPARE(machine.currentStage(), 1);
+    QVERIFY(machine.isIdle());
+
+    QSignalSpy resumedSpy(&machine, &IdleStateMachine::resumed);
+    machine.setStages({});
+
+    QCOMPARE(resumedSpy.count(), 1);
+    QCOMPARE(machine.currentStage(), 0);
+    QVERIFY(!machine.isIdle());
+    QVERIFY(machine.stages().isEmpty());
+}
+
 void IdleStateMachineTest::monitoringPauseDisarmsAndResumeRearms()
 {
     RecordingFactory rec;
@@ -278,6 +327,37 @@ void IdleStateMachineTest::redundantSetStagesIsNoOpAndDropsInvalid()
     // Re-applying the now-empty ladder is again a no-op.
     machine.setStages({});
     QCOMPARE(stagesSpy.count(), 2);
+}
+
+// isArmed() answers "is anything WRONG", which is not the same question as "is anything
+// watching" — and the difference is load-bearing, because the daemon responds to false by
+// rebuilding the ladder and, after a bounded number of tries, switching idle detection off
+// for the whole session. Three states have to be told apart:
+//   a healthy ladder                 -> true
+//   a source that would not arm      -> false  (the login race this exists for)
+//   a ladder INHIBITED on purpose    -> true   (paused, not broken)
+// The third is the one that bit: an inhibited machine tears its sources down, so an all-of
+// over an empty list reported failure and would have killed a perfectly good feature.
+void IdleStateMachineTest::isArmedReportsLadderHealth()
+{
+    RecordingFactory rec;
+    IdleStateMachine machine(rec.factory());
+    machine.setStages({{QStringLiteral("a"), 1000ms}, {QStringLiteral("b"), 2000ms}});
+    QVERIFY(machine.isArmed());
+    QCOMPARE(rec.created.size(), 2);
+
+    // ONE unarmed stage out of two is enough: a ladder is only as armed as its weakest rung,
+    // and a stage that never fires is a stage whose idleness is never reported.
+    rec.created.at(1)->setArmed(false);
+    QVERIFY(!machine.isArmed());
+    rec.created.at(1)->setArmed(true);
+    QVERIFY(machine.isArmed());
+
+    // Inhibition is deliberate, so it reports HEALTHY even though it is watching nothing.
+    machine.setMonitoringEnabled(false);
+    QVERIFY(machine.isArmed());
+    machine.setMonitoringEnabled(true);
+    QVERIFY(machine.isArmed());
 }
 
 QTEST_GUILESS_MAIN(IdleStateMachineTest)

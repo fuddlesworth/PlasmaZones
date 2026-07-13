@@ -24,6 +24,8 @@
 #include <QSet>
 #include <QThread>
 
+#include <PhosphorServiceIdle/IdleService.h>
+
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -1256,6 +1258,22 @@ bool Daemon::init()
     // can query its state. Ownership stays with `this` via QObject parent.
     m_compositorBridge = new CompositorBridgeAdaptor(this);
 
+    // Session-idle detection for Decorations.Performance.PauseWhenIdle. The KWin
+    // effect cannot do this itself: idleness arrives over ext-idle-notify-v1, a
+    // Wayland CLIENT protocol that the compositor the effect lives in SERVES rather
+    // than consumes. The daemon is already a client, so it watches and pushes the
+    // resolved boolean over D-Bus.
+    //
+    // Worth the plumbing because it is the only thing that recovers idle GPU power:
+    // an animated decoration pack repaints every window carrying it on every vsync,
+    // and it is the existence of per-frame work — not how cheap that work is — that
+    // keeps the card pinned in its top performance state.
+    //
+    // Constructed AFTER m_settingsAdaptor (it emits through it) and AFTER
+    // m_compositorBridge (it subscribes to bridgeRegistered to push the current idle
+    // state to a freshly (re)started effect, since the signal is edge-triggered).
+    setupIdleService();
+
     // Overlay adaptor - overlay visibility and highlighting
     m_overlayAdaptor = new OverlayAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
                                           m_screenManager.get(), m_settings.get(), this);
@@ -2027,6 +2045,21 @@ void Daemon::start()
     // handler; this is the matching reset on the value side.
     m_shuttingDown = false;
 
+    // Re-arm the idle service. stop() tears it down (its Wayland notification object and
+    // every connection around it), and setupIdleService is otherwise only reached from
+    // init(), which start() does not re-run — so an in-process restart came back up with
+    // the idle state permanently stale. Guarded on !m_idleService so the ordinary
+    // init()-then-start() path does not build it twice.
+    //
+    // Note what this does NOT fix: stop() also unregisters the D-Bus object and the service
+    // name, and re-registering them lives in init(), not here. A restarted daemon therefore
+    // has no bus presence, so nothing it publishes reaches the effect regardless. The
+    // re-arm exists so the daemon's own state is consistent after the cycle (which the
+    // repairs below also do), not because the cycle fully restores service.
+    if (!m_idleService) {
+        setupIdleService();
+    }
+
     // Re-publish the QML static defaults. stop() nulls all three
     // (`PhosphorCurve::setDefaultRegistry(nullptr)` etc.) to prevent
     // borrowed-pointer UAF during teardown; without this re-publish,
@@ -2261,6 +2294,54 @@ void Daemon::stop()
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
     PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
     PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
+
+    // Idle wiring, ALSO before the m_running gate, for the same reason as the two
+    // blocks above: setupIdleService() runs from init(), which precedes start(), so
+    // an init-without-start teardown (test fixtures, early-fail init, double-stop)
+    // reaches the member destructors with the idle service still live. ~Daemon calls
+    // stop(), so resetting the service HERE (unconditionally, above the gate) means the
+    // member destructor never has to. Every call below is null-safe and idempotent, so
+    // running it on the already-stopped path costs nothing.
+    //
+    // The debounce timer goes with it: a pending fire would land in refreshIdleStages
+    // after teardown. It early-returns on a null m_idleService, so this is belt and
+    // braces — but every other piece of this wiring is severed explicitly rather than
+    // left to an invariant, and this is the last piece.
+    m_idleStagesRefreshTimer.stop();
+    // Sever the idled/resumed lambdas BEFORE the reset. They are the two connections
+    // idle.cpp makes with m_idleService as SENDER (not in m_idleConnections, which holds
+    // only the settings/bridge/timer connections keyed on other senders), so
+    // teardownIdleConnections below does not touch them — and it runs after this reset
+    // anyway. Destroying the service walks ~IdleStateMachine, which can emit resumed()
+    // while IdleService's own QObject connections are still live (QObject severs them only
+    // in ~QObject, after member destruction), firing the daemon lambda mid-teardown. That
+    // publishes sessionIdleNow() — a spurious sessionIdleChanged(false) D-Bus broadcast on
+    // shutdown when the seat was idle. Disconnecting first makes the teardown emit nothing.
+    if (m_idleService) {
+        m_idleService->disconnect(this);
+    }
+    m_idleService.reset();
+    // The next run starts from a fresh effect that assumes an active session. Leaving this
+    // true would make the re-armed service's first publish look redundant and swallow it.
+    m_publishedSessionIdle = false;
+    // And the arm-retry budget, for the same reason its two neighbours here are reset: the
+    // race it covers is a STARTUP race, so a restarted daemon needs its full budget. Spent
+    // in run 1, it would otherwise send run 2 straight to the give-up branch on the very
+    // first attempt.
+    m_idleArmRetriesLeft = kIdleArmRetries;
+    // The idle service's own signals die with it, but the connections idle.cpp made whose
+    // sender OUTLIVES it are still live: the two settings signals, the debounce timer (a
+    // value member), and the bridgeRegistered push when a compositor bridge exists (that
+    // one is conditional, so it is three or four). A settings write between stop() and
+    // ~Daemon would still run their lambdas. Sever exactly those.
+    //
+    // NOT a blanket disconnect(m_settings.get(), nullptr, this, nullptr). That severs
+    // every m_settings→this connection — the gap-resnap sweep, the adjacent-threshold
+    // handler, the snapping/autotile enable-delta, the animation-profile republish, all
+    // eleven of them — and most are made in the constructor or init(), which start() does
+    // NOT re-run. A stop()→start() cycle (which this daemon supports deliberately, and
+    // says so in three places) would come back up with them silently gone.
+    teardownIdleConnections();
 
     if (!m_running) {
         return;

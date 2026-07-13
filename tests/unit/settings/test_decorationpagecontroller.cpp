@@ -646,6 +646,31 @@ private Q_SLOTS:
         QVERIFY2(!params.contains(QStringLiteral("fancy-border")), "no seeding while the plain border is off");
     }
 
+    /// The opacity-tint analogue: with ShowWindowOpacityTint off there is no plain look to
+    /// carry over, so adding an opacity-tint pack seeds nothing. Guards the seed's gate on
+    /// its OWN toggle (a seed that ignored showWindowOpacityTint would go uncaught otherwise,
+    /// since the positive test above only proves the toggle-on path).
+    void setChain_noSeedWhenPlainOpacityTintOff()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePack(tmp.path(), QStringLiteral("fade-tint"), fadeTintMetadata()));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        TreeStubSettings settings;
+        settings.setShowWindowOpacityTint(false);
+        settings.setWindowOpacity(0.8);
+        settings.setWindowTintStrength(0.25);
+
+        DecorationPageController c(&registry, &settings);
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("fade-tint")});
+
+        const QVariantMap params = c.rawProfile(path).value(QStringLiteral("parameters")).toMap();
+        QVERIFY2(!params.contains(QStringLiteral("fade-tint")), "no seeding while the plain opacity-tint is off");
+    }
+
     /// First direct edit at a path with NO override: prevChain falls back to
     /// the resolved effective chain, so a pack the user was already
     /// previewing via inheritance is not "new" and must not be seeded — the
@@ -781,6 +806,43 @@ private Q_SLOTS:
         QVERIFY2(!params.contains(QStringLiteral("cornerRadius")), "undeclared id must not be inserted");
         QVERIFY2(!params.contains(QStringLiteral("activeColor")), "undeclared id must not be inserted");
         QVERIFY2(!params.contains(QStringLiteral("inactiveColor")), "undeclared id must not be inserted");
+    }
+
+    /// availableShaderEffects() offers EVERY registered pack, including "border" and
+    /// "opacity-tint". Those two also back the plain easy-mode layers, but they are
+    /// selectable packs like any other: the effect injects the plain layer only for a
+    /// window whose chain has no user packs, so picking one cannot double-apply. This pins
+    /// the removal of the old picker filter that hid exactly those two ids.
+    void availableShaderEffects_offersBorderAndOpacityTintPacks()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        // Author the two reserved-named packs plus an ordinary one, so a filter keyed on
+        // the id (the bug this guards against) would drop the first two and leave the third.
+        QJsonObject borderMeta = fancyBorderMetadata();
+        borderMeta.insert(QLatin1String("id"), QLatin1String("border"));
+        QJsonObject opacityTintMeta = fadeTintMetadata();
+        opacityTintMeta.insert(QLatin1String("id"), QLatin1String("opacity-tint"));
+        QVERIFY(writePack(tmp.path(), QStringLiteral("border"), borderMeta));
+        QVERIFY(writePack(tmp.path(), QStringLiteral("opacity-tint"), opacityTintMeta));
+        QVERIFY(writePack(tmp.path(), QStringLiteral("glowish"), glowishMetadata()));
+
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(registry.hasEffect(QStringLiteral("border")));
+        QVERIFY(registry.hasEffect(QStringLiteral("opacity-tint")));
+
+        TreeStubSettings settings;
+        DecorationPageController c(&registry, &settings);
+
+        QStringList offeredIds;
+        const QVariantList offered = c.availableShaderEffects();
+        for (const QVariant& entry : offered) {
+            offeredIds.append(entry.toMap().value(QStringLiteral("id")).toString());
+        }
+        QVERIFY2(offeredIds.contains(QStringLiteral("border")), "the border pack must be selectable");
+        QVERIFY2(offeredIds.contains(QStringLiteral("opacity-tint")), "the opacity-tint pack must be selectable");
+        QVERIFY2(offeredIds.contains(QStringLiteral("glowish")), "an ordinary pack must still be offered");
     }
 };
 

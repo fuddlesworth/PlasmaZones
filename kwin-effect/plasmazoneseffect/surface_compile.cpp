@@ -228,7 +228,7 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         return &packState;
     }
     // Named-param preamble (`#define p_<id> ...`) for pack-declared parameters.
-    // Every pack routes its knobs through these — the reserved "border" pack
+    // Every pack routes its knobs through these — the built-in "border" pack
     // included, whose width/radius/colours are its own declared params seeded
     // from the resolved appearance.
     expanded = PhosphorShaders::spliceAfterVersion(expanded,
@@ -331,6 +331,10 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // iMouse (hover-reactive packs) — -1 for the common pack that never reads
     // the cursor; pushBorderUniforms skips the push entirely then.
     packState.iMouseLoc = shader->uniformLocation(SC::kIMouse);
+    if (packState.iMouseLoc >= 0) {
+        // Latch the session gate the hover driver early-outs on. See the member doc.
+        m_anyCompiledPackReadsCursor = true;
+    }
 
     // User-declared image textures (metadata `textures`): resolve the sampler +
     // iTextureResolution[N] element locations and upload each declared file

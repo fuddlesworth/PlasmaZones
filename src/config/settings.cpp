@@ -213,10 +213,10 @@ void Settings::load()
         m_ownedRuleStore->load();
     }
 
-    // Store-backed groups (Shaders, Appearance, Ordering, Animations,
-    // Rendering, Performance, ZoneGeometry, Shortcuts, Editor, Exclusions,
-    // Display, ZoneSelector, Activation, Behavior, Autotiling) don't need
-    // explicit load calls — their getters read through m_store on demand.
+    // Every schema-declared, store-backed group (the full set buildSettingsSchema
+    // registers, e.g. Windows, Gaps, Decorations, Shaders, Animations, ...) needs no
+    // explicit load call — their getters read through m_store on demand. Enumerating the
+    // groups here just drifts as new ones are added, so it is left to the schema.
     // Per-screen override maps are not Q_PROPERTYs, so the snapshot loop above
     // doesn't cover them. Capture them around the reload so settingsChanged()
     // can fire when a reload (e.g. the daemon's reloadSettings after a Save)
@@ -324,9 +324,10 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::orderingGroup(), // "Ordering"
         ConfigDefaults::windowsAppearanceGroup(), // "Windows" — window border + title bar decoration
         ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
+        ConfigDefaults::decorationsPerformanceGroup(), // "Decorations.Performance" — idle/focused-only animation gating
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
         ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
-                                            // + WindowFiltering sub-group
+                                            // + WindowFiltering + Performance sub-groups
     };
 }
 
@@ -1179,8 +1180,14 @@ void Settings::setAnimationEasingCurve(const QString& curve)
         // resolves to a slightly-different-precision canonical form).
         toStore = resolved->toString();
     } else {
-        qCWarning(lcConfig) << "setAnimationEasingCurve: curve spec" << curve
-                            << "did not resolve — persisting raw (library default will apply at animation time)";
+        // DEBUG, and the spec is NOT echoed. `curve` is the caller's raw string, and
+        // animationEasingCurve is a registered STRING setting — so any session-bus peer
+        // reaches this with content of its own choosing, unbounded in length and rate. That
+        // is the same log-injection vector the per-screen writers were demoted for, one call
+        // frame deeper still. "It did not resolve" is the signal; the failing text is not
+        // worth an attacker-writable line in the daemon's log.
+        qCDebug(lcConfig) << "setAnimationEasingCurve: curve spec did not resolve — persisting raw "
+                             "(the library default applies at animation time)";
         toStore = curve;
     }
 
@@ -1363,6 +1370,25 @@ void Settings::setDecorationProfileTreeJson(const QString& json)
     }
     setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
 }
+
+// ── Decorations.Performance (PhosphorConfig::Store-backed) ──────────────────
+// These bound WHEN the decoration chain animates, not how much work it does per
+// frame. An animated pack repaints every window carrying it on every vsync, and
+// that alone holds the GPU in its top performance state however cheap the frame
+// is — so the only lever that returns the card to its idle clocks is to stop
+// drawing when nothing needs to change.
+
+P_STORE_GET(bool, decorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey, bool)
+P_STORE_SET_BOOL(setDecorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey,
+                 decorationAnimateFocusedOnlyChanged)
+
+P_STORE_GET(bool, decorationPauseWhenIdle, decorationsPerformanceGroup, pauseWhenIdleKey, bool)
+P_STORE_SET_BOOL(setDecorationPauseWhenIdle, decorationsPerformanceGroup, pauseWhenIdleKey,
+                 decorationPauseWhenIdleChanged)
+
+P_STORE_GET(int, decorationIdleTimeoutSec, decorationsPerformanceGroup, idleTimeoutSecKey, int)
+P_STORE_SET_INT(setDecorationIdleTimeoutSec, decorationsPerformanceGroup, idleTimeoutSecKey,
+                decorationIdleTimeoutSecChanged)
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values
@@ -1750,13 +1776,17 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         case DisableAxis::Desktop: {
             const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
             if (slash <= 0 || slash == canonicalEntry.size() - 1) {
-                qCWarning(lcConfig) << "Skipping malformed desktop disable entry:" << canonicalEntry;
+                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
+                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
+                qCDebug(lcConfig) << "Skipping malformed desktop disable entry";
                 continue;
             }
             bool ok = false;
             desktop = canonicalEntry.mid(slash + 1).toInt(&ok);
             if (!ok || desktop <= 0) {
-                qCWarning(lcConfig) << "Skipping malformed desktop disable entry:" << canonicalEntry;
+                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
+                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
+                qCDebug(lcConfig) << "Skipping malformed desktop disable entry";
                 continue;
             }
             screenId = canonicalEntry.left(slash);
@@ -1772,7 +1802,9 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             // is unambiguous. Mirrors the Desktop axis above.
             const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
             if (slash <= 0 || slash == canonicalEntry.size() - 1) {
-                qCWarning(lcConfig) << "Skipping malformed activity disable entry:" << canonicalEntry;
+                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
+                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
+                qCDebug(lcConfig) << "Skipping malformed activity disable entry";
                 continue;
             }
             screenId = canonicalEntry.left(slash);
@@ -1803,19 +1835,48 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         // Persistence failed — the in-memory rule set still advanced,
         // so consumers wired to `rulesChanged(persisted=false)` already
         // know. Surface it on the settings-side log too so users
-        // grepping `lcConfig` see the failure, and skip the aggregate
-        // `settingsChanged()` emit so dirty-state trackers don't
-        // believe the write made it to disk. Roll the in-memory store
-        // back to its on-disk state (mirrors the reset() rollback
-        // below) so subsequent reads through this Settings instance
-        // return the same view as cross-process consumers reading the
-        // unmodified file — without this, the in-memory state would
-        // diverge from disk indefinitely until the next save/load
-        // cycle.
+        // grepping `lcConfig` see the failure. Then try to roll the
+        // in-memory store back to its on-disk state (mirrors the
+        // reset() rollback below) so subsequent reads through this
+        // Settings instance return the same view as cross-process
+        // consumers reading the unmodified file.
+        //
+        // The aggregate `settingsChanged()` emit is GATED on whether that
+        // rollback actually restored the original set (see the
+        // emit-on-change note below it), NOT skipped outright. In the
+        // double-failure case the rollback leaves the value diverged and
+        // the emit does fire, so a dirty-state tracker can re-read the
+        // advanced in-memory value and mark itself clean while disk still
+        // holds the old list. That is the lesser of the two divergences:
+        // staying silent instead strands every disable-list UI on a set
+        // the getters no longer report.
+        //
+        // BEST-EFFORT, not guaranteed: load() deliberately keeps the
+        // in-memory set when it cannot read the file, and an unreadable
+        // file is a plausible reason the persist failed in the first
+        // place. In that double failure the in-memory state stays
+        // diverged from disk until the next successful save or load.
+        // Nothing better is available here — inventing a second recovery
+        // path for a store we already know we cannot write would be
+        // guessing.
         qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
                             << axisInt;
         m_ruleStore->load();
-        Q_EMIT(this->*signalFn)(mode);
+        // Emit only if the rollback did NOT restore the original set — which is exactly the
+        // emit-on-change rule, applied to the state we actually ended up in.
+        //
+        // The usual case is that load() puts the entries back where they started, so nothing
+        // changed and nothing is announced; firing then would make every disable-list UI
+        // re-read a set identical to the one it is already showing. But load() is best-effort
+        // (it keeps the advanced in-memory set when it cannot read the file, and an unreadable
+        // file is a plausible reason the write failed in the first place), so the rollback can
+        // leave the value MOVED. Announcing nothing there would strand every UI on the old
+        // list while the getters report the new one — which is the same silent divergence,
+        // just from the other side.
+        if (canonical(disableEntriesFor(mode, axisInt)) != before) {
+            Q_EMIT(this->*signalFn)(mode);
+            Q_EMIT settingsChanged();
+        }
         return;
     }
 

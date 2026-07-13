@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
+#include <QDBusContext>
 #include <QDBusVariant>
 #include <QString>
 #include <QVariant>
@@ -31,7 +32,17 @@ class ShaderRegistry;
  *
  * Uses registry pattern for setSetting.
  */
-class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor
+/// Inherits QDBusContext (like OverlayAdaptor) so getSetting can answer an
+/// UNKNOWN key with a real D-Bus error instead of a valid-but-empty value.
+/// That distinction is load-bearing: getSetting resolves keys through a
+/// hand-maintained registry, not through Qt property reflection, so a setting
+/// whose registration is forgotten is a live possibility — and while the miss
+/// answered with an empty string, every one of the ~50 callers coerced it blind
+/// (QVariant("").toBool() is false), silently shipping the default-inverted
+/// value instead of failing. An error reply makes loadSettingAsync's
+/// reply.isValid() false, so the callback never runs and the caller keeps its
+/// own default. One central guard instead of a type-check at every call site.
+class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor, public QDBusContext
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Settings")
@@ -78,9 +89,10 @@ public Q_SLOTS:
      * @brief Batch-get multiple settings in one D-Bus call.
      *
      * Reads every requested key via the getter registry and returns a map
-     * containing only the keys that were found. Unknown keys are logged as
-     * warnings and omitted from the result (callers should fall back to
-     * their hardcoded defaults for missing entries).
+     * containing only the keys that were found. An unknown key is omitted from the
+     * result and logged at DEBUG level, so a caller probing for optional settings does
+     * not spam production logs. Callers fall back to their own defaults for anything
+     * missing.
      *
      * Exists to collapse the editor startup's per-key getSetting() chain
      * (8 round-trips for gap/overlay settings) into a single round-trip.
@@ -93,12 +105,22 @@ public Q_SLOTS:
     /**
      * @brief Batch-set multiple settings in one D-Bus call.
      *
-     * Applies all values via the setter registry, saves once (synchronously),
-     * and lets the KConfig change notification propagate settingsChanged.
-     * Unknown keys are logged as warnings but do not abort the batch.
+     * Applies all values via the setter registry, saves once (synchronously), and lets
+     * the config backend's change notification propagate settingsChanged.
+     *
+     * An unknown key makes the call return false — writing a key nobody knows is a caller
+     * bug, not an optional probe — but it does not abort the batch: every key that IS known
+     * still gets applied. It is logged at DEBUG, not warning: the key comes from whoever is
+     * on the session bus, and a warning let any process fill the daemon's log with content
+     * of its own choosing. The `false` is the real signal.
      *
      * @param settings Map of setting key -> value
-     * @return true if every key was found in the registry and its setter succeeded
+     * @return true if every key was known to the registry and every key that HAS a setter
+     *         applied successfully. A key that is registered read-only (motionProfileTree,
+     *         animationShaderSearchPaths, the global gap getters) is skipped without failing
+     *         the batch — see the skip's rationale at the call site. This is false when a key
+     *         is unknown OR when a setter rejects its value (an out-of-range enum, an invalid
+     *         blob); such a setter returns false and flips the batch result.
      */
     bool setSettings(const QVariantMap& settings);
 
@@ -115,22 +137,28 @@ public Q_SLOTS:
      *
      * Applies every (key, value) pair in @p values via the same category
      * dispatch as setPerScreenSetting, then schedules a single debounced
-     * save. Mirrors the global getSettings/setSettings batch pattern so
-     * the KCM per-monitor page can flush a category in one round-trip
-     * instead of N sequential calls.
+     * save. Mirrors the global getSettings/setSettings batch pattern.
+     *
+     * NOTE: nothing in this tree calls it. It was added for a KCM per-monitor flush that
+     * never materialised — the KCM writes config.json in-process and calls
+     * reloadSettings(). It stays as part of the PUBLISHED D-Bus write surface (declared in
+     * org.plasmazones.Settings.xml, covered by tests/unit/dbus), for external clients. Do
+     * not re-justify it by naming an in-tree caller; there is none.
      *
      * Unknown keys inside @p values are passed through to the underlying
-     * Settings method, which logs a warning and no-ops — consistent with
-     * single-key behavior.
+     * Settings method, which no-ops and logs at DEBUG (the key is caller-supplied; see
+     * setSettings) — consistent with single-key behavior.
      *
      * @param screenId Virtual or physical screen identifier
-     * @param category "autotile" | "snapping" | "zoneSelector"
+     * @param category "autotile" | "snapping" | "zoneSelector". NOTE: "snapping" is
+     *                 READ-ONLY (it projects the config's per-monitor gaps), so a write to
+     *                 it is rejected and does nothing. Write those through "autotile".
      * @param values   Map of key -> value. QDBusArgument-wrapped values
      *                 from the wire are unwrapped via DBusVariantUtils
      *                 before reaching the setter.
-     * @return true if the category was recognized and the batch ran
-     *         against a concrete Settings backend; false if the category
-     *         was unknown or no concrete Settings was available.
+     * @return true if the category was recognized and writable, and the batch ran; false if
+     *         the category was unknown, or is the read-only "snapping" projection. (There is
+     *         no longer any concrete-backend check — the dispatch runs against ISettings.)
      *         Per-key failures are logged by the underlying Settings but
      *         cannot be surfaced here since the setters return void.
      */
@@ -218,7 +246,7 @@ public Q_SLOTS:
     /**
      * @brief Get metadata for a single setting
      * @param key Setting key name
-     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"stringlist"
+     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"stringlist"|"map"
      */
     QString getSettingSchema(const QString& key);
 
@@ -244,6 +272,22 @@ Q_SIGNALS:
      * effect subscribes to this signal and re-fetches `motionProfileTree`.
      */
     void motionProfileTreeChanged();
+
+    /**
+     * @brief Daemon → KWin effect: the session went idle, or came back.
+     *
+     * The effect pauses decoration-chain animation while idle. That is the only
+     * thing that lets the GPU leave its top performance state: an animated pack
+     * repaints every window carrying it on every vsync, and it is the existence of
+     * per-frame work — not its size — that holds the clocks up, so making each
+     * frame cheaper cannot recover the idle power. Not drawing can.
+     *
+     * The daemon owns the detection because idleness is a Wayland CLIENT concern
+     * (`ext-idle-notify-v1`, via PhosphorServiceIdle) and the effect lives inside
+     * the compositor, which serves that protocol rather than consuming it. The
+     * effect only ever sees the resolved boolean.
+     */
+    void sessionIdleChanged(bool idle);
 
     /**
      * @brief Daemon → KWin effect: please enumerate running windows.
