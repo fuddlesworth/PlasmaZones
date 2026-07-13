@@ -152,9 +152,9 @@ uniform vec2 iAnchorPosInFbo;
 
 // Window's effective rule-resolved opacity in [0, 1] — compositor path
 // only. A `SetOpacity` rule must dim the window for the whole
-// transition, but the custom transition shader is compiled
-// `MapTexture`-only (no `Modulate` trait), so KWin never applies
-// `data.opacity()` to it. `surfaceColor()` below multiplies the
+// transition, but the custom transition shader is compiled without the
+// `Modulate` trait, so KWin never applies `data.opacity()` to it.
+// `surfaceColor()` below multiplies the
 // premultiplied surface sample by this uniform so the dim holds across
 // the animation instead of snapping in only after it ends. The
 // kwin-effect pushes 1.0 for windows with no matching rule, so the
@@ -399,7 +399,7 @@ vec4 surfaceColor(vec2 uv) {
     // window-rule opacity: uTexture0 is premultiplied, so multiplying the
     // whole sample by the [0, 1] `iWindowOpacity` is the correct
     // premultiplied-alpha dim. This is what makes a `SetOpacity` rule hold
-    // throughout a transition (the MapTexture-only shader can't see
+    // throughout a transition (with no `Modulate` trait the shader can't see
     // `data.opacity()`); the effect feeds 1.0 when no rule matches, so the
     // common case is unchanged. Every window-content shader reads the
     // surface through this helper (directly or via bmw_compat's

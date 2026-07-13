@@ -821,8 +821,8 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // double compression on HDR, precisely the case this exists for. No
         // opacity modulate either: unlike the present shader, this path's
         // window-rule opacity is folded into the sample by surfaceColor()
-        // (animation_uniforms.glsl), and KWin's TRAIT_MODULATE slot is unused
-        // on a MapTexture custom shader.
+        // (animation_uniforms.glsl), and this shader is compiled without the
+        // Modulate trait so KWin's TRAIT_MODULATE slot never applies.
         //
         // The override must be spliced AFTER expandIncludes ran above:
         // colormanagement.glsl lives in KWin's `:/opengl/` resource, which
