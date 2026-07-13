@@ -139,8 +139,10 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     // Window-layer rules need the same placement-scoped re-resolve, but they
     // are EVENT-driven (during normal operation only reconcileRuleWindowLayer
     // writes keepAbove/keepBelow; restoreAllRuleWindowLayers is
-    // destructor-only), so the cache clear above does nothing for them on
-    // its own — opacity revives per-frame in paintWindow, layer does not.
+    // destructor-only), so the cache clear above does nothing for them on its
+    // own. Appearance (opacity / tint / border) re-folds through each caller's
+    // decoration path (clearAllDecorations on daemon loss, scheduleBorderSweep
+    // on re-seed); the layer does not, so it is re-reconciled here.
     // Re-reconcile every window right here at the bulk-placement chokepoint so
     // BOTH edges are covered: on daemon loss a `WHEN IsFloating` layer rule
     // releases its keep-above against the cleared placement (snapshot restore)

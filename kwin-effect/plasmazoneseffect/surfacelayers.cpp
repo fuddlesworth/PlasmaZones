@@ -268,8 +268,9 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         // window fully opaque. Dim the capture by the folded value there instead — the nested
         // draw runs KWin's default modulating shader and the pack that owns the value never
         // runs, so single-apply holds. Any other chain captures raw and dims downstream as a
-        // pack-param concern (frost/glass contentOpacity, the tint layer's own param). The
-        // opacity is part of the capture cache key (plan.foldOpacity), so a change re-captures.
+        // pack-param concern (frost/glass contentOpacity, the tint layer's own param). An
+        // opacity move on this fail-safe path re-captures — planSurfaceFold clears captureValid
+        // for it, keyed on the same missing-pack condition used right here.
         qreal captureOpacity = 1.0;
         if (deco.chainBakesOpacity && !qFuzzyCompare(deco.foldedOpacity + 1.0, 2.0)) {
             const CompiledSurfacePack* const otPack = compiledPackLazy(QStringLiteral("opacity-tint"));

@@ -433,9 +433,9 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
         : kCursorOutside;
     const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
     plan.foldFocus = chainReadsFocus ? advanceFocusFade(windowId, focusedNow) : 0.0f;
-    // v3.2 layer-backed model: the effective opacity is folded into the opacity-tint pack
-    // param and carried on the decoration. Key the fold cache on it so the capture fail-safe
-    // (opacity-tint pack missing) re-captures when the value moves.
+    // The effective opacity, folded into the opacity-tint pack param and carried on the
+    // decoration. It is a fold cache key: a change re-folds, and on the fail-safe path (where
+    // the opacity is baked into the CAPTURE) the guard just below also re-captures.
     plan.foldOpacity = static_cast<float>(deco.foldedOpacity);
     // Explicit epsilon, NOT qFuzzyCompare: both values settle at exactly 0.0, which
     // qFuzzyCompare is documented not to handle (it is a RELATIVE comparison, and
@@ -448,6 +448,21 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     };
     const bool stateMoved = !stateEqual(state.foldedFocus, plan.foldFocus)
         || !stateEqual(state.foldedOpacity, plan.foldOpacity) || plan.foldCursor != state.foldedCursor;
+
+    // The opacity fail-safe (surfacelayers.cpp) bakes the window's opacity INTO the capture
+    // when an opacity-baking chain's opacity-tint pack failed to compile. On that path an
+    // opacity move needs a RE-CAPTURE, not just the re-fold `stateMoved` triggers below: the
+    // dimmed pixels live in the capture texture, and re-folding over the still-old-dim
+    // capture would render the previous opacity forever (until unrelated content damage). The
+    // layer-backed path captures raw and is correctly served by the re-fold alone, so gate on
+    // the same missing-pack condition the fail-safe itself uses rather than re-capturing on
+    // every opacity move.
+    if (deco.chainBakesOpacity && !stateEqual(state.foldedOpacity, plan.foldOpacity)) {
+        const CompiledSurfacePack* const otPack = compiledPackLazy(QStringLiteral("opacity-tint"));
+        if (!otPack || !otPack->shader) {
+            state.captureValid = false;
+        }
+    }
 
     // Where does the capture BELONG this fold? Two homes: compositeTex[0] for a chain
     // with no compilable pack (nothing folds, so the capture IS the composite), captureTex
