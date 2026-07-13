@@ -68,8 +68,14 @@ public:
         // write-then-read test would silently see a stale value.
         StubSettings::setAdjacentThreshold(v);
     }
+    void setDefaultLayoutId(const QString& v) override
+    {
+        ++setDefaultLayoutIdCalls;
+        StubSettings::setDefaultLayoutId(v);
+    }
     int setAdjacentThresholdCalls = 0;
     int lastAdjacentThreshold = -1;
+    int setDefaultLayoutIdCalls = 0;
 };
 
 class TestSettingsAdaptorBatch : public QObject
@@ -225,11 +231,26 @@ private Q_SLOTS:
         QCOMPARE(m_settings->lastAdjacentThreshold, 42);
     }
 
-    // Empty-string matches StubSettings::defaultLayoutId() default — guard fires.
-    void testSetSetting_unchangedStringScalar_returnsTrue()
+    // Empty-string matches StubSettings::defaultLayoutId() default — the value-equality
+    // guard must short-circuit WITHOUT invoking the setter. The call counter is what pins
+    // it: a return-value-only assertion cannot tell a guard-fire from a setter that ran and
+    // returned true (mirrors the int scalar guard test above).
+    void testSetSetting_unchangedStringScalar_guardShortCircuits()
     {
+        m_settings->setDefaultLayoutIdCalls = 0;
         const bool ok = m_adaptor->setSetting(QStringLiteral("defaultLayoutId"), QDBusVariant(QVariant(QString())));
         QVERIFY(ok);
+        QCOMPARE(m_settings->setDefaultLayoutIdCalls, 0);
+    }
+
+    // The changing-write counterpart: a different layout id must actually invoke the setter.
+    void testSetSetting_changedStringScalar_invokesSetter()
+    {
+        m_settings->setDefaultLayoutIdCalls = 0;
+        const bool ok =
+            m_adaptor->setSetting(QStringLiteral("defaultLayoutId"), QDBusVariant(QVariant(QStringLiteral("grid"))));
+        QVERIFY(ok);
+        QCOMPARE(m_settings->setDefaultLayoutIdCalls, 1);
     }
 
     // Composite (list-of-map) settings like dragActivationTriggers advertise

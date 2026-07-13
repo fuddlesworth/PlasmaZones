@@ -390,6 +390,11 @@ private Q_SLOTS:
             auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
             windows->writeString(ConfigDefaults::borderScopeKey(), QStringLiteral("normal"));
             windows->writeString(ConfigDefaults::titleBarScopeKey(), QStringLiteral("all"));
+            // opacityTintScope shares the identical closed-set validator; without a
+            // valid-token leg here a validator that wrongly snapped a legitimate
+            // "normal"/"all" for THIS key would pass, since its default is also "tiled"
+            // and so indistinguishable from a mis-snap in the garbage test above.
+            windows->writeString(ConfigDefaults::opacityTintScopeKey(), QStringLiteral("normal"));
             windows.reset();
             backend->sync();
         }
@@ -397,6 +402,7 @@ private Q_SLOTS:
         Settings settings;
         QCOMPARE(settings.windowBorderScope(), QStringLiteral("normal"));
         QCOMPARE(settings.windowTitleBarScope(), QStringLiteral("all"));
+        QCOMPARE(settings.windowOpacityTintScope(), QStringLiteral("normal"));
     }
 
     /**
@@ -440,6 +446,63 @@ private Q_SLOTS:
 
         Settings settings;
         QCOMPARE(settings.windowBorderColorActive(), QStringLiteral("accent"));
+    }
+
+    /**
+     * windowTintColor carries the identical "#AARRGGBB"-or-"accent" contract as the border
+     * colours, and a missing/mis-wired validColorOr on its key would ship silently. Pin both
+     * legs: garbage snaps to the schema default, a valid hex round-trips untouched.
+     */
+    void testReadValidatedTintColor_garbageSnaps_hexPreserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::tintColorKey(), QStringLiteral("not-a-color"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowTintColor(), ConfigDefaults::windowTintColor());
+    }
+
+    void testReadValidatedTintColor_hexPreserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::tintColorKey(), QStringLiteral("#FF3DAEE9"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowTintColor(), QStringLiteral("#FF3DAEE9"));
+    }
+
+    /**
+     * The "accent" sentinel is a valid tint-colour value (the effect resolves it to the
+     * live system colour), so validation must leave it untouched.
+     */
+    void testReadValidatedTintColor_accentPreserved()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto windows = backend->group(ConfigDefaults::windowsAppearanceGroup());
+            windows->writeString(ConfigDefaults::tintColorKey(), QStringLiteral("accent"));
+            windows.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.windowTintColor(), QStringLiteral("accent"));
     }
 
     // =========================================================================

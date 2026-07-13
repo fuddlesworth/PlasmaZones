@@ -245,7 +245,7 @@ public Q_SLOTS:
     /**
      * @brief Get metadata for a single setting
      * @param key Setting key name
-     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"stringlist"
+     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"stringlist"|"map"
      */
     QString getSettingSchema(const QString& key);
 

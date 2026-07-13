@@ -2298,19 +2298,28 @@ void Daemon::stop()
     // Idle wiring, ALSO before the m_running gate, for the same reason as the two
     // blocks above: setupIdleService() runs from init(), which precedes start(), so
     // an init-without-start teardown (test fixtures, early-fail init, double-stop)
-    // reaches the member destructors with every idle connection still live. There the
-    // unique_ptr deleter runs BEFORE the pointer is nulled, so a seat that happens to
-    // be idle at that moment cascades ~IdleNotifier → destroyNotification() → resumed()
-    // → the daemon lambda → sessionIdleNow(), which dereferences an IdleService that is
-    // inside its own destructor and emits over D-Bus from a half-destroyed state
-    // machine. Severing here closes that window. Every call below is null-safe and
-    // idempotent, so running it on the already-stopped path costs nothing.
+    // reaches the member destructors with the idle service still live. ~Daemon calls
+    // stop(), so resetting the service HERE (unconditionally, above the gate) means the
+    // member destructor never has to. Every call below is null-safe and idempotent, so
+    // running it on the already-stopped path costs nothing.
     //
     // The debounce timer goes with it: a pending fire would land in refreshIdleStages
     // after teardown. It early-returns on a null m_idleService, so this is belt and
     // braces — but every other piece of this wiring is severed explicitly rather than
     // left to an invariant, and this is the last piece.
     m_idleStagesRefreshTimer.stop();
+    // Sever the idled/resumed lambdas BEFORE the reset. They are the two connections
+    // idle.cpp makes with m_idleService as SENDER (not in m_idleConnections, which holds
+    // only the settings/bridge/timer connections keyed on other senders), so
+    // teardownIdleConnections below does not touch them — and it runs after this reset
+    // anyway. Destroying the service walks ~IdleStateMachine, which can emit resumed()
+    // while IdleService's own QObject connections are still live (QObject severs them only
+    // in ~QObject, after member destruction), firing the daemon lambda mid-teardown. That
+    // publishes sessionIdleNow() — a spurious sessionIdleChanged(false) D-Bus broadcast on
+    // shutdown when the seat was idle. Disconnecting first makes the teardown emit nothing.
+    if (m_idleService) {
+        m_idleService->disconnect(this);
+    }
     m_idleService.reset();
     // The next run starts from a fresh effect that assumes an active session. Leaving this
     // true would make the re-armed service's first publish look redundant and swallow it.
@@ -2320,10 +2329,11 @@ void Daemon::stop()
     // in run 1, it would otherwise send run 2 straight to the give-up branch on the very
     // first attempt.
     m_idleArmRetriesLeft = kIdleArmRetries;
-    // The idle service's own signals die with it, but the FOUR connections idle.cpp made
-    // outlive it: the two settings signals, the bridgeRegistered push, and the debounce
-    // timer (a value member, so it outlives the service too). A settings write between
-    // stop() and ~Daemon would still run their lambdas. Sever exactly those four.
+    // The idle service's own signals die with it, but the connections idle.cpp made whose
+    // sender OUTLIVES it are still live: the two settings signals, the debounce timer (a
+    // value member), and the bridgeRegistered push when a compositor bridge exists (that
+    // one is conditional, so it is three or four). A settings write between stop() and
+    // ~Daemon would still run their lambdas. Sever exactly those.
     //
     // NOT a blanket disconnect(m_settings.get(), nullptr, this, nullptr). That severs
     // every m_settings→this connection — the gap-resnap sweep, the adjacent-threshold

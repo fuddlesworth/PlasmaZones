@@ -162,9 +162,13 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // frame, and the rect restarts at this slice. If not, it is a sibling output tiling the
     // same canvas in the same generation, and the rect unions.
     const bool sameGeneration = !state.backdropGenerationOutputs.contains(outputRect);
-    if (!sameGeneration) {
-        state.backdropGenerationOutputs.clear();
-    }
+    // The generation-set mutation (clear-then-append) is deferred to AFTER a successful
+    // blit, below. Doing the clear here would leave the set emptied-but-not-re-appended on
+    // the failed-blit early return, so the NEXT frame would see this output as
+    // sameGeneration and UNION its slice with the still-stale backdropRect — reproducing,
+    // for one frame, the over-large stale-reflection band the generation set replaced. The
+    // captured `sameGeneration` bool above is what the union check uses, so deferring the
+    // set write changes nothing this frame.
     if (!state.backdropFbo) {
         state.backdropTex.reset();
         state.backdropSize = QSize();
@@ -209,6 +213,12 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         destNorm = QVector4D(x0, y0, x1 - x0, y1 - y0);
     }
     state.backdropRect = destNorm;
+    // Commit the generation-set write now that the blit succeeded: a fresh generation
+    // (this output starting over) clears first, a sibling in the same generation just adds
+    // itself. The failed-blit path above skipped this, leaving the set as it was.
+    if (!sameGeneration) {
+        state.backdropGenerationOutputs.clear();
+    }
     state.backdropGenerationOutputs.append(outputRect);
 }
 

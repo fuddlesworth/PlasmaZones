@@ -808,7 +808,7 @@ private:
         bool hideTitleBar = false;
         QString titleBarScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
         // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*),
-        // rendered by the reserved "opacity-tint" pack in easy mode. The tint
+        // rendered by the built-in "opacity-tint" pack in easy mode. The tint
         // colour carries hex or the accent sentinel like the border colours.
         bool showOpacityTint = false;
         QString opacityTintScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
@@ -1027,7 +1027,7 @@ private:
     /// (uSurfaceFocused), plus @p packId's customParams/customColors — seeded from
     /// THIS window's resolved values (WindowDecoration::packParamValues) with the
     /// compiled pack's baked baseline as fallback. @p wb is the window's border
-    /// entry. The reserved "border" base pack needs no special-casing here:
+    /// entry. The built-in "border" base pack needs no special-casing here:
     /// updateWindowDecoration routes the window's resolved border appearance
     /// into packParamValues by param id, the same path every pack's overrides
     /// take.

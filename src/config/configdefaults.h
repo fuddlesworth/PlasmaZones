@@ -380,7 +380,7 @@ public:
 
     // ── Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*) ──
     // The opacity analogue of the plain border: config-backed, rendered by the
-    // reserved "opacity-tint" surface pack in easy mode (no user decoration
+    // built-in "opacity-tint" surface pack in easy mode (no user decoration
     // packs), suppressed wholesale by any user pack. Defaults mirror the
     // pack's own parameter defaults (full opacity, no tint) so enabling the
     // toggle changes nothing until the user moves a slider; the tint colour

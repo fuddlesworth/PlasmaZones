@@ -646,6 +646,31 @@ private Q_SLOTS:
         QVERIFY2(!params.contains(QStringLiteral("fancy-border")), "no seeding while the plain border is off");
     }
 
+    /// The opacity-tint analogue: with ShowWindowOpacityTint off there is no plain look to
+    /// carry over, so adding an opacity-tint pack seeds nothing. Guards the seed's gate on
+    /// its OWN toggle (a seed that ignored showWindowOpacityTint would go uncaught otherwise,
+    /// since the positive test above only proves the toggle-on path).
+    void setChain_noSeedWhenPlainOpacityTintOff()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePack(tmp.path(), QStringLiteral("fade-tint"), fadeTintMetadata()));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        TreeStubSettings settings;
+        settings.setShowWindowOpacityTint(false);
+        settings.setWindowOpacity(0.8);
+        settings.setWindowTintStrength(0.25);
+
+        DecorationPageController c(&registry, &settings);
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("fade-tint")});
+
+        const QVariantMap params = c.rawProfile(path).value(QStringLiteral("parameters")).toMap();
+        QVERIFY2(!params.contains(QStringLiteral("fade-tint")), "no seeding while the plain opacity-tint is off");
+    }
+
     /// First direct edit at a path with NO override: prevChain falls back to
     /// the resolved effective chain, so a pack the user was already
     /// previewing via inheritance is not "new" and must not be seeded — the

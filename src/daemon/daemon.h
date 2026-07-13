@@ -806,7 +806,8 @@ private:
     bool m_idleUnsupported = false;
 
     /// Every connection setupIdleService made whose SENDER outlives m_idleService: the two
-    /// settings signals, bridgeRegistered, and the debounce timer (a value member). Held so
+    /// settings signals, the debounce timer (a value member), and bridgeRegistered when a
+    /// compositor bridge exists (conditional, so three or four). Held so
     /// stop() severs exactly these — not, say, every connection m_settings has to us, most
     /// of which are made in the constructor or init() and would never come back on a
     /// stop()→start() cycle — and so a re-armed service cannot stack duplicates.
