@@ -56,6 +56,7 @@ int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Di
     bool bestOverlaps = false;
     qreal bestGap = std::numeric_limits<qreal>::max();
     qreal bestPerp = std::numeric_limits<qreal>::max();
+    qreal bestAxis = std::numeric_limits<qreal>::max();
 
     for (int i = 0; i < candidates.size(); ++i) {
         const QRectF& c = candidates.at(i);
@@ -66,6 +67,7 @@ int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Di
 
         qreal gap = 0;
         qreal perp = 0;
+        qreal axis = 0;
         bool overlaps = false;
 
         if (horizontal) {
@@ -76,6 +78,7 @@ int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Di
             gap = forward ? (c.left() - focus.right()) : (focus.left() - c.right());
             overlaps = spanOverlap(focus.top(), focus.bottom(), c.top(), c.bottom()) > 0;
             perp = std::abs(cc.y() - focusCenter.y());
+            axis = std::abs(cc.x() - focusCenter.x());
         } else {
             if (forward ? (cc.y() <= focusCenter.y()) : (cc.y() >= focusCenter.y())) {
                 continue;
@@ -83,6 +86,7 @@ int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Di
             gap = forward ? (c.top() - focus.bottom()) : (focus.top() - c.bottom());
             overlaps = spanOverlap(focus.left(), focus.right(), c.left(), c.right()) > 0;
             perp = std::abs(cc.x() - focusCenter.x());
+            axis = std::abs(cc.y() - focusCenter.y());
         }
 
         // Window navigation: a purely diagonal candidate (no perpendicular
@@ -95,7 +99,12 @@ int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Di
         }
 
         // Rects overlapping on the primary axis too yield a negative gap; clamp
-        // so they rank by the perpendicular tie-break rather than by sign.
+        // so they rank by the tie-breaks below rather than by sign. Candidates
+        // in a stack of primary-axis-overlapping zones therefore all tie at
+        // gap 0, which is why the travel-axis centre distance participates in
+        // the ranking: without it the tie falls through to list order, and
+        // list order is direction-asymmetric (zones are typically stored
+        // left-to-right, so "left" would skip to the farthest zone).
         gap = std::max(qreal(0), gap);
 
         bool better = false;
@@ -105,8 +114,16 @@ int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Di
             better = overlaps;
         } else if (gap < bestGap - eps) {
             better = true;
-        } else if (gap <= bestGap + eps && perp < bestPerp) {
-            better = true;
+        } else if (gap <= bestGap + eps) {
+            if (perp < bestPerp - eps) {
+                better = true;
+            } else if (perp <= bestPerp + eps && axis < bestAxis - eps) {
+                // Equal gap and equal perpendicular offset: prefer the
+                // candidate whose centre is nearest along the travel axis, so
+                // stacked overlapping zones step one neighbour at a time in
+                // BOTH directions instead of resolving by index order.
+                better = true;
+            }
         }
 
         if (better) {
@@ -114,6 +131,7 @@ int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Di
             bestOverlaps = overlaps;
             bestGap = gap;
             bestPerp = perp;
+            bestAxis = axis;
         }
     }
 
