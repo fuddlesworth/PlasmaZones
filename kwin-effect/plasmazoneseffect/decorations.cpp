@@ -278,7 +278,8 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // OverrideDecorationChain rule REPLACES the tree's user packs wholesale
     // (its empty-chain sentinel blocks decoration outright), and its
     // per-pack params override the tree profile's map below. The reserved
-    // "border" id was already filtered by the resolver, and the tree's
+    // "border" and "opacity-tint" ids were already filtered by the resolver,
+    // and the tree's
     // per-layer disable set deliberately does not apply — a rule chain is
     // explicit. Reads the same cached per-window action walk the opacity /
     // border-appearance resolvers use, so it refreshes on every trigger

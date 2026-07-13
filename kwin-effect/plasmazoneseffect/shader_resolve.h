@@ -205,11 +205,13 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
  * `chain` is the ordered surface-pack id list that REPLACES the
  * DecorationProfileTree's user packs for the matched window; an empty list is
  * the "no decoration" sentinel (block the tree chain outright). The reserved
- * rule-owned "border" id is filtered here so a hand-edited rule cannot inject
- * a second base border. `params` carries the action's per-pack parameter map
- * ({packId -> {paramId -> value}}), which overrides the tree profile's map
- * per pack. Returns `std::nullopt` when no rule fills the slot, so
- * updateWindowDecoration falls through to the tree unchanged.
+ * config/rule-owned ids — "border" and "opacity-tint" — are filtered here
+ * (from the chain AND the params map) so a hand-edited rule cannot inject a
+ * second plain layer or run a reserved pack on baked defaults. `params`
+ * carries the action's per-pack parameter map ({packId -> {paramId ->
+ * value}}), which overrides the tree profile's map per pack. Returns
+ * `std::nullopt` when no rule fills the slot, so updateWindowDecoration
+ * falls through to the tree unchanged.
  */
 struct ResolvedDecorationChain
 {

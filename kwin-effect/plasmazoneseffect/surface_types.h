@@ -342,12 +342,15 @@ struct WindowDecoration
 
     /// The effective opacity folded into the opacity-tint layer's `opacity`
     /// param (config default, SetOpacity rule winning); 1.0 when the layer is
-    /// off. Consumed ONLY by the fold's failed-compile fallback: if the
-    /// opacity-tint pack has no compiled shader, the fold skips it and nothing
-    /// would apply this value, so the window CAPTURE dims by it instead
-    /// (KWin's default modulating shader runs the nested draw). Single-apply
-    /// holds — the pack that owns the value never ran. Every other path reads
-    /// the value through packParamValues like any pack param.
+    /// off. Two direct consumers, both fallbacks for paths where the fold's
+    /// composite is not what reaches the screen: the fold's failed-compile
+    /// fallback (the opacity-tint pack has no compiled shader, so the window
+    /// CAPTURE dims by this value under KWin's default modulating shader),
+    /// and the transition iWindowOpacity push on the bare-uTexture0 fallback
+    /// of an opacity-baking chain (paintWindow). Single-apply holds on both —
+    /// they fire only when the pack that owns the value did not run. Every
+    /// other path reads the value through packParamValues like any pack
+    /// param.
     double foldedOpacity = 1.0;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:

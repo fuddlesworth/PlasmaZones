@@ -339,6 +339,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("tintStrength"),
                PhosphorI18n::tr("Tint strength"),
                {PhosphorI18n::tr("wash"), PhosphorI18n::tr("blend"), PhosphorI18n::tr("colour")});
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("useSystemAccentTint"),
+               PhosphorI18n::tr("Use system accent color for the tint"),
+               {PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("colour")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("tintColor"), PhosphorI18n::tr("Tint color"),
                {PhosphorI18n::tr("wash"), PhosphorI18n::tr("colour"), PhosphorI18n::tr("accent")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("hideTitleBars"),
