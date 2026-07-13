@@ -4,6 +4,7 @@
 #include "../plasmazoneseffect.h"
 
 #include "shader_internal.h"
+#include "surface_fold.h"
 #include "types.h"
 #include "window_query.h"
 
@@ -22,7 +23,6 @@
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
-#include <QLoggingCategory>
 #include <QMatrix4x4>
 #include <QPoint>
 #include <QRectF>
@@ -36,8 +36,6 @@
 #include <epoxy/gl.h>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 
@@ -61,45 +59,6 @@ void drawFullscreenQuad()
     vbo->reset();
     vbo->setVertices(verts);
     vbo->render(GL_TRIANGLE_STRIP);
-}
-
-/// Does this pack's output depend on anything that varies between frames?
-///
-/// A pack is STATIC when its fold is a pure function of its input composite and
-/// its resolved parameters — so given the same input texture it paints the same
-/// pixels forever, and the fold can be cached. Everything a pack reads that is
-/// NOT constant for a given (window size, parameter set) is enumerated here:
-///
-///   iTime            continuous seconds
-///   audio spectrum   the live CAVA bars
-///   uBackdrop        the scene behind the window
-///   uSurfaceFocused  focus, and the cross-fade ramp between the two states
-///   uSurfaceOpacity  the rule-resolved window opacity
-///   iMouse           the cursor
-///
-/// Everything else on CompiledSurfacePack (uSurfaceSize, uSurfaceScale, the frame
-/// rect, custom params and colours) is fixed for a given size and parameter set,
-/// and both of those already force a full realloc + refold when they change.
-///
-/// Deliberately introspective, never keyed on a pack id: it is the compiled
-/// shader's linked uniforms that decide this. A new pack that happens to be as
-/// simple as opacity-tint is picked up as static with no change here.
-bool packIsStatic(const PlasmaZones::CompiledSurfacePack& pk)
-{
-    const auto passVaries = [](int time, int audio, int backdrop) {
-        return time >= 0 || audio >= 0 || backdrop >= 0;
-    };
-    if (passVaries(pk.uTimeLoc, pk.iAudioSpectrumSizeLoc, pk.uBackdropLoc) || pk.uFocusedLoc >= 0 || pk.uOpacityLoc >= 0
-        || pk.iMouseLoc >= 0) {
-        return false;
-    }
-    // A static main pass fed by a time-varying buffer pass is still time-varying.
-    for (const PlasmaZones::CompiledSurfaceBufferPass& bp : pk.bufferPasses) {
-        if (passVaries(bp.uTimeLoc, bp.iAudioSpectrumSizeLoc, bp.uBackdropLoc)) {
-            return false;
-        }
-    }
-    return true;
 }
 
 } // namespace
@@ -270,28 +229,26 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             }
             state.compositeFbo[i] = std::move(fbo);
         }
-        // The capture and static-prefix targets live alongside the ping-pong pair
-        // and are sized identically; a stale one at the old size must never be
-        // presented, so the realloc invalidates both.
+        // The capture target lives alongside the ping-pong pair and is sized
+        // identically; a stale one at the old size must never be presented, so the
+        // realloc invalidates every cache keyed on it.
+        //
+        // The static-prefix target is NOT allocated here. It is only ever written
+        // when a chain has a cacheable run followed by a per-frame pack, which the
+        // most common chains do not — the default ["border"] has no per-frame pack at
+        // all — so allocating it eagerly meant a full-canvas RGBA8 (a fifth of the
+        // decoration's whole VRAM budget, ~8 MB on a 4K window) that was never
+        // written and never read. It is allocated lazily below, once the fold knows
+        // the chain actually needs it.
         if (!allocFailed) {
             state.captureValid = false;
             state.prefixValid = false;
             state.compositeValid = false;
             state.prefixPackCount = -1;
             state.captureFbo.reset();
+            state.prefixTex.reset();
             state.prefixFbo.reset();
-            const auto allocTarget = [&](std::unique_ptr<KWin::GLTexture>& tex,
-                                         std::unique_ptr<KWin::GLFramebuffer>& fbo) {
-                tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
-                if (!tex) {
-                    return false;
-                }
-                tex->setFilter(GL_LINEAR);
-                tex->setWrapMode(GL_CLAMP_TO_EDGE);
-                fbo = std::make_unique<KWin::GLFramebuffer>(tex.get());
-                return fbo->valid();
-            };
-            if (!allocTarget(state.captureTex, state.captureFbo) || !allocTarget(state.prefixTex, state.prefixFbo)) {
+            if (!allocSurfaceTarget(state.captureTex, state.captureFbo, textureSize)) {
                 allocFailed = true;
             }
         }
@@ -391,31 +348,65 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         state.captureValid = false;
     }
 
-    // How many packs at the head of the chain are STATIC? Their fold is a pure
-    // function of the capture, so it can be cached across frames while the
-    // animated packs behind them keep folding over it every frame.
+    // How many packs at the head of the chain are cacheable? Their fold is a pure
+    // function of the capture and the folded STATE (focus / opacity), so it can be
+    // cached across frames while the per-frame packs behind them keep re-folding.
     //
-    // This is a leading RUN, not a set: once a time-varying pack has folded, its
-    // output differs every frame, so every pack downstream is fed a different
-    // input every frame no matter how simple it is. Stop at the first pack that
-    // varies — and at the first that failed to compile, whose skip would otherwise
-    // desync the count from the packs actually folded below.
+    // This is a leading RUN, not a set: once a per-frame pack has folded, its output
+    // differs every frame, so every pack downstream is fed a different input every
+    // frame no matter how simple it is. Stop at the first pack that varies per frame
+    // — and at the first that failed to compile, whose skip would otherwise desync
+    // the count from the packs actually folded below.
     int staticPrefix = 0;
     while (staticPrefix < chain.size()) {
         const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(staticPrefix));
-        if (!pk || !pk->shader || staticPrefix >= static_cast<int>(state.chainBufferTex.size()) || !packIsStatic(*pk)) {
+        if (!pk || !pk->shader || staticPrefix >= static_cast<int>(state.chainBufferTex.size())
+            || packVariesPerFrame(*pk)) {
             break;
         }
         ++staticPrefix;
     }
-    // The PREFIX cache pays only when something dynamic follows the static run: it
-    // exists so the animated packs can fold over a run that does not need re-folding.
-    const bool usePrefix = captureCacheable && staticPrefix > 0 && staticPrefix < foldablePacks;
-    // When NOTHING in the chain is dynamic there is no such split — the entire
-    // composite is a pure function of the capture, so it is cached whole instead.
+
+    // The STATE the fold is about to bake in. Focus and rule-opacity are constant
+    // between events (the ramp clamps to exactly 0/1 at its ends), so they are cache
+    // keys rather than disqualifiers — which is what lets the default `border` chain
+    // cache at all, since that pack mixes its colours on uSurfaceFocused.
+    //
+    // advanceFocusFade reads the PINNED per-frame clock, so calling it here and again
+    // from pushBorderUniforms within the same fold is an exact no-op the second time:
+    // the ramp still advances at most once per frame.
+    const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
+    const float foldFocus = advanceFocusFade(windowId, focusedNow);
+    float foldOpacity = static_cast<float>(bit->ruleOpacity);
+    if (m_shaderManager.frameOpacityCached(w)) {
+        const auto frameOpacity = m_shaderManager.cachedFrameOpacity(w);
+        foldOpacity = frameOpacity ? static_cast<float>(qBound(0.0, *frameOpacity, 1.0)) : 1.0f;
+    }
+    const bool stateMoved =
+        !qFuzzyCompare(state.foldedFocus, foldFocus) || !qFuzzyCompare(state.foldedOpacity, foldOpacity);
+
+    // The PREFIX cache pays only when something per-frame follows the cacheable run:
+    // it exists so those packs can fold over a run that does not need re-folding.
+    bool usePrefix = captureCacheable && staticPrefix > 0 && staticPrefix < foldablePacks;
+    // Allocate its target lazily, and only for a chain that will actually use it. A
+    // chain with no per-frame pack (the default ["border"]) never writes it, so an
+    // eager allocation was a full-canvas RGBA8 held for nothing. Release it again if
+    // the chain changes to a shape that no longer needs it.
+    if (usePrefix) {
+        if (!state.prefixTex && !allocSurfaceTarget(state.prefixTex, state.prefixFbo, state.compositeSize)) {
+            // Out of VRAM for the optional cache: fold the chain the long way rather
+            // than failing the whole paint.
+            usePrefix = false;
+        }
+    } else if (state.prefixTex) {
+        state.prefixTex.reset();
+        state.prefixFbo.reset();
+    }
+    // When NOTHING in the chain varies per frame there is no such split — the whole
+    // composite is a pure function of (capture, state), so it is cached entire.
     const bool allStatic = captureCacheable && foldablePacks > 0 && staticPrefix == foldablePacks;
-    // Both caches sit downstream of the capture: a re-capture invalidates them.
-    if (!state.captureValid) {
+    // Both caches sit downstream of the capture and of the folded state.
+    if (!state.captureValid || stateMoved) {
         state.prefixValid = false;
         state.compositeValid = false;
     }
@@ -477,6 +468,14 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // binding the transition path relies on being re-asserted on every fold, and an
     // early return that skipped it would strand the window on the wrong shader.
     if (allStatic && state.compositeValid && state.compositeTex[state.finalSlot]) {
+        // Stamp the fold time even though nothing was folded: the composite IS
+        // current as of now, which is what the field means. Without this, a chain
+        // whose metadata declares needsBackdrop but whose compiled shaders never
+        // actually reference uBackdrop is classified cacheable, early-returns
+        // forever, and lastFoldMs stays frozen — so postPaintScreen's backdropDue
+        // test reads permanently true and drives an addRepaintFull every ~33ms for
+        // the rest of the session, and the desktop can never idle.
+        state.lastFoldMs = ShaderInternal::shaderClockNowMs();
         return state.compositeTex[state.finalSlot].get();
     }
 
@@ -776,9 +775,12 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
 
     state.finalSlot = lastDst;
     // The composite just folded is reusable verbatim only when nothing in the chain
-    // varies between frames. Anything else (iTime, audio, backdrop, focus, opacity,
-    // mouse) has to fold again next frame — packIsStatic is what decides.
+    // varies PER FRAME (iTime, audio, backdrop, mouse). Focus and opacity are baked
+    // in as keys instead, so record what this fold used — the next one refuses the
+    // cache if either has moved.
     state.compositeValid = allStatic;
+    state.foldedFocus = foldFocus;
+    state.foldedOpacity = foldOpacity;
     state.lastFoldMs = ShaderInternal::shaderClockNowMs();
     return state.compositeTex[lastDst].get();
 }

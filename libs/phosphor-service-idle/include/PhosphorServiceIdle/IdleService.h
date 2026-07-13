@@ -56,6 +56,15 @@ public:
     /// sorted by ascending timeout. Entries with a non-positive `timeoutMs` are
     /// ignored.
     [[nodiscard]] QVariantList stages() const;
+    /// Reconfiguring the ladder RESETS the session to active. The old sources are
+    /// destroyed and new ones armed, and a compositor arms a fresh notification from
+    /// the active state — so if the session was idle, `resumed()` fires and
+    /// `currentStage` returns to 0. Passing an empty list therefore both disarms idle
+    /// detection AND releases an already-idle session. Consumers rely on that (the
+    /// PlasmaZones daemon clears the ladder to turn idle-pausing off, and needs the
+    /// resume edge to un-pause the compositor effect), so it is contract, not
+    /// incidental behaviour. Pinned by IdleStateMachine's clearStagesWhileIdleResumes
+    /// test.
     void setStages(const QVariantList& stages);
 
     /// 0 when active; otherwise the 1-based index of the deepest stage currently

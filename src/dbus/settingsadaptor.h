@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
+#include <QDBusContext>
 #include <QDBusVariant>
 #include <QString>
 #include <QVariant>
@@ -31,7 +32,17 @@ class ShaderRegistry;
  *
  * Uses registry pattern for setSetting.
  */
-class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor
+/// Inherits QDBusContext (like OverlayAdaptor) so getSetting can answer an
+/// UNKNOWN key with a real D-Bus error instead of a valid-but-empty value.
+/// That distinction is load-bearing: getSetting resolves keys through a
+/// hand-maintained registry, not through Qt property reflection, so a setting
+/// whose registration is forgotten is a live possibility — and while the miss
+/// answered with an empty string, every one of the ~50 callers coerced it blind
+/// (QVariant("").toBool() is false), silently shipping the default-inverted
+/// value instead of failing. An error reply makes loadSettingAsync's
+/// reply.isValid() false, so the callback never runs and the caller keeps its
+/// own default. One central guard instead of a type-check at every call site.
+class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor, public QDBusContext
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Settings")

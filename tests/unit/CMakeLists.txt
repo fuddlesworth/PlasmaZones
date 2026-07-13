@@ -699,6 +699,18 @@ target_compile_definitions(test_dbus_contract_sync
 target_link_libraries(test_dbus_contract_sync PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_dbus_contract_sync COMMAND test_dbus_contract_sync)
 
+# Every setting the KWin effect fetches must be present in SettingsAdaptor's
+# hand-maintained getter registry. getSetting resolves keys through that map, NOT
+# through Qt property reflection, so a forgotten REGISTER_*_SETTING line ships a
+# feature that is dead on the effect side while every other layer looks complete.
+# That has happened; this is the tripwire. The expected keys are scraped from the
+# effect's own source rather than duplicated, so the test cannot drift.
+add_executable(test_settings_registry_contract dbus/test_settings_registry_contract.cpp)
+target_compile_definitions(test_settings_registry_contract
+                           PRIVATE PLASMAZONES_EFFECT_SRC_DIR="${CMAKE_SOURCE_DIR}/kwin-effect")
+target_link_libraries(test_settings_registry_contract PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_settings_registry_contract COMMAND test_settings_registry_contract)
+
 # End-to-end adaptor routing test: verifies typed-struct slot dispatch works
 # over a real QDBusConnection. Regression guard for the 2026-04-10 resnap
 # crash (moc recorded unqualified type names, metatype lookup failed).

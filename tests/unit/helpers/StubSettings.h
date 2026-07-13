@@ -1027,28 +1027,53 @@ public:
     {
     }
 
-    // Decorations.Performance (ISettings) — bounds on WHEN the decoration chain
-    // animates. Stubbed to the shipped defaults; no test drives them yet.
+    // Decorations.Performance (ISettings). Real storage, not no-op setters: the
+    // daemon arms its idle ladder off decorationPauseWhenIdleChanged /
+    // decorationIdleTimeoutSecChanged, so a stub that could never emit them would make
+    // the whole idle relay untestable — and a setter that silently drops the value
+    // breaks the get-after-set contract every other settable here honours.
     bool decorationAnimateFocusedOnly() const override
     {
-        return ConfigDefaults::decorationAnimateFocusedOnly();
+        return m_decorationAnimateFocusedOnly;
     }
-    void setDecorationAnimateFocusedOnly(bool) override
+    void setDecorationAnimateFocusedOnly(bool value) override
     {
+        if (m_decorationAnimateFocusedOnly == value) {
+            return;
+        }
+        m_decorationAnimateFocusedOnly = value;
+        Q_EMIT decorationAnimateFocusedOnlyChanged();
+        Q_EMIT settingsChanged();
     }
     bool decorationPauseWhenIdle() const override
     {
-        return ConfigDefaults::decorationPauseWhenIdle();
+        return m_decorationPauseWhenIdle;
     }
-    void setDecorationPauseWhenIdle(bool) override
+    void setDecorationPauseWhenIdle(bool value) override
     {
+        if (m_decorationPauseWhenIdle == value) {
+            return;
+        }
+        m_decorationPauseWhenIdle = value;
+        Q_EMIT decorationPauseWhenIdleChanged();
+        Q_EMIT settingsChanged();
     }
     int decorationIdleTimeoutSec() const override
     {
-        return ConfigDefaults::decorationIdleTimeoutSec();
+        return m_decorationIdleTimeoutSec;
     }
-    void setDecorationIdleTimeoutSec(int) override
+    void setDecorationIdleTimeoutSec(int value) override
     {
+        // Mirror the schema's clampInt so the stub cannot hand the daemon a timeout
+        // the real Settings would never produce.
+        const int clamped =
+            qBound(ConfigDefaults::decorationIdleTimeoutSecMin(), value, ConfigDefaults::decorationIdleTimeoutSecMax());
+        if (m_decorationIdleTimeoutSec == clamped) {
+            return;
+        }
+        m_decorationIdleTimeoutSec = clamped;
+        Q_EMIT decorationIdleTimeoutSecChanged();
+        Q_EMIT settingsChanged();
     }
 
     // Autotile decoration settings (ISettings)
@@ -1417,6 +1442,9 @@ private:
     bool m_hideWindowTitleBars = ConfigDefaults::hideWindowTitleBars();
     QString m_windowTitleBarScope = ConfigDefaults::windowTitleBarScope();
     int m_focusFadeDuration = ConfigDefaults::focusFadeDuration();
+    bool m_decorationAnimateFocusedOnly = ConfigDefaults::decorationAnimateFocusedOnly();
+    bool m_decorationPauseWhenIdle = ConfigDefaults::decorationPauseWhenIdle();
+    int m_decorationIdleTimeoutSec = ConfigDefaults::decorationIdleTimeoutSec();
 };
 
 } // namespace PlasmaZones

@@ -619,9 +619,22 @@ void Daemon::setupIdleService()
     // already-idle session, but not from here — setStages({}) drives the state
     // machine back to stage 0, which emits resumed(), which the handler above turns
     // into sessionIdleChanged(false).
+    //
+    // DEBOUNCED, because a rebuild is not free and not silent: it destroys and
+    // recreates the compositor's ext-idle-notify-v1 object, and if the session is
+    // currently idle it announces a resume (waking every decorated window through
+    // repaintAllDecorations). The "Idle after" slider writes on every step of a drag,
+    // so an undebounced connect would do all of that per pixel of travel.
+    m_idleStagesRefreshTimer.setSingleShot(true);
+    m_idleStagesRefreshTimer.setInterval(kIdleStagesRefreshDebounceMs);
+    connect(&m_idleStagesRefreshTimer, &QTimer::timeout, this, &Daemon::refreshIdleStages);
     if (m_settings) {
-        connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, &Daemon::refreshIdleStages);
-        connect(m_settings.get(), &ISettings::decorationPauseWhenIdleChanged, this, &Daemon::refreshIdleStages);
+        connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, [this] {
+            m_idleStagesRefreshTimer.start();
+        });
+        connect(m_settings.get(), &ISettings::decorationPauseWhenIdleChanged, this, [this] {
+            m_idleStagesRefreshTimer.start();
+        });
     }
 
     // Push the CURRENT state whenever the KWin effect (re)registers. sessionIdleChanged
@@ -635,8 +648,11 @@ void Daemon::setupIdleService()
                     if (!m_settingsAdaptor) {
                         return;
                     }
-                    const bool idle =
-                        m_idleService && m_settings && m_settings->decorationPauseWhenIdle() && m_idleService->isIdle();
+                    // No decorationPauseWhenIdle() term: with the toggle off,
+                    // refreshIdleStages leaves the ladder empty, so the machine is at
+                    // stage 0 and isIdle() is already false. Testing the setting too
+                    // would imply a second enforcement point that does not exist.
+                    const bool idle = m_idleService && m_idleService->isIdle();
                     Q_EMIT m_settingsAdaptor->sessionIdleChanged(idle);
                 });
     }

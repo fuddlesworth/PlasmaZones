@@ -115,49 +115,30 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
     if (!target) {
         target = windowHint;
     }
-    // Release the offscreen redirect + border shader slot IF this border owns
-    // it. When an animation transition currently owns the slot (shaderApplied
-    // is false — the transition's begin took it over), we must NOT touch
-    // setShader / unredirect: the transition lifecycle owns the handover and a
-    // stray unredirect here would tear down the animation mid-flight. The
-    // transition-end path re-checks m_windowDecorations and only re-applies the
-    // border shader when the border still exists, so dropping the entry here
-    // (after this guarded release) is the correct teardown.
-    if (wb.shaderApplied) {
-        // setShader / unredirect on the deleted-but-still-painted window are
-        // safe: KWin keys both on the redirected-windows map, and the redirect
-        // stays live until the window is discarded. Skipping the release left
-        // the corpse redirected with the present shader still bound while the
-        // multipass erase below destroyed the composite textures its sampler
-        // uniforms referenced — GL auto-unbinds a deleted texture, an unbound
-        // sampler reads opaque black, and the next paint of the Deleted drew
-        // the whole expanded quad black (the close flash).
-        KWin::EffectWindow* w = target;
-        if (w) {
-            // Only clear when no transition raced in to own the slot between
-            // this border being applied and now — reconcileDecorationShader would
-            // have cleared shaderApplied in that case, but guard defensively.
-            if (!m_shaderManager.findTransition(w)) {
-                setShader(w, nullptr);
-                unredirect(w);
-                // Dropping the redirect/shader on a STATIC window generates no
-                // damage of its own (mirror of the addRepaintFull on the apply
-                // path in updateWindowDecoration) — without this the stale bordered
-                // frame lingers until unrelated damage arrives.
-                w->addRepaintFull();
-                // A padded chain painted a margin band OUTSIDE the window rect;
-                // per-window repaints clip to the window item, so damage it at
-                // screen level or the stale glow lingers after removal.
-                if (wb.outerPadding > 0 && KWin::effects) {
-                    QRectF padded = w->expandedGeometry();
-                    if (padded.isEmpty()) {
-                        padded = w->frameGeometry();
-                    }
-                    const int pad = wb.outerPadding;
-                    KWin::effects->addRepaint(KWin::RectF(padded.adjusted(-pad, -pad, pad, pad)));
-                }
-            }
-        }
+    // Hand the offscreen redirect + shader slot back IF this decoration owns it.
+    // (releaseDecorationGl no-ops while a transition owns the slot: the transition
+    // lifecycle owns that handover, and a stray unredirect would tear down the
+    // animation mid-flight.)
+    //
+    // Running it on the DELETED-but-still-painted window is deliberate and
+    // load-bearing: KWin keys both calls on its redirected-windows map and the
+    // redirect stays live until the window is discarded. Skipping it left the corpse
+    // redirected with the present shader still bound while the surface-state erase
+    // below destroyed the composite textures its samplers referenced — GL auto-unbinds
+    // a deleted texture, an unbound sampler reads opaque black, and the next paint of
+    // the Deleted drew the whole expanded quad black (the close flash).
+    //
+    // SKIPPED on the REFRESH path (keepSurfaceState), and that is the larger half of
+    // what keeping the state buys. A refresh re-asserts the very redirect and shader
+    // this would drop, so releasing here would: destroy KWin's OffscreenData (texture
+    // AND framebuffer) only for the re-apply to make KWin allocate a fresh one, the
+    // exact churn we are avoiding one layer up; and issue an addRepaintFull that is
+    // NOT flagged m_selfRepainting, so the windowDamaged handler would clear
+    // captureValid and cold-start the capture cache anyway. Both on every focus
+    // change, for every decorated window. The three exits in updateWindowDecoration
+    // where the refresh finds the window undecoratable run the release themselves.
+    if (wb.shaderApplied && !keepSurfaceState) {
+        releaseDecorationGl(target, wb.outerPadding);
     }
     if (wb.paddedGeoConnection) {
         disconnect(wb.paddedGeoConnection);
@@ -193,18 +174,72 @@ void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::Ef
     // Reuses the exact `target` resolved at the top (exact-id live match, else
     // the frozen reverse mapping, else the hint) — a fuzzy sibling here would
     // early-return on the SIBLING's transition and leak this window's FBO.
+    // A decoration REFRESH (updateWindowDecoration's remove-first step) keeps the
+    // GL working set. The targets are keyed on (size, chain, scale) and the fold
+    // re-validates all three, so freeing them here only for the very next fold to
+    // reallocate them is pure churn — and updateAllDecorations funnels through here
+    // on every focus change, so it would free and reallocate every decorated
+    // window's textures and framebuffers every time the user clicked another window.
+    // Genuine teardown still frees.
+    if (!keepSurfaceState) {
+        releaseSurfaceState(windowId, target);
+    }
+}
+
+// Free a window's composite / capture / prefix / buffer GL targets — UNLESS a
+// shader transition is mid-flight on it.
+//
+// That guard is the whole reason this is a function. The rotate/snap paths
+// re-resolve the decoration DURING an animation (state flip → rule flush →
+// updateWindowDecoration), and erasing the state destroys the very composite the
+// animation is still sampling: the at-draw probes caught windows animating with
+// compositeTexId 0, and decoration_render.cpp's last-moment layer rebind and
+// paint_pipeline.cpp's morph old-snapshot seed both reach for it without needing a
+// decoration entry to exist. The transition keeps the state; its own teardown (by
+// then with no live transition) or the windowDeleted backstop frees it.
+//
+// Every erase site must go through here. `target` is the exact window (an
+// exact-id live match, else the frozen reverse mapping, else the caller's hint) —
+// a fuzzy same-app sibling would early-return on the SIBLING's transition and leak
+// this window's GL state.
+void PlasmaZonesEffect::releaseSurfaceState(const QString& windowId, KWin::EffectWindow* target)
+{
     if (target && m_shaderManager.findTransition(target)) {
         return;
     }
-    // A decoration REFRESH (updateWindowDecoration's remove-first step) keeps the
-    // GL working set. The targets are keyed on (size, chain) and the fold re-checks
-    // both itself, so freeing them here only to have the very next fold reallocate
-    // them is pure churn — and updateAllDecorations runs on every focus change, so
-    // it would cold-start the capture and static-prefix caches, and free and
-    // reallocate every decorated window's textures and framebuffers, every time the
-    // user clicked a different window. Genuine teardown still frees.
-    if (!keepSurfaceState) {
-        m_surfaceMultipass.erase(windowId);
+    m_surfaceMultipass.erase(windowId);
+}
+
+// Hand the window's OffscreenEffect redirect and shader slot back to KWin, and
+// damage what the decoration was covering.
+//
+// Split out of removeWindowDecoration because the REFRESH path deliberately skips it
+// (the refresh re-asserts the same redirect a moment later, so tearing it down just
+// makes KWin free and reallocate its OffscreenData) — but the paths where a refresh
+// discovers the window is no longer decoratable must still run it, or the window
+// would be left redirected and shaded with no decoration behind it.
+void PlasmaZonesEffect::releaseDecorationGl(KWin::EffectWindow* w, int outerPadding)
+{
+    if (!w || m_shaderManager.findTransition(w)) {
+        // A transition owns the slot; its own teardown does the handover.
+        return;
+    }
+    setShader(w, nullptr);
+    unredirect(w);
+    // Dropping the redirect/shader on a STATIC window generates no damage of its own,
+    // so without this the stale decorated frame lingers until something unrelated
+    // repaints it.
+    w->addRepaintFull();
+    // A padded chain painted a margin band OUTSIDE the window rect; per-window
+    // repaints clip to the window item, so damage the band at screen level or the
+    // stale glow lingers after removal.
+    if (outerPadding > 0 && KWin::effects) {
+        QRectF padded = w->expandedGeometry();
+        if (padded.isEmpty()) {
+            padded = w->frameGeometry();
+        }
+        KWin::effects->addRepaint(
+            KWin::RectF(padded.adjusted(-outerPadding, -outerPadding, outerPadding, outerPadding)));
     }
 }
 
@@ -349,19 +384,36 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // before re-adding, so the local lookup would report false for EVERY window
     // and scrub every in-flight ramp — the fade would snap on each focus change.
     const bool wasDecorated = wasDecoratedHint.value_or(m_windowDecorations.contains(windowId));
-    // Remove the existing decoration first, but KEEP its GL working set: this is a
-    // refresh of the same window, the capture / prefix / composite targets are keyed
-    // on (size, chain) and the fold re-validates both, so tearing them down here
-    // would just make the next fold reallocate them. updateAllDecorations funnels
-    // through here on every focus change, so erasing would cold-start both caches
-    // and churn every decorated window's textures and framebuffers on every click.
+
+    // What the outgoing decoration held, captured BEFORE the remove-first erases it.
+    // The remove keeps the GL working set AND the redirect/shader slot (see below),
+    // so the three exits where this refresh discovers the window is no longer
+    // decoratable have to release both themselves — and by then the entry is gone.
+    const auto priorIt = m_windowDecorations.constFind(windowId);
+    const bool priorShaderApplied = priorIt != m_windowDecorations.constEnd() && priorIt->shaderApplied;
+    const int priorOuterPadding = priorIt != m_windowDecorations.constEnd() ? priorIt->outerPadding : 0;
+
+    // Remove the existing decoration first, but KEEP its GL working set and its
+    // redirect: this is a REFRESH of the same window, about to re-assert the very
+    // redirect and shader a teardown would drop, and the composite targets are keyed
+    // on (size, chain, scale) which the fold re-validates itself. updateAllDecorations
+    // funnels through here on every focus change, so tearing down would make KWin free
+    // and reallocate its OffscreenData, and cold-start our capture cache, on every
+    // click. `undecorate` below is the path that genuinely tears down.
     removeWindowDecoration(windowId, w, /*keepSurfaceState=*/true);
 
+    // Release everything the remove-first deliberately kept. For a window that turns
+    // out to be undecoratable, the kept state is an orphan and the kept redirect is a
+    // window left shaded with nothing to shade it with.
+    const auto undecorate = [&] {
+        if (priorShaderApplied) {
+            releaseDecorationGl(w, priorOuterPadding);
+        }
+        releaseSurfaceState(windowId, w);
+    };
+
     if (!w || w->isMinimized() || w->isFullScreen()) {
-        // The window is no longer decoratable, so the kept state is now an orphan —
-        // nothing else will reach it until windowDeleted. Free it here rather than
-        // holding its full-canvas textures for the window's remaining lifetime.
-        m_surfaceMultipass.erase(windowId);
+        undecorate();
         return;
     }
 
@@ -376,7 +428,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     if (!shouldDecorateWindow(w)) {
         // Same orphan release as the minimized/fullscreen gate above: the window is
         // no longer decorated, so nothing will reach its kept GL state again.
-        m_surfaceMultipass.erase(windowId);
+        undecorate();
         return;
     }
 
@@ -432,7 +484,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     if (chain.isEmpty()) {
         // The DECORATE GATE: no border and no user packs, so this window ends up
         // undecorated. Release the GL state the remove-first step kept.
-        m_surfaceMultipass.erase(windowId);
+        undecorate();
         return;
     }
     const QString basePackId = chain.first();
@@ -584,41 +636,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         wb.ruleBorderActiveColor = appearance.activeColor.value_or(accentOr);
         wb.ruleBorderInactiveColor = appearance.inactiveColor.value_or(wb.ruleBorderActiveColor);
     }
-
-    // Does this chain actually paint non-opaque pixels over the window's frame?
-    // See WindowDecoration::chainTranslucent — this drives prePaintWindow's
-    // setTranslucent(), which is an occlusion hint the shader stage cannot give
-    // us, and which costs every window BELOW this one its damage culling when we
-    // assert it falsely.
-    //
-    // Opaque is the narrow, provable case: the rule-backed border on its own,
-    // square-cornered (a radius rounds the frame's corners away to transparent),
-    // sampling no backdrop and applying no opacity of its own. A user pack can
-    // round corners, glow, tint or blur, and nothing in its metadata promises it
-    // covers every texel — so any user pack in the chain stays translucent.
-    // Opaque has to be PROVEN, and the border pack makes that a narrow claim.
-    // Reading data/surface/shared/surface_lib.glsl:
-    //
-    //   borderComposite: ba = edge * insideMask * col.a — the band's output alpha
-    //     IS the border colour's alpha, and a translucent border is a supported
-    //     feature (it blends with the desktop, not the content), so the colour must
-    //     be fully opaque.
-    //   standardBorderBand: radius = (cornerRadius + borderWidth) * uSurfaceScale —
-    //     the OUTER corner radius includes the border width, so a zero corner radius
-    //     still arcs the window's outer corners away to transparent whenever the
-    //     border has any width at all. The smoothstep feather softens the outermost
-    //     ring on top of that.
-    //
-    // So the only rule border that genuinely covers every texel of the frame is a
-    // zero-width one (the degenerate "border enabled, nothing drawn" case), with
-    // both colours opaque. Anything else is translucent, and claiming otherwise
-    // would tell KWin to skip compositing the desktop under a band that is about to
-    // blend with it — the band would blend against stale framebuffer pixels.
-    const bool ruleBorderOnly = wb.ruleBorder && chain.size() == 1;
-    const bool opaqueBorderColors =
-        wb.ruleBorderActiveColor.alpha() == 255 && wb.ruleBorderInactiveColor.alpha() == 255;
-    wb.chainTranslucent = !(ruleBorderOnly && wb.ruleBorderWidth == 0 && wb.ruleBorderRadius == 0 && opaqueBorderColors
-                            && !wb.needsBackdrop && !wb.chainHandlesOpacity);
 
     // The cached static-prefix fold (SurfaceMultipassState::prefixTex) bakes the
     // pack parameters resolved above, and they have just been re-resolved — drop

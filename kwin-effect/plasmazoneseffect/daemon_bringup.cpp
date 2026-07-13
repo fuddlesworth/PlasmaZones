@@ -665,9 +665,12 @@ void PlasmaZonesEffect::loadCachedSettings()
         if (m_pauseAnimationWhenIdle != b) {
             m_pauseAnimationWhenIdle = b;
             if (!b) {
-                // Drop a stale idle latch: the daemon only announces a RESUME, so a
-                // session that went idle under the old setting would otherwise keep
-                // m_sessionIdle true and re-pause the moment the toggle came back on.
+                // Drop any stale idle latch. Belt and braces: the daemon DOES announce
+                // the release itself (clearing the ladder drives its state machine back
+                // to active, which emits sessionIdleChanged(false)), but this costs
+                // nothing and covers a daemon that is dead, restarting, or older than
+                // that behaviour — in which case nothing else would ever clear the latch
+                // and every decorated window would stay frozen.
                 m_sessionIdle = false;
             }
             repaintAllDecorations();
@@ -1023,6 +1026,19 @@ void PlasmaZonesEffect::loadCachedSettings()
             KWin::effects->makeOpenGLContextCurrent();
         }
         m_compiledPacks.clear();
+        // Recompiling the packs invalidates every CACHED FOLD, and updateAllDecorations
+        // is not a sufficient net for that: it skips windows with a live shader
+        // transition, and only re-resolves windows on the current desktop — so a
+        // decorated window that is both would keep compositeValid/prefixValid set and
+        // its next fold would early-return a composite baked with the OLD shader.
+        // Invalidate the folds directly. The textures stay (they are keyed on size and
+        // chain, neither of which a recompile changes) and so does the capture, which
+        // is window content and has nothing to do with the pack source.
+        for (auto& [id, surfaceState] : m_surfaceMultipass) {
+            surfaceState.compositeValid = false;
+            surfaceState.prefixValid = false;
+            surfaceState.prefixPackCount = -1;
+        }
         updateAllDecorations();
         if (KWin::effects) {
             KWin::effects->addRepaintFull();

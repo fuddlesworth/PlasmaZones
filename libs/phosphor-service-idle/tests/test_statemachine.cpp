@@ -78,6 +78,7 @@ private Q_SLOTS:
     void resumeFromDeepStageResets();
     void stagesSortedByAscendingTimeout();
     void reconfigureWhileIdleResets();
+    void clearStagesWhileIdleResumes();
     void monitoringPauseDisarmsAndResumeRearms();
     void redundantSetStagesIsNoOpAndDropsInvalid();
 };
@@ -212,6 +213,35 @@ void IdleStateMachineTest::reconfigureWhileIdleResets()
     fresh->fireIdle();
     QCOMPARE(machine.currentStage(), 1);
     QCOMPARE(machine.currentStageName(), QStringLiteral("sleep"));
+}
+
+// Emptying the ladder WHILE IDLE must resume, not just disarm.
+//
+// reconfigureWhileIdleResets above only covers replacing one ladder with another.
+// Clearing it is the path consumers actually use to turn idle detection off, and they
+// depend on the resume edge: the PlasmaZones daemon empties the ladder when the user
+// turns "pause decorations when idle" off, and the compositor effect un-pauses on the
+// resulting sessionIdleChanged(false). Without that edge, a user who went idle and then
+// switched the setting off would be left with every decorated window frozen until the
+// next real idle-to-active cycle. An optimisation that skipped rebuild() for an empty
+// ladder would break that silently, and no other test in this file would notice.
+void IdleStateMachineTest::clearStagesWhileIdleResumes()
+{
+    RecordingFactory rec;
+    IdleStateMachine machine(rec.factory());
+
+    machine.setStages({{QStringLiteral("decorations"), 30s}});
+    rec.created.at(0)->fireIdle();
+    QCOMPARE(machine.currentStage(), 1);
+    QVERIFY(machine.isIdle());
+
+    QSignalSpy resumedSpy(&machine, &IdleStateMachine::resumed);
+    machine.setStages({});
+
+    QCOMPARE(resumedSpy.count(), 1);
+    QCOMPARE(machine.currentStage(), 0);
+    QVERIFY(!machine.isIdle());
+    QVERIFY(machine.stages().isEmpty());
 }
 
 void IdleStateMachineTest::monitoringPauseDisarmsAndResumeRearms()

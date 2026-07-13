@@ -895,6 +895,22 @@ private:
     ///        Genuine teardown (close, delete, undecorate) leaves it false.
     void removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint = nullptr,
                                 bool keepSurfaceState = false);
+
+    /// Free a window's composite / capture / prefix / buffer GL targets — unless a
+    /// shader transition is mid-flight on it, which still samples them. THE ONLY
+    /// place m_surfaceMultipass is erased: every caller must route through here, or
+    /// it will destroy the composite a live animation is drawing from (the
+    /// compositeTexId-0 class of bug). @p target must be the EXACT window, never a
+    /// fuzzy same-app sibling.
+    void releaseSurfaceState(const QString& windowId, KWin::EffectWindow* target);
+
+    /// Hand the window's OffscreenEffect redirect and shader slot back to KWin and
+    /// damage what the decoration covered. Skipped by a decoration REFRESH (which is
+    /// about to re-assert the same redirect, so tearing it down only makes KWin free
+    /// and reallocate its OffscreenData); run by the paths where a refresh discovers
+    /// the window is no longer decoratable, or it would be left redirected and shaded
+    /// with no decoration behind it. No-op while a transition owns the slot.
+    void releaseDecorationGl(KWin::EffectWindow* w, int outerPadding);
     /// SHARED placement-flip funnel: re-resolve a window's decoration
     /// update-or-remove in the SAME turn after its snapped / tiled /
     /// floating state flipped. Both engines route through this (snap's

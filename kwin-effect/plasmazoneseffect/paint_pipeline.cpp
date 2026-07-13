@@ -293,8 +293,8 @@ void PlasmaZonesEffect::postPaintScreen()
         // The clock prePaintScreen pinned for this cycle (it is unpinned at the end
         // of this function, so it is still live here). Read once: a live per-window
         // sample would let two windows in the same frame disagree about the time.
-        const qint64 frameClockMs = m_shaderManager.currentFrameClockMs() >= 0 ? m_shaderManager.currentFrameClockMs()
-                                                                               : ShaderInternal::shaderClockNowMs();
+        const qint64 pinnedMs = m_shaderManager.currentFrameClockMs();
+        const qint64 frameClockMs = pinnedMs >= 0 ? pinnedMs : ShaderInternal::shaderClockNowMs();
         for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
             if (!it->shaderApplied) {
                 continue;
@@ -482,30 +482,43 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         }
     }
 
-    // Clear the opaque region for a decorated window whose chain actually paints
-    // non-opaque pixels over the frame — rounded corners, a tint below 1.0, a
-    // glass pack sampling the scene behind. KWin decides what to composite BEHIND
-    // a window before any of our shaders run, so this cannot be expressed in the
-    // fragment stage: by the time a pack outputs alpha < 1 the scene has already
-    // skipped whatever sits underneath, and the pack blends against stale pixels.
+    // A decorated window is TRANSLUCENT. Clear its opaque region so KWin keeps
+    // compositing whatever sits behind it.
     //
-    // It is asserted from the RESOLVED CHAIN (WindowDecoration::chainTranslucent),
-    // not from the mere existence of a decoration. Claiming translucency for an
-    // opaque chain is not free: it costs every window BELOW this one its damage
-    // culling, so they composite — and re-fold, if they are decorated too — for
-    // nothing. A square-cornered rule border is genuinely opaque and keeps its
-    // opaque region; every user pack chain is conservatively translucent.
+    // This is an OCCLUSION hint, not a rendering one, and it cannot be expressed in
+    // the fragment stage: KWin decides what to composite BEHIND a window before any
+    // of our shaders run, so by the time a pack outputs alpha < 1 the scene has
+    // already skipped whatever is underneath and the pack blends against stale
+    // framebuffer pixels.
     //
-    // This flag used to be set for EVERY decorated window, to keep it in KWin's
-    // paint set so drawWindow kept firing on idle frames. An opaque chain does not
-    // need that: an undamaged window's pixels — border and all, baked into the
-    // composite that was last presented — are still on screen and still correct,
-    // so there is nothing to redraw. The cases where the composite changes with no
-    // window damage (a focus cross-fade, an iTime pack, a backdrop refresh) all
-    // schedule their own repaints in postPaintScreen already. Forcing a repaint
-    // here instead would be worse than the flag it replaced: it would manufacture
-    // damage every frame and stop an idle desktop from ever idling.
-    if (!transformDriven && decorated && decoIt->chainTranslucent) {
+    // It is unconditional because EVERY chain is in fact translucent, and that is a
+    // property of the shader, not a conservative guess. Reading
+    // data/surface/shared/surface_lib.glsl:
+    //
+    //   borderComposite  ba = edge * insideMask * col.a — the band's output alpha IS
+    //                    the border colour's alpha, and a translucent border colour is
+    //                    a supported feature, not an edge case.
+    //   standardBorderBand  radius = (cornerRadius + borderWidth) * uSurfaceScale —
+    //                    the OUTER radius includes the border width, so even a zero
+    //                    corner radius arcs the window's outer corners away whenever
+    //                    the border has any width. And the smoothstep feather leaves
+    //                    the outermost ring of the frame partially transparent
+    //                    regardless.
+    //
+    // So a chain covering every texel of the frame would need a zero-width border —
+    // one that draws nothing — and even that is feathered. Deriving a per-window
+    // "is it opaque" flag was tried and deleted: its true branch could not fire, and
+    // it read as a fix while changing nothing. Proving opacity would need a pack
+    // metadata contract that does not exist (metadata declares what a pack NEEDS —
+    // needsBackdrop, handlesOpacity, padding — never that its output is total).
+    //
+    // Note what this is NOT for. It used to be set to keep the window in KWin's paint
+    // set so drawWindow kept firing on idle frames. That was a repaint-scheduling hack
+    // riding an occlusion flag, and it was not even needed: an undamaged window's
+    // pixels, border and all, are already on screen in the last-presented composite.
+    // The cases where the composite changes with no window damage (a focus cross-fade,
+    // an iTime pack, a backdrop refresh) schedule their own repaints in postPaintScreen.
+    if (!transformDriven && decorated) {
         data.setTranslucent();
     }
 

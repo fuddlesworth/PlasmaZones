@@ -23,6 +23,7 @@
 #include "window_query.h"
 
 #include <optional>
+#include <utility> // std::exchange
 
 namespace PlasmaZones {
 

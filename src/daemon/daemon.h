@@ -751,6 +751,14 @@ private:
     /// per-frame work, not its size, that holds the clocks up.
     std::unique_ptr<PhosphorServiceIdle::IdleService> m_idleService;
 
+    /// Coalesces idle-ladder rebuilds. Rearming is not free and not silent — it
+    /// destroys and recreates the compositor's ext-idle-notify-v1 object, and while
+    /// the session is idle it announces a resume, which wakes every decorated window.
+    /// The "Idle after" slider writes on every step of a drag, so the rebuild is
+    /// deferred to one net reconfigure once the value settles.
+    QTimer m_idleStagesRefreshTimer;
+    static constexpr int kIdleStagesRefreshDebounceMs = 250;
+
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;

@@ -5,8 +5,9 @@
 
 // Per-window GL state for the decoration composite fold, split out of types.h to
 // keep that header under the 800-line limit. Consumed by surfacelayers.cpp (which
-// folds), surface_backdrop.cpp (which fills backdropTex), decoration_render.cpp and
-// paint_pipeline.cpp (which present compositeTex[finalSlot]).
+// folds), surface_backdrop.cpp (which fills backdropTex), decoration_render.cpp
+// (which presents compositeTex[finalSlot]) and paint_pipeline.cpp (which seeds the
+// morph old-content snapshot from it and reads canvasGeo).
 
 #include <opengl/glframebuffer.h>
 #include <opengl/gltexture.h>
@@ -83,6 +84,12 @@ struct SurfaceMultipassState
     ///
     /// Invalidated with the capture (it is downstream of it), and by any chain or
     /// size change, which already rebuild everything here.
+    ///
+    /// Allocated LAZILY, and only for a chain that has a cacheable run followed by a
+    /// per-frame pack. Most chains do not — the default ["border"] has no per-frame
+    /// pack at all — so an eager allocation was a full-canvas RGBA8 per decorated
+    /// window that was never written and never read. Null whenever the chain has no
+    /// use for it.
     std::unique_ptr<KWin::GLTexture> prefixTex;
     std::unique_ptr<KWin::GLFramebuffer> prefixFbo;
     bool prefixValid = false;
@@ -102,6 +109,25 @@ struct SurfaceMultipassState
     /// long as the capture does. Cleared with captureValid, and by any chain, size,
     /// scale or parameter change.
     bool compositeValid = false;
+
+    /// The STATE the cached fold above was baked with.
+    ///
+    /// Focus and rule-opacity are the two inputs a pack reads that are constant
+    /// between events rather than different every frame, so they are cache KEYS, not
+    /// disqualifiers (see packVariesPerFrame). Recording them is what lets the
+    /// default `border` chain cache at all: that pack mixes its active and inactive
+    /// colours on uSurfaceFocused, so treating focus as per-frame disqualified the
+    /// most common decorated window on the desktop from both caches.
+    ///
+    /// A settled window folds once and holds. It re-folds across a focus cross-fade
+    /// (the ramp moves every frame, and the border genuinely changes colour) and on
+    /// a rule-opacity change, then settles again — the ramp clamps to exactly 0.0 /
+    /// 1.0 at its ends, so it terminates rather than jittering the cache forever.
+    ///
+    /// Sentinels chosen so a never-folded state can never compare equal to a real
+    /// value: focus is a clamped 0..1 and opacity a clamped 0..1.
+    float foldedFocus = -1.0f;
+    float foldedOpacity = -1.0f;
 
     QStringList chainKey; ///< the chain `chainBufferTex` was allocated for
     QSize compositeSize; ///< full textureSize the composite targets were allocated for

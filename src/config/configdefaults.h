@@ -1180,7 +1180,7 @@ public:
     }
 
     /// Seconds of no input before decoration animation pauses.
-    static int decorationIdleTimeoutSec()
+    static constexpr int decorationIdleTimeoutSec()
     {
         return 30;
     }
@@ -1832,6 +1832,9 @@ static_assert(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDu
 static_assert(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDurationMin()
                   && ConfigDefaults::focusFadeDuration() <= ConfigDefaults::focusFadeDurationMax(),
               "ConfigDefaults::focusFadeDuration() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::decorationIdleTimeoutSec() >= ConfigDefaults::decorationIdleTimeoutSecMin()
+                  && ConfigDefaults::decorationIdleTimeoutSec() <= ConfigDefaults::decorationIdleTimeoutSecMax(),
+              "ConfigDefaults::decorationIdleTimeoutSec() outside declared [min, max] slider range");
 static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin()
                   && ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax(),
               "ConfigDefaults::animationStaggerInterval() outside declared [min, max] slider range");

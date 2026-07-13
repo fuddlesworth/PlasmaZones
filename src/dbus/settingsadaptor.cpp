@@ -968,10 +968,26 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
         return QDBusVariant(value);
     }
 
-    qCWarning(lcDbusSettings) << "Setting key not found:" << key;
-    // Return a valid but empty QDBusVariant with error indicator
-    // Callers should check for empty string as "not found" indicator
-    return QDBusVariant(QVariant(QString()));
+    // An unknown key is an ERROR, not an empty value.
+    //
+    // This map is hand-maintained (the REGISTER_*_SETTING block), not derived from
+    // the metaobject, so "somebody added a setting and forgot to register it" is a
+    // live failure mode — it has already happened. While a miss answered with a
+    // valid empty string, every caller coerced it blind: QVariant("").toBool() is
+    // false, so a forgotten registration silently forced the setting off, INVERTING
+    // any default-true one, with nothing but a daemon-side warning to show for it.
+    //
+    // A real error reply makes QDBusPendingReply::isValid() false in
+    // ClientHelpers::loadSettingAsync, so the value callback never runs and the
+    // caller simply keeps its own default. Guarded once here rather than pushed out
+    // to ~50 call sites as a defensive type-check.
+    qCWarning(lcDbusSettings) << "getSetting: unknown key" << key;
+    if (calledFromDBus()) {
+        sendErrorReply(QDBusError::InvalidArgs, QStringLiteral("Unknown setting key: %1").arg(key));
+    }
+    // The return value is discarded once sendErrorReply has run; it matters only for
+    // a direct (non-D-Bus) call, where an invalid variant is the honest answer.
+    return QDBusVariant(QVariant());
 }
 
 bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
