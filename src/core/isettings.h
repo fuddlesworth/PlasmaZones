@@ -242,7 +242,7 @@ public:
     virtual int focusFadeDuration() const = 0;
     virtual void setFocusFadeDuration(int ms) = 0;
     // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*): the
-    // opacity analogue of the plain border, rendered by the reserved
+    // opacity analogue of the plain border, rendered by the built-in
     // "opacity-tint" surface pack and suppressed by any user decoration pack.
     // Opacity and tint strength are [0.0, 1.0]; the tint colour is an
     // #AARRGGBB hex string or the "accent" sentinel like the border colours.
