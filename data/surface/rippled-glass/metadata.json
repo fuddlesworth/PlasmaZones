@@ -1,7 +1,7 @@
 {
     "id": "rippled-glass",
     "name": "Rippled Glass",
-    "description": "A pane of rippled glass over the scene behind the window. The blurred backdrop warps across the whole pane under a drifting watery distortion, with slight colour fringing and soft highlights along the ripples. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "description": "A pane of rippled glass over the scene behind the window. The blurred backdrop warps across the whole pane under a drifting watery distortion, with slight colour fringing and soft highlights along the ripples. It shows through wherever the window itself is translucent.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",

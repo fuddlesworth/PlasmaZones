@@ -79,35 +79,35 @@
             "id": "colorCyan",
             "name": "Gradient cyan",
             "type": "color",
-            "default": "#22D3EE",
+            "default": "#ff22d3ee",
             "description": "First stop of the brand gradient"
         },
         {
             "id": "colorBlue",
             "name": "Gradient blue",
             "type": "color",
-            "default": "#3B82F6",
+            "default": "#ff3b82f6",
             "description": "Second stop of the brand gradient"
         },
         {
             "id": "colorPurple",
             "name": "Gradient purple",
             "type": "color",
-            "default": "#A855F7",
+            "default": "#ffa855f7",
             "description": "Third stop of the brand gradient"
         },
         {
             "id": "colorRose",
             "name": "Gradient rose",
             "type": "color",
-            "default": "#F43F5E",
+            "default": "#fff43f5e",
             "description": "Fourth stop of the brand gradient"
         },
         {
             "id": "colorTint",
             "name": "Glass tint",
             "type": "color",
-            "default": "#0B1730",
+            "default": "#ff0b1730",
             "description": "The navy surface the blurred scene sinks toward"
         }
     ]

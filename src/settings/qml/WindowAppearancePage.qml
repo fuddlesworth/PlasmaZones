@@ -429,6 +429,10 @@ SettingsFlickable {
                         checked: root.ctl.windowTintColor === root.accentToken
                         accessibleName: i18n("Use system accent color for the tint")
                         onToggled: function (newValue) {
+                            // The tint colour's config default IS the border
+                            // default (ConfigDefaults::windowTintColor returns
+                            // windowBorderColorActive), so toggling accent off
+                            // restores the same fallback the border swatches use.
                             root.ctl.windowTintColor = newValue ? root.accentToken : root.defaultBorderHex;
                         }
                     }

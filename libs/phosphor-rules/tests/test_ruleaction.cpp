@@ -531,6 +531,15 @@ private Q_SLOTS:
         const auto visible = RuleAction::fromJson(vis);
         QVERIFY(visible.has_value());
         QCOMPARE(ActionRegistry::instance().slotFor(*visible), QString(ActionSlot::OpacityTintVisible));
+
+        // Genuine round-trips, mirroring testSetTintColor: toJson→fromJson is
+        // stable for the bool and the unit-range double alike.
+        const auto visibleRoundTripped = RuleAction::fromJson(visible->toJson());
+        QVERIFY(visibleRoundTripped.has_value());
+        QCOMPARE(*visibleRoundTripped, *visible);
+        const auto strengthRoundTripped = RuleAction::fromJson(strength->toJson());
+        QVERIFY(strengthRoundTripped.has_value());
+        QCOMPARE(*strengthRoundTripped, *strength);
     }
 
     void testSetTintColor_requireHexOrAccent()

@@ -41,7 +41,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 1.0,
-            "group": "Shape",
+            "group": "Content",
             "description": "How visible the window content stays over the glass pane, where 1.0 is fully opaque and 0.0 shows only the refracted backdrop"
         },
         {

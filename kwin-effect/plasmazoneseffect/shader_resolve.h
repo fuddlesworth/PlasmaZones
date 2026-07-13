@@ -120,10 +120,12 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorRules::Ru
  * Returns the rule-resolved opacity in `[0.0, 1.0]` when an enabled rule fills
  * the `opacity` slot of @p resolved with a valid `value` param, or `std::nullopt`
  * when no rule filled it / the param is missing / the value falls outside the
- * documented range. Caller applies the returned value via
- * `KWin::WindowPaintData::setOpacity` (absolute set, not multiplicative —
- * SetOpacity semantics are "make the window THIS opaque," not "scale by this
- * factor").
+ * documented range. SetOpacity is layer-backed, so callers fold the returned
+ * value into the plain opacity-tint layer's pack param at decoration-update
+ * time, or cache it per frame for the shader-transition draw's
+ * bare-uTexture0 fallback (`iWindowOpacity`). Either way the value is an
+ * absolute set, not multiplicative — SetOpacity semantics are "make the
+ * window THIS opaque," not "scale by this factor".
  *
  * @p resolved comes from the effect's `resolveRuleActions` helper, which
  * peeks the evaluator's per-window cache and only builds the WindowQuery on a

@@ -1,7 +1,7 @@
 {
     "id": "frosted-glass",
     "name": "Frosted Glass",
-    "description": "The phosphor-shell frosted panel look over a real blur. The scene behind the surface is blurred and tinted by a slowly turning two-colour gradient. A drifting crystalline grain and a soft vignette sit on top. Where no scene exists behind the surface (OSDs and popups) it falls back to the original translucent gradient slab.",
+    "description": "The phosphor-shell frosted panel look over a real blur. The scene behind the surface is blurred and tinted by a slowly turning two-colour gradient. A drifting crystalline grain and a soft vignette sit on top. Where no scene exists behind the surface (OSDs and popups) it falls back to the original translucent gradient slab. Lowering the Content opacity parameter fades the window content over the pane.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",
@@ -42,7 +42,7 @@
             "default": 1.0,
             "min": 0.0,
             "max": 1.0,
-            "group": "Shape",
+            "group": "Content",
             "description": "How visible the window content stays over the frosted pane, where 1.0 is fully opaque and 0.0 shows only the blurred backdrop"
         },
         {

@@ -339,6 +339,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("colour"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("outline")});
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("opacityTint"),
                PhosphorI18n::tr("Opacity and tint"));
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("opacityTintScope"),
+               PhosphorI18n::tr("Apply opacity and tint to"),
+               {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("transparency")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("windowOpacity"),
                PhosphorI18n::tr("Opacity"),
                {PhosphorI18n::tr("transparency"), PhosphorI18n::tr("translucent"), PhosphorI18n::tr("fade")});

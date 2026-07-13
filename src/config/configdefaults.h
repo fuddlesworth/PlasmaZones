@@ -393,9 +393,25 @@ public:
     {
         return 1.0;
     }
+    static constexpr qreal windowOpacityMin()
+    {
+        return 0.0;
+    }
+    static constexpr qreal windowOpacityMax()
+    {
+        return 1.0;
+    }
     static double windowTintStrength()
     {
         return 0.0;
+    }
+    static constexpr qreal windowTintStrengthMin()
+    {
+        return 0.0;
+    }
+    static constexpr qreal windowTintStrengthMax()
+    {
+        return 1.0;
     }
     static QString windowTintColor()
     {

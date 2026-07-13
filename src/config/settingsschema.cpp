@@ -969,8 +969,16 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          QMetaType::QString,
          {},
          scopeValidator(CD::windowOpacityTintScope())},
-        {CD::opacityKey(), CD::windowOpacity(), QMetaType::Double, {}, clampDouble(0.0, 1.0)},
-        {CD::tintStrengthKey(), CD::windowTintStrength(), QMetaType::Double, {}, clampDouble(0.0, 1.0)},
+        {CD::opacityKey(),
+         CD::windowOpacity(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::windowOpacityMin(), CD::windowOpacityMax())},
+        {CD::tintStrengthKey(),
+         CD::windowTintStrength(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::windowTintStrengthMin(), CD::windowTintStrengthMax())},
         {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString, {}, validBorderColorOr(CD::windowTintColor())},
     };
 }

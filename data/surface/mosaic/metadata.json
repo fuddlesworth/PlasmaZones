@@ -1,7 +1,7 @@
 {
     "id": "mosaic",
     "name": "Mosaic",
-    "description": "The scene behind the window pixelated into coarse cells instead of blurred, the privacy-glass look. Nothing behind the window is readable but its colours still show through. Cell size, corner radius and an optional tint are this pack's own parameters. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "description": "The scene behind the window pixelated into coarse cells instead of blurred, the privacy-glass look. Nothing behind the window is readable but its colours still show through. Cell size, corner radius and an optional tint are this pack's own parameters. It shows through wherever the window itself is translucent.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",

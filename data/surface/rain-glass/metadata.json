@@ -1,7 +1,7 @@
 {
     "id": "rain-glass",
     "name": "Rain on Glass",
-    "description": "The scene behind the window fogged by a blur, with rain droplets running down the pane. Each droplet refracts the scene and leaves a trail of beads that fade as it falls. Droplet size, rain amount, fall speed and refraction strength are this pack's own parameters. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "description": "The scene behind the window fogged by a blur, with rain droplets running down the pane. Each droplet refracts the scene and leaves a trail of beads that fade as it falls. Droplet size, rain amount, fall speed and refraction strength are this pack's own parameters. It shows through wherever the window itself is translucent.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",

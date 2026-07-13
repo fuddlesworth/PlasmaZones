@@ -525,23 +525,25 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         }
     }
 
-    // Resolve + cache the rule-resolved opacity for ANY window with
-    // SetOpacity rules, independent of whether a transition is in flight.
-    // SetOpacity is layer-backed: the plain opacity-tint layer folds it into
-    // its pack param at updateWindowDecoration time, so the cache here feeds
-    // the ONE consumer that reads the rule live per frame — the
-    // shader-transition draw's bare-uTexture0 fallback (the path where an
-    // opacity-baking chain's fold didn't run). No KWin paint-data opacity is
-    // set anywhere: a window without the layer simply does not honour
-    // SetOpacity — custom chains dim through their own pack params
-    // (frost/glass contentOpacity), and a transparent theme keeps its own
-    // alpha untouched. No setTranslucent() needed either: every
-    // shader-applied decorated window is already marked translucent below,
-    // and the rule dims nothing anywhere else. Skip our own overlay /
-    // plasma-shell surfaces so a broad user rule can't dim our UI or the
-    // panel; short-circuit on an empty rule set to keep the default-state
-    // hot path at two pointer reads.
-    if (w && m_shaderManager.hasOpacityRules()) {
+    // Resolve + cache the rule-resolved opacity for a window with SetOpacity
+    // rules WHILE a shader transition is in flight on it. SetOpacity is
+    // layer-backed: the plain opacity-tint layer folds it into its pack param
+    // at updateWindowDecoration time, so the cache here feeds the ONE
+    // consumer that reads the rule live per frame — the shader-transition
+    // draw's bare-uTexture0 fallback (the path where an opacity-baking
+    // chain's fold didn't run). That consumer only executes for a window
+    // whose transition is active, so the hasTransition(w) gate keeps idle
+    // frames from paying a discarded rule-cascade walk per SetOpacity-rule
+    // window. No KWin paint-data opacity is set anywhere: a window without
+    // the layer simply does not honour SetOpacity — custom chains dim
+    // through their own pack params (frost/glass contentOpacity), and a
+    // transparent theme keeps its own alpha untouched. No setTranslucent()
+    // needed either: every shader-applied decorated window is already marked
+    // translucent below, and the rule dims nothing anywhere else. Skip our
+    // own overlay / plasma-shell surfaces so a broad user rule can't dim our
+    // UI or the panel; short-circuit on an empty rule set to keep the
+    // default-state hot path at two pointer reads.
+    if (w && m_shaderManager.hasOpacityRules() && m_shaderManager.hasTransition(w)) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
             m_shaderManager.cacheFrameOpacity(w, resolveWindowOpacity(resolveRuleActions(w, getWindowId(w))));

@@ -1,7 +1,7 @@
 {
     "id": "duotone",
     "name": "Duotone",
-    "description": "The scene behind the window blurred and remapped onto a two-colour gradient by brightness, the concert-poster look. Shadows take the first colour and highlights the second. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "description": "The scene behind the window blurred and remapped onto a two-colour gradient by brightness, the concert-poster look. Shadows take the first colour and highlights the second. It shows through wherever the window itself is translucent.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",

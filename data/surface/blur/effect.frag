@@ -23,7 +23,7 @@ vec4 pSurface(vec2 uv) {
     // The slab below stays solid, so translucency reveals the blurred
     // backdrop rather than the raw scene.
     SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
-    // Fade the window content over the frost; the translucency it frees is
+    // Fade the window content over the pane; the translucency it frees is
     // filled by the blurred backdrop in slabComposite below.
     slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
 

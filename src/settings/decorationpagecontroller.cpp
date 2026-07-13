@@ -51,24 +51,29 @@ DecorationProfile directProfileAt(const DecorationProfileTree& tree, const QStri
     return path.isEmpty() ? tree.baseline() : tree.directOverride(path);
 }
 
-/// The resolved effective parameters at @p path, filtered to the packs in the
-/// resolved effective chain. The base map for ENGAGING a direct parameters
-/// override at an inheriting path: DecorationProfile::overlay replaces the
-/// map wholesale, so engaging from empty would drop sibling packs' inherited
-/// params, while engaging unfiltered could materialize stale params for a
-/// pack an ancestor's chain edit already removed (they would silently
-/// resurrect if that pack is ever re-added).
-QVariantMap inheritedParamsForChain(const DecorationProfileTree& tree, const QString& path)
+/// @p params filtered to the packs in @p chain. Filtering prevents a
+/// materialized direct override from carrying stale params for a pack the
+/// chain no longer contains (they would silently resurrect if that pack is
+/// ever re-added).
+QVariantMap paramsFilteredToChain(const QVariantMap& params, const QStringList& chain)
 {
-    const DecorationProfile resolved = tree.resolve(path);
-    const QStringList chain = resolved.effectiveChain();
-    const QVariantMap inherited = resolved.effectiveParameters();
     QVariantMap out;
-    for (auto it = inherited.constBegin(); it != inherited.constEnd(); ++it) {
+    for (auto it = params.constBegin(); it != params.constEnd(); ++it) {
         if (chain.contains(it.key()))
             out.insert(it.key(), it.value());
     }
     return out;
+}
+
+/// The resolved effective parameters at @p path, filtered to the packs in the
+/// resolved effective chain. The base map for ENGAGING a direct parameters
+/// override at an inheriting path: DecorationProfile::overlay replaces the
+/// map wholesale, so engaging from empty would drop sibling packs' inherited
+/// params, while engaging unfiltered could materialize stale params.
+QVariantMap inheritedParamsForChain(const DecorationProfileTree& tree, const QString& path)
+{
+    const DecorationProfile resolved = tree.resolve(path);
+    return paramsFilteredToChain(resolved.effectiveParameters(), resolved.effectiveChain());
 }
 
 /// Write @p profile back as the DIRECT profile at @p path (baseline for the
@@ -255,11 +260,7 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
         if (profile.parameters) {
             allParams = *profile.parameters;
         } else {
-            const QVariantMap inherited = tree.resolve(path).effectiveParameters();
-            for (auto it = inherited.constBegin(); it != inherited.constEnd(); ++it) {
-                if (chain.contains(it.key()))
-                    allParams.insert(it.key(), it.value());
-            }
+            allParams = paramsFilteredToChain(tree.resolve(path).effectiveParameters(), chain);
         }
         bool seeded = false;
         for (const QString& packId : chain) {
