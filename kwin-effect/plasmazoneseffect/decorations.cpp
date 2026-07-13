@@ -13,6 +13,8 @@
 
 #include <epoxy/gl.h>
 
+#include <QScopeGuard>
+
 #include <PhosphorAnimation/AnimationShaderContract.h>
 
 #include "../autotilehandler.h"
@@ -58,6 +60,48 @@ std::optional<QColor> resolveDefaultBorderColor(const QString& value, const QCol
     return color.isValid() ? std::optional<QColor>(color) : std::nullopt;
 }
 
+/// Everything a WindowDecoration contributes to the cached static-prefix fold, in
+/// one comparable value. Focus and rule opacity are deliberately absent: the fold
+/// keys on those itself (SurfaceMultipassState::foldedFocus / foldedOpacity), so
+/// they must not drag the far more expensive whole-chain invalidation along with
+/// them on every focus change.
+struct FoldInputs
+{
+    QStringList chain;
+    QString basePackId;
+    QHash<QString, SurfaceParamValues> packParamValues;
+    int outerPadding = 0;
+    bool needsBackdrop = false;
+    bool chainHandlesOpacity = false;
+    // The rule-backed border appearance, which pushBorderUniforms substitutes for
+    // the "border" pack's own baked params. A rule edit that recolours the border
+    // moves the fold even though the chain and the pack params are untouched.
+    bool ruleBorder = false;
+    int ruleBorderWidth = 0;
+    int ruleBorderRadius = 0;
+    QColor ruleBorderActiveColor;
+    QColor ruleBorderInactiveColor;
+
+    bool operator==(const FoldInputs&) const = default;
+};
+
+FoldInputs foldInputsOf(const WindowDecoration& wb)
+{
+    return FoldInputs{
+        wb.chain,
+        wb.basePackId,
+        wb.packParamValues,
+        wb.outerPadding,
+        wb.needsBackdrop,
+        wb.chainHandlesOpacity,
+        wb.ruleBorder,
+        wb.ruleBorderWidth,
+        wb.ruleBorderRadius,
+        wb.ruleBorderActiveColor,
+        wb.ruleBorderInactiveColor,
+    };
+}
+
 } // namespace
 
 void PlasmaZonesEffect::setupDecorationManager()
@@ -86,163 +130,6 @@ void PlasmaZonesEffect::setupDecorationManager()
             });
 }
 
-void PlasmaZonesEffect::removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint,
-                                               bool keepSurfaceState)
-{
-    auto it = m_windowDecorations.find(windowId);
-    if (it == m_windowDecorations.end()) {
-        return;
-    }
-    WindowDecoration& wb = it.value();
-    // Resolve the EXACT window this decoration belongs to, once, for both the
-    // GL teardown and the multipass-guard below. findWindowById's fuzzy appId
-    // fallback can return a same-app SIBLING for a dead windowId, and tearing
-    // down the sibling's redirect / erasing its FBO would be wrong — the
-    // callers (reconcileDecorationOnPlacementFlip, the windowDecorationRestored
-    // handler) re-check getWindowId(w) == windowId precisely to avoid this, but
-    // this internal re-resolution must too. Preference order: an exact-id live
-    // match; else the frozen reverse mapping (resolves a deleted window under
-    // its exact id, and survives a close transition); else the caller's hint
-    // (the close path passes the corpse, whose getWindowId no longer
-    // re-derives to windowId, so it can't be exact-checked here).
-    KWin::EffectWindow* target = findWindowById(windowId);
-    if (target && getWindowId(target) != windowId) {
-        target = nullptr;
-    }
-    if (!target) {
-        target = m_windowIdReverse.value(windowId);
-    }
-    if (!target) {
-        target = windowHint;
-    }
-    // Hand the offscreen redirect + shader slot back IF this decoration owns it.
-    // (releaseDecorationGl no-ops while a transition owns the slot: the transition
-    // lifecycle owns that handover, and a stray unredirect would tear down the
-    // animation mid-flight.)
-    //
-    // Running it on the DELETED-but-still-painted window is deliberate and
-    // load-bearing: KWin keys both calls on its redirected-windows map and the
-    // redirect stays live until the window is discarded. Skipping it left the corpse
-    // redirected with the present shader still bound while the surface-state erase
-    // below destroyed the composite textures its samplers referenced — GL auto-unbinds
-    // a deleted texture, an unbound sampler reads opaque black, and the next paint of
-    // the Deleted drew the whole expanded quad black (the close flash).
-    //
-    // SKIPPED on the REFRESH path (keepSurfaceState), and that is the larger half of
-    // what keeping the state buys. A refresh re-asserts the very redirect and shader
-    // this would drop, so releasing here would: destroy KWin's OffscreenData (texture
-    // AND framebuffer) only for the re-apply to make KWin allocate a fresh one, the
-    // exact churn we are avoiding one layer up; and issue an addRepaintFull that is
-    // NOT flagged m_selfRepainting, so the windowDamaged handler would clear
-    // captureValid and cold-start the capture cache anyway. Both on every focus
-    // change, for every decorated window. The three exits in updateWindowDecoration
-    // where the refresh finds the window undecoratable run the release themselves.
-    if (wb.shaderApplied && !keepSurfaceState) {
-        releaseDecorationGl(target, wb.outerPadding);
-    }
-    if (wb.paddedGeoConnection) {
-        disconnect(wb.paddedGeoConnection);
-    }
-    if (wb.damageConnection) {
-        disconnect(wb.damageConnection);
-    }
-    m_windowDecorations.erase(it);
-    // The audio-reactive decoration set may have shrunk — re-evaluate whether the
-    // effect's cava instance is still needed. DEFERRED + coalesced: this runs as
-    // the remove-first step of updateWindowDecoration on every focus/snap/rule
-    // refresh, and a synchronous stop() here would block the compositor thread
-    // (cava terminate + waitForFinished) and then respawn when the decoration is
-    // re-added a step later. scheduleEffectAudioSync collapses the remove+readd
-    // to one net decision at event-loop return. Runs before the transition
-    // early-return below so both exits keep the run gate in sync.
-    scheduleEffectAudioSync();
-    // NB: m_focusFade is deliberately NOT scrubbed here. updateWindowDecoration
-    // calls removeWindowDecoration as its remove-first step on every refresh
-    // (focus change / snap flip / rule edit), so scrubbing here would reset the
-    // focus cross-fade on each one. The undecorated→decorated snap is handled in
-    // updateWindowDecoration (wasDecorated); close/delete scrub it explicitly.
-
-    // Free the window's composite / buffer FBO targets, reclaiming GPU
-    // memory — UNLESS a shader transition is mid-flight on this window. The
-    // rotate/snap paths re-resolve the decoration DURING the animation
-    // (state flip → rule flush → updateWindowDecoration → here), and erasing the
-    // entry destroys the very composite the animation is sampling — the
-    // at-draw probes caught windows animating with compositeTexId 0. The
-    // transition keeps the state; its own teardown (endShaderTransition →
-    // removeWindowDecoration, by then with no live transition) or the
-    // windowDeleted backstop erases it.
-    // Reuses the exact `target` resolved at the top (exact-id live match, else
-    // the frozen reverse mapping, else the hint) — a fuzzy sibling here would
-    // early-return on the SIBLING's transition and leak this window's FBO.
-    // A decoration REFRESH (updateWindowDecoration's remove-first step) keeps the
-    // GL working set. The targets are keyed on (size, chain, scale) and the fold
-    // re-validates all three, so freeing them here only for the very next fold to
-    // reallocate them is pure churn — and updateAllDecorations funnels through here
-    // on every focus change, so it would free and reallocate every decorated
-    // window's textures and framebuffers every time the user clicked another window.
-    // Genuine teardown still frees.
-    if (!keepSurfaceState) {
-        releaseSurfaceState(windowId, target);
-    }
-}
-
-// Free a window's composite / capture / prefix / buffer GL targets — UNLESS a
-// shader transition is mid-flight on it.
-//
-// That guard is the whole reason this is a function. The rotate/snap paths
-// re-resolve the decoration DURING an animation (state flip → rule flush →
-// updateWindowDecoration), and erasing the state destroys the very composite the
-// animation is still sampling: the at-draw probes caught windows animating with
-// compositeTexId 0, and decoration_render.cpp's last-moment layer rebind and
-// paint_pipeline.cpp's morph old-snapshot seed both reach for it without needing a
-// decoration entry to exist. The transition keeps the state; its own teardown (by
-// then with no live transition) or the windowDeleted backstop frees it.
-//
-// Every erase site must go through here. `target` is the exact window (an
-// exact-id live match, else the frozen reverse mapping, else the caller's hint) —
-// a fuzzy same-app sibling would early-return on the SIBLING's transition and leak
-// this window's GL state.
-void PlasmaZonesEffect::releaseSurfaceState(const QString& windowId, KWin::EffectWindow* target)
-{
-    if (target && m_shaderManager.findTransition(target)) {
-        return;
-    }
-    m_surfaceMultipass.erase(windowId);
-}
-
-// Hand the window's OffscreenEffect redirect and shader slot back to KWin, and
-// damage what the decoration was covering.
-//
-// Split out of removeWindowDecoration because the REFRESH path deliberately skips it
-// (the refresh re-asserts the same redirect a moment later, so tearing it down just
-// makes KWin free and reallocate its OffscreenData) — but the paths where a refresh
-// discovers the window is no longer decoratable must still run it, or the window
-// would be left redirected and shaded with no decoration behind it.
-void PlasmaZonesEffect::releaseDecorationGl(KWin::EffectWindow* w, int outerPadding)
-{
-    if (!w || m_shaderManager.findTransition(w)) {
-        // A transition owns the slot; its own teardown does the handover.
-        return;
-    }
-    setShader(w, nullptr);
-    unredirect(w);
-    // Dropping the redirect/shader on a STATIC window generates no damage of its own,
-    // so without this the stale decorated frame lingers until something unrelated
-    // repaints it.
-    w->addRepaintFull();
-    // A padded chain painted a margin band OUTSIDE the window rect; per-window
-    // repaints clip to the window item, so damage the band at screen level or the
-    // stale glow lingers after removal.
-    if (outerPadding > 0 && KWin::effects) {
-        QRectF padded = w->expandedGeometry();
-        if (padded.isEmpty()) {
-            padded = w->frameGeometry();
-        }
-        KWin::effects->addRepaint(
-            KWin::RectF(padded.adjusted(-outerPadding, -outerPadding, outerPadding, outerPadding)));
-    }
-}
-
 void PlasmaZonesEffect::reconcileDecorationOnPlacementFlip(const QString& windowId)
 {
     // SHARED placement-flip funnel — the one way BOTH engines re-decorate a
@@ -266,31 +153,6 @@ void PlasmaZonesEffect::reconcileDecorationOnPlacementFlip(const QString& window
         // sibling must not stand in for the dead window's GL release, so only
         // pass w through when it really is windowId (e.g. merely off-desktop).
         removeWindowDecoration(windowId, (w && getWindowId(w) == windowId) ? w : nullptr);
-    }
-}
-
-void PlasmaZonesEffect::clearAllDecorations()
-{
-    // Skip entries whose window is riding a live shader transition — the
-    // close path DELIBERATELY keeps the closing window's border + multipass
-    // entries alive so renderSurfaceChain can composite the decoration under
-    // the close animation, and this bulk clear runs within milliseconds of
-    // every close (focus shift → updateAllDecorations, autotile re-layout).
-    // Removing them here nuked the kept state before the first close frame:
-    // findWindowById refuses deleted windows and the bulk path has no window
-    // hint, so removeWindowDecoration's own mid-transition guard could never
-    // engage. The frozen reverse mapping (kept alive through the transition
-    // by slotWindowClosed) resolves the deleted window here; the skipped
-    // entry is erased by endShaderTransition's teardown or the windowDeleted
-    // backstop.
-    const QStringList ids = m_windowDecorations.keys();
-    for (const QString& windowId : ids) {
-        if (KWin::EffectWindow* w = m_windowIdReverse.value(windowId)) {
-            if (m_shaderManager.findTransition(w)) {
-                continue;
-            }
-        }
-        removeWindowDecoration(windowId);
     }
 }
 
@@ -392,6 +254,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     const auto priorIt = m_windowDecorations.constFind(windowId);
     const bool priorShaderApplied = priorIt != m_windowDecorations.constEnd() && priorIt->shaderApplied;
     const int priorOuterPadding = priorIt != m_windowDecorations.constEnd() ? priorIt->outerPadding : 0;
+    // What the outgoing decoration baked into the cached fold, so the re-resolve
+    // below can tell a real change from an identical re-resolve. See the
+    // invalidation just before the insert.
+    const FoldInputs priorFold = priorIt != m_windowDecorations.constEnd() ? foldInputsOf(*priorIt) : FoldInputs{};
 
     // Remove the existing decoration first, but KEEP its GL working set and its
     // redirect: this is a REFRESH of the same window, about to re-assert the very
@@ -638,15 +504,22 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
 
     // The cached static-prefix fold (SurfaceMultipassState::prefixTex) bakes the
-    // pack parameters resolved above, and they have just been re-resolved — drop
-    // it. Normally the whole state is erased by removeWindowDecoration (which
-    // updateWindowDecoration runs first), but that path deliberately KEEPS the
-    // state while a transition is mid-flight, so a parameter edit landing during an
-    // animation would otherwise leave the prefix folded with the old values.
+    // chain and the pack parameters resolved above, so a refresh that MOVED any of
+    // them has to drop it. But only then. updateAllDecorations funnels every focus
+    // change, snap flip and rule edit through here, and re-resolving is not the same
+    // as changing: the overwhelmingly common refresh lands on byte-identical fold
+    // inputs. Invalidating unconditionally would re-fold every decorated window's
+    // entire chain on every click, which is precisely the work the cache exists to
+    // avoid. Focus and rule opacity are NOT compared here: they move constantly and
+    // the fold keys on them itself (SurfaceMultipassState::foldedFocus /
+    // foldedOpacity), so a change there invalidates exactly the windows it affects.
     if (const auto sit = m_surfaceMultipass.find(windowId); sit != m_surfaceMultipass.end()) {
-        sit->second.prefixValid = false;
-        sit->second.compositeValid = false;
-        sit->second.prefixPackCount = -1;
+        const bool foldInputsMoved = !wasDecorated || priorFold != foldInputsOf(wb);
+        if (foldInputsMoved) {
+            sit->second.prefixValid = false;
+            sit->second.compositeValid = false;
+            sit->second.prefixPackCount = -1;
+        }
     }
 
     // Corner rounding and the outline are entirely the SHADER's job (the
@@ -688,6 +561,19 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     reconcileDecorationShader(windowId, w);
     // `w` is non-null here (the early-out above returns on !w), so no
     // KWin::effects guard is needed — addRepaintFull is a window method.
+    //
+    // Flagged as OURS. This repaint says "the decoration changed", not "the window's
+    // content changed" — and windowDamaged fires on repaint SCHEDULING, so an
+    // unflagged one would clear captureValid and force a full effects->drawWindow()
+    // re-capture. updateAllDecorations funnels every focus change through here, so
+    // that would cold-start the capture cache on every click, which is exactly what
+    // keeping the surface state across a refresh exists to prevent. The window's
+    // content is unchanged; only the fold's inputs moved, and the fold keys on those
+    // (foldedFocus / foldedOpacity) itself.
+    m_selfRepainting = true;
+    auto clearSelfRepaint = qScopeGuard([this] {
+        m_selfRepainting = false;
+    });
     w->addRepaintFull();
     // Padded chains paint OUTSIDE the window's expanded rect; addRepaintFull
     // (and addLayerRepaint) clip to the window item, so the margin band needs
@@ -704,13 +590,21 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
 
 void PlasmaZonesEffect::updateAllDecorations()
 {
-    // Snapshot which windows were decorated BEFORE the bulk clear: the hint
-    // passed to updateWindowDecoration below is what lets the focus cross-fade
-    // survive this reconcile (a post-clear contains() lookup would report every
-    // window as freshly decorated and snap its ramp).
+    // Snapshot which windows are decorated BEFORE the reconcile: the hint passed to
+    // updateWindowDecoration below is what lets the focus cross-fade survive it (a
+    // window whose entry is rebuilt in place would otherwise look freshly decorated
+    // and snap its ramp), and the post-loop sweep needs it to find the entries this
+    // pass did not revisit.
     const QSet<QString> previouslyDecorated(m_windowDecorations.keyBegin(), m_windowDecorations.keyEnd());
 
-    clearAllDecorations();
+    // NOT clearAllDecorations(). This runs on every focus change, and a bulk clear
+    // tears down each decorated window's whole GL working set: it hands back the
+    // offscreen redirect, drops the border shader, and frees the capture, prefix and
+    // composite targets — only for the loop below to rebuild all of it a microsecond
+    // later, for windows whose decoration almost never actually changed. Every window
+    // the loop revisits is refreshed in place instead (updateWindowDecoration removes
+    // first with keepSurfaceState, so the redirect and the caches survive), and the
+    // sweep after the loop removes exactly the entries nothing revisited.
 
     // Iterate all effect windows and reconcile each window's border + title-bar
     // from its effective appearance (config-backed default gated by scope, with
@@ -722,6 +616,7 @@ void PlasmaZonesEffect::updateAllDecorations()
     // clears a now-stale override left by a removed rule (so no bulk restore
     // pass is needed here).
     const auto windows = KWin::effects->stackingOrder();
+    QSet<QString> revisited;
     for (KWin::EffectWindow* w : windows) {
         if (!w || w->isDeleted()) {
             continue;
@@ -744,6 +639,7 @@ void PlasmaZonesEffect::updateAllDecorations()
         // a hide (rule or config default) applying to a window on another
         // virtual desktop would not take effect until next activation.
         if (w->isOnCurrentDesktop()) {
+            revisited.insert(wid);
             updateWindowDecoration(wid, w, previouslyDecorated.contains(wid));
         }
         reconcileRuleHiddenTitleBar(wid, w);
@@ -752,6 +648,29 @@ void PlasmaZonesEffect::updateAllDecorations()
         // reconcile-to-unset restores a window whose SetWindowLayer rule was
         // just removed, mirroring the title-bar note above.
         reconcileRuleWindowLayer(wid, w);
+    }
+
+    // Whatever the loop did not revisit still holds a decoration it should no longer
+    // have: the window moved to another desktop, or left the stacking order without a
+    // close ever reaching us. These are genuine teardowns, so they release the GL
+    // working set and the surface state.
+    //
+    // Entries riding a live shader transition are skipped, exactly as the old bulk
+    // clear skipped them. The close path deliberately keeps a closing window's
+    // decoration + multipass state alive so the chain can composite under the close
+    // animation, and this reconcile runs within milliseconds of every close (the
+    // focus shift alone triggers it). The frozen reverse mapping resolves the deleted
+    // window; endShaderTransition's teardown or the windowDeleted backstop erases the
+    // entry when the animation is done.
+    for (const QString& wid : previouslyDecorated) {
+        if (revisited.contains(wid)) {
+            continue;
+        }
+        KWin::EffectWindow* w = m_windowIdReverse.value(wid);
+        if (w && m_shaderManager.findTransition(w)) {
+            continue;
+        }
+        removeWindowDecoration(wid, w);
     }
 }
 

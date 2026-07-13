@@ -88,6 +88,12 @@ struct SurfaceParamValues
 {
     std::array<QVector4D, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> params{};
     std::array<QVector4D, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomColors> colors{};
+
+    /// Comparable so updateWindowDecoration can ask whether a re-resolve actually
+    /// MOVED a window's pack parameters. It usually has not (a focus change re-runs
+    /// the whole resolve and lands on the same values), and the cached static-prefix
+    /// fold that bakes them only has to be dropped when they really changed.
+    bool operator==(const SurfaceParamValues&) const = default;
 };
 
 /// Compiled state for ONE surface shader pack (e.g. "border", "glow"), keyed by

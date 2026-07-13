@@ -48,6 +48,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
     plasmazoneseffect/decorations.cpp
+    plasmazoneseffect/decoration_teardown.cpp
     plasmazoneseffect/decoration_render.cpp
     plasmazoneseffect/surfacelayers.cpp
     plasmazoneseffect/surface_backdrop.cpp
@@ -73,6 +74,8 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/shader_resolve.h
     plasmazoneseffect/shader_internal.h
     plasmazoneseffect/types.h
+    plasmazoneseffect/surface_state.h
+    plasmazoneseffect/surface_fold.h
     shadertransitionmanager.h
     shadertransitionmanager.cpp
     autotilehandler.cpp

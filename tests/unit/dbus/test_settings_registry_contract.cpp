@@ -22,12 +22,17 @@
  * failure safe, but it does not make it visible. This test does.
  *
  * The list of expected keys is not hand-maintained: the test reads the effect's own
- * source and extracts every literal it passes to loadSettingAsync(). A new setting
- * the effect fetches is therefore checked automatically, with no list to forget.
+ * sources and extracts every key it fetches, in each of the shapes the effect writes
+ * them (see keysFetchedByEffect below). A new setting the effect fetches is therefore
+ * checked automatically, with no list to forget — and a fetch written in a shape the
+ * scrape does NOT recognise fails the test loudly rather than vanishing from it, which
+ * would have been the same silent hole all over again.
  */
 
 #include <QTest>
 #include <QFile>
+#include <QFileInfo>
+#include <QHash>
 #include <QObject>
 #include <QRegularExpression>
 #include <QSet>
@@ -37,7 +42,7 @@
 #include <memory>
 
 #include "../helpers/IsolatedConfigGuard.h"
-#include "../helpers/StubSettings.h"
+#include "config/settings.h"
 #include "dbus/settingsadaptor.h"
 
 using namespace PlasmaZones;
@@ -45,30 +50,135 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 
-/// Every key the effect passes to loadSettingAsync(QStringLiteral("...")), scraped
-/// from its source. Deliberately source-derived rather than duplicated here: a
-/// hand-copied list is exactly the thing that drifts.
-QStringList keysFetchedByEffect(QString* whyFailed)
+QString readSource(const QString& path, QString* whyFailed)
 {
-    const QString path = QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR "/plasmazoneseffect/daemon_bringup.cpp");
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
         *whyFailed = QStringLiteral("cannot open %1").arg(path);
         return {};
     }
-    const QString src = QString::fromUtf8(f.readAll());
+    return QString::fromUtf8(f.readAll());
+}
 
-    // loadSettingAsync(QStringLiteral("someKey"), ...)
-    // Written with escapes rather than a raw string: a raw string inside the
-    // QStringLiteral macro does not survive preprocessing.
-    static const QRegularExpression re(QLatin1String("loadSettingAsync\\(\\s*QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"));
-    QStringList keys;
-    auto it = re.globalMatch(src);
-    while (it.hasNext()) {
-        keys << it.next().captured(1);
+/// Every setting key the effect fetches, scraped from its own sources rather than
+/// duplicated here — a hand-copied list is exactly the thing that drifts.
+///
+/// The effect fetches in FOUR shapes across TWO files, and all of them must be
+/// understood or the key silently escapes this test:
+///
+///   loadSettingAsync(QStringLiteral("key"), …)                        inline
+///   loadAudioInt / loadAudioBool(QStringLiteral("key"), …)            audio wrappers,
+///                                                                     which forward to
+///                                                                     loadSettingAsync
+///   loadSettingAsync(SettingProperty::X, …)                           named constant
+///   constexpr QLatin1String kName = SettingProperty::X;               local alias
+///   loadSettingAsync(this, kName, …)                                    (shader_transitions)
+///
+/// The constants are resolved by scraping ServiceConstants.h, so the named forms are
+/// checked as strictly as the literal ones.
+///
+/// @p unaccounted receives any fetch call site that matches none of the above and is
+/// not a known non-fetch (the loadSettingAsync definition, its forwarding call, and
+/// the audio wrappers' own bodies, all of which take the key as a PARAMETER). The
+/// caller asserts it is empty: a fetch written in a shape this function does not know
+/// would otherwise simply not be seen, and the test would pass green on precisely the
+/// bug it exists to catch. It has already caught itself doing that once.
+QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
+{
+    const QString constantsSrc =
+        readSource(QStringLiteral(PLASMAZONES_PROTOCOL_INC_DIR "/PhosphorProtocol/ServiceConstants.h"), whyFailed);
+    if (constantsSrc.isEmpty()) {
+        return {};
     }
+
+    // SettingProperty::Name -> "actualKey", from ServiceConstants.h.
+    QHash<QString, QString> constants;
+    static const QRegularExpression constRe(
+        QLatin1String("inline constexpr QLatin1String ([A-Za-z0-9_]+)\\(\"([A-Za-z0-9_]+)\"\\)"));
+    auto cit = constRe.globalMatch(constantsSrc);
+    while (cit.hasNext()) {
+        const auto m = cit.next();
+        constants.insert(m.captured(1), m.captured(2));
+    }
+
+    // Any call that fetches a setting, in every shape the effect writes. Escapes
+    // rather than a raw string: a raw string inside QStringLiteral does not survive
+    // preprocessing.
+    static const QRegularExpression fetchRe(QLatin1String(
+        "load(?:SettingAsync|AudioInt|AudioBool)\\(\\s*(?:this,\\s*)?(?:QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"
+        "|PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+)"
+        "|([A-Za-z][A-Za-z0-9_]*)\\s*,)"));
+    // A local alias: constexpr QLatin1String kName = SettingProperty::X;
+    static const QRegularExpression aliasRe(
+        QLatin1String("QLatin1String ([A-Za-z0-9_]+) = PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+)"));
+    // Call sites that do not name a key: they take it as a parameter.
+    static const QRegularExpression nonFetchRe(
+        QLatin1String("PlasmaZonesEffect::loadSettingAsync\\(const QString" // the definition
+                      "|loadSettingAsync\\(this,\\s*name\\b" // its forwarding call
+                      "|loadSettingAsync\\(name\\b")); // inside the audio wrappers
+
+    const QStringList files{
+        QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR "/plasmazoneseffect/daemon_bringup.cpp"),
+        QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR "/plasmazoneseffect/shader_transitions.cpp"),
+    };
+
+    QStringList keys;
+    for (const QString& path : files) {
+        const QString src = readSource(path, whyFailed);
+        if (src.isEmpty()) {
+            return {};
+        }
+
+        // Local aliases first, so a `kName` argument can be resolved.
+        QHash<QString, QString> aliases;
+        auto ait = aliasRe.globalMatch(src);
+        while (ait.hasNext()) {
+            const auto m = ait.next();
+            aliases.insert(m.captured(1), constants.value(m.captured(2)));
+        }
+
+        int scraped = 0;
+        auto it = fetchRe.globalMatch(src);
+        while (it.hasNext()) {
+            const auto m = it.next();
+            QString key;
+            if (!m.captured(1).isEmpty()) {
+                key = m.captured(1); // QStringLiteral("…")
+            } else if (!m.captured(2).isEmpty()) {
+                key = constants.value(m.captured(2)); // SettingProperty::X
+            } else {
+                key = aliases.value(m.captured(3)); // a local alias
+            }
+            if (key.isEmpty()) {
+                continue; // an identifier we could not resolve; the tally below catches it
+            }
+            keys << key;
+            ++scraped;
+        }
+
+        const int total = static_cast<int>(src.count(QLatin1String("loadSettingAsync(")))
+            + static_cast<int>(src.count(QLatin1String("loadAudioInt(")))
+            + static_cast<int>(src.count(QLatin1String("loadAudioBool(")));
+        int nonFetch = 0;
+        auto nit = nonFetchRe.globalMatch(src);
+        while (nit.hasNext()) {
+            nit.next();
+            ++nonFetch;
+        }
+        if (scraped + nonFetch != total) {
+            *unaccounted << QStringLiteral(
+                                "%1: %2 fetch call sites, %3 scraped, %4 known non-fetches — %5 "
+                                "unaccounted for")
+                                .arg(QFileInfo(path).fileName())
+                                .arg(total)
+                                .arg(scraped)
+                                .arg(nonFetch)
+                                .arg(total - scraped - nonFetch);
+        }
+    }
+
     if (keys.isEmpty()) {
-        *whyFailed = QStringLiteral("scraped 0 keys from %1 — has the call shape changed?").arg(path);
+        *whyFailed = QStringLiteral("scraped 0 keys — has the call shape changed?");
     }
     return keys;
 }
@@ -82,8 +192,13 @@ class TestSettingsRegistryContract : public QObject
 private Q_SLOTS:
     void init()
     {
+        // A real Settings, not a stub: initializeRegistry() gates some getters behind
+        // a qobject_cast to the concrete type, so a stub backend would leave those keys
+        // out of getSettingKeys() and the test would report them missing even though
+        // production registers them correctly. IsolatedConfigGuard keeps this off the
+        // developer's own config.
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_settings = new StubSettings(nullptr);
+        m_settings = new Settings(nullptr);
         m_parent = new QObject(nullptr);
         m_adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, /*profileRegistry=*/nullptr, m_parent);
     }
@@ -106,8 +221,18 @@ private Q_SLOTS:
     void testEveryKeyTheEffectFetchesIsRegistered()
     {
         QString why;
-        const QStringList fetched = keysFetchedByEffect(&why);
+        QStringList unaccounted;
+        const QStringList fetched = keysFetchedByEffect(&why, &unaccounted);
         QVERIFY2(!fetched.isEmpty(), qPrintable(why));
+
+        // Every fetch call site must be either a key we scraped or a known non-fetch. A
+        // fetch written in a shape this test does not recognise would otherwise be
+        // invisible to it, and the test would pass green while the key it fetches went
+        // unregistered — the exact failure this file prevents.
+        QVERIFY2(unaccounted.isEmpty(),
+                 qPrintable(QStringLiteral("Unrecognised setting-fetch call shape: %1. Teach keysFetchedByEffect() "
+                                           "the new shape, or the key it fetches goes unchecked.")
+                                .arg(unaccounted.join(QStringLiteral("; ")))));
 
         // One named temporary: iterators taken from two separate getSettingKeys()
         // calls would belong to different lists.
@@ -176,7 +301,7 @@ private Q_SLOTS:
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
-    StubSettings* m_settings = nullptr;
+    Settings* m_settings = nullptr;
     QObject* m_parent = nullptr;
     SettingsAdaptor* m_adaptor = nullptr;
 };

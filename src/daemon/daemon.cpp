@@ -595,9 +595,12 @@ void Daemon::setupIdleService()
     }
 
     connect(m_idleService.get(), &PhosphorServiceIdle::IdleService::idled, this, [this](int /*stage*/) {
-        // refreshIdleStages() empties the ladder whenever PauseWhenIdle is off, so
-        // this cannot fire in that state. The re-check is belt and braces against a
-        // future edit that arms the ladder for some other consumer.
+        // The PauseWhenIdle re-check is LOAD-BEARING, not defensive. refreshIdleStages()
+        // does empty the ladder when the setting goes off, but it is debounced (see
+        // below), so between the toggle and the rebuild the old stage is still armed and
+        // can still fire. Without this check that stale stage would idle-pause a session
+        // the user has just told us not to pause. It also covers a future consumer arming
+        // the ladder for its own reasons.
         if (m_settings && m_settings->decorationPauseWhenIdle() && m_settingsAdaptor) {
             Q_EMIT m_settingsAdaptor->sessionIdleChanged(true);
         }
@@ -648,11 +651,14 @@ void Daemon::setupIdleService()
                     if (!m_settingsAdaptor) {
                         return;
                     }
-                    // No decorationPauseWhenIdle() term: with the toggle off,
-                    // refreshIdleStages leaves the ladder empty, so the machine is at
-                    // stage 0 and isIdle() is already false. Testing the setting too
-                    // would imply a second enforcement point that does not exist.
-                    const bool idle = m_idleService && m_idleService->isIdle();
+                    // The setting IS re-checked, and it is not redundant. The ladder
+                    // rebuild is debounced, so between the user turning PauseWhenIdle
+                    // off and the timer firing there is a window where the setting is
+                    // already false but the ladder is still armed and isIdle() can
+                    // still be true. A bridge registering inside that window would
+                    // otherwise push idle=true for a feature the user just switched off.
+                    const bool idle =
+                        m_idleService && m_settings && m_settings->decorationPauseWhenIdle() && m_idleService->isIdle();
                     Q_EMIT m_settingsAdaptor->sessionIdleChanged(idle);
                 });
     }

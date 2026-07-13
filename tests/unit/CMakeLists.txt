@@ -707,7 +707,8 @@ add_test(NAME test_dbus_contract_sync COMMAND test_dbus_contract_sync)
 # effect's own source rather than duplicated, so the test cannot drift.
 add_executable(test_settings_registry_contract dbus/test_settings_registry_contract.cpp)
 target_compile_definitions(test_settings_registry_contract
-                           PRIVATE PLASMAZONES_EFFECT_SRC_DIR="${CMAKE_SOURCE_DIR}/kwin-effect")
+                           PRIVATE PLASMAZONES_EFFECT_SRC_DIR="${CMAKE_SOURCE_DIR}/kwin-effect"
+                                   PLASMAZONES_PROTOCOL_INC_DIR="${CMAKE_SOURCE_DIR}/libs/phosphor-protocol/include")
 target_link_libraries(test_settings_registry_contract PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_settings_registry_contract COMMAND test_settings_registry_contract)
 
