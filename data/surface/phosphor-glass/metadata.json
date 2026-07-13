@@ -1,12 +1,11 @@
 {
     "id": "phosphor-glass",
     "name": "Phosphor Glass",
-    "description": "Dark navy glass over a real blur that behaves like a phosphor screen. Bright content behind the surface excites a glowing response in the brand gradient, the glow breathes like phosphor persistence, and a slow diagonal sweep recharges the pane as it passes. Where no scene exists behind the surface it falls back to a translucent navy slab with the same shimmer.",
+    "description": "Dark navy glass over a real blur that behaves like a phosphor screen. Bright content behind the surface excites a glowing response in the brand gradient, the glow breathes like phosphor persistence, and a slow diagonal sweep recharges the pane as it passes. Where no scene exists behind the surface it falls back to a translucent navy slab with the same shimmer. Lowering the Content opacity parameter fades the window content so the glass shows on opaque windows too.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",
     "needsBackdrop": true,
-    "handlesOpacity": true,
     "animated": true,
     "multipass": true,
     "bufferScale": 0.25,
@@ -30,6 +29,15 @@
             "min": 0,
             "max": 32,
             "description": "Roundness of the pane corners (px, 0 for square)"
+        },
+        {
+            "id": "contentOpacity",
+            "name": "Content opacity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How visible the window content stays over the pane, where 1.0 is fully opaque and 0.0 shows only the phosphor glass"
         },
         {
             "id": "tintStrength",
@@ -80,35 +88,35 @@
             "id": "colorCyan",
             "name": "Gradient cyan",
             "type": "color",
-            "default": "#22D3EE",
+            "default": "#ff22d3ee",
             "description": "First stop of the brand gradient"
         },
         {
             "id": "colorBlue",
             "name": "Gradient blue",
             "type": "color",
-            "default": "#3B82F6",
+            "default": "#ff3b82f6",
             "description": "Second stop of the brand gradient"
         },
         {
             "id": "colorPurple",
             "name": "Gradient purple",
             "type": "color",
-            "default": "#A855F7",
+            "default": "#ffa855f7",
             "description": "Third stop of the brand gradient"
         },
         {
             "id": "colorRose",
             "name": "Gradient rose",
             "type": "color",
-            "default": "#F43F5E",
+            "default": "#fff43f5e",
             "description": "Fourth stop of the brand gradient"
         },
         {
             "id": "colorTint",
             "name": "Glass tint",
             "type": "color",
-            "default": "#0B1730",
+            "default": "#ff0b1730",
             "description": "The navy surface the blurred scene sinks toward"
         }
     ]

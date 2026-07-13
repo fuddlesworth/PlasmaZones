@@ -274,13 +274,17 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
                 m_navigationHandler->seedFloatingWindows(reply.value());
             }
             // The clear (and any re-seed) changed the IsFloating match input;
-            // drop the stale placement-scoped verdicts so a `WHEN isFloating`
-            // rule re-resolves against the fresh state on the next frame
-            // (mirrors the daemon-loss invalidation). Runs on the invalid-reply
-            // path too — the unconditional clear above changed state there as
-            // well, and skipping it would leave a cached "floating" verdict
-            // pinned to a window that is no longer floating.
+            // drop the stale placement-scoped verdicts, then schedule a
+            // border sweep so every decorated window re-folds its appearance
+            // slots against the fresh state (a `WHEN isFloating` SetOpacity or
+            // border rule bakes into the decoration at updateWindowDecoration
+            // time, so the cache clear alone revives nothing). Runs on the
+            // invalid-reply path too — the unconditional clear above changed
+            // state there as well, and skipping it would leave a cached
+            // "floating" verdict pinned to a window that is no longer
+            // floating. The sweep is coalesced with syncZonesFromDaemon's.
             invalidateAllRuleCaches();
+            scheduleBorderSweep();
         });
     }
 
@@ -691,6 +695,53 @@ void PlasmaZonesEffect::loadCachedSettings()
             scheduleBorderSweep();
         }
     });
+    // Plain opacity+tint layer (the border's opacity analogue) — same
+    // change-detect + sweep pattern as the border keys above.
+    loadSettingAsync(QStringLiteral("showWindowOpacityTint"), [this](const QVariant& v) {
+        const bool b = v.toBool();
+        if (m_windowAppearanceDefault.showOpacityTint != b) {
+            m_windowAppearanceDefault.showOpacityTint = b;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowOpacityTintScope"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.opacityTintScope != s) {
+            m_windowAppearanceDefault.opacityTintScope = s;
+            scheduleBorderSweep();
+        }
+    });
+    // Both unit-range values are clamped at this D-Bus boundary: the settings
+    // side validates its own writes, but the daemon is a separate process and
+    // this effect must not trust the wire (a hand-edited config or an older
+    // daemon can answer out of range). The ok-gate mirrors focusFadeDuration
+    // below: an older daemon answers an UNKNOWN key with a valid empty-string
+    // variant, and an unguarded toDouble() would coerce that to 0.0 — for
+    // opacity, a fully INVISIBLE window on version skew. Keeping the seeded
+    // default is the safe fallback.
+    loadSettingAsync(QStringLiteral("windowOpacity"), [this](const QVariant& v) {
+        bool ok = false;
+        const double d = qBound(0.0, v.toDouble(&ok), 1.0);
+        if (ok && !qFuzzyCompare(m_windowAppearanceDefault.opacity + 1.0, d + 1.0)) {
+            m_windowAppearanceDefault.opacity = d;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowTintStrength"), [this](const QVariant& v) {
+        bool ok = false;
+        const double d = qBound(0.0, v.toDouble(&ok), 1.0);
+        if (ok && !qFuzzyCompare(m_windowAppearanceDefault.tintStrength + 1.0, d + 1.0)) {
+            m_windowAppearanceDefault.tintStrength = d;
+            scheduleBorderSweep();
+        }
+    });
+    loadSettingAsync(QStringLiteral("windowTintColor"), [this](const QVariant& v) {
+        const QString s = v.toString();
+        if (m_windowAppearanceDefault.tintColor != s) {
+            m_windowAppearanceDefault.tintColor = s;
+            scheduleBorderSweep();
+        }
+    });
     // Decoration focus cross-fade (uSurfaceFocused ramp). A standalone
     // decoration setting, deliberately independent of animationsEnabled /
     // animationDuration / the window.focus motion node: the fade is a
@@ -984,6 +1035,7 @@ void PlasmaZonesEffect::loadCachedSettings()
             KWin::effects->makeOpenGLContextCurrent();
         }
         m_compiledPacks.clear();
+        m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         updateAllDecorations();
         if (KWin::effects) {
             KWin::effects->addRepaintFull();

@@ -227,8 +227,10 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
         qCWarning(lcEffect) << "Failed to expand surface shader includes for" << eff.id << ":" << includeError;
         return &packState;
     }
-    // Named-param preamble (`#define p_<id> ...`) for pack-declared parameters —
-    // empty for the border pack, whose state comes from the contract uniforms.
+    // Named-param preamble (`#define p_<id> ...`) for pack-declared parameters.
+    // Every pack routes its knobs through these — the reserved "border" pack
+    // included, whose width/radius/colours are its own declared params seeded
+    // from the resolved appearance.
     expanded = PhosphorShaders::spliceAfterVersion(expanded,
                                                    PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(eff));
     // Select the PLASMAZONES_KWIN branch of surface_uniforms.glsl (classic-GL
@@ -307,17 +309,6 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     packState.uScaleLoc = shader->uniformLocation(SC::kUSurfaceScale);
     packState.uFocusedLoc = shader->uniformLocation(SC::kUSurfaceFocused);
     packState.uOpacityLoc = shader->uniformLocation(SC::kUSurfaceOpacity);
-    // Pack metadata is the SOLE authority on who owns the rule alpha — the linker
-    // location alone is not, or a pack that samples uSurfaceOpacity without
-    // declaring "handlesOpacity" would get it applied twice (once folded, once by
-    // the present pass, which suppresses itself on the metadata flag). See
-    // CompiledSurfacePack::handlesOpacity.
-    packState.handlesOpacity = eff.handlesOpacity;
-    if (packState.uOpacityLoc >= 0 && !eff.handlesOpacity) {
-        qCWarning(lcEffect) << "Surface shader pack" << packId
-                            << "samples uSurfaceOpacity but does not declare \"handlesOpacity\": true — the rule"
-                               " alpha will be applied by the present pass, not by the pack";
-    }
     // iTime — present (>= 0) only when the pack's main references it; that is the
     // signal the window must be driven to repaint continuously (windowSurfaceAnimates).
     packState.uTimeLoc = shader->uniformLocation(SC::kITime);
@@ -406,8 +397,8 @@ CompiledSurfacePack* PlasmaZonesEffect::compiledPack(const QString& packId,
     // maps p_<id> to the right lane). The override source is the resolved
     // DecorationProfile's parameters[packId] merged over the pack's declared
     // defaults via translateSurfaceParams; baked once at first compile (the cache
-    // is pack-keyed — see CompiledSurfacePack). The border pack declares none, so
-    // all locations resolve to -1 and push nothing.
+    // is pack-keyed — see CompiledSurfacePack). Slots a pack does not declare
+    // resolve to -1 and push nothing.
     for (int slot = 0; slot < SC::kMaxCustomParams; ++slot) {
         packState.customParamsLoc[slot] = shader->uniformLocation(kCustomParamsElementNames[slot]);
     }

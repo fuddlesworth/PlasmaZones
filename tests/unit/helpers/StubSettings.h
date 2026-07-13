@@ -506,7 +506,11 @@ public:
     }
     void setShowWindowBorder(bool v) override
     {
+        if (m_showWindowBorder == v) {
+            return;
+        }
         m_showWindowBorder = v;
+        Q_EMIT showWindowBorderChanged();
     }
     QString windowBorderScope() const override
     {
@@ -514,7 +518,11 @@ public:
     }
     void setWindowBorderScope(const QString& v) override
     {
+        if (m_windowBorderScope == v) {
+            return;
+        }
         m_windowBorderScope = v;
+        Q_EMIT windowBorderScopeChanged();
     }
     int windowBorderWidth() const override
     {
@@ -522,7 +530,11 @@ public:
     }
     void setWindowBorderWidth(int v) override
     {
+        if (m_windowBorderWidth == v) {
+            return;
+        }
         m_windowBorderWidth = v;
+        Q_EMIT windowBorderWidthChanged();
     }
     int windowBorderRadius() const override
     {
@@ -530,7 +542,11 @@ public:
     }
     void setWindowBorderRadius(int v) override
     {
+        if (m_windowBorderRadius == v) {
+            return;
+        }
         m_windowBorderRadius = v;
+        Q_EMIT windowBorderRadiusChanged();
     }
     QString windowBorderColorActive() const override
     {
@@ -538,7 +554,11 @@ public:
     }
     void setWindowBorderColorActive(const QString& v) override
     {
+        if (m_windowBorderColorActive == v) {
+            return;
+        }
         m_windowBorderColorActive = v;
+        Q_EMIT windowBorderColorActiveChanged();
     }
     QString windowBorderColorInactive() const override
     {
@@ -546,7 +566,11 @@ public:
     }
     void setWindowBorderColorInactive(const QString& v) override
     {
+        if (m_windowBorderColorInactive == v) {
+            return;
+        }
         m_windowBorderColorInactive = v;
+        Q_EMIT windowBorderColorInactiveChanged();
     }
     bool hideWindowTitleBars() const override
     {
@@ -554,7 +578,71 @@ public:
     }
     void setHideWindowTitleBars(bool v) override
     {
+        if (m_hideWindowTitleBars == v) {
+            return;
+        }
         m_hideWindowTitleBars = v;
+        Q_EMIT hideWindowTitleBarsChanged();
+    }
+    bool showWindowOpacityTint() const override
+    {
+        return m_showWindowOpacityTint;
+    }
+    void setShowWindowOpacityTint(bool v) override
+    {
+        if (m_showWindowOpacityTint == v) {
+            return;
+        }
+        m_showWindowOpacityTint = v;
+        Q_EMIT showWindowOpacityTintChanged();
+    }
+    QString windowOpacityTintScope() const override
+    {
+        return m_windowOpacityTintScope;
+    }
+    void setWindowOpacityTintScope(const QString& v) override
+    {
+        if (m_windowOpacityTintScope == v) {
+            return;
+        }
+        m_windowOpacityTintScope = v;
+        Q_EMIT windowOpacityTintScopeChanged();
+    }
+    double windowOpacity() const override
+    {
+        return m_windowOpacity;
+    }
+    void setWindowOpacity(double v) override
+    {
+        if (qFuzzyCompare(m_windowOpacity, v)) {
+            return;
+        }
+        m_windowOpacity = v;
+        Q_EMIT windowOpacityChanged();
+    }
+    double windowTintStrength() const override
+    {
+        return m_windowTintStrength;
+    }
+    void setWindowTintStrength(double v) override
+    {
+        if (qFuzzyCompare(m_windowTintStrength, v)) {
+            return;
+        }
+        m_windowTintStrength = v;
+        Q_EMIT windowTintStrengthChanged();
+    }
+    QString windowTintColor() const override
+    {
+        return m_windowTintColor;
+    }
+    void setWindowTintColor(const QString& v) override
+    {
+        if (m_windowTintColor == v) {
+            return;
+        }
+        m_windowTintColor = v;
+        Q_EMIT windowTintColorChanged();
     }
     QString windowTitleBarScope() const override
     {
@@ -562,7 +650,11 @@ public:
     }
     void setWindowTitleBarScope(const QString& v) override
     {
+        if (m_windowTitleBarScope == v) {
+            return;
+        }
         m_windowTitleBarScope = v;
+        Q_EMIT windowTitleBarScopeChanged();
     }
     int focusFadeDuration() const override
     {
@@ -570,7 +662,11 @@ public:
     }
     void setFocusFadeDuration(int ms) override
     {
+        if (m_focusFadeDuration == ms) {
+            return;
+        }
         m_focusFadeDuration = ms;
+        Q_EMIT focusFadeDurationChanged();
     }
     int adjacentThreshold() const override
     {
@@ -1393,6 +1489,11 @@ private:
     bool m_hideWindowTitleBars = ConfigDefaults::hideWindowTitleBars();
     QString m_windowTitleBarScope = ConfigDefaults::windowTitleBarScope();
     int m_focusFadeDuration = ConfigDefaults::focusFadeDuration();
+    bool m_showWindowOpacityTint = ConfigDefaults::showWindowOpacityTint();
+    QString m_windowOpacityTintScope = ConfigDefaults::windowOpacityTintScope();
+    double m_windowOpacity = ConfigDefaults::windowOpacity();
+    double m_windowTintStrength = ConfigDefaults::windowTintStrength();
+    QString m_windowTintColor = ConfigDefaults::windowTintColor();
 };
 
 } // namespace PlasmaZones

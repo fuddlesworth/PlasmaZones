@@ -17,8 +17,11 @@
 // behind them (uHasBackdrop = 0), so the pack renders a translucent navy
 // slab with the same gradient shimmer and recharge sweep.
 //
-// handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
-// the pane stays solid and translucency reveals the phosphor backdrop.
+// Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
+// (SetOpacity is layer-backed and custom chains own their alpha). The pack's
+// own contentOpacity parameter fades the window content so the phosphor
+// backdrop shows on opaque windows; a theme's own translucent pixels reveal
+// it the same way with no parameter involved.
 
 #include <surface_multipass.glsl>
 
@@ -39,6 +42,9 @@ float pingPong(float x) {
 
 vec4 pSurface(vec2 uv) {
     SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    // Fade the window content over the pane; the translucency it frees is
+    // filled by the phosphor glass in slabComposite below.
+    slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
 
     // Frame-normalized coordinate: gradient hue, sweep phase and vignette all
     // scale with the pane.

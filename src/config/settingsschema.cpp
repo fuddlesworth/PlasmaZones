@@ -960,6 +960,26 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::focusFadeDurationMin(), CD::focusFadeDurationMax())},
+        // Plain opacity+tint layer: opacity/strength are [0.0, 1.0] doubles,
+        // the tint colour shares the border-colour shape (#AARRGGBB or the
+        // accent sentinel) and the scope shares the closed token set.
+        {CD::showOpacityTintKey(), CD::showWindowOpacityTint(), QMetaType::Bool},
+        {CD::opacityTintScopeKey(),
+         CD::windowOpacityTintScope(),
+         QMetaType::QString,
+         {},
+         scopeValidator(CD::windowOpacityTintScope())},
+        {CD::opacityKey(),
+         CD::windowOpacity(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::windowOpacityMin(), CD::windowOpacityMax())},
+        {CD::tintStrengthKey(),
+         CD::windowTintStrength(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::windowTintStrengthMin(), CD::windowTintStrengthMax())},
+        {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString, {}, validBorderColorOr(CD::windowTintColor())},
     };
 }
 

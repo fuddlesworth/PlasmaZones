@@ -339,6 +339,13 @@ public:
     P_CONFIG_KEY(borderColorActiveKey, "BorderColorActive")
     P_CONFIG_KEY(borderColorInactiveKey, "BorderColorInactive")
     P_CONFIG_KEY(focusFadeDurationKey, "FocusFadeDuration")
+    // Plain opacity+tint layer (rendered by the reserved "opacity-tint"
+    // surface pack), the opacity analogue of ShowBorder/BorderScope above.
+    P_CONFIG_KEY(showOpacityTintKey, "ShowOpacityTint")
+    P_CONFIG_KEY(opacityTintScopeKey, "OpacityTintScope")
+    P_CONFIG_KEY(opacityKey, "Opacity")
+    P_CONFIG_KEY(tintStrengthKey, "TintStrength")
+    P_CONFIG_KEY(tintColorKey, "TintColor")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Gaps (shared inner/outer gap model)

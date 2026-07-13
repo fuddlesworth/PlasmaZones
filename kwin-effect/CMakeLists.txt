@@ -47,6 +47,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect.cpp
     plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
+    plasmazoneseffect/decoration_appearance.cpp
     plasmazoneseffect/decorations.cpp
     plasmazoneseffect/decoration_render.cpp
     plasmazoneseffect/surfacelayers.cpp

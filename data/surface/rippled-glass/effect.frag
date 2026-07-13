@@ -12,8 +12,11 @@
 // 0.3). The field drifts on iTime at p_rippleSpeed; 0 freezes it, giving the
 // static bathroom-window look.
 //
-// handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
-// the pane stays solid and translucency reveals the rippled backdrop.
+// Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
+// (SetOpacity is layer-backed and custom chains own their alpha). The pack's
+// own contentOpacity parameter fades the window content so the rippled
+// backdrop shows on opaque windows; a theme's own translucent pixels reveal
+// it the same way with no parameter involved.
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the pane degrades to a faint tint slab with the same corner rounding.
 
@@ -31,6 +34,9 @@ float rippleHeight(vec2 q, float t) {
 
 vec4 pSurface(vec2 uv) {
     SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    // Fade the window content over the pane; the translucency it frees is
+    // filled by the rippled backdrop in slabComposite below.
+    slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
     vec2 px = slab.px;
     float mask = slab.mask;
 

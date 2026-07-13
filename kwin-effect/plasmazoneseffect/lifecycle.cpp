@@ -228,6 +228,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // either way.
         const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
         m_compiledPacks.clear();
+        m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         m_surfaceMultipass.clear();
         if (haveContext) {
             KWin::effects->addRepaintFull();
@@ -942,10 +943,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_navigationHandler->clearAllFloatingState();
         // The placement caches above feed placement-scoped rule match inputs. A
         // SetOpacity rule keyed on IsSnapped/IsFloating/Zone caches its verdict
-        // per (windowId, ruleSet revision) — neither moves here — so without this
-        // the window keeps its stale opacity (borders revert via restoreAll /
-        // clearAllDecorations below, but opacity would not). Re-resolve every opacity
-        // window against the now-cleared placement, matching the border teardown.
+        // per (windowId, ruleSet revision) — neither moves here — so drop the
+        // whole match cache; any decoration built after this resolves against
+        // the cleared placement. The folded opacity itself reverts with the
+        // decorations (clearAllDecorations below tears down the opacity-tint
+        // layer along with the border), so no repaint or re-fold is needed here.
         // Also carries the window-layer sweep (see invalidateAllRuleCaches): a
         // `WHEN IsFloating` layer rule releases its keep-above here (snapshot
         // restore) instead of stranding it for the daemon-down interval.

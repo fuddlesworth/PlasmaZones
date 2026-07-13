@@ -120,10 +120,12 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorRules::Ru
  * Returns the rule-resolved opacity in `[0.0, 1.0]` when an enabled rule fills
  * the `opacity` slot of @p resolved with a valid `value` param, or `std::nullopt`
  * when no rule filled it / the param is missing / the value falls outside the
- * documented range. Caller applies the returned value via
- * `KWin::WindowPaintData::setOpacity` (absolute set, not multiplicative —
- * SetOpacity semantics are "make the window THIS opaque," not "scale by this
- * factor").
+ * documented range. SetOpacity is layer-backed, so callers fold the returned
+ * value into the plain opacity-tint layer's pack param at decoration-update
+ * time, or cache it per frame for the shader-transition draw's
+ * bare-uTexture0 fallback (`iWindowOpacity`). Either way the value is an
+ * absolute set, not multiplicative — SetOpacity semantics are "make the
+ * window THIS opaque," not "scale by this factor".
  *
  * @p resolved comes from the effect's `resolveRuleActions` helper, which
  * peeks the evaluator's per-window cache and only builds the WindowQuery on a
@@ -170,10 +172,23 @@ struct ResolvedWindowAppearance
     // activeColor in its matching state.
     std::optional<QColor> activeColor;
     std::optional<QColor> inactiveColor;
+    // Plain opacity+tint layer slots (SetOpacityTintVisible / SetTintStrength /
+    // SetTintColor), mirroring the border trio above. `tintColor`'s accent
+    // sentinel resolves to the system accent like `activeColor`. `opacity`
+    // carries the CONFIG value only — resolveWindowAppearance never fills it
+    // (the SetOpacity rule has its own resolver, resolveWindowOpacity, and
+    // updateWindowDecoration folds that rule over this config value when the
+    // layer renders); it exists here so resolveEffectiveWindowAppearance can
+    // carry the config value alongside the rule-resolved tint slots.
+    std::optional<bool> showOpacityTint;
+    std::optional<double> opacity;
+    std::optional<double> tintStrength;
+    std::optional<QColor> tintColor;
 
     bool any() const
     {
-        return hideTitleBar || showBorder || borderWidth || borderRadius || activeColor || inactiveColor;
+        return hideTitleBar || showBorder || borderWidth || borderRadius || activeColor || inactiveColor
+            || showOpacityTint || tintStrength || tintColor;
     }
 };
 
@@ -192,11 +207,13 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
  * `chain` is the ordered surface-pack id list that REPLACES the
  * DecorationProfileTree's user packs for the matched window; an empty list is
  * the "no decoration" sentinel (block the tree chain outright). The reserved
- * rule-owned "border" id is filtered here so a hand-edited rule cannot inject
- * a second base border. `params` carries the action's per-pack parameter map
- * ({packId -> {paramId -> value}}), which overrides the tree profile's map
- * per pack. Returns `std::nullopt` when no rule fills the slot, so
- * updateWindowDecoration falls through to the tree unchanged.
+ * config/rule-owned ids — "border" and "opacity-tint" — are filtered here
+ * (from the chain AND the params map) so a hand-edited rule cannot inject a
+ * second plain layer or run a reserved pack on baked defaults. `params`
+ * carries the action's per-pack parameter map ({packId -> {paramId ->
+ * value}}), which overrides the tree profile's map per pack. Returns
+ * `std::nullopt` when no rule fills the slot, so updateWindowDecoration
+ * falls through to the tree unchanged.
  */
 struct ResolvedDecorationChain
 {

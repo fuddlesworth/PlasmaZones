@@ -286,6 +286,24 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
         return color;
     };
 
+    // [0.0, 1.0] double slot (SetTintStrength). Same defence-in-depth re-read
+    // as the other slots; the range mirrors the load-time validator.
+    const auto unitDoubleSlot = [&resolved](QLatin1StringView slot) -> std::optional<double> {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return std::nullopt;
+        }
+        const QJsonValue v = action->params.value(PhosphorRules::ActionParam::Value);
+        if (!v.isDouble()) {
+            return std::nullopt;
+        }
+        const double d = v.toDouble();
+        if (d < 0.0 || d > 1.0) {
+            return std::nullopt;
+        }
+        return d;
+    };
+
     ResolvedWindowAppearance out;
     out.hideTitleBar = boolSlot(PhosphorRules::ActionSlot::HideTitleBar);
     out.showBorder = boolSlot(PhosphorRules::ActionSlot::BorderVisible);
@@ -293,6 +311,13 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorRu
     out.borderRadius = intSlot(PhosphorRules::ActionSlot::BorderRadius, PhosphorRules::MaxBorderRadius);
     out.activeColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorActive, accentColor);
     out.inactiveColor = borderColorSlot(PhosphorRules::ActionSlot::BorderColorInactive, inactiveColor);
+    // Plain opacity+tint layer slots. The tint colour's accent sentinel
+    // resolves to the system accent (focus-independent, so the active colour
+    // is the right system fallback). `out.opacity` stays unset here — it is
+    // config-only, filled by resolveEffectiveWindowAppearance.
+    out.showOpacityTint = boolSlot(PhosphorRules::ActionSlot::OpacityTintVisible);
+    out.tintStrength = unitDoubleSlot(PhosphorRules::ActionSlot::TintStrength);
+    out.tintColor = borderColorSlot(PhosphorRules::ActionSlot::TintColor, accentColor);
     // An omitted `inactive` mirrors the active colour, matching the retired
     // global behaviour where a window with no distinct inactive colour kept its
     // active border when unfocused.
@@ -315,9 +340,11 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
     }
     // The load-time validator guarantees `chain` is present and an array;
     // re-check here (defence in depth against programmatic construction
-    // paths) and drop non-string entries plus the reserved rule-owned
-    // "border" id, which SetBorderVisible governs — a hand-edited rule must
-    // not inject a second base border into the fold.
+    // paths) and drop non-string entries plus the reserved config/rule-owned
+    // ids: "border" (SetBorderVisible governs it) and "opacity-tint"
+    // (SetOpacityTintVisible) — a hand-edited rule must not inject a second
+    // plain layer into the fold, nor flip the window into custom mode with a
+    // reserved pack running on baked defaults.
     const QJsonValue chainVal = action->params.value(PhosphorRules::ActionParam::Chain);
     if (!chainVal.isArray()) {
         return std::nullopt;
@@ -326,7 +353,7 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
     const QJsonArray arr = chainVal.toArray();
     for (const QJsonValue& entry : arr) {
         const QString id = entry.toString();
-        if (id.isEmpty() || id == QLatin1String("border")) {
+        if (id.isEmpty() || id == QLatin1String("border") || id == QLatin1String("opacity-tint")) {
             continue;
         }
         out.chain.append(id);
@@ -334,11 +361,13 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
     // Optional per-pack params override, same nested-object shape the tree
     // profile uses ({packId -> {paramId -> value}}); mirrors how the
     // animation override reads ActionParam::Params in
-    // resolveAnimationShaderProfile. Drop any "border" entry for symmetry
-    // with the chain filter above — the reserved rule-owned border pack's
-    // params come from the resolved appearance (SetBorder*), never the chain.
+    // resolveAnimationShaderProfile. Drop the reserved ids for symmetry with
+    // the chain filter above — the plain layers' params come from the
+    // resolved appearance (SetBorder* / SetOpacity / SetTint*), never the
+    // chain.
     out.params = action->params.value(PhosphorRules::ActionParam::Params).toObject().toVariantMap();
     out.params.remove(QStringLiteral("border"));
+    out.params.remove(QStringLiteral("opacity-tint"));
     return out;
 }
 

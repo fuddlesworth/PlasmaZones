@@ -5,6 +5,7 @@
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Ambience",
+    "providesOpacityTint": true,
     "fragmentShader": "effect.frag",
     "parameters": [
         {

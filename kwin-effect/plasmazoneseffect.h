@@ -792,17 +792,27 @@ private:
         QString inactiveColor;
         bool hideTitleBar = false;
         QString titleBarScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
+        // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*),
+        // rendered by the reserved "opacity-tint" pack in easy mode. The tint
+        // colour carries hex or the accent sentinel like the border colours.
+        bool showOpacityTint = false;
+        QString opacityTintScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
+        double opacity = 1.0;
+        double tintStrength = 0.0;
+        QString tintColor;
     };
     WindowAppearanceDefault m_windowAppearanceDefault;
 
-    /// True when a config-default border or hidden title bar could apply to some
-    /// window. Placement-change reconciliation (invalidateRuleCacheForStateChange /
-    /// flushPendingRuleInvalidations) must run whenever this is true even with an
-    /// empty rule set, because a config default is scope-gated on placement state
-    /// (isSnapped / isTiled / normal), so a snap/unsnap changes whether it applies.
+    /// True when a config-default border, hidden title bar, or opacity+tint
+    /// layer could apply to some window. Placement-change reconciliation
+    /// (invalidateRuleCacheForStateChange / flushPendingRuleInvalidations) must
+    /// run whenever this is true even with an empty rule set, because a config
+    /// default is scope-gated on placement state (isSnapped / isTiled /
+    /// normal), so a snap/unsnap changes whether it applies.
     bool hasWindowAppearanceDefault() const
     {
-        return m_windowAppearanceDefault.showBorder || m_windowAppearanceDefault.hideTitleBar;
+        return m_windowAppearanceDefault.showBorder || m_windowAppearanceDefault.hideTitleBar
+            || m_windowAppearanceDefault.showOpacityTint;
     }
 
     /// True when the decoration profile tree could decorate some window (a
@@ -836,13 +846,6 @@ private:
     /// the border draw path and the title-bar reconcile so config-backed
     /// defaults apply even with an empty rule set.
     ResolvedWindowAppearance resolveEffectiveWindowAppearance(KWin::EffectWindow* w, const QString& windowId) const;
-
-    // The window most recently passed to slotWindowActivated — i.e. the
-    // "previously active" window on the next focus change. Used to repaint the
-    // window that just lost focus so a focus-scoped (IsFocused) SetOpacity rule
-    // re-resolves on it; the window gaining focus is repainted via the slot's
-    // own argument. QPointer auto-nulls on window destruction.
-    QPointer<KWin::EffectWindow> m_lastActivatedWindow;
 
     // The window currently in an interactive RESIZE (set at
     // windowStartUserMovedResized when isUserResize(), cleared at finish).
@@ -965,9 +968,10 @@ private:
     /// (uSurfaceFocused), plus @p packId's customParams/customColors — seeded from
     /// THIS window's resolved values (WindowDecoration::packParamValues) with the
     /// compiled pack's baked baseline as fallback. @p wb is the window's border
-    /// entry: when its ruleBorder flag is set AND @p packId is the rule-owned
-    /// border base, THIS window's rule-resolved width / radius / colours override
-    /// the seeded slot-0 params (user packs in the chain keep their own values).
+    /// entry. The reserved "border" base pack needs no special-casing here:
+    /// updateWindowDecoration routes the window's resolved border appearance
+    /// into packParamValues by param id, the same path every pack's overrides
+    /// take.
     /// Writes onto the ALREADY-BOUND pack shader: every caller (drawWindow's idle
     /// blit, renderSurfaceChain's transition capture, renderSurfaceChainComposite's
     /// per-pack fold) owns the KWin::ShaderBinder, has already resolved @p pack
@@ -1066,6 +1070,13 @@ private:
     int m_surfacePresentFinalLoc = -1; ///< uFinal sampler location on the present shader
     int m_surfacePresentOpacityLoc = -1; ///< uOpacity (final modulation) location on the present shader
     bool m_surfacePresentFailed = false; ///< latch a failed present-shader compile
+    /// One-shot latch for the capture-time opacity fallback warning (the
+    /// opacity-tint pack failed to compile). The condition is pack-level and
+    /// the fold runs per window per frame, so an unlatched warning would spam
+    /// the journal at vsync rate. Reset alongside the compile cache on a
+    /// registry hot-reload (effectsChanged) so a fixed pack that breaks again
+    /// warns again.
+    bool m_opacityTintFallbackWarned = false;
 
     /// Continuous seconds for the surface contract's `iTime`, relative to an
     /// epoch captured at first use (so the value starts near 0 and keeps float
@@ -1278,13 +1289,15 @@ private:
     /// cache is keyed (windowId, ruleSet revision); neither moves on a bulk
     /// placement change, so a placement-scoped opacity verdict would otherwise
     /// stay cached (e.g. a `WHEN isSnapped` SetOpacity window staying dimmed after
-    /// the cache that made it "snapped" was cleared). Drops the whole match cache
-    /// and forces a full repaint so opacity rules re-resolve against the current
-    /// IsSnapped / IsFloating / Zone state, then re-reconciles every window's
-    /// rule layer — keepAbove/keepBelow is event-driven, so the cache clear
-    /// alone would leave it stale on both the loss and re-seed edges. Borders
-    /// recover via their own restore / rebuild path. No-op when there are no
-    /// animation rules and no rule-held layer snapshots.
+    /// the cache that made it "snapped" was cleared). Drops the whole match cache,
+    /// then re-reconciles every window's rule layer — keepAbove/keepBelow is
+    /// event-driven, so the cache clear alone would leave it stale on both the
+    /// loss and re-seed edges. Appearance slots (opacity, tint, border colour)
+    /// bake into the decoration at updateWindowDecoration time, so each caller
+    /// pairs this with its own decoration path: daemon loss tears the
+    /// decorations down (clearAllDecorations), the daemon-ready re-seeds
+    /// schedule a border sweep to re-fold against the fresh placement. No-op
+    /// when there are no animation rules and no rule-held layer snapshots.
     void invalidateAllRuleCaches();
 
     /// Flush coalesced per-rule-cache invalidations queued by

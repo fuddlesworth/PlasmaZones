@@ -230,6 +230,21 @@ public:
     // by focus. Independent of the window animation system; 0 = instant.
     virtual int focusFadeDuration() const = 0;
     virtual void setFocusFadeDuration(int ms) = 0;
+    // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*): the
+    // opacity analogue of the plain border, rendered by the reserved
+    // "opacity-tint" surface pack and suppressed by any user decoration pack.
+    // Opacity and tint strength are [0.0, 1.0]; the tint colour is an
+    // #AARRGGBB hex string or the "accent" sentinel like the border colours.
+    virtual bool showWindowOpacityTint() const = 0;
+    virtual void setShowWindowOpacityTint(bool show) = 0;
+    virtual QString windowOpacityTintScope() const = 0;
+    virtual void setWindowOpacityTintScope(const QString& scope) = 0;
+    virtual double windowOpacity() const = 0;
+    virtual void setWindowOpacity(double opacity) = 0;
+    virtual double windowTintStrength() const = 0;
+    virtual void setWindowTintStrength(double strength) = 0;
+    virtual QString windowTintColor() const = 0;
+    virtual void setWindowTintColor(const QString& color) = 0;
 
     // Editor settings — used by EditorPageController. Editor-scope rather
     // than Snapping/Tiling-scope, so they don't fit any sub-interface.
@@ -453,6 +468,11 @@ Q_SIGNALS:
     void hideWindowTitleBarsChanged();
     void windowTitleBarScopeChanged();
     void focusFadeDurationChanged();
+    void showWindowOpacityTintChanged();
+    void windowOpacityTintScopeChanged();
+    void windowOpacityChanged();
+    void windowTintStrengthChanged();
+    void windowTintColorChanged();
     // Editor
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();

@@ -5,7 +5,6 @@
 
 #include "shader_internal.h"
 #include "types.h"
-#include "window_query.h"
 
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
@@ -295,13 +294,37 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             glClear(GL_COLOR_BUFFER_BIT);
             KWin::ItemEffect keepRenderable(w->windowItem());
             KWin::WindowPaintData captureData;
-            // Capture RAW (opacity 1.0). Rule opacity is applied downstream
-            // as a shader concern: the present passthrough modulates the
-            // final composite (KWin-style uniform ghosting), unless a chain
-            // pack declares handlesOpacity and applies uSurfaceOpacity to
-            // its own content sample instead (frost). Dimming the capture
-            // here would double-apply against either.
-            captureData.setOpacity(1.0);
+            // Capture RAW (opacity 1.0). Any dimming is applied downstream
+            // as a shader concern: the plain opacity-tint layer's folded
+            // opacity param, or a pack's own content parameter (frost/glass
+            // contentOpacity). Dimming the capture here would double-apply
+            // against either.
+            //
+            // ONE exception, fail-safe not fail-open: if the opacity-tint
+            // pack has no compiled shader, step 2 skips it and NOTHING
+            // applies the window's resolved opacity — a SetOpacity rule (or
+            // the config default) would silently render fully opaque. Dim
+            // the capture by the folded value instead: the nested draw runs
+            // KWin's default modulating shader, and the pack that owns the
+            // value never runs, so single-apply holds. The tint half of the
+            // broken pack is dropped (cosmetic); the opacity half — the part
+            // a rule commands — survives.
+            qreal captureOpacity = 1.0;
+            if (deco.chainBakesOpacity && !qFuzzyCompare(deco.foldedOpacity + 1.0, 2.0)) {
+                CompiledSurfacePack* const otPack = compiledPackLazy(QStringLiteral("opacity-tint"));
+                if (!otPack || !otPack->shader) {
+                    captureOpacity = qBound(0.0, deco.foldedOpacity, 1.0);
+                    // Latched: the condition is pack-level and this fold runs
+                    // per window per frame — unlatched it would spam at vsync
+                    // rate. Cleared with the compile cache on registry reload.
+                    if (!m_opacityTintFallbackWarned) {
+                        m_opacityTintFallbackWarned = true;
+                        qCWarning(lcEffect) << "opacity-tint pack unavailable — applying window opacity"
+                                            << captureOpacity << "at capture time for" << windowId;
+                    }
+                }
+            }
+            captureData.setOpacity(captureOpacity);
             const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
             KWin::effects->drawWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
             KWin::GLFramebuffer::popFramebuffer();
@@ -322,12 +345,6 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // load-bearing if m_compiledPacks were ever swapped for a node-relocating
     // container, so keep it.
     int src = 0;
-    // Did a pack that ACTUALLY DREW take ownership of the window's rule alpha? The
-    // metadata flag alone cannot answer this: a handlesOpacity pack that fails to
-    // compile is skipped below, so nothing applies uSurfaceOpacity — and if both
-    // consumers stood down on the metadata, the window would render fully opaque and
-    // silently drop the user's SetOpacity rule. See SurfaceMultipassState::handledOpacity.
-    bool foldAppliedOpacity = false;
     for (int k = 0; k < chain.size(); ++k) {
         CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
         if (!pk || !pk->shader) {
@@ -623,21 +640,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         }
         glActiveTexture(GL_TEXTURE0);
         KWin::GLFramebuffer::popFramebuffer();
-        // Latch AFTER the main pass has actually drawn. Setting it at the top of the
-        // loop — as this first did — claims the alpha was applied on paths where the
-        // pack's main pass never runs (a chainBufferTex size mismatch, an invalid
-        // FBO). pushBorderUniforms is the ONLY site that pushes uSurfaceOpacity and
-        // it lives inside that main pass, so the flag would say the alpha was handled,
-        // both consumers would stand down, and the window would render fully opaque —
-        // the exact fail-open this flag exists to remove, relocated rather than fixed.
-        if (pk->handlesOpacity && pk->uOpacityLoc >= 0) {
-            foldAppliedOpacity = true;
-        }
         src = dst;
     }
 
     state.finalSlot = src;
-    state.handledOpacity = foldAppliedOpacity;
     state.lastFoldMs = ShaderInternal::shaderClockNowMs();
     return state.compositeTex[src].get();
 }

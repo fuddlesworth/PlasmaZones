@@ -13,17 +13,12 @@
 
 #include <epoxy/gl.h>
 
-#include <PhosphorAnimation/AnimationShaderContract.h>
-
 #include "../autotilehandler.h"
 #include "../snaphandler.h"
 #include "shader_internal.h"
 #include "shader_resolve.h"
-#include "window_query.h"
 
-#include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorCompositor/DecorationDefaults.h>
-#include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorRules/RuleAction.h>
 
 #include <PhosphorSurface/DecorationProfile.h>
@@ -39,26 +34,6 @@
 #include <utility>
 
 namespace PlasmaZones {
-
-namespace {
-
-// Resolve a config-default border-colour string against the live system colour
-// its `accent` sentinel maps to. Mirrors resolveWindowAppearance's rule colour
-// path: the sentinel yields @p systemColor (nullopt when that colour is not yet
-// known), an empty string contributes nothing, anything else parses as hex.
-std::optional<QColor> resolveDefaultBorderColor(const QString& value, const QColor& systemColor)
-{
-    if (value.isEmpty()) {
-        return std::nullopt;
-    }
-    if (value == PhosphorRules::BorderColorToken::Accent) {
-        return systemColor.isValid() ? std::optional<QColor>(systemColor) : std::nullopt;
-    }
-    const QColor color(value);
-    return color.isValid() ? std::optional<QColor>(color) : std::nullopt;
-}
-
-} // namespace
 
 void PlasmaZonesEffect::setupDecorationManager()
 {
@@ -246,83 +221,9 @@ void PlasmaZonesEffect::clearAllDecorations()
     }
 }
 
-bool PlasmaZonesEffect::windowMatchesAppearanceScope(const QString& scope, KWin::EffectWindow* w,
-                                                     const QString& windowId) const
-{
-    if (!w) {
-        return false;
-    }
-    namespace WAS = PhosphorCompositor::WindowAppearanceScope;
-    if (scope == WAS::All) {
-        return true;
-    }
-    if (scope == WAS::Tiled) {
-        // A window occupying a snap zone OR managed by the autotile engine. Use
-        // each engine's render-marked set (populated synchronously on commit),
-        // NOT the NavigationHandler zone cache: markWindowSnapped builds the border
-        // synchronously before the async windowStateChanged that fills that cache
-        // lands, so reading it here would miss a just-snapped window's default
-        // border until the next full sweep. The autotile half is already symmetric.
-        return isWindowMarkedSnapped(windowId) || m_autotileHandler->isTiledWindow(windowId);
-    }
-    if (scope == WAS::Normal) {
-        return windowTypeFor(w) == PhosphorProtocol::WindowType::Normal && !windowIsTransient(w);
-    }
-    // Unknown / empty token: contribute no default (the settings side validates
-    // the token to one of the three above).
-    return false;
-}
-
-ResolvedWindowAppearance PlasmaZonesEffect::resolveEffectiveWindowAppearance(KWin::EffectWindow* w,
-                                                                             const QString& windowId) const
-{
-    // Start from the user rule appearance (per-slot optionals). resolveWindowAppearance
-    // returns nullopt when no rule fills any slot, including the empty-rule-set case;
-    // an empty struct then carries only the config-default fills below.
-    std::optional<ResolvedWindowAppearance> ruleOvr;
-    if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
-        ruleOvr = resolveWindowAppearance(resolveRuleActions(w, windowId), m_borderAccentColor, m_borderInactiveColor);
-    }
-    ResolvedWindowAppearance out = ruleOvr.value_or(ResolvedWindowAppearance{});
-
-    const WindowAppearanceDefault& def = m_windowAppearanceDefault;
-
-    // Border slots: fill each slot the rules left unset from the config default,
-    // but only when the window matches the border scope. An engaged rule slot
-    // (even a rule value of false / 0) is left untouched — rules win per slot.
-    if (windowMatchesAppearanceScope(def.borderScope, w, windowId)) {
-        if (!out.showBorder) {
-            out.showBorder = def.showBorder;
-        }
-        if (!out.borderWidth) {
-            out.borderWidth = def.borderWidth;
-        }
-        if (!out.borderRadius) {
-            out.borderRadius = def.borderRadius;
-        }
-        if (!out.activeColor) {
-            out.activeColor = resolveDefaultBorderColor(def.activeColor, m_borderAccentColor);
-        }
-        if (!out.inactiveColor) {
-            out.inactiveColor = resolveDefaultBorderColor(def.inactiveColor, m_borderInactiveColor);
-        }
-    }
-    // Mirror the rule path: an unset inactive colour falls back to the active one
-    // so an active-only default keeps its border colour when the window unfocuses.
-    if (!out.inactiveColor) {
-        out.inactiveColor = out.activeColor;
-    }
-
-    // Title-bar slot: the config default only ever contributes a HIDE (true).
-    // A config value of false means "no opinion" (show the native title bar),
-    // NOT a force-show veto — that veto semantic (engaged false) is reserved for
-    // an explicit SetHideTitleBar=false rule, so leave the slot unset when the
-    // default is off. Fill only when the default hides AND the window is in scope.
-    if (!out.hideTitleBar && def.hideTitleBar && windowMatchesAppearanceScope(def.titleBarScope, w, windowId)) {
-        out.hideTitleBar = true;
-    }
-    return out;
-}
+// windowMatchesAppearanceScope and resolveEffectiveWindowAppearance live in
+// decoration_appearance.cpp (split out to keep this TU under the 800-line
+// limit, mirroring the surface_backdrop.cpp split).
 
 void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w,
                                                std::optional<bool> wasDecoratedHint)
@@ -355,20 +256,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         return;
     }
 
-    // BORDER appearance resolves as the config-backed default (Windows.* keys,
-    // gated by the border scope) with per-window rule overrides layered on top
-    // (resolveEffectiveWindowAppearance); the "border" surface-shader pack
-    // RENDERS that resolution. The pack is NOT inserted into the user's
-    // decoration tree — the resolved show-border flag is the sole border gate,
-    // and the resolved width / radius / colours ride the per-window override
-    // fields below (pushed by pushBorderUniforms, which picks active vs
-    // inactive colour by focus). The decoration tree contributes only the
-    // user's OWN pack chain (e.g. glow) composited on top.
-    const ResolvedWindowAppearance appearance = resolveEffectiveWindowAppearance(w, windowId);
-    const bool showBorder = appearance.showBorder.value_or(false);
-
-    // User decoration packs from the tree. The "border" id is rule-owned, so an
-    // explicit user "border" entry is dropped here (the rule path owns it).
+    // User decoration packs from the tree. The reserved "border" and
+    // "opacity-tint" ids are config/rule-owned (the plain layers), so an
+    // explicit user entry for either is dropped here — otherwise a stray
+    // tree entry would flip the window into CUSTOM mode, silently disabling
+    // every plain layer, and render the reserved pack with its baked
+    // defaults instead of the resolved appearance.
     // enabledChain(): packs the user toggled off stay in the profile but must
     // not render, exactly like a disabled rule is skipped by the evaluator.
     QStringList userPacks;
@@ -376,7 +269,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
     const QStringList treeChain = resolvedProfile.enabledChain();
     for (const QString& pack : treeChain) {
-        if (pack != QLatin1String("border")) {
+        if (pack != QLatin1String("border") && pack != QLatin1String("opacity-tint")) {
             userPacks.append(pack);
         }
     }
@@ -385,9 +278,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // OverrideDecorationChain rule REPLACES the tree's user packs wholesale
     // (its empty-chain sentinel blocks decoration outright), and its
     // per-pack params override the tree profile's map below. The reserved
-    // "border" id was already filtered by the resolver, and the tree's
-    // per-layer disable set deliberately does not apply — a rule chain is
-    // explicit. Reads the same cached per-window action walk the opacity /
+    // "border" and "opacity-tint" ids were already filtered by the resolver,
+    // and the tree's per-layer disable set deliberately does not apply — a
+    // rule chain is explicit. Reads the same cached per-window action walk the opacity /
     // border-appearance resolvers use, so it refreshes on every trigger
     // that re-runs updateWindowDecoration (rule edits, focus, snap flips,
     // desktop changes).
@@ -396,12 +289,58 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         userPacks = ruleChain->chain;
     }
 
-    // DECORATE GATE: render when the rule shows a border OR the tree declares user
-    // packs. Neither → nothing to render. The "border" base (when present) renders
-    // first; user packs composite over it (chain[1..]).
+    // EASY vs CUSTOM MODE: any user pack on the window (tree chain or rule
+    // chain override) puts the window in custom mode — the packs and their own
+    // parameters are the whole decoration, and the plain layers (the Windows.*
+    // config defaults plus the SetBorder* / SetOpacityTintVisible / SetTint*
+    // rule slots) neither render nor apply. Only a window with NO user packs
+    // resolves the appearance: the config-backed defaults (each gated by its
+    // scope) with per-window rule overrides layered on top, rendered by the
+    // reserved "border" and "opacity-tint" surface-shader packs. An empty rule
+    // chain (the "no decoration" sentinel) strips the user packs and thus
+    // lands back in easy mode — SetBorderVisible / SetOpacityTintVisible stay
+    // the layer-off switches. The title-bar slot is NOT part of this split
+    // (reconcileRuleHiddenTitleBar resolves it separately). The SetOpacity
+    // rule is layer-backed, full stop: it renders through the opacity-tint
+    // layer when the layer is on (folded into the pack's opacity param,
+    // replacing the config value) and nowhere else. Custom chains dim
+    // through their own pack params (frost/glass contentOpacity); a chain
+    // without one, a vetoed/off layer, or an undecorated window does not
+    // honour the rule — the user's packs (or their transparent theme) own
+    // the window's alpha.
+    std::optional<ResolvedWindowAppearance> appearance;
+    bool showBorder = false;
+    bool showOpacityTint = false;
+    if (userPacks.isEmpty()) {
+        appearance = resolveEffectiveWindowAppearance(w, windowId);
+        showBorder = appearance->showBorder.value_or(false);
+        showOpacityTint = appearance->showOpacityTint.value_or(false);
+        // NO-OP LAYER GATE: an opacity-tint layer at its resting values
+        // (opacity 1.0, tint strength 0.0, and no SetOpacity rules loaded)
+        // composites to exactly the raw window, but still costs the redirect
+        // + per-frame composite fold. Drop it — the output is identical.
+        // Gated on rule PRESENCE (hasOpacityRules), not on a per-window
+        // match, so a focus-scoped SetOpacity rule doesn't churn the chain
+        // (and its composite allocations) on every focus flip; tintStrength
+        // needs no such coarsening because the appearance already folds the
+        // per-window rule slot.
+        if (showOpacityTint && appearance->tintStrength.value_or(0.0) <= 0.0 && appearance->opacity.value_or(1.0) >= 1.0
+            && !m_shaderManager.hasOpacityRules()) {
+            showOpacityTint = false;
+        }
+    }
+
+    // DECORATE GATE: the chain is either the plain layers (easy mode — the
+    // reserved "border" base and/or the "opacity-tint" layer, both on →
+    // both render, opacity-tint folding OVER the border so the window fades
+    // as a whole) or the user packs (custom mode). Neither → nothing to
+    // render.
     QStringList chain;
     if (showBorder) {
         chain.append(QStringLiteral("border"));
+    }
+    if (showOpacityTint) {
+        chain.append(QStringLiteral("opacity-tint"));
     }
     chain.append(userPacks);
     if (chain.isEmpty()) {
@@ -437,6 +376,62 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
             allPackParams.insert(it.key(), it.value());
         }
     }
+    // Shared accent fallback for the plain layers below: the live system
+    // accent when the daemon has delivered one, else the Breeze default.
+    const QColor accentOr = m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9"));
+    if (showBorder) {
+        // Easy mode: the resolved border appearance rides the reserved
+        // "border" pack's OWN declared parameters (borderWidth / cornerRadius /
+        // activeColor / inactiveColor, see data/surface/border/metadata.json),
+        // routed by id through the same translateSurfaceParams path every
+        // other pack's overrides take — no positional slot layout is assumed
+        // anywhere. width / radius fall back to the shared DecorationDefaults
+        // when only "show border" is set; an omitted colour falls back to the
+        // live system accent (matching the useSystemAccent default), which is
+        // forced off because the colours arrive here already accent-resolved.
+        // inactiveColor mirrors active when unset. The shader picks active vs
+        // inactive by uSurfaceFocused. Neither the tree nor a rule chain can
+        // carry "border" params (both strip the reserved id), so this insert
+        // overwrites nothing.
+        QVariantMap borderParams;
+        borderParams.insert(QStringLiteral("borderWidth"),
+                            appearance->borderWidth.value_or(PhosphorCompositor::DecorationDefaults::BorderWidth));
+        borderParams.insert(QStringLiteral("cornerRadius"),
+                            appearance->borderRadius.value_or(PhosphorCompositor::DecorationDefaults::BorderRadius));
+        borderParams.insert(QStringLiteral("useSystemAccent"), false);
+        const QColor active = appearance->activeColor.value_or(accentOr);
+        borderParams.insert(QStringLiteral("activeColor"), active);
+        borderParams.insert(QStringLiteral("inactiveColor"), appearance->inactiveColor.value_or(active));
+        allPackParams.insert(QStringLiteral("border"), borderParams);
+    }
+    if (showOpacityTint) {
+        // Easy mode: the plain opacity+tint layer rides the "opacity-tint"
+        // pack's own declared parameters, routed by id like the border above.
+        // Every slot is config default with the per-window rule winning:
+        // opacity = the SetOpacity rule when one matches, else the config
+        // value; tint strength/colour are the rule-resolved slots with the
+        // config default filled in (the fallbacks here are the pack's own
+        // defaults, hit only when the layer was rule-forced on for an
+        // out-of-scope window). Folding SetOpacity here makes the layer the
+        // window's SOLE opacity applier: the rule has no other application
+        // path (no KWin paint-data opacity, no present modulation), and
+        // chainBakesOpacity below keeps the transition fallback from
+        // re-applying it over the folded composite. userPacks is empty in
+        // easy mode, so this insert can't clobber a user's own opacity-tint
+        // params.
+        std::optional<qreal> ruleOpacity;
+        if (m_shaderManager.hasOpacityRules()) {
+            ruleOpacity = resolveWindowOpacity(resolveRuleActions(w, windowId));
+        }
+        const double effectiveOpacity =
+            ruleOpacity ? qBound(0.0, *ruleOpacity, 1.0) : qBound(0.0, appearance->opacity.value_or(1.0), 1.0);
+        wb.foldedOpacity = effectiveOpacity;
+        QVariantMap otParams;
+        otParams.insert(QStringLiteral("opacity"), effectiveOpacity);
+        otParams.insert(QStringLiteral("tintStrength"), appearance->tintStrength.value_or(0.0));
+        otParams.insert(QStringLiteral("tintColor"), appearance->tintColor.value_or(accentOr));
+        allPackParams.insert(QStringLiteral("opacity-tint"), otParams);
+    }
     int outerPadding = 0;
     bool needsBackdrop = false;
     for (const QString& packId : std::as_const(chain)) {
@@ -446,9 +441,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         }
         // Any needsBackdrop pack in the chain switches the window onto the
         // composite path with a per-frame backdrop capture (see paintWindow).
-        // handlesOpacity is deliberately NOT accumulated here: opacity authority
-        // is decided per-frame by what the fold actually applied
-        // (SurfaceMultipassState::handledOpacity), never by chain metadata.
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
         const QVariantMap packOverrides = allPackParams.value(packId).toMap();
         wb.packParamValues.insert(packId, ShaderInternal::resolveSurfaceParamValues(eff, packOverrides));
@@ -474,16 +466,13 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
-
-    // Rule-resolved opacity, routing + capture-dim input (see the field doc).
-    // Resolved here rather than per paint: every trigger that can flip a
-    // SetOpacity verdict (focus change, snap/float state, rule edits) funnels
-    // through updateWindowDecoration already.
-    if (m_shaderManager.hasOpacityRules()) {
-        if (const auto opacity = resolveWindowOpacity(resolveRuleActions(w, windowId))) {
-            wb.ruleOpacity = qBound(0.0, *opacity, 1.0);
-        }
-    }
+    // The plain opacity-tint layer folds the window's resolved opacity
+    // (config default, SetOpacity rule winning) into its pack param — the
+    // chain BAKES the window's opacity. The flag's one runtime job is the
+    // transition iWindowOpacity push: 1.0 when the fold produced the
+    // composite the transition samples, the rule-resolved fallback otherwise
+    // (see paintWindow).
+    wb.chainBakesOpacity = showOpacityTint;
 
     // Padded chains paint a margin band OUTSIDE the window rect; KWin's own
     // move/resize damage covers only the window's old/new rects, so track the
@@ -516,22 +505,6 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
                                              KWin::effects->addRepaint(KWin::RectF(padded));
                                              it->lastPaddedGeo = padded;
                                          });
-    }
-
-    if (showBorder) {
-        // Per-window border appearance from the merged config-default + rule
-        // resolution. width / radius fall back to the shared DecorationDefaults
-        // when only "show border" is set; an omitted colour falls back to the
-        // live system accent (matching the useSystemAccent default), and an
-        // unknown accent to the pack's metadata default colour. inactiveColor
-        // mirrors active when unset.
-        wb.ruleBorder = true;
-        wb.ruleBorderWidth = appearance.borderWidth.value_or(PhosphorCompositor::DecorationDefaults::BorderWidth);
-        wb.ruleBorderRadius = appearance.borderRadius.value_or(PhosphorCompositor::DecorationDefaults::BorderRadius);
-        const QColor accentOr =
-            m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9"));
-        wb.ruleBorderActiveColor = appearance.activeColor.value_or(accentOr);
-        wb.ruleBorderInactiveColor = appearance.inactiveColor.value_or(wb.ruleBorderActiveColor);
     }
 
     // Corner rounding and the outline are entirely the SHADER's job (the

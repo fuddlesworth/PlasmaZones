@@ -442,6 +442,31 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             }
             return PhosphorI18n::tr("Unfocused border: %1").arg(shown);
         }
+        if (action.type == ActionType::SetTintStrength) {
+            // Wire value is the [0,1] strength; shown as a percent to match
+            // the editor (same treatment as SetSplitRatio). Mirror the
+            // runtime resolver's reject paths (unitDoubleSlot: non-number or
+            // out-of-range → ignored) like SetOpacity above, so the label
+            // never claims a strength the effect won't apply: null/undefined
+            // (present but unset) → bare label, bool or out-of-range →
+            // "(invalid)".
+            if (raw.isNull() || raw.isUndefined()) {
+                return PhosphorI18n::tr("Tint strength");
+            }
+            const QVariant rv = raw.toVariant();
+            bool ok = false;
+            const double v = rv.typeId() == QMetaType::Bool ? 0.0 : rv.toDouble(&ok);
+            if (!ok || v < 0.0 || v > 1.0) {
+                return PhosphorI18n::tr("Tint strength (invalid)");
+            }
+            return PhosphorI18n::tr("Tint strength: %1%").arg(qRound(v * 100.0));
+        }
+        if (action.type == ActionType::SetTintColor) {
+            const QString value = raw.toString();
+            const QString shown =
+                value == PhosphorRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent") : value.toUpper();
+            return PhosphorI18n::tr("Tint color: %1").arg(shown);
+        }
         // ── autotile parameter overrides ──
         if (action.type == ActionType::SetMaxWindows) {
             return PhosphorI18n::tr("Max tiled windows: %1").arg(raw.toInt());

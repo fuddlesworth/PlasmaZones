@@ -72,21 +72,17 @@ bool PlasmaZonesEffect::isActive() const
     // clause those events would resolve cleanly, redirect the window,
     // and then sit unrendered until the timer-driven teardown fired.
     //
-    // `m_shaderManager.hasOpacityRules()` is included for the same
-    // chain-exclusion reason, but the failure mode is the opposite of a
-    // one-shot transition: a SetOpacity rule is a PERSISTENT per-window
-    // appearance change that prePaintWindow/paintWindow must apply on
-    // every frame the matched window is painted. The transient triggers
-    // above only hold isActive() true while a drag/animation/transition
-    // is in flight; the instant they settle KWin drops the effect from
-    // the chain and `data.setOpacity()` stops running, so the window
-    // snaps back to full opacity until the next interaction spins a
-    // transition back up. Gating on hasOpacityRules() keeps the effect
-    // in the chain for as long as any enabled opacity rule exists, so
-    // the dim survives idle. This does not force continuous repaints —
-    // KWin still only composites on damage; isActive() merely keeps the
-    // effect consulted (and the window composited rather than
-    // direct-scanned-out) when a frame is produced.
+    // `hasOpacityRules()` is deliberately NOT an activation clause.
+    // SetOpacity is layer-backed: a persistent per-window dim exists only
+    // as the opacity-tint layer's folded pack param, and any window
+    // carrying that layer sits in m_windowDecorations — the clause below
+    // already holds the effect active for it. The only per-frame rule
+    // consumer left is prePaintWindow's frame-opacity cache, which feeds
+    // the shader-transition draw's bare-uTexture0 fallback; a transition
+    // in flight holds isActive() true via `!m_shaderManager.empty()`. A
+    // SetOpacity rule with no layered window and no transition has no
+    // paint-path consumer at all (the rule is inert by design), so it
+    // must not keep the effect in the chain.
     //
     // `!m_windowDecorations.isEmpty()` is the SAME persistent case as opacity
     // rules: a per-window border is rendered passively in drawWindow by
@@ -101,7 +97,7 @@ bool PlasmaZonesEffect::isActive() const
     // survives idle. O(1) — a QHash emptiness check, safe in this per-frame
     // hot path.
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
-        || m_shaderManager.hasOpacityRules() || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning();
+        || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

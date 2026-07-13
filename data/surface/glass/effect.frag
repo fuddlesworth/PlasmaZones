@@ -25,8 +25,10 @@
 // final colorMatrix is KWin output colour management, which our pipeline
 // applies at the present/KWin layer — nothing to port shader-side.
 //
-// handlesOpacity: the window sample is dimmed by uSurfaceOpacity here, so
-// the pane stays solid and translucency reveals the refracted backdrop.
+// Content dimming: the window sample is dimmed by the pack's own
+// p_contentOpacity parameter, so the pane stays solid and translucency
+// reveals the refracted backdrop. A theme's own transparent pixels reveal
+// it the same way with no parameter involved.
 // DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
 // the pane degrades to a faint tint slab with the same corner rounding.
 
@@ -36,6 +38,9 @@
 
 vec4 pSurface(vec2 uv) {
     SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    // Fade the window content over the pane; the translucency it frees is
+    // filled by the refracted backdrop in the composite below.
+    slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
     vec2 px = slab.px;
     vec2 halfSz = slab.fs.halfSize;
     vec2 pos = px - slab.fs.center; // pane-centered, top-down device px

@@ -137,12 +137,26 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// transparent, so a pack must style a fallback on that gate.
     bool needsBackdrop = false;
 
-    /// Declares that the pack applies the window's rule-resolved opacity
-    /// itself (reading `uSurfaceOpacity`), so the compositor's present pass
-    /// must NOT also apply its default KWin-style final modulation. Frost
-    /// dims only its window content sample this way, keeping the frost slab
-    /// solid; packs without this flag get uniform whole-output ghosting.
-    bool handlesOpacity = false;
+    /// Declares that the pack draws a window border of its own (the border
+    /// family: border, border-sweep, border-rgb, ...). Semantic contract
+    /// flag, deliberately NOT keyed off the browsing category: a
+    /// providesBorder pack is expected to declare the shared border param
+    /// ids `borderWidth` / `cornerRadius` (and `activeColor` /
+    /// `inactiveColor` where it distinguishes focus), which the settings
+    /// side seeds from the plain Windows border setting when the pack is
+    /// added to a chain. Any user pack in a window's chain already
+    /// suppresses the plain border layer wholesale (see the kwin effect's
+    /// updateWindowDecoration), so this flag gates seeding and UI hints,
+    /// not rendering.
+    bool providesBorder = false;
+
+    /// Declares that the pack fades/tints the window surface (the reserved
+    /// opacity-tint pack). Same contract idea as providesBorder: such a pack
+    /// is expected to declare the shared param ids `opacity` /
+    /// `tintStrength` / `tintColor`, which the settings side seeds from the
+    /// plain Windows opacity+tint setting when the pack is added to a chain.
+    /// Gates seeding, not rendering.
+    bool providesOpacityTint = false;
 
     /// Declares that the pack reacts to the CAVA audio spectrum (it includes
     /// surface_audio.glsl and reads audioBar / getBass / …). Both runtimes feed

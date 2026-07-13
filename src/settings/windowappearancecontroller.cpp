@@ -77,6 +77,14 @@ WindowAppearanceController::WindowAppearanceController(ISettings& settings, QObj
             &WindowAppearanceController::windowTitleBarScopeChanged);
     connect(m_settings, &ISettings::focusFadeDurationChanged, this,
             &WindowAppearanceController::focusFadeDurationChanged);
+    connect(m_settings, &ISettings::showWindowOpacityTintChanged, this,
+            &WindowAppearanceController::showWindowOpacityTintChanged);
+    connect(m_settings, &ISettings::windowOpacityTintScopeChanged, this,
+            &WindowAppearanceController::windowOpacityTintScopeChanged);
+    connect(m_settings, &ISettings::windowOpacityChanged, this, &WindowAppearanceController::windowOpacityChanged);
+    connect(m_settings, &ISettings::windowTintStrengthChanged, this,
+            &WindowAppearanceController::windowTintStrengthChanged);
+    connect(m_settings, &ISettings::windowTintColorChanged, this, &WindowAppearanceController::windowTintColorChanged);
     connect(m_settings, &ISettings::innerGapChanged, this, &WindowAppearanceController::innerGapChanged);
     connect(m_settings, &ISettings::outerGapChanged, this, &WindowAppearanceController::outerGapChanged);
     connect(m_settings, &ISettings::usePerSideOuterGapChanged, this,
@@ -161,6 +169,49 @@ void WindowAppearanceController::setWindowTitleBarScope(const QString& scope)
 void WindowAppearanceController::setFocusFadeDuration(int ms)
 {
     m_settings->setFocusFadeDuration(ms);
+}
+
+// ── Plain opacity+tint layer ─────────────────────────────────────────────────
+
+bool WindowAppearanceController::showWindowOpacityTint() const
+{
+    return m_settings->showWindowOpacityTint();
+}
+QString WindowAppearanceController::windowOpacityTintScope() const
+{
+    return m_settings->windowOpacityTintScope();
+}
+double WindowAppearanceController::windowOpacity() const
+{
+    return m_settings->windowOpacity();
+}
+double WindowAppearanceController::windowTintStrength() const
+{
+    return m_settings->windowTintStrength();
+}
+QString WindowAppearanceController::windowTintColor() const
+{
+    return m_settings->windowTintColor();
+}
+void WindowAppearanceController::setShowWindowOpacityTint(bool show)
+{
+    m_settings->setShowWindowOpacityTint(show);
+}
+void WindowAppearanceController::setWindowOpacityTintScope(const QString& scope)
+{
+    m_settings->setWindowOpacityTintScope(scope);
+}
+void WindowAppearanceController::setWindowOpacity(double opacity)
+{
+    m_settings->setWindowOpacity(opacity);
+}
+void WindowAppearanceController::setWindowTintStrength(double strength)
+{
+    m_settings->setWindowTintStrength(strength);
+}
+void WindowAppearanceController::setWindowTintColor(const QString& color)
+{
+    m_settings->setWindowTintColor(color);
 }
 
 // ── Shared inner/outer gaps ──────────────────────────────────────────────────

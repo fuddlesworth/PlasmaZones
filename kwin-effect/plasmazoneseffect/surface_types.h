@@ -123,18 +123,7 @@ struct CompiledSurfacePack
     int uFrameSizeLoc = -1; ///< uSurfaceFrameSize — frame size excluding shadows, device px
     int uScaleLoc = -1; ///< uSurfaceScale — logical-to-device pixel scale
     int uFocusedLoc = -1; ///< uSurfaceFocused — 1.0 focused / 0.0 unfocused
-    int uOpacityLoc = -1; ///< uSurfaceOpacity — rule-resolved window opacity (handlesOpacity packs)
-    /// The pack's `"handlesOpacity"` METADATA flag, cached at compile time.
-    ///
-    /// Gates the uSurfaceOpacity push, so that push and the present pass's
-    /// suppression (`SurfaceMultipassState::handledOpacity`) share ONE authority. Gate
-    /// the push on the linker (`uOpacityLoc >= 0`) instead and a pack that samples
-    /// uSurfaceOpacity — directly, or via the shared `surfaceSlabOpen()` helper —
-    /// without declaring the flag gets the rule alpha applied twice: once folded,
-    /// once by the present pass. That is the single-apply invariant the
-    /// iWindowOpacity bug already broke once. Such a pack now gets 1.0 pushed and
-    /// the present pass modulates, as intended.
-    bool handlesOpacity = false;
+    int uOpacityLoc = -1; ///< uSurfaceOpacity — LEGACY, pushed as a constant 1.0 (retired rule feed)
     int uTimeLoc = -1; ///< iTime — continuous seconds; -1 ⟺ static pack (drives the repaint gate)
     /// uTexture0 — the input-surface sampler (unit 0). Every decorated window
     /// (one-pack chains included) folds through renderSurfaceChainComposite,
@@ -188,11 +177,12 @@ struct CompiledSurfacePack
 
     /// Pack-declared parameter uniform locations + resolved-default values.
     /// float/int/bool params pack into customParams[N], colours into
-    /// customColors[N]. The border pack declares borderWidth / cornerRadius /
-    /// useSystemAccent (customParams[0]) and active/inactive colours
-    /// (customColors[0..1]) — pushBorderUniforms overrides those slots with
-    /// the per-window rule appearance. Slots a pack does not reference
-    /// resolve to -1 and push nothing.
+    /// customColors[N]. The reserved "border" pack declares borderWidth /
+    /// cornerRadius / useSystemAccent (customParams[0]) and active/inactive
+    /// colours (customColors[0..1]); its per-window rule/config appearance
+    /// rides WindowDecoration::packParamValues, routed by param id like any
+    /// other pack override — pushBorderUniforms has no border-specific slot
+    /// writes. Slots a pack does not reference resolve to -1 and push nothing.
     std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> customParamsLoc = []() {
         std::array<int, PhosphorSurfaceShaders::SurfaceShaderContract::kMaxCustomParams> a;
         a.fill(-1);
@@ -232,21 +222,6 @@ struct SurfaceMultipassState
     QStringList chainKey; ///< the chain `chainBufferTex` was allocated for
     QSize compositeSize; ///< full textureSize the composite targets were allocated for
     int finalSlot = 0; ///< which compositeTex slot holds the final fold
-    /// Did the LAST fold actually apply the window's rule alpha?
-    ///
-    /// Reports what the fold DID, not what the metadata promised.
-    /// The pack metadata is folded from the registry
-    /// alone, with no reference to whether the pack's GLSL compiled — so a
-    /// handlesOpacity pack that FAILS to compile is skipped by the fold (nothing
-    /// applies uSurfaceOpacity) while both consumers still stand down on the
-    /// metadata, and the window renders FULLY OPAQUE, silently dropping the user's
-    /// SetOpacity rule. Fail-open on a rule they set.
-    ///
-    /// Reading this instead means a compiled-but-broken chain falls back to
-    /// present-pass modulation, which is exactly the "no pack owns the alpha"
-    /// regime. The pack METADATA cannot answer this question — it reports what a pack
-    /// promised, not what the fold delivered — which is the whole point of this field.
-    bool handledOpacity = false;
     /// The logical rect the composite canvas covers (expanded geometry
     /// inflated by the chain's outer padding, captured when the fold ran).
     /// The layer-rect remap and the padded quads read THIS instead of
@@ -323,11 +298,14 @@ struct WindowDecoration
     /// this so the border path never fights the transition lifecycle.
     bool shaderApplied = false;
 
-    /// The resolved decoration shader-pack chain for this window
-    /// (DecorationProfile::effectiveChain()), e.g. {"border"} or {"border",
-    /// "glow"}. The idle present path composites the FULL chain
-    /// (renderSurfaceChainComposite folds chain[1..] over the base); only the
-    /// animation surface-layer path renders chain[0] (basePackId) alone.
+    /// The resolved decoration shader-pack chain for this window: either the
+    /// reserved {"border"} base (easy mode — no user packs anywhere on the
+    /// window's surface path) or the user's own pack chain, e.g. {"glow",
+    /// "border-sweep"} (custom mode — any user pack suppresses the plain
+    /// border outright, see updateWindowDecoration). The idle present path
+    /// composites the FULL chain (renderSurfaceChainComposite folds
+    /// chain[1..] over the base); only the animation surface-layer path
+    /// renders chain[0] (basePackId) alone.
     QStringList chain;
 
     /// The base pack id to render — chain.value(0), defaulting to "border".
@@ -335,20 +313,6 @@ struct WindowDecoration
     /// looks this up in m_compiledPacks to get the CompiledSurfacePack instead
     /// of the old single global border shader.
     QString basePackId;
-
-    /// True when the base "border" pack in `chain` is driven by the window
-    /// rules (the rule-backed appearance path) rather than a user decoration
-    /// pack. When set, the fields below carry the per-window border appearance
-    /// resolved from the rules (resolveWindowAppearance); pushBorderUniforms
-    /// pushes them in place of the "border" pack's shared metadata defaults so
-    /// each window can show a different width / radius / colour. The shader picks
-    /// activeColor vs inactiveColor by uSurfaceFocused. False for a pure
-    /// user-pack chain, where the pack's own baked param defaults apply.
-    bool ruleBorder = false;
-    int ruleBorderWidth = 0;
-    int ruleBorderRadius = 0;
-    QColor ruleBorderActiveColor;
-    QColor ruleBorderInactiveColor;
 
     /// Transparent OUTER MARGIN (logical px) the chain's packs need around
     /// the window to draw into — the max over each pack's resolved
@@ -367,18 +331,28 @@ struct WindowDecoration
     /// landing on this window).
     bool needsBackdrop = false;
 
-    /// The window's rule-resolved opacity (SetOpacity), 1.0 when no rule
-    /// applies. Custom MapTexture redirect shaders IGNORE
-    /// WindowPaintData::opacity (KWin only applies it through its own
-    /// default shader's modulation), so a decorated window would render
-    /// fully opaque no matter the rule. When < 1.0 the window routes
-    /// through the composite fold, whose window CAPTURE applies the dim
-    /// (the nested draw uses KWin's default modulating shader) — content
-    /// dims once, decoration packs stack over it at full strength, and a
-    /// frost pack gets the translucency it fills. Kept fresh by
-    /// updateWindowDecoration, which re-runs on every trigger that can change
-    /// a rule verdict (focus, snap state, rule/config edits).
-    double ruleOpacity = 1.0;
+    /// True when the chain carries the plain opacity-tint layer, whose
+    /// opacity param is the resolved config + SetOpacity fold — the chain
+    /// BAKES the window's opacity into its composite. Sole runtime consumer
+    /// is the transition iWindowOpacity push: 1.0 when the fold's composite
+    /// is what the transition samples, the foldedOpacity fallback otherwise
+    /// (refined by the per-frame rule cache when one is populated).
+    /// SetOpacity has no other application path: custom chains configure
+    /// their own dimming through pack params (frost/glass contentOpacity).
+    bool chainBakesOpacity = false;
+
+    /// The effective opacity folded into the opacity-tint layer's `opacity`
+    /// param (config default, SetOpacity rule winning); 1.0 when the layer is
+    /// off. Two direct consumers, both fallbacks for paths where the fold's
+    /// composite is not what reaches the screen: the fold's failed-compile
+    /// fallback (the opacity-tint pack has no compiled shader, so the window
+    /// CAPTURE dims by this value under KWin's default modulating shader),
+    /// and the transition iWindowOpacity push on the bare-uTexture0 fallback
+    /// of an opacity-baking chain (paintWindow). Single-apply holds on both —
+    /// they fire only when the pack that owns the value did not run. Every
+    /// other path reads the value through packParamValues like any pack
+    /// param.
+    double foldedOpacity = 1.0;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but

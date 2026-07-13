@@ -1,13 +1,12 @@
 {
     "id": "glass",
     "name": "Glass",
-    "description": "A pane of glass over the scene behind the window. The backdrop is blurred and bends toward the edges like a bevelled lens, with slight colour fringing and a soft rim light. It shows through wherever the window itself is translucent, so pair it with an opacity rule.",
+    "description": "A pane of glass over the scene behind the window. The backdrop is blurred and bends toward the edges like a bevelled lens, with slight colour fringing and a soft rim light. It shows through wherever the window itself is translucent, and lowering the Content opacity parameter fades the window content to reveal more of it.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Blur",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
-    "handlesOpacity": true,
     "multipass": true,
     "bufferScale": 0.25,
     "bufferShaders": [
@@ -34,6 +33,16 @@
             "max": 32,
             "description": "Corner rounding of the glass pane (px, match the Border pack)",
             "group": "Shape"
+        },
+        {
+            "id": "contentOpacity",
+            "name": "Content opacity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 1.0,
+            "group": "Content",
+            "description": "How visible the window content stays over the glass pane, where 1.0 is fully opaque and 0.0 shows only the refracted backdrop"
         },
         {
             "id": "refractionStrength",
