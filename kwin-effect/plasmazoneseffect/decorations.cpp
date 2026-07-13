@@ -70,13 +70,15 @@ struct FoldInputs
     // The two that can genuinely move on their own.
     QStringList chain;
     QHash<QString, SurfaceParamValues> packParamValues;
-    // Derived from those two, and each ALSO keyed independently inside the fold
-    // (basePackId is chain.first(); outerPadding rides compositeSize / captureScaleKey;
-    // needsBackdrop makes every pack per-frame, so such a chain is never cached at
-    // all). Compared anyway: they are what the fold actually reads, and a comparison
-    // that quietly depends on a derivation staying true elsewhere is the kind that
-    // stops holding without anyone noticing. The cost is a few word compares on a
-    // decoration refresh.
+    // Derived from the two above (basePackId is chain.first(); the other two are
+    // resolved from the chain and its params), and compared anyway. Two of them have a
+    // second keying inside the fold — outerPadding rides compositeSize /
+    // captureScaleKey, and a backdrop-reading PACK is per-frame so it is never cached —
+    // but a chain is not a pack: ["border", "frost"] still caches the border in its
+    // static prefix, and nothing else keys on needsBackdrop within a fixed chain. These
+    // are what the fold actually reads, and a comparison that quietly depends on a
+    // derivation staying true elsewhere is the kind that stops holding without anyone
+    // noticing. The cost is a few word compares on a decoration refresh.
     QString basePackId;
     int outerPadding = 0;
     bool needsBackdrop = false;
@@ -276,10 +278,20 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // out to be undecoratable, the kept state is an orphan and the kept redirect is a
     // window left shaded with nothing to shade it with.
     const auto undecorate = [&] {
+        // Resolve the EXACT window, the same way removeWindowDecoration does, instead
+        // of handing the caller's `w` straight through. The first gate below invokes
+        // this with a NULL w, and releaseSurfaceState's live-transition guard is
+        // `if (target && findTransition(target))` — a null target sails past it and
+        // erases the composite an animation is still sampling, while releaseDecorationGl
+        // no-ops on null and leaves the window redirected with a shader whose samplers
+        // point at the textures just freed. That is the unbound-sampler black flash both
+        // files document at length. The frozen reverse mapping resolves a window the
+        // caller could not.
+        KWin::EffectWindow* const target = w ? w : m_windowIdReverse.value(windowId);
         if (priorShaderApplied) {
-            releaseDecorationGl(w, priorOuterPadding);
+            releaseDecorationGl(target, priorOuterPadding);
         }
-        releaseSurfaceState(windowId, w);
+        releaseSurfaceState(windowId, target);
     };
 
     if (!w || w->isMinimized() || w->isFullScreen()) {

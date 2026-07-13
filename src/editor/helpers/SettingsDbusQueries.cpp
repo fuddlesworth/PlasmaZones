@@ -29,18 +29,17 @@ QVariant unwrapGetSetting(const QDBusMessage& reply)
     return reply.arguments().constFirst().value<QDBusVariant>().variant();
 }
 
-// WARNING: Only safe for settings whose values are never legitimately the
-// empty string. getSetting() in settingsadaptor.cpp returns an empty-
-// string QDBusVariant as the "key not found" sentinel (see the default
-// return at the bottom of SettingsAdaptor::getSetting), and this helper
-// treats that as "missing" so callers fall back to their defaults. A
-// string-typed setting that the user has cleared would therefore be
-// indistinguishable from an unknown key and get silently dropped. Only
-// used as a fallback by querySettingsBatch() for the gap/overlay keys
-// (all int/bool), which makes this safe today — do not generalize
-// without first replacing the sentinel with a structured "not found"
-// signal on the daemon side.
-QVariantMap querySettingsPerKey_NonStringOnly(const QStringList& keys)
+// Fetch each key with its own getSetting() call. The fallback path for a daemon too
+// old to have the batched getSettings().
+//
+// An unknown key answers with a D-Bus ERROR, so unwrapGetSetting hands back an invalid
+// QVariant and the isValid() check below drops it — the caller keeps its own default.
+// This used to need a warning and a name to match: getSetting once answered an unknown
+// key with a valid EMPTY STRING, so "missing" and "the user cleared this string setting"
+// were the same reply, and this helper was restricted to int/bool keys because it could
+// not tell them apart. The daemon reports the difference properly now, so the
+// restriction is gone.
+QVariantMap querySettingsPerKey(const QStringList& keys)
 {
     QVariantMap result;
     for (const QString& key : keys) {
@@ -49,13 +48,10 @@ QVariantMap querySettingsPerKey_NonStringOnly(const QStringList& keys)
         }
         const QVariant value = unwrapGetSetting(PhosphorProtocol::ClientHelpers::syncCall(
             PhosphorProtocol::Service::Interface::Settings, QStringLiteral("getSetting"), {key}));
+        // An invalid variant is an unknown key (the daemon answered with an error) or a
+        // getter that failed. Either way there is nothing to report, and the caller's
+        // default stands. A legitimately EMPTY string is a real value and is kept.
         if (!value.isValid()) {
-            continue;
-        }
-        // Empty-string sentinel for unknown keys — see the warning on this
-        // function's comment above. Safe for the int/bool gap/overlay keys
-        // this helper is restricted to.
-        if (value.typeId() == QMetaType::QString && value.toString().isEmpty()) {
             continue;
         }
         result.insert(key, value);
@@ -97,7 +93,7 @@ QVariantMap querySettingsBatch(const QStringList& keys)
         if (err.type() == QDBusError::UnknownMethod) {
             qCWarning(lcDbus) << "getSettings() unavailable on daemon — falling back to per-key getSetting()."
                               << "Restart plasmazones-daemon to pick up the batched path.";
-            return querySettingsPerKey_NonStringOnly(keys);
+            return querySettingsPerKey(keys);
         }
         qCWarning(lcDbus) << "getSettings() failed:" << err.message() << "(type" << err.type() << ")";
     }

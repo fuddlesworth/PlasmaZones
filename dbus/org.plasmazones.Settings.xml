@@ -24,7 +24,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getSetting">
-            <annotation name="org.gtk.GDBus.DocString" value="Get a single setting value by key (variant type)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get a single setting value by key (variant type). An unknown or empty key answers with an org.freedesktop.DBus.Error.InvalidArgs error rather than a value, so a caller that fetches a key the daemon does not know keeps its own default instead of silently reading an empty one."/>
             <arg name="key" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
             </arg>

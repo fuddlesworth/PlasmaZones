@@ -292,14 +292,25 @@ KWin::GLTexture* PlasmaZonesEffect::transparentFallbackTexture()
     return m_transparentFallbackTex.get();
 }
 
-bool PlasmaZonesEffect::bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc)
+bool PlasmaZonesEffect::bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc,
+                                         bool animating)
 {
     // This helper only binds the ready texture — it never uploads. The fold
     // uploads up front (renderSurfaceChainComposite, see the note there); the
     // animation path uploads inline just before calling, with the active unit
     // parked on kSurfaceAudioUnit so the upload lands on its destination
     // (paint_pipeline.cpp's audio block).
-    const bool live = audioActive() && m_audioSpectrumTex != nullptr;
+    //
+    // @p animating is false for a chain Decorations.Performance has PAUSED, and the
+    // spectrum is then treated exactly as it is when no audio is playing: bar count 0,
+    // no texture bound, the pack renders its static look. This is not cosmetic tidying.
+    // packVariesPerFrame stops counting audio as per-frame while paused so the chain
+    // becomes CACHEABLE, and a cached composite fed by a live spectrum is a
+    // contradiction: the window would hold still on its cached frame yet bake a
+    // different beat into it on every fold the capture forced, which for the archetypal
+    // case (an unfocused music player, redrawing its own UI constantly) is most frames.
+    // Freeze the input or do not freeze the fold — not one without the other.
+    const bool live = animating && audioActive() && m_audioSpectrumTex != nullptr;
     // Push the bar count (0 when not live) so surface_audio.glsl's helpers gate
     // themselves off and the pack renders static without a bound sampler. Derive
     // the count from the BOUND texture's width, not m_audioSpectrumSize: if an

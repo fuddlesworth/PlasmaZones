@@ -328,20 +328,31 @@ struct SurfaceMultipassState
     float foldedFocus = -1.0f;
     float foldedOpacity = -1.0f;
 
-    /// The clock the last fold pushed as iTime, in the same seconds as
-    /// surfaceShaderTimeSeconds().
+    /// The window's own animation clock, in surfaceShaderTimeSeconds() seconds, and the
+    /// bookkeeping that makes it STOP while Decorations.Performance has the chain paused
+    /// (an idle session, or an unfocused window under "animate the focused window
+    /// only") and RESUME where it stopped.
     ///
-    /// A chain that Decorations.Performance has PAUSED (idle session, or an unfocused
-    /// window under "animate the focused window only") is handed this value again
-    /// instead of a live clock reading. Its cached composite is then reused on every
-    /// incidental paint, and on the folds that DO still have to run while paused (the
-    /// window's own content damaged, its focus ramp moved, its rule opacity changed)
-    /// the animation reproduces the frame it was paused on rather than teleporting to
-    /// wherever the wall clock has got to. Reset to a live reading by every fold that
-    /// is allowed to animate, so resuming picks the clock straight back up.
+    /// Not simply the shared clock. That one runs on regardless, so a window paused for
+    /// ten minutes would resume by jumping its iTime ten minutes forward in a single
+    /// frame, and every periodic pack (anything on sin(iTime)) would pop to an
+    /// unrelated phase. Under "animate the focused window only" that fires on every
+    /// focus return, which is the most common interaction there is.
     ///
-    /// Negative means no fold has run yet, so the first one reads the live clock.
+    /// So the paused time is ACCUMULATED into timeOffsetSec and subtracted out. A
+    /// resumed window carries on from the frame it froze on, and the pause is invisible
+    /// beyond the stillness itself.
+    ///
+    ///   pausedAtSec   the shared clock when the pause began; negative when running
+    ///   timeOffsetSec total seconds spent paused, subtracted from the shared clock
+    ///   foldedTimeSec what the last fold actually pushed as iTime
+    ///
+    /// foldedTimeSec is what the folds that must still run while paused (the window's
+    /// own content damaged, its focus ramp moving) push, so they reproduce the frozen
+    /// frame instead of drifting. Negative means no fold has run yet.
     float foldedTimeSec = -1.0f;
+    float pausedAtSec = -1.0f;
+    float timeOffsetSec = 0.0f;
 
     QStringList chainKey; ///< the chain `chainBufferTex` was allocated for
     QSize compositeSize; ///< full textureSize the composite targets were allocated for
@@ -494,17 +505,27 @@ struct WindowDecoration
     /// landing on this window).
     bool needsBackdrop = false;
 
-    /// The window's rule-resolved opacity (SetOpacity), 1.0 when no rule
-    /// applies. Custom MapTexture redirect shaders IGNORE
-    /// WindowPaintData::opacity (KWin only applies it through its own
-    /// default shader's modulation), so a decorated window would render
-    /// fully opaque no matter the rule. When < 1.0 the window routes
-    /// through the composite fold, whose window CAPTURE applies the dim
-    /// (the nested draw uses KWin's default modulating shader) — content
-    /// dims once, decoration packs stack over it at full strength, and a
-    /// frost pack gets the translucency it fills. Kept fresh by
-    /// updateWindowDecoration, which re-runs on every trigger that can change
-    /// a rule verdict (focus, snap state, rule/config edits).
+    /// The window's rule-resolved opacity (SetOpacity), 1.0 when no rule applies.
+    /// Custom MapTexture redirect shaders IGNORE WindowPaintData::opacity (KWin only
+    /// applies it through its own default shader's modulation), so a decorated window
+    /// would render fully opaque no matter the rule.
+    ///
+    /// The CAPTURE does not apply it. It is taken raw, at opacity 1.0
+    /// (captureWindowSurface), because dimming there would double-apply against
+    /// whichever of the two downstream owners actually applies the alpha: a pack that
+    /// declares handlesOpacity (frost dims its own content sample so its slab stays
+    /// solid), or else the present pass's final modulation. Exactly one of them does,
+    /// and which one is reported by the fold, not by metadata — see
+    /// SurfaceMultipassState::handledOpacity.
+    ///
+    /// That the capture is raw is load-bearing beyond tidiness: it is why an opacity
+    /// change does not have to invalidate the capture cache, and why the repaints that
+    /// carry a re-resolved opacity to the screen are flagged as ours (see
+    /// selfRepaintScope). The fold keys on the resolved value itself (foldedOpacity), so
+    /// the change reaches the screen on that very repaint without a re-capture.
+    ///
+    /// Kept fresh by updateWindowDecoration, which re-runs on every trigger that can
+    /// change a rule verdict (focus, snap state, rule/config edits).
     double ruleOpacity = 1.0;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:

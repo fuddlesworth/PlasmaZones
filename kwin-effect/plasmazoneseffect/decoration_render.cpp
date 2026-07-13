@@ -296,7 +296,7 @@ qreal PlasmaZonesEffect::resolvedWindowOpacity(KWin::EffectWindow* w, const Wind
 }
 
 void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
-                                           const CompiledSurfacePack& pack, qreal scale, float timeSec,
+                                           const CompiledSurfacePack& pack, qreal scale, float timeSec, bool animating,
                                            qreal texturePaddingLogical, const QString& windowId)
 {
     // The caller (renderSurfaceChainComposite's per-pack fold) has already
@@ -408,7 +408,12 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
         const QPointF cursorGlobal = m_shaderManager.m_cachedCursorGlobal;
         float localX = -1.0f;
         float localY = -1.0f;
-        const bool inside = cursorGlobal.x() >= expanded.left() && cursorGlobal.x() < expanded.right()
+        // A PAUSED chain reads the cursor as absent, the same way it reads the audio
+        // spectrum as silent: its composite is cached, and a cached composite fed a
+        // live cursor would jump the hover highlight to a new place on every fold the
+        // capture forced while pretending to hold still. The (-1, -1) sentinel is the
+        // shape the packs already handle (cursor outside the canvas).
+        const bool inside = animating && cursorGlobal.x() >= expanded.left() && cursorGlobal.x() < expanded.right()
             && cursorGlobal.y() >= expanded.top() && cursorGlobal.y() < expanded.bottom();
         if (inside) {
             localX = static_cast<float>((cursorGlobal.x() - expanded.left()) * scale);

@@ -221,6 +221,19 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // and chain, dropping the caches each allocation makes stale. On failure the whole
     // surface state is gone (and `state` with it), so there is nothing left to fold.
     if (!ensureSurfaceTargets(windowId, state, chain, textureSize, captureScale, compiledPackLazy)) {
+        // Out of VRAM. Hand the window back to KWin rather than leaving it redirected
+        // with a present shader whose uFinal sampler now points at nothing: the fold has
+        // no composite to bind, so the window would render as transparent black — it
+        // would VANISH. Undecorated is a far better answer to an allocation failure than
+        // invisible. Not during a transition, which owns the shader slot and would be
+        // torn out mid-animation; it re-captures every frame anyway and gets its own
+        // chance to recover next one.
+        if (!captureRestoreShader) {
+            releaseDecorationGl(w, deco.outerPadding);
+            if (const auto it = m_windowDecorations.find(windowId); it != m_windowDecorations.end()) {
+                it->shaderApplied = false;
+            }
+        }
         return nullptr;
     }
 
@@ -258,11 +271,36 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // thing being watched, it drives the window's geometry frame by frame, and it is
     // the one caller that supplies its own restore shader.
     const bool mayAnimate = captureRestoreShader != nullptr || decorationMayAnimate(w);
-    const float foldTime =
-        (!mayAnimate && state.foldedTimeSec >= 0.0f) ? state.foldedTimeSec : surfaceShaderTimeSeconds();
-    // A transition supplies its own restore shader and drives the window's
-    // geometry frame by frame; don't trust a cached capture across it.
-    const bool captureCacheable = foldablePacks > 0 && captureRestoreShader == nullptr;
+    // The window's own clock, which STOPS while it is paused and RESUMES where it
+    // stopped. Not the shared clock: that one runs on regardless, so a window paused
+    // for ten minutes would resume by jumping its iTime ten minutes forward in a single
+    // frame and every periodic pack would pop to an unrelated phase — on every focus
+    // return, under "animate the focused window only". The paused seconds are
+    // accumulated into timeOffsetSec and subtracted out instead.
+    const float sharedNow = surfaceShaderTimeSeconds();
+    if (mayAnimate) {
+        if (state.pausedAtSec >= 0.0f) {
+            state.timeOffsetSec += sharedNow - state.pausedAtSec;
+            state.pausedAtSec = -1.0f;
+        }
+    } else if (state.pausedAtSec < 0.0f) {
+        state.pausedAtSec = sharedNow;
+    }
+    // While paused this is pinned to the instant the pause began, so the folds that
+    // still have to run (the window's own content damaged, its focus ramp moving)
+    // reproduce the frame it froze on instead of drifting.
+    const float foldTime = (mayAnimate ? sharedNow : state.pausedAtSec) - state.timeOffsetSec;
+    // A transition supplies its own restore shader and drives the window's geometry
+    // frame by frame; don't trust a cached capture across it.
+    //
+    // NOT gated on foldablePacks. A chain in which every pack failed to compile folds
+    // nothing — the capture goes straight into compositeTex[0] and is presented from
+    // there — and its capture is as reusable as any other, because the window's own
+    // damage is the only thing that can change it. Requiring a foldable pack here meant
+    // such a window re-ran the full effects->drawWindow() re-entry, the single most
+    // expensive step of the fold, on EVERY paint of any window overlapping it, forever,
+    // to reproduce a composite identical to the undecorated window.
+    const bool captureCacheable = captureRestoreShader == nullptr;
     if (!captureCacheable) {
         state.captureValid = false;
     }
@@ -440,12 +478,20 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // prefixTex, so a handlesOpacity pack in the static head has already applied the
     // alpha even though the loop below never visits it. Starting from false there
     // would report the fold as not owning an alpha it very much baked in, and the
-    // present pass would modulate it a second time. A pack that compiled is a pack
-    // that drew, which is exactly what the loop concludes for the packs it does run.
+    // present pass would modulate it a second time.
+    //
+    // The test has to be EXACTLY the one the loop applies below, metadata AND linked
+    // uniform. A pack that declares handlesOpacity but whose compiled GLSL never links
+    // uSurfaceOpacity applies no alpha at all — pushBorderUniforms pushes it only when
+    // uOpacityLoc >= 0 — so trusting the metadata alone here would report an alpha
+    // nobody applied, both consumers would stand down, and the window would render
+    // fully opaque with the user's SetOpacity rule silently dropped. That fail-open is
+    // the entire reason this is a fold-reported fact and not a metadata one, and it
+    // must not creep back in on the prefix path.
     bool foldAppliedOpacity = false;
     for (int k = 0; k < firstPack; ++k) {
         const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(k));
-        if (pk && pk->shader && pk->handlesOpacity) {
+        if (pk && pk->shader && pk->handlesOpacity && pk->uOpacityLoc >= 0) {
             foldAppliedOpacity = true;
             break;
         }
@@ -565,7 +611,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 // Audio spectrum (unit kSurfaceAudioUnit) for a buffer pass that
                 // reads surface_audio.glsl — same contract as the main pass.
                 passAudioBound =
-                    bindSurfaceAudio(pass.shader.get(), pass.iAudioSpectrumSizeLoc, pass.uAudioSpectrumLoc);
+                    bindSurfaceAudio(pass.shader.get(), pass.iAudioSpectrumSizeLoc, pass.uAudioSpectrumLoc, mayAnimate);
                 drawFullscreenQuad();
             }
             for (size_t j = 0; j < i && j < 4; ++j) {
@@ -686,7 +732,8 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             // surface_audio.glsl. Pushes iAudioSpectrumSize (0 when audio is
             // off, so getBass* reads 0 and the pack renders static) and binds
             // the spectrum texture only when live.
-            mainAudioBound = bindSurfaceAudio(pk->shader.get(), pk->iAudioSpectrumSizeLoc, pk->uAudioSpectrumLoc);
+            mainAudioBound =
+                bindSurfaceAudio(pk->shader.get(), pk->iAudioSpectrumSizeLoc, pk->uAudioSpectrumLoc, mayAnimate);
             // User-declared image textures (metadata `textures`), units
             // kSurfaceUserTextureBaseUnit.. — loaded once at compile time onto
             // the pack state. Every slot the shader REFERENCES gets a bind: a
@@ -727,7 +774,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             }
             // Contract uniforms + pack params. windowId threaded in so the
             // focus-fade ramp doesn't recompute getWindowId(w) per pack.
-            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, foldTime, pad, windowId);
+            pushBorderUniforms(w, *bit, chain.at(k), *pk, captureScale, foldTime, mayAnimate, pad, windowId);
             drawFullscreenQuad();
         }
         for (int i = 0; i < mainChannelsBound; ++i) {

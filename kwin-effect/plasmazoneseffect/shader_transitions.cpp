@@ -378,7 +378,7 @@ inline void dispatchJsonSetting(QLatin1String name, const QVariant& v,
 //     why the upload is dispatched back via QueuedConnection rather
 //     than completed inline on the worker.
 // ─────────────────────────────────────────────────────────────────────────────
-void PlasmaZonesEffect::evictLruTextureIfOverBound()
+void PlasmaZonesEffect::evictLruTextureIfOverBound(const ShaderTransition* pending)
 {
     // Build the set of cache pointers currently referenced by any
     // active transition's userTextures slots ONCE. Eviction skips
@@ -390,6 +390,20 @@ void PlasmaZonesEffect::evictLruTextureIfOverBound()
     std::unordered_set<const CachedTexture*> inFlight;
     for (const auto& [_, transition] : m_shaderManager.shaderTransitions()) {
         for (CachedTexture* tex : transition.userTextures) {
+            if (tex) {
+                inFlight.insert(tex);
+            }
+        }
+    }
+    // The transition still being BUILT is not in shaderTransitions() yet (it is
+    // inserted once every slot is resolved), so the slots it has already filled would
+    // otherwise be evictable by the sweep its own next slot triggers — leaving it
+    // holding a dangling pointer. It survives today only by arithmetic: the soft bound
+    // is many times the slot count and every entry it touches carries the newest access
+    // tick, so it can never be the victim. That is a property of two constants, not a
+    // guarantee, and neither constant knows it is load-bearing.
+    if (pending) {
+        for (CachedTexture* tex : pending->userTextures) {
             if (tex) {
                 inFlight.insert(tex);
             }
@@ -500,6 +514,20 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
                     effect->m_shaderManager.m_textureLoadsInFlight.remove(path);
                     if (img.isNull()) {
                         qCWarning(lcEffect) << "warmUserTextureAsync: load failed for" << path;
+                        return;
+                    }
+                    // This lands from the EVENT LOOP, between frames — not inside a
+                    // paint cycle — so the compositor's GL context is not guaranteed
+                    // current. Everything below is GL: the upload, the filter/wrap
+                    // state, and the LRU sweep, whose eviction destroys a GLTexture and
+                    // therefore calls glDeleteTextures. Issuing any of that against no
+                    // context (or, worse, another thread's) is undefined. Every other
+                    // off-paint GL site in the effect makes the context current first
+                    // and says so; this one was missed. Bail rather than latch: the next
+                    // use of the path loads it synchronously inside a paint.
+                    if (!KWin::effects || !KWin::effects->makeOpenGLContextCurrent()) {
+                        qCWarning(lcEffect)
+                            << "warmUserTextureAsync: no current GL context, discarding upload for" << path;
                         return;
                     }
                     // Re-check the cache: another transition may have
@@ -1202,10 +1230,10 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
             texIt = m_shaderManager.m_textureCache.emplace(path, std::move(cachedTex)).first;
             // Eviction sweep is safe here: std::map only invalidates the
             // erased iterator, so `texIt` (the entry we just inserted)
-            // stays valid. The freshly-inserted entry's lastAccessTick
-            // is the global maximum, so it can never be the eviction
-            // victim.
-            evictLruTextureIfOverBound();
+            // stays valid. The transition under construction is handed in
+            // explicitly — it is not in shaderTransitions() yet, so the
+            // slots it has already filled would not otherwise be protected.
+            evictLruTextureIfOverBound(&transition);
             freshlyLoaded = true;
         }
         transition.userTextures[slot] = &texIt->second;

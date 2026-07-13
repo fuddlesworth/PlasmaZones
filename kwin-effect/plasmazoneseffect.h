@@ -934,9 +934,10 @@ private:
     ///     compiled pack is about to be recompiled and no composite survives it;
     ///   - lifecycle.cpp's windowDeleted backstop, which runs after the window is gone
     ///     and there is nothing left to animate;
-    ///   - surfacelayers.cpp's alloc-failure path, which erases the half-built state it
-    ///     just failed to allocate and returns nullptr immediately, so a transition
-    ///     loses its layer for one frame rather than sampling a freed texture.
+    ///   - surface_capture.cpp's ensureSurfaceTargets, which on an allocation failure
+    ///     erases the half-built state it just failed to allocate and returns false;
+    ///     its caller abandons the fold immediately, so a transition loses its layer
+    ///     for one frame rather than sampling a freed texture.
     /// Nothing else may.
     void releaseSurfaceState(const QString& windowId, KWin::EffectWindow* target);
 
@@ -1008,9 +1009,9 @@ private:
     /// entry: when its ruleBorder flag is set AND @p packId is the rule-owned
     /// border base, THIS window's rule-resolved width / radius / colours override
     /// the seeded slot-0 params (user packs in the chain keep their own values).
-    /// Writes onto the ALREADY-BOUND pack shader: every caller (drawWindow's idle
-    /// blit, renderSurfaceChain's transition capture, renderSurfaceChainComposite's
-    /// per-pack fold) owns the KWin::ShaderBinder, has already resolved @p pack
+    /// Writes onto the ALREADY-BOUND pack shader: its one caller
+    /// (renderSurfaceChainComposite's per-pack fold, which every path now routes
+    /// through) owns the KWin::ShaderBinder, has already resolved @p pack
     /// and the border entry, and has ruled out a transition owning the slot, so
     /// this neither binds/unbinds nor re-validates the window.
     /// @p texturePaddingLogical: outer margin (logical px) baked into the
@@ -1021,8 +1022,12 @@ private:
     /// Decorations.Performance has paused is handed a frozen clock — see
     /// SurfaceMultipassState::foldedTimeSec. Sampling live here would let a paused
     /// window's packs disagree with the frozen composite they are folding into.
+    /// @p animating is false for a chain Decorations.Performance has paused. Every
+    /// per-frame input it pushes is then frozen with the clock — see @p timeSec, and
+    /// the cursor sentinel in the body. Freeze the fold or freeze its inputs, never one
+    /// without the other.
     void pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
-                            const CompiledSurfacePack& pack, qreal scale, float timeSec,
+                            const CompiledSurfacePack& pack, qreal scale, float timeSec, bool animating,
                             qreal texturePaddingLogical = 0.0, const QString& windowId = {});
 
     /// The window's rule-resolved opacity, preferring the per-frame value
@@ -1345,7 +1350,11 @@ private:
     /// binds nothing) when audio is not live or the pack declares no audio
     /// locations, so getBass*() reads 0 and the pack renders static. Returns true
     /// when it bound the texture (the caller then unbinds the unit after drawing).
-    bool bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc);
+    /// Bind the CAVA spectrum for a pack. @p animating is false for a chain that
+    /// Decorations.Performance has paused, which is treated exactly like silence (bar
+    /// count 0, no texture) — a paused chain is cached, and a cached composite must not
+    /// be fed a live spectrum. See the note in surface_audio.cpp.
+    bool bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc, bool animating);
 
     /// Resolve the DECORATION SURFACE PATH for @p windowId based on MEMBERSHIP
     /// alone:
@@ -1585,7 +1594,11 @@ private:
     // state signal outran the client's commit. Implementation in
     // window_lifecycle.cpp beside its two call sites.
     void beginMaximizeShaderMorph(KWin::EffectWindow* window, const QRectF& departureFrame);
-    void evictLruTextureIfOverBound();
+    /// Evict least-recently-used cached textures back under the soft bound, never
+    /// touching one a live transition still points at. @p pending is the transition
+    /// currently being BUILT, which is not in shaderTransitions() yet and would
+    /// otherwise have the slots it has already filled evicted out from under it.
+    void evictLruTextureIfOverBound(const ShaderTransition* pending = nullptr);
     void warmUserTextureAsync(const QString& absolutePath);
 
     std::unique_ptr<DragTracker> m_dragTracker;

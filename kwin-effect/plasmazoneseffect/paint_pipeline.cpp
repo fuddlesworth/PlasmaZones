@@ -1430,6 +1430,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // settles, not for the normal path — holding its redirect, its
                     // shader, and the whole compositor's transformed-windows paint
                     // path for ~3.5 s after every single drag.
+                    //
+                    // Deliberately NOT m_selfRepainting-flagged, unlike the other
+                    // repaints the effect issues to drive its own animation. This one
+                    // fires inside a live transition, where the capture cache is off
+                    // anyway (captureCacheable excludes a transition, which supplies its
+                    // own restore shader), so there is no cache for it to invalidate —
+                    // and it is a one-shot settle edge, not a per-frame driver. Flag it
+                    // if either of those ever stops being true.
                     if (!wasSettled && transition.meshSim.settled) {
                         w->addRepaintFull();
                     }
@@ -1666,7 +1674,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // lands on the audio unit, its destination anyway.
                     glActiveTexture(GL_TEXTURE0 + ShaderInternal::kSurfaceAudioUnit);
                     ensureAudioSpectrumTexture();
-                    bindSurfaceAudio(shader, cached->iAudioSpectrumSizeLoc, cached->uAudioSpectrumLoc);
+                    // A live window transition is the thing being watched, so it always animates.
+                    bindSurfaceAudio(shader, cached->iAudioSpectrumSizeLoc, cached->uAudioSpectrumLoc,
+                                     /*animating=*/true);
                     // Unconditional, NOT bindSurfaceAudio's return: a dirty
                     // upload above can leave the spectrum texture bound on
                     // the parked unit even when the bind reports not-live

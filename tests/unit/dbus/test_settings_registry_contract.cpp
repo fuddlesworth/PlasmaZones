@@ -21,15 +21,21 @@
  * effect's callback never runs and the caller keeps its own default. That makes the
  * failure safe, but it does not make it visible. This test does.
  *
- * The list of expected keys is not hand-maintained: the test reads the effect's own
- * sources and extracts every key it fetches, in each of the shapes the effect writes
- * them (see keysFetchedByEffect below). A new setting the effect fetches is therefore
- * checked automatically, with no list to forget — and a fetch written in a shape the
- * scrape does NOT recognise fails the test loudly rather than vanishing from it, which
- * would have been the same silent hole all over again.
+ * Nothing here is hand-maintained. The test scans EVERY effect source it finds on disk
+ * and extracts every key each one fetches, in each of the shapes the effect writes them
+ * (see keysFetchedByEffect below). A new setting, in a new file, is therefore checked
+ * automatically, with no list to forget — and a fetch written in a shape the scrape does
+ * NOT recognise fails the test loudly rather than vanishing from it, which would have
+ * been the same silent hole all over again.
+ *
+ * That last property is the one to defend. This scrape has twice been written in a way
+ * that quietly resolved a fetch to the wrong key while its own self-check still
+ * balanced, which is the very failure it is here to prevent. If you change it, make the
+ * unrecognised case LOUD.
  */
 
 #include <QTest>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -62,22 +68,29 @@ QString readSource(const QString& path, QString* whyFailed)
         *whyFailed = QStringLiteral("cannot open %1").arg(path);
         return {};
     }
-    return QString::fromUtf8(f.readAll());
+    const QString content = QString::fromUtf8(f.readAll());
+    if (content.isEmpty()) {
+        // An empty-but-readable file returns the same {} as an unopenable one, so it
+        // has to explain itself too or the caller's failure message comes out blank.
+        *whyFailed = QStringLiteral("%1 is empty").arg(path);
+    }
+    return content;
 }
 
 /// Every setting key the effect fetches, scraped from its own sources rather than
 /// duplicated here — a hand-copied list is exactly the thing that drifts.
 ///
-/// The effect fetches in FOUR shapes across TWO files, and all of them must be
-/// understood or the key silently escapes this test:
+/// The effect fetches in FOUR shapes, and all of them must be understood or the key
+/// silently escapes this test:
 ///
 ///   loadSettingAsync(QStringLiteral("key"), …)                        inline
 ///   loadAudioInt / loadAudioBool(QStringLiteral("key"), …)            audio wrappers,
 ///                                                                     which forward to
 ///                                                                     loadSettingAsync
 ///   loadSettingAsync(SettingProperty::X, …)                           named constant
-///   constexpr QLatin1String kName = SettingProperty::X;               local alias
-///   loadSettingAsync(this, kName, …)                                    (shader_transitions)
+///   constexpr QLatin1String kName = SettingProperty::X;               local alias,
+///   loadSettingAsync(this, kName, …)                                    resolved by NAME
+///                                                                       and POSITION
 ///
 /// The constants are resolved by scraping ServiceConstants.h, so the named forms are
 /// checked as strictly as the literal ones.
@@ -122,10 +135,23 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
                       "|loadSettingAsync\\(this,\\s*name\\b" // its forwarding call
                       "|loadSettingAsync\\(name\\b")); // inside the audio wrappers
 
-    const QStringList files{
-        QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR "/plasmazoneseffect/daemon_bringup.cpp"),
-        QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR "/plasmazoneseffect/shader_transitions.cpp"),
-    };
+    // EVERY effect source, found at test time. A hand-written file list is a list to
+    // forget: a new .cpp that fetches a setting would simply not be looked at, and the
+    // test would keep passing while the key went unchecked — which is the whole failure
+    // this file exists to make impossible. The two directories are where the effect's
+    // translation units live.
+    QStringList files;
+    for (const QString& dir : {QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR),
+                               QStringLiteral(PLASMAZONES_EFFECT_SRC_DIR "/plasmazoneseffect")}) {
+        const QFileInfoList entries = QDir(dir).entryInfoList({QStringLiteral("*.cpp")}, QDir::Files);
+        for (const QFileInfo& entry : entries) {
+            files << entry.absoluteFilePath();
+        }
+    }
+    if (files.isEmpty()) {
+        *whyFailed = QStringLiteral("found no effect sources under %1").arg(QLatin1String(PLASMAZONES_EFFECT_SRC_DIR));
+        return {};
+    }
 
     QStringList keys;
     for (const QString& path : files) {
@@ -134,26 +160,40 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
             return {};
         }
 
-        // Local aliases, resolved POSITIONALLY — by where they are defined, not by
-        // name. Every one of them in shader_transitions.cpp is called `kName`, each in
-        // its own function scope, naming a DIFFERENT setting. A name-keyed map
-        // collapses all three into whichever was defined last, and the tally below
-        // still balances (three call sites, three scraped), so two real keys silently
-        // stopped being checked while the test went on passing. That is the exact
-        // silent-miss this file exists to catch, so it must not be reintroduced by the
-        // file's own scrape.
-        QList<QPair<qsizetype, QString>> aliases; // (offset of the definition, key)
+        // Local aliases, resolved by NAME **and** POSITION. Both halves are load-bearing,
+        // and each was got wrong once:
+        //
+        //   By name alone: every alias in shader_transitions.cpp is called `kName`, each
+        //   in its own function scope, naming a DIFFERENT setting. A name-keyed map
+        //   collapses all three into whichever was written last, so two real keys stop
+        //   being checked — silently, because the tally still balances.
+        //
+        //   By position alone: an identifier that is NOT one of the aliases at all (a
+        //   member constant, a differently-spelled local, a new fetch appended after the
+        //   last alias in the file) binds to whichever alias happens to precede it. The
+        //   key checked is then not the key fetched — again silently, again with a
+        //   balanced tally.
+        //
+        // So: bind an identifier to the nearest alias DEFINED BEFORE IT that has THAT
+        // NAME. Anything else resolves to nothing and trips the tally below, loudly.
+        // This test exists to catch exactly the failure it kept committing itself.
+        struct Alias
+        {
+            qsizetype definedAt;
+            QString name;
+            QString key;
+        };
+        QList<Alias> aliases;
         auto ait = aliasRe.globalMatch(src);
         while (ait.hasNext()) {
             const auto m = ait.next();
-            aliases.append({m.capturedStart(0), constants.value(m.captured(2))});
+            aliases.append({m.capturedStart(0), m.captured(1), constants.value(m.captured(2))});
         }
-        // The alias in effect at @p offset is the last one defined before it.
-        const auto aliasAt = [&aliases](qsizetype offset) -> QString {
+        const auto aliasAt = [&aliases](const QString& name, qsizetype offset) -> QString {
             QString found;
-            for (const auto& [definedAt, key] : aliases) {
-                if (definedAt < offset) {
-                    found = key;
+            for (const Alias& alias : aliases) {
+                if (alias.definedAt < offset && alias.name == name) {
+                    found = alias.key;
                 }
             }
             return found;
@@ -169,7 +209,7 @@ QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccounted)
             } else if (!m.captured(2).isEmpty()) {
                 key = constants.value(m.captured(2)); // SettingProperty::X
             } else {
-                key = aliasAt(m.capturedStart(0)); // a local alias
+                key = aliasAt(m.captured(3), m.capturedStart(0)); // a local alias, by name
             }
             if (key.isEmpty()) {
                 continue; // an identifier we could not resolve; the tally below catches it
@@ -306,13 +346,29 @@ private Q_SLOTS:
      */
     void testRegisteredBoolRoundTripsAsBool()
     {
-        m_settings->setDecorationPauseWhenIdle(true);
-        const QVariant v = m_adaptor->getSetting(QStringLiteral("decorationPauseWhenIdle")).variant();
-        QCOMPARE(v.typeId(), QMetaType::Bool);
-        QCOMPARE(v.toBool(), true);
-
+        // FALSE first. The setting defaults to true on a fresh config, so writing true
+        // and reading it back would assert the default rather than the write, and the
+        // true leg would pass even if the setter did nothing at all.
         m_settings->setDecorationPauseWhenIdle(false);
-        QCOMPARE(m_adaptor->getSetting(QStringLiteral("decorationPauseWhenIdle")).variant().toBool(), false);
+        const QVariant off = m_adaptor->getSetting(QStringLiteral("decorationPauseWhenIdle")).variant();
+        QCOMPARE(off.typeId(), QMetaType::Bool);
+        QCOMPARE(off.toBool(), false);
+
+        m_settings->setDecorationPauseWhenIdle(true);
+        const QVariant on = m_adaptor->getSetting(QStringLiteral("decorationPauseWhenIdle")).variant();
+        QCOMPARE(on.typeId(), QMetaType::Bool);
+        QCOMPARE(on.toBool(), true);
+    }
+
+    /**
+     * An EMPTY key is a caller bug in exactly the way an unknown one is, and must answer
+     * the same way. It used to return a valid empty string, which is the silent shape
+     * this whole file exists to stamp out.
+     */
+    void testEmptyKeyDoesNotReturnAValidEmptyValue()
+    {
+        const QVariant v = m_adaptor->getSetting(QString()).variant();
+        QVERIFY2(!v.isValid(), "An empty key must answer like an unknown one: no valid value.");
     }
 
     /**

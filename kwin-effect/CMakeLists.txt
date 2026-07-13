@@ -65,6 +65,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_lifecycle.cpp
     plasmazoneseffect/daemon_bringup.cpp
     plasmazoneseffect/daemon_apply.cpp
+    plasmazoneseffect/rule_invalidation.cpp
     plasmazoneseffect/drag_snap.cpp
     plasmazoneseffect/drag_end.cpp
     plasmazoneseffect/mesh_sim.cpp

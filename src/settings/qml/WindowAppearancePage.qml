@@ -287,11 +287,11 @@ SettingsFlickable {
                             // actually draws. A stored "accent" value would otherwise
                             // coerce to black.
                             const raw = root.ctl.windowBorderColorActive;
-                            return raw === root.accentToken ? (appSettings ? appSettings.highlightColor : Kirigami.Theme.highlightColor) : raw;
+                            return raw === root.accentToken ? appSettings.highlightColor : raw;
                         }
                         onClicked: {
                             const raw = root.ctl.windowBorderColorActive;
-                            activeBorderColorDialog.selectedColor = raw === root.accentToken ? (appSettings ? appSettings.highlightColor : root.defaultBorderHex) : raw;
+                            activeBorderColorDialog.selectedColor = raw === root.accentToken ? appSettings.highlightColor : raw;
                             activeBorderColorDialog.open();
                         }
                     }
@@ -313,11 +313,11 @@ SettingsFlickable {
                             // (alpha included), not the accent, matching what the
                             // border actually draws.
                             const raw = root.ctl.windowBorderColorInactive;
-                            return raw === root.accentToken ? (appSettings ? appSettings.inactiveColor : Kirigami.Theme.highlightColor) : raw;
+                            return raw === root.accentToken ? appSettings.inactiveColor : raw;
                         }
                         onClicked: {
                             const raw = root.ctl.windowBorderColorInactive;
-                            inactiveBorderColorDialog.selectedColor = raw === root.accentToken ? (appSettings ? appSettings.inactiveColor : root.defaultBorderHex) : raw;
+                            inactiveBorderColorDialog.selectedColor = raw === root.accentToken ? appSettings.inactiveColor : raw;
                             inactiveBorderColorDialog.open();
                         }
                     }

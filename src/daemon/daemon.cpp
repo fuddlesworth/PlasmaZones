@@ -630,14 +630,30 @@ void Daemon::setupIdleService()
     m_idleStagesRefreshTimer.setSingleShot(true);
     m_idleStagesRefreshTimer.setInterval(kIdleStagesRefreshDebounceMs);
     connect(&m_idleStagesRefreshTimer, &QTimer::timeout, this, &Daemon::refreshIdleStages);
-    if (m_settings) {
-        connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, [this] {
-            m_idleStagesRefreshTimer.start();
-        });
-        connect(m_settings.get(), &ISettings::decorationPauseWhenIdleChanged, this, [this] {
-            m_idleStagesRefreshTimer.start();
-        });
-    }
+    // NOT guarded on m_settings. It is a unique_ptr built in the constructor's init
+    // list and can never be null here — m_settingsAdaptor was constructed FROM it
+    // already. A guard would be worse than pointless: were it ever to trip, these two
+    // connects would be skipped and the idle ladder would sit pinned to its startup
+    // value for the process lifetime, so the timeout slider and the PauseWhenIdle
+    // toggle would both become silent no-ops.
+    connect(m_settings.get(), &ISettings::decorationIdleTimeoutSecChanged, this, [this] {
+        m_idleStagesRefreshTimer.start();
+    });
+    connect(m_settings.get(), &ISettings::decorationPauseWhenIdleChanged, this, [this] {
+        m_idleStagesRefreshTimer.start();
+        // Announce the state the toggle just put us in, NOW and unconditionally, rather
+        // than leaving it to the debounced rebuild.
+        //
+        // Turning it OFF means the session is not idle as far as this feature is
+        // concerned, whatever the seat is doing. Turning it back ON while the seat is
+        // ALREADY idle produces no new edge from the compositor to ride — the ladder
+        // rebuild re-arms from active, and until the next real idle timeout the effect
+        // would run unpaused on a session that has been idle the whole time. Forced past
+        // the change check for the same reason bridgeRegistered is: what the effect
+        // believes is the question, and it cannot be derived from what we last sent.
+        const bool idle = m_idleService && m_settings->decorationPauseWhenIdle() && m_idleService->isIdle();
+        publishSessionIdle(idle, /*force=*/true);
+    });
 
     // Push the CURRENT state whenever the KWin effect (re)registers. sessionIdleChanged
     // is edge-triggered, and a restarted daemon arms a fresh ext-idle-notify-v1
@@ -2595,6 +2611,12 @@ void Daemon::stop()
     // handlers dereference m_settings and m_settingsAdaptor, and it is currently
     // safe only because reverse-declaration-order destruction happens to kill it
     // first — an invariant no reader can see and a member reorder would break.
+    //
+    // The debounce timer goes with it, for the same reason: a pending fire would land
+    // in refreshIdleStages after teardown. It early-returns on a null m_idleService, so
+    // this is belt and braces — but every other piece of this wiring is severed
+    // explicitly rather than left to an invariant, and this is the last piece.
+    m_idleStagesRefreshTimer.stop();
     m_idleService.reset();
 
     // Destroy the router. Engines below outlive it so any in-flight

@@ -176,6 +176,15 @@ bool PlasmaZonesEffect::windowSurfaceAnimates(const QString& windowId)
         if (pack->iAudioSpectrumSizeLoc >= 0 && audioReactiveDriving()) {
             return true;
         }
+        // A hover-reactive pack has to be driven for the same reason: there is no
+        // per-cursor-move damage path, so if nothing repaints the window its highlight
+        // never follows the pointer. packVariesPerFrame already classifies iMouse as a
+        // per-frame input (so such a pack is excluded from both caches) — without this
+        // the two disagreed, and the pack paid a full chain re-fold on every incidental
+        // paint while STILL never tracking the cursor: the worst of both.
+        if (pack->iMouseLoc >= 0) {
+            return true;
+        }
         for (const CompiledSurfaceBufferPass& bp : pack->bufferPasses) {
             if (bp.uTimeLoc >= 0 || (bp.iAudioSpectrumSizeLoc >= 0 && audioReactiveDriving())) {
                 return true;
