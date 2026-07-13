@@ -15,13 +15,8 @@
 #include "shader_internal.h"
 #include "shader_resolve.h"
 
-#include <PhosphorSurface/DecorationProfile.h>
-#include <PhosphorSurface/DecorationProfileTree.h>
-
 #include <QByteArray>
-#include <QColor>
 #include <QLoggingCategory>
-#include <QVariantMap>
 #include <QVector2D>
 #include <QVector4D>
 
