@@ -76,6 +76,7 @@ QString withoutComments(const QString& src)
     out.reserve(src.size());
     bool inLine = false;
     bool inBlock = false;
+    bool inString = false;
     for (qsizetype i = 0; i < src.size(); ++i) {
         const QChar c = src.at(i);
         const QChar next = (i + 1 < src.size()) ? src.at(i + 1) : QChar();
@@ -91,6 +92,32 @@ QString withoutComments(const QString& src)
                 inBlock = false;
                 ++i;
             }
+            continue;
+        }
+        // STRING LITERALS ARE NOT COMMENTS, and this has to know the difference. A literal
+        // containing "//" — a URL, a path, a glob, a snippet of GLSL — would otherwise look
+        // like the start of a comment, and everything after it on the line (a real fetch,
+        // say) would be silently deleted from what the scrape sees. Silently. No effect
+        // source contains such a literal today; relying on that is exactly the kind of
+        // luck this file has already run out of four times.
+        if (inString) {
+            if (c == QLatin1Char('\\')) {
+                out.append(c);
+                if (i + 1 < src.size()) {
+                    out.append(src.at(i + 1)); // an escaped quote does not end the literal
+                    ++i;
+                }
+                continue;
+            }
+            if (c == QLatin1Char('"')) {
+                inString = false;
+            }
+            out.append(c);
+            continue;
+        }
+        if (c == QLatin1Char('"')) {
+            inString = true;
+            out.append(c);
             continue;
         }
         if (c == QLatin1Char('/') && next == QLatin1Char('/')) {
