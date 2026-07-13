@@ -316,23 +316,40 @@ inline QList<SourceFn> functionsIn(const QString& src)
 /// @p unresolved is set when the call names a SettingProperty the constants scrape could
 /// not resolve — that is LOUD, never silent: the call has the right SHAPE, so the tally
 /// balances perfectly while the key it fetches is never compared against the registry.
-inline QString keyNamedBy(const QString& args, const QHash<QString, QString>& constants, QString* unresolved)
+inline QStringList keysNamedBy(const QString& args, const QHash<QString, QString>& constants, QString* unresolved)
 {
     static const QRegularExpression keyRe(
         QLatin1String("QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"
                       "|PhosphorProtocol::Service::SettingProperty::([A-Za-z0-9_]+)"));
-    const auto m = keyRe.match(args);
-    if (!m.hasMatch()) {
-        return {};
+    // EVERY key the call names, not just the first. A ternary choosing between two keys —
+    // loadSettingAsync(hdr ? QStringLiteral("colorHdr") : QStringLiteral("color"), cb) —
+    // contributed only the first, so the second was never compared against the registry. A
+    // call that names N keys can really fetch any of them, so all N get checked.
+    QStringList out;
+    auto it = keyRe.globalMatch(args);
+    while (it.hasNext()) {
+        const auto m = it.next();
+        if (!m.captured(1).isEmpty()) {
+            out << m.captured(1);
+            continue;
+        }
+        const QString resolved = constants.value(m.captured(2));
+        if (resolved.isEmpty()) {
+            *unresolved = m.captured(2);
+            return out;
+        }
+        out << resolved;
     }
-    if (!m.captured(1).isEmpty()) {
-        return m.captured(1);
-    }
-    const QString resolved = constants.value(m.captured(2));
-    if (resolved.isEmpty()) {
-        *unresolved = m.captured(2);
-    }
-    return resolved;
+    return out;
+}
+
+/// The D-Bus methods that READ a setting. Wherever one of these is named, a setting is being
+/// fetched — whatever the function doing it is called. Both scrapes seed from this, because
+/// "who issues the read call" is a property of the fetch and "what is the function called" is
+/// not.
+inline QLatin1String dbusReadPattern()
+{
+    return QLatin1String("QStringLiteral\\(\"(getSetting|getSettings)\"\\)");
 }
 
 /// Is @p offset inside the body of a function that is BOTH a known fetcher AND actually
@@ -468,7 +485,62 @@ inline QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccoun
     // Seed with the primitive. A function JOINS the set by handing one of its own key
     // parameters to a member of the set — which is what a wrapper IS. Iterated to a fixed
     // point so a wrapper of a wrapper is caught too.
+    // Seeded with the PRIMITIVE'S NAME — and a name is the wrong thing to key on, so it is
+    // not the only seed. The editor's scrape asks "who issues the getSetting D-Bus call?",
+    // which is a property of the fetch. The effect's asked "who is called loadSettingAsync?",
+    // which is a coincidence of naming — so a SECOND primitive (defined in a linked library,
+    // or a hand-rolled ClientHelpers::asyncCall) was invisible to it: never scraped, never
+    // counted, never reported. One such primitive really was sitting exported and uncalled in
+    // a library the effect links.
+    //
+    // So ask BOTH questions. Any function whose body names getSetting / getSettings is a
+    // fetcher too, whatever it is called, and a bus call inside no function at all is LOUD.
+    static const QRegularExpression effectDbusReadRe(dbusReadPattern());
+    QStringList keys; ///< accumulates from the bus-call seed below as well as the call scan
     QSet<QString> fetchers{QStringLiteral("loadSettingAsync")};
+    for (const QString& path : files) {
+        const QString& src = sources[path];
+        auto dit = effectDbusReadRe.globalMatch(src);
+        while (dit.hasNext()) {
+            const auto dm = dit.next();
+            bool enclosed = false;
+            for (const SourceFn& fn : functions[path]) {
+                if (dm.capturedStart(0) > fn.bodyStart && dm.capturedStart(0) < fn.bodyEnd) {
+                    fetchers.insert(fn.name);
+                    enclosed = true;
+                }
+            }
+            if (!enclosed) {
+                *unaccounted << QStringLiteral(
+                                    "%1: a getSetting D-Bus call sits outside any function the scrape can "
+                                    "see, so the key it fetches is never checked")
+                                    .arg(QFileInfo(path).fileName());
+            }
+            // The key may be named AT the bus call rather than at a wrapper's call site —
+            // that is what a hand-rolled ClientHelpers::syncCall(…, "getSetting", {"k"})
+            // looks like. Read it here, where it is, instead of waiting for a call site that
+            // will never come. A bus call that names no readable key at all is loud.
+            const qsizetype callOpen = src.lastIndexOf(QLatin1Char('('), dm.capturedStart(0));
+            const qsizetype callClose = callOpen >= 0 ? matchDelimiter(src, callOpen, QLatin1Char(')')) : -1;
+            if (callClose > dm.capturedEnd(0)) {
+                const QString callArgs = src.mid(callOpen + 1, callClose - callOpen - 1);
+                QString busUnresolved;
+                const QStringList busKeys = keysNamedBy(callArgs, constants, &busUnresolved);
+                bool named = false;
+                for (const QString& busKey : busKeys) {
+                    if (busKey == dm.captured(1)) {
+                        continue; // the method name itself, not a setting key
+                    }
+                    keys << busKey;
+                    named = true;
+                }
+                if (!named && !enclosed) {
+                    *unaccounted << QStringLiteral("%1: a getSetting D-Bus call names no key the scrape can read")
+                                        .arg(QFileInfo(path).fileName());
+                }
+            }
+        }
+    }
     bool grew = true;
     while (grew) {
         grew = false;
@@ -531,7 +603,6 @@ inline QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccoun
     // because all seven keys happened to be registered. Delete one registration and it would
     // have stayed green while the setting died.
 
-    QStringList keys;
     for (const QString& path : files) {
         const QString& src = sources[path];
         auto cit2 = callRe.globalMatch(src);
@@ -549,7 +620,7 @@ inline QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccoun
                 continue; // the fetcher's own declaration or definition — it names no key
             }
             QString unresolved;
-            const QString key = keyNamedBy(args, constants, &unresolved);
+            const QStringList named = keysNamedBy(args, constants, &unresolved);
             if (!unresolved.isEmpty()) {
                 *unaccounted << QStringLiteral(
                                     "%1: cannot resolve SettingProperty::%2 — is it declared in "
@@ -557,8 +628,8 @@ inline QStringList keysFetchedByEffect(QString* whyFailed, QStringList* unaccoun
                                     .arg(QFileInfo(path).fileName(), unresolved);
                 continue;
             }
-            if (!key.isEmpty()) {
-                keys << key;
+            if (!named.isEmpty()) {
+                keys << named;
                 continue;
             }
             // Names no key. The ONLY acceptable reason is that it is forwarding a key it was
@@ -626,7 +697,7 @@ inline QStringList keysFetchedByEditor(QString* whyFailed, QStringList* unaccoun
     }
 
     // The D-Bus read methods. Wherever one of these is NAMED, a setting is being fetched.
-    static const QRegularExpression dbusReadRe(QLatin1String("QStringLiteral\\(\"(getSetting|getSettings)\"\\)"));
+    static const QRegularExpression dbusReadRe(dbusReadPattern());
     static const QRegularExpression literalRe(QLatin1String("QStringLiteral\\(\"([A-Za-z0-9_]+)\"\\)"));
 
     QStringList keys;
@@ -718,7 +789,18 @@ inline QStringList keysFetchedByEditor(QString* whyFailed, QStringList* unaccoun
             // Every element must be a literal, exactly as the named-list path below demands —
             // this used to take match() rather than globalMatch() and so contributed only the
             // FIRST key of the list, silently dropping the rest.
-            const qsizetype brace = args.indexOf(QLatin1Char('{'));
+            // Only when the brace opens the FIRST argument. Searching the whole argument list
+            // for a '{' would find a CALLBACK's opening brace the moment anyone writes an
+            // async editor fetcher, then demand every statement of the lambda body be a string
+            // literal and fail the test on perfectly good code whose key sits right there in
+            // argument one. A tripwire that cries wolf is a tripwire someone loosens, and that
+            // is twice now how this file was broken.
+            const QStringList topLevel = splitTopLevel(args);
+            const QString firstArg = topLevel.isEmpty() ? QString() : topLevel.first().trimmed();
+            const bool bracedList = firstArg.startsWith(QLatin1Char('{'))
+                || firstArg.startsWith(QLatin1String("QStringList{"))
+                || firstArg.startsWith(QLatin1String("QStringList {"));
+            const qsizetype brace = bracedList ? args.indexOf(QLatin1Char('{')) : -1;
             const qsizetype braceEnd = brace >= 0 ? matchDelimiter(args, brace, QLatin1Char('}')) : -1;
             if (braceEnd > brace) {
                 const QStringList elements = splitTopLevel(args.mid(brace + 1, braceEnd - brace - 1));

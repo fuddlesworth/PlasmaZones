@@ -1285,12 +1285,43 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
 }
 } // namespace
 
+namespace {
+
+/// Is @p screenId a plausible screen identifier, as far as this BOUNDARY can tell?
+///
+/// Shape only, deliberately. A per-screen setting is legitimately written for a monitor that
+/// is not currently connected (the config outlives the cable), so refusing an id that no live
+/// QScreen matches would break saved configuration rather than protect anything. What this
+/// does refuse is what a screen id can never be: empty, absurdly long, or carrying control
+/// characters — which is how a hostile session-bus peer would grow the config file without
+/// bound and smuggle newlines into anything that later prints one.
+///
+/// CLAUDE.md: "Input validation at system boundaries." This is that boundary: every one of
+/// the three per-screen writers is a D-Bus slot reachable by any process on the session bus.
+bool isPlausibleScreenId(const QString& screenId)
+{
+    constexpr int kMaxScreenIdLength = 256;
+    if (screenId.isEmpty() || screenId.size() > kMaxScreenIdLength) {
+        return false;
+    }
+    return std::none_of(screenId.cbegin(), screenId.cend(), [](QChar c) {
+        return c.category() == QChar::Other_Control;
+    });
+}
+
+} // namespace
+
 void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
                                           const QDBusVariant& value)
 {
     if (!m_settings) {
         return;
     }
+    if (!isPlausibleScreenId(screenId)) {
+        qCDebug(lcDbusSettings) << "setPerScreenSetting: implausible screen id (rejected at the D-Bus boundary)";
+        return;
+    }
+
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
         qCDebug(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
@@ -1311,6 +1342,11 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QStr
     if (!m_settings) {
         return;
     }
+    if (!isPlausibleScreenId(screenId)) {
+        qCDebug(lcDbusSettings) << "clearPerScreenSettings: implausible screen id (rejected at the D-Bus boundary)";
+        return;
+    }
+
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
         qCDebug(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;

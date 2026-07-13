@@ -161,7 +161,10 @@ void SettingsController::setActivePage(const QString& page)
     const QString resolved = parentPageRedirects().value(page, page);
 
     if (!validPageNames().contains(resolved)) {
-        qCWarning(PlasmaZones::lcCore) << "Unknown settings page:" << page;
+        // The page name arrives over D-Bus (SettingsAppAdaptor::setActivePage), so it is
+        // caller-supplied and unbounded. A typo still deserves a trace, so keep one — at
+        // debug, without echoing arbitrary text into a warning.
+        qCDebug(PlasmaZones::lcCore) << "Unknown settings page requested";
         return;
     }
     // Reentrancy guard: a slot connected to activePageChanged that

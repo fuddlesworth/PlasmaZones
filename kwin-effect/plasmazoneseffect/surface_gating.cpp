@@ -98,10 +98,11 @@ QPointF PlasmaZonesEffect::foldCursorFor(KWin::EffectWindow* w, const QRectF& ca
     if (!mayAnimate || !w) {
         return kCursorOutside;
     }
-    // HALF-OPEN, exactly like pushBorderUniforms' own inside-test. QRectF::contains is
-    // closed on all four edges, so a pointer sitting precisely on the right or bottom edge
-    // was keyed as INSIDE while the shader was handed the absent sentinel — and this
-    // expression's whole purpose is to be the value the shader actually receives.
+    // HALF-OPEN, and this is now the ONLY containment test in the effect — pushBorderUniforms
+    // reads the sentinel this produces rather than re-deriving one, and says so. QRectF::contains
+    // is closed on all four edges, so a pointer sitting precisely on the right or bottom edge was
+    // keyed as INSIDE while the shader was handed the absent sentinel, and this expression's
+    // whole purpose is to BE the value the shader receives.
     const bool inside = cursor.x() >= canvasGeo.left() && cursor.x() < canvasGeo.right()
         && cursor.y() >= canvasGeo.top() && cursor.y() < canvasGeo.bottom();
     return inside ? cursor : kCursorOutside;
@@ -109,10 +110,15 @@ QPointF PlasmaZonesEffect::foldCursorFor(KWin::EffectWindow* w, const QRectF& ca
 
 // Repaint every decorated window whose chain reads the cursor.
 //
-// Called from the pointer-motion handler, and it is the ONLY thing that restarts a hover
-// pack's repaint loop: windowSurfaceAnimates stops driving one as soon as its folded
-// cursor matches the live one, and the live one is only sampled during a frame. Without
-// this, the driver would depend on some other window happening to damage.
+// Called from the pointer-motion handler. It is the driver that restarts a hover pack's
+// repaint loop when the POINTER moves: windowSurfaceAnimates stops driving one as soon as its
+// folded cursor matches the live one, and the live one is only sampled during a frame, so
+// without this the loop would depend on some other window happening to damage.
+//
+// It is not the only restart. windowSurfaceAnimates arms the same one-shot and drives too,
+// which covers the case where the fold cursor changes with NO pointer motion at all (the gate
+// flipping on focus gain, say). The two must therefore agree exactly about the flag and about
+// foldCursorFor, and they do.
 //
 // Flagged as ours, like every other driver repaint: the window's CONTENT has not changed,
 // only where the pointer is, and the fold keys on that itself (foldedCursor).

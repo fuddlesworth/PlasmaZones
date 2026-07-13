@@ -378,7 +378,7 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     while (staticPrefix < chain.size()) {
         const CompiledSurfacePack* const pk = compiledPackLazy(chain.at(staticPrefix));
         const bool draws = pk && pk->shader && staticPrefix < static_cast<int>(state.chainBufferTex.size());
-        if (draws && packVariesPerFrame(*pk, plan.mayAnimate)) {
+        if (draws && packVariesPerFrame(*pk, plan.mayAnimate, audioReactiveDriving())) {
             break;
         }
         if (draws) {

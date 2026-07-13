@@ -24,9 +24,9 @@ namespace SettingsDbusQueries {
  * @return Map of key → value for keys the daemon recognized; unknown keys
  *         are omitted and callers must fall back to their own defaults.
  *
- * Collapses N individual getSetting() round-trips into one — the primary
- * reason this helper exists. Used on the editor startup hot path by
- * refreshGlobalGapOverlaySettings() in gaps.cpp.
+ * Collapses N individual getSetting() round-trips into one, which is the primary reason
+ * this helper exists. Both editor startup hot paths use it: refreshGlobalGapOverlaySettings()
+ * in gaps.cpp, and the CAVA/audio key set in shader.cpp.
  *
  * Returns an empty map if
  * the daemon is unreachable or the call times out (500 ms cap); callers

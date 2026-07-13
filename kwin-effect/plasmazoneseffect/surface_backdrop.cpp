@@ -149,7 +149,13 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // then kept a valid rect covering canvas it no longer captures, the clamp stopped biting,
     // and the overhanging band sampled a frozen reflection of where the window used to be.
     const QRectF outputRect = viewport.renderRect();
-    const bool sameGeneration = state.backdropFrameMs >= 0 && outputRect != state.backdropOutputRect;
+    // Has THIS output already contributed to the current generation? If so this is its next
+    // frame, and the rect restarts at this slice. If not, it is a sibling output tiling the
+    // same canvas in the same generation, and the rect unions.
+    const bool sameGeneration = !state.backdropGenerationOutputs.contains(outputRect);
+    if (!sameGeneration) {
+        state.backdropGenerationOutputs.clear();
+    }
     if (!state.backdropFbo) {
         state.backdropTex.reset();
         state.backdropSize = QSize();
@@ -194,8 +200,7 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
         destNorm = QVector4D(x0, y0, x1 - x0, y1 - y0);
     }
     state.backdropRect = destNorm;
-    state.backdropFrameMs = frameStamp;
-    state.backdropOutputRect = outputRect;
+    state.backdropGenerationOutputs.append(outputRect);
 }
 
 } // namespace PlasmaZones

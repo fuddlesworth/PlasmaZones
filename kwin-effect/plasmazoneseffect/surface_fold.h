@@ -187,7 +187,7 @@ inline SurfaceCanvas surfaceCanvasFor(const QRectF& expandedOrFrame, qreal outer
 ///
 /// Deliberately introspective, never keyed on a pack id: the compiled shader's
 /// linked uniforms decide it, so a new pack is classified with no change here.
-inline bool packVariesPerFrame(const PlasmaZones::CompiledSurfacePack& pk, bool animating)
+inline bool packVariesPerFrame(const PlasmaZones::CompiledSurfacePack& pk, bool animating, bool audioDriving)
 {
     // The backdrop half. uHasBackdrop and uBackdropRect are as per-frame as uBackdrop
     // itself: the gate flips when the window leaves an output and the sub-rect is
@@ -197,8 +197,18 @@ inline bool packVariesPerFrame(const PlasmaZones::CompiledSurfacePack& pk, bool 
         return backdrop >= 0 || hasBackdrop >= 0 || backdropRect >= 0;
     };
     // The half Decorations.Performance can freeze.
-    const auto readsClock = [animating](int time, int audio) {
-        return animating && (time >= 0 || audio >= 0);
+    //
+    // @p audioDriving is audioReactiveDriving(): whether the spectrum is actually live. An
+    // audio pack whose visualizer is OFF (or whose track has been quiet past the idle window)
+    // is handed silence, so it does not vary per frame and its fold is cacheable — which is
+    // exactly what windowSurfaceAnimates concludes when it stops driving such a window. This
+    // predicate did not ask, so it kept classifying the pack as per-frame, compositeValid was
+    // cleared on every fold, and the window re-folded its entire chain on any incidental
+    // paint forever, for a composite that is byte-identical. The classifier and the driver
+    // have to key on ONE expression; disagreeing about it is how this PR produced three
+    // separate cache bugs already.
+    const auto readsClock = [animating, audioDriving](int time, int audio) {
+        return (animating && time >= 0) || (audioDriving && animating && audio >= 0);
     };
 
     if (readsBackdrop(pk.uBackdropLoc, pk.uHasBackdropLoc, pk.uBackdropRectLoc)

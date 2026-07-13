@@ -1174,6 +1174,14 @@ private:
     qint64 surfaceShaderTimeMs();
     qint64 m_surfaceTimeEpochMs = -1; ///< steady-clock ms captured on the first iTime push
 
+    /// Should this window be driven to repaint THIS frame?
+    ///
+    /// NOT a pure query, and not only about iTime: it also reports an in-flight focus ramp, a
+    /// live audio spectrum, and a fold cursor that has drifted from the folded one — and in
+    /// that last case it ARMS hoverRepaintPending, which is why it is non-const. A reader who
+    /// took the old "true when any pack references iTime" wording at face value is exactly how
+    /// the second hover driver came to spin at vsync.
+    ///
     /// True when ANY pack in @p windowId's resolved chain references iTime (main
     /// or a buffer pass). Such a window is driven to repaint every frame by
     /// postPaintScreen so its animation advances even with no content damage; a

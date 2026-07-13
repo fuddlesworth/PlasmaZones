@@ -1179,8 +1179,14 @@ void Settings::setAnimationEasingCurve(const QString& curve)
         // resolves to a slightly-different-precision canonical form).
         toStore = resolved->toString();
     } else {
-        qCWarning(lcConfig) << "setAnimationEasingCurve: curve spec" << curve
-                            << "did not resolve — persisting raw (library default will apply at animation time)";
+        // DEBUG, and the spec is NOT echoed. `curve` is the caller's raw string, and
+        // animationEasingCurve is a registered STRING setting — so any session-bus peer
+        // reaches this with content of its own choosing, unbounded in length and rate. That
+        // is the same log-injection vector the per-screen writers were demoted for, one call
+        // frame deeper still. "It did not resolve" is the signal; the failing text is not
+        // worth an attacker-writable line in the daemon's log.
+        qCDebug(lcConfig) << "setAnimationEasingCurve: curve spec did not resolve — persisting raw "
+                             "(the library default applies at animation time)";
         toStore = curve;
     }
 
@@ -1757,13 +1763,17 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         case DisableAxis::Desktop: {
             const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
             if (slash <= 0 || slash == canonicalEntry.size() - 1) {
-                qCWarning(lcConfig) << "Skipping malformed desktop disable entry:" << canonicalEntry;
+                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
+                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
+                qCDebug(lcConfig) << "Skipping malformed desktop disable entry";
                 continue;
             }
             bool ok = false;
             desktop = canonicalEntry.mid(slash + 1).toInt(&ok);
             if (!ok || desktop <= 0) {
-                qCWarning(lcConfig) << "Skipping malformed desktop disable entry:" << canonicalEntry;
+                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
+                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
+                qCDebug(lcConfig) << "Skipping malformed desktop disable entry";
                 continue;
             }
             screenId = canonicalEntry.left(slash);
@@ -1779,7 +1789,9 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             // is unambiguous. Mirrors the Desktop axis above.
             const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
             if (slash <= 0 || slash == canonicalEntry.size() - 1) {
-                qCWarning(lcConfig) << "Skipping malformed activity disable entry:" << canonicalEntry;
+                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
+                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
+                qCDebug(lcConfig) << "Skipping malformed activity disable entry";
                 continue;
             }
             screenId = canonicalEntry.left(slash);
@@ -1829,12 +1841,21 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
                             << axisInt;
         m_ruleStore->load();
-        // NOTHING is emitted here. The rollback puts the entry set back exactly where it
-        // started, so the value did not change and the project's emit-on-change rule says
-        // not to claim it did — and this signal is what the disable-list UIs re-read on, so
-        // firing it would have them re-read a set identical to the one they are already
-        // showing. Consumers that track the RULES specifically are covered regardless:
-        // load() emits rulesChanged(persisted=true) on its way back to the on-disk state.
+        // Emit only if the rollback did NOT restore the original set — which is exactly the
+        // emit-on-change rule, applied to the state we actually ended up in.
+        //
+        // The usual case is that load() puts the entries back where they started, so nothing
+        // changed and nothing is announced; firing then would make every disable-list UI
+        // re-read a set identical to the one it is already showing. But load() is best-effort
+        // (it keeps the advanced in-memory set when it cannot read the file, and an unreadable
+        // file is a plausible reason the write failed in the first place), so the rollback can
+        // leave the value MOVED. Announcing nothing there would strand every UI on the old
+        // list while the getters report the new one — which is the same silent divergence,
+        // just from the other side.
+        if (canonical(disableEntriesFor(mode, axisInt)) != before) {
+            Q_EMIT(this->*signalFn)(mode);
+            Q_EMIT settingsChanged();
+        }
         return;
     }
 

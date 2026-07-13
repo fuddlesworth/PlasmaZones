@@ -211,9 +211,18 @@ public:
         m_disabledDesktops.insert(static_cast<int>(mode), entries);
         Q_EMIT settingsChanged();
     }
-    bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode, const QString& /*screenIdOrName*/, int) const override
+    bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                           int desktop) const override
     {
-        return false;
+        // Reads the member its setter writes. It used to return a hardcoded false, so the
+        // gate was permanently OPEN for every stub-backed test and set-then-query was
+        // unobservable — the exact defect class this fixture exists to disprove. Composite
+        // key and the desktop <= 0 guard both mirror production (settings.cpp).
+        if (desktop <= 0) {
+            return false;
+        }
+        const QString key = screenIdOrName + QLatin1Char('/') + QString::number(desktop);
+        return m_disabledDesktops.value(static_cast<int>(mode)).contains(key);
     }
     QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const override
     {
@@ -227,10 +236,16 @@ public:
         m_disabledActivities.insert(static_cast<int>(mode), entries);
         Q_EMIT settingsChanged();
     }
-    bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode, const QString& /*screenIdOrName*/,
-                            const QString&) const override
+    bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                            const QString& activityId) const override
     {
-        return false;
+        // See isDesktopDisabled: same hardcoded-false hazard, same composite key, and the
+        // empty-activity guard production applies.
+        if (activityId.isEmpty()) {
+            return false;
+        }
+        const QString key = screenIdOrName + QLatin1Char('/') + activityId;
+        return m_disabledActivities.value(static_cast<int>(mode)).contains(key);
     }
     bool showZoneNumbers() const override
     {
@@ -1945,12 +1960,24 @@ public:
         Q_EMIT lockedScreensChanged();
         Q_EMIT settingsChanged();
     }
-    bool isContextLocked(const QString&, int, const QString&) const override
+    bool isContextLocked(const QString& screenId, int desktop, const QString& activityId) const override
     {
-        return false;
+        return m_lockedContexts.contains(contextLockKey(screenId, desktop, activityId));
     }
-    void setContextLocked(const QString&, int, const QString&, bool) override
+    void setContextLocked(const QString& screenId, int desktop, const QString& activityId, bool locked) override
     {
+        const QString key = contextLockKey(screenId, desktop, activityId);
+        if (m_lockedContexts.contains(key) == locked) {
+            return;
+        }
+        if (locked) {
+            m_lockedContexts.insert(key);
+        } else {
+            m_lockedContexts.remove(key);
+        }
+        // ISettings declares no contextLockedChanged, so the aggregate signal is the only
+        // one to emit.
+        Q_EMIT settingsChanged();
     }
 
     // Rendering (ISettings)
@@ -2065,6 +2092,14 @@ private:
     QString m_audioInputMethod = ConfigDefaults::audioInputMethod();
     QString m_audioInputSource = ConfigDefaults::audioInputSource();
     QString m_labelFontFamily = ConfigDefaults::labelFontFamily();
+    /// The composite key production uses for a locked (screen, desktop, activity) context.
+    static QString contextLockKey(const QString& screenId, int desktop, const QString& activityId)
+    {
+        return screenId + QLatin1Char('/') + QString::number(desktop) + QLatin1Char('/') + activityId;
+    }
+
+    QSet<QString> m_lockedContexts;
+
     // Per-mode disable lists, keyed by the AssignmentEntry::Mode int. Real storage: the
     // setters used to drop the value entirely, so no test could ever disable anything.
     QHash<int, QStringList> m_disabledMonitors;

@@ -1107,6 +1107,18 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     disconnect(&m_shaderManager.m_animationShaderRegistry, nullptr, this, nullptr);
     disconnect(&m_surfaceShaderRegistry, nullptr, this, nullptr);
 
+    // Make the context current for the WHOLE destructor, member destruction included.
+    //
+    // The teardown calls below each make it current themselves — but only if they have
+    // something to tear down. Unload the effect with no decorated windows and no live
+    // transition (a KCM toggle on an idle desktop) and clearAllDecorations() iterates nothing,
+    // the drain loop runs zero times, and nothing makes the context current at all. Then the
+    // members go: m_compiledPacks, m_shaderCache, m_textureCache — glDeleteProgram,
+    // glDeleteTextures, glDeleteFramebuffers, against whatever context happens to be current.
+    // Making it current is sticky per-thread, so one call here covers the body and everything
+    // the members destroy afterwards.
+    ensureGlContextCurrent();
+
     // Stop the audio-spectrum provider (terminates its cava child process) and
     // sever its signal before teardown, so a late spectrumUpdated can't dispatch
     // to onEffectAudioSpectrum against half-destroyed members.

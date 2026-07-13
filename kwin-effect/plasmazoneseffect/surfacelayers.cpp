@@ -459,10 +459,17 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                     // uHasBackdrop first. A third-party pack that does not is not a bug in
                     // the pack.
                     pass.shader->setUniform(pass.uBackdropLoc, 5);
-                    glActiveTexture(GL_TEXTURE5);
-                    transparentFallbackTexture()->bind();
-                    glActiveTexture(GL_TEXTURE0);
-                    passBackdropUnitBound = true;
+                    // Set the uniform EVEN IF the fallback texture is null. An explicitly set sampler
+                    // pointing at an unbound unit reads black, which is the safe answer; an UNSET one
+                    // reads unit 0, the running composite. The lazy 1x1 upload can fail (OOM, context
+                    // loss), and every other consumer of this texture null-checks it — these two were
+                    // the only ones dereferencing it blind, which is a segfault in the compositor.
+                    if (KWin::GLTexture* const fallback = transparentFallbackTexture()) {
+                        glActiveTexture(GL_TEXTURE5);
+                        fallback->bind();
+                        glActiveTexture(GL_TEXTURE0);
+                        passBackdropUnitBound = true;
+                    }
                 }
                 if (pass.uBackdropRectLoc >= 0) {
                     pass.shader->setUniform(pass.uBackdropRectLoc, state.backdropRect);
@@ -655,10 +662,17 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
                 // Declared with nothing behind it — the transparent fallback, for the reason
                 // given on the buffer-pass sibling above. Unit 0 is the running composite.
                 pk->shader->setUniform(pk->uBackdropLoc, 5);
-                glActiveTexture(GL_TEXTURE5);
-                transparentFallbackTexture()->bind();
-                glActiveTexture(GL_TEXTURE0);
-                mainBackdropUnitBound = true;
+                // Set the uniform EVEN IF the fallback texture is null. An explicitly set sampler
+                // pointing at an unbound unit reads black, which is the safe answer; an UNSET one
+                // reads unit 0, the running composite. The lazy 1x1 upload can fail (OOM, context
+                // loss), and every other consumer of this texture null-checks it — these two were
+                // the only ones dereferencing it blind, which is a segfault in the compositor.
+                if (KWin::GLTexture* const fallback = transparentFallbackTexture()) {
+                    glActiveTexture(GL_TEXTURE5);
+                    fallback->bind();
+                    glActiveTexture(GL_TEXTURE0);
+                    mainBackdropUnitBound = true;
+                }
             }
             if (pk->uBackdropRectLoc >= 0) {
                 pk->shader->setUniform(pk->uBackdropRectLoc, state.backdropRect);

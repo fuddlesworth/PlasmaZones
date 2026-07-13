@@ -485,15 +485,20 @@ struct SurfaceMultipassState
     /// cross-monitor animations).
     qint64 backdropFrameMs = -1;
 
-    /// The output rect of the last capture that wrote backdropRect.
+    /// Every output that has blitted into the CURRENT accumulation generation.
     ///
-    /// This, and NOT a clock, is what separates one accumulation generation from the next. A
-    /// canvas straddling two outputs is blitted once per output, and those slices must UNION
-    /// into one valid rect — but the next blit from the SAME output is a new frame of the
-    /// same window and must RESTART the rect, or a window that has moved keeps claiming
-    /// canvas it no longer captures. Outputs have independent frame clocks, so no clock can
-    /// tell those two cases apart.
-    QRectF backdropOutputRect;
+    /// This, and NOT a clock, is what separates one generation from the next. A canvas
+    /// straddling several outputs is blitted once per output, and those slices must UNION
+    /// into one valid rect — but a blit from an output ALREADY in this generation is the next
+    /// frame for that output and must RESTART the rect, or a window that has moved keeps
+    /// claiming canvas it no longer captures. Outputs have independent frame clocks, so no
+    /// clock can tell those two cases apart.
+    ///
+    /// A SET, not "the last output that blitted". With two outputs both covering the canvas
+    /// the blits alternate A, B, A, B — so "different from the last one" is true every single
+    /// time, the restart never fires, and the rect only ever grows. That is the same
+    /// never-expiring generation the wall-clock version had, which is what this replaced.
+    QList<QRectF> backdropGenerationOutputs;
 
     /// A backdrop repaint has been ASKED FOR and has not yet produced a fold.
     ///
