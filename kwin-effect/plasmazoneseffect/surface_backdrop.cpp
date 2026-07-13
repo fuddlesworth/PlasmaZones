@@ -46,7 +46,14 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // happens to agree. Texel alignment between the backdrop and the composite is what lets
     // a pack sample both with one uv, and a drift between two copies of this arithmetic
     // would misalign the frost silently.
-    const SurfaceCanvas canvas = surfaceCanvasFor(windowRect, pad, viewport.scale());
+    //
+    // windowSurfaceScale(w), NOT viewport.scale(): the backdrop TEXTURE must match the
+    // composite texture, and the composite is now built at the window's pinned scale. Handing
+    // this output's scale here would size the backdrop for one output while the composite is
+    // sized for another, and on a mixed-DPI straddle the two would disagree — exactly the
+    // silent misalignment this shared helper exists to prevent. The blit below still reads
+    // through the live `viewport`; only the destination canvas is pinned.
+    const SurfaceCanvas canvas = surfaceCanvasFor(windowRect, pad, windowSurfaceScale(w));
     const QRectF logicalGeometry = canvas.logicalGeometry;
     const QSize textureSize = canvas.textureSize;
     if (textureSize.isEmpty()) {

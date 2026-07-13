@@ -1109,7 +1109,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // back, so it must not sit inside the ShaderBinder scope below.
             // Null when the window has no surface layers (the common no-border
             // case), in which case surfaceColor() samples the bare uTexture0.
-            KWin::GLTexture* const surfaceLayerTex = renderSurfaceChain(transition, w, viewport.scale());
+            // Pinned per-window scale, matching the rest path so the transition folds into the
+            // same-sized canvas the cache already holds.
+            KWin::GLTexture* const surfaceLayerTex = renderSurfaceChain(transition, w, windowSurfaceScale(w));
             // Prefer the composite's RECORDED canvas rect over recomputing
             // from live geometry: it describes the texture that actually
             // exists, which matters for a CLOSING (deleted) window whose
@@ -1882,7 +1884,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // takes this path — one-pack chains included — so a rest
             // composite always exists (the close path reuses it to carry the
             // decoration through close animations).
-            renderSurfaceChainComposite(w, viewport.scale());
+            // The window's PINNED scale, not this output's: see windowSurfaceScale. Handing
+            // viewport.scale() here is what made a straddling window realloc and recapture
+            // twice per frame forever.
+            renderSurfaceChainComposite(w, windowSurfaceScale(w));
         }
     }
 

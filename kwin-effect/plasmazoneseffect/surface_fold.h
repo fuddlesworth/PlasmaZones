@@ -13,6 +13,7 @@
 
 #include "types.h"
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <opengl/glframebuffer.h>
@@ -36,6 +37,48 @@ namespace PlasmaZones {
 inline bool backdropUsable(const SurfaceMultipassState& state)
 {
     return state.backdropTex && state.backdropRect.z() > 0.0f && state.backdropRect.w() > 0.0f;
+}
+
+/// The scale a window's decoration canvas is pinned to, the SAME on every output that paints
+/// the window.
+///
+/// paintWindow runs once per output the window touches, and the viewport scale handed to each
+/// call is THAT output's scale. A window straddling a 1x and a 2x output was therefore handed
+/// a different scale on each of the two calls per frame, which changed both the texture size
+/// and captureScale, tripped the realloc-and-recapture branch every single time, and re-ran
+/// the fold's most expensive step — a full effects->drawWindow() re-entry — twice per frame,
+/// forever. Every cache the window had was dead for exactly the mixed-DPI multi-monitor case.
+///
+/// Pin to the HIGHEST scale among the outputs the window's expanded rect intersects: one
+/// canvas, one capture, one fold, and the lower-scale output's paint samples the cache.
+/// Highest rather than the current output's, so the hi-DPI half of a straddle is rendered at
+/// full resolution instead of upscaled from a low-resolution canvas. It cannot change with
+/// which output is painting, so the two per-frame calls now agree and the caches hold.
+///
+/// Falls back to the window's own screen (then 1.0) when the intersection finds nothing — a
+/// window mid-move can briefly report a rect touching no output at all.
+inline qreal windowSurfaceScale(const KWin::EffectWindow* w)
+{
+    if (!w || !KWin::effects) {
+        return 1.0;
+    }
+    QRectF rect = w->expandedGeometry();
+    if (rect.isEmpty()) {
+        rect = w->frameGeometry();
+    }
+    qreal best = 0.0;
+    const auto outputs = KWin::effects->screens();
+    for (const KWin::LogicalOutput* out : outputs) {
+        if (out && rect.intersects(QRectF(out->geometry())) && out->scale() > best) {
+            best = out->scale();
+        }
+    }
+    if (best <= 0.0) {
+        if (const KWin::LogicalOutput* const own = w->screen()) {
+            best = own->scale();
+        }
+    }
+    return best > 0.0 ? best : 1.0;
 }
 
 /// The rect a padded decoration actually covers: the window's expanded geometry (its
