@@ -7,6 +7,8 @@
 #include "shader_resolve.h"
 #include "window_query.h"
 
+#include <PhosphorAnimation/AnimationLimits.h>
+
 #include <core/output.h>
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
@@ -34,6 +36,119 @@
 namespace PlasmaZones {
 
 using ShaderInternal::shaderClockNowMs;
+
+namespace {
+
+/// Progress for a TIME-DRIVEN transition (`durationMs > 0`) at @p nowMs: linear
+/// ratio → timing-curve ease → held-move pin → release down-ramp. @p active
+/// reports whether paintWindow would paint the leg this frame.
+///
+/// Does NOT apply the `reverse` flip — callers do, because paintWindow shares
+/// that final step with its animator-driven branch.
+///
+/// @p stepCurve owns the SINGLE per-frame integrator step for a stateful
+/// (spring) curve. paintWindow passes true. The backdrop capture passes false
+/// and reads the last stepped value (at most one frame stale), so it can predict
+/// the drawn rect without double-stepping the integrator paintWindow owns.
+///
+/// Both callers route through this one function on purpose: the capture must
+/// sample the scene where the quad is actually drawn, and a partial replica
+/// drifts. During a held-move release, for instance, the draw ramps progress
+/// back toward 0 while an un-ramped predictor sits pinned at 1 — the frost pane
+/// then samples the live frame while the draw lerps toward the grab frame.
+qreal timeDrivenProgress(ShaderTransition& st, qint64 nowMs, bool stepCurve, bool& active)
+{
+    active = false;
+    if (st.durationMs <= 0) {
+        return 0.0;
+    }
+    qreal progress = 0.0;
+    const qint64 elapsed = nowMs - st.startTimeMs;
+    if (elapsed >= 0 && elapsed <= st.durationMs) {
+        // Ease the linear time progress through the per-event timing curve
+        // (resolved global → "All" → node → rule at begin time), so a node's
+        // curve shapes its shader iTime exactly as it shapes the animator-driven
+        // branch. `lastPaintTimeMs` still holds the previous tick here — it is
+        // advanced later, alongside iTimeDelta. Shared with the desktop switch;
+        // see easeProgress for the dt cap and the stateful/stateless split.
+        const qreal linear = qreal(elapsed) / qreal(st.durationMs);
+        progress = ShaderInternal::easeProgress(st.progressCurve.get(), st.progressCurveState, st.lastPaintTimeMs,
+                                                nowMs, linear, stepCurve);
+        active = true;
+    } else if ((st.holdUntilRelease || (st.meshSim.initialized && !st.meshSim.settled)) && elapsed > st.durationMs) {
+        // HELD move/resize: the drag outlives the nominal duration by design.
+        // Stay active with progress pinned at 1 — the motion uniforms
+        // (iMoveVelocity / iMoveOffset / iMoveMesh), not the clock, drive the
+        // shader from here, and a stateful curve deliberately stops stepping. The
+        // pin is exact: reading the frozen CurveState instead would sit below 1
+        // for an underdamped spring. After release (holdUntilRelease cleared) a
+        // mesh-driven transition stays active until its lattice settles, so the
+        // wobble rings out instead of being cut off at the release frame.
+        progress = 1.0;
+        active = true;
+    }
+    // NOTE: there is deliberately NO "completion frame" branch here for a
+    // stateful curve. One was tried and was unreachable: it needed a paint at
+    // `elapsed > durationMs`, but tryBeginShaderForEvent's teardown timer fires
+    // AT durationMs (and Qt's coarse timer may fire up to 5% early), so the leg
+    // is erased before such a frame can land. The residual it was meant to hide
+    // is instead removed at the source — Spring's settling band is 0.5%, not the
+    // 2% control-theory convention, so the integrator is already within half a
+    // percent of 1.0 when the clock expires. See SettleBand in spring.cpp.
+    // Held-move release leg (velocity/trail move packs): the release handler
+    // stamps releaseStartMs instead of clearing the hold flag, and progress ramps
+    // back toward 0 over the same durationMs — the shader plays iTime 1→0 after
+    // release, so a dissolve-while-held pack (phosphor-vortex) rematerialises
+    // instead of snapping at teardown. Subtracting from the base progress (not
+    // from a hard 1.0) bounds a grab shorter than the nominal duration by its
+    // grab-in value. The ramp is deliberately LINEAR even when the base was eased:
+    // this leg is exclusive to window.movement.move, whose packs drive their
+    // visuals from the motion uniforms, not from iTime. Mesh packs never stamp
+    // this and are untouched. Runs BEFORE the caller's reverse flip, which is
+    // correct — the stamp only exists on the held-move path, and window.move
+    // installs with reverse == false.
+    if (active && st.releaseStartMs >= 0) {
+        const qreal down = qreal(nowMs - st.releaseStartMs) / qreal(st.durationMs);
+        // Route through the ONE clamp policy, not a bare qBound. A held-move leg
+        // whose grab was SHORTER than the nominal duration takes the eased branch
+        // above, not the pin — so `progress` can legitimately carry an overshooting
+        // curve's overshoot (1.08), and an unconditional qBound would snap it to 1.0
+        // at the exact moment the button lets go. The lower bound matters equally:
+        // an overshooting curve dips below 0, and a 0.0 floor kills that too.
+        progress = ShaderInternal::clampProgressForCurve(progress - qMax(down, 0.0), st.progressCurve.get());
+    }
+    // Re-grab resume: the accrued down-ramp, decaying back to 0 over the same
+    // durationMs. At the re-grab frame the offset equals the ramp the release
+    // leg above had accrued, so the first resumed frame reproduces the last
+    // released frame exactly — continuous by construction. Applied to the
+    // PAINTED progress (not to the clock) so it is correct for a stateless
+    // curve and a stateful spring alike: the spring's integrator keeps its own
+    // value and this only lifts the offset off it. See the rationale on
+    // ShaderTransition::regrabStartMs for why rewinding startTimeMs cannot work.
+    if (active && st.regrabStartMs >= 0) {
+        const qreal back = qreal(nowMs - st.regrabStartMs) / qreal(st.durationMs);
+        const qreal offset = st.regrabDownOffset - qMax(back, 0.0);
+        if (offset <= 0.0) {
+            // Retire the exhausted offset only on the PAINT pass. `stepCurve` is the
+            // "I own the per-frame mutation" flag, and the backdrop predictor passes
+            // false precisely so it can read this function without side effects — but
+            // this reset was outside that guard, so the predictor was clearing state
+            // paintWindow's own call was about to read. Benign today (both share the
+            // pinned frame clock, so both see the same expiry), and a free bug for
+            // whoever next changes either arm.
+            if (stepCurve) {
+                st.regrabStartMs = -1;
+                st.regrabDownOffset = 0.0;
+            }
+        } else {
+            // Same clamp policy as the release ramp above — see there.
+            progress = ShaderInternal::clampProgressForCurve(progress - offset, st.progressCurve.get());
+        }
+    }
+    return progress;
+}
+
+} // namespace
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 {
@@ -176,11 +291,32 @@ void PlasmaZonesEffect::postPaintScreen()
     if (!m_shaderManager.empty()) {
         const qint64 now = shaderClockNowMs();
         for (const auto& [w, transition] : m_shaderManager.shaderTransitions()) {
-            if (!w || w->isDeleted()) {
+            if (!w) {
+                continue;
+            }
+            // Skip windows KWin is not painting. An off-desktop window never reaches
+            // paintWindow, and paintWindow is the ONLY teardown for a durationMs == 0
+            // (animator-driven) leg — it has no timer. Without this, snapping a window
+            // and then switching virtual desktop mid-morph leaves the arm below
+            // requesting a FULL-OUTPUT repaint every vsync, indefinitely.
+            //
+            // EXCEPT a leg we hold the close grab on. A closing window is isDeleted()
+            // for its ENTIRE close animation (we keep the corpse alive with that very
+            // grab), and it emits no damage of its own because the client is gone — so
+            // it is the leg that needs this pump MOST. Skipping it leaves the close
+            // shader running only as long as something else happens to damage the
+            // output. `closeGrabHeld` is precisely "this leg is animating a corpse we
+            // are keeping alive", and paintWindow already calls screen()/frameGeometry()
+            // on that same ref-held Deleted every close frame.
+            if (!transition.closeGrabHeld && (w->isDeleted() || !w->isOnCurrentDesktop())) {
                 continue;
             }
             const bool timeBasedActive =
                 transition.durationMs > 0 && (now - transition.startTimeMs) <= transition.durationMs;
+            // An animator-driven leg is live only while the ANIMATOR is. Gating on
+            // the mode flag alone (durationMs == 0) keeps repainting for a leg whose
+            // animation finished but whose teardown has not run.
+            const bool animatorActive = transition.durationMs == 0 && m_windowAnimator->hasAnimation(w);
             // Held move/resize transitions live past their nominal duration
             // (timeBasedActive goes false), and a soft-body lattice keeps
             // ringing AFTER release when the window emits no damage of its
@@ -213,7 +349,7 @@ void PlasmaZonesEffect::postPaintScreen()
                 // output as dirty every frame the transition is live. The
                 // `heldActive` arm (hoisted above) keeps a held/ringing
                 // lattice repainting after the duration timer stands down.
-                if ((timeBasedActive || transition.durationMs == 0 || heldActive) && KWin::effects) {
+                if ((timeBasedActive || animatorActive || heldActive) && KWin::effects) {
                     if (const auto* output = w->screen()) {
                         KWin::effects->addRepaint(output->geometry());
                     } else {
@@ -337,7 +473,7 @@ void PlasmaZonesEffect::postPaintScreen()
     // the prePaintScreen→postPaintScreen bracket (defensive bootstrap,
     // future test harness, an unexpected mid-cycle paint) then falls
     // back to the live `shaderClockNowMs()` via the -1 sentinel branch
-    // in shader_resolve.cpp's resolveShaderClock(), instead of reading
+    // via the -1 sentinel branch in this file's own clock read, instead of reading
     // a stale pinned timestamp from this cycle.
     m_shaderManager.setCurrentFrameClockMs(-1);
     // Drop the per-frame SetOpacity cache so next frame's prePaintWindow
@@ -475,7 +611,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // the three animation classes expose exact geometry:
             //   1. C++ WindowAnimator translate+scale — its current rect.
             //   2. Geometry-morph transitions — lerp(from, to, progress)
-            //      with the same time-based progress the draw uses.
+            //      with the same eased progress the draw uses (below).
             //   3. Non-morph shader transitions: anchor-extent packs warp in
             //      place (rest rect is already right); surface-extent movers
             //      (fly-in / bounce) place pixels only the shader knows, so
@@ -483,17 +619,69 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             //      that rides the quad, which motion masks. The reference
             //      blur effects disable blur outright on transformed
             //      windows; this degrades strictly less.
-            QRectF animatedFrame = m_windowAnimator->currentValue(w, QRectF());
-            if (!animatedFrame.isValid()) {
-                if (const ShaderTransition* st = m_shaderManager.findTransition(w);
-                    st && st->fromGeometry.isValid() && st->toGeometry.isValid() && st->durationMs > 0) {
-                    const qreal t = qBound(0.0, qreal(frameNowMs - st->startTimeMs) / qreal(st->durationMs), 1.0);
+            //
+            // PRECEDENCE MUST MIRROR THE DRAW. paintWindow gives a geometry-morph
+            // shader priority: when the live transition declares iFromRect
+            // (`shaderOwnsGeometry`) it interpolates the drawn rect itself and the
+            // WindowAnimator's translate+scale is SKIPPED. Consulting the animator
+            // first here would invert that — a maximize morph installed while a
+            // snap animation is still in flight (the snap's animator entry is not
+            // removed) would predict the snap's rect while the draw paints the
+            // morph's, and the pane would sample the wrong scene slice for the
+            // overlap.
+            QRectF animatedFrame;
+            ShaderTransition* st = m_shaderManager.findTransition(w);
+            const bool shaderOwnsGeometry = st && st->cached && st->cached->iFromRectLoc >= 0;
+            if (shaderOwnsGeometry && st->fromGeometry.isValid() && st->toGeometry.isValid() && st->durationMs > 0) {
+                // Same progress the draw will use, via the shared SSOT.
+                // stepCurve=false: paintWindow owns the stateful curve's single
+                // per-frame step, so this read must not advance it. The reverse
+                // flip is applied here, as paintWindow does.
+                bool stActive = false;
+                qreal t = timeDrivenProgress(*st, frameNowMs, /*stepCurve=*/false, stActive);
+                // Honour `active`: an installed-but-expired leg (elapsed past
+                // durationMs, not held) paints no shader this frame and the window
+                // sits at its rest rect. Lerping its 0-progress would snap the pane
+                // back to fromGeometry — the PRE-maximize rect — on the expiry
+                // frame. Leaving animatedFrame invalid falls back to the rest-rect
+                // capture, which is where the draw actually is.
+                if (stActive) {
+                    if (st->reverse) {
+                        t = 1.0 - t;
+                    }
+                    // Mirror the pack's OWN split: POSITION takes the raw t (the
+                    // overshoot IS the bounce, and it is where the eye reads it),
+                    // SIZE takes the clamped t. That is exactly what window-morph
+                    // does — `mix(iFromRect.xy, iToRect.xy, t)` alongside
+                    // `mix(iFromRect.zw, iToRect.zw, tc)` — because extrapolating an
+                    // EXTENT is nonsense at a large ratio (a maximize computes a
+                    // negative width) while extrapolating a POSITION is the feature.
+                    // Lerping both axes with the raw t, as this briefly did, fixed
+                    // the position and broke the size.
+                    //
+                    // CAVEAT, and it is real: one hard-coded lerp shape cannot track
+                    // five packs that each choose their own. `fold` eases its rect
+                    // through a smoothstep, `ripple-snap` squares a time-compressed
+                    // progress, and `flow` / `phosphor-stream` stagger it PER VERTEX —
+                    // there is no single rect to predict for those. The predictor
+                    // approximates for everything except window-morph, and always has.
+                    // Making it exact needs the rect curve to come from the pack (a
+                    // metadata field), not from a guess here. The cost of being wrong
+                    // is bounded: the frost pane samples a slightly-off scene slice.
+                    // It does not corrupt the draw.
+                    const qreal tc = qBound(0.0, t, 1.0);
                     const QRectF& f = st->fromGeometry;
                     const QRectF& g = st->toGeometry;
-                    animatedFrame =
-                        QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
-                               f.width() + (g.width() - f.width()) * t, f.height() + (g.height() - f.height()) * t);
+                    animatedFrame = QRectF(f.x() + (g.x() - f.x()) * t, f.y() + (g.y() - f.y()) * t,
+                                           qMax(1.0, f.width() + (g.width() - f.width()) * tc),
+                                           qMax(1.0, f.height() + (g.height() - f.height()) * tc));
                 }
+            }
+            if (!animatedFrame.isValid()) {
+                // No morph owns the geometry (or it is a durationMs == 0 morph
+                // riding the animator's timeline, whose rect the animator has):
+                // the animator's current rect is what the draw transforms by.
+                animatedFrame = m_windowAnimator->currentValue(w, QRectF());
             }
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, animatedFrame);
         }
@@ -595,35 +783,30 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             return;
         }
         // Two progress sources, picked by the transition's mode (see
-        // ShaderTransition's docstring). Lifecycle events (window.*)
-        // started via tryBeginShaderForEvent set durationMs > 0 and drive
-        // progress from monotonic steady-clock elapsed; zone.* events flowed
-        // through applyWindowGeometry leave durationMs = 0 and ride the
+        // ShaderTransition's docstring). Lifecycle events started via
+        // tryBeginShaderForEvent set durationMs > 0 and drive progress from
+        // monotonic steady-clock elapsed; the window.movement.* geometry events
+        // that flow through applyWindowGeometry leave durationMs = 0 and ride the
         // m_windowAnimator timeline so the shader matches the geometry
         // animation.
         qreal progress = 0.0;
         bool active = false;
         if (transition.durationMs > 0) {
-            const qint64 elapsed = frameNowMs - transition.startTimeMs;
-            if (elapsed >= 0 && elapsed <= transition.durationMs) {
-                progress = qreal(elapsed) / qreal(transition.durationMs);
-                active = true;
-            } else if ((transition.holdUntilRelease || (transition.meshSim.initialized && !transition.meshSim.settled))
-                       && elapsed > transition.durationMs) {
-                // HELD move/resize: the drag outlives the nominal duration
-                // by design. Stay active with progress pinned at 1 — the
-                // motion uniforms (iMoveVelocity / iMoveOffset / iMoveMesh),
-                // not the clock, drive the shader from here. After release
-                // (holdUntilRelease cleared) a mesh-driven transition stays
-                // active until its lattice settles, so the wobble rings out
-                // instead of being cut off at the release frame.
-                progress = 1.0;
-                active = true;
-            }
+            // Shared with the backdrop capture (see timeDrivenProgress). This is
+            // the site that OWNS the stateful curve's single per-frame step.
+            progress = timeDrivenProgress(transition, frameNowMs, /*stepCurve=*/true, active);
         } else {
             const auto* anim = m_windowAnimator->animationFor(w);
             if (anim && anim->isAnimating()) {
-                progress = qBound(0.0, anim->state().value, 1.0);
+                // Same clamp POLICY as the time-driven source (ShaderInternal::
+                // easeProgress): an overshooting curve's value passes through raw,
+                // everything else is clamped. Clamping here unconditionally — as
+                // this once did — flattened iTime at 1.0 for exactly the
+                // window.movement.* events whose GEOMETRY visibly bounces, so the
+                // shader and the rect disagreed about the same curve. That is the
+                // divergence the unclamped policy exists to prevent, and this was
+                // the majority event class.
+                progress = ShaderInternal::clampProgressForCurve(anim->state().value, anim->spec().profile.curve.get());
                 active = true;
             }
         }
@@ -631,8 +814,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // assigned shader covers both directions of a paired event:
         // window.open plays 0→1, window.close plays the same shader 1→0;
         // going-to-minimized plays 1→0 while unminimize plays 0→1; same
-        // for maximize/unmaximize. Both progress sources are guaranteed
-        // to be in [0, 1] above, so the flip is bound-preserving.
+        // for maximize/unmaximize. The flip is symmetric about 0.5 and preserves
+        // whatever range the curve produced — an overshooting curve leaves [0,1]
+        // (1.08 mirrors to -0.08, the correct reversed overshoot), so this is NOT
+        // a bound-preserving operation and must not be assumed to be one.
         if (transition.reverse) {
             progress = 1.0 - progress;
         }
@@ -680,9 +865,18 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // the top of paintWindow) so multiple paint passes within
             // one cycle agree on the timestamp.
             const qint64 nowMs = frameNowMs;
+            // Cap the frame delta at Limits::MaxShaderTimeDeltaSeconds, matching
+            // the daemon's overlay push (overlayservice/shader.cpp) and the
+            // SurfaceAnimator. A transition can live up to MaxAnimationDurationMs,
+            // so a compositor stall or a suspend/resume mid-transition would
+            // otherwise hand the shader a multi-second dt in a single frame and
+            // jump every dt-integrated effect (particle motion, noise advance,
+            // sparkle drift) far past where it should be. The -1 sentinel still
+            // yields 0 on the first paint.
             const float iTimeDelta = (transition.lastPaintTimeMs < 0)
                 ? 0.0f
-                : static_cast<float>(nowMs - transition.lastPaintTimeMs) / 1000.0f;
+                : qMin(static_cast<float>(nowMs - transition.lastPaintTimeMs) / 1000.0f,
+                       PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds);
             transition.lastPaintTimeMs = nowMs;
             // Pin the GLSL contract: `iFrame` is declared `uniform int`
             // in animation_uniforms.glsl; bumping iFrameValue's type to
@@ -775,9 +969,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // geometry fallback stays for the fold's failure paths, which can
             // erase the multipass entry.
             QRectF layerCanvasGeo = expandedGeo.adjusted(-layerPad, -layerPad, layerPad, layerPad);
-            if (const auto lsIt = m_surfaceMultipass.find(getWindowId(w));
-                lsIt != m_surfaceMultipass.end() && lsIt->second.canvasGeo.isValid()) {
-                layerCanvasGeo = lsIt->second.canvasGeo;
+            if (const auto lsIt = m_surfaceMultipass.find(getWindowId(w)); lsIt != m_surfaceMultipass.end()) {
+                if (lsIt->second.canvasGeo.isValid()) {
+                    layerCanvasGeo = lsIt->second.canvasGeo;
+                }
             }
             const QVector4D layerRectInTexture = ShaderInternal::computeTextureSubRect(
                 transition.surfaceExtent ? anchorGeo : expandedGeo, layerCanvasGeo);
@@ -1061,7 +1256,22 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (transition.meshSim.initialized) {
                     const qint64 mdt = (transition.meshLastMs < 0) ? 0 : (nowMs - transition.meshLastMs);
                     transition.meshLastMs = nowMs;
+                    const bool wasSettled = transition.meshSim.settled;
                     ShaderInternal::stepMeshSim(transition.meshSim, w->frameGeometry(), static_cast<qreal>(mdt));
+                    // Request ONE more frame on the settle edge. The lattice flips
+                    // `settled` here, INSIDE the paint — but postPaintScreen has
+                    // already decided whether to inject a repaint for this window, and
+                    // its `heldActive` arm reads the same flag. So on the frame a
+                    // wobble settles, nothing schedules the next paint, and the expiry
+                    // teardown (which only runs from paintWindow, on a frame where the
+                    // leg is inactive) never gets one. The leg then survives on the
+                    // 4 s mesh SAFETY cap — which exists for a lattice that never
+                    // settles, not for the normal path — holding its redirect, its
+                    // shader, and the whole compositor's transformed-windows paint
+                    // path for ~3.5 s after every single drag.
+                    if (!wasSettled && transition.meshSim.settled) {
+                        w->addRepaintFull();
+                    }
                 }
                 if (cached->iMoveMeshLoc >= 0) {
                     // Publish node deflections from ideal grid position, px.

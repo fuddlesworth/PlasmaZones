@@ -8,6 +8,7 @@
 
 #include "../windowanimator.h"
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -545,22 +546,37 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
 
 bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                                               const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs,
-                                              bool reverse, bool holdCloseGrab, bool holdAddedGrab)
+                                              bool reverse, bool holdCloseGrab, bool holdAddedGrab,
+                                              std::shared_ptr<const PhosphorAnimation::Curve> progressCurve)
 {
     const QString effectId = profile.effectiveEffectId();
     if (effectId.isEmpty() || !window)
         return false;
+
+    // A timing curve is meaningless on the animator-driven path (durationMs == 0):
+    // that leg reads its progress from the WindowAnimator, whose own profile
+    // ALREADY carries the curve, so applying one here would double-ease. The
+    // pairing is unrepresentable in the transition (progressCurve is stored only
+    // under durationMs > 0, and types.h documents the null-on-that-path invariant
+    // as fact), so normalise it away in release instead of letting a caller's
+    // curve vanish silently. Assert in debug so the miswiring surfaces at once.
+    Q_ASSERT(durationMs > 0 || !progressCurve);
+    if (durationMs <= 0 && progressCurve) {
+        qCWarning(lcEffect) << "beginShaderTransition: progressCurve supplied with durationMs <= 0 — dropping it; the "
+                               "animator-driven path already carries the curve";
+        progressCurve.reset();
+    }
 
     // Global animations toggle. Mirrors the daemon's
     // `SurfaceAnimator::beginShow/beginHide` early-out when
     // `setEnabled(false)`. Gating here (rather than only in
     // `tryBeginShaderForEvent`) covers BOTH callsite categories
     // uniformly: window-lifecycle events that flow through
-    // `tryBeginShaderForEvent`, and zone.* events that flow through
+    // `tryBeginShaderForEvent`, and the window.movement.* geometry events that flow through
     // `applyWindowGeometry → beginShaderTransition` directly. Without
-    // this gate the zone.* path would still install shader transitions
+    // this gate that path would still install shader transitions
     // even with global animations off.
-    if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
+    if (!m_windowAnimator->isEnabled()) {
         return false;
     }
 
@@ -909,7 +925,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots; ++slot) {
             // GLSL sampler name: uTexture1..3 (slot+1 because uTexture0 is
             // the redirected surface, not user-declared). Matches the
-            // overlay shader convention in data/shaders/shared/textures.glsl.
+            // overlay shader convention in data/overlays/shared/textures.glsl.
             // Pre-baked from the file-scope `kUserTextureSamplerNames` /
             // `kITextureResolutionKeys` arrays — no per-slot QByteArray
             // alloc per shader install.
@@ -1226,6 +1242,13 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (durationMs > 0) {
         transition.durationMs = durationMs;
         transition.startTimeMs = shaderClockNowMs();
+        // Per-event timing curve (global → "All" → node → rule). paintWindow
+        // eases the linear time progress through it. Stored only on the
+        // time-driven path; a durationMs == 0 animator-driven transition reads a
+        // curve-shaped value from the WindowAnimator, so a curve here would
+        // double-ease. Fresh CurveState for a stateful (spring) curve.
+        transition.progressCurve = std::move(progressCurve);
+        transition.progressCurveState = PhosphorAnimation::CurveState{};
     }
 
     // Claim the closing window for our shader animation. Done HERE — after
@@ -1651,10 +1674,10 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     // Fast-path early-out on the global animations toggle. The
     // authoritative gate also lives in `beginShaderTransition` (so
-    // zone.* callers via `applyWindowGeometry` are gated too), but
+    // window.movement.* callers via `applyWindowGeometry` are gated too), but
     // dispatching there would still pay the shader-tree resolve cost
     // — this skips it entirely when the global toggle is off.
-    if (m_windowAnimator && !m_windowAnimator->isEnabled()) {
+    if (!m_windowAnimator->isEnabled()) {
         return;
     }
     // Window-filtering gate. `shouldAnimateWindow` honours the user's
@@ -1685,21 +1708,25 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     const PhosphorRules::WindowQuery query = ruleQuery(window);
     const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
-    // Per-event base duration. The daemon mirrors its motion
-    // PhosphorProfileRegistry into `motionProfileTree` over D-Bus —
-    // ProfileTree::resolve walks `window.open → window → global` and
-    // overlays each level, so a user-set `window.open` = 900 ms wins
-    // over the global default exactly as the daemon's SurfaceAnimator
-    // resolves per-event OSD/popup durations from the registry.
+    // Per-event motion profile (curve + duration) in ONE walk, via the shared
+    // SSOT: global animator profile → category "All" → per-node motion-tree
+    // override → per-window Rule. The daemon mirrors its motion
+    // PhosphorProfileRegistry into `motionProfileTree` over D-Bus, so a user-set
+    // `window.open` = 900 ms (or an "All" curve) wins over the global default.
     //
-    // Fall back to the caller-supplied global `durationMs` when NO node in the
-    // path's parent chain carries an override: an empty tree (D-Bus race / fresh
-    // user) must not silently collapse every event to the library default
-    // (150 ms). The resolved value is then handed to the combined resolver as its
-    // `defaultDurationMs`, so the per-window-class Rule timing cascade
-    // (`OverrideAnimationTiming`) still layers on top (rule wins → per-event base
-    // → global), matching the resolver's documented contract.
-    const int baseDurationMs = resolveMotionTreeBaseDuration(profilePath, durationMs);
+    // The base is the animator's global profile, so when NO node overrides the
+    // result is the global (never the library 150 ms default), and BOTH the
+    // duration and the curve come from the SAME base — no cross-field base
+    // skew. `effectiveDuration()` feeds the combined resolver as its
+    // `defaultDurationMs` (the Rule timing slot still layers on top, matching
+    // the resolver's documented rule → per-event → global contract), and
+    // `.curve` shapes the time-driven `iTime`: paintWindow eases the linear
+    // progress through it so a node's curve (e.g. "Ease Out") applies to its
+    // shader exactly as it does on the animator-driven snap path. Null curve →
+    // linear iTime.
+    const PhosphorAnimation::Profile eventMotion = resolveEventMotionProfile(profilePath, query, windowId);
+    const int baseDurationMs = qRound(eventMotion.effectiveDuration());
+    const std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = eventMotion.curve;
     // Combined cascade: ONE cached evaluator walk feeds BOTH the shader-slot
     // and timing-slot reads. The pre-refactor pair of `resolveAnimationShader
     // Profile` + `resolveAnimationDuration` ran two priority-order walks per
@@ -1719,13 +1746,22 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // `durationMs <= 0` guard at the top of `tryBeginShaderForEvent`
     // rejects non-positive inputs, so `durationMs` here is a safe
     // positive floor.
-    const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
-        m_shaderManager.animationRuleEvaluator(), profileTree, windowId, query, profilePath, baseDurationMs);
+    const auto resolved = PlasmaZones::resolveAnimationShaderProfile(m_shaderManager.animationRuleEvaluator(),
+                                                                     profileTree, windowId, query, profilePath);
     const auto& profile = resolved.profile;
-    int effectiveDurationMs = resolved.durationMs;
+    // The duration comes from the motion cascade ALONE. resolveEventMotionProfile
+    // already applied the Rule timing slot and clamped the result into the
+    // envelope, so there is exactly one read and one clamp of that slot; the shader
+    // resolver deliberately no longer re-reads it.
+    int effectiveDurationMs = baseDurationMs;
     if (effectiveDurationMs <= 0) {
         effectiveDurationMs = durationMs;
     }
+    // Spring lifetime, shared with the desktop switch: a stateful curve derives its
+    // own lifetime from settleTime() and ignores the duration entirely. The result
+    // drives BOTH the paint active-window and the teardown timer below, so the two
+    // stay in lockstep.
+    effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(effectiveDurationMs, progressCurve.get());
     if (profile.effectiveEffectId().isEmpty()) {
         // Default-state path: a fresh user with no shader overrides
         // anywhere in the tree resolves every event to empty effectId,
@@ -1759,9 +1795,44 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (!resolvedShaderAppliesToEvent(profile.effectiveEffectId(), profilePath)) {
         return;
     }
-    const bool installed =
-        beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab, holdAddedGrab);
-    if (!installed) {
+    const bool installed = beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab,
+                                                 holdAddedGrab, progressCurve);
+    auto* transition = m_shaderManager.findTransition(window);
+    // Mark the held-move leg by IDENTITY. The drag handlers must not infer it from
+    // liveness: `window.movement.move` is opt-in with no default shader, so the
+    // common case installs nothing at all and `findTransition` would hand them an
+    // unrelated leg to pin and reverse. See ShaderTransition::heldMove.
+    //
+    // We may stamp when `installed` is false, but ONLY for the same-effect
+    // short-circuit — where the live leg genuinely IS the pack this event resolved
+    // (a pack whose `appliesTo` admits both "move" and another class can already be
+    // running for that other event). `beginShaderTransition` returns false from many
+    // other places — compile failure, the cached null-shader sentinel, a registry
+    // miss, a refused pack, a collapsed surface — and in EVERY one of those the live
+    // leg is something else entirely, most reachably the `window.focus` leg the click
+    // that began this drag just installed. Stamping that would pin it for the drag,
+    // kill its teardown timer, and play the focus animation BACKWARD on release: the
+    // exact bug this flag exists to prevent, re-introduced from the write side.
+    //
+    // So test what the short-circuit itself tests — does the live leg's cached shader
+    // point at THIS event's pack? The null-shader sentinel is excluded by the
+    // `->shader` check, which matters because that sentinel is sticky: once a pack
+    // fails to compile, every later drag in the session would otherwise mis-stamp.
+    //
+    // Only ever write TRUE. A non-move event short-circuiting into a live held-move
+    // leg must leave the flag alone — supersession builds a fresh ShaderTransition
+    // whose default is already false, so the false case needs no code, and writing it
+    // would re-introduce the mislabelling from the other direction.
+    bool ownsResolvedLeg = installed;
+    if (!ownsResolvedLeg && transition) {
+        const auto cacheIt = m_shaderManager.m_shaderCache.find(profile.effectiveEffectId());
+        ownsResolvedLeg = cacheIt != m_shaderManager.m_shaderCache.end() && cacheIt->second.shader
+            && transition->cached == &cacheIt->second;
+    }
+    if (transition && ownsResolvedLeg && profilePath == PhosphorAnimation::ProfilePaths::WindowMove) {
+        transition->heldMove = true;
+    }
+    if (!installed || !transition) {
         // Either beginShaderTransition no-op'd (compile fail, invalid id,
         // collapsed surface, animations disabled) and there is nothing
         // to teardown, OR the same-effect short-circuit kept the prior
@@ -1778,36 +1849,51 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // (window.move during window.snapIn, window.focus interrupting
     // window.maximize) leave a stale timer that tears down the SUCCESSOR
     // when its own timer hasn't fired yet.
-    const auto* installedTransition = m_shaderManager.findTransition(window);
-    if (!installedTransition) {
-        // Defensive: beginShaderTransition reported true but the entry
-        // is gone (synchronous teardown raced us). Nothing to time.
-        return;
-    }
-    const quint64 myGeneration = installedTransition->generation;
+    scheduleShaderTransitionTeardown(window, transition->generation, effectiveDurationMs);
+}
+
+void PlasmaZonesEffect::scheduleShaderTransitionTeardown(KWin::EffectWindow* window, quint64 generation, int delayMs)
+{
     QPointer<KWin::EffectWindow> safeWindow(window);
-    QTimer::singleShot(effectiveDurationMs, this, [this, safeWindow, myGeneration]() {
+    QTimer::singleShot(qMax(1, delayMs), this, [this, safeWindow, generation]() {
         // Two-tier guard: QPointer catches QObject destruction,
         // endShaderTransition's isDeleted() catches KWin's deletion-animation phase
         if (!safeWindow) {
             return;
         }
-        if (const auto* live = m_shaderManager.findTransition(safeWindow); live && live->generation == myGeneration) {
-            // HELD transitions (the interactive drag) outlive their
-            // nominal duration by design: the user is still dragging.
-            // windowFinishUserMovedResized owns their teardown (a settle
-            // tail after release), so the duration timer stands down.
-            // A mesh-backed drag released BEFORE this timer fires is
-            // covered by the generation check above instead: the release
-            // handler clears the hold flag but bumps the generation when
-            // it hands the lifetime to the settle gate.
-            if (live->holdUntilRelease) {
-                return;
-            }
-            endShaderTransition(safeWindow);
+        const auto* live = m_shaderManager.findTransition(safeWindow);
+        if (!live || live->generation != generation) {
+            // A newer transition replaced us (last-event-wins) and owns its own
+            // timer — leave it alone.
+            return;
         }
-        // else: a newer transition replaced us (last-event-wins) and owns
-        // its own timer — leave it alone.
+        // HELD transitions (the interactive drag) outlive their nominal duration by
+        // design: the user is still dragging. windowFinishUserMovedResized owns
+        // their teardown (a settle tail after release), so the duration timer stands
+        // down. A mesh-backed drag released BEFORE this timer fires is covered by the
+        // generation check above instead: the release handler clears the hold flag
+        // but bumps the generation when it hands the lifetime to the settle gate.
+        if (live->holdUntilRelease) {
+            return;
+        }
+        // Re-check against the transition's OWN clock rather than trusting the delay
+        // we were armed with. `startTimeMs` is REBASED every frame a window spends
+        // under restore suppression (a window repositioned on open is withheld from
+        // compositing until its configure lands, and its animation must not play
+        // invisibly in the meantime — see paint_pipeline). The install-time arming is
+        // therefore up to kRestoreSuppressDeadlineMs (250 ms) too early, and firing
+        // it would tear the leg down while its timeline still had a quarter second
+        // to run — the open animation is cut mid-flight and the window pops. Re-arm
+        // for the remainder instead. Any future rebase gets the same treatment for
+        // free, which is why this is a re-check and not a suppression special case.
+        const qint64 remaining =
+            static_cast<qint64>(live->durationMs) - (ShaderInternal::shaderClockNowMs() - live->startTimeMs);
+        if (remaining > 0) {
+            scheduleShaderTransitionTeardown(safeWindow.data(), generation,
+                                             static_cast<int>(qMin<qint64>(remaining, 60000)));
+            return;
+        }
+        endShaderTransition(safeWindow);
     });
 }
 
@@ -1976,16 +2062,28 @@ void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
     PhosphorProtocol::ClientHelpers::loadSettingAsync(this, kName, [this, kName](const QVariant& v) {
         dispatchJsonSetting(kName, v,
                             [this](const QJsonObject& obj) {
-                                // ProfileTree::fromJson resolves the optional `curve`
-                                // field through a CurveRegistry. The effect resolves
-                                // ONLY per-event durations from this tree (it never
-                                // animates with the motion curve — shader effects carry
-                                // their own timing), so a throwaway empty registry is
-                                // sufficient: an unresolved curve simply stays null,
-                                // and effectiveDuration() reads `duration` directly.
-                                PhosphorAnimation::CurveRegistry curves;
+                                // ProfileTree::fromJson resolves each node's optional
+                                // `curve` field through a CurveRegistry. The effect now
+                                // resolves per-event curve AND duration from this tree
+                                // (resolveEventMotionProfile reads `.curve` to shape the
+                                // time-driven iTime), so parse with the effect's own
+                                // `m_curveRegistry` — the SAME registry the Rule path
+                                // resolves against (shader_resolve.cpp) — rather than a
+                                // throwaway.
+                                //
+                                // Builtins are sufficient here and no CurveLoader is
+                                // needed in the compositor: a Profile persists its curve
+                                // BY SPEC, not by registry key (Profile::toJson writes
+                                // `curve->toString()`, e.g. "0.34,1.20,0.64,1.00" or
+                                // "spring:<omega>,<zeta>"; the friendly name rides in the
+                                // separate `presetName` field). A user curve pack
+                                // (data/curves/*.json) is a named preset over a BUILTIN
+                                // typeId, so it round-trips through its spec and the
+                                // ctor-registered builtin factories resolve it. Sharing
+                                // one registry keeps both curve paths on identical
+                                // resolution rules rather than two that can drift.
                                 auto& tree = m_shaderManager.motionProfileTree();
-                                tree = PhosphorAnimation::ProfileTree::fromJson(obj, curves);
+                                tree = PhosphorAnimation::ProfileTree::fromJson(obj, m_curveRegistry);
                                 qCDebug(lcEffect) << "loadMotionProfileTreeFromDbus: tree loaded with"
                                                   << tree.overriddenPaths().size()
                                                   << "per-event overrides — paths=" << tree.overriddenPaths();
@@ -1994,27 +2092,61 @@ void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
     });
 }
 
-int PlasmaZonesEffect::resolveMotionTreeBaseDuration(const QString& profilePath, int fallbackMs) const
+PhosphorAnimation::Profile PlasmaZonesEffect::resolveEventMotionProfile(const QString& profilePath,
+                                                                        const PhosphorRules::WindowQuery& query,
+                                                                        const QString& windowId) const
 {
-    // A motion-tree override anywhere up @p profilePath's ancestor chain replaces
-    // @p fallbackMs with the node's resolved effective duration; otherwise the
-    // fallback stands. The kMaxAncestorDepth cap guards a malformed profilePath
-    // whose parentPath() returns the input unchanged (would spin on the
-    // compositor thread). Real paths are three or four dot-separated segments.
+    // Cascade base: the WindowAnimator's global profile carries the authoritative
+    // global curve + duration (from animationEasingCurve / animationDuration).
+    //
+    // Before the async settings load lands, the animator's `duration` is still
+    // nullopt, so effectiveDuration() falls back to Profile::DefaultDuration
+    // while `animationDurationMs()` reports Limits::DefaultAnimationDurationMs.
+    // Callers rely on those two agreeing (it is what makes the pre-load window
+    // resolve to the same duration either way), so pin the coupling here rather
+    // than let a future bump to one silently skew it.
+    static_assert(
+        qRound(PhosphorAnimation::Profile::DefaultDuration) == PhosphorAnimation::Limits::DefaultAnimationDurationMs,
+        "Profile::DefaultDuration and Limits::DefaultAnimationDurationMs must agree, or the pre-settings-load "
+        "motion cascade skews against animationDurationMs()");
+    const PhosphorAnimation::Profile& base = m_windowAnimator->profile();
+    // Category "All" → per-node: overlay only the motion-tree override chain for
+    // this path onto the global base (overlayChainOnto skips the tree's own
+    // baseline and returns base untouched when nothing in the chain overrides,
+    // so an empty tree keeps the animator's global). Gated on a non-empty
+    // override set to keep the default-state fast-path (no chain walk).
     const auto& motionTree = m_shaderManager.motionProfileTree();
-    constexpr int kMaxAncestorDepth = 16;
-    QString cursor = profilePath;
-    for (int depth = 0; !cursor.isEmpty() && depth < kMaxAncestorDepth; ++depth) {
-        if (motionTree.hasOverride(cursor)) {
-            return qRound(motionTree.resolve(profilePath).effectiveDuration());
-        }
-        const QString parent = PhosphorAnimation::ProfilePaths::parentPath(cursor);
-        if (parent == cursor) {
-            break;
-        }
-        cursor = parent;
+    PhosphorAnimation::Profile resolved =
+        motionTree.hasAnyOverride() ? motionTree.overlayChainOnto(profilePath, base) : base;
+    // Rule override (top of the cascade): a per-window Timing / Curve rule for
+    // this (window, event) replaces the resolved curve / duration. Skipped for
+    // windowless events (desktop switch) and when no rules are configured.
+    if (query.hasWindow() && !m_shaderManager.animationRuleSet().isEmpty()) {
+        resolved = PlasmaZones::resolveAnimationMotionProfile(m_shaderManager.animationRuleEvaluator(), resolved, query,
+                                                              profilePath, windowId, m_curveRegistry);
     }
-    return fallbackMs;
+    // Clamp the resolved duration into the animation envelope HERE, at the one
+    // place every consumer shares. The motion tree hands a node's duration
+    // through unclamped (ProfileTree does no bounding, and Profile::fromJson
+    // accepts any finite positive value up to one hour), and the tree is rebuilt
+    // from hand-editable profile JSON.
+    //
+    // The two shader consumers re-clamp the DURATION downstream via
+    // resolveTransitionLifetimeMs. The animator calls that helper too, but only
+    // for the spring maxLifetimeMs cap — its PARAMETRIC duration goes from
+    // applyWindowGeometry straight into WindowAnimator::startAnimation, whose
+    // own clampProfile bounds to [0, 10000] ms, a different, looser envelope.
+    // Without this a `"duration": 5000` node would run a 2 s shader leg on
+    // window.open but a 5 s animator leg on a snap, with its durationMs == 0
+    // shader riding along and pinning per-frame repaints for the full 5 s.
+    // Clamping at the source keeps all three consumers on one envelope; the
+    // downstream clamps then become idempotent.
+    if (resolved.duration) {
+        resolved.duration =
+            static_cast<qreal>(qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, qRound(*resolved.duration),
+                                      PhosphorAnimation::Limits::MaxAnimationDurationMs));
+    }
+    return resolved;
 }
 
 void PlasmaZonesEffect::slotMotionProfileTreeChanged()

@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
+#include <PhosphorAnimation/Curve.h>
 
 #include <QByteArray>
 #include <QRectF>
@@ -195,6 +197,114 @@ inline QVector4D computeTextureSubRect(const QRectF& inner, const QRectF& outer)
     return QVector4D(static_cast<float>(inner.x() - outer.x()) / outerW,
                      static_cast<float>(inner.y() - outer.y()) / outerH, static_cast<float>(inner.width()) / outerW,
                      static_cast<float>(inner.height()) / outerH);
+}
+
+/// The lifetime (ms) a shader transition should run for, given the motion
+/// cascade's resolved @p nominalMs and its timing @p curve.
+///
+/// A STATEFUL (spring) curve derives its own timeline from its physics rather
+/// than the duration slider — mirroring the settings UI's "Spring mode derives
+/// its own duration" — so it runs for the spring's analytical settle time and
+/// rings out under the paint pass's per-frame step() instead of being cut at
+/// the easing duration.
+///
+/// Every result is clamped into the animation envelope. All three callers (the
+/// animator's lifetime, the per-window shader leg, and the desktop switch) feed an
+/// already-clamped nominal (resolveEventMotionProfile bounds the motion cascade's
+/// duration at the source), so for a STATELESS curve this qBound is idempotent.
+/// It stays load-bearing for the SPRING path, whose settleTime() is derived from
+/// the curve's physics and is bounded by nothing upstream — and it keeps the
+/// helper correct for any future caller that hands it a raw tree duration.
+///
+/// Consequence at parity across all callers: a spring whose settleTime() exceeds
+/// the max is CUT, and for a very soft one that means cut before it visibly
+/// starts, not merely mid-ring. `omega=0.1, zeta=0.1` settles in 530 s, floored to
+/// Spring::MaxSettleSeconds (30 s) and then clamped to 2 s here — at which point
+/// the integrated value is still ~0.02, so the transition tears down with iTime
+/// near ZERO and the window snaps. The clamp is doing its job (it is the only
+/// thing between such a profile and a pinned repaint), but a pack author tuning a
+/// soft spring should know the envelope, not the physics, is what they hit.
+inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::Curve* curve)
+{
+    const int lifetime = (curve && curve->isStateful()) ? qRound(curve->settleTime() * 1000.0) : nominalMs;
+    return qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, lifetime,
+                  PhosphorAnimation::Limits::MaxAnimationDurationMs);
+}
+
+/// The iTime clamp POLICY, in one place.
+///
+/// An overshooting curve (underdamped spring, elastic ease) keeps its overshoot —
+/// the overshoot IS the curve, and the geometry animator bounces past the target on
+/// the same pick, so flattening it here would make the shader and the geometry
+/// disagree. It is bounded, not clamped: the same overshoot envelope the animator
+/// interpolates within (`PhosphorAnimation::boundCurveProgress`, see
+/// AnimationLimits.h), which every curve the library produces already satisfies, so
+/// it is a backstop for a hand-edited profile or a third-party registered curve
+/// rather than a limit a bundled pack ever meets. A pack author cannot write a
+/// defence against an unstated range, which is why the range is stated.
+///
+/// Every other curve is clamped to [0, 1], where an out-of-range value is a bug
+/// rather than the intent.
+///
+/// Both progress sources must route through this: `easeProgress` (the time-driven
+/// branch) and `paintWindow`'s animator-driven branch. They are two call sites of
+/// one policy, and when the policy lived in two places only one of them got
+/// updated — the animator branch kept clamping, which flattened the bounce for
+/// exactly the `window.movement.*` events whose geometry visibly bounces.
+inline qreal clampProgressForCurve(qreal value, const PhosphorAnimation::Curve* curve)
+{
+    return (curve && curve->overshoots()) ? PhosphorAnimation::boundCurveProgress(value) : qBound(0.0, value, 1.0);
+}
+
+/// Ease @p linear through @p curve. Shared by the per-window transition paint
+/// and the desktop switch, which otherwise carried this logic (and its dt cap)
+/// twice.
+///
+/// A null curve is linear. A stateless curve evaluates @p linear directly. A
+/// STATEFUL (spring) curve integrates @p state toward 1 by the inter-frame dt
+/// and returns the integrated value, ignoring @p linear.
+///
+/// OVERSHOOT: a curve that reports `overshoots()` (an underdamped spring, a
+/// back / elastic ease) returns its value UNCLAMPED, so iTime can exceed 1 — and
+/// dip below 0 — for those curves. That is deliberate: the overshoot IS the
+/// curve, and clamping it flattens a bouncy pick into a plateau at 1.0 while the
+/// geometry animator (`AnimatedValue::advance`, which likewise does not clamp)
+/// bounces past the target. Flattening here would make the shader and the
+/// geometry disagree about the same curve. Non-overshooting curves stay clamped,
+/// where an out-of-range value is a bug rather than the intent.
+///
+/// Packs must therefore treat iTime as UNBOUNDED for these curves —
+/// `AnimationShaderContract::kITime` tells authors to clamp defensively, and a
+/// pack that samples a texture or lerps a rect on iTime without clamping will
+/// extrapolate past its endpoint on an overshooting pick.
+///
+/// @p stepCurve owns the SINGLE per-frame integrator step: the paint pass passes
+/// true; a predictor that must not advance the integrator (the backdrop capture)
+/// passes false and reads the last stepped value.
+///
+/// The dt is capped at Limits::MaxShaderTimeDeltaSeconds — NOT for stability.
+/// Spring::step is an EXACT exponential integrator, so it is unconditionally stable
+/// at any dt. The cap bounds how far a stall JUMPS: a suspend/resume or compositor
+/// hitch would otherwise advance the spring several seconds in one frame, which is
+/// correct physics but reads as a teleport. @p lastPaintTimeMs < 0 is the
+/// "no prior paint" sentinel and yields dt = 0.
+inline qreal easeProgress(const PhosphorAnimation::Curve* curve, PhosphorAnimation::CurveState& state,
+                          qint64 lastPaintTimeMs, qint64 nowMs, qreal linear, bool stepCurve)
+{
+    if (!curve) {
+        return linear;
+    }
+    if (!curve->isStateful()) {
+        return clampProgressForCurve(curve->evaluate(linear), curve);
+    }
+    if (stepCurve) {
+        const qreal dt = lastPaintTimeMs < 0
+            ? 0.0
+            : qBound(0.0, qreal(nowMs - lastPaintTimeMs) / 1000.0,
+                     static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
+        curve->step(dt, state, 1.0);
+    }
+    return clampProgressForCurve(state.value, curve);
 }
 
 /// Pre-baked uniform / param key strings for the hot paths.

@@ -5,6 +5,8 @@
 
 #include "colorutil.h"
 
+#include <PhosphorShaders/ShaderRegistry.h>
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -35,7 +37,7 @@ constexpr QLatin1String kDefaultVertexShaderFilename{"zone.vert"};
 // segments or symlink-style absolute prefixes) are rejected with a warning and
 // an empty string so the loader fails closed rather than loading arbitrary
 // files. Absolute paths in the JSON are still allowed — the shader catalog
-// installer occasionally points at /usr/share/plasmazones/shaders/common — but
+// installer occasionally points at /usr/share/plasmazones/overlays/common — but
 // relative paths cannot escape their declared root.
 QString resolveRelative(const QString& metadataDir, const QString& maybeRelative)
 {
@@ -144,9 +146,10 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     // Validate at the boundary: a metadata.json that points at a missing
     // fragment shader fails the loader rather than silently propagating a
     // bad path that would surface later as an opaque shader-compile error.
-    // (The "isEmpty" branch is implicit here — resolveRelative returns the
-    // metadata-dir-prefixed default filename when the JSON omits the field,
-    // so out.fragmentShader is always non-empty by the time we get here.)
+    // (No separate isEmpty branch: resolveRelative returns either the
+    // metadata-dir-prefixed path — the default filename when the JSON omits
+    // the field — or an empty string on a rejected path traversal, and
+    // QFileInfo::exists("") is false, so this one check rejects both cases.)
     if (!QFileInfo::exists(out.fragmentShader)) {
         qCWarning(lcMetadataLoader) << "fragment shader not found:" << out.fragmentShader;
         return false;
@@ -166,7 +169,14 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     if (obj.contains(QLatin1String("bufferShaders"))) {
         const QJsonArray arr = obj.value(QLatin1String("bufferShaders")).toArray();
         for (const auto& v : arr) {
-            out.bufferShaders.append(resolveRelative(metadataDir, v.toString()));
+            // resolveRelative returns an empty string for a rejected path
+            // traversal; skip those so the renderer never receives an empty
+            // buffer-pass path (the single-bufferShader form is guarded
+            // downstream by an isEmpty check, this list is not).
+            const QString resolved = resolveRelative(metadataDir, v.toString());
+            if (!resolved.isEmpty()) {
+                out.bufferShaders.append(resolved);
+            }
         }
     }
     if (obj.contains(QLatin1String("bufferWraps"))) {
@@ -181,41 +191,52 @@ bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out)
     }
 
     // ── Per-parameter defaults ──────────────────────────────────
-    const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
-    for (const auto& v : params) {
-        if (!v.isObject())
-            continue;
-        const QJsonObject p = v.toObject();
-        const QString type = p.value(QLatin1String("type")).toString(QStringLiteral("float"));
-        const QString id = p.value(QLatin1String("id")).toString();
-        // A missing slot field is intentional — UI-only metadata that
-        // doesn't get pushed to the shader. An explicit negative slot is
-        // a metadata error and gets logged so authoring mistakes don't
-        // silently disappear.
-        if (!p.contains(QLatin1String("slot")))
-            continue;
-        const int slot = p.value(QLatin1String("slot")).toInt(-1);
-        if (slot < 0) {
-            qCWarning(lcMetadataLoader) << "parameter" << id << "has negative slot" << slot << "— dropping";
+    // Slot resolution is delegated to the daemon's own parser:
+    // ShaderRegistry::parsePackMetadata applies the registry's T1.1 automatic
+    // assignment (explicit slots reserved first, slotless params packed into
+    // the next free lane of their pool in declaration order, ids that aren't
+    // valid GLSL identifier bodies claiming no lane), so the lane a default
+    // is seeded into here matches the lane the generated p_<id> preamble the
+    // renderer installs reads — by construction, not by a hand-maintained
+    // copy of the registry's algorithm. parsePackMetadata re-reads
+    // <dir>/metadata.json itself; that exact filename is the pack layout
+    // contract the renderer's preamble path (renderer.cpp) already relies on.
+    QString parseError;
+    const PhosphorShaders::ShaderRegistry::ShaderInfo packInfo =
+        PhosphorShaders::ShaderRegistry::parsePackMetadata(metadataDir, &parseError);
+    if (!parseError.isEmpty()) {
+        qCWarning(lcMetadataLoader) << "parameter parse failed for" << metadataPath << ":" << parseError;
+        return false;
+    }
+
+    for (const auto& p : packInfo.parameters) {
+        if (p.slot < 0) {
+            qCWarning(lcMetadataLoader) << "parameter" << p.id << "id is not a valid GLSL identifier — dropping";
             continue;
         }
 
-        if (type == QLatin1String("float") || type == QLatin1String("int")) {
-            seedParam(out.customParams, slot, p.value(QLatin1String("default")).toDouble(0.0));
-        } else if (type == QLatin1String("bool")) {
-            seedParam(out.customParams, slot, p.value(QLatin1String("default")).toBool(false) ? 1.0 : 0.0);
-        } else if (type == QLatin1String("color")) {
-            seedColor(out.customColors, slot,
-                      parseHexColor(p.value(QLatin1String("default")).toString(QStringLiteral("#000000"))));
-        } else if (type == QLatin1String("image")) {
-            if (slot >= 4) {
-                qCWarning(lcMetadataLoader) << "image slot" << slot << "out of range [0, 4) — dropping" << id;
+        if (p.type == QLatin1String("float") || p.type == QLatin1String("int")) {
+            seedParam(out.customParams, p.slot, p.defaultValue.toDouble());
+        } else if (p.type == QLatin1String("bool")) {
+            seedParam(out.customParams, p.slot, p.defaultValue.toBool() ? 1.0 : 0.0);
+        } else if (p.type == QLatin1String("color")) {
+            seedColor(out.customColors, p.slot, parseHexColor(p.defaultValue.toString()));
+        } else if (p.type == QLatin1String("image")) {
+            if (p.slot >= 4) {
+                qCWarning(lcMetadataLoader) << "image slot" << p.slot << "out of range [0, 4) — dropping" << p.id;
                 continue;
             }
-            out.userTextures[slot] = resolveRelative(metadataDir, p.value(QLatin1String("default")).toString());
-            out.userTextureWraps[slot] = p.value(QLatin1String("wrap")).toString(QStringLiteral("clamp"));
+            out.userTextures[p.slot] = resolveRelative(metadataDir, p.defaultValue.toString());
+            // ParameterInfo.wrap is empty when metadata omits the field; the
+            // renderer's texture setup expects a concrete mode, so normalise
+            // to the daemon's "clamp" default at the seam.
+            out.userTextureWraps[p.slot] = p.wrap.isEmpty() ? QStringLiteral("clamp") : p.wrap;
         } else {
-            qCWarning(lcMetadataLoader) << "parameter" << id << "has unsupported type" << type << "— dropping";
+            // Deliberate: the registry's poolOf treats an unknown type as
+            // scalar, so the param has already claimed a scalar lane (keeping
+            // the numbering aligned with the p_<id> preamble) — only the
+            // seeding is skipped, leaving that lane at the -1 sentinel.
+            qCWarning(lcMetadataLoader) << "parameter" << p.id << "has unsupported type" << p.type << "— dropping";
         }
     }
 

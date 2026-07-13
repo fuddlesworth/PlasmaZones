@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "EasingCurve.js" as Easing
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -101,8 +102,13 @@ ColumnLayout {
                 if (isBounce)
                     return name + ":1.00,3";
 
+                // A bare "elastic-out" canonicalises to the Elastic preset's own
+                // parameters, so the style combo still recognises it. These two must
+                // stay in step: normalizeCurve canonicalises the user's curve AND the
+                // preset before comparing, so a mismatch here silently drops the
+                // combo back to "Custom".
                 if (isElastic)
-                    return name + ":1.00,0.30";
+                    return name + ":1.40,0.30";
 
                 return name;
             }
@@ -248,18 +254,26 @@ ColumnLayout {
     // ── Amplitude (elastic + bounce) ────────────────────────────────────────
     SettingsRow {
         visible: curveInfo.isElastic || curveInfo.isBounce
-        title: i18n("Amplitude")
-        description: curveInfo.isElastic ? i18n("Strength of elastic overshoot") : i18n("Height of bounce peaks")
+        title: curveInfo.isElastic ? i18n("Overshoot") : i18n("Amplitude")
+        description: curveInfo.isElastic ? i18n("How far past the target it travels before settling back") : i18n("Height of bounce peaks")
 
         SettingsSlider {
-            Accessible.name: i18n("Amplitude")
+            Accessible.name: curveInfo.isElastic ? i18n("Overshoot") : i18n("Amplitude")
             enabled: easingRoot.animationsEnabled
-            from: curveInfo.isElastic ? 1 : 0.5
-            to: 3
-            stepSize: 0.1
+            // Mirrors Easing::clampAmplitude. For elastic the value IS the peak, so
+            // the range is the curve's own reachable one and its FLOOR moves with the
+            // period: the curve starts a full unit below the target, so at a short
+            // period the crest lands before the envelope has decayed and it simply
+            // cannot bounce gently. Showing that honestly beats clamping into it
+            // silently. Bounce never leaves [0, 1], so its wider range is all usable.
+            from: curveInfo.isElastic ? Easing.minElasticPeak(easingRoot.easingPreview.elasticPeriod) : 0.5
+            to: curveInfo.isElastic ? 2 : 3
+            stepSize: 0.05
             value: easingRoot.easingPreview.curveAmplitude
             formatValue: function (v) {
-                return v.toFixed(1);
+                // Elastic's value is a peak, so it reads naturally as "+50% past the
+                // target"; bounce's is a bare height scale.
+                return curveInfo.isElastic ? "+" + Math.round((v - 1) * 100) + "%" : v.toFixed(1);
             }
             onMoved: value => {
                 var ct = easingRoot.easingPreview.curveType;
@@ -313,7 +327,12 @@ ColumnLayout {
             }
             onMoved: value => {
                 var ct = easingRoot.easingPreview.curveType;
-                var amp = easingRoot.easingPreview.curveAmplitude.toFixed(2);
+                // Re-clamp the amplitude against the NEW period before composing
+                // the string: elastic's amplitude floor moves with the period
+                // (minElasticPeak), so shortening the period can strand the old
+                // amplitude below what the curve can produce. C++ fromString
+                // clamps identically on read, but stored must equal used.
+                var amp = Easing.clampAmplitude(true, easingRoot.easingPreview.curveAmplitude, value).toFixed(2);
                 easingRoot.appSettings.animationEasingCurve = ct + ":" + amp + "," + value.toFixed(2);
             }
         }

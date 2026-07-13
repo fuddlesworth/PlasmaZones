@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QString>
@@ -70,7 +71,17 @@ public:
     }
 
     /// Approximate settle time in seconds. Parametric: 1.0 (the [0,1] domain).
-    /// Spring: analytical 99% settle time. Never infinity.
+    /// Spring: the analytical settling time — when the response first comes
+    /// within `SettleBand` (0.5%) of the target — capped at
+    /// Spring::MaxSettleSeconds. The band is deliberately tighter than the 2%
+    /// control-theory convention, because this value IS an animation lifetime and
+    /// the residual at it is a visible terminal jump.
+    ///
+    /// MUST be finite and strictly positive. Callers use this as an animation
+    /// LIFETIME — `AnimatedValue::advance` ends a stateful animation on it and
+    /// `ShaderInternal::resolveTransitionLifetimeMs` arms a shader transition
+    /// with it — so a zero or negative value would complete the animation
+    /// instantly, and a non-finite one would never complete it.
     virtual qreal settleTime() const
     {
         return 1.0;
@@ -96,5 +107,17 @@ protected:
     Curve(Curve&&) = default;
     Curve& operator=(Curve&&) = default;
 };
+
+/// Bound a curve's output to the overshoot envelope
+/// [`Limits::MinCurveProgress`, `Limits::MaxCurveProgress`]. Consumers apply
+/// this to whatever `evaluate()` / `step()` produced, at the point where the
+/// progress is interpolated into a value — never to a stateful curve's own
+/// `CurveState::value`, which is integrator state. See `AnimationLimits.h` for
+/// why the envelope is enforced here, by the callers, and not inside
+/// `Curve::evaluate`.
+inline qreal boundCurveProgress(qreal progress)
+{
+    return qBound(qreal(Limits::MinCurveProgress), progress, qreal(Limits::MaxCurveProgress));
+}
 
 } // namespace PhosphorAnimation

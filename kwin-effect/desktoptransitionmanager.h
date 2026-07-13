@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationLimits.h> // Limits::{Min,Max,Default}AnimationDurationMs
 #include <PhosphorAnimation/AnimationShaderContract.h> // kMaxCustomParams
+#include <PhosphorAnimation/Curve.h> // per-event timing curve + CurveState
 
 #include <QHash> // std::hash<QString> specialization (used by the unordered_map key below)
 #include <QString>
@@ -43,10 +45,11 @@ class PlasmaZonesEffect;
 /// The effect owns one instance. On `desktopChanged` the effect resolves the
 /// `desktop.switch` shader from the shader profile tree and calls begin(); if no
 /// shader is assigned begin() is a no-op and KWin's normal switch proceeds. When
-/// a transition is live the effect claims `setActiveFullScreenEffect(this)` so
+/// a transition is live begin() claims `setActiveFullScreenEffect(m_effect)` so
 /// KWin's built-in Slide bows out, forces a full-screen paint via the mask, and
 /// routes paintScreen through paintOutput() which draws the blend instead of the
-/// live scene until progress reaches 1.
+/// live scene until progress reaches 1. The claim is taken only when no other
+/// effect holds the screen, and released only while KWin still reports it as ours.
 class DesktopTransitionManager
 {
 public:
@@ -56,20 +59,20 @@ public:
     DesktopTransitionManager(const DesktopTransitionManager&) = delete;
     DesktopTransitionManager& operator=(const DesktopTransitionManager&) = delete;
 
-    /// Fallback switch duration (ms) when the motion profile tree carries no
-    /// `desktop.switch` (or ancestor) duration override.
-    static constexpr int DefaultDurationMs = 300;
-
     /// Start a transition. @p output is the switched output, or nullptr for a
     /// global (all-output) switch — in which case every output transitions from
     /// @p from to @p to. Resolves nothing itself: the caller passes the already
     /// resolved @p effectId (empty → no-op), @p params (the profile's effective
-    /// pack parameters, translated into the customParams/customColors pools) and
-    /// @p durationMs (the motion-tree resolved duration; <= 0 falls back to
-    /// DefaultDurationMs). Capture is deferred to the first paintOutput() for each
-    /// output, where a live GL context exists.
+    /// pack parameters, translated into the customParams/customColors pools),
+    /// @p durationMs (the motion-cascade resolved duration; floored into the
+    /// animation envelope, so even a 0 becomes a sane minimum) and the optional
+    /// @p progressCurve (the node's timing curve; null → linear iTime). Every
+    /// resolved lifetime is clamped into the animation envelope. Capture is
+    /// deferred to the first paintOutput() for each output, where a live GL
+    /// context exists.
     void begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
-               const QString& effectId, const QVariantMap& params, int durationMs);
+               const QString& effectId, const QVariantMap& params, int durationMs,
+               std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
 
     /// True while any output has a live transition. Feeds PlasmaZonesEffect::isActive()
     /// so KWin keeps the effect in the paint chain.
@@ -98,7 +101,16 @@ public:
 
     /// Schedule the next frame while any transition is live (called from
     /// postPaintScreen). No-op when idle.
-    void scheduleRepaints() const;
+    ///
+    /// Also REAPS transitions whose lifetime has run out. paintOutput() settles an
+    /// output only when that output is painted, so an output that stops being
+    /// painted mid-transition (DPMS-asleep but still enabled, or one KWin has
+    /// stopped rendering) would never settle while a sibling output kept painting:
+    /// m_active would never empty, the active-fullscreen-effect claim would never
+    /// release, and Slide/Overview/Cube would stay suppressed for the rest of the
+    /// session. postPaintScreen runs regardless of which output painted, so the
+    /// wall-clock reap here makes settling independent of being painted.
+    void scheduleRepaints();
 
     /// Drop every compiled desktop-transition shader so the next switch recompiles
     /// against freshly reloaded pack source. Called from the AnimationShaderRegistry
@@ -151,6 +163,20 @@ private:
         QVector4D switchDelta;
         qint64 startTimeMs = 0;
         int durationMs = 0;
+        // Per-event timing curve for `desktop.switch`, resolved through the
+        // cascade `global → desktop → desktop.switch` (an override on the bare
+        // `desktop` node would apply, though the UI exposes only the leaf, so it
+        // has no separate user-facing "All"). paintOutput eases the linear
+        // `elapsed / durationMs` through it before uploading iTime, so the node's
+        // curve (e.g. "Ease Out") shapes the switch exactly as it shapes the
+        // per-window shader path. Null → linear iTime.
+        std::shared_ptr<const PhosphorAnimation::Curve> progressCurve;
+        // Integration state for a STATEFUL (spring) progressCurve; stepped toward
+        // target 1 by the inter-frame dt in paintOutput. Unused for stateless.
+        PhosphorAnimation::CurveState progressCurveState;
+        // Previous paintOutput tick time (shader-clock ms) for the spring dt.
+        // -1 = no prior paint (first step gets dt 0).
+        qint64 lastPaintTimeMs = -1;
         // Monotonic paint counter uploaded as iFrame, so glitch-style desktop
         // packs get a per-frame stutter that is independent of the linear iTime
         // progress — matching the canonical animation contract's iFrame.
@@ -179,15 +205,28 @@ private:
     /// output-sized FBO, bottom-to-top in stacking order (wallpaper included —
     /// it is an on-all-desktops window). Used for the OUTGOING desktop, which is
     /// no longer current so its windows aren't in the live scene and must be
-    /// reconstructed via drawWindow. Returns null on allocation failure.
-    std::unique_ptr<KWin::GLTexture> captureDesktop(KWin::VirtualDesktop* desktop, KWin::LogicalOutput* screen);
+    /// reconstructed through the per-window pipeline. Returns null on allocation
+    /// failure.
+    ///
+    /// @p outputTarget and @p outputViewport are the ON-SCREEN target this
+    /// capture will ultimately be blended into. They supply the capture's device
+    /// size, internal format and colour space, so the blend is a pass-through
+    /// rather than a conversion — see captureFormatFor.
+    std::unique_ptr<KWin::GLTexture> captureDesktop(KWin::VirtualDesktop* desktop, KWin::LogicalOutput* screen,
+                                                    const KWin::RenderTarget& outputTarget,
+                                                    const KWin::RenderViewport& outputViewport);
 
     /// Capture the LIVE composited scene for @p screen into a fresh output-sized
     /// FBO via effects->paintScreen. Used for the INCOMING desktop: it is the
     /// current desktop after the switch, so its already-visible windows render
     /// black through drawWindow (they belong to the ongoing scene paint) — the
     /// scene composite is the correct, reliable source. Returns null on failure.
-    std::unique_ptr<KWin::GLTexture> captureLiveScene(int mask, KWin::LogicalOutput* screen);
+    ///
+    /// @p outputTarget / @p outputViewport as for captureDesktop: both captures
+    /// must land in the same size, format and colour space.
+    std::unique_ptr<KWin::GLTexture> captureLiveScene(int mask, KWin::LogicalOutput* screen,
+                                                      const KWin::RenderTarget& outputTarget,
+                                                      const KWin::RenderViewport& outputViewport);
 
     /// Compile (or fetch from cache) the desktop-transition shader for @p effectId.
     /// Returns nullptr when the effect id is unknown or compilation failed.
@@ -196,6 +235,15 @@ private:
     /// Free an output's transition and, when the last one goes, release the
     /// active-fullscreen-effect claim.
     void endOutput(KWin::LogicalOutput* screen);
+
+    /// Release the active-fullscreen-effect claim once no transition is left.
+    ///
+    /// Releases only when KWin still reports US as the active full-screen effect.
+    /// An unconditional `setActiveFullScreenEffect(nullptr)` would clear a claim
+    /// that Overview or Cube took while our transition was in flight, unsuppressing
+    /// every effect that was bowing out to THEM. The claim in begin() is guarded
+    /// symmetrically: it only takes the screen when nobody else holds it.
+    void releaseFullScreenClaimIfIdle();
 
     /// Make the compositor GL context current so GLTexture/GLShader frees issue
     /// their glDelete* against a live context. Every off-paint-thread mutator that

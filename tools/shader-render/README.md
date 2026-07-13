@@ -3,12 +3,12 @@
 Headless offscreen renderer for PlasmaZones shaders. Reproducible
 shader previews without a compositor, display, or screen-capture
 tool. Used by the documentation site at
-[phosphor-works.github.io/plasmazones/shaders/](https://phosphor-works.github.io/plasmazones/shaders/)
+[phosphor-works.github.io/plasmazones/overlays/](https://phosphor-works.github.io/plasmazones/overlays/)
 and anyone else who needs a stable image of a built-in shader.
 
 ## What it does
 
-1. Loads `data/shaders/<id>/metadata.json` plus the shader's GLSL
+1. Loads `data/overlays/<id>/metadata.json` plus the shader's GLSL
    files exactly the way the daemon does.
 2. Loads `data/layouts/<id>.json` to get a real zone arrangement,
    so the shader has actual zones to draw rather than a single
@@ -61,7 +61,7 @@ Common flags:
 | `--fps` | `30` | frame rate (drives `iTime` advancement) |
 | `--out` | `<id>.webm` | output path; extension picks the format |
 | `--audio-mode` | `sine` | one of `silent`, `sine`, `noise`, `sweep` |
-| `--shader-dir` | `data/shaders/` then `/usr/share/...` | where to find shader bundles |
+| `--shader-dir` | `data/overlays/` then `/usr/share/...` | where to find shader bundles |
 | `--layout-dir` | `data/layouts/` then `/usr/share/...` | where to find layout JSONs |
 
 Output formats are picked by extension:
@@ -92,23 +92,23 @@ The bar count matches the runtime CAVA default (256).
 
 ## Batch wrapper
 
-A shell loop over the shaders.json list is the typical site-update
+A shell loop over the overlays.json list is the typical site-update
 flow:
 
 ```bash
-for id in $(jq -r '.[].id' src/data/plasmazones/shaders.json); do
+for id in $(jq -r '.[].id' src/data/plasmazones/overlays.json); do
     plasmazones-shader-render \
         --shader "$id" \
         --resolution 960x540 \
         --output-size 480x270 \
         --frames 150 \
-        --out public/plasmazones/shaders/$id.webm
+        --out public/plasmazones/overlays/$id.webm
 done
 ```
 
 Run on a developer machine once per release; commit the resulting
 `.webm` files to the docs repo. Or run it as a CI step against
-PRs that touch `data/shaders/`.
+PRs that touch `data/overlays/`.
 
 ## Status / known limitations
 

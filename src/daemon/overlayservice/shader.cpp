@@ -123,9 +123,6 @@ bool OverlayService::anyScreenUsesShader() const
     if (!canUseShaders()) {
         return false;
     }
-    if (m_settings && !m_settings->enableShaderEffects()) {
-        return false;
-    }
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
         if (useShaderForScreen(it.key())) {
             return true;
@@ -137,9 +134,6 @@ bool OverlayService::anyScreenUsesShader() const
 bool OverlayService::useShaderForScreen(const QString& screenId) const
 {
     if (!canUseShaders()) {
-        return false;
-    }
-    if (m_settings && !m_settings->enableShaderEffects()) {
         return false;
     }
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
@@ -186,10 +180,13 @@ void OverlayService::startShaderAnimation()
     const int interval = qRound(1000.0 / frameRate);
     m_shaderUpdateTimer->start(interval);
 
-    // CAVA runs independently (started in setSettings / enableAudioVisualizerChanged).
-    // Just sync config in case frame rate changed since CAVA was started.
+    // CAVA runs independently (spun up lazily by syncCavaState when audio-viz
+    // is enabled and something audio-reactive is on screen). Just sync config
+    // in case frame rate changed since CAVA was started.
     if (m_audioProvider && m_audioProvider->isRunning() && m_settings) {
-        m_audioProvider->setFramerate(frameRate);
+        PhosphorAudio::SpectrumOptions opts = m_audioProvider->options();
+        opts.framerate = frameRate;
+        m_audioProvider->setOptions(opts);
     }
 
     qCDebug(lcOverlay) << "Shader animation started at" << (1000 / interval) << "fps";

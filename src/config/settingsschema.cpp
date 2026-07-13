@@ -182,24 +182,72 @@ QVariant sanitizePerAlgorithmSettings(const QVariant& v)
 } // namespace
 
 // ─── Shaders ────────────────────────────────────────────────────────────────
-// Controls: overall effect toggle, frame rate, audio visualizer, bar count.
+// Controls: frame rate, plus the full audio-spectrum parameter set in the
+// Shaders.Audio sub-group. String choices are coerced by the ConfigDefaults
+// normalizers so hand-edited configs can't persist garbage; the input source
+// is free-form (the provider sanitizes it before it reaches cava).
 
 void appendShadersSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::shadersGroup()] = {
-        {CD::enabledKey(), CD::enableShaderEffects(), QMetaType::Bool},
         {CD::frameRateKey(),
          CD::shaderFrameRate(),
          QMetaType::Int,
          {},
          clampInt(CD::shaderFrameRateMin(), CD::shaderFrameRateMax())},
-        {CD::audioVisualizerKey(), CD::enableAudioVisualizer(), QMetaType::Bool},
-        {CD::audioSpectrumBarCountKey(),
+    };
+    schema.groups[CD::shadersAudioGroup()] = {
+        {CD::enabledKey(), CD::enableAudioVisualizer(), QMetaType::Bool},
+        {CD::barsKey(),
          CD::audioSpectrumBarCount(),
          QMetaType::Int,
          {},
          clampInt(CD::audioSpectrumBarCountMin(), CD::audioSpectrumBarCountMax())},
+        {CD::autosensKey(), CD::audioAutosens(), QMetaType::Bool},
+        {CD::sensitivityKey(),
+         CD::audioSensitivity(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::audioSensitivityMin(), CD::audioSensitivityMax())},
+        {CD::noiseReductionKey(),
+         CD::audioNoiseReduction(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::audioNoiseReductionMin(), CD::audioNoiseReductionMax())},
+        {CD::lowerCutoffHzKey(),
+         CD::audioLowerCutoffHz(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::audioLowerCutoffHzMin(), CD::audioLowerCutoffHzMax())},
+        {CD::higherCutoffHzKey(),
+         CD::audioHigherCutoffHz(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::audioHigherCutoffHzMin(), CD::audioHigherCutoffHzMax())},
+        {CD::monstercatKey(), CD::audioMonstercat(), QMetaType::Bool},
+        {CD::wavesKey(), CD::audioWaves(), QMetaType::Bool},
+        {CD::channelModeKey(),
+         CD::audioChannelMode(),
+         QMetaType::QString,
+         {},
+         [](const QVariant& v) {
+             return QVariant(CD::normalizeAudioChannelMode(v.toString()));
+         }},
+        {CD::reverseKey(), CD::audioReverse(), QMetaType::Bool},
+        {CD::extraSmoothingKey(),
+         CD::audioExtraSmoothing(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::audioExtraSmoothingMin(), CD::audioExtraSmoothingMax())},
+        {CD::inputMethodKey(),
+         CD::audioInputMethod(),
+         QMetaType::QString,
+         {},
+         [](const QVariant& v) {
+             return QVariant(CD::normalizeAudioInputMethod(v.toString()));
+         }},
+        {CD::inputSourceKey(), CD::audioInputSource(), QMetaType::QString},
     };
 }
 

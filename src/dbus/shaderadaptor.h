@@ -90,7 +90,7 @@ public Q_SLOTS:
 
     /**
      * @brief Get the user shader installation directory path
-     * @return Path to ~/.local/share/plasmazones/shaders
+     * @return Path to ~/.local/share/plasmazones/overlays
      */
     QString userShaderDirectory();
 

@@ -215,6 +215,17 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     static_assert(kMinBufferScale > 0.0 && kMinBufferScale < kMaxBufferScale,
                   "kMinBufferScale must be positive and strictly less than kMaxBufferScale");
 
+    /// Maximum number of buffer passes a pack may declare.
+    ///
+    /// Bounded because every declared pass costs a canvas-sized RGBA8 texture and a
+    /// fullscreen draw PER DECORATED WINDOW, PER FRAME, and the count comes from an
+    /// installable pack's JSON — an unvalidated system boundary, and previously the
+    /// one uncapped axis (bufferScale, outerPadding and the texture slots are all
+    /// bounded). Four is not arbitrary: the fold binds `iChannel0..3` and a pass
+    /// samples only the passes before it, so a fifth buffer is structurally
+    /// unreadable — allocated, cleared, drawn, and sampled by nothing.
+    static constexpr int kMaxBufferPasses = 4;
+
     /// Declared shader inputs beyond the standard surface set
     /// (uTexture0, uSurfaceSize, uSurfaceFocused, etc.). Each entry maps
     /// `parameterId → { type, default, min, max, ... }`. Field names

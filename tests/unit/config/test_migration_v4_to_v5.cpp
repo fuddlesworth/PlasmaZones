@@ -437,6 +437,107 @@ private Q_SLOTS:
                      .contains(QStringLiteral("Inner")));
     }
 
+    // ─── Retired Shaders.Enabled toggle stripped, siblings survive ─────────
+
+    // v5 retires the Shaders.Enabled overlay-shader master toggle and moves
+    // the flat audio keys (AudioVisualizer / AudioSpectrumBarCount) into the
+    // Shaders.Audio group (Enabled / Bars). The strip must remove exactly the
+    // toggle: FrameRate survives in place, and the audio values must arrive
+    // in the new group intact. Guards against a regression that widens the
+    // stripped key set — stripKeysAtPath prunes a group once it empties, and
+    // the full-chain schema-drift test only catches PRODUCED-but-undeclared
+    // keys, so silently dropped survivors would pass every other test. The v4
+    // audio spellings are frozen literals here (their live accessors are gone).
+    void testShaderToggleStripped_siblingsSurvive()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {ConfigKeys::shadersGroup()},
+                  {{ConfigKeys::enabledKey(), false},
+                   {ConfigKeys::frameRateKey(), 90},
+                   {QStringLiteral("AudioVisualizer"), true},
+                   {QStringLiteral("AudioSpectrumBarCount"), 32}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject shaders =
+            readJson(ConfigDefaults::configFilePath()).value(ConfigKeys::shadersGroup()).toObject();
+        QVERIFY2(!shaders.contains(ConfigKeys::enabledKey()), "the retired Shaders.Enabled key must be stripped");
+        QCOMPARE(shaders.value(ConfigKeys::frameRateKey()).toInt(), 90);
+        QVERIFY2(!shaders.contains(QStringLiteral("AudioVisualizer")),
+                 "the flat AudioVisualizer key must move to Shaders.Audio");
+        QVERIFY2(!shaders.contains(QStringLiteral("AudioSpectrumBarCount")),
+                 "the flat AudioSpectrumBarCount key must move to Shaders.Audio");
+        const QJsonObject audio = shaders.value(QStringLiteral("Audio")).toObject();
+        QCOMPARE(audio.value(ConfigKeys::enabledKey()).toBool(), true);
+        QCOMPARE(audio.value(ConfigKeys::barsKey()).toInt(), 32);
+    }
+
+    // The audio move must not depend on the Enabled strip running first: a
+    // v4 config whose Shaders group carries only the audio keys (the toggle
+    // was never persisted) still lands them in Shaders.Audio, and the flat
+    // group survives solely through its new Audio child.
+    void testAudioKeysMoved_withoutEnabledKey()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {ConfigKeys::shadersGroup()},
+                  {{QStringLiteral("AudioVisualizer"), true}, {QStringLiteral("AudioSpectrumBarCount"), 48}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject shaders =
+            readJson(ConfigDefaults::configFilePath()).value(ConfigKeys::shadersGroup()).toObject();
+        QVERIFY(!shaders.contains(QStringLiteral("AudioVisualizer")));
+        QVERIFY(!shaders.contains(QStringLiteral("AudioSpectrumBarCount")));
+        const QJsonObject audio = shaders.value(QStringLiteral("Audio")).toObject();
+        QCOMPARE(audio.value(ConfigKeys::enabledKey()).toBool(), true);
+        QCOMPARE(audio.value(ConfigKeys::barsKey()).toInt(), 48);
+    }
+
+    // A v4 config that never touched the audio settings must not grow a
+    // Shaders.Audio group: absent keys write nothing (differ-from-default
+    // contract), so defaults stay unwritten.
+    void testAudioKeysAbsent_noAudioGroupWritten()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {ConfigKeys::shadersGroup()}, {{ConfigKeys::frameRateKey(), 90}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject shaders =
+            readJson(ConfigDefaults::configFilePath()).value(ConfigKeys::shadersGroup()).toObject();
+        QVERIFY(!shaders.contains(QStringLiteral("Audio")));
+        QCOMPARE(shaders.value(ConfigKeys::frameRateKey()).toInt(), 90);
+    }
+
+    // When Enabled is the ONLY Shaders key, the strip empties the group and
+    // stripKeysAtPath prunes it entirely rather than leaving an empty object.
+    void testShaderToggleStripped_soleKeyPrunesGroup()
+    {
+        IsolatedConfigGuard guard;
+        seedEmptyRules();
+
+        QJsonObject cfg = baseV4Config();
+        setNested(cfg, {ConfigKeys::shadersGroup()}, {{ConfigKeys::enabledKey(), true}});
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject after = readJson(ConfigDefaults::configFilePath());
+        QVERIFY2(!after.contains(ConfigKeys::shadersGroup()), "an Enabled-only Shaders group must be pruned");
+    }
+
     // ─── Idempotency ──────────────────────────────────────────────────────
 
     void testIdempotency_runTwiceIsNoOp()

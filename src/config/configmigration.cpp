@@ -3309,6 +3309,11 @@ constexpr QLatin1String kV4SegDecorations{"Decorations"};
 constexpr QLatin1String kV4SegBorders{"Borders"};
 constexpr QLatin1String kV4SegGaps{"Gaps"};
 
+// Flat audio-spectrum keys under "Shaders" — v5 moves them into the
+// "Shaders.Audio" group (Enabled / Bars).
+constexpr QLatin1String kV4KeyAudioVisualizer{"AudioVisualizer"};
+constexpr QLatin1String kV4KeyAudioSpectrumBarCount{"AudioSpectrumBarCount"};
+
 // Appearance leaf keys.
 constexpr QLatin1String kV4KeyActive{"Active"};
 constexpr QLatin1String kV4KeyInactive{"Inactive"};
@@ -3447,13 +3452,13 @@ QJsonObject buildModeStash(const QJsonObject& root, QLatin1String mode)
 // Strip the named keys from the group at @p segments, pruning the group (and
 // now-empty ancestors) if nothing else remains. Keys not consumed here (e.g.
 // Snapping.Gaps.AdjacentThreshold, Tiling.Gaps.SmartGaps) survive.
-void stripKeysAtPath(QJsonObject& root, const QStringList& segments, const QList<QLatin1String>& keys)
+void stripKeysAtPath(QJsonObject& root, const QStringList& segments, const QStringList& keys)
 {
     QJsonObject grp = groupObjectAtPath(root, segments.join(QLatin1Char('.')));
     if (grp.isEmpty()) {
         return;
     }
-    for (QLatin1String key : keys) {
+    for (const QString& key : keys) {
         grp.remove(key);
     }
     if (grp.isEmpty()) {
@@ -3664,6 +3669,38 @@ void ConfigMigration::migrateV4ToV5(QJsonObject& root)
         removeGroupAtSegments(root, {QString(mode), QString(kV4SegAppearance), QString(kV4SegBorders)});
         stripKeysAtPath(root, {QString(mode), QString(kV4SegGaps)},
                         {kV4KeyInner, kV4KeyOuter, kV4KeyUsePerSide, kV4KeyTop, kV4KeyBottom, kV4KeyLeft, kV4KeyRight});
+    }
+
+    // ── Drop the retired overlay-shader master toggle ───────────────────────
+    // v5 removes Shaders.Enabled entirely: shader use is decided per layout
+    // (shaderId "none" draws the rectangle overlay), so the global switch
+    // gated nothing the layouts don't already control. The key reaches this
+    // strip from two sources: existing v2-v4 configs where the user set the
+    // toggle, and v1 configs whose EnableShaderEffects the v1→v2 step still
+    // renames to Shaders.Enabled. Stripping here keeps the chain's output
+    // aligned with the v5 schema for both.
+    stripKeysAtPath(root, {ConfigKeys::shadersGroup()}, {ConfigKeys::enabledKey()});
+
+    // ── Move the flat audio keys into the Shaders.Audio group ──────────────
+    // v5 grows a full audio-spectrum parameter group (Shaders.Audio). The two
+    // audio keys that shipped under flat Shaders move there so user values
+    // survive; the source spellings are frozen above (kV4KeyAudio*), the
+    // destinations are written through the live accessors (v5 is current).
+    {
+        const QJsonObject shaders = groupObjectAtPath(root, ConfigKeys::shadersGroup());
+        QJsonObject audio;
+        const QJsonValue viz = shaders.value(kV4KeyAudioVisualizer);
+        if (viz.isBool()) {
+            audio.insert(ConfigKeys::enabledKey(), viz);
+        }
+        const QJsonValue bars = shaders.value(kV4KeyAudioSpectrumBarCount);
+        if (bars.isDouble()) {
+            audio.insert(ConfigKeys::barsKey(), bars);
+        }
+        if (!audio.isEmpty()) {
+            setGroupAtSegments(root, ConfigKeys::shadersAudioGroup().split(QLatin1Char('.')), audio);
+        }
+        stripKeysAtPath(root, {ConfigKeys::shadersGroup()}, {kV4KeyAudioVisualizer, kV4KeyAudioSpectrumBarCount});
     }
 
     // Stamp literal 5 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.

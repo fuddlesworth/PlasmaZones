@@ -646,6 +646,16 @@ target_link_libraries(test_anchor_uniforms PRIVATE Qt6::Test Qt6::Core Qt6::Gui 
 target_include_directories(test_anchor_uniforms PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 add_test(NAME test_anchor_uniforms COMMAND test_anchor_uniforms)
 
+# Pure-timing test for the compositor's shader clock
+# (ShaderInternal::resolveTransitionLifetimeMs / easeProgress) — pins the
+# duration envelope (the only bound on a hand-edited profile or an undamped
+# spring), the stateless/stateful split, the dt cap, the peek contract, and the
+# deliberate overshoot passthrough. Same header-only reach as the anchor test.
+add_executable(test_shader_timing ui/test_shader_timing.cpp)
+target_link_libraries(test_shader_timing PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation)
+target_include_directories(test_shader_timing PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_shader_timing COMMAND test_shader_timing)
+
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently
 # drift from the GLSL wallpaperUv helper it mirrors.
@@ -829,6 +839,17 @@ add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_ov
 # profilesChanged reload propagation. Compiles the controller sources
 # directly (they live in the plasmazones-settings executable, not
 # plasmazones_core); the split _paths TU carries parentChain().
+#
+# decorationpagecontroller_sets.cpp carries the same GCC-only LTO
+# suppression it gets in src/settings/CMakeLists.txt (see the full
+# rationale there): source-file properties are directory-scoped, so the
+# settings dir's suppression does not reach this second consuming target,
+# and a Release+LTO build would re-emit the GCC 16 std::optional
+# maybe-uninitialized false positive from the test build.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_sets.cpp PROPERTIES
+        COMPILE_OPTIONS "-fno-lto;-Wno-maybe-uninitialized")
+endif()
 add_executable(test_decorationpagecontroller
     settings/test_decorationpagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller.cpp

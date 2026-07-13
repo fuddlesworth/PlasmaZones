@@ -633,21 +633,6 @@ void Settings::resetKeys(const ConfigKeyList& keys)
 
 // ── Shaders (PhosphorConfig::Store-backed) ──────────────────────────────────
 
-bool Settings::enableShaderEffects() const
-{
-    return m_store->read<bool>(ConfigDefaults::shadersGroup(), ConfigDefaults::enabledKey());
-}
-
-void Settings::setEnableShaderEffects(bool enable)
-{
-    if (enableShaderEffects() == enable) {
-        return;
-    }
-    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::enabledKey(), enable);
-    Q_EMIT enableShaderEffectsChanged();
-    Q_EMIT settingsChanged();
-}
-
 int Settings::shaderFrameRate() const
 {
     return m_store->read<int>(ConfigDefaults::shadersGroup(), ConfigDefaults::frameRateKey());
@@ -668,7 +653,7 @@ void Settings::setShaderFrameRate(int fps)
 
 bool Settings::enableAudioVisualizer() const
 {
-    return m_store->read<bool>(ConfigDefaults::shadersGroup(), ConfigDefaults::audioVisualizerKey());
+    return m_store->read<bool>(ConfigDefaults::shadersAudioGroup(), ConfigDefaults::enabledKey());
 }
 
 void Settings::setEnableAudioVisualizer(bool enable)
@@ -676,20 +661,20 @@ void Settings::setEnableAudioVisualizer(bool enable)
     if (enableAudioVisualizer() == enable) {
         return;
     }
-    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::audioVisualizerKey(), enable);
+    m_store->write(ConfigDefaults::shadersAudioGroup(), ConfigDefaults::enabledKey(), enable);
     Q_EMIT enableAudioVisualizerChanged();
     Q_EMIT settingsChanged();
 }
 
 int Settings::audioSpectrumBarCount() const
 {
-    return m_store->read<int>(ConfigDefaults::shadersGroup(), ConfigDefaults::audioSpectrumBarCountKey());
+    return m_store->read<int>(ConfigDefaults::shadersAudioGroup(), ConfigDefaults::barsKey());
 }
 
 void Settings::setAudioSpectrumBarCount(int count)
 {
     const int before = audioSpectrumBarCount();
-    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::audioSpectrumBarCountKey(), count);
+    m_store->write(ConfigDefaults::shadersAudioGroup(), ConfigDefaults::barsKey(), count);
     if (audioSpectrumBarCount() == before) {
         return;
     }
@@ -1386,6 +1371,35 @@ void Settings::setDecorationProfileTreeJson(const QString& json)
 
 P_STORE_GET(QString, renderingBackend, renderingGroup, backendKey, QString)
 P_STORE_SET_STRING(setRenderingBackend, renderingGroup, backendKey, renderingBackendChanged)
+
+// Shaders.Audio (ISettings) — the audio-spectrum analysis parameter set.
+// enableAudioVisualizer / audioSpectrumBarCount live with the other
+// handwritten shader accessors above; the rest are uniform store-backed
+// scalars, so the macros apply.
+P_STORE_GET(bool, audioAutosens, shadersAudioGroup, autosensKey, bool)
+P_STORE_SET_BOOL(setAudioAutosens, shadersAudioGroup, autosensKey, audioAutosensChanged)
+P_STORE_GET(int, audioSensitivity, shadersAudioGroup, sensitivityKey, int)
+P_STORE_SET_INT(setAudioSensitivity, shadersAudioGroup, sensitivityKey, audioSensitivityChanged)
+P_STORE_GET(int, audioNoiseReduction, shadersAudioGroup, noiseReductionKey, int)
+P_STORE_SET_INT(setAudioNoiseReduction, shadersAudioGroup, noiseReductionKey, audioNoiseReductionChanged)
+P_STORE_GET(int, audioLowerCutoffHz, shadersAudioGroup, lowerCutoffHzKey, int)
+P_STORE_SET_INT(setAudioLowerCutoffHz, shadersAudioGroup, lowerCutoffHzKey, audioLowerCutoffHzChanged)
+P_STORE_GET(int, audioHigherCutoffHz, shadersAudioGroup, higherCutoffHzKey, int)
+P_STORE_SET_INT(setAudioHigherCutoffHz, shadersAudioGroup, higherCutoffHzKey, audioHigherCutoffHzChanged)
+P_STORE_GET(bool, audioMonstercat, shadersAudioGroup, monstercatKey, bool)
+P_STORE_SET_BOOL(setAudioMonstercat, shadersAudioGroup, monstercatKey, audioMonstercatChanged)
+P_STORE_GET(bool, audioWaves, shadersAudioGroup, wavesKey, bool)
+P_STORE_SET_BOOL(setAudioWaves, shadersAudioGroup, wavesKey, audioWavesChanged)
+P_STORE_GET(QString, audioChannelMode, shadersAudioGroup, channelModeKey, QString)
+P_STORE_SET_STRING(setAudioChannelMode, shadersAudioGroup, channelModeKey, audioChannelModeChanged)
+P_STORE_GET(bool, audioReverse, shadersAudioGroup, reverseKey, bool)
+P_STORE_SET_BOOL(setAudioReverse, shadersAudioGroup, reverseKey, audioReverseChanged)
+P_STORE_GET(int, audioExtraSmoothing, shadersAudioGroup, extraSmoothingKey, int)
+P_STORE_SET_INT(setAudioExtraSmoothing, shadersAudioGroup, extraSmoothingKey, audioExtraSmoothingChanged)
+P_STORE_GET(QString, audioInputMethod, shadersAudioGroup, inputMethodKey, QString)
+P_STORE_SET_STRING(setAudioInputMethod, shadersAudioGroup, inputMethodKey, audioInputMethodChanged)
+P_STORE_GET(QString, audioInputSource, shadersAudioGroup, inputSourceKey, QString)
+P_STORE_SET_STRING(setAudioInputSource, shadersAudioGroup, inputSourceKey, audioInputSourceChanged)
 
 // ── Performance (PhosphorConfig::Store-backed) ──────────────────────────────
 

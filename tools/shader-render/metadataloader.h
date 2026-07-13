@@ -14,7 +14,7 @@
 namespace PlasmaZones::ShaderRender {
 
 /**
- * @brief Subset of data/shaders/<id>/metadata.json the renderer needs.
+ * @brief Subset of data/overlays/<id>/metadata.json the renderer needs.
  *
  * Mirrors the fields the daemon reads when constructing a ShaderEffect.
  * The bake / hot-reload bits aren't relevant here — every render is a
@@ -93,22 +93,30 @@ struct ShaderMetadata
 };
 
 /**
- * @brief Parse data/shaders/<id>/metadata.json into ShaderMetadata.
+ * @brief Parse data/overlays/<id>/metadata.json into ShaderMetadata.
  *
- * Returns false if the file is missing, malformed, doesn't declare a
- * fragment shader, or the declared fragment shader does not exist on
- * disk. All path fields are resolved absolute against the metadata.json's
- * directory.
+ * Returns false if the file is missing, malformed, the fragment shader
+ * (declared, or the effect.frag default when the field is omitted) does
+ * not exist on disk, or the pack's parameter metadata fails to parse.
+ * Parameter parsing
+ * re-reads `metadata.json` from the file's directory (see below), so the
+ * metadata file must carry that exact name — the same pack layout
+ * contract the renderer's preamble path relies on. All path fields are
+ * resolved absolute against the metadata.json's directory.
  *
- * Parameter slot resolution mirrors the daemon's flat 0–31 slot index:
+ * Parameter slot resolution uses the daemon's flat 0–31 slot index:
  *   * float / int / bool — slot S → customParams[S/4].(x|y|z|w)[S%4]
  *     (8 vec4s × 4 channels = 32 distinct float slots)
  *   * color — slot S → customColors[S] (16 slots)
  *   * image — slot S → userTextures[S] / userTextureWraps[S] (4 slots)
  *
- * Parameters without a `slot` field are skipped silently (treated as
- * UI-only metadata). Parameters with an explicitly invalid slot
- * (negative or out-of-range for the type) are dropped with a warning.
+ * Slots are resolved by `ShaderRegistry::parsePackMetadata` — the registry's
+ * own T1.1 assignment (explicit slots reserved first, slotless params packed
+ * into the next free lane of their pool in declaration order) — so the seeded
+ * defaults line up with the `p_<id>` preamble the renderer installs by
+ * construction. Parameters whose id is not a valid GLSL identifier body claim
+ * no lane and are dropped with a warning; out-of-range slots are dropped with
+ * a warning.
  */
 bool loadShaderMetadata(const QString& metadataPath, ShaderMetadata& out);
 

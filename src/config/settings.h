@@ -384,13 +384,27 @@ public:
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
 
     // Shader Effects
-    Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
-                   enableShaderEffectsChanged)
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
     Q_PROPERTY(bool enableAudioVisualizer READ enableAudioVisualizer WRITE setEnableAudioVisualizer NOTIFY
                    enableAudioVisualizerChanged)
     Q_PROPERTY(int audioSpectrumBarCount READ audioSpectrumBarCount WRITE setAudioSpectrumBarCount NOTIFY
                    audioSpectrumBarCountChanged)
+    Q_PROPERTY(bool audioAutosens READ audioAutosens WRITE setAudioAutosens NOTIFY audioAutosensChanged)
+    Q_PROPERTY(int audioSensitivity READ audioSensitivity WRITE setAudioSensitivity NOTIFY audioSensitivityChanged)
+    Q_PROPERTY(
+        int audioNoiseReduction READ audioNoiseReduction WRITE setAudioNoiseReduction NOTIFY audioNoiseReductionChanged)
+    Q_PROPERTY(
+        int audioLowerCutoffHz READ audioLowerCutoffHz WRITE setAudioLowerCutoffHz NOTIFY audioLowerCutoffHzChanged)
+    Q_PROPERTY(
+        int audioHigherCutoffHz READ audioHigherCutoffHz WRITE setAudioHigherCutoffHz NOTIFY audioHigherCutoffHzChanged)
+    Q_PROPERTY(bool audioMonstercat READ audioMonstercat WRITE setAudioMonstercat NOTIFY audioMonstercatChanged)
+    Q_PROPERTY(bool audioWaves READ audioWaves WRITE setAudioWaves NOTIFY audioWavesChanged)
+    Q_PROPERTY(QString audioChannelMode READ audioChannelMode WRITE setAudioChannelMode NOTIFY audioChannelModeChanged)
+    Q_PROPERTY(bool audioReverse READ audioReverse WRITE setAudioReverse NOTIFY audioReverseChanged)
+    Q_PROPERTY(
+        int audioExtraSmoothing READ audioExtraSmoothing WRITE setAudioExtraSmoothing NOTIFY audioExtraSmoothingChanged)
+    Q_PROPERTY(QString audioInputMethod READ audioInputMethod WRITE setAudioInputMethod NOTIFY audioInputMethodChanged)
+    Q_PROPERTY(QString audioInputSource READ audioInputSource WRITE setAudioInputSource NOTIFY audioInputSourceChanged)
 
     // Global Shortcuts (configurable via KCM, registered with KGlobalAccel)
     Q_PROPERTY(
@@ -1050,14 +1064,36 @@ public:
     // ranges uniformly); setters route the write through the store so the
     // value is coerced + persisted in memory on the same call, with save()
     // flushing to disk.
-    bool enableShaderEffects() const override;
-    void setEnableShaderEffects(bool enable) override;
     int shaderFrameRate() const override;
     void setShaderFrameRate(int fps) override;
     bool enableAudioVisualizer() const override;
     void setEnableAudioVisualizer(bool enable) override;
     int audioSpectrumBarCount() const override;
     void setAudioSpectrumBarCount(int count) override;
+    bool audioAutosens() const override;
+    void setAudioAutosens(bool enable) override;
+    int audioSensitivity() const override;
+    void setAudioSensitivity(int percent) override;
+    int audioNoiseReduction() const override;
+    void setAudioNoiseReduction(int value) override;
+    int audioLowerCutoffHz() const override;
+    void setAudioLowerCutoffHz(int hz) override;
+    int audioHigherCutoffHz() const override;
+    void setAudioHigherCutoffHz(int hz) override;
+    bool audioMonstercat() const override;
+    void setAudioMonstercat(bool enable) override;
+    bool audioWaves() const override;
+    void setAudioWaves(bool enable) override;
+    QString audioChannelMode() const override;
+    void setAudioChannelMode(const QString& mode) override;
+    bool audioReverse() const override;
+    void setAudioReverse(bool enable) override;
+    int audioExtraSmoothing() const override;
+    void setAudioExtraSmoothing(int percent) override;
+    QString audioInputMethod() const override;
+    void setAudioInputMethod(const QString& method) override;
+    QString audioInputSource() const override;
+    void setAudioInputSource(const QString& source) override;
 
     // Global Shortcuts (for KGlobalAccel) — PhosphorConfig::Store-backed.
     QString openEditorShortcut() const;

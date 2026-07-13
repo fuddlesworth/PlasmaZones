@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Canonical uniform contract for SURFACE shaders — the third shader-pack
-// category, alongside animation (data/animations) and overlay (data/shaders).
+// category, alongside animation (data/animations) and overlay (data/overlays).
 // A surface shader decorates a rendered surface: it samples the surface's own
 // content (uTexture0) and the geometry of the content rect within that texture,
 // and paints decoration (rounded corners + border today; tint / glow / frost in

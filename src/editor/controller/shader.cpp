@@ -48,10 +48,60 @@ bool EditorController::audioVisualizerEnabled() const
                                                  ConfigDefaults::enableAudioVisualizer());
 }
 
-int EditorController::audioBarCount() const
+PhosphorAudio::SpectrumOptions EditorController::audioOptions() const
 {
-    return SettingsDbusQueries::queryIntSetting(QStringLiteral("audioSpectrumBarCount"),
-                                                ConfigDefaults::audioSpectrumBarCount());
+    // One batch round-trip for the full Shaders.Audio parameter set; an older
+    // daemon omits unknown keys from the reply, and the type-checked
+    // extractors below fall back to the compile defaults for those (same
+    // skew handling as the KWin effect's loaders).
+    static const QStringList kAudioKeys = {QStringLiteral("audioSpectrumBarCount"),
+                                           QStringLiteral("shaderFrameRate"),
+                                           QStringLiteral("audioAutosens"),
+                                           QStringLiteral("audioSensitivity"),
+                                           QStringLiteral("audioNoiseReduction"),
+                                           QStringLiteral("audioLowerCutoffHz"),
+                                           QStringLiteral("audioHigherCutoffHz"),
+                                           QStringLiteral("audioMonstercat"),
+                                           QStringLiteral("audioWaves"),
+                                           QStringLiteral("audioChannelMode"),
+                                           QStringLiteral("audioReverse"),
+                                           QStringLiteral("audioExtraSmoothing"),
+                                           QStringLiteral("audioInputMethod"),
+                                           QStringLiteral("audioInputSource")};
+    const QVariantMap values = SettingsDbusQueries::querySettingsBatch(kAudioKeys);
+    const auto intOr = [&values](const QString& key, int fallback) {
+        bool ok = false;
+        const int value = values.value(key).toInt(&ok);
+        return ok ? value : fallback;
+    };
+    const auto boolOr = [&values](const QString& key, bool fallback) {
+        const QVariant value = values.value(key);
+        return value.typeId() == QMetaType::Bool ? value.toBool() : fallback;
+    };
+    const auto stringOr = [&values](const QString& key, const QString& fallback) {
+        const QString value = values.value(key).toString();
+        return value.isEmpty() ? fallback : value;
+    };
+
+    PhosphorAudio::SpectrumOptions opts;
+    opts.barCount = intOr(QStringLiteral("audioSpectrumBarCount"), ConfigDefaults::audioSpectrumBarCount());
+    opts.framerate = intOr(QStringLiteral("shaderFrameRate"), ConfigDefaults::shaderFrameRate());
+    opts.autosens = boolOr(QStringLiteral("audioAutosens"), ConfigDefaults::audioAutosens());
+    opts.sensitivity = intOr(QStringLiteral("audioSensitivity"), ConfigDefaults::audioSensitivity());
+    opts.noiseReduction = intOr(QStringLiteral("audioNoiseReduction"), ConfigDefaults::audioNoiseReduction());
+    opts.lowerCutoffHz = intOr(QStringLiteral("audioLowerCutoffHz"), ConfigDefaults::audioLowerCutoffHz());
+    opts.higherCutoffHz = intOr(QStringLiteral("audioHigherCutoffHz"), ConfigDefaults::audioHigherCutoffHz());
+    opts.monstercat = boolOr(QStringLiteral("audioMonstercat"), ConfigDefaults::audioMonstercat());
+    opts.waves = boolOr(QStringLiteral("audioWaves"), ConfigDefaults::audioWaves());
+    opts.channelMode = PhosphorAudio::channelModeFromString(
+        stringOr(QStringLiteral("audioChannelMode"), ConfigDefaults::audioChannelMode()));
+    opts.reverse = boolOr(QStringLiteral("audioReverse"), ConfigDefaults::audioReverse());
+    opts.extraSmoothing = PhosphorAudio::extraSmoothingFromPercent(
+        intOr(QStringLiteral("audioExtraSmoothing"), ConfigDefaults::audioExtraSmoothing()));
+    opts.inputMethod = PhosphorAudio::inputMethodFromSetting(
+        stringOr(QStringLiteral("audioInputMethod"), ConfigDefaults::audioInputMethod()));
+    opts.inputSource = stringOr(QStringLiteral("audioInputSource"), ConfigDefaults::audioInputSource());
+    return opts;
 }
 
 QVariantMap EditorController::translateShaderParams(const QString& shaderId, const QVariantMap& params) const

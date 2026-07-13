@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Shared geometry / composite / focus helpers for SURFACE shader packs — the
-// decoration-category cousin of the overlay category's data/shaders/shared/
+// decoration-category cousin of the overlay category's data/overlays/shared/
 // common.glsl. Pulls in the uniform contract (surface_uniforms.glsl) and layers
 // the small idioms every decoration pack was re-deriving inline: the
 // rounded-rect SDF, the frame-geometry setup, the AA slab mask, the focus dim,

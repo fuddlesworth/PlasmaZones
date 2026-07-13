@@ -239,7 +239,10 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                         kw->maximize(KWin::MaximizeRestore);
                         --m_suppressMaximizeChanged;
                     }
-                    m_effect->applyWindowGeometry(w, savedGeo.toRect());
+                    // Snap-out: leaving tile-managed sizing.
+                    m_effect->applyWindowGeometry(w, savedGeo.toRect(), /*allowDuringDrag=*/false,
+                                                  /*skipAnimation=*/false,
+                                                  PhosphorAnimation::ProfilePaths::WindowSnapOut);
                 } else if (wasTracked) {
                     // No local bucket entry but the window WAS tile-managed
                     // here: it was snap-managed when it entered autotile, so

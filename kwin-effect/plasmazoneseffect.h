@@ -15,9 +15,11 @@
 #include <PhosphorCompositor/TriggerParser.h>
 
 #include <PhosphorAnimation/AnimationLimits.h>
+#include <PhosphorAnimation/Curve.h> // beginShaderTransition's progressCurve param
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/Profile.h> // resolveEventMotionProfile's return type
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorAudio/AudioDefaults.h>
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
@@ -63,10 +65,6 @@ class LogicalOutput;
 
 namespace PhosphorAnimation {
 class IMotionClock;
-}
-
-namespace PhosphorAudio {
-class IAudioSpectrumProvider;
 }
 
 namespace PlasmaZones {
@@ -733,12 +731,29 @@ private:
     // the window.focus event no longer snaps or retimes it. 0 = instant.
     // Seeded to the shared default until the async settings load lands.
     int m_focusFadeDurationMs = PhosphorCompositor::DecorationDefaults::FocusFadeMs;
-    // Resolve a per-event base duration (ms) from the motion profile tree: a
-    // motion-tree override anywhere up @p profilePath's ancestor chain replaces
-    // @p fallbackMs with the node's resolved effectiveDuration(), else the
-    // fallback stands. Used by tryBeginShaderForEvent (per-event transition
-    // timing).
-    int resolveMotionTreeBaseDuration(const QString& profilePath, int fallbackMs) const;
+    // Resolve the fully-cascaded motion Profile (curve + duration) for
+    // @p profilePath: global animator profile → category "All" → per-node
+    // motion-tree overrides → per-window Rule override. This is the single SSOT
+    // for the per-event timing cascade, shared by all three per-event timing
+    // consumers — the animator-driven geometry path (applyWindowGeometry), the
+    // time-driven shader path (tryBeginShaderForEvent) and the desktop switch
+    // (the desktopChanged handler) — so each honours the same global → All →
+    // node resolution. Pass a windowless @p query (hasWindow() false) + empty
+    // @p windowId for events with no per-window rule scope (desktop switch);
+    // the Rule layer is then skipped and only the tree cascade applies.
+    //
+    // The returned DURATION is clamped into [Limits::MinAnimationDurationMs,
+    // Limits::MaxAnimationDurationMs] — callers do not need to re-clamp, and
+    // applyWindowGeometry depends on it (WindowAnimator's own clampProfile uses a
+    // looser envelope). A null returned CURVE means linear iTime, but in practice
+    // it is unreachable after settings load: daemon_bringup builds the animator's
+    // global curve with CurveRegistry::create(), which never returns null.
+    //
+    // The duration does NOT bound a stateful (spring) curve, which derives its
+    // lifetime from settleTime() instead — see AnimationLimits.h.
+    PhosphorAnimation::Profile resolveEventMotionProfile(const QString& profilePath,
+                                                         const PhosphorRules::WindowQuery& query,
+                                                         const QString& windowId) const;
     // Cap on the per-frame ramp delta. A window at rest (value pinned at 0 or 1)
     // stops being force-repainted by windowSurfaceAnimates, so its FocusFadeState
     // `lastMs` goes stale; without this cap the first frame after a focus change
@@ -810,6 +825,10 @@ private:
     /// unrelated push rebuilt them.
     bool hasDecorationTreeContent() const
     {
+        // NOTE: DecorationProfileTree is PhosphorSurfaceShaders', not
+        // PhosphorAnimation::ProfileTree — it has no hasAnyOverride(). Not a hot
+        // path (this runs on reconcile, not per frame), so the QStringList copy
+        // is fine here.
         return !m_decorationTree.resolve(QString()).effectiveChain().isEmpty()
             || !m_decorationTree.overriddenPaths().isEmpty();
     }
@@ -923,9 +942,9 @@ private:
     /// Compile-on-first-use + cache the surface shader pack @p packId (window
     /// border / rounded corners / glow / …) from data/surface via the
     /// SurfaceShaderRegistry, keyed by pack id in m_compiledPacks. Returns the
-    /// cached CompiledSurfacePack (whose `shader` may be nullptr + `compileFailed`
-    /// set when the pack is missing or its compile failed — decoration then
-    /// no-ops for that pack), or nullptr only when there is no GL context yet.
+    /// cached CompiledSurfacePack (whose `shader` is nullptr when the pack is missing
+    /// or its compile failed — decoration then no-ops for that pack), or nullptr only
+    /// when there is no GL context yet.
     /// The whole cache is cleared on a SurfaceShaderRegistry hot-reload
     /// (effectsChanged) and on teardown.
     ///
@@ -1153,12 +1172,14 @@ private:
     /// folding every audio border forever. -1 until the first spectrum arrives.
     qint64 m_audioSpectrumLastChangeMs = -1;
 
-    /// The daemon's audio-viz master toggle + bar count, pulled via getSetting in
-    /// loadCachedSettings exactly like snapAssistEnabled. The effect's cava run
-    /// gate ANDs the toggle with an audio decoration or an audio animation pack
-    /// being present.
+    /// The daemon's audio-viz master toggle + the full CAVA parameter set,
+    /// pulled via getSetting in loadCachedSettings exactly like
+    /// snapAssistEnabled. The effect's cava run gate ANDs the toggle with an
+    /// audio decoration or an audio animation pack being present; the options
+    /// are applied wholesale in syncEffectAudioState (the provider no-ops on
+    /// an unchanged set and restarts capture at most once per change).
     bool m_enableAudioVisualizer = false;
-    int m_audioSpectrumBarCount = PhosphorAudio::Defaults::DefaultBarCount;
+    PhosphorAudio::SpectrumOptions m_audioOptions;
     /// Coalescing latch for scheduleEffectAudioSync: many decoration/settings
     /// callbacks can fire in one event-loop turn (a focus change removes then
     /// re-adds a decoration); collapsing them to one syncEffectAudioState keeps
@@ -1395,9 +1416,12 @@ private:
     ///   (b) Pre-commit short-circuit — install short-circuited before
     ///       any state was committed: empty effectId / null window,
     ///       global animations toggle off, collapsed/minimised surface,
-    ///       registry miss, shader file open / read / include-expansion
-    ///       failure, or shader compile failure. Nothing was installed,
-    ///       so there is nothing to schedule a teardown for either.
+    ///       registry miss, a desktop-class pack refused on a window
+    ///       event, the cached null-shader sentinel from a prior compile
+    ///       failure, shader file open / read / include-expansion
+    ///       failure, shader compile failure, or the transition-map
+    ///       insert being rejected. Nothing was installed, so there is
+    ///       nothing to schedule a teardown for either.
     ///
     /// Both cases are correctly handled by `tryBeginShaderForEvent`'s
     /// "skip the timer" branch. A future caller writing a manual install
@@ -1405,9 +1429,17 @@ private:
     /// `m_shaderManager.findTransition(window)` (and its generation)
     /// pre-call and compare against the post-call snapshot to detect
     /// case (a).
+    ///
+    /// @p progressCurve is the event's resolved timing curve, and is honoured
+    /// ONLY on the time-driven path (@p durationMs > 0), where paintWindow eases
+    /// the linear progress through it. On the animator-driven path
+    /// (@p durationMs == 0) it is dropped with a warning: that leg reads its
+    /// progress from the WindowAnimator, whose own profile already carries the
+    /// curve, so honouring it here would double-ease.
     bool beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
-                               bool holdAddedGrab = false);
+                               bool holdAddedGrab = false,
+                               std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
     void endShaderTransition(KWin::EffectWindow* window);
 
     // First-frame open suppression — implementations in window_lifecycle.cpp.
@@ -1422,6 +1454,13 @@ private:
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false);
+    /// Arm the duration teardown for a time-driven transition, generation-guarded.
+    ///
+    /// Re-arms itself when the transition's own clock says the leg is not finished.
+    /// The install-time delay is only a first estimate: restore suppression rebases
+    /// `startTimeMs` every withheld frame, so a timer fixed at install fires while
+    /// the animation still has up to 250 ms left to play.
+    void scheduleShaderTransitionTeardown(KWin::EffectWindow* window, quint64 generation, int delayMs);
     /// Runtime mirror of the settings pickers' shader-class filter, routed
     /// through the canonical PhosphorAnimationShaders::
     /// shaderEffectAppliesToEventPath predicate so the two can never drift.

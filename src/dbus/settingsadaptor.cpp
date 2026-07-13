@@ -455,10 +455,25 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("labelFontUnderline", labelFontUnderline, setLabelFontUnderline)
     REGISTER_BOOL_SETTING("labelFontStrikeout", labelFontStrikeout, setLabelFontStrikeout)
     REGISTER_STRING_SETTING("renderingBackend", renderingBackend, setRenderingBackend)
-    REGISTER_BOOL_SETTING("enableShaderEffects", enableShaderEffects, setEnableShaderEffects)
     REGISTER_INT_SETTING("shaderFrameRate", shaderFrameRate, setShaderFrameRate)
     REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)
     REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
+    // The full CAVA analysis parameter set (Shaders.Audio): the KWin effect
+    // runs its own cava instance and pulls every knob through this map via
+    // loadSettingAsync, so each one must be registered here or the effect's
+    // loaders only ever see the unknown-key empty reply and keep defaults.
+    REGISTER_BOOL_SETTING("audioAutosens", audioAutosens, setAudioAutosens)
+    REGISTER_INT_SETTING("audioSensitivity", audioSensitivity, setAudioSensitivity)
+    REGISTER_INT_SETTING("audioNoiseReduction", audioNoiseReduction, setAudioNoiseReduction)
+    REGISTER_INT_SETTING("audioLowerCutoffHz", audioLowerCutoffHz, setAudioLowerCutoffHz)
+    REGISTER_INT_SETTING("audioHigherCutoffHz", audioHigherCutoffHz, setAudioHigherCutoffHz)
+    REGISTER_BOOL_SETTING("audioMonstercat", audioMonstercat, setAudioMonstercat)
+    REGISTER_BOOL_SETTING("audioWaves", audioWaves, setAudioWaves)
+    REGISTER_STRING_SETTING("audioChannelMode", audioChannelMode, setAudioChannelMode)
+    REGISTER_BOOL_SETTING("audioReverse", audioReverse, setAudioReverse)
+    REGISTER_INT_SETTING("audioExtraSmoothing", audioExtraSmoothing, setAudioExtraSmoothing)
+    REGISTER_STRING_SETTING("audioInputMethod", audioInputMethod, setAudioInputMethod)
+    REGISTER_STRING_SETTING("audioInputSource", audioInputSource, setAudioInputSource)
 
     // Zone settings. The shared inner/outer gaps are not exposed here: they are
     // config-backed (the Gaps group) and consumed daemon-side by the geometry
