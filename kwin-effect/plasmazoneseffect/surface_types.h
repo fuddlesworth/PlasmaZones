@@ -335,7 +335,8 @@ struct WindowDecoration
     /// opacity param is the resolved config + SetOpacity fold — the chain
     /// BAKES the window's opacity into its composite. Sole runtime consumer
     /// is the transition iWindowOpacity push: 1.0 when the fold's composite
-    /// is what the transition samples, the rule-resolved fallback otherwise.
+    /// is what the transition samples, the foldedOpacity fallback otherwise
+    /// (refined by the per-frame rule cache when one is populated).
     /// SetOpacity has no other application path: custom chains configure
     /// their own dimming through pack params (frost/glass contentOpacity).
     bool chainBakesOpacity = false;
