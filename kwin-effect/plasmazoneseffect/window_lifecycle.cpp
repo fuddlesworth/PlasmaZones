@@ -662,15 +662,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // WindowClass matcher so they don't need the cache drop.
         auto invalidateRuleCache = [this, safeW]() {
             m_shaderManager.animationRuleEvaluator().clearCache();
-            // The cache drop alone only helps per-frame consumers (opacity
-            // re-resolves in paintWindow). The stacking layer is EVENT-driven
-            // and the eager window-added apply ran against the pre-swap
-            // placeholder class — re-drive it so a layer rule keyed to the
-            // real class applies (and one keyed to the placeholder releases)
-            // without waiting for an incidental sweep. The hasWindowLayerRules
-            // fast path keeps this free for sessions with no layer rules.
+            // The cache drop alone revives nothing: appearance slots (opacity,
+            // tint, border colour) bake into the decoration at
+            // updateWindowDecoration time, and the stacking layer is
+            // EVENT-driven. Both applied eagerly at window-added against the
+            // pre-swap placeholder class — re-drive them here so a rule keyed
+            // to the real class applies (and one keyed to the placeholder
+            // releases) without waiting for an incidental focus / placement
+            // sweep. Decoration re-folds only for an on-desktop window
+            // (matching updateAllDecorations' gate); an off-desktop swap is
+            // picked up by the desktop-switch rebuild.
             if (safeW && !safeW->isDeleted()) {
-                reconcileRuleWindowLayer(getWindowId(safeW), safeW);
+                const QString wid = getWindowId(safeW);
+                if (safeW->isOnCurrentDesktop()) {
+                    updateWindowDecoration(wid, safeW);
+                }
+                reconcileRuleWindowLayer(wid, safeW);
             }
         };
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
