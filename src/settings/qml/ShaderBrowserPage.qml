@@ -4,7 +4,6 @@
 import "GroupSortLogic.js" as Core
 import QtCore
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -27,6 +26,7 @@ import org.kde.kirigami as Kirigami
  *
  *   signal shaderEffectsChanged()
  *   signal shaderProfileChanged(const QString& path)  // optional
+ *   signal toastRequested(const QString& text)        // optional
  *
  * Plus a few labels the host can override to suit its domain (e.g.
  * "Browse installed snapping overlay shaders" vs the animation copy).
@@ -188,11 +188,34 @@ SettingsFlickable {
 
         return opts;
     }
-    property int groupByIndex: 0
-    property int sortByIndex: 0
+    /// The chosen options, by id. The id is the state and the combo index is
+    /// derived from it, never the other way around: the option lists gain and
+    /// lose the Type entry as the type axis appears, so a stored index would
+    /// silently re-point the selection at whatever option moved into that slot.
+    property string _preferredGroupId: "category"
+    property string _preferredSortId: "name"
     property bool sortAscending: true
+    /// True once the persisted selection has been adopted. The derived indices
+    /// settle several times while the page builds, and pushing those into the
+    /// bar before it exists is both pointless and a null dereference.
+    property bool _completed: false
+    readonly property int groupByIndex: root._indexOfOption(root._groupOptions, root._preferredGroupId)
+    readonly property int sortByIndex: root._indexOfOption(root._sortOptions, root._preferredSortId)
+    /// The option actually in force. Same as the preferred id whenever that
+    /// option is present. It differs only while the preferred one is absent (a
+    /// remembered Type choice on a page whose type axis is currently hidden),
+    /// where _indexOfOption falls back to the first entry, so what the page
+    /// groups by always matches what the combo shows.
     readonly property string _groupId: (_groupOptions[groupByIndex] || _groupOptions[0]).id
     readonly property string _sortId: (_sortOptions[sortByIndex] || _sortOptions[0]).id
+
+    onGroupByIndexChanged: root._syncGroupSortBar()
+    onSortByIndexChanged: root._syncGroupSortBar()
+    // The option lists themselves change shape when the type axis appears, and a
+    // ComboBox silently resets currentIndex to 0 on a model change. Re-point it,
+    // or the bar shows Name while the page is still sorting by Category.
+    on_GroupOptionsChanged: root._syncGroupSortBar()
+    on_SortOptionsChanged: root._syncGroupSortBar()
     // ── Derived: category index (sorted, with counts) ───────────────────
     readonly property var _allCategories: {
         var counts = {};
@@ -377,22 +400,10 @@ SettingsFlickable {
             ++root._usagesRev;
         }
 
-        // Surface bridge-emitted toast requests through the shell
-        // `window.showToast`. Without this, the controller's
-        // toastRequested signal goes to /dev/null and the install
-        // drop zone falls back to the generic InlineMessage above
-        // (which can't carry the concrete failure reason).
-        function onToastRequested(text) {
-            if (window && window.showToast)
-                window.showToast(text);
-        }
-
         target: root.bridge
-        // `ignoreUnknownSignals` is tolerated implicitly by Connections —
-        // bridges that don't expose `shaderProfileChanged` /
-        // `toastRequested` simply never fire them; the functions are
-        // still defined so the signal handler index resolves correctly
-        // when present.
+        // Bridges that do not expose `shaderProfileChanged` simply never fire it.
+        // Toasts are NOT handled here: the shell (Main.qml) owns that for every
+        // bridge, so a refusal raised while another page is loaded still lands.
         ignoreUnknownSignals: true
     }
 
@@ -416,128 +427,22 @@ SettingsFlickable {
             text: root.infoBannerText
         }
 
-        SettingsCard {
-            Layout.fillWidth: true
+        ImportDropCard {
             headerText: i18n("User shaders")
-            collapsible: true
             searchAnchor: "userShaders"
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: root.userShadersDescription
-                    wrapMode: Text.WordWrap
-                    color: Kirigami.Theme.disabledTextColor
-                }
-
-                Rectangle {
-                    id: dropZone
-
-                    readonly property bool _highlight: dropArea.containsDrag
-
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Layout.preferredHeight: Kirigami.Units.gridUnit * 5
-                    radius: Kirigami.Units.smallSpacing
-                    color: _highlight ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
-                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
-                    border.color: _highlight ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
-
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: Kirigami.Units.largeSpacing
-
-                        Kirigami.Icon {
-                            source: dropZone._highlight ? "folder-add" : "folder-download"
-                            implicitWidth: Kirigami.Units.iconSizes.large
-                            implicitHeight: Kirigami.Units.iconSizes.large
-                            color: dropZone._highlight ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
-                        }
-
-                        Label {
-                            text: dropZone._highlight ? root.dropZoneHoverText : root.dropZoneIdleText
-                            color: dropZone._highlight ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
-                            font.italic: !dropZone._highlight
-                        }
-                    }
-
-                    DropArea {
-                        id: dropArea
-
-                        anchors.fill: parent
-                        keys: ["text/uri-list"]
-                        onDropped: function (drop) {
-                            var urls = drop.urls;
-                            if (!urls || urls.length === 0) {
-                                drop.accepted = false;
-                                return;
-                            }
-                            var ok = root.bridge ? root.bridge.installShaderPack(String(urls[0])) : false;
-                            installResult.show(ok, urls[0]);
-                            drop.accepted = true;
-                        }
-                    }
-                }
-
-                Kirigami.InlineMessage {
-                    id: installResult
-
-                    function show(ok, url) {
-                        var basename = String(url).split("/").pop();
-                        if (basename.length === 0)
-                            basename = String(url);
-
-                        if (ok) {
-                            type = Kirigami.MessageType.Positive;
-                            text = i18nc("@info shader install success", "Installed shader pack “%1”.", basename);
-                        } else {
-                            type = Kirigami.MessageType.Error;
-                            text = i18nc("@info shader install failure", "Could not install “%1”. The folder must contain a metadata.json and not collide with an existing pack.", basename);
-                        }
-                        visible = true;
-                        autoHideTimer.restart();
-                    }
-
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    visible: false
-                    showCloseButton: true
-
-                    Timer {
-                        id: autoHideTimer
-
-                        interval: 6000
-                        onTriggered: installResult.visible = false
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                    Button {
-                        text: i18n("Open Folder")
-                        icon.name: "folder-open"
-                        flat: true
-                        Accessible.name: i18n("Open user shader directory")
-                        onClicked: {
-                            if (root.bridge)
-                                root.bridge.openUserShaderDirectory();
-                        }
-                    }
-                }
-            }
+            description: root.userShadersDescription
+            idleText: root.dropZoneIdleText
+            hoverText: root.dropZoneHoverText
+            // A shader pack is a FOLDER, unlike the single-file set import.
+            idleIcon: "folder-download"
+            hoverIcon: "folder-add"
+            iconSize: Kirigami.Units.iconSizes.large
+            dropZoneHeight: Kirigami.Units.gridUnit * 5
+            importFn: url => root.bridge ? root.bridge.installShaderPack(url) : false
+            openFolderFn: root.bridge ? () => root.bridge.openUserShaderDirectory() : null
+            openFolderAccessibleName: i18n("Open user shader directory")
+            successTextFn: name => i18nc("@info shader install success", "Installed shader pack “%1”.", name)
+            failureTextFn: name => i18nc("@info shader install failure", "Could not install “%1”. The folder must contain a metadata.json and not collide with an existing pack.", name)
         }
 
         // ── Search row ──────────────────────────────────────────────────
@@ -628,10 +533,22 @@ SettingsFlickable {
             groupByIndex: root.groupByIndex
             sortByIndex: root.sortByIndex
             sortAscending: root.sortAscending
+            // Qualified deliberately: `root` carries identically-named
+            // groupByIndex / sortByIndex / sortAscending properties, and reading
+            // those here instead of the bar's would be a silent no-op.
+            // Adopt a preference only from the control the user actually
+            // activated. Inferring it from an index delta silently dropped an
+            // explicit pick that happened to land on the index a fallback was
+            // already showing, leaving a stale preference the user could not
+            // clear.
+            onGroupPicked: function (index) {
+                root._preferredGroupId = (root._groupOptions[index] || root._groupOptions[0]).id;
+            }
+            onSortPicked: function (index) {
+                root._preferredSortId = (root._sortOptions[index] || root._sortOptions[0]).id;
+            }
             onChanged: {
-                root.groupByIndex = groupByIndex;
-                root.sortByIndex = sortByIndex;
-                root.sortAscending = sortAscending;
+                root.sortAscending = groupSortBar.sortAscending;
                 root._savePrefs();
             }
         }
@@ -738,9 +655,34 @@ SettingsFlickable {
     }
 
     function _savePrefs() {
-        prefs.groupId = root._groupId;
-        prefs.sortId = root._sortId;
+        // The PREFERRED ids, not the effective ones: a Type choice made on a
+        // page whose axis is currently hidden must survive to the session where
+        // it is back.
+        prefs.groupId = root._preferredGroupId;
+        prefs.sortId = root._preferredSortId;
         prefs.sortAscending = root.sortAscending;
+    }
+    // The bar's combo bindings are initial-only (they break on the first user
+    // pick), so a derived index change has to be pushed into it.
+    //
+    // Deferred by a tick on purpose. The option lists and the bar's model
+    // bindings update in the same pass, and pushing an index against the model
+    // the bar has NOT yet rebuilt gets rejected as out of range: the ComboBox
+    // then resets itself to 0 and the bar silently shows Name while the page
+    // sorts by Type. Waiting a tick means the model is already the new one.
+    function _syncGroupSortBar() {
+        if (!root._completed)
+            return;
+
+        Qt.callLater(root._applyGroupSortBarSync);
+    }
+    function _applyGroupSortBarSync() {
+        groupSortBar.groupByIndex = root.groupByIndex;
+        groupSortBar.sortByIndex = root.sortByIndex;
+        // The bar's `sortAscending: root.sortAscending` binding breaks the first
+        // time the direction button writes it, so push this one too.
+        groupSortBar.sortAscending = root.sortAscending;
+        groupSortBar.syncFromState();
     }
     function _indexOfOption(options, id) {
         for (var i = 0; i < options.length; i++)
@@ -751,10 +693,11 @@ SettingsFlickable {
     }
 
     Component.onCompleted: {
-        root.groupByIndex = root._indexOfOption(root._groupOptions, prefs.groupId);
-        root.sortByIndex = root._indexOfOption(root._sortOptions, prefs.sortId);
+        root._preferredGroupId = prefs.groupId;
+        root._preferredSortId = prefs.sortId;
         root.sortAscending = prefs.sortAscending;
-        groupSortBar.syncFromState();
+        root._completed = true;
+        root._syncGroupSortBar();
     }
 
     ShaderBrowserDetailDialog {

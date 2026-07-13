@@ -3,6 +3,10 @@
 
 #pragma once
 
+// Not forward-declared: moc needs the complete type to register the
+// ShaderSetStore* Q_PROPERTY below as a pointer meta-type.
+#include "shadersetstore.h"
+
 #include <PhosphorControl/PageController.h>
 #include <QByteArray>
 #include <QHash>
@@ -22,7 +26,6 @@ namespace PlasmaZones {
 
 class AnimationPresetLibrary;
 class ISettings;
-class MotionSetStore;
 
 /// Q_PROPERTY surface for the "Animations" settings page.
 ///
@@ -53,10 +56,12 @@ class MotionSetStore;
 /// ## Composition
 ///
 /// The controller delegates persistence-heavy concerns to two child
-/// QObjects: `AnimationPresetLibrary` (preset CRUD) and `MotionSetStore`
-/// (motion-set CRUD). Their signals are forwarded to the controller's
-/// own signals via `connect()` so QML rebinds without poking at the
-/// sub-services directly.
+/// QObjects: `AnimationPresetLibrary` (preset CRUD) and `ShaderSetStore`
+/// (motion-set CRUD). The preset library's signals are forwarded to the
+/// controller's own signals via `connect()` so QML rebinds without poking
+/// at it directly. The set store is the exception: QML binds it straight
+/// as `setsBridge` (the shared ShaderSetsPage talks to it), so only its
+/// `pendingChangesChanged` is forwarded, for the dirty flag.
 class AnimationsPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
@@ -65,6 +70,9 @@ class AnimationsPageController : public PhosphorControl::PageController
     Q_PROPERTY(qreal springOmegaMax READ springOmegaMax CONSTANT)
     Q_PROPERTY(qreal springZetaMin READ springZetaMin CONSTANT)
     Q_PROPERTY(qreal springZetaMax READ springZetaMax CONSTANT)
+
+    /// The motion-set store, bound by AnimationsMotionSetsPage as its `bridge`.
+    Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
 
 public:
     /// @param shaderRegistry Optional — when null, all `*ShaderEffects()` /
@@ -131,9 +139,6 @@ public:
     /// form.
     Q_INVOKABLE QString eventLabel(const QString& path) const;
 
-    /// Wraps `ProfilePaths::parentPath`.
-    Q_INVOKABLE QString parentPath(const QString& path) const;
-
     /// Inheritance chain from @p path up to (but excluding) the empty
     /// root. Useful for "snap → zone → global" breadcrumbs.
     Q_INVOKABLE QStringList parentChain(const QString& path) const;
@@ -174,8 +179,12 @@ public:
     /// defaults" for the animation pages: each cleared file is snapshotted like
     /// a normal edit, so the change stages and a subsequent Discard restores it.
     /// The shader tree, animation Profile blob, and window filtering are separate
-    /// Settings keys the caller resets alongside this. @return the number of
-    /// override files actually removed.
+    /// Settings keys the caller resets alongside this.
+    /// @return the number of override files actually removed, or -1 when the
+    /// reset did not complete: either it was REFUSED because an async discard
+    /// owns the snapshot map (every override file is still on disk), or some
+    /// files could not be removed (a partial reset). The page toasts the reason
+    /// in both cases. A caller must not treat -1 as "nothing to clear".
     int clearAllOverrides();
 
     /// Library of user-saved Profile presets. Each entry is a Profile JSON
@@ -197,31 +206,19 @@ public:
     /// `userPresetsChanged()`.
     Q_INVOKABLE bool removeUserPreset(const QString& name);
 
-    // ── Motion sets (Phase 7) ────────────────────────────────────────
+    // ── Motion sets ──────────────────────────────────────────────────
 
-    /// Lists the user's saved motion-set files. Each row:
-    ///   { name, description, overrideCount, slug }
-    Q_INVOKABLE QVariantList availableMotionSets() const;
-
-    /// Reads the motion-set file at @p name and writes one per-path
-    /// override file for every entry. Atomic: validates every entry
-    /// up-front; rejects the whole set on any malformed entry rather
-    /// than committing partial state. "Merge" semantics: existing
-    /// overrides at paths NOT in the set are preserved. Emits
-    /// `overrideChanged()` for each path written and a single
-    /// `pendingChangesChanged()` at the end. @return true on
-    /// successful read + per-path writes.
-    Q_INVOKABLE bool applyMotionSet(const QString& name);
-
-    /// Snapshots the current set of per-path override files into a
-    /// motion-set JSON under
-    /// `~/.local/share/plasmazones/motionsets/<slug>.json`. @p
-    /// description is freeform metadata for the UI; pass an empty
-    /// string to omit.
-    Q_INVOKABLE bool saveCurrentAsMotionSet(const QString& name, const QString& description);
-
-    /// Delete a saved motion-set file.
-    Q_INVOKABLE bool removeMotionSet(const QString& name);
+    /// The motion-set store — the `bridge` ShaderSetsPage binds to.
+    /// Motion sets snapshot the per-event override FILES under
+    /// `~/.local/share/plasmazones/motionsets/<slug>.json`. Applying
+    /// merges: overrides at paths NOT in the set are preserved. Writes ride
+    /// this controller's `setOverride`, so each one snapshots pre-edit
+    /// content and Discard restores it. The domain closures live in
+    /// motionsetdomain.cpp.
+    ShaderSetStore* setsBridge() const
+    {
+        return m_motionSets;
+    }
 
     // ── Shader effects (Phase 6) ─────────────────────────────────────
 
@@ -254,24 +251,18 @@ public:
     /// availableShaderEffects consumers.
     Q_INVOKABLE QVariantList availableShaderEffectsForPath(const QString& path) const;
 
-    /// Single-effect lookup. Empty map when @p effectId is unknown.
-    Q_INVOKABLE QVariantMap shaderEffectInfo(const QString& effectId) const;
-
     /// Just the parameters list for @p effectId — convenience for the
     /// per-event shader-param editor.
     Q_INVOKABLE QVariantList shaderParameters(const QString& effectId) const;
 
-    /// XDG-writable user shader directory path (no side effects). Use
-    /// `ensureUserShaderDirectory()` if you also need it created on disk.
+    /// XDG-writable user shader directory path (no side effects). The directory
+    /// is created on demand by openUserShaderDirectory() and by the pack
+    /// installer, so a caller that only needs the path pays for no filesystem
+    /// write.
     /// Internal helper — not exposed to QML; the page surfaces an
     /// "Open Folder" button that calls `openUserShaderDirectory()`
     /// directly rather than displaying the path as a label.
     QString userShaderDirectoryPath() const;
-
-    /// Ensure the user shader directory exists; create it if missing.
-    /// @return true when the directory exists (newly created or already
-    /// present).
-    Q_INVOKABLE bool ensureUserShaderDirectory();
 
     /// Open the user shader directory in the system file manager,
     /// creating it first if missing.
@@ -302,10 +293,13 @@ public:
     Q_INVOKABLE QVariantMap resolvedShaderProfile(const QString& path) const;
 
     /// Assign @p effectId (with optional @p parameters) to @p path.
-    /// An empty @p effectId clears the assignment at this path,
-    /// equivalent to `clearShaderOverride(path)`. Emits
-    /// `pendingChangesChanged()` whenever the call actually changed
-    /// state.
+    /// An empty @p effectId writes an explicit "no effect" sentinel at this
+    /// path, which BLOCKS inheritance from every ancestor for it and its
+    /// descendants. That is deliberately the opposite of
+    /// `clearShaderOverride(path)`, which removes the entry so resolution
+    /// falls through to the parent again — the sentinel is what makes "I
+    /// disabled all popups" stick even when a parent assigns a shader. Emits
+    /// `pendingChangesChanged()` whenever the call actually changed state.
     Q_INVOKABLE bool setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& parameters);
 
     /// Remove the shader override at @p path; ancestors take over via
@@ -326,7 +320,9 @@ public:
     /// Clear every shader override whose path is strictly DEEPER than
     /// @p path (i.e. paths starting with `<path>.`). Does NOT clear
     /// the override at @p path itself. Returns the number of cleared
-    /// entries. Persists the batch via a single `setShaderProfileTree`
+    /// entries (0 = nothing to clear), or -1 when refused while an
+    /// async discard owns the tree (the page toasts the reason).
+    /// Persists the batch via a single `setShaderProfileTree`
     /// write, which fires `shaderProfileTreeChanged` once and (via the
     /// constructor's broadcast lambda) one path-agnostic
     /// `shaderProfileChanged()` signal — NOT one per cleared path.
@@ -368,9 +364,6 @@ Q_SIGNALS:
     /// rebind without poking at the registry directly.
     void shaderEffectsChanged();
 
-    /// Emitted on any successful add/removeMotionSet or apply.
-    void motionSetsChanged();
-
     /// Emitted whenever `hasPendingChanges()` may have flipped. The
     /// SettingsController's slot calls `setNeedsSave(true)` when there
     /// are pending changes; emits with `false`-equivalent state on
@@ -396,17 +389,33 @@ public:
     /// True iff there are unsaved changes the user could still discard.
     bool hasPendingChanges() const;
 
-    /// Forget the snapshot — every change so far is now "saved." Called
-    /// from `SettingsController::save()`.
+    /// Forget the snapshot — every change so far is now "saved." Called from
+    /// apply(); SettingsController::save() deliberately does NOT call it (that
+    /// would double-dispatch, see settingscontroller_lifecycle.cpp).
     void commitPending();
 
     /// Restore every file in the snapshot to its pre-edit state and
     /// clear the snapshot. Called from `SettingsController::load()`
     /// (Discard). Emits `overrideChanged`/`userPresetsChanged`/
-    /// `motionSetsChanged`/`shaderProfileChanged` so QML refreshes.
+    /// `pendingChangesChanged` and refreshes the set store through
+    /// `ShaderSetStore::notifyLiveStateChanged()` so QML refreshes.
+    /// (`shaderProfileChanged` arrives separately, from the caller's
+    /// own `Settings::load()`.)
     /// Failures (e.g. permission errors during file restore) are
     /// retained in the snapshot so a subsequent revert can retry.
-    void revertPending();
+    /// @return true when the page is CLEAN afterwards. False has two causes, and
+    /// a caller that goes on to declare the state clean (an import, a defaults
+    /// reset) must honour both, or it strands pre-edit snapshots that a later
+    /// Discard writes back over the new state:
+    ///   * the revert was REFUSED outright, because an asyncRevertPending() worker
+    ///     holds the snapshot map, or
+    ///   * some file could not be restored (permission drift) and was RETAINED for
+    ///     a retry.
+    /// The Discard path itself may ignore the result: ApplicationController's
+    /// discardAllAsync dispatches this page's async revert before the settings
+    /// domain calls load(), so hitting the guard there means the async worker
+    /// already owns the restore.
+    bool revertPending();
 
     /// Async sibling of revertPending — runs the QSaveFile restore
     /// loop on a QtConcurrent worker so a Discard with dozens of
@@ -418,6 +427,13 @@ public:
     /// revertPending — partial failures stay in m_pendingFileSnapshots
     /// for a subsequent retry.
     Q_INVOKABLE void asyncRevertPending();
+
+    /// True while an asyncRevertPending() worker owns the snapshot map. A caller
+    /// that gets false from revertPending() uses this to tell the two causes
+    /// apart: the worker is mid-restore and will finish the job (and re-dirty the
+    /// page itself if it has to retain a file), versus a restore that actually
+    /// failed and left the page dirty.
+    bool asyncRevertInFlight() const;
 
 private:
     QString userProfilesDir() const;
@@ -440,6 +456,13 @@ private:
     /// permanently lose pre-edit content — the controller's direct
     /// callers (setOverride / clearOverride) bail in that case.
     bool snapshotFileIfFirst(const QString& filePath);
+    /// Undo a snapshotFileIfFirst() staging when the write it was taken for
+    /// never landed. No-op unless the file on disk still matches the staged
+    /// content exactly, so a snapshot guarding an earlier successful edit is
+    /// left alone. Handed to the sub-services as a callable.
+    /// @return true when the entry was dropped (and pendingChangesChanged was
+    /// emitted if that flipped hasPendingChanges()).
+    bool dropFileSnapshotIfUnchanged(const QString& filePath);
 
     PhosphorAnimationShaders::AnimationShaderRegistry* m_shaderRegistry = nullptr;
     ISettings* m_settings = nullptr;
@@ -449,7 +472,7 @@ private:
     // `this` as parent so ~AnimationsPageController tears them down
     // automatically. No manual delete; no QPointer needed.
     AnimationPresetLibrary* m_presets = nullptr;
-    MotionSetStore* m_motionSets = nullptr;
+    ShaderSetStore* m_motionSets = nullptr;
 
     /// Pre-edit file contents keyed by absolute path. `std::nullopt`
     /// means "the file did not exist before this session." Mutated only
@@ -469,15 +492,6 @@ private:
     /// overwrite the first's retained map, producing inconsistent
     /// disk state. Mirrors ApplicationController::m_applying.
     bool m_asyncRevertInFlight = false;
-    /// Monotonic generation counter bumped on every asyncRevertPending
-    /// dispatch. The shaderProfileTreeChanged DirectConnection lambda
-    /// captures the value at connect time of each invocation — when an
-    /// external reload (Settings::load() chasing discard()) fires
-    /// shaderProfileTreeChanged mid-worker, the lambda's captured
-    /// generation no longer matches and it MUST skip clearing
-    /// `m_shaderTreeDirty`. The worker's finished handler then clears
-    /// the dirty bit as part of its terminal sequence.
-    quint64 m_asyncRevertGeneration = 0;
     /// Last observed value of hasPendingChanges() seen by the
     /// pendingChangesChanged → dirtyChanged forwarder. CLAUDE.md:
     /// "Only emit signals when value actually changes". Several call

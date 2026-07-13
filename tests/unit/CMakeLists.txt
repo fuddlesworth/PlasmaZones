@@ -783,9 +783,9 @@ target_link_libraries(test_window_appearance_controller PRIVATE Qt6::Test Qt6::C
     PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
 add_test(NAME test_window_appearance_controller COMMAND test_window_appearance_controller)
 
-# Animations-controller sources shared by the three test executables below
-# (page controller / motion sets / shader overrides). One list so a new
-# controller source file can't silently miss one of the three.
+# Animations-controller sources shared by the four test executables below
+# (page controller / motion sets / presets / shader overrides). One list so a
+# new controller source file can't silently miss one of the four.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
@@ -793,7 +793,8 @@ set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/motionsetdomain.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
 )
 
@@ -811,14 +812,14 @@ target_link_libraries(test_animations_page_controller
     PRIVATE
         Qt6::Test
         Qt6::Core
+        Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
 
-# Companion test executable: motion-set + user-preset + pending-changes
-# coverage. Split from test_animations_page_controller to keep each test
+# Companion test executable: motion-set + pending-changes coverage. Split from test_animations_page_controller to keep each test
 # file under the project's <800-line guideline.
 add_executable(test_animations_motion_sets
     settings/test_animations_motion_sets.cpp
@@ -828,11 +829,31 @@ target_link_libraries(test_animations_motion_sets
     PRIVATE
         Qt6::Test
         Qt6::Core
+        Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
 add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
+
+# Companion test executable: the user-preset library (AnimationPresetLibrary).
+# Split from test_animations_motion_sets to keep each test file under the
+# project's <800-line guideline, and because presets and sets are separate
+# sub-services of the controller.
+add_executable(test_animations_presets
+    settings/test_animations_presets.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_presets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_presets COMMAND test_animations_presets)
 
 # Companion test executable: shader-override end-to-end coverage. Split
 # from test_animations_page_controller to keep each test file under the
@@ -845,6 +866,7 @@ target_link_libraries(test_animations_shader_overrides
     PRIVATE
         Qt6::Test
         Qt6::Core
+        Qt6::Gui
         PhosphorAnimation::PhosphorAnimation
         PhosphorControl::PhosphorControl
         plasmazones_core
@@ -857,12 +879,25 @@ add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_ov
 # override engage/clear, per-pack parameter merge/prune, subtree ops and
 # profilesChanged reload propagation. Compiles the controller sources
 # directly (they live in the plasmazones-settings executable, not
-# plasmazones_core); the split _paths TU carries parentChain().
+# plasmazones_core); the split _paths / _browser / _sets TUs carry
+# parentChain(), the shader-browser bridge and the set-store wiring.
 #
+# One source list, shared by the page-controller test and the decoration-set
+# test below, so a new controller TU can't silently miss one of the two.
+set(_decoration_ctrl_SRCS
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_paths.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_browser.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_sets.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/shadersetstore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
+)
+
 # decorationpagecontroller_sets.cpp carries the same GCC-only LTO
 # suppression it gets in src/settings/CMakeLists.txt (see the full
 # rationale there): source-file properties are directory-scoped, so the
-# settings dir's suppression does not reach this second consuming target,
+# settings dir's suppression does not reach these consuming targets,
 # and a Release+LTO build would re-emit the GCC 16 std::optional
 # maybe-uninitialized false positive from the test build.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -871,22 +906,57 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 add_executable(test_decorationpagecontroller
     settings/test_decorationpagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_paths.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_browser.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagecontroller_sets.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
+    ${_decoration_ctrl_SRCS}
 )
 target_link_libraries(test_decorationpagecontroller
     PRIVATE
         Qt6::Test
         Qt6::Core
+        Qt6::Gui
         PhosphorSurface::PhosphorSurface
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
 add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontroller)
+
+# Companion test executable: decoration-set CRUD over the shared
+# ShaderSetStore (save / list / apply / remove / update / export / import,
+# the active-flag containment semantics, and the format-version gate). Split
+# from test_decorationpagecontroller to keep each test file under the
+# project's <800-line guideline — same split as the motion side's
+# test_animations_motion_sets.
+add_executable(test_decoration_sets
+    settings/test_decoration_sets.cpp
+    ${_decoration_ctrl_SRCS}
+)
+target_link_libraries(test_decoration_sets
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_decoration_sets COMMAND test_decoration_sets)
+
+# The refusal half of the decoration-set suite. Split from the round-trip half so
+# each file stays under the 800-line cap; both share the sandbox guard and the
+# payload builders in helpers/DecorationSetHelpers.h.
+add_executable(test_decoration_sets_validation
+    settings/test_decoration_sets_validation.cpp
+    ${_decoration_ctrl_SRCS}
+)
+target_link_libraries(test_decoration_sets_validation
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_validation)
 
 # Rules page (Phase 4 of the window-rule refactor): RuleModel
 # derives SectionRole / summaries from a rule's shape; RuleController

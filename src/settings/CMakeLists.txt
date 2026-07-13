@@ -22,6 +22,7 @@ set(plasmazones_settings_SRCS
     searchcatalog.cpp
     searchproviders.h
     searchproviders.cpp
+    registryshaderpreviewbackend.h
     settingscontroller.h
     settingscontroller.cpp
     # SettingsController is large enough to violate the 800-line cap
@@ -59,7 +60,7 @@ set(plasmazones_settings_SRCS
     animationspagecontroller.h
     animationspagecontroller.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
-    # helpers shared between the two AnimationsPageController TUs. Inline
+    # helpers shared across the four AnimationsPageController TUs. Inline
     # definitions make cross-TU linkage independent of unity-build merging.
     animations_controller_detail.h
     # AnimationsPageController shader-leg methods compile into the same
@@ -72,7 +73,7 @@ set(plasmazones_settings_SRCS
     # TU grew past 800 lines after the F#2c async-revert addition.
     animationspagecontroller_overrides.cpp
     # AnimationsPageController path-discovery helpers
-    # (sectionForPath / eventLabel / parentPath / parentChain). Same
+    # (sectionForPath / eventLabel / parentChain). Same
     # split rationale — small per-Q_INVOKABLE methods extracted so the
     # main TU stays under the 800-line cap.
     animationspagecontroller_paths.cpp
@@ -81,13 +82,17 @@ set(plasmazones_settings_SRCS
     # Centralises the symlink-rejection + metadata.json safety checks.
     shaderpackinstaller.h
     shaderpackinstaller.cpp
-    # Sub-services hosted by AnimationsPageController as child QObjects:
-    # preset library + motion-set store. Split out to keep
-    # animationspagecontroller.cpp under the project's 800-line cap.
+    # Preset library — a sub-service hosted by AnimationsPageController as a
+    # child QObject. Split out to keep animationspagecontroller.cpp under the
+    # project's 800-line cap.
     animationpresetlibrary.h
     animationpresetlibrary.cpp
-    motionsetstore.h
-    motionsetstore.cpp
+    # Shared set store (motion sets + decoration sets) and the motion-set
+    # domain closures that specialise it.
+    shadersetstore.h
+    shadersetstore.cpp
+    motionsetdomain.h
+    motionsetdomain.cpp
     animationfileutils.h
     animationfileutils.cpp
     editorpagecontroller.h
@@ -109,7 +114,7 @@ set(plasmazones_settings_SRCS
     snappingzoneselectorcontroller.h
     snappingzoneselectorcontroller.cpp
     # Decoration drill-down page — PER-SURFACE chains of decoration shader
-    # packs + border/titlebar globals, resolved through a
+    # packs, resolved through a
     # DecorationProfileTree (baseline + walk-up inheritance). Parallel to
     # AnimationsPageController's tree model but with no per-event staging;
     # mutations write straight to the Settings decorationProfileTree.
@@ -121,7 +126,8 @@ set(plasmazones_settings_SRCS
     decorationpagecontroller_browser.cpp
     decorationpagecontroller_sets.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
-    # helpers shared between the two DecorationPageController TUs.
+    # helpers. Consumed only by decorationpagecontroller.cpp; kept separate to
+    # hold the conversion helpers out of the controller TU.
     decoration_controller_detail.h
     tilingalgorithmcontroller.h
     tilingalgorithmcontroller.cpp
@@ -204,7 +210,7 @@ set(plasmazones_settings_SRCS
 
 add_executable(plasmazones-settings ${plasmazones_settings_SRCS})
 
-# GCC 16 LTO false positive: applyDecorationSet stages a QList of entries whose
+# GCC 16 LTO false positive: stageEntries() builds a QList of entries whose
 # DecorationProfile holds std::optional members. A disengaged optional's payload
 # bytes are legitimately uninitialized and only ever read behind the engaged
 # flag, but GCC's link-time IPA maybe-uninitialized pass loses that guard across
@@ -336,6 +342,8 @@ qt_add_qml_module(plasmazones-settings
         # Shared group/sort infrastructure (Layouts + Rules pages)
         qml/GroupSortBar.qml
         qml/GroupSortLogic.js
+        # Shared theme-font construction (whole-group `font:` bindings)
+        qml/FontUtils.js
         qml/ZoneSelectorSection.qml
         qml/EasingPreview.qml
         qml/EasingSettings.qml
@@ -376,10 +384,22 @@ qt_add_qml_module(plasmazones-settings
         qml/DecorationSurfaceCard.qml
         qml/ChainEditor.qml
         # Pack-agnostic shader-browser components — shared by the
-        # animation-shader and snapping-overlay-shader pages. Both pages
-        # are thin wrappers that pass the right controller bridge.
+        # animation-shader, snapping-overlay-shader and decoration-shader
+        # pages. All three are thin wrappers that pass the right controller
+        # bridge.
         qml/ShaderBrowserPage.qml
         qml/ShaderBrowserCard.qml
+        # Domain-agnostic sets page + rich set card — shared by the Decoration
+        # Sets and Motion Sets pages. Both are thin wrappers that pass the
+        # right ShaderSetStore bridge plus their domain copy.
+        qml/ShaderSetsPage.qml
+        qml/ShaderSetCard.qml
+        # Shared drag-and-drop import band (shader packs, layouts /
+        # algorithms, sets).
+        qml/FileDropZone.qml
+        qml/ImportDropCard.qml
+        # Shared row badge (neutral metadata + highlighted state).
+        qml/MetadataChip.qml
         qml/FilterMenuButton.qml
         # Stay-open checkable menu item shared by every filter menu
         # (Layouts via LayoutFilterBar, Rules + shader browser via

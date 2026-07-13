@@ -449,9 +449,23 @@ void SettingsController::resetPage(const QString& page)
     // user rules on the Rules page). Suppress onSettingsPropertyChanged during
     // the config reset; mark the active page dirty explicitly below.
     if (isAnimationPage(page)) {
-        if (m_animationsPage != nullptr) {
+        {
             const LoadingScope loadingScope(m_loading);
-            m_animationsPage->clearAllOverrides();
+            // -1 means the reset did not complete (refused mid-discard, or some
+            // override files could not be removed), so resetting the config keys
+            // would leave the page half reset and reported clean. The page has
+            // already toasted the reason; the user can retry once it is resolved.
+            if (m_animationsPage != nullptr && m_animationsPage->clearAllOverrides() < 0) {
+                // A partial failure may have cleared and staged some overrides
+                // before the survivor; reconcile so the footer's needsSave
+                // matches the page badges (this call is not m_loading-gated,
+                // and it is a no-op for the untouched mid-discard refusal).
+                // The config keys stay un-reset; a retry finishes the job.
+                reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
+                return;
+            }
+            // Outside the page-controller null check: the config keys are settings
+            // state and do not depend on the page controller existing.
             m_settings.resetKeys(animationConfigKeys());
         }
         // isPageDirty(animation) is value-based (hasPendingChanges || any
@@ -624,10 +638,12 @@ void SettingsController::discardPage(const QString& page)
             const LoadingScope loadingScope(m_loading);
             m_settings.discardKeys(animationConfigKeys());
         }
-        // revertPending() left hasPendingChanges() false; reconcile every
-        // animation leaf against the value-based truth (all clean post-revert)
-        // so the global needsSave drops the entries the pendingChangesChanged
-        // handler had attributed to the tree. Batched: one emission at most.
+        // Reconcile every animation leaf against the value-based truth so the
+        // global needsSave drops the entries the pendingChangesChanged handler
+        // had attributed to the tree. Value-based on purpose: revertPending()
+        // does not always leave hasPendingChanges() false (it refuses outright
+        // while an async discard is in flight, and it retains a file whose
+        // restore failed so a retry can pick it up). Batched: one emission at most.
         reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
         return;
     }

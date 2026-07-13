@@ -110,9 +110,18 @@ QVariantList DecorationPageController::shaderEffectUsages(const QString& effectI
     if (!m_settings || effectId.isEmpty()) {
         return {};
     }
-    const DecorationProfileTree tree = m_settings->decorationProfileTree();
-    const QStringList overridden = tree.overriddenPaths();
+    const DecorationProfileTree& tree = this->tree();
     QVariantList out;
+    // The baseline is a real chain the resolve walk falls back to (D-Bus can set
+    // one), so a pack used only there would otherwise report zero usages.
+    const DecorationProfile baseline = tree.baseline();
+    if (baseline.chain && baseline.chain->contains(effectId)) {
+        QVariantMap entry;
+        entry.insert(QLatin1String("path"), QString());
+        entry.insert(QLatin1String("label"), PhosphorI18n::tr("Global default"));
+        out.append(entry);
+    }
+    const QStringList overridden = tree.overriddenPaths();
     for (const QString& p : overridden) {
         const DecorationProfile profile = tree.directOverride(p);
         if (!profile.chain || !profile.chain->contains(effectId)) {
@@ -123,7 +132,8 @@ QVariantList DecorationPageController::shaderEffectUsages(const QString& effectI
         entry.insert(QLatin1String("label"), surfacePathLabel(p));
         out.append(entry);
     }
-    // Deterministic UI order — overriddenPaths() iterates a hash.
+    // Alphabetical UI order. overriddenPaths() returns insertion order, which is
+    // deterministic but not what a reader scanning the list expects.
     std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
         return a.toMap().value(QLatin1String("label")).toString() < b.toMap().value(QLatin1String("label")).toString();
     });
