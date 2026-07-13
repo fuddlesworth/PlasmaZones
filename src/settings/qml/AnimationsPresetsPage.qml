@@ -36,7 +36,6 @@ SettingsFlickable {
     readonly property var _easingUserPresets: filterUserPresets(false)
     // QVariantList from C++
     readonly property var _springUserPresets: filterUserPresets(true)
-    // QVariantList from C++
     property bool _deletingPreset: false
 
     function isSpringEntry(curveStr) {
@@ -88,13 +87,6 @@ SettingsFlickable {
         function onUserPresetsChanged() {
             root.userPresetsList = settingsController.animationsPage.userPresets();
             root._deletingPreset = false;
-        }
-
-        // Surface controller-emitted toast requests (e.g. removeUserPreset
-        // refused mid-discard) through the shell `window.showToast`.
-        function onToastRequested(text) {
-            if (window && window.showToast)
-                window.showToast(text);
         }
 
         target: settingsController.animationsPage

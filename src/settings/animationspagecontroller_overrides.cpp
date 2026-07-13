@@ -9,7 +9,7 @@
 // Group covers:
 //   * Path derivation (userProfilesDir / profileFilePath / userMotionSetsDir)
 //   * Existence + read (hasOverride / rawProfile / resolvedProfile)
-//   * Write + clear (setOverride / clearOverride)
+//   * Write + clear (setOverride / clearOverride / clearAllOverrides)
 //
 // Sibling _shaders.cpp owns the shader-tree side; the main TU owns
 // pending-changes tracking, async-revert, and the section catalog.
@@ -17,8 +17,8 @@
 #include "animationspagecontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../core/isettings.h"
 #include "../core/logging.h"
+#include "../phosphor_i18n.h"
 #include "animations_controller_detail.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -174,12 +174,8 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     }
     obj.insert(JsonNameKey, path);
 
-    // Snapshot ONLY if this is the first edit to this path; remove the
-    // snapshot if the write below fails so hasPendingChanges() doesn't
-    // report a phantom pending edit pointing at content we never touched.
-    // Bail before touching disk if the snapshot couldn't be captured —
-    // an unrecoverable revert is worse than the failed write.
-    const bool firstSnapshot = !m_pendingFileSnapshots.contains(filePath);
+    // Snapshot before touching disk, and bail if the pre-edit content could not
+    // be captured: an unrecoverable revert is worse than a failed write.
     if (!snapshotFileIfFirst(filePath)) {
         qCWarning(lcConfig) << "setOverride: refusing to write" << filePath << "without a recoverable snapshot";
         return false;
@@ -187,20 +183,26 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
 
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        if (firstSnapshot)
-            m_pendingFileSnapshots.remove(filePath);
+        dropFileSnapshotIfUnchanged(filePath);
         return false;
     }
     file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
     if (!file.commit()) {
-        if (firstSnapshot)
-            m_pendingFileSnapshots.remove(filePath);
+        dropFileSnapshotIfUnchanged(filePath);
         return false;
     }
 
+    // The write may have restored the file to exactly its pre-edit content (the
+    // user undid an edit by hand). The staged snapshot is then a phantom: disk
+    // already holds what Discard would write back, so keeping it would leave the
+    // page dirty forever with nothing to restore.
+    //
+    // The drop owns the signal for the transition it causes, so the compare below
+    // must not fire again for the same flip.
+    const bool dropped = dropFileSnapshotIfUnchanged(filePath);
     const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
-    if (wasPending != nowPending)
+    if (!dropped && wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
     return true;
 }
@@ -226,41 +228,63 @@ bool AnimationsPageController::clearOverride(const QString& path)
     // hasPendingChanges() walk. Mirrors setOverride() ordering above so
     // a future refactor doesn't see two divergent capture-point shapes.
     const bool wasPending = hasPendingChanges();
-    // Mirror setOverride's snapshot-rollback symmetry: capture whether
-    // this call is the first to touch the file, snapshot, and on
-    // remove() failure roll the snapshot back so hasPendingChanges()
-    // doesn't report a phantom pending edit pointing at a file the
-    // user never actually touched (the unsaved-changes badge would
-    // light up and Discard would write the original content back over
-    // an unchanged original — harmless but confusing UX).
-    const bool firstSnapshot = !m_pendingFileSnapshots.contains(filePath);
+    // Mirror setOverride's snapshot symmetry, through the one shared rollback
+    // primitive: it drops the staged entry only while disk still matches it.
     if (!snapshotFileIfFirst(filePath)) {
         qCWarning(lcConfig) << "clearOverride: refusing to delete" << filePath << "without a recoverable snapshot";
         return false;
     }
     if (!file.remove()) {
-        if (firstSnapshot)
-            m_pendingFileSnapshots.remove(filePath);
+        dropFileSnapshotIfUnchanged(filePath);
         return false;
     }
+    // Deleting a file that did not exist before this session's edits returns it
+    // to its pre-edit state (the snapshot is `nullopt` = "was absent"), so the
+    // staged entry is a phantom and has to go, or the page stays dirty with
+    // nothing to discard. The drop owns the signal for that flip (see setOverride).
+    const bool dropped = dropFileSnapshotIfUnchanged(filePath);
     const bool nowPending = hasPendingChanges();
     Q_EMIT overrideChanged(path);
-    if (wasPending != nowPending)
+    if (!dropped && wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
     return true;
 }
 
 int AnimationsPageController::clearAllOverrides()
 {
+    // Refuse outright while the discard worker owns the snapshot map: every
+    // clearOverride() below would refuse individually, and the caller would read
+    // the resulting 0 as "there was nothing to clear" rather than "nothing was
+    // cleared". Report it as a refusal instead.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "clearAllOverrides: refusing while an async discard is in flight";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        return -1;
+    }
     // Clear every built-in event path. clearOverride is a no-op (returns false)
     // for paths without an override file, so only real overrides are removed and
     // snapshotted; it emits overrideChanged / pendingChangesChanged per removed
     // file so the pages refresh and the staged-changes state updates.
     int cleared = 0;
+    int failed = 0;
     const QStringList paths = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
     for (const QString& path : paths) {
-        if (clearOverride(path))
+        if (clearOverride(path)) {
             ++cleared;
+        } else if (hasOverride(path)) {
+            // The file is still there, so this was a real failure and not the
+            // "nothing to clear" no-op. Counting it as either would report a reset
+            // that did not happen.
+            ++failed;
+        }
+    }
+    if (failed > 0) {
+        qCWarning(lcConfig) << "clearAllOverrides:" << failed << "override files could not be removed";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Some animation overrides could not be reset."));
+        // Report the incomplete reset the same way as the refusal above: a
+        // positive count here would let the caller finish its reset path and
+        // declare the page clean while override files remain on disk.
+        return -1;
     }
     return cleared;
 }

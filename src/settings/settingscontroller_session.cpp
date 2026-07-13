@@ -615,15 +615,24 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // only refreshes settings.json-backed state. Without these the
         // imported config disagrees with what the page controllers still
         // hold in their in-memory snapshots.
-        if (m_animationsPage) {
-            m_animationsPage->revertPending();
+        // Refused means an async discard still owns the snapshot map, so the
+        // page is still holding pre-edit content for files the import just
+        // rewrote. Leave the session DIRTY in that case: marking it clean would
+        // strand those snapshots, and the next Discard would write them back over
+        // the config we imported.
+        const bool animationsReverted = !m_animationsPage || m_animationsPage->revertPending();
+        if (!animationsReverted) {
+            qCWarning(lcConfig) << "importConfig: animation snapshots are still staged after the revert (a discard is "
+                                   "in flight, or a restore failed)";
         }
         if (m_rulesPage) {
             m_rulesPage->revert();
         }
         m_loading = false;
         DaemonDBus::notifyReload();
-        setNeedsSave(false);
+        if (animationsReverted) {
+            setNeedsSave(false);
+        }
     }
     return ok;
 }

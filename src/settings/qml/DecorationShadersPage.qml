@@ -19,10 +19,12 @@ ShaderBrowserPage {
     bridge: settingsController.decorationPage
     settingsCategory: "DecorationShadersFilterBar"
     infoBannerText: i18n("Browse installed decoration packs. Stack packs onto a surface's chain from the Windows, OSDs, and Popups pages.")
+    // "Places", not "surfaces": the usage list can include the global default
+    // chain (set over D-Bus), which is not a surface.
     usageHeaderTextFn: function (count) {
-        return i18ncp("@info shader usage section header (decoration)", "Used on %n surface", "Used on %n surfaces", count);
+        return i18ncp("@info shader usage section header (decoration)", "Used in %n place", "Used in %n places", count);
     }
     usageChipTextFn: function (count) {
-        return i18ncp("@info shader usage chip (decoration)", "%n surface", "%n surfaces", count);
+        return i18ncp("@info shader usage chip (decoration)", "%n place", "%n places", count);
     }
 }
