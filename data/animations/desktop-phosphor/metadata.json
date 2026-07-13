@@ -1,7 +1,7 @@
 {
     "id": "desktop-phosphor",
     "name": "Desktop Phosphor",
-    "description": "Switches desktops behind a diagonal band of light in the official Phosphor style. The front carries the brand gradient from cyan to rose, and the image bends softly through it like refraction.",
+    "description": "Switches desktops over a circuit of light in the official Phosphor style. Signal pulses race along glowing traces in the switch direction, nodes flare as each pulse arrives, and the new desktop floods outward from every lit node behind a thin front carrying the brand gradient.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Reveal",
@@ -9,26 +9,40 @@
     "fragmentShader": "effect.frag",
     "parameters": [
         {
-            "id": "bandWidth",
-            "name": "Front Width",
-            "type": "float",
-            "default": 0.28,
-            "min": 0.05,
-            "max": 0.6
+            "id": "followSwitch",
+            "name": "Follow Switch Direction",
+            "type": "bool",
+            "default": true
         },
         {
-            "id": "ripple",
-            "name": "Front Ripple",
+            "id": "dirX",
+            "name": "Direction X",
             "type": "float",
-            "default": 0.3,
-            "min": 0.0,
+            "default": 1.0,
+            "min": -1.0,
             "max": 1.0
         },
         {
-            "id": "warp",
-            "name": "Refraction",
+            "id": "dirY",
+            "name": "Direction Y",
             "type": "float",
-            "default": 0.5,
+            "default": 1.0,
+            "min": -1.0,
+            "max": 1.0
+        },
+        {
+            "id": "graphScale",
+            "name": "Circuit Density",
+            "type": "float",
+            "default": 5.0,
+            "min": 2.0,
+            "max": 12.0
+        },
+        {
+            "id": "traceOpacity",
+            "name": "Trace Brightness",
+            "type": "float",
+            "default": 0.7,
             "min": 0.0,
             "max": 1.0
         },

@@ -3,11 +3,20 @@
 //
 // Desktop Phosphor — the official Phosphor brand desktop switch, the
 // desktop leg of the phosphor-flux / phosphor-bloom / border-phosphor set.
-// A wide band of the brand accent gradient (cyan #22D3EE → blue #3B82F6 →
-// purple #A855F7 → rose #F43F5E) sweeps diagonally across the screen: ahead
-// of it the outgoing desktop, behind it the incoming one, and on the front
-// the image bends softly through the light like refraction. `t` is forward
-// switch progress in [0,1].
+// Where phosphor-bloom keeps the diagonal light sweep as the per-window
+// signature, the desktop switch borrows phosphor-flux's signal-graph motif
+// instead: a sparse circuit of nodes lights up across the screen in the
+// switch direction, a bright pulse races each trace and its arrival
+// activates the destination node, and the incoming desktop floods outward
+// from every lit node behind a thin front carrying the brand gradient
+// (cyan #22D3EE → blue #3B82F6 → purple #A855F7 → rose #F43F5E). `t` is
+// forward switch progress in [0,1].
+//
+// Causality is real, not faked: each graph cell owns an activation time
+// (directional projection plus per-cell stagger), every edge's pulse
+// departs its earlier-activated endpoint and lands exactly at the later
+// endpoint's activation, and that same activation clock starts the cell's
+// reveal flood. So the circuit visibly carries the switch.
 //
 // Colour is a real tunable here: the p_color* slots resolve to the
 // customColors pool, which the desktop-transition pass binds at parity with
@@ -28,52 +37,172 @@ vec3 fluxGradient(float t) {
     return c;
 }
 
+#ifdef PLASMAZONES_KWIN
+
+// Distance from p to segment ab.
+float sdSegment(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a;
+    vec2 ba = b - a;
+    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1.0e-6), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+
+// Jittered node position for a graph cell, in graph units. Static (no
+// orbit): activation times and pulse arrivals are derived from these
+// positions, and a transition is too short for drift to read anyway.
+vec2 graphNodePos(vec2 cell) {
+    return cell + 0.2 + 0.6 * hash22(cell);
+}
+
+// Per-cell activation time in (0, ~0.65]: a directional ramp (the circuit
+// lights up along the switch direction) plus a per-cell stagger so the
+// front reads as signal propagation, not a straight wipe. `extent` is the
+// graph-space screen extent, so the projection is normalized to [0,1]
+// regardless of resolution or density.
+float nodeActivation(vec2 nodePos, vec2 dir, vec2 extent) {
+    vec2 nodeUV = nodePos / max(extent, vec2(1.0e-4));
+    float proj = clamp(dot(nodeUV - 0.5, dir) * 0.7071 + 0.5, 0.0, 1.0);
+    float stagger = classicHash(floor(nodePos * 7.3));
+    return 0.06 + proj * 0.44 + stagger * 0.14;
+}
+
+#endif // PLASMAZONES_KWIN
+
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
-    const float kPi = 3.14159265359;
+    // ── Graph space: aspect-corrected uv scaled by circuit density, same
+    // construction as phosphor-flux's signal-graph layer. ──
+    vec2 res = resolutionSafe();
+    float aspect = res.x / max(res.y, 1.0);
+    float scale = max(p_graphScale, 2.0);
+    vec2 extent = vec2(aspect, 1.0) * scale;
+    vec2 q = uv * extent;
+    vec2 cell = floor(q);
 
-    // ── Diagonal sweep coordinate with a gentle static ripple across the
-    // perpendicular axis, matching the phosphor-bloom window front. ──
-    float band = clamp(p_bandWidth, 0.05, 0.6);
-    float grad = (uv.x + uv.y) * 0.5;   // 0 top-left .. 1 bottom-right
-    float perp = uv.x - uv.y;
-    float ripple = sin(perp * 6.0) * 0.5 + sin(perp * 15.0 + 1.9) * 0.3;
-    float rippleAmp = clamp(p_ripple, 0.0, 1.0) * 0.05;
-    float threshold = grad + ripple * rippleAmp;
+    // Direction: follow the actual switch (iSwitchDelta via switchDirection)
+    // when p_followSwitch is on; the configured direction params are the
+    // fallback and the forced direction when it is off. The default (1, 1)
+    // keeps the brand's top-left-to-bottom-right diagonal.
+    vec2 cfg = vec2(p_dirX, p_dirY);
+    vec2 dir = normalize(((p_followSwitch > 0.5) ? switchDirection(cfg) : cfg)
+                         + vec2(1.0e-6, 0.0));
 
-    // Expand progress past [0,1] by the band plus the worst-case ripple
-    // offset (|ripple| <= 0.8) so the first / last pixels fully clear their
-    // threshold band at t=0 and t=1 (clean endpoints) even when the ripple
-    // pushes a threshold outside [0,1].
-    float slack = band + 0.8 * rippleAmp;
-    float p = t * (1.0 + 2.0 * slack) - slack;
+    // Feature sizes in graph units, derived from pixels so traces stay
+    // hairline and pulses stay compact at any resolution.
+    float pxInGraph = scale / max(res.y, 1.0);
+    float lineW  = 1.5 * pxInGraph;
+    float nodeR  = 3.0 * pxInGraph;
+    float pulseR = 5.0 * pxInGraph;
 
-    // reveal: 0 = still outgoing desktop .. 1 = incoming desktop.
-    float reveal = smoothstep(threshold - band, threshold + band, p);
+    // Global envelope for the additive circuit: exactly 0 at both endpoints
+    // so the settled desktops carry no residue, full through the middle.
+    float env = smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.86, 0.97, t));
 
-    // Proximity to the light front (1 = on the leading edge).
-    float edge = clamp(1.0 - abs((p - threshold) / band), 0.0, 1.0);
+    // Flood speed in graph units per unit progress. The latest activation is
+    // ~0.64 and a pixel's own-cell node is at most ~1.14 units away, so by
+    // t = 1 the slowest front has travelled (1 - 0.64) * 6 = 2.16 units and
+    // every pixel has cleared its reveal smoothstep with margin.
+    const float floodSpeed = 6.0;
 
-    // ── Refraction: pixels near the front bend along the sweep direction, a
-    // full sine cycle across the band so the offset is zero at the band
-    // centre and at both band edges (no seams where the effect hands back the
-    // untouched desktops). ──
-    vec2 dir = normalize(vec2(1.0, 1.0));
-    float bend = sin(clamp((p - threshold) / band, -1.0, 1.0) * kPi);
-    vec2 offset = dir * bend * edge * clamp(p_warp, 0.0, 1.0) * 0.02;
+    // m: signed distance of the furthest-advanced reveal front past this
+    // fragment, maximized over the 3x3 node neighbourhood. Positive =
+    // incoming desktop has reached this pixel.
+    float m = -1.0e3;
+    vec3 circuit = vec3(0.0);
 
-    vec3 col = crossFade(uv + offset, reveal).rgb;
+    // 3x3 neighbourhood: each visited cell contributes its node, its reveal
+    // flood, and its edges toward the right and downward neighbours, so
+    // every edge is drawn exactly once and any fragment near a node, edge,
+    // or front is covered.
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            vec2 cA = cell + vec2(float(dx), float(dy));
+            vec2 posA = graphNodePos(cA);
+            float aA = nodeActivation(posA, dir, extent);
 
-    // ── Gradient light front: the full brand gradient rides the band, cyan
-    // on the leading edge and rose trailing into the incoming desktop, with
-    // a fine per-frame grain so the light shimmers as it passes. iFrame is
-    // bound on the desktop pass at contract parity, independent of the eased
-    // switch progress. ──
-    float q = clamp((p - threshold) / band * 0.5 + 0.5, 0.0, 1.0);
-    vec3 fluxC = fluxGradient(q);
-    float sparkle = 0.9 + 0.2 * classicHash(floor(uv * resolutionSafe() / 2.0)
+            // ── Reveal flood: the incoming desktop grows radially out of
+            // the node from the moment it activates. ──
+            float dNode = length(q - posA);
+            m = max(m, (t - aA) * floodSpeed - dNode);
+
+            // ── Node dot: flares as its activation lands, holds a dimmer
+            // core while its flood is still local, gone under env at the
+            // endpoints. ──
+            float flare = exp(-pow((t - aA) / 0.05, 2.0));
+            float hold  = smoothstep(aA - 0.02, aA + 0.02, t)
+                        * (1.0 - smoothstep(aA + 0.12, aA + 0.30, t));
+            float node = exp(-dNode * dNode / (nodeR * nodeR));
+            vec3 nodeCol = fluxGradient(clamp(aA * 1.6 - 0.1, 0.0, 1.0));
+            circuit += nodeCol * node * (2.2 * flare + 0.5 * hold);
+
+            // ── Edges to the right / downward neighbours, sparsely gated so
+            // the mesh reads as circuitry, not a grid. ──
+            for (int e = 0; e < 2; e++) {
+                vec2 cB = cA + (e == 0 ? vec2(1.0, 0.0) : vec2(0.0, 1.0));
+                float gate = classicHash(cA * 3.7 + float(e) * 13.1);
+                if (gate < 0.45) continue;
+
+                vec2 posB = graphNodePos(cB);
+                float aB = nodeActivation(posB, dir, extent);
+
+                // Order the endpoints by activation: the pulse departs the
+                // earlier node and arrives exactly at the later node's
+                // activation, so signal and reveal share one clock.
+                vec2 pFrom = aA <= aB ? posA : posB;
+                vec2 pTo   = aA <= aB ? posB : posA;
+                float a0 = min(aA, aB);
+                float a1 = max(aA, aB);
+
+                // Trace lights when its source activates and fades shortly
+                // after the pulse lands.
+                float lit = smoothstep(a0 - 0.02, a0 + 0.03, t)
+                          * (1.0 - smoothstep(a1 + 0.08, a1 + 0.25, t));
+                if (lit <= 0.001) continue;
+
+                float dEdge = sdSegment(q, pFrom, pTo);
+                float line = smoothstep(lineW, lineW * 0.3, dEdge);
+                vec3 edgeCol = fluxGradient(clamp(a0 * 1.6 - 0.1 + gate * 0.2, 0.0, 1.0));
+                circuit += edgeCol * line * 0.35 * lit;
+
+                // ── Travelling pulse with a short fading tail. ──
+                float ph = clamp((t - a0) / max(a1 - a0, 0.04), 0.0, 1.0);
+                float travelling = step(a0, t) * (1.0 - step(a1 + 0.02, t));
+                vec2 pulsePos = mix(pFrom, pTo, ph);
+                float dPulse = length(q - pulsePos);
+                float pulse = exp(-dPulse * dPulse / (pulseR * pulseR));
+                vec2 tailPos = mix(pFrom, pTo, max(ph - 0.15, 0.0));
+                float dTail = length(q - tailPos);
+                pulse += 0.35 * exp(-dTail * dTail / (pulseR * pulseR * 2.0));
+
+                vec3 pulseCol = fluxGradient(clamp(mix(a0, a1, ph) * 1.6 - 0.1, 0.0, 1.0));
+                circuit += pulseCol * pulse * 1.4 * travelling;
+            }
+        }
+    }
+
+    // reveal: 0 = still outgoing desktop .. 1 = incoming desktop. The
+    // completion floor guarantees a clean t = 1 endpoint even for a pixel
+    // pathologically far from every gated node.
+    float reveal = smoothstep(0.0, 0.12, m);
+    reveal = max(reveal, smoothstep(0.92, 1.0, t));
+
+    vec3 col = crossFade(uv, reveal).rgb;
+
+    // ── Gradient front: a thin rim of brand light rides the flood boundary,
+    // cyan-through-rose by how late the local front is, with a fine
+    // per-frame grain so the light shimmers as it passes. iFrame is bound on
+    // the desktop pass at contract parity, independent of the eased switch
+    // progress. ──
+    float front = smoothstep(-0.30, 0.0, m) * (1.0 - smoothstep(0.0, 0.30, m));
+    float sparkle = 0.9 + 0.2 * classicHash(floor(uv * res / 2.0)
                                             + floor(float(iFrame) * 0.2));
-    col += fluxC * edge * edge * clamp(p_glow, 0.0, 2.0) * 0.55 * sparkle;
+    vec3 frontCol = fluxGradient(clamp(t * 1.5 - 0.15, 0.0, 1.0));
+    col += frontCol * front * front * clamp(p_glow, 0.0, 2.0) * 0.5 * sparkle;
+
+    // Additive circuit, gated by the global envelope and dimmed where the
+    // incoming desktop has already settled so it never lingers as residue.
+    col += circuit * env * clamp(p_traceOpacity, 0.0, 1.0)
+                  * mix(1.0, 0.25, reveal) * clamp(p_glow * 0.5 + 0.5, 0.0, 1.5);
 
     // Two opaque desktops blended stay opaque — the pass draws with blending
     // off and replaces the screen, so alpha is a constant 1.
