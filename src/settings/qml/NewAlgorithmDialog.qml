@@ -348,10 +348,15 @@ Kirigami.Dialog {
                             columnSpacing: Kirigami.Units.largeSpacing * 2
                             rowSpacing: Kirigami.Units.smallSpacing
 
-                            // Each box uses `Binding on checked` (not a plain
-                            // `checked:` binding) so the onOpened property
-                            // resets still reach the control after a user
-                            // toggle severs a declarative binding.
+                            // Each box drives its flag through `onToggled` and
+                            // reads it back through `Binding on checked` with
+                            // an explicit RestoreNone, so the onOpened resets
+                            // land and nothing is restored behind them when a
+                            // binding goes away. A plain `checked:` binding
+                            // would also survive the toggle (setChecked() is a
+                            // C++ setter and does not sever a binding); this
+                            // form just states the restore policy rather than
+                            // inheriting a default.
                             CheckBox {
                                 text: i18n("Master count")
                                 onToggled: root.supportsMasterCount = checked

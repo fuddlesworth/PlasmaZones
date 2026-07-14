@@ -158,7 +158,7 @@ private:
     // Accessor values resolved once at load (override fn → metadata → default).
     int m_cachedMasterZoneIndex = -1;
     int m_cachedMinimumWindows = 1;
-    int m_cachedDefaultMaxWindows = 6;
+    int m_cachedDefaultMaxWindows = AutotileDefaults::ScriptedDefaultMaxWindows;
     qreal m_cachedDefaultSplitRatio = AutotileDefaults::DefaultSplitRatio;
     bool m_cachedSupportsMasterCount = false;
     bool m_cachedSupportsSplitRatio = false;

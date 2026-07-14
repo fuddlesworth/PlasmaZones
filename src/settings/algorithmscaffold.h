@@ -40,13 +40,17 @@ QString sanitizeMetadataString(QString value);
 ///
 /// Returns empty on an unrecognized shape: no metadata table, an opening line
 /// that does not end at the `{`, an unterminated table, a brace depth that
-/// goes negative, a metadata line that leaves a Luau long bracket (`[[...]]`,
-/// long string or long comment) open past its end, or a name/id field that is
-/// not a whole `field = "value",` line. Only depth-1 fields are touched, so
-/// nested `customParams` entries keep their own `name` keys. The brace-depth
-/// scan ignores braces inside quoted strings and after `--` comments. A long
-/// bracket opened and closed on one line is fine; multi-line short strings
-/// inside metadata are not supported.
+/// goes negative, or a name/id field that is not a whole `field = "value",`
+/// line. Only depth-1 fields are touched, so nested `customParams` entries
+/// keep their own `name` keys.
+///
+/// The brace-depth scan counts a brace only where it is code. Quoted strings,
+/// `--` line comments, and long brackets at any level (`[[`, `[=[`, ...,
+/// as long strings or, spelled `--[[`, long comments) are text, whether they
+/// close on their own line or span several. Short strings continued across
+/// lines (backslash-newline, `\z`) are the one shape not handled, and no
+/// bundled template's metadata uses one.
+///
 /// @p displayName must already be sanitizeMetadataString()'d and
 /// @p id must be a bare `[A-Za-z0-9_-]` basename — both are embedded in Luau
 /// string literals without further escaping.

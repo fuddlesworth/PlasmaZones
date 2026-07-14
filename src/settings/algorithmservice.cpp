@@ -50,15 +50,17 @@ QString userAlgorithmsDir()
 /// True when @p baseName.luau already exists anywhere on the data search path,
 /// user directory or any system directory.
 ///
-/// A user file does not merely sit alongside a bundled algorithm of the same
-/// basename, it displaces it: the loader registers each script under the `id`
-/// in its metadata, scans the user directory first, and keeps the first
-/// registration (ScriptedAlgorithmLoader::performScan). Both writers here
-/// derive the new `id` from the same slug as the filename, so landing on a
-/// bundled basename unregisters that bundled algorithm outright. Probing only
-/// the user directory would therefore let "Grid" delete Grid from the catalog.
-/// Deliberate overrides still work, they just go through hand-placing or
-/// editing a file rather than through create and import.
+/// The loader registers each script under the `id` in its metadata, scans the
+/// user directory first, and keeps the first registration
+/// (ScriptedAlgorithmLoader::performScan). Create and duplicate both write the
+/// new `id` from the same slug as the filename, so for them landing on a
+/// bundled basename would unregister that bundled algorithm outright: probing
+/// only the user directory would let "Grid" delete Grid from the catalog.
+/// Import is not in that set, since it keeps the file's own id.
+///
+/// Every bundled algorithm's basename matches its id, which is what lets a
+/// filename probe answer an id question. Deliberate overrides still work, they
+/// just go through hand-placing or editing a file rather than through create.
 bool algorithmBaseNameTaken(const QString& baseName)
 {
     return !QStandardPaths::locate(QStandardPaths::GenericDataLocation,
@@ -278,12 +280,13 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     if (destInfo.exists() && source.canonicalFilePath() == destInfo.canonicalFilePath()) {
         return true;
     }
-    // A different file owns the name: pick a unique "<name>-N.luau" rather than
-    // displacing it (no destructive remove-then-copy; matches duplicate/create).
-    // The probe spans the whole search path, so importing a third-party
-    // "grid.luau" rolls over instead of shadowing the bundled Grid out of the
-    // registry.
-    if (algorithmBaseNameTaken(source.completeBaseName())) {
+    // A different user file owns the name: pick a unique "<name>-N.luau" rather
+    // than clobbering it (no destructive remove-then-copy; matches
+    // duplicate/create). Filename collisions only. An import keeps the file's
+    // own metadata id, so unlike create/duplicate a rename here cannot decide
+    // which algorithm the loader registers, and a bundled-name collision is
+    // deliberately not rolled over.
+    if (destInfo.exists()) {
         destPath = findUniqueAlgorithmPath(destDir, source.completeBaseName());
         if (destPath.isEmpty()) {
             Q_EMIT algorithmOperationFailed(

@@ -55,7 +55,7 @@ QStringList templateSpdxLines(const QStringList& lines, int spdxHeaderEnd)
 
 /// Our own blank-scaffold indent. The rewrite path passes the source file's
 /// indent instead, so a copy keeps the formatting its author chose.
-const QLatin1String ScaffoldFieldIndent("        ");
+constexpr QLatin1String kScaffoldFieldIndent{"        "};
 
 QString quotedField(const QString& indent, const QString& key, const QString& value)
 {
@@ -72,18 +72,69 @@ QString leadingWhitespace(const QString& line)
     return line.left(i);
 }
 
-/// Net brace delta of one line, ignoring braces inside quoted Luau strings
-/// (double or single quoted, with backslash escapes) and after a `--` comment
-/// marker. Line-scoped: short strings continued across lines
-/// (backslash-newline, `\z`) are not handled; the bundled templates' metadata
-/// uses none. A long bracket that stays open past the end of the line defeats
-/// the scan outright, so opensUnclosedLongBracket() rejects that shape before
-/// this delta is trusted.
-int braceDelta(const QString& line)
+/// No Luau long bracket is open.
+constexpr int NoLongBracket = -1;
+
+/// If a Luau long-bracket opener (`[`, N `=`, `[`) starts at @p pos in @p line,
+/// return its level N and set @p pastOpener to the index just past it.
+/// Otherwise return NoLongBracket.
+int matchLongBracketOpen(const QString& line, int pos, int& pastOpener)
+{
+    if (line[pos] != QLatin1Char('[')) {
+        return NoLongBracket;
+    }
+    int i = pos + 1;
+    int level = 0;
+    while (i < line.size() && line[i] == QLatin1Char('=')) {
+        ++level;
+        ++i;
+    }
+    if (i >= line.size() || line[i] != QLatin1Char('[')) {
+        return NoLongBracket;
+    }
+    pastOpener = i + 1;
+    return level;
+}
+
+/// Index just past the `]`, N `=`, `]` closer for a level-@p level long bracket
+/// at or after @p from, or -1 when the line does not close it.
+int findLongBracketClose(const QString& line, int level, int from)
+{
+    const QString closer = QLatin1Char(']') + QString(level, QLatin1Char('=')) + QLatin1Char(']');
+    const int at = line.indexOf(closer, from);
+    return at < 0 ? -1 : at + closer.size();
+}
+
+/// Net brace delta of the CODE on one line, given the long-bracket state on
+/// entry, updating @p longBracketLevel for the next line.
+///
+/// Braces are counted only where they are code. Text is skipped in all three
+/// forms Luau has: quoted strings (double or single, with backslash escapes),
+/// `--` line comments, and long brackets at any level (`[[`, `[=[`, ...), as
+/// long strings or, spelled `--[[`, long comments. A long bracket may open and
+/// close on one line, span lines, or repeat, and @p longBracketLevel carries an
+/// open one across the line boundary.
+///
+/// Not handled: short strings continued across lines (backslash-newline, `\z`).
+/// No bundled template's metadata uses one.
+int braceDelta(const QString& line, int& longBracketLevel)
 {
     int delta = 0;
+    int i = 0;
+
+    // A long bracket left open by an earlier line: everything up to its closer
+    // is text.
+    if (longBracketLevel != NoLongBracket) {
+        const int past = findLongBracketClose(line, longBracketLevel, 0);
+        if (past < 0) {
+            return 0;
+        }
+        longBracketLevel = NoLongBracket;
+        i = past;
+    }
+
     QChar quote;
-    for (int i = 0; i < line.size(); ++i) {
+    for (; i < line.size(); ++i) {
         const QChar c = line[i];
         if (!quote.isNull()) {
             if (c == QLatin1Char('\\')) {
@@ -95,58 +146,42 @@ int braceDelta(const QString& line)
         }
         if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
             quote = c;
-        } else if (c == QLatin1Char('-') && i + 1 < line.size() && line[i + 1] == QLatin1Char('-')) {
-            break;
-        } else if (c == QLatin1Char('{')) {
+            continue;
+        }
+        if (c == QLatin1Char('-') && i + 1 < line.size() && line[i + 1] == QLatin1Char('-')) {
+            // `--[[` opens a long comment, which can close and let code resume.
+            // A plain `--` runs to end of line.
+            int pastOpener = 0;
+            const int level = i + 2 < line.size() ? matchLongBracketOpen(line, i + 2, pastOpener) : NoLongBracket;
+            if (level == NoLongBracket) {
+                return delta;
+            }
+            const int past = findLongBracketClose(line, level, pastOpener);
+            if (past < 0) {
+                longBracketLevel = level;
+                return delta;
+            }
+            i = past - 1;
+            continue;
+        }
+        int pastOpener = 0;
+        const int level = matchLongBracketOpen(line, i, pastOpener);
+        if (level != NoLongBracket) {
+            const int past = findLongBracketClose(line, level, pastOpener);
+            if (past < 0) {
+                longBracketLevel = level;
+                return delta;
+            }
+            i = past - 1;
+            continue;
+        }
+        if (c == QLatin1Char('{')) {
             ++delta;
         } else if (c == QLatin1Char('}')) {
             --delta;
         }
     }
     return delta;
-}
-
-/// True when @p line opens a Luau long bracket (`[[`, as a long string or, via
-/// `--[[`, a long comment) that does not close on the same line.
-///
-/// Such a bracket makes every following line unreadable to a line-scoped scan:
-/// its text is data, but braces in it still reach braceDelta(), which then
-/// mistracks depth and can end the metadata walk early. A long bracket that
-/// opens and closes on one line is harmless and stays supported. Only the
-/// unclosed shape is detected, and rewriteMetadataNameId() rejects the file
-/// rather than corrupting it.
-bool opensUnclosedLongBracket(const QString& line)
-{
-    QChar quote;
-    for (int i = 0; i < line.size(); ++i) {
-        const QChar c = line[i];
-        if (!quote.isNull()) {
-            if (c == QLatin1Char('\\')) {
-                ++i;
-            } else if (c == quote) {
-                quote = QChar();
-            }
-            continue;
-        }
-        if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
-            quote = c;
-            continue;
-        }
-        // `[[` opens a long bracket whether or not a `--` precedes it, so this
-        // check runs before the comment break below.
-        if (c == QLatin1Char('[') && i + 1 < line.size() && line[i + 1] == QLatin1Char('[')) {
-            return line.indexOf(QLatin1String("]]"), i + 2) < 0;
-        }
-        if (c == QLatin1Char('-') && i + 1 < line.size() && line[i + 1] == QLatin1Char('-')) {
-            // A `--` comment: only a long-comment opener matters past here.
-            const int longOpen = line.indexOf(QLatin1String("[["), i + 2);
-            if (longOpen < 0) {
-                return false;
-            }
-            return line.indexOf(QLatin1String("]]"), longOpen + 2) < 0;
-        }
-    }
-    return false;
 }
 
 } // anonymous namespace
@@ -169,9 +204,9 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
 
     QString m;
     m += QStringLiteral("    metadata = {\n");
-    m += quotedField(ScaffoldFieldIndent, QStringLiteral("name"), displayName) + QLatin1Char('\n');
-    m += quotedField(ScaffoldFieldIndent, QStringLiteral("id"), id) + QLatin1Char('\n');
-    m += quotedField(ScaffoldFieldIndent, QStringLiteral("description"), QStringLiteral("Custom tiling algorithm"))
+    m += quotedField(kScaffoldFieldIndent, QStringLiteral("name"), displayName) + QLatin1Char('\n');
+    m += quotedField(kScaffoldFieldIndent, QStringLiteral("id"), id) + QLatin1Char('\n');
+    m += quotedField(kScaffoldFieldIndent, QStringLiteral("description"), QStringLiteral("Custom tiling algorithm"))
         + QLatin1Char('\n');
     m += QStringLiteral("        producesOverlappingZones = ") + b(caps.overlappingZones) + QStringLiteral(",\n");
     m += QStringLiteral("        supportsMasterCount = ") + b(caps.masterCount) + QStringLiteral(",\n");
@@ -266,18 +301,18 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     // top-level field so the insert matches its siblings. Stays empty for a
     // table with no other field, and the fallback below covers that.
     QString fieldIndent;
+    // Carries an unclosed long bracket across the line boundary, so the text
+    // inside a multi-line long string or comment is never read as code.
+    int longBracketLevel = NoLongBracket;
     for (int i = metaStart; i < lines.size(); ++i) {
-        // A long bracket left open past this line turns the rest of the table
-        // into text the line scan would misread as code. Reject rather than
-        // rewrite on a depth we know is wrong.
-        if (opensUnclosedLongBracket(lines[i])) {
-            return QString();
-        }
         const int depthAtLineStart = depth;
-        depth += braceDelta(lines[i]);
+        // A line that opens inside a long bracket is that bracket's text, so
+        // a `name = "..."` in it is content rather than a field to rewrite.
+        const bool lineStartsInText = longBracketLevel != NoLongBracket;
+        depth += braceDelta(lines[i], longBracketLevel);
 
         QString line = lines[i];
-        if (i > metaStart && depthAtLineStart == 1) {
+        if (i > metaStart && depthAtLineStart == 1 && !lineStartsInText) {
             const QString trimmed = line.trimmed();
             if (fieldIndent.isEmpty() && !trimmed.isEmpty() && !trimmed.startsWith(QLatin1Char('}'))) {
                 fieldIndent = leadingWhitespace(line);

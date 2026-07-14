@@ -35,18 +35,23 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     d.type = m.value(QStringLiteral("type")).toString();
     d.defaultValue = m.value(QStringLiteral("default"));
     d.description = m.value(QStringLiteral("description")).toString();
-    const bool hasMin = m.contains(QStringLiteral("min"));
-    const bool hasMax = m.contains(QStringLiteral("max"));
-    if (hasMin) {
-        d.minValue = m.value(QStringLiteral("min")).toDouble();
+    // A non-finite bound (a script writing 0/0 or math.huge) must not reach the
+    // normalisation and clamp below: every NaN comparison is false, so the swap
+    // is skipped and std::clamp propagates the NaN straight out to the settings
+    // spinbox. Keep the default bound instead, as resolveReal() does for the
+    // metadata reals.
+    const QVariant minV = m.value(QStringLiteral("min"));
+    const QVariant maxV = m.value(QStringLiteral("max"));
+    if (minV.isValid() && std::isfinite(minV.toDouble())) {
+        d.minValue = minV.toDouble();
     }
-    if (hasMax) {
-        d.maxValue = m.value(QStringLiteral("max")).toDouble();
+    if (maxV.isValid() && std::isfinite(maxV.toDouble())) {
+        d.maxValue = maxV.toDouble();
     }
     // Guarantee a non-inverted range for the settings UI even when a script
     // supplies only one bound (the other keeps its default): an inverted
-    // [min, max] makes a slider/spinbox undefined. (hasMin/hasMax are read above
-    // to apply the explicit values; the normalisation itself is unconditional.)
+    // [min, max] makes a slider/spinbox undefined. Both bounds are finite by
+    // here, so the comparison is meaningful and the swap is unconditional.
     if (d.minValue > d.maxValue) {
         const double t = d.minValue;
         d.minValue = d.maxValue;
@@ -54,9 +59,11 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     }
     // Keep a number param's default inside its own [min, max] range so the
     // settings control never initialises outside its track (mirrors the
-    // metadata clamping applied to defaultSplitRatio / window counts).
+    // metadata clamping applied to defaultSplitRatio / window counts). A
+    // non-finite default is dropped for the same reason as a non-finite bound.
     if (d.type == QLatin1String("number") && d.defaultValue.canConvert<double>()) {
-        d.defaultValue = std::clamp(d.defaultValue.toDouble(), d.minValue, d.maxValue);
+        const double v = d.defaultValue.toDouble();
+        d.defaultValue = std::isfinite(v) ? std::clamp(v, d.minValue, d.maxValue) : d.minValue;
     }
     d.enumOptions = m.value(QStringLiteral("options")).toStringList();
     return d;
@@ -640,7 +647,7 @@ QVector<QRect> LuauTileAlgorithm::calculateZones(const TilingParams& params) con
     // Fill the work area for a lone window unless the algorithm opts into laying
     // out the single-window case itself (e.g. a centered single-window layout). Opted-in
     // scripts get tile() called with windowCount == 1.
-    if (params.windowCount == 1 && !m_metadata.supportsSingleWindow) {
+    if (params.windowCount == 1 && !supportsSingleWindow()) {
         return {area};
     }
 
@@ -658,7 +665,7 @@ QVector<QRect> LuauTileAlgorithm::calculateZones(const TilingParams& params) con
 
 void LuauTileAlgorithm::prepareTilingState(TilingState* state) const
 {
-    if (!m_metadata.supportsMemory) {
+    if (!supportsMemory()) {
         return;
     }
     if (!state || state->splitTree()) {
@@ -694,10 +701,12 @@ QVariantMap LuauTileAlgorithm::buildStateMap(const TilingState* state, bool incl
     st[QStringLiteral("splitRatio")] = std::clamp(state->splitRatio(), MinSplitRatio, MaxSplitRatio);
 
     int focusedIndex = -1;
-    // Cap like buildContext's own window list, so the hook-side and tile-side
-    // views of the same state cannot disagree on length.
-    const int windowCap = std::min<int>(state->tiledWindowCount(), MaxZones);
-    const QVector<WindowInfo> infos = buildWindowInfos(state, windowCap, appIdResolver(), focusedIndex);
+    // Uncapped on purpose. buildWindowInfos only reports focusedIndex for a
+    // window it actually visits, so truncating here would report -1 for a
+    // focused window past the cap. The list is already bounded by
+    // tiledWindows(), and windowCount / countAfterRemoval below are uncapped
+    // too, so the snapshot stays self-consistent.
+    const QVector<WindowInfo> infos = buildWindowInfos(state, state->tiledWindowCount(), appIdResolver(), focusedIndex);
     QVariantList windows;
     for (const WindowInfo& info : infos) {
         QVariantMap w;

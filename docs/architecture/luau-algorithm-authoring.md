@@ -76,10 +76,12 @@ That is a complete algorithm. `pluau.algorithm{…}` wraps the table and returns
 | `onWindowRemoved` | no | `(state, index) -> ()` | Lifecycle hook (§8) |
 | `onWindowResized` | no | `(state, resize) -> table?` | Interactive-resize hook (§9) |
 
-The stubs also allow a function of the same name as a metadata field (for
-example `defaultSplitRatio`) when a value must be computed instead of declared.
-It is called once at load and cached, so it cannot vary per retile. The bundled
-algorithms all use plain metadata fields.
+The stubs also allow a function in place of any of eight metadata fields
+(`masterZoneIndex`, `supportsMasterCount`, `supportsSplitRatio`,
+`producesOverlappingZones`, `centerLayout`, `minimumWindows`,
+`defaultMaxWindows`, `defaultSplitRatio`) when a value must be computed instead
+of declared. Each is called once at load and cached, so it cannot vary per
+retile. The bundled algorithms all use plain metadata fields.
 
 ---
 
@@ -93,13 +95,13 @@ to sensible defaults.
 | `name` | string | Display name in the settings UI |
 | `id` | string | Stable identifier (defaults to the file name) |
 | `description` | string | One-line description |
-| `defaultMaxWindows` | number | Default window cap shown in the UI (omit or 0 to use the built-in default of 6) |
+| `defaultMaxWindows` | number | Default window cap shown in the UI (omit or 0 to use the built-in default of 6; otherwise clamped to 1–100) |
 | `minimumWindows` | number | Smallest window count the layout supports (clamped to 1–100) |
 | `supportsMasterCount` | boolean | Exposes the “master count” control; sets `ctx.masterCount` |
 | `supportsSplitRatio` | boolean | Exposes the split-ratio slider; sets `ctx.splitRatio` |
 | `defaultSplitRatio` | number | Initial split ratio (0.1–0.9) |
 | `supportsMinSizes` | boolean | Honours per-window minimum sizes (default `true`) |
-| `supportsMemory` | boolean | Uses the persistent split tree + hooks (§10) |
+| `supportsMemory` | boolean | Uses the persistent split tree (§10) |
 | `supportsScriptState` | boolean | Persists an opaque `ctx.state` table across retiles (§9) |
 | `supportsSingleWindow` | boolean | Owns the lone-window case; without it the host fills the work area when one window is tiled |
 | `retileOnFocus` | boolean | Re-runs `tile` when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight) |
@@ -211,6 +213,9 @@ pluau.clampSplitRatio(r)
 `pluau.computeCumulativeMinDims`, `pluau.solveTwoPart`, `pluau.solveThreeColumn`,
 `pluau.appendGracefulDegradation`.
 
+`appendGracefulDegradation` appends into its `zones` argument and returns
+nothing, like `stripLayout`.
+
 ### Resize helpers (§9)
 
 `pluau.masterStackResize(state, resize, horizontal)` implements the standard
@@ -321,7 +326,8 @@ activity.
 
 Set `metadata.supportsMemory = true` to receive a persistent `ctx.tree`
 (`SplitNode`) that survives across window add/remove events. The host keeps the
-tree in step for you, so a memory algorithm implements no hooks of its own. Use
+tree in step for you, so a memory algorithm needs no lifecycle hooks (§8). It
+can still implement `onWindowResized` (§9) to react to a drag. Use
 `pluau.applyTreeGeometry(ctx.tree, ctx.area, ctx.innerGap)` in `tile` to turn
 the tree into zones. See `data/algorithms/dwindle-memory.luau` for a full
 example. Most layouts are stateless and don't need this.
