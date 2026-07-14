@@ -297,6 +297,14 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             if (lastScreenId != physicalScreenId && !lastScreenId.startsWith(prefix)) {
                 continue;
             }
+            // Already a valid VS in the CURRENT config — leave it alone, like
+            // the three sibling loops above. Re-resolving would let a shared
+            // layout (zone present on every VS) silently rewrite a correct
+            // vs:1 last-used to the first candidate, and force a save for a
+            // no-op.
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(lastScreenId) && virtualScreenIds.contains(lastScreenId)) {
+                continue;
+            }
             const QString lastZoneId = state->lastUsedZoneId();
             QString targetVs = virtualScreenIds.first(); // default
             if (!lastZoneId.isEmpty() && m_layoutManager) {
@@ -330,12 +338,27 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             }
             QHash<QString, QRect> remapped;
             bool any = false;
+            // Deterministic collision rule for keys folding into one target
+            // (QHash iteration order is unspecified, so last-visit-wins would
+            // make the surviving float-back rect nondeterministic run to run):
+            // an untouched identity key beats any remapped one, and among
+            // remapped sources the lexicographically smallest source key wins.
+            QHash<QString, QString> chosenSource;
             for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
                 QString screen = it.key();
                 if (screen == physicalScreenId || screen.startsWith(prefix)) {
                     screen = resolveVirtualScreen(ptZoneIds, screen);
                     any = true;
                 }
+                const auto prev = chosenSource.constFind(screen);
+                if (prev != chosenSource.constEnd()) {
+                    const bool prevIsIdentity = (prev.value() == screen);
+                    const bool thisIsIdentity = (it.key() == screen);
+                    if (prevIsIdentity || (!thisIsIdentity && prev.value() <= it.key())) {
+                        continue; // keep the previously chosen entry
+                    }
+                }
+                chosenSource.insert(screen, it.key());
                 remapped.insert(screen, it.value());
             }
             if (any) {
@@ -467,6 +490,11 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     const int freeGeoRemapped = m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
         QHash<QString, QRect> remapped;
         bool any = false;
+        // Same deterministic collision rule as the ToVirtual sibling: identity
+        // beats remapped, then smallest source key — every VS sub-key here
+        // folds into the ONE physical key, so without it the surviving rect
+        // would follow QHash iteration order.
+        QHash<QString, QString> chosenSource;
         for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
             QString screen = it.key();
             if (PhosphorIdentity::VirtualScreenId::isVirtual(screen)
@@ -474,6 +502,15 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
                 screen = physicalScreenId;
                 any = true;
             }
+            const auto prev = chosenSource.constFind(screen);
+            if (prev != chosenSource.constEnd()) {
+                const bool prevIsIdentity = (prev.value() == screen);
+                const bool thisIsIdentity = (it.key() == screen);
+                if (prevIsIdentity || (!thisIsIdentity && prev.value() <= it.key())) {
+                    continue; // keep the previously chosen entry
+                }
+            }
+            chosenSource.insert(screen, it.key());
             remapped.insert(screen, it.value());
         }
         if (any) {

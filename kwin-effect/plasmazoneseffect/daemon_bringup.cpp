@@ -982,10 +982,18 @@ void PlasmaZonesEffect::loadCachedSettings()
     // silently disable / invert the min-size gate. Kept symmetric with
     // `animationDuration`'s `qBound` clamp above.
     loadSettingAsync(QStringLiteral("animationMinimumWindowWidth"), [this](const QVariant& v) {
-        m_animationMinWindowWidth = qBound(0, v.toInt(), 2000);
+        bool ok = false;
+        const int i = v.toInt(&ok);
+        if (ok) {
+            m_animationMinWindowWidth = qBound(0, i, 2000);
+        }
     });
     loadSettingAsync(QStringLiteral("animationMinimumWindowHeight"), [this](const QVariant& v) {
-        m_animationMinWindowHeight = qBound(0, v.toInt(), 2000);
+        bool ok = false;
+        const int i = v.toInt(&ok);
+        if (ok) {
+            m_animationMinWindowHeight = qBound(0, i, 2000);
+        }
     });
 
     // Decoration window filtering — independent of the snapping/tiling and
@@ -1013,14 +1021,24 @@ void PlasmaZonesEffect::loadCachedSettings()
     // animation min-size fetches above — the daemon schema already bounds
     // these to [0, 2000].
     loadSettingAsync(QStringLiteral("decorationMinimumWindowWidth"), [this](const QVariant& v) {
-        const int i = qBound(0, v.toInt(), 2000);
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        const int i = qBound(0, raw, 2000);
         if (m_decorationMinWindowWidth != i) {
             m_decorationMinWindowWidth = i;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("decorationMinimumWindowHeight"), [this](const QVariant& v) {
-        const int i = qBound(0, v.toInt(), 2000);
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        const int i = qBound(0, raw, 2000);
         if (m_decorationMinWindowHeight != i) {
             m_decorationMinWindowHeight = i;
             scheduleBorderSweep();

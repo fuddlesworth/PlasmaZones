@@ -1405,7 +1405,13 @@ private:
     /// unloaded because a `desktop.peek` pack is assigned. Only names WE
     /// unloaded are recorded, so clearing the pack (or unloading this effect)
     /// loads back exactly what the user had — never an effect KWin left
-    /// disabled in kwinrc.
+    /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop
+    /// Effects KCM WHILE the suppression holds it unloaded leaves its name
+    /// recorded (the KCM apply is a no-op on the already-unloaded effect), so
+    /// the eventual restore re-loads it for the rest of the session; the next
+    /// session honours kwinrc, which the suppression never writes. Querying
+    /// kwinrc from the effect to close this would add a config dependency the
+    /// plugin doesn't otherwise need.
     QStringList m_suppressedShowDesktopEffects;
     /// Set by the aboutToQuit latch (constructor): distinguishes a runtime
     /// unload of this effect from compositor shutdown in the destructor's

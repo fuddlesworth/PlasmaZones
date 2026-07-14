@@ -1498,6 +1498,12 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     const bool transitionHadCloseGrab = transition.closeGrabHeld;
     const bool transitionHadAddedGrab = transition.addedGrabHeld;
     auto* inserted = m_shaderManager.insertTransition(window, std::move(transition));
+    // Pin the invariant the inherited-grab rollback below relies on:
+    // insertTransition can only fail on a duplicate key, which the
+    // supersession erase above makes impossible for a same-window install. A
+    // future insertTransition failure mode (capacity policy etc.) would leak
+    // an inherited refWindow with no owner through the skip-release branch.
+    Q_ASSERT(!(isSameWindowSupersession && !inserted));
     if (!inserted) {
         // Contract violation: the supersession branch above did not erase
         // the prior entry, or a concurrent install raced us. Release the
