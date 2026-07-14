@@ -68,7 +68,7 @@ Kirigami.Dialog {
         {
             "name": i18n("Dwindle (Memory)"),
             "id": "dwindle-memory",
-            "desc": i18n("Remembers split positions across changes")
+            "desc": i18n("Remembers split positions when you resize a split")
         },
         {
             "name": i18n("Cluster"),

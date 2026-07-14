@@ -47,6 +47,15 @@ QString userAlgorithmsDir()
         + ScriptedAlgorithmSubdir + QLatin1Char('/');
 }
 
+/// True when @p name is a bare basename: the shape the loader registers and the
+/// only shape safe to interpolate into a path. Asked by every entry point that
+/// takes an id or a filename from outside.
+bool isBareBaseName(const QString& name)
+{
+    static const QRegularExpression bareBaseName(QStringLiteral("^[A-Za-z0-9_-]+$"));
+    return bareBaseName.match(name).hasMatch();
+}
+
 /// True when @p baseName.luau already exists anywhere on the data search path,
 /// user directory or any system directory.
 ///
@@ -258,8 +267,7 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
         Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Only Luau algorithm files (.luau) can be imported."));
         return false;
     }
-    static const QRegularExpression validBaseName(QStringLiteral("^[A-Za-z0-9_-]+$"));
-    if (!validBaseName.match(source.completeBaseName()).hasMatch()) {
+    if (!isBareBaseName(source.completeBaseName())) {
         Q_EMIT algorithmOperationFailed(
             PhosphorI18n::tr("Algorithm file names may contain only letters, digits, hyphens, and underscores."));
         return false;
@@ -268,6 +276,8 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     // this large, so copying it in would leave the user a success toast for an
     // algorithm that never appears. Checked on the source's size, so an
     // oversized file is never read into memory either.
+    static_assert(PhosphorTiles::AutotileDefaults::MaxScriptSizeBytes == 1024 * 1024,
+                  "the import failure message below states the cap in words");
     if (source.size() > PhosphorTiles::AutotileDefaults::MaxScriptSizeBytes) {
         Q_EMIT algorithmOperationFailed(
             PhosphorI18n::tr("That algorithm file is too large to load. Algorithms are limited to 1 MB."));
@@ -304,11 +314,12 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
         }
     }
 
-    // Read the source through, then write it atomically. QFile::copy creates the
-    // destination and then fills it, which is the exposure writeAlgorithmFile
-    // exists to avoid: this is the one writer landing IN the directory the
-    // daemon's loader watches, so a partial file there is a file the loader can
-    // read mid-copy.
+    // Read the source through, then write it atomically. Import is the only
+    // writer here that COPIES an existing file rather than generating content,
+    // which is what makes QFile::copy the tempting wrong answer: it creates the
+    // destination and then fills it, and this lands in the directory the
+    // daemon's loader watches, so the loader can read the file mid-copy. Like
+    // duplicate and create, it goes through writeAlgorithmFile instead.
     QFile in(filePath);
     if (!in.open(QIODevice::ReadOnly)) {
         Q_EMIT algorithmOperationFailed(
@@ -415,8 +426,7 @@ void AlgorithmService::openAlgorithm(const QString& algorithmId)
     // as a bare basename before interpolating it into a path, so a stray id with
     // separators / ".." can never escape the user dir (defence in depth — every
     // producer already sanitizes).
-    static const QRegularExpression safeBaseName(QStringLiteral("^[A-Za-z0-9_-]+$"));
-    if (!safeBaseName.match(algorithmId).hasMatch()) {
+    if (!isBareBaseName(algorithmId)) {
         qCWarning(PlasmaZones::lcCore) << "Cannot open algorithm — unsafe id (not a bare basename):" << algorithmId;
         return;
     }
@@ -697,8 +707,7 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
         // Defence in depth, mirroring openAlgorithm: a bare basename can
         // never escape the algorithms subdir.
-        static const QRegularExpression safeTemplateName(QStringLiteral("^[A-Za-z0-9_-]+$"));
-        if (!safeTemplateName.match(baseTemplate).hasMatch()) {
+        if (!isBareBaseName(baseTemplate)) {
             qCWarning(PlasmaZones::lcCore)
                 << "createNewAlgorithm: unsafe template id (not a bare basename):" << baseTemplate;
             Q_EMIT algorithmOperationFailed(

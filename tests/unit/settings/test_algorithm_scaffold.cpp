@@ -575,6 +575,21 @@ void TestAlgorithmScaffold::spliceHandlesTrailingNameOrIdField()
                                               "        }, id = \"x\",\n"));
     QVERIFY(spliceTemplate(afterBlockNestedId, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
 
+    // A field AHEAD of the table's own closer is still the table's field.
+    const QString onCloserLine = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        description = \"d\",\n"
+        "        foo = 1, name = \"Real\" },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(onCloserLine, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
+
+    // A bracketed key is the same Luau key as the bare one, and its string is
+    // elided from the match subject, so the shape is rejected rather than read.
+    const QString bracketedKey = moduleWithMetadataBody(QStringLiteral("        [\"name\"] = \"Real\",\n"));
+    QVERIFY(spliceTemplate(bracketedKey, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
+
     // A line that opens inside a long bracket can still close it and carry a
     // real field. Skipping the whole line would leave this to duplicate.
     const QString afterCloser =
@@ -596,6 +611,21 @@ void TestAlgorithmScaffold::spliceHandlesTrailingNameOrIdField()
     QVERIFY(out.contains(QStringLiteral("        id = \"b\",")));
     QVERIFY(!out.contains(QStringLiteral("name = \"A\"")));
     QVERIFY(out.contains(QStringLiteral("        customParams = { key = \"g\", name = \"Gap\" },")));
+
+    // Past the table's own closer the code belongs to the enclosing table, so a
+    // `name` there is not metadata's and must not reject.
+    out = spliceTemplate(QStringLiteral("return pluau.algorithm {\n"
+                                        "    metadata = {\n"
+                                        "        name = \"A\",\n"
+                                        "        id = \"a\",\n"
+                                        "    }, foo = { name = \"x\" },\n"
+                                        "    tile = function(ctx) return {} end,\n"
+                                        "}\n"),
+                         kCopyright, QStringLiteral("B"), QStringLiteral("b"));
+    QVERIFY(!out.isEmpty());
+    QVERIFY(out.contains(QStringLiteral("        name = \"B\",")));
+    QVERIFY(!out.contains(QStringLiteral("name = \"A\"")));
+    QVERIFY(out.contains(QStringLiteral("    }, foo = { name = \"x\" },")));
 
     // A nested table written across lines keeps its own name key too.
     out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        customParams = {\n"

@@ -147,7 +147,7 @@ export type Pluau = {
     join: (...{ Zone }) -> { Zone },
     algorithm: (def: Algorithm) -> Algorithm,
     -- geometry builtins (see pluau.luau for full signatures)
-    fillArea: (area: Rect, count: number) -> { Zone },
+    fillArea: (area: Zone, count: number) -> { Zone },
     fillRegion: (x: number, y: number, w: number, h: number, count: number) -> { Zone },
     equalColumnsLayout: (area: Rect, count: number, gap: number, minSizes: { MinSize }) -> { Zone },
     masterStackLayout: (area: Rect, count: number, gap: number, splitRatio: number, masterCount: number,
@@ -173,16 +173,17 @@ export type Pluau = {
         minC: number, minR: number) -> { leftWidth: number, centerWidth: number, rightWidth: number,
         leftX: number, centerX: number, rightX: number },
     applyPerWindowMinSize: (w: number, h: number, minSizes: { MinSize }, i: number) -> { w: number, h: number },
+    -- minW/minH are keyed 0..windowCount inclusive, not 1-based arrays.
     computeCumulativeMinDims: (windowCount: number, minSizes: { MinSize }, innerGap: number)
-        -> { minW: { number }, minH: { number } },
-    appendGracefulDegradation: (zones: { Zone }, remaining: Rect, leftover: number, innerGap: number) -> (),
+        -> { minW: { [number]: number }, minH: { [number]: number } },
+    appendGracefulDegradation: (zones: { Zone }, remaining: Zone, leftover: number, innerGap: number) -> (),
     -- shared algorithm helpers
     guardArea: (area: Rect, count: number) -> { Zone }?,
     clamp: (v: any, lo: number, hi: number) -> number?,
     center: (start: number, total: number, size: number) -> number,
-    gridShape: (count: number) -> (number, number),
+    gridShape: (count: number) -> (number, number), -- returns cols, rows
     cumulativeOffsets: (start: number, sizes: { number }, gap: number) -> { number },
-    minSizeAt: (minSizes: { MinSize }?, i: number) -> (number, number),
+    minSizeAt: (minSizes: { MinSize }?, i: number) -> (number, number), -- returns w, h
     resizeRatioGrow: (newSize: number, oldSize: number, oldRatio: number) -> number,
     resizeRatioShrink: (newSize: number, oldSize: number, oldRatio: number) -> number,
     masterStackResize: (state: HookState, resize: ResizeEvent, horizontal: boolean) -> { [string]: any }?,

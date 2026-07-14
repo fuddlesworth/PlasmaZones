@@ -48,7 +48,7 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     }
     // Guarantee a non-inverted range for the settings UI even when a script
     // supplies only one bound (the other keeps its default): an inverted
-    // [min, max] makes a slider/spinbox undefined. Both bounds are finite by
+    // [min, max] makes a slider undefined. Both bounds are finite by
     // here, so the comparison is meaningful and the swap is unconditional.
     if (d.minValue > d.maxValue) {
         const double t = d.minValue;
@@ -347,8 +347,10 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
 
     // Seed caches from metadata. An unset field falls back to this class's own
     // default, which for defaultMaxWindows is ScriptedDefaultMaxWindows rather
-    // than TilingAlgorithm's base 5. Only a hand-authored script reaches that
-    // fallback: everything the settings app generates writes the field out.
+    // than TilingAlgorithm's base 5. The settings app's blank scaffold writes
+    // the field out from that same constant, and every bundled algorithm
+    // declares it, so a splice or duplicate inherits it from its source. Only a
+    // hand-authored script omitting it reaches the fallback.
     m_cachedMasterZoneIndex = m_metadata.masterZoneIndex;
     m_cachedSupportsMasterCount = m_metadata.supportsMasterCount;
     m_cachedSupportsSplitRatio = m_metadata.supportsSplitRatio;

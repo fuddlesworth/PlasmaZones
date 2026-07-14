@@ -200,7 +200,7 @@ pluau.applyTreeGeometry(node, rect, gap)   -- memory algorithms
 
 ```
 pluau.guardArea(area, count)      -- early-return fill for tiny work areas
-pluau.clamp(v, lo, hi)            -- NaN-safe; returns nil for non-numbers (pair with `or default`)
+pluau.clamp(v, lo, hi)            -- returns nil for anything that is not a real number, NaN included (pair with `or default`)
 pluau.center(start, total, size)
 pluau.gridShape(count)            -- cols, rows for a near-square grid
 pluau.rect(x, y, w, h)
@@ -322,8 +322,10 @@ its early-outs. Returning `nil` leaves the bag alone, but returning only
 `splitRatio` clears it, because `splitRatio` is stripped before the rest is
 stored. `pluau.masterStackResize` returns either `nil` or a table holding only
 `splitRatio`, so a `supportsScriptState` algorithm cannot return it directly.
-Build your own table, copy the helper's ratio into it when there is one, and
-treat the `nil` as the case where the drag missed the seam.
+Build your own table and copy the helper's ratio into it when there is one. The
+helper returns `nil` whenever it has no ratio to offer, which covers a layout
+with no stack to split, a degenerate old size or ratio, and a drag on an edge
+that is not the seam.
 
 `supportsScriptState` is the lightweight alternative to the split tree: an
 opaque table you shape however you like, persisted per screen, desktop, and

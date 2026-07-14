@@ -119,15 +119,20 @@ int findLongBracketClose(const QString& line, int level, int from)
 /// @p startDepth is the brace depth the line opens at, so the scan can speak in
 /// depths the caller shares rather than line-relative ones. When @p codeOnly is
 /// non-null it collects the line's code at depth 1 exactly — the metadata
-/// table's own fields, wherever on the line they fall. Text is elided, and so
-/// is anything nested deeper, so a caller can ask "is there a field here"
-/// without a string, a comment, or a nested table's keys answering.
+/// table's own fields, wherever on the line they fall. Text is elided, so is
+/// anything nested deeper, and so is anything past the table's own closer. A
+/// caller can ask "is there a field of THIS table here" without a string, a
+/// comment, a nested table's keys, or the enclosing table's code answering.
 ///
 /// Not handled: short strings continued across lines (backslash-newline, `\z`).
 /// No bundled template's metadata uses one.
 int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, QString* codeOnly = nullptr)
 {
     int depth = startDepth;
+    // Set once the metadata table closes on this line. Everything after its
+    // closer belongs to the enclosing table, so it is not ours to collect even
+    // though it sits at depth 1 again.
+    bool closed = false;
     int i = 0;
 
     // A long bracket left open by an earlier line: everything up to its closer
@@ -188,16 +193,19 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
         // `customParams = { name = "x" }` cannot read as a trailing `name`
         // field, while a real one after that table's closer still does.
         if (c == QLatin1Char('{')) {
-            if (codeOnly && depth == 1) {
+            if (codeOnly && depth == 1 && !closed) {
                 codeOnly->append(c);
             }
             ++depth;
         } else if (c == QLatin1Char('}')) {
             --depth;
-            if (codeOnly && depth == 1) {
+            if (depth < 1) {
+                closed = true;
+            }
+            if (codeOnly && depth == 1 && !closed) {
                 codeOnly->append(c);
             }
-        } else if (codeOnly && depth == 1) {
+        } else if (codeOnly && depth == 1 && !closed) {
             codeOnly->append(c);
         }
     }
@@ -319,8 +327,11 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     // count, since `a = 1; name = "x"` is the same trap as the comma form.
     // Matched against the line's top-level code only, so neither a
     // `description = "name = x"` value nor a nested table's own `name` key can
-    // trip it.
-    static const QRegularExpression anyNameOrIdFieldRe(QStringLiteral(R"((?:^|[,;])\s*(?:name|id)\s*=)"));
+    // trip it. A bracketed key (`["name"] = ...`) is the same Luau key as the
+    // bare one, and its string is elided from the match subject, so any
+    // bracketed key of this table is rejected rather than read: no bundled
+    // template uses one, and guessing is how the pair silently duplicates.
+    static const QRegularExpression anyNameOrIdFieldRe(QStringLiteral(R"((?:^|[,;])\s*(?:(?:name|id)\s*=|\[))"));
 
     QStringList metaLines;
     int depth = 0;
@@ -368,11 +379,10 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
         }
         // Any OTHER field of the table on this line, wherever it falls: after a
         // sibling, after a nested table's closer, after a long bracket's
-        // closer, or on a line that opened deeper. None can be rewritten in
-        // place, and leaving one lets Luau's last-wins keep the template's
-        // value. `depth >= 1` skips the table's own closing line, whose trailing
-        // code belongs to the enclosing table rather than to metadata.
-        if (i > metaStart && !rewrote && depth >= 1 && anyNameOrIdFieldRe.match(codeOnly).hasMatch()) {
+        // closer, on a line that opened deeper, or ahead of the table's own
+        // closer. None can be rewritten in place, and leaving one lets Luau's
+        // last-wins keep the template's value.
+        if (i > metaStart && !rewrote && anyNameOrIdFieldRe.match(codeOnly).hasMatch()) {
             return QString();
         }
         metaLines += line;
