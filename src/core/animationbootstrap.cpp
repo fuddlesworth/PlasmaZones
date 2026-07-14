@@ -34,7 +34,7 @@ QStringList discoverDataDirs(QLatin1StringView xdgRelative)
     // the writable user location FIRST, system dirs AFTER. The loader
     // iterates in caller-supplied order and lets later entries override
     // earlier on key collision, so we reverse to achieve the standard
-    // "system first, user wins last" layering (decision X). Matches
+    // "system first, user wins last" layering. Matches
     // LayoutManager::loadLayouts.
     QStringList dirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QString(xdgRelative),
                                                  QStandardPaths::LocateDirectory);

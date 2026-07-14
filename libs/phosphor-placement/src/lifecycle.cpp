@@ -535,15 +535,16 @@ bool WindowTrackingService::pruneMigratedWindows(const QStringList& windowsToRem
             // unassignWindow / unsnapForFloat do — a migrated-away zone must not
             // linger as the global last-used.
             lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, store);
+            // Notify zone-state consumers exactly as the interactive unassign
+            // path does (WindowTrackingService::unassignWindow, which gates on
+            // wasAssigned — the store lookup is this loop's equivalent) — a
+            // prune that lands in storage but never reaches listeners leaves
+            // them tracking a window this service no longer considers snapped.
+            Q_EMIT windowZoneChanged(wId, QString());
         }
         clearFreeGeometry(wId); // drop the record's shared free geometry
         clearPreFloatZoneForWindow(wId);
         m_windowStickyStates.remove(wId);
-        // Notify zone-state consumers exactly as the interactive unassign path
-        // does (WindowTrackingService::unassignWindow) — a prune that lands in
-        // storage but never reaches listeners leaves them tracking a window
-        // this service no longer considers snapped.
-        Q_EMIT windowZoneChanged(wId, QString());
     }
     if (lastUsedCleared) {
         markDirty(DirtyLastUsedZone);

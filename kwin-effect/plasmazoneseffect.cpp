@@ -53,6 +53,12 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
     Q_UNUSED(flags)
     // Called when KWin wants effects to reload or when daemon notifies of settings change
     qCDebug(lcEffect) << "reconfigure() called";
+    // A KWin effects reconfigure (any Desktop Effects KCM apply) reconciles
+    // the loaded-effects list against kwinrc, which RE-LOADS windowaperture /
+    // eyeonscreen — the suppression never writes kwinrc, so this is the one
+    // path that undoes the unload without any of the other sync triggers
+    // (tree load, registry commit, animations toggle) firing. Re-assert.
+    syncShowDesktopEffectSuppression();
 }
 
 bool PlasmaZonesEffect::isActive() const

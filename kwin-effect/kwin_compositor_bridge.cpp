@@ -4,6 +4,8 @@
 #include "kwin_compositor_bridge.h"
 #include "plasmazoneseffect.h"
 
+#include <QLoggingCategory>
+
 #include <PhosphorCompositor/GeometryHelpers.h>
 #include <PhosphorIdentity/WindowId.h>
 
@@ -262,6 +264,7 @@ void KWinCompositorBridge::activateWindow(WindowHandle w)
     // cancels a peek — same policy as every direct activateWindow site in the
     // effect (see PlasmaZonesEffect::isShowingDesktop).
     if (PlasmaZonesEffect::isShowingDesktop()) {
+        qCDebug(lcEffect) << "bridge activateWindow: dropped during show desktop";
         return;
     }
     KWin::effects->activateWindow(ew);

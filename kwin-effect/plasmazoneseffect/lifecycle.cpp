@@ -1195,12 +1195,18 @@ void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
         }
         return;
     }
+    // Keep names whose re-load failed: the wantOurs=false branch re-runs on
+    // every later sync (tree edits, registry commits, reconfigure), so a
+    // transient loader failure gets a free retry instead of permanently
+    // dropping the restore obligation for the session.
+    QStringList failed;
     for (const QString& name : std::as_const(m_suppressedShowDesktopEffects)) {
         if (!KWin::effects->loadEffect(name)) {
-            qCWarning(lcEffect) << "failed to restore show-desktop effect" << name;
+            qCWarning(lcEffect) << "failed to restore show-desktop effect" << name << "— will retry on next sync";
+            failed.append(name);
         }
     }
-    m_suppressedShowDesktopEffects.clear();
+    m_suppressedShowDesktopEffects = failed;
 }
 
 PlasmaZonesEffect::~PlasmaZonesEffect()

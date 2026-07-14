@@ -60,7 +60,8 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
 // own two-texture shader contract rather than the single-surface pipeline.
 // `switch` blends the OUTGOING desktop against the INCOMING desktop; `peek`
 // (show desktop) blends the windows scene against the bare desktop, and its
-// show-back leg reuses the same node with the captures swapped.
+// show-back leg reuses the same node, running the blend in the opposite
+// direction from the hide leg's cached bare-desktop capture.
 PHOSPHORANIMATION_EXPORT extern const QString Desktop;
 PHOSPHORANIMATION_EXPORT extern const QString DesktopSwitch;
 PHOSPHORANIMATION_EXPORT extern const QString DesktopPeek;
@@ -118,7 +119,7 @@ PHOSPHORANIMATION_EXPORT extern const QString Widget;
 PHOSPHORANIMATION_EXPORT extern const QString WidgetHover; ///< 150 ms OutCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPress; ///< 100 ms OutCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetDim; ///< 200 ms OutCubic
-PHOSPHORANIMATION_EXPORT extern const QString WidgetTint; ///< 300 ms Linear (family root)
+PHOSPHORANIMATION_EXPORT extern const QString WidgetTint; ///< 300 ms widget-out (family root)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetTintFast; ///< 120 ms (variant)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetToggleOn; ///< 250 ms OutBack (spring feel)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetToggleOff; ///< 250 ms OutBack
@@ -129,8 +130,8 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetAccordionExpand; ///< 250 ms
 PHOSPHORANIMATION_EXPORT extern const QString WidgetAccordionCollapse; ///< 180 ms InCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetFadeIn; ///< 200 ms OutCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetFadeOut; ///< 400 ms InCubic
-PHOSPHORANIMATION_EXPORT extern const QString WidgetReorder; ///< 200 ms OutCubic
-PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 200 ms OutCubic
+PHOSPHORANIMATION_EXPORT extern const QString WidgetReorder; ///< 150 ms OutCubic (family seed)
+PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 150 ms OutCubic (family seed)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulse; ///< 1000 ms sinusoidal (family root)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulseFast; ///< 500 ms
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulseSlow; ///< 1500 ms

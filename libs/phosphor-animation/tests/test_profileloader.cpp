@@ -102,7 +102,7 @@ private Q_SLOTS:
         QCOMPARE(loader.loadFromDirectory(dir.path()), 0);
     }
 
-    /// User-overrides-system collision pattern (decision X). Loads the
+    /// User-overrides-system collision pattern. Loads the
     /// system dir first (lower priority), then user dir overrides on
     /// the same name. systemSourcePath tracked on the user entry for
     /// future restore.

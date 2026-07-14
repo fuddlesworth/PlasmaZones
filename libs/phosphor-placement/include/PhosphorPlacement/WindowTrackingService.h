@@ -1155,11 +1155,13 @@ private:
 
     /// Unassign every window in @p windowsToRemove and drop its auxiliary
     /// per-window state (free geometry, pre-float zone, sticky flag), emitting
-    /// windowZoneChanged per window so zone-state consumers hear about the
-    /// prune exactly as they do for the interactive unassign path. Shared by
-    /// the two VS-migration prune loops (migrateScreenAssignmentsToVirtual /
-    /// ...FromVirtual). Marks DirtyLastUsedZone when any last-used cleared;
-    /// returns true when it removed anything (the caller's save trigger).
+    /// windowZoneChanged per window whose store lookup succeeded, so
+    /// zone-state consumers hear about the prune exactly as they do for the
+    /// interactive unassign path. Shared by the two VS-migration prune loops
+    /// (migrateScreenAssignmentsToVirtual / ...FromVirtual). Marks
+    /// DirtyLastUsedZone when any last-used cleared; returns true when given a
+    /// non-empty list (the callers only build it from zone-assigned windows,
+    /// so non-empty means state changed and a save is due).
     bool pruneMigratedWindows(const QStringList& windowsToRemove);
     PhosphorSnapEngine::SnapState* snapGlobals() const
     {

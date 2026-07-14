@@ -11,6 +11,7 @@
 #include <core/renderviewport.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <opengl/eglcontext.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/gltexture.h>
 #include <scene/windowitem.h>
@@ -23,10 +24,10 @@
 #include <memory>
 
 // The capture half of DesktopTransitionManager: how a desktop BECOMES a texture.
-// desktoptransitionmanager.cpp keeps the other half — how two textures become a
-// frame (compile, blend, settle, teardown). The two capture paths and the texture
-// allocation/format helpers they share only serve that first question, so they
-// live here.
+// desktoptransitionmanager.cpp keeps the lifecycle half (blend, settle,
+// teardown) and desktoptransitionshader.cpp the assembly half (pack source →
+// compiled GLShader). The capture paths and the texture allocation/format
+// helpers they share only serve the first question, so they live here.
 namespace PlasmaZones {
 
 namespace {
@@ -303,8 +304,13 @@ DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, 
         // render. Fall back to re-rendering the live scene (identical output,
         // one extra scene pass) when there is no source texture or the
         // hardware cannot blit.
+        // Blit capability lives on the GL context in this KWin (the
+        // GLFramebuffer doc still names the old blitSupported() accessor);
+        // desktop framebuffer blits need GL 3.0 / ARB_framebuffer_object,
+        // which supportsBlits() reports.
+        const KWin::EglContext* const glContext = KWin::EglContext::currentContext();
         bool baseCopied = false;
-        if (bareDesktop && bareDesktop->size() == tex->size() && KWin::GLFramebuffer::blitSupported()) {
+        if (bareDesktop && bareDesktop->size() == tex->size() && glContext && glContext->supportsBlits()) {
             KWin::GLFramebuffer srcFbo(bareDesktop);
             if (srcFbo.valid()) {
                 // blitFromFramebuffer reads from the CURRENT framebuffer and

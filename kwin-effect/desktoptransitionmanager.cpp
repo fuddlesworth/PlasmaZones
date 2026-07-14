@@ -11,9 +11,6 @@
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorShaders/ShaderEntryPoint.h>
-#include <PhosphorShaders/ShaderIncludeResolver.h>
-#include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <effect/effecthandler.h>
 #include <core/output.h>
@@ -26,9 +23,6 @@
 #include <opengl/glvertexbuffer.h>
 
 #include <QColor>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QVector2D>
 
 #include <algorithm>
@@ -324,9 +318,14 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
             // cache ends up unseeded). Left alive it would deferred-capture
             // the RESTORED-windows scene as the "bare desktop" — poisoning the
             // cache for the next show leg — and blend FROM≈TO for its whole
-            // duration. The context is already current (above); repaint so the
-            // settled scene draws a frame nothing else schedules.
-            if (m_active.erase(screen) > 0) {
+            // duration. Kind-guarded: a live SWITCH transition mapped here
+            // (begun unclaimed under another effect that has since released)
+            // is not ours to truncate. The context is already current (above);
+            // repaint so the settled scene draws a frame nothing else
+            // schedules.
+            const auto staleIt = m_active.find(screen);
+            if (staleIt != m_active.end() && staleIt->second.kind == Kind::PeekHide) {
+                m_active.erase(staleIt);
                 KWin::effects->addRepaint(screen->geometry());
             }
             continue;
@@ -458,7 +457,11 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
             // this frame's capture geometry — an output scale/mode change or
             // an HDR format flip between the legs makes it unusable, in which
             // case the null fromTex below abandons the transition and the
-            // restored windows appear instantly (KWin's default).
+            // restored windows appear instantly (KWin's default). Validation
+            // is deliberately size + internalFormat only: a colour-space
+            // change on the SAME format (an SDR brightness tweak mid-peek)
+            // blends a slightly stale-space desktop for one leg, which is not
+            // worth carrying a ColorDescription alongside every cache entry.
             std::shared_ptr<KWin::GLTexture> desktopTex;
             const auto cachedIt = m_peekDesktopCache.find(screen);
             if (cachedIt != m_peekDesktopCache.end()) {

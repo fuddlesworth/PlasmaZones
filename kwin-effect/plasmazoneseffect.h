@@ -1440,14 +1440,20 @@ private:
     void scheduleEffectAudioSync();
 
     /// Unload KWin's show-desktop script effects (windowaperture / eyeonscreen)
-    /// while a valid `desktop.peek` pack is assigned, and load back exactly the
-    /// ones WE unloaded when it is cleared. Unloading is the only suppression
-    /// that works: they never consult activeFullScreenEffect() (and the peek
-    /// deliberately takes no fullscreen claim anyway, see
-    /// DesktopTransitionManager) — left loaded they would animate invisibly
-    /// under our blend AND leak their transforms into the peek captures (the
-    /// capture paths continue down the effect chain). Called after every
-    /// shader-profile-tree load; the destructor restores them on unload.
+    /// while the peek would actually run — a `desktop.peek` pack is assigned,
+    /// installed, desktop-contract, AND animations are enabled — and load back
+    /// exactly the ones WE unloaded when any of that stops holding. Unloading
+    /// is the only suppression that works: they never consult
+    /// activeFullScreenEffect() (and the peek deliberately takes no fullscreen
+    /// claim anyway, see DesktopTransitionManager) — left loaded they would
+    /// animate invisibly under our blend AND leak their transforms into the
+    /// peek captures (the capture paths continue down the effect chain).
+    /// Idempotent; re-asserted from every path that can change the predicate
+    /// or the loaded-effects list: the shader-profile-tree load, the animation
+    /// registry commit (bringup + pack install/uninstall), the animationsEnabled
+    /// setting, and reconfigure() (a Desktop Effects KCM apply re-loads the
+    /// scripts from kwinrc). The destructor restores them on a runtime unload
+    /// but skips during compositor shutdown (m_compositorShuttingDown).
     void syncShowDesktopEffectSuppression();
 
     /// True when any decorated window's resolved chain carries an audio-reactive
