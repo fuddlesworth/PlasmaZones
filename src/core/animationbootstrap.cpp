@@ -239,21 +239,20 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // highlight family root inherits the widget OutCubic feel.
         {QLatin1StringView{"widget.zoneHighlight"}, QLatin1StringView{"widget-out"}, 200.0},
 
-        // No `desktop.*` motion seeds — and NOT because a seed
-        // here would be unread. It would be read: the daemon runs this same
-        // function on its own registry (daemon.cpp), and settingsadaptor's
-        // `motionProfileTree` getter flattens that registry's snapshot into
-        // the tree the kwin-effect fetches over D-Bus, where every non-`Global`
-        // path becomes an OVERRIDE. An override beats the caller's base in
-        // overlayChainOnto, so a `desktop` seed would shadow the user's global
-        // animation duration and curve for both desktop legs — and the desktop
-        // transitions are specifically designed to INHERIT them, so that the
-        // global slider retimes them (see the desktopChanged and
-        // showingDesktopChanged handlers in lifecycle.cpp). Unseeded, they
-        // fall through to the animator's global
-        // profile, which is the contract. Seeds also exist to preserve prior
-        // bundled-JSON character, and these transitions are new: there is no
-        // prior tuning to preserve.
+        // No `desktop.*` motion seeds — and NOT because a seed here would be
+        // unread. It would be read: the daemon runs this same function on its
+        // own registry (daemon.cpp), and settingsadaptor's `motionProfileTree`
+        // getter flattens that registry's snapshot into the tree the
+        // kwin-effect fetches over D-Bus, where every non-`Global` path becomes
+        // an OVERRIDE. An override beats the caller's base in overlayChainOnto,
+        // so a `desktop` seed would shadow the user's global animation duration
+        // and curve for both desktop legs — and the desktop transitions are
+        // specifically designed to INHERIT them, so that the global slider
+        // retimes them (see the desktopChanged and showingDesktopChanged
+        // handlers in lifecycle.cpp). Unseeded, they fall through to the
+        // animator's global profile, which is the contract. Seeds also exist to
+        // preserve prior bundled-JSON character, and these transitions are new:
+        // there is no prior tuning to preserve.
     }};
 
     for (const auto& seed : seeds) {

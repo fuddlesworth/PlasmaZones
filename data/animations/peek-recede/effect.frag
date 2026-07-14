@@ -35,7 +35,16 @@ vec4 pTransition(vec2 uv, float t) {
     // Both smoothstep calls keep edge0 < edge1 (undefined otherwise), so the
     // upper bound is written as one minus a rising step rather than reversed
     // edges.
-    float soft = 0.01;
+    //
+    // The feather is divided by scale because the mask is evaluated in CONTENT
+    // space, which the shrink expands by 1/scale: a constant content-space
+    // feather would come out as `soft * scale` on screen and collapse to
+    // sub-pixel at a strong recede (0.5 px at the 0.05 clamp floor on a 1080p
+    // output), aliasing the edge into a hard jagged rectangle. Dividing holds
+    // the feather at a constant ~0.01 of the screen for every recede depth. At
+    // t = 0 scale is 1, so this is the same 0.01 the endpoint reasoning below
+    // assumes.
+    float soft = 0.01 / scale;
     vec2 inside = smoothstep(vec2(-soft), vec2(soft), contentUV)
                 * (vec2(1.0) - smoothstep(vec2(1.0 - soft), vec2(1.0 + soft), contentUV));
     float mask = inside.x * inside.y;

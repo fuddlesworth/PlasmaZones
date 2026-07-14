@@ -20,8 +20,12 @@
 //     assume iTime is monotonically increasing, and do not assume FROM is
 //     whatever is currently on screen.
 // A stateful/overshooting curve can drive iTime slightly outside [0,1] on
-// either event (the show leg mirrors an overshoot past 1 into negative t), so
-// packs clamp themselves.
+// either event (the show leg mirrors an overshoot past 1 into negative t), so a
+// pack must hold its endpoints for a t just outside the range. Clamping t up
+// front is the simplest way and most packs do it. Feeding t through a padded
+// smoothstep works too, since smoothstep saturates on its own — desktop-wipe,
+// desktop-circle, desktop-dissolve and desktop-aretha take that route and need
+// no clamp of their own.
 //
 // Desktop transitions only ever run in the kwin-effect. The samplers live in
 // the PLASMAZONES_KWIN branch only, mirroring old_content.glsl's uOldWindow:

@@ -775,12 +775,13 @@ private:
     // Resolve the fully-cascaded motion Profile (curve + duration) for
     // @p profilePath: global animator profile → category "All" → per-node
     // motion-tree overrides → per-window Rule override. This is the single SSOT
-    // for the per-event timing cascade, shared by all three per-event timing
+    // for the per-event timing cascade, shared by all four per-event timing
     // consumers — the animator-driven geometry path (applyWindowGeometry), the
-    // time-driven shader path (tryBeginShaderForEvent) and the desktop switch
-    // (the desktopChanged handler) — so each honours the same global → All →
+    // time-driven shader path (tryBeginShaderForEvent), the desktop switch (the
+    // desktopChanged handler) and the show-desktop peek (the
+    // showingDesktopChanged handler) — so each honours the same global → All →
     // node resolution. Pass a windowless @p query (hasWindow() false) + empty
-    // @p windowId for events with no per-window rule scope (desktop switch);
+    // @p windowId for events with no per-window rule scope (both desktop legs);
     // the Rule layer is then skipped and only the tree cascade applies.
     //
     // The returned DURATION is clamped into [Limits::MinAnimationDurationMs,
@@ -1657,7 +1658,8 @@ private:
     // and transition lifecycle are managed by ShaderTransitionManager.
     ShaderTransitionManager m_shaderManager;
 
-    // Full-screen virtual-desktop switch transition. By-value + `this` ctor,
+    // Full-screen desktop transitions: the virtual-desktop switch and the
+    // show-desktop peek, which share the same path. By-value + `this` ctor,
     // same ownership shape as m_shaderManager; must be initialised AFTER it in
     // the ctor init list to match declaration order.
     DesktopTransitionManager m_desktopTransition;

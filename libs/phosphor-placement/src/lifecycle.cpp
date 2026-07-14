@@ -288,38 +288,44 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     // virtual sub-screen on it) to the virtual screen its last-used zone falls in.
     // (No empty-list guard needed: the function early-returned on empty
     // virtualScreenIds above.)
-    {
-        for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-            const QString lastScreenId = state->lastUsedScreenId();
-            if (lastScreenId != physicalScreenId && !lastScreenId.startsWith(prefix)) {
-                continue;
-            }
-            // Already a valid VS in the CURRENT config — leave it alone, like
-            // the three sibling loops above. Re-resolving would let a shared
-            // layout (zone present on every VS) silently rewrite a correct
-            // vs:1 last-used to the first candidate, and force a save for a
-            // no-op.
-            if (PhosphorIdentity::VirtualScreenId::isVirtual(lastScreenId) && virtualScreenIds.contains(lastScreenId)) {
-                continue;
-            }
-            const QString lastZoneId = state->lastUsedZoneId();
-            QString targetVs = virtualScreenIds.first(); // default
-            if (!lastZoneId.isEmpty() && m_layoutManager) {
-                for (const QString& vsId : virtualScreenIds) {
-                    PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
-                    if (vsLayout) {
-                        auto uuidOpt = parseUuid(lastZoneId);
-                        if (uuidOpt && vsLayout->zoneById(*uuidOpt)) {
-                            targetVs = vsId;
-                            break;
-                        }
+    for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
+        const QString lastScreenId = state->lastUsedScreenId();
+        if (lastScreenId != physicalScreenId && !lastScreenId.startsWith(prefix)) {
+            continue;
+        }
+        // Already a valid VS in the CURRENT config — leave the SCREEN alone,
+        // like the three sibling loops above. Re-resolving would let a shared
+        // layout (zone present on every VS) silently rewrite a correct vs:1
+        // last-used to the first candidate, and force a save for a no-op.
+        //
+        // The ZONE still gets validated: what is settled here is only which
+        // screen the last-used belongs to, not that its zone survived this
+        // reconfiguration. Skipping straight past the validateLastUsedZone
+        // below would leave a store pointing at a zone that no longer exists in
+        // its own VS layout — the exact staleness that call exists to clear,
+        // and which the unconditional re-resolve this branch replaced used to
+        // catch for free.
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(lastScreenId) && virtualScreenIds.contains(lastScreenId)) {
+            validateLastUsedZone(lastScreenId);
+            continue;
+        }
+        const QString lastZoneId = state->lastUsedZoneId();
+        QString targetVs = virtualScreenIds.first(); // default
+        if (!lastZoneId.isEmpty() && m_layoutManager) {
+            for (const QString& vsId : virtualScreenIds) {
+                PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
+                if (vsLayout) {
+                    auto uuidOpt = parseUuid(lastZoneId);
+                    if (uuidOpt && vsLayout->zoneById(*uuidOpt)) {
+                        targetVs = vsId;
+                        break;
                     }
                 }
             }
-            state->restoreLastUsedZone(lastZoneId, targetVs, state->lastUsedZoneClass(), state->lastUsedDesktop());
-            anyStateMigrated = true;
-            validateLastUsedZone(targetVs);
         }
+        state->restoreLastUsedZone(lastZoneId, targetVs, state->lastUsedZoneClass(), state->lastUsedDesktop());
+        anyStateMigrated = true;
+        validateLastUsedZone(targetVs);
     }
 
     // Migrate the shared free-geometry screenId KEYS from physical (or old virtual)
@@ -568,24 +574,37 @@ bool WindowTrackingService::pruneMigratedWindows(const QStringList& windowsToRem
 {
     bool lastUsedCleared = false;
     for (const QString& wId : windowsToRemove) {
+        bool wasAssigned = false;
         if (PhosphorSnapEngine::SnapState* store = snapForWindow(wId)) {
             const QStringList removedZones = store->zonesForWindow(wId);
             auto unResult = store->unassignWindow(wId);
             lastUsedCleared |= unResult.lastUsedZoneCleared;
+            wasAssigned = unResult.wasAssigned;
             // Scrub the disk-restored representative on the global holder too, as
             // unassignWindow / unsnapForFloat do — a migrated-away zone must not
             // linger as the global last-used.
             lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, store);
-            // Notify zone-state consumers exactly as the interactive unassign
-            // path does (WindowTrackingService::unassignWindow, which gates on
-            // wasAssigned — the store lookup is this loop's equivalent) — a
-            // prune that lands in storage but never reaches listeners leaves
-            // them tracking a window this service no longer considers snapped.
-            Q_EMIT windowZoneChanged(wId, QString());
         }
         clearFreeGeometry(wId); // drop the record's shared free geometry
         clearPreFloatZoneForWindow(wId);
         m_windowStickyStates.remove(wId);
+        // Notify zone-state consumers, as the interactive unassign path does
+        // (WindowTrackingService::unassignWindow) — a prune that lands in
+        // storage but never reaches listeners leaves them tracking a window
+        // this service no longer considers snapped.
+        //
+        // Emitted LAST, after this window's three clears, not from inside the
+        // store branch above. AutotileEngine::onWindowZoneChanged runs
+        // SYNCHRONOUSLY on an empty zoneId and calls onWindowRemoved, which
+        // relayouts; emitting mid-teardown would drive that relayout against a
+        // window whose free geometry and pre-float zone are still present but
+        // about to vanish. Gated on wasAssigned for the same reason the
+        // interactive path is: it is the store's own answer to "did this
+        // window actually hold a zone", so a window already unassigned raises
+        // no spurious removal.
+        if (wasAssigned) {
+            Q_EMIT windowZoneChanged(wId, QString());
+        }
     }
     if (lastUsedCleared) {
         markDirty(DirtyLastUsedZone);

@@ -18,7 +18,11 @@ class TestBuiltinEffects : public QObject
 
 private Q_SLOTS:
 
-    void testAllSevenEffectsDiscovered()
+    // The seven original per-window packs. The floor below is deliberately a
+    // floor, not an equality: the bundled set grows freely, and pinning the
+    // count would make every new pack a test edit. What matters is that these
+    // seven keep resolving by id.
+    void testCoreEffectsDiscovered()
     {
         const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
         if (!QDir(dataDir).exists())
@@ -62,6 +66,39 @@ private Q_SLOTS:
             QVERIFY2(QFile::exists(e.fragmentShaderPath),
                      qPrintable(QStringLiteral("Effect ") + e.id + QStringLiteral(" fragment shader not found: ")
                                 + e.fragmentShaderPath));
+        }
+    }
+
+    // The desktop-class packs must DECLARE the desktop contract. `appliesTo`
+    // is what `shaderEffectAppliesToEventPath` gates on (see
+    // test_animationshadereffect), so a pack missing the "desktop" token is
+    // refused on `desktop.switch` / `desktop.peek` and becomes silently
+    // unselectable — while every other bundled-pack assertion here still
+    // passes, since none of them read this field. Pinned per id rather than
+    // by looping availableEffects(), so that DELETING the token from a
+    // metadata.json fails instead of quietly shrinking the checked set.
+    void testDesktopPacksDeclareDesktopContract()
+    {
+        const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+
+        const QStringList desktopPacks = {
+            QStringLiteral("peek-recede"),
+            QStringLiteral("peek-blinds"),
+            QStringLiteral("phosphor-peek"),
+        };
+
+        for (const QString& id : desktopPacks) {
+            QVERIFY2(registry.hasEffect(id), qPrintable(QStringLiteral("Missing desktop pack: ") + id));
+            const AnimationShaderEffect e = registry.effect(id);
+            QVERIFY2(e.appliesTo.contains(QStringLiteral("desktop")),
+                     qPrintable(QStringLiteral("Pack ") + id
+                                + QStringLiteral(" does not declare appliesTo \"desktop\"; it would be refused on "
+                                                 "every desktop event path")));
         }
     }
 

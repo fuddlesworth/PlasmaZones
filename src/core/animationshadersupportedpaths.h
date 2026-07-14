@@ -18,12 +18,13 @@ namespace PlasmaZones {
 /// @c OverlayService::buildOsdConfig / @c buildLayoutPickerConfig /
 /// @c buildZoneSelectorConfig / @c buildSnapAssistConfig; a
 /// @c tryBeginShaderForEvent(...) call under
-/// @c kwin-effect/plasmazoneseffect/ (window_lifecycle, drag_snap,
-/// daemon_apply, shader_transitions); or a
-/// @c resolveShaderWithDefault(tree, ...) call driving
-/// DesktopTransitionManager from
-/// @c kwin-effect/plasmazoneseffect/lifecycle.cpp (the two desktop
-/// legs, which are screen-level rather than per-window). When a future
+/// @c kwin-effect/plasmazoneseffect/ (window_lifecycle for the
+/// open/close/move/maximize/focus legs, daemon_apply for minimize); or a
+/// @c resolveShaderWithDefault(tree, ...) call, which drives both the
+/// screen-level desktop legs from
+/// @c kwin-effect/plasmazoneseffect/lifecycle.cpp and the snap geometry
+/// legs through @c applyWindowGeometry in
+/// @c kwin-effect/plasmazoneseffect/drag_snap.cpp. When a future
 /// surface adds a shader leg, append its leg paths here in lockstep.
 inline QStringList shaderConsumedLeafEventPaths()
 {
@@ -56,9 +57,10 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::WindowMove,
         PP::WindowFocus,
         // Snap-into-zone window animations driven by the kwin-effect's
-        // applyWindowGeometry / daemon_apply chokepoints. Each routes
-        // through tryBeginShaderForEvent so the user can pick a
-        // distinct shader per snap event.
+        // applyWindowGeometry chokepoint (drag_snap.cpp), which resolves
+        // through resolveShaderWithDefault rather than
+        // tryBeginShaderForEvent, applying the same rule-then-tree cascade
+        // so the user can pick a distinct shader per snap event.
         //
         // There are NO resize legs: `window.movement.resize` (the
         // interactive edge-drag) and the never-routed
@@ -161,13 +163,13 @@ inline bool eventPathSupportsShaderLeg(const QString& path)
 inline PhosphorAnimationShaders::ShaderProfileTree
 pruneShaderProfileTreeToSupportedPaths(const PhosphorAnimationShaders::ShaderProfileTree& src)
 {
-    const QSet<QString>& kSupported = supportedShaderPathSet();
+    const QSet<QString>& supported = supportedShaderPathSet();
 
     PhosphorAnimationShaders::ShaderProfileTree pruned;
     pruned.setBaseline(src.baseline());
     const QStringList overriddenPaths = src.overriddenPaths();
     for (const QString& path : overriddenPaths) {
-        if (kSupported.contains(path)) {
+        if (supported.contains(path)) {
             pruned.setOverride(path, src.directOverride(path));
         }
     }

@@ -1186,6 +1186,16 @@ void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
     // override (or a pack assigned while the animations master toggle is off)
     // must not unload KWin's effects and then bail at the signal, leaving the
     // user with no show-desktop animation at all.
+    //
+    // The gate covers ASSIGNMENT and CONTRACT, not COMPILE. Compilation happens
+    // on the GL thread at paint time, so a pack whose metadata is valid but
+    // whose .frag fails to compile still unloads the builtins here and then
+    // draws nothing (compiledShader's null sentinel abandons the leg). That
+    // leaves no show-desktop animation for as long as the pack stays assigned.
+    // Accepted rather than plumbed: routing a paint-thread compile result back
+    // into this predicate would make the suppression depend on frame timing,
+    // and a bundled pack that fails to compile is a build-time bug the shader
+    // validator catches, not a runtime state to design around.
     bool wantOurs = false;
     const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::resolveShaderWithDefault(
         m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::DesktopPeek);
@@ -1245,6 +1255,14 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // the next session loads the effects from kwinrc, which the suppression
     // never writes to.
     if (KWin::effects && !m_compositorShuttingDown) {
+        // The latch is not what makes this safe against mid-iteration mutation
+        // — the defer below is. What it buys is not queueing a load at all
+        // during compositor shutdown: the destructor then runs from
+        // EffectsHandler's own unload-everything sequence, and while the
+        // stopped event loop means the lambda could never fire anyway, that is
+        // a property of the shutdown path rather than a guarantee this code
+        // should lean on.
+        //
         // Deferred, detached (no `this` context — we are dying): this
         // destructor runs from KWin's unloadEffect, and if that unload
         // originated from a KCM-apply reconcile iterating the loaded-effects
@@ -1277,8 +1295,11 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         m_suppressedShowDesktopEffects.clear();
     }
 
-    // Sever the registry's `effectsChanged` connection BEFORE anything
-    // else runs. The slot lambda touches `m_shaderManager.m_shaderTransitions`,
+    // Sever the registry's `effectsChanged` connection BEFORE any shader or
+    // cache teardown runs. (The suppressed-effect restore above is deliberately
+    // ahead of it: it only reads a QStringList and posts a detached timer, so
+    // it can neither re-enter the registry nor touch the caches this guards.)
+    // The slot lambda touches `m_shaderManager.m_shaderTransitions`,
     // `m_shaderManager.m_shaderCache`, and `m_shaderManager.m_textureCache` — all
     // declared AFTER `m_animationShaderRegistry` in shadertransitionmanager.h,
     // so they destruct FIRST in C++ reverse-declaration order. The registry

@@ -455,10 +455,12 @@ private Q_SLOTS:
     /// `OverlayService::buildOsdConfig` / `buildLayoutPickerConfig` /
     /// `buildZoneSelectorConfig` / `buildSnapAssistConfig` (osd + popup
     /// families), `tryBeginShaderForEvent` under
-    /// `kwin-effect/plasmazoneseffect/` (window family), and
-    /// `resolveShaderWithDefault` driving DesktopTransitionManager from
+    /// `kwin-effect/plasmazoneseffect/` (window_lifecycle for
+    /// open/close/move/maximize/focus, daemon_apply for minimize), and
+    /// `resolveShaderWithDefault`, driving both DesktopTransitionManager from
     /// `kwin-effect/plasmazoneseffect/lifecycle.cpp` (the screen-level desktop
-    /// switch and peek legs).
+    /// switch and peek legs) and the snap geometry legs through
+    /// `applyWindowGeometry` in `kwin-effect/plasmazoneseffect/drag_snap.cpp`.
     void supportsShaderLeg_matchesConsumedLegCallSites()
     {
         AnimationsPageController c;
@@ -475,14 +477,14 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.show")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.hide")));
 
-        // Window family — consumed leaves driven by the KWin effect's
-        // tryBeginShaderForEvent, under kwin-effect/plasmazoneseffect/
-        // (window_lifecycle, drag_snap, daemon_apply, shader_transitions).
-        // Each maps to a window-lifecycle hook (windowAdded, windowClosed,
-        // windowStartUserMovedResized for the held move,
-        // windowMaximizedStateChanged, minimizedChanged, windowActivated)
-        // and runs the resolved shader on the OffscreenEffect's redirected
-        // texture quad.
+        // Window family — consumed leaves driven by the KWin effect under
+        // kwin-effect/plasmazoneseffect/. The lifecycle legs go through
+        // tryBeginShaderForEvent (window_lifecycle for windowAdded,
+        // windowClosed, windowStartUserMovedResized for the held move,
+        // windowMaximizedStateChanged and windowActivated; daemon_apply for
+        // minimizedChanged), while the snap geometry legs resolve through
+        // applyWindowGeometry in drag_snap.cpp. Both run the resolved shader
+        // on the OffscreenEffect's redirected texture quad.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.open")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.close")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));

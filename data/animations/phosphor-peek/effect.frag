@@ -55,7 +55,13 @@ vec4 pTransition(vec2 uv, float t) {
     vec2 dir = dot(rawDir, rawDir) > 1.0e-6 ? normalize(rawDir) : vec2(1.0, 0.0);
     vec2 perp = vec2(-dir.y, dir.x);
 
-    // Position of this fragment projected onto the drain direction, in [0,1].
+    // Position of this fragment projected onto the drain direction. The 0.7071
+    // scale maps the projection onto the full [0,1] span for a DIAGONAL
+    // direction, which is the default. An axis-aligned drain only spans
+    // [0.146, 0.854], so its front crosses empty space for a little of the
+    // sweep at each end before it reaches any fragment. The endpoint
+    // guarantees below hold either way, because the front starts and ends
+    // beyond both bounds.
     float proj = clamp(dot(uv - 0.5, dir) * 0.7071 + 0.5, 0.0, 1.0);
     // Meander the front along the traces so it reads as signal drain, not a
     // straight wipe. The jitter is bounded so the endpoint guarantees hold.

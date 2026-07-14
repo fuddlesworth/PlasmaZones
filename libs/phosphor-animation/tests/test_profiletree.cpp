@@ -264,6 +264,63 @@ private Q_SLOTS:
         QVERIFY(std::dynamic_pointer_cast<const Spring>(composed.curve) != nullptr);
     }
 
+    // The "All Desktop Events" node is a REAL cascade parent for MOTION, not
+    // just for the shader pick: a `desktop` curve/duration override must reach
+    // BOTH screen-level leaves. The kwin-effect composes each leg's timing
+    // through this exact call (overlayChainOnto onto the animator's global
+    // profile) in the desktopChanged / showingDesktopChanged handlers, so
+    // without this the peek and the switch could silently ignore the parent
+    // the settings page presents as governing them.
+    void testOverlayChainOntoAppliesDesktopAllToBothLeaves()
+    {
+        ProfileTree tree;
+
+        // Baseline deliberately differs from the caller's base, to prove the
+        // tree's own baseline stays out of it (the effect owns global).
+        Profile treeBaseline;
+        treeBaseline.duration = 150.0;
+        tree.setBaseline(treeBaseline);
+
+        Profile desktopAll;
+        desktopAll.duration = 500.0;
+        desktopAll.curve = std::make_shared<Spring>(Spring::snappy());
+        tree.setOverride(PP::Desktop, desktopAll);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+        animatorGlobal.curve = std::make_shared<Easing>();
+
+        for (const QString& leaf : {PP::DesktopSwitch, PP::DesktopPeek}) {
+            const Profile composed = tree.overlayChainOnto(leaf, animatorGlobal);
+            QVERIFY2(composed.duration.has_value(), qPrintable(leaf));
+            QCOMPARE(*composed.duration, 500.0);
+            QVERIFY2(std::dynamic_pointer_cast<const Spring>(composed.curve) != nullptr, qPrintable(leaf));
+        }
+    }
+
+    // A leaf override beats the desktop "All" parent on the leaf that sets it,
+    // and leaves its sibling on the parent's value. This is what makes the two
+    // legs independently tunable under one parent — the peek can run its own
+    // duration without retiming the switch.
+    void testOverlayChainOntoDesktopLeafBeatsAllForThatLeafOnly()
+    {
+        ProfileTree tree;
+
+        Profile desktopAll;
+        desktopAll.duration = 500.0;
+        tree.setOverride(PP::Desktop, desktopAll);
+
+        Profile peekLeaf;
+        peekLeaf.duration = 80.0;
+        tree.setOverride(PP::DesktopPeek, peekLeaf);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+
+        QCOMPARE(*tree.overlayChainOnto(PP::DesktopPeek, animatorGlobal).duration, 80.0); // leaf
+        QCOMPARE(*tree.overlayChainOnto(PP::DesktopSwitch, animatorGlobal).duration, 500.0); // parent "All"
+    }
+
     // Leaf override wins over the "All" parent; a field the leaf leaves unset
     // still inherits the parent's; a field neither sets keeps the caller base.
     void testOverlayChainOntoLeafBeatsParentKeepsBaseForUnset()

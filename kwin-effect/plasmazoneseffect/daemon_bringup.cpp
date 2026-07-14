@@ -974,8 +974,15 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the animation cascade; rules whose match expression resolves for
     // the window override the filter at the resolver layer so a targeted
     // rule can re-enable animation for an otherwise-excluded app.
+    // Guard on isValid() like the sibling below. This member happens to init
+    // `false`, which is what toBool() would also yield for a failed reply — but
+    // that agreement is a coincidence of the default's polarity that nothing
+    // records, and flipping the default later would silently turn a missed
+    // fetch into the wrong filter.
     loadSettingAsync(QStringLiteral("animationExcludeTransientWindows"), [this](const QVariant& v) {
-        m_animationExcludeTransientWindows = v.toBool();
+        if (v.isValid()) {
+            m_animationExcludeTransientWindows = v.toBool();
+        }
     });
     // Default true (exclude). Guard on isValid() so a failed reply
     // leaves the member at its `true` init rather than `toBool()`'s

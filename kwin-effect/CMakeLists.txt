@@ -138,11 +138,16 @@ set_source_files_properties(desktoptransitionmanager.cpp PROPERTIES SKIP_UNITY_B
 # its own file-local helpers (captureFormatFor, allocateOutputTexture); same
 # reason, same exclusion.
 set_source_files_properties(desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-# desktoptransitionshader.cpp is the assembly part (compiledShader + its
-# function-local vertex-source constant); same class, same exclusion.
+# The remaining two parts of the same class carry no file-local entity today —
+# desktoptransitionshader.cpp's vertex source is a FUNCTION-local static (which
+# cannot ODR-collide) and desktoptransitionteardown.cpp has no anonymous
+# namespace at all — so neither is excluded to fix a present collision. They are
+# excluded to keep the rule uniform across all four TUs of the class: a
+# file-local helper added to either one later would otherwise silently join the
+# blob and collide, which is exactly how the drawDesktopBlendQuad clash above
+# arrived. The cost is blob parallelism and cross-TU inlining, both irrelevant
+# for two small TUs.
 set_source_files_properties(desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-# desktoptransitionteardown.cpp is the teardown part (settle, reap, removal
-# handlers, cache/shader release); same class, same exclusion.
 set_source_files_properties(desktoptransitionteardown.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Link required libraries

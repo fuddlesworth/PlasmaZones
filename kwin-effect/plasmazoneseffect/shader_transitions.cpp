@@ -1515,10 +1515,13 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // the unconditional erase makes unreachable is the right trade.
         // insertTransition pins the duplicate-key invariant itself, asserting
         // in debug and logging a release-build breadcrumb.
-        if (holdAddedGrab && !existingAddedHeldGrab && window) {
+        // No `&& window` on either arm: the early-return at the top of
+        // beginShaderTransition rejects a null window, and every path between
+        // here and there dereferences it unconditionally.
+        if (holdAddedGrab && !existingAddedHeldGrab) {
             window->setData(KWin::WindowAddedGrabRole, QVariant());
         }
-        if (holdCloseGrab && !existingHeldGrab && window) {
+        if (holdCloseGrab && !existingHeldGrab) {
             window->setData(KWin::WindowClosedGrabRole, QVariant());
             QPointer<PlasmaZonesEffect> selfGuard(this);
             KWin::EffectWindow* heldWindow = window;

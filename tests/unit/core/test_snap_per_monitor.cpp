@@ -386,6 +386,7 @@ private Q_SLOTS:
         QVERIFY(m_engine->desktopsWithActiveState().contains(2));
         QVERIFY(m_engine->desktopsWithActiveState().contains(3));
         SnapState* store2 = m_engine->stateForWindow(win2);
+        SnapState* const global = m_engine->globalState();
         const int before = m_engine->allSnapStates().size();
 
         m_engine->pruneStatesForDesktop(3);
@@ -394,6 +395,11 @@ private Q_SLOTS:
         QCOMPARE(m_engine->stateForWindow(win2), store2); // desktop-2 store survives
         QVERIFY(!m_engine->desktopsWithActiveState().contains(3));
         QVERIFY(m_engine->desktopsWithActiveState().contains(2));
+        // The holder survives IN THE STATES MAP, as tests 5 and 7 assert for their
+        // own prunes. Its key's desktop defaults to 1, so a prune of desktop 3 has
+        // no reason to touch it — but the empty screenId is what actually exempts
+        // it, and only reading the map proves the prune honoured that.
+        QVERIFY(m_engine->allSnapStates().contains(global));
         QCOMPARE(m_engine->allSnapStates().size(), before - 1);
     }
 
