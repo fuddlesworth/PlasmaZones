@@ -775,22 +775,31 @@ target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::C
     PhosphorControl::PhosphorControl)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
-# Pure string helpers behind AlgorithmService::createNewAlgorithm (blank
-# scaffold + template splice). Compiled directly because they live in the
-# plasmazones-settings executable rather than plasmazones_core.
+# Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
+# directly because they live in the plasmazones-settings executable rather than
+# plasmazones_core. Split in two by surface: the template splice / metadata
+# rewrite here, the blank scaffold next door. They share no fixture, and one
+# file for both exceeded the 800-line guideline.
+#
+# Both targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
+# ScriptedDefaultMaxWindows and DefaultSplitRatio so a generated algorithm
+# matches the engine's own fallbacks - header-only constants, no .so coupling
+# beyond the include path. Linking PhosphorTiles rather than hand-listing paths
+# lets its interface carry the transitive PhosphorLayoutApi include it needs.
 add_executable(test_algorithm_scaffold
     settings/test_algorithm_scaffold.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
 )
-# PhosphorTiles pulls in AutotileConstants.h's ScriptedDefaultMaxWindows and
-# DefaultSplitRatio, which the blank scaffold writes into every algorithm it
-# generates so they match the engine's own fallbacks - header-only constants,
-# no .so coupling beyond the include path. Linking the target rather than
-# hand-listing paths lets its interface carry the transitive
-# PhosphorLayoutApi include that AutotileConstants.h needs.
 target_link_libraries(test_algorithm_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 target_compile_definitions(test_algorithm_scaffold PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_algorithm_scaffold COMMAND test_algorithm_scaffold)
+
+add_executable(test_algorithm_blank_scaffold
+    settings/test_algorithm_blank_scaffold.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_blank_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_algorithm_blank_scaffold COMMAND test_algorithm_blank_scaffold)
 
 add_executable(test_window_appearance_controller
     settings/test_window_appearance_controller.cpp

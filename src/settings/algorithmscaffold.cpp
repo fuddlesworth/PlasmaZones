@@ -116,8 +116,10 @@ int findLongBracketClose(const QString& line, int level, int from)
 /// close on one line, span lines, or repeat, and @p longBracketLevel carries an
 /// open one across the line boundary.
 ///
-/// When @p codeOnly is non-null, every character counted as code is appended to
-/// it, so a caller can pattern-match a line without matching inside its text.
+/// When @p codeOnly is non-null, the line's own TOP-LEVEL code is appended to
+/// it: text is elided, and so are the contents of any table nested on the line
+/// (its braces remain). A caller can pattern-match that without matching inside
+/// a string, a comment, or a nested table's fields.
 ///
 /// Not handled: short strings continued across lines (backslash-newline, `\z`).
 /// No bundled template's metadata uses one.
@@ -137,6 +139,9 @@ int braceDelta(const QString& line, int& longBracketLevel, QString* codeOnly = n
         i = past;
     }
 
+    // Brace depth within this line alone, so codeOnly can tell a nested table's
+    // contents from the line's own top-level code.
+    int lineDepth = 0;
     QChar quote;
     for (; i < line.size(); ++i) {
         const QChar c = line[i];
@@ -179,13 +184,25 @@ int braceDelta(const QString& line, int& longBracketLevel, QString* codeOnly = n
             i = past - 1;
             continue;
         }
-        if (codeOnly) {
-            codeOnly->append(c);
-        }
+        // codeOnly records this line's own TOP-LEVEL code: a nested table's
+        // braces survive but its contents do not, so a caller asking "is there
+        // a second field on this line" cannot mistake a nested table's key for
+        // one. Without that, `customParams = { name = "x" }` reads the same as
+        // a genuine trailing `name` field.
         if (c == QLatin1Char('{')) {
+            if (codeOnly && lineDepth == 0) {
+                codeOnly->append(c);
+            }
+            ++lineDepth;
             ++delta;
         } else if (c == QLatin1Char('}')) {
+            --lineDepth;
+            if (codeOnly && lineDepth <= 0) {
+                codeOnly->append(c);
+            }
             --delta;
+        } else if (codeOnly && lineDepth <= 0) {
+            codeOnly->append(c);
         }
     }
     return delta;
@@ -302,9 +319,12 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     // anchored patterns above only see a field that leads its line, so without
     // this a trailing `a = 1, name = "x",` would be neither rewritten nor
     // rejected: we would insert our own pair and Luau, which takes the last
-    // duplicate key, would keep the template's. Matched against the line's code
-    // only, so a `description = "name = x"` value cannot trip it.
-    static const QRegularExpression anyNameOrIdFieldRe(QStringLiteral(R"((?:^|,)\s*(?:name|id)\s*=)"));
+    // duplicate key, would keep the template's. Both of Luau's field separators
+    // count, since `a = 1; name = "x"` is the same trap as the comma form.
+    // Matched against the line's top-level code only, so neither a
+    // `description = "name = x"` value nor a nested table's own `name` key can
+    // trip it.
+    static const QRegularExpression anyNameOrIdFieldRe(QStringLiteral(R"((?:^|[,;])\s*(?:name|id)\s*=)"));
 
     QStringList metaLines;
     int depth = 0;
@@ -327,7 +347,16 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
         depth += braceDelta(lines[i], longBracketLevel, &codeOnly);
 
         QString line = lines[i];
-        if (i > metaStart && depthAtLineStart == 1 && !lineStartsInText) {
+        if (i > metaStart && depthAtLineStart == 1 && lineStartsInText) {
+            // The line opens inside a long bracket, so its leading text is not a
+            // field. It can still close the bracket and carry real code, and a
+            // name/id there can be neither rewritten in place nor left to
+            // duplicate, so reject. A line that is text all the way through
+            // contributes no code and falls past this untouched.
+            if (anyNameOrIdFieldRe.match(codeOnly).hasMatch()) {
+                return QString();
+            }
+        } else if (i > metaStart && depthAtLineStart == 1) {
             const QString trimmed = line.trimmed();
             if (fieldIndent.isEmpty() && !trimmed.isEmpty() && !trimmed.startsWith(QLatin1Char('}'))) {
                 fieldIndent = leadingWhitespace(line);

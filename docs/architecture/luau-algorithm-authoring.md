@@ -83,8 +83,9 @@ must be computed instead of declared: `masterZoneIndex`, `supportsMasterCount`,
 `minimumWindows`, `defaultMaxWindows`, `defaultSplitRatio`. A function there
 takes precedence over the metadata field of the same name. Each is called once
 at load and cached, so it cannot vary per retile. A function written inside
-`metadata` is not an override and is ignored, so the field falls back to its
-default. The bundled algorithms all use plain metadata fields.
+`metadata` is not an override, and the field does not receive the computed
+value, so put the function on the algorithm table. The bundled algorithms all
+use plain metadata fields.
 
 ---
 
@@ -100,8 +101,8 @@ to sensible defaults.
 | `description` | string | One-line description |
 | `defaultMaxWindows` | number | Default window cap shown in the UI (omit or 0 to use the built-in default of 6; otherwise clamped to 1–100) |
 | `minimumWindows` | number | Smallest window count the layout supports (clamped to 1–100) |
-| `supportsMasterCount` | boolean | Exposes the “master count” control; sets `ctx.masterCount` |
-| `supportsSplitRatio` | boolean | Exposes the split-ratio slider; sets `ctx.splitRatio` |
+| `supportsMasterCount` | boolean | Exposes the “master count” control, so the user can adjust `ctx.masterCount` |
+| `supportsSplitRatio` | boolean | Exposes the split-ratio slider, so the user can adjust `ctx.splitRatio` |
 | `defaultSplitRatio` | number | Initial split ratio (0.1–0.9) |
 | `supportsMinSizes` | boolean | Honours per-window minimum sizes (default `true`) |
 | `supportsMemory` | boolean | Uses the persistent split tree (§10) |
@@ -317,7 +318,11 @@ Return a table (or `nil` to do nothing). Two optional, independent outputs:
 The table you return replaces the whole bag rather than merging into it, so
 return every key you want to keep. When a branch has nothing to change, return
 `state.scriptState` unchanged. This is why `aligned-grid` returns it verbatim on
-its early-outs.
+its early-outs. Returning `nil` leaves the bag alone, but returning only
+`splitRatio` clears it, because `splitRatio` is stripped before the rest is
+stored. `pluau.masterStackResize` returns exactly that, so a `supportsScriptState`
+algorithm must merge its own keys into what the helper returns rather than
+returning it directly.
 
 `supportsScriptState` is the lightweight alternative to the split tree: an
 opaque table you shape however you like, persisted per screen, desktop, and

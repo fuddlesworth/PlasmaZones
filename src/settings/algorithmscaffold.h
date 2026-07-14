@@ -40,10 +40,14 @@ QString sanitizeMetadataString(QString value);
 ///
 /// Returns empty on an unrecognized shape: no metadata table, an opening line
 /// that does not end at the `{`, an unterminated table, a brace depth that
-/// goes negative, or a name/id field that is not a whole `field = "value",`
-/// line (including one sharing its line with another field, in either order).
-/// Only depth-1 fields are touched, so nested `customParams` entries keep their
-/// own `name` keys.
+/// goes negative, or a top-level name/id field that is not a whole
+/// `field = "value",` line. That last one covers a field sharing its line with
+/// another (in either order, and separated by `,` or `;`) and one trailing a
+/// long bracket's closer, since neither can be rewritten in place and leaving
+/// either would let Luau's last-wins keep the template's value.
+///
+/// Only the table's own top-level fields are read, so a nested `customParams`
+/// entry keeps its own `name` key whether it is written inline or across lines.
 ///
 /// The brace-depth scan counts a brace only where it is code. Quoted strings,
 /// `--` line comments, and long brackets at any level (`[[`, `[=[`, ...,

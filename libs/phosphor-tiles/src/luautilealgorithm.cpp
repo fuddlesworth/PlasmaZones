@@ -36,10 +36,10 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     d.defaultValue = m.value(QStringLiteral("default"));
     d.description = m.value(QStringLiteral("description")).toString();
     // A non-finite bound (a script writing 0/0 or math.huge) must not reach the
-    // normalisation and clamp below: every NaN comparison is false, so the swap
-    // is skipped and std::clamp propagates the NaN straight out to the settings
-    // spinbox. Keep the default bound instead, as resolveReal() does for the
-    // metadata reals.
+    // normalisation below: every NaN comparison is false, so the swap silently
+    // does nothing and the NaN survives into minValue/maxValue, which
+    // toVariantMap() hands to the settings spinbox as its range. Keep the
+    // default bound instead, as resolveReal() does for the metadata reals.
     const QVariant minV = m.value(QStringLiteral("min"));
     const QVariant maxV = m.value(QStringLiteral("max"));
     if (minV.isValid() && std::isfinite(minV.toDouble())) {

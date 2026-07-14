@@ -295,7 +295,27 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
         }
     }
 
-    if (!QFile::copy(filePath, destPath)) {
+    // Read the source through, then write it atomically. QFile::copy creates the
+    // destination and then fills it, which is the exposure writeAlgorithmFile
+    // exists to avoid: this is the one writer landing IN the directory the
+    // daemon's loader watches, so a partial file there is a file the loader can
+    // read mid-copy.
+    QFile in(filePath);
+    if (!in.open(QIODevice::ReadOnly)) {
+        Q_EMIT algorithmOperationFailed(
+            PhosphorI18n::tr("Could not read the algorithm file. Check that it still exists and is readable."));
+        return false;
+    }
+    const QByteArray contents = in.readAll();
+    if (in.error() != QFileDevice::NoError) {
+        qCWarning(PlasmaZones::lcCore) << "importAlgorithm: failed to read" << filePath << in.errorString();
+        Q_EMIT algorithmOperationFailed(
+            PhosphorI18n::tr("Could not read the algorithm file. Check that it still exists and is readable."));
+        return false;
+    }
+    in.close();
+
+    if (!writeAlgorithmFile(destPath, contents)) {
         // Report failure — the QML caller treats a false return as a silent no-op.
         Q_EMIT algorithmOperationFailed(
             PhosphorI18n::tr("Could not copy the algorithm file. Check available disk space and permissions."));
