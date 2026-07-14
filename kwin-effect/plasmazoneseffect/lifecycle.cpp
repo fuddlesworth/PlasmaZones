@@ -677,8 +677,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Full-screen show-desktop PEEK transition, the sibling of the desktop
     // switch above. Resolve the `desktop.peek` shader; when one is assigned,
     // run the windows-scene / bare-desktop blend (hide leg on true, show-back
-    // leg on false — beginPeek swaps the captures). An empty resolve is a
-    // no-op, so KWin's default show-desktop behaviour proceeds untouched.
+    // leg on false). One node drives both legs over the same endpoints; the
+    // show leg reverses the blend rather than swapping the captures, so an
+    // asymmetric pack retraces its own motion (see paintOutput). An empty
+    // resolve is a no-op, so KWin's default show-desktop behaviour proceeds
+    // untouched.
     // While a pack IS assigned, KWin's windowaperture / eyeonscreen script
     // effects are unloaded (syncShowDesktopEffectSuppression) — they ignore
     // the fullscreen claim, and left loaded they would leak their transforms

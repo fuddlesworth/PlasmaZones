@@ -1504,22 +1504,17 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // grab refs we just acquired so the window doesn't strand in
         // closing/added state, then bail. The new shader/redirect is not
         // installed because we never reach setShader/redirect below.
-        // Roll back only what THIS install freshly acquired: with an inherited
-        // grab (existing*HeldGrab) the prior entry still owns the role AND the
-        // ref — the only way this insert fails with one is the prior entry NOT
-        // having been erased — and clearing its role here would let KWin's
-        // stock fade/glide re-engage on a window it is mid-animating; its own
-        // endShaderTransition releases both, and unreffing here too would
-        // double-release.
-        //
-        // The inherited-grab case is deliberately given NO release action
-        // rather than a defensive one: the two ways an insert could fail with
-        // a grab inherited imply OPPOSITE rollbacks (prior entry erased →
-        // must release; prior entry alive → releasing double-releases), so
-        // with no safe action available, leaking on a path the supersession
-        // erase already makes impossible is the right trade. insertTransition
-        // asserts the duplicate-key contract itself and logs a release-build
-        // breadcrumb, which is where that invariant is pinned.
+        // Roll back only what THIS install freshly acquired, and give the
+        // INHERITED-grab case (existing*HeldGrab) no release action at all.
+        // That asymmetry is deliberate: reaching here with a grab inherited
+        // means the supersession erase ran (it is unconditional above) and the
+        // insert STILL failed, which leaves two possibilities implying
+        // OPPOSITE rollbacks — the erased entry's grab is now unowned (must
+        // release), or a racing install already inherited it (releasing
+        // double-releases). With no safe action available, leaking on a path
+        // the unconditional erase makes unreachable is the right trade.
+        // insertTransition pins the duplicate-key invariant itself, asserting
+        // in debug and logging a release-build breadcrumb.
         if (holdAddedGrab && !existingAddedHeldGrab && window) {
             window->setData(KWin::WindowAddedGrabRole, QVariant());
         }

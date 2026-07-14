@@ -338,13 +338,16 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             const QSet<QString> untiled = previous - newSet;
             for (const QString& wid : untiled) {
                 KWin::EffectWindow* win = m_effect->findWindowById(wid);
+                // Every untiled window drops its per-screen tiled tracking,
+                // minimized/unresolvable or not — hoisted so the branch below
+                // reads as what it actually gates: the centering-target
+                // cleanup.
+                clearWindowTiledOnScreen(screenId, wid);
                 if (!win || win->isMinimized()) {
-                    // Minimized windows keep their tracking quiescent: the
-                    // re-tile on unminimize re-asserts.
-                    clearWindowTiledOnScreen(screenId, wid);
+                    // A minimized (or vanished) window KEEPS its centering
+                    // target: the re-tile on unminimize re-asserts it.
                     continue;
                 }
-                clearWindowTiledOnScreen(screenId, wid);
                 // A daemon-initiated untile that is not a float/fullscreen/
                 // close/desktop-switch (e.g. a rule change dropping the
                 // window from the layout) must not leave a stale centering
@@ -438,13 +441,18 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             // cross-output "hole on the source monitor" bug.
             if (m_autotileStaggerGeneration != gen
                 || m_autotileStaggerGenByScreen.value(snap.screenId) != genByScreen.value(snap.screenId)) {
-                // A genuinely newer retile of this window's screen has
-                // superseded this apply — normal during rapid ops. Logged at
-                // debug to keep the supersession trail available without
-                // production noise (it was the smoking gun for the cross-output
-                // "source doesn't reflow" bug: a destination batch keyed to the
-                // moved window's STALE screen bumped the source screen's gen).
+                // A genuinely newer retile — of this window's screen, OR a
+                // global bump (desktop/screen switch) — has superseded this
+                // apply; normal during rapid ops. Both epochs are logged
+                // because either can be the one that tripped: printing only
+                // the per-screen pair read as "superseded, but the gens match"
+                // whenever the global epoch fired. Logged at debug to keep the
+                // supersession trail available without production noise (it
+                // was the smoking gun for the cross-output "source doesn't
+                // reflow" bug: a destination batch keyed to the moved window's
+                // STALE screen bumped the source screen's gen).
                 qCDebug(lcEffect) << "Autotile apply: skip superseded" << snap.windowId << "screen" << snap.screenId
+                                  << "| globalGen now" << m_autotileStaggerGeneration << "captured" << gen
                                   << "| screenGen now" << m_autotileStaggerGenByScreen.value(snap.screenId)
                                   << "captured" << genByScreen.value(snap.screenId);
                 return;

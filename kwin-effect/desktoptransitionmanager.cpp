@@ -276,6 +276,13 @@ void DesktopTransitionManager::reapPeekTransitions()
     // bare-desktop cache (a broken hide/show pairing means the capture may no
     // longer match the desktop's content, which size/format validation cannot
     // see; the next show leg then settles instantly, KWin's default).
+    //
+    // No releaseFullScreenClaimIfIdle() after the erase, unlike every other
+    // erase site: a peek entry can never coexist with our claim (begin() only
+    // claims when no peek is live, and beginPeek bails outright while ANY
+    // claim is held), so emptying m_active of peeks cannot strand one. The
+    // call would be a harmless no-op — it is omitted to keep that invariant
+    // stated rather than silently relied on.
     const bool hasPeekEntries = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
         return entry.second.kind != Kind::Switch;
     });
@@ -440,8 +447,14 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     // (e.g. "Ease Out") shapes iTime — matching the per-window shader path. A
     // stateless curve evaluates the linear point; a stateful spring integrates
     // its CurveState toward target 1 by the inter-frame dt, mirroring
-    // AnimatedValue. Null curve → linear. Clamped to [0, 1] per the iTime
-    // contract. lastPaintTimeMs is advanced here, once per output paint tick.
+    // AnimatedValue. Null curve → linear. Only linearT is clamped to [0, 1]:
+    // easeProgress deliberately leaves an OVERSHOOTING curve unclamped,
+    // bounded to [MinCurveProgress, MaxCurveProgress] = [-1, 2] via
+    // boundCurveProgress, and the iTime contract makes packs clamp themselves.
+    // The show leg's 1 - easedT MIRRORS that range rather than widening it, so
+    // a spring's overshoot past 1 drives its t negative — the exact mirror of
+    // the hide leg overshooting past 1. lastPaintTimeMs is advanced here, once
+    // per output paint tick.
     // durationMs is guaranteed >= Limits::MinAnimationDurationMs by
     // resolveTransitionLifetimeMs in begin(), so the divisor is always positive.
     const qreal linearT = qBound<qreal>(0.0, qreal(elapsed) / qreal(tr.durationMs), 1.0);
@@ -510,19 +523,25 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
             // fired, so a plain live capture has them), TO = the hide leg's
             // cached bare desktop — because this leg reverses TIME rather than
             // swapping textures (see the t computation above). The cache entry
-            // is single-consumption,
-            // taken out of the map here whatever happens next: a bare desktop
-            // is only valid for the show leg that immediately follows its hide
-            // leg (the next hide re-seeds it), and holding an output-sized GPU
-            // texture between peeks buys nothing. It must also still match
-            // this frame's capture geometry — an output scale/mode change or
-            // an HDR format flip between the legs makes it unusable, in which
-            // case the null fromTex below abandons the transition and the
-            // restored windows appear instantly (KWin's default). Validation
-            // is deliberately size + internalFormat only: a colour-space
-            // change on the SAME format (an SDR brightness tweak mid-peek)
-            // blends a slightly stale-space desktop for one leg, which is not
-            // worth carrying a ColorDescription alongside every cache entry.
+            // is single-consumption, taken out of the map here whatever
+            // happens next: a bare desktop is only valid for the show leg that
+            // immediately follows its hide leg (the next hide re-seeds it),
+            // and holding an output-sized GPU texture between peeks buys
+            // nothing. It must also still match this frame's capture geometry
+            // — an output scale/mode change or an HDR format flip between the
+            // legs makes it unusable, in which case the null toTex below
+            // abandons the transition and the restored windows appear
+            // instantly (KWin's default). Validation is deliberately size +
+            // internalFormat only; two staleness classes are accepted rather
+            // than chased. A colour-space change on the SAME format (an SDR
+            // brightness tweak mid-peek) blends a slightly stale-space desktop
+            // for one leg, which is not worth carrying a ColorDescription per
+            // entry. And the capture is AGE-blind: a peek held over a
+            // slideshow wallpaper or a clock widget replays that content as it
+            // was at the hide leg, so the show leg's first frame rewinds it
+            // and settles forward to live. Neither is fixable at reasonable
+            // cost — the bare desktop genuinely cannot be re-captured behind
+            // the restored windows.
             std::shared_ptr<KWin::GLTexture> desktopTex;
             const auto cachedIt = m_peekDesktopCache.find(screen);
             if (cachedIt != m_peekDesktopCache.end()) {

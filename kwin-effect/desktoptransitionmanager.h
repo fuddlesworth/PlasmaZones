@@ -176,10 +176,13 @@ public:
 
 private:
     /// What a transition blends. Switch reconstructs the outgoing desktop and
-    /// captures the incoming live scene; the two peek legs pair a live-scene
-    /// capture with the bare desktop (captured fresh on the hide leg while the
-    /// just-hidden windows are held renderable, replayed from the per-output
-    /// cache on the show leg).
+    /// captures the incoming live scene. Both peek legs share ONE endpoint
+    /// pair and differ only in the direction time runs: FROM = the windows
+    /// scene (reconstructed on the hide leg from the just-hidden windows held
+    /// renderable, captured live on the show leg — they are back by then), TO
+    /// = the bare desktop (captured live on the hide leg, replayed from the
+    /// per-output cache on the show leg — it cannot be re-captured once the
+    /// windows return).
     enum class Kind {
         Switch,
         PeekHide,
@@ -333,10 +336,11 @@ private:
     /// Free an output's transition and, when the last one goes, release the
     /// active-fullscreen-effect claim.
     ///
-    /// This and the teardown members below it (releaseFullScreenClaimIfIdle,
+    /// This and the other teardown members (releaseFullScreenClaimIfIdle,
     /// ensureGlContextCurrent, scheduleRepaints, outputRemoved, desktopRemoved,
-    /// invalidateShaderCache, reset) are implemented in
-    /// desktoptransitionteardown.cpp — the class's teardown half.
+    /// invalidateShaderCache, reset — the last five are declared in the public
+    /// section above) are implemented in desktoptransitionteardown.cpp, the
+    /// class's teardown part.
     void endOutput(KWin::LogicalOutput* screen);
 
     /// Release the active-fullscreen-effect claim once no transition is left.

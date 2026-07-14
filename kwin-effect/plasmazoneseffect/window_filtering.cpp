@@ -222,8 +222,9 @@ PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleActions(KWin::Effec
 bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason) const
 {
     // Single source of truth for the window-TYPE rejection set shared by
-    // shouldHandleWindow() (snap/zone filter) and notifyWindowActivated()
-    // (focus-tracking filter). Both must reject the exact same structural
+    // shouldHandleWindow() (snap/zone filter), notifyWindowActivated()
+    // (focus-tracking filter) and classifyWindowKind() (window_identity.cpp).
+    // They must reject the exact same structural
     // types: a window kind that can never legitimately be a snap/autotile
     // target must also never be reported as the active window, or the daemon's
     // focus tracking gets pinned to a popup. Discussion #461 item 11 (Steam
@@ -234,7 +235,7 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     // isTileableWindow() deliberately keeps its own, narrower list (it gates
     // on !isNormalWindow()) and is NOT folded in here.
 
-    // Null is structurally unmanageable. Both current callers null-check before
+    // Null is structurally unmanageable. Every caller null-checks before
     // reaching here, so this is a defensive guard that keeps the precondition
     // enforced rather than merely documented for any future caller.
     if (!w) {
@@ -485,8 +486,9 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
     // Always-wrong surfaces — never draw a border here regardless of any
     // toggle. Our own overlay/editor windows and xdg-portal surfaces mirror the
     // structural rejects in shouldHandleWindow; plasma-shell + the special/
-    // desktop/dock/fullscreen/skipSwitcher set is the structural clause shared
-    // with shouldAnimateWindow. (fullscreen is also rejected earlier in
+    // desktop/dock/skipSwitcher set is shouldAnimateWindow's structural clause
+    // PLUS isFullScreen(), which is decoration-only — do NOT fold the two into
+    // one predicate. (Fullscreen is also rejected earlier in
     // updateWindowDecoration, but keep it here so the gate stands alone.)
     if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass) || isPlasmaShellSurface(windowClass)) {
         return false;

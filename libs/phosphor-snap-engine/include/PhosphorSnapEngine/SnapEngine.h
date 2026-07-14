@@ -433,12 +433,12 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// The SnapState that owns @p windowId (via the reverse map), or the global
-    /// holder when the window is untracked — NEVER null once the engine is
-    /// wired (see the fallback rationale on the definition). An untracked
-    /// window then reads empty per-window data out of the holder, which is
-    /// observably identical to the nullptr this once returned. Never creates.
-    /// Callers must not null-check the result as a tracked/untracked test; ask
-    /// the reverse map (or compare against globalState()) instead.
+    /// holder when the window is untracked — NEVER null (the holder is
+    /// constructed in the ctor; see the fallback rationale on the definition).
+    /// An untracked window then reads empty per-window data out of the holder,
+    /// which is observably identical to the nullptr this once returned. Never
+    /// creates. Callers must not null-check the result as a tracked/untracked
+    /// test; use isWindowTracked() for that.
     SnapState* stateForWindow(const QString& windowId);
     const SnapState* stateForWindow(const QString& windowId) const;
 

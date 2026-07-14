@@ -251,11 +251,13 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // highlight family root inherits the widget OutCubic feel.
         {QLatin1StringView{"widget.zoneHighlight"}, QLatin1StringView{"widget-out"}, 200.0},
 
-        // No `workspace.*` / `desktop.*` motion seeds: the opt-in desktop
-        // transitions (desktop.switch and desktop.peek) carry no
-        // motion-Profile seed because their timing rides the shader path (the
-        // kwin-effect's DesktopTransitionManager), not this per-event Profile
-        // tree. Both stay off until the user assigns a desktop shader.
+        // No `workspace.*` / `desktop.*` motion seeds: these seeds populate the
+        // SHELL-side registry, and the desktop transitions (desktop.switch and
+        // desktop.peek) run in the kwin-effect, which resolves their duration
+        // and curve against its OWN motion tree (resolveEventMotionProfile in
+        // lifecycle.cpp, walking global → desktop → the leaf). A seed here
+        // would never be read. Both stay off until the user assigns a desktop
+        // shader — they are opt-in, with no built-in default.
     }};
 
     for (const auto& seed : seeds) {

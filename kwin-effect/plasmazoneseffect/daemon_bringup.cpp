@@ -975,13 +975,14 @@ void PlasmaZonesEffect::loadCachedSettings()
             m_animationExcludeNotificationsAndOsd = v.toBool();
         }
     });
-    // Clamp on the effect side as a defence-in-depth — the daemon's
-    // schema validator already bounds these to [0, 2000], but a
-    // &ok gate + two-sided clamp, same hardening as the snapping/decoration
-    // min-size loaders: a non-int variant (an older daemon's valid-empty reply
-    // for an unknown key) is rejected outright rather than coerced to 0, and a
+    // Clamp on the effect side as defence-in-depth — the daemon's schema
+    // validator already bounds these to [0, 2000], but the daemon is a separate
+    // process and this effect must not trust the wire. The &ok gate + two-sided
+    // clamp is the same hardening the snapping/decoration min-size loaders
+    // apply: a non-int variant (an older daemon's valid-empty reply for an
+    // unknown key) is rejected outright rather than coerced to 0, and a
     // negative or absurd value from an out-of-spec callsite is clamped, so the
-    // min-size gate can be neither silently disabled nor inverted.
+    // min-size gate cannot be silently disabled.
     loadSettingAsync(QStringLiteral("animationMinimumWindowWidth"), [this](const QVariant& v) {
         bool ok = false;
         const int i = v.toInt(&ok);
