@@ -28,6 +28,24 @@ using PhosphorRules::Operator;
 using PhosphorRules::Rule;
 using PhosphorRules::RuleAction;
 
+/// The seeded SetEngineMode("snapping") + SetSnappingLayout action pair shared
+/// by every snapping-assignment template — the same shape the old
+/// MonitorStatePage assignment flow produced. The layout id is left empty for
+/// the editor's picker; the engine mode is pre-set to "snapping" because the
+/// templates' whole point is the snap layout.
+void appendSnappingAssignmentActions(Rule& rule)
+{
+    RuleAction engineMode;
+    engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
+    engineMode.params.insert(ActionParam::Mode,
+                             PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping));
+    rule.actions.append(engineMode);
+    RuleAction layoutAction;
+    layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
+    layoutAction.params.insert(ActionParam::LayoutId, QString());
+    rule.actions.append(layoutAction);
+}
+
 } // namespace
 
 QVariantMap newEmptyRule(const QString& subject)
@@ -44,8 +62,9 @@ QVariantMap newEmptyRule(const QString& subject)
         rule.name = PhosphorI18n::tr("New desktop rule");
         rule.priority = kContextBandBase;
         // VirtualDesktop is numeric; seed with 1 (typical first desktop).
-        // Validator rejects 0 because 0 means "all desktops" and is the same
-        // as having no predicate at all.
+        // 0 is the sticky/all-desktops sentinel — it never equals a real
+        // desktop number (matchexpression.cpp, VD-1) and the editor's desktop
+        // picker treats it as unset.
         rule.match = MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 1);
     } else if (subject == QLatin1String("application")) {
         rule.name = PhosphorI18n::tr("New application rule");
@@ -94,9 +113,10 @@ QVariantList ruleTemplates()
     // deliberately NO smart-gaps (TiledWindowCount + gap actions) template:
     // smart gaps already ships as a plain autotile setting
     // (AutotileConfig::smartGaps, Settings → Tiling), and such a rule would
-    // silently never fire anyway — the gap resolver never stamps
-    // tiledWindowCount into its context query (see
-    // layoutregistry_assignments.cpp, resolveAssignmentEntry).
+    // silently never fire anyway — the gap resolver (resolveContextGaps in
+    // layoutregistry_assignments.cpp) never stamps tiledWindowCount into its
+    // context query; only resolveAssignmentEntry does, which is why
+    // TiledWindowCount works for algorithm-switch rules but not gap rules.
     QVariantList out;
     out.append(entry(QLatin1String("layoutOnMonitor"), PhosphorI18n::tr("Set a layout on a monitor"),
                      PhosphorI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
@@ -144,20 +164,9 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         rule.name = PhosphorI18n::tr("Snapping layout on monitor");
         rule.priority = kContextBandBase;
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
-        // Two seeded actions — set engine mode AND pick the layout — so the
-        // editor opens with the same shape the old MonitorStatePage
-        // assignment flow produced. The user fills in the screen and layout
-        // pickers; the engine-mode is pre-set to "snapping" because the
-        // template's whole point is the snap layout.
-        RuleAction engineMode;
-        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
-        engineMode.params.insert(ActionParam::Mode,
-                                 PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping));
-        rule.actions.append(engineMode);
-        RuleAction layoutAction;
-        layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
-        layoutAction.params.insert(ActionParam::LayoutId, QString());
-        rule.actions.append(layoutAction);
+        // The user fills in the screen and layout pickers (see
+        // appendSnappingAssignmentActions for the seeded shape's rationale).
+        appendSnappingAssignmentActions(rule);
     } else if (templateId == QLatin1String("algorithmOnMonitor")) {
         rule.name = PhosphorI18n::tr("Tiling algorithm on monitor");
         rule.priority = kContextBandBase;
@@ -189,18 +198,11 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         rule.priority = kContextBandBase;
         // Desktop twin of layoutOnMonitor — same seeded action pair, keyed on
         // the desktop number instead of the screen picker. Seed desktop 1 for
-        // the same reason newEmptyRule("desktop") does: 0 means "all desktops"
-        // and the validator rejects it.
+        // the same reason newEmptyRule("desktop") does: 0 is the
+        // sticky/all-desktops sentinel and the desktop picker treats it as
+        // unset.
         rule.match = MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 1);
-        RuleAction engineMode;
-        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
-        engineMode.params.insert(ActionParam::Mode,
-                                 PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping));
-        rule.actions.append(engineMode);
-        RuleAction layoutAction;
-        layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
-        layoutAction.params.insert(ActionParam::LayoutId, QString());
-        rule.actions.append(layoutAction);
+        appendSnappingAssignmentActions(rule);
     } else if (templateId == QLatin1String("portraitLayout")) {
         rule.name = PhosphorI18n::tr("Layout for portrait monitors");
         rule.priority = kContextBandBase;
@@ -208,15 +210,7 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         // covers a rotating monitor in both positions (it simply stops
         // matching when the screen returns to landscape).
         rule.match = MatchExpression::makeLeaf(Field::ScreenOrientation, Operator::Equals, QStringLiteral("portrait"));
-        RuleAction engineMode;
-        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
-        engineMode.params.insert(ActionParam::Mode,
-                                 PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping));
-        rule.actions.append(engineMode);
-        RuleAction layoutAction;
-        layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
-        layoutAction.params.insert(ActionParam::LayoutId, QString());
-        rule.actions.append(layoutAction);
+        appendSnappingAssignmentActions(rule);
     } else if (templateId == QLatin1String("snapAppToZone")) {
         rule.name = PhosphorI18n::tr("Open an app in a zone");
         rule.priority = kApplicationBandBase;

@@ -1113,8 +1113,9 @@ void TestRuleController::templatesProduceSeededRules()
     QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("value")).toBool(), true);
 
     // `layoutOnDesktop` is the desktop twin of layoutOnMonitor: a
-    // `VirtualDesktop == 1` leaf (0 means "all desktops" and is rejected)
-    // + the same SetEngineMode("snapping") + SetSnappingLayout pair.
+    // `VirtualDesktop == 1` leaf (0 is the all-desktops sentinel, so the seed
+    // must be a real desktop number) + the same SetEngineMode("snapping") +
+    // SetSnappingLayout pair.
     const QVariantMap desktopRule = controller.newRuleFromTemplate(QStringLiteral("layoutOnDesktop"));
     const QVariantMap desktopMatch = desktopRule.value(QStringLiteral("match")).toMap();
     QCOMPARE(desktopMatch.value(QStringLiteral("field")).toString(), QStringLiteral("virtualDesktop"));
