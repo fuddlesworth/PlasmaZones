@@ -1112,6 +1112,62 @@ void TestRuleController::templatesProduceSeededRules()
     QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("lockContext"));
     QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("value")).toBool(), true);
 
+    // `layoutOnDesktop` is the desktop twin of layoutOnMonitor: a
+    // `VirtualDesktop == 1` leaf (0 is the all-desktops sentinel, so the seed
+    // must be a real desktop number) + the same SetEngineMode("snapping") +
+    // SetSnappingLayout pair.
+    const QVariantMap desktopRule = controller.newRuleFromTemplate(QStringLiteral("layoutOnDesktop"));
+    const QVariantMap desktopMatch = desktopRule.value(QStringLiteral("match")).toMap();
+    QCOMPARE(desktopMatch.value(QStringLiteral("field")).toString(), QStringLiteral("virtualDesktop"));
+    QCOMPARE(desktopMatch.value(QStringLiteral("value")).toInt(), 1);
+    const QVariantList desktopActions = desktopRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(desktopActions.size(), 2);
+    QCOMPARE(desktopActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
+    QCOMPARE(desktopActions.at(1).toMap().value(QStringLiteral("type")).toString(),
+             QStringLiteral("setSnappingLayout"));
+
+    // `portraitLayout` showcases the ScreenOrientation context field: a
+    // `screenOrientation == "portrait"` leaf + the snapping assignment pair.
+    const QVariantMap portraitRule = controller.newRuleFromTemplate(QStringLiteral("portraitLayout"));
+    const QVariantMap portraitMatch = portraitRule.value(QStringLiteral("match")).toMap();
+    QCOMPARE(portraitMatch.value(QStringLiteral("field")).toString(), QStringLiteral("screenOrientation"));
+    QCOMPARE(portraitMatch.value(QStringLiteral("value")).toString(), QStringLiteral("portrait"));
+    const QVariantList portraitActions = portraitRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(portraitActions.size(), 2);
+    QCOMPARE(portraitActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
+    QCOMPARE(portraitActions.at(1).toMap().value(QStringLiteral("type")).toString(),
+             QStringLiteral("setSnappingLayout"));
+
+    // `snapAppToZone` is the flagship per-app placement rule: AppId leaf +
+    // SnapToZone seeded with ordinal 1 (the validator requires a non-empty
+    // zones list, so the seed must survive the round-trip).
+    const QVariantMap snapRule = controller.newRuleFromTemplate(QStringLiteral("snapAppToZone"));
+    QCOMPARE(snapRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("appId"));
+    const QVariantList snapActions = snapRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(snapActions.size(), 1);
+    QCOMPARE(snapActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("snapToZone"));
+    const QVariantList seededZones = snapActions.at(0).toMap().value(QStringLiteral("zones")).toList();
+    QCOMPARE(seededZones.size(), 1);
+    QCOMPARE(seededZones.at(0).toInt(), 1);
+
+    // `routeAppToScreen`: AppId leaf + RouteToScreen with an empty target
+    // (the user picks the monitor in the editor).
+    const QVariantMap routeRule = controller.newRuleFromTemplate(QStringLiteral("routeAppToScreen"));
+    QCOMPARE(routeRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("appId"));
+    const QVariantList routeActions = routeRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(routeActions.size(), 1);
+    QCOMPARE(routeActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("routeToScreen"));
+
+    // `floatApp`: AppId leaf + a single param-less Float action.
+    const QVariantMap floatRule = controller.newRuleFromTemplate(QStringLiteral("floatApp"));
+    QCOMPARE(floatRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("appId"));
+    const QVariantList floatActions = floatRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(floatActions.size(), 1);
+    QCOMPARE(floatActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("float"));
+
     // An unknown id must return an empty map — the AddRuleSheet would
     // otherwise commit a UUID-less rule on a typo in the template id.
     const QVariantMap bogus = controller.newRuleFromTemplate(QStringLiteral("nonexistentTemplate"));

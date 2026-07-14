@@ -358,9 +358,10 @@ private Q_SLOTS:
         QCOMPARE(m_engine->stateForWindow(winAvs), m_engine->globalState());
         // The other monitor's store and the global holder survive.
         QCOMPARE(m_engine->stateForWindow(winB), storeB);
-        // The holder survives IN THE STATES MAP, un-pruned. Comparing
+        // The SAME holder survives IN THE STATES MAP, un-pruned. Comparing
         // globalState() to its earlier copy is vacuous (the member is never
-        // reassigned); reading the map genuinely fails if the prune removed it.
+        // reassigned, so it passes even if the prune removed the holder from the
+        // map); reading the map genuinely fails in that case.
         QVERIFY(m_engine->allSnapStates().contains(global));
         QCOMPARE(m_engine->allSnapStates().size(), before - 2);
     }
@@ -423,7 +424,8 @@ private Q_SLOTS:
 
         QCOMPARE(m_engine->stateForWindow(winB), m_engine->globalState()); // removed-activity store gone
         QCOMPARE(m_engine->stateForWindow(winA), storeKeep); // kept-activity store survives
-        // Map-membership check, not a pointer self-compare — see test 5.
+        // The SAME empty-activity holder survives, un-pruned. Map-membership
+        // check, not a pointer self-compare — see test 5.
         QVERIFY(m_engine->allSnapStates().contains(global));
         QCOMPARE(m_engine->allSnapStates().size(), before - 1);
     }
