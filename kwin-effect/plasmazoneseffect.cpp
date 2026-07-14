@@ -62,10 +62,21 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
     // NEXT event-loop turn only, never synchronously: this reconfigure runs
     // from inside EffectsHandler's dispatch over its loaded-effects container,
     // and a synchronous unloadEffect/loadEffect here would mutate that
-    // container mid-iteration. The deferred pass also lands after any queued
-    // loader work the KCM apply scheduled, so it covers both orderings; the
-    // sync is idempotent, so a reconfigure storm just coalesces to cheap
-    // no-ops. `this` as context cancels the callback if we unload first.
+    // container mid-iteration. The sync is idempotent, so a reconfigure storm
+    // just coalesces to cheap no-ops. `this` as context cancels the callback if
+    // we unload first.
+    //
+    // Whether the deferred pass lands after the KCM's own re-load of
+    // windowaperture/eyeonscreen is NOT guaranteed here — it depends on
+    // EffectsHandler's internal ordering between queueing those loads and
+    // driving our reconfigure(). Lose the race and the sync sees them still
+    // unloaded, no-ops, and they come back live alongside an assigned peek
+    // pack. That is self-correcting rather than sticky: any later trigger (a
+    // pack change, the animations toggle, the next reconfigure) re-asserts,
+    // and the cost until then is that a peek capture can bake in their
+    // transform. Re-asserting from the showingDesktopChanged handler would
+    // close it, but that handler runs inside KWin's own emission over its
+    // effects list, which is the one place an unload must not happen.
     QTimer::singleShot(0, this, [this]() {
         syncShowDesktopEffectSuppression();
     });
@@ -81,7 +92,8 @@ bool PlasmaZonesEffect::isActive() const
     //
     // Without this clause, the only paths that wake the chain are
     // (a) interactive drag (`m_dragTracker->isDragging()`) and
-    // (b) zone-snap reflow animations (`m_windowAnimator`).
+    // (b) zone-snap reflow animations (`m_windowAnimator`), plus
+    // (c) the full-screen desktop legs below.
     // window.move works through (a) because the drag holds isActive()
     // true; every other lifecycle event (focus/open/close/minimize/
     // maximize/resize) installs a shader transition only — without this
@@ -112,6 +124,16 @@ bool PlasmaZonesEffect::isActive() const
     // consulted for as long as any window has a border, so the border
     // survives idle. O(1) — a QHash emptiness check, safe in this per-frame
     // hot path.
+    //
+    // `m_desktopTransition.isRunning()` is the same shape as the shader-manager
+    // clause, for the screen-level legs. A desktop switch or a show-desktop
+    // peek installs from a signal handler (desktopChanged /
+    // showingDesktopChanged): no drag is held, the window animator has no entry
+    // for it, and the blend is not a redirected window — so no other clause
+    // here can be true for one. Drop this and paintScreen is never called,
+    // DesktopTransitionManager::paintOutput never gets a frame, and the blend
+    // sits unrendered until its own wall-clock reap. Also O(1) (an
+    // unordered_map emptiness check).
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
         || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning();
 }

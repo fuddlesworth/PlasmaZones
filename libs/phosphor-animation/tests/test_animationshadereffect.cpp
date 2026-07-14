@@ -5,7 +5,6 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QTest>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;

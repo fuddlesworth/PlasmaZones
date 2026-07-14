@@ -69,7 +69,7 @@ private Q_SLOTS:
         }
     }
 
-    // The desktop-class packs must DECLARE the desktop contract. `appliesTo`
+    // Every desktop-class pack must DECLARE the desktop contract. `appliesTo`
     // is what `shaderEffectAppliesToEventPath` gates on (see
     // test_animationshadereffect), so a pack missing the "desktop" token is
     // refused on `desktop.switch` / `desktop.peek` and becomes silently
@@ -77,6 +77,11 @@ private Q_SLOTS:
     // passes, since none of them read this field. Pinned per id rather than
     // by looping availableEffects(), so that DELETING the token from a
     // metadata.json fails instead of quietly shrinking the checked set.
+    //
+    // The list is the full desktop class, not just the peek packs: the hazard
+    // is identical for the switch packs, and pinning only the newest three
+    // would leave the same hole open on the other eleven. A new desktop pack
+    // is expected to add its id here.
     void testDesktopPacksDeclareDesktopContract()
     {
         const QString dataDir = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations");
@@ -87,9 +92,11 @@ private Q_SLOTS:
         registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
 
         const QStringList desktopPacks = {
-            QStringLiteral("peek-recede"),
-            QStringLiteral("peek-blinds"),
-            QStringLiteral("phosphor-peek"),
+            QStringLiteral("peek-recede"),      QStringLiteral("peek-blinds"),      QStringLiteral("phosphor-peek"),
+            QStringLiteral("desktop-fade"),     QStringLiteral("desktop-slide"),    QStringLiteral("desktop-slidefade"),
+            QStringLiteral("desktop-wipe"),     QStringLiteral("desktop-circle"),   QStringLiteral("desktop-dissolve"),
+            QStringLiteral("desktop-pixelate"), QStringLiteral("desktop-cube"),     QStringLiteral("desktop-crosszoom"),
+            QStringLiteral("desktop-aretha"),   QStringLiteral("desktop-phosphor"),
         };
 
         for (const QString& id : desktopPacks) {

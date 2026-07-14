@@ -1558,11 +1558,14 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // captured the values that landed in the map.
         const bool releaseCloseGrab = transitionHadCloseGrab;
         const bool releaseAddedGrab = transitionHadAddedGrab;
-        if (releaseAddedGrab && window) {
+        // No `&& window` here either, for the reason given on the insert-failure
+        // rollback above: the early-return at the top of beginShaderTransition
+        // rejects a null window, and this point is strictly later in the flow.
+        if (releaseAddedGrab) {
             // Symmetric WindowAddedGrabRole rollback. No ref to release.
             window->setData(KWin::WindowAddedGrabRole, QVariant());
         }
-        if (releaseCloseGrab && window) {
+        if (releaseCloseGrab) {
             // Clear WindowClosedGrabRole synchronously while the
             // ref we hold guarantees `window` is still alive. The
             // role clear is a courtesy for other effects.

@@ -386,7 +386,7 @@ private Q_SLOTS:
         QVERIFY(m_engine->desktopsWithActiveState().contains(2));
         QVERIFY(m_engine->desktopsWithActiveState().contains(3));
         SnapState* store2 = m_engine->stateForWindow(win2);
-        SnapState* const global = m_engine->globalState();
+        SnapState* global = m_engine->globalState();
         const int before = m_engine->allSnapStates().size();
 
         m_engine->pruneStatesForDesktop(3);

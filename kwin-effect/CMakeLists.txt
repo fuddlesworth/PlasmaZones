@@ -130,23 +130,26 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
 # KWin's GL headers) would break that ordering. Mirrors the daemon's identical
 # guard on dmabufglimport.cpp (src/CMakeLists.txt).
 set_source_files_properties(snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-# desktoptransitionmanager.cpp defines a file-local drawDesktopBlendQuad; keep
-# it out of the Unity blob so it never ODR-collides with surfacelayers.cpp's
-# equivalent.
+# All four TUs of DesktopTransitionManager stay out of the Unity blob.
+#
+# None of them fixes a PRESENT collision, and the comments here used to imply
+# otherwise. Every file-local name across the four is unique repo-wide
+# (drawDesktopBlendQuad, translatePackParams, captureFormatFor,
+# allocateOutputTexture), and desktoptransitionmanager.cpp:42 is explicit that
+# its quad helper was given a distinct name from surfacelayers.cpp's
+# drawFullscreenQuad precisely so the blob CANNOT collide — differently-named
+# anonymous-namespace entities never do. The remaining two TUs carry no
+# file-local entity at all: the vertex source in desktoptransitionshader.cpp is
+# a FUNCTION-local static, and desktoptransitionteardown.cpp has no anonymous
+# namespace.
+#
+# The exclusion is a uniform prophylactic rule instead: this class is split by
+# concern across four files that freely add file-local helpers, and a future one
+# sharing a name with any other blob member would fail the build in a way that
+# reads as unrelated. Keeping the whole class out costs only blob parallelism
+# and cross-TU inlining, neither of which matters for four small TUs.
 set_source_files_properties(desktoptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-# desktoptransitioncapture.cpp holds the capture part of the same class, including
-# its own file-local helpers (captureFormatFor, allocateOutputTexture); same
-# reason, same exclusion.
 set_source_files_properties(desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-# The remaining two parts of the same class carry no file-local entity today —
-# desktoptransitionshader.cpp's vertex source is a FUNCTION-local static (which
-# cannot ODR-collide) and desktoptransitionteardown.cpp has no anonymous
-# namespace at all — so neither is excluded to fix a present collision. They are
-# excluded to keep the rule uniform across all four TUs of the class: a
-# file-local helper added to either one later would otherwise silently join the
-# blob and collide, which is exactly how the drawDesktopBlendQuad clash above
-# arrived. The cost is blob parallelism and cross-TU inlining, both irrelevant
-# for two small TUs.
 set_source_files_properties(desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 set_source_files_properties(desktoptransitionteardown.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 

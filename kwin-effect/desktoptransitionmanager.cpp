@@ -30,8 +30,9 @@
 
 // The drive part of DesktopTransitionManager: resolve a pack, start a
 // transition, blend a frame. The other three parts of the class live beside it —
-// captureDesktop / captureLiveScene / capturePeekWindowsScene (plus the texture
-// allocation and format helpers they share) in desktoptransitioncapture.cpp,
+// captureDesktop / captureLiveScene / capturePeekWindowsScene and their shared
+// compositeWindowsInto tail (plus the texture allocation and format helpers
+// they share) in desktoptransitioncapture.cpp,
 // compiledShader (the pack-source → GLShader assembly) in
 // desktoptransitionshader.cpp, and the settle / reap / removal / release
 // handlers in desktoptransitionteardown.cpp.
@@ -421,7 +422,21 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
         if (displaced != m_active.end() && displaced->second.kind != Kind::Switch
             && displaced->second.kind != tr.kind) {
             const OutputTransition& old = displaced->second;
-            if (tr.progressCurve && tr.progressCurve->isStateful()) {
+            // BOTH curves must be stateful to hand the spring state over. The
+            // displaced leg only HAS integration state if it was itself driven
+            // by a spring — easeProgress never writes CurveState for a
+            // stateless curve, so old.progressCurveState would still read its
+            // default value 0, and seeding `1 - 0` would start the new leg at
+            // the far endpoint: the exact snap this resume exists to prevent.
+            // The mirror case is just as wrong (a spring's integrated value has
+            // no relation to its raw wall-clock progress), so a curve-kind
+            // change between the legs — reachable when the daemon pushes a
+            // motion-tree edit between the two showingDesktopChanged edges —
+            // falls through to the clock back-date, which at least degrades to
+            // a proportional resume rather than a jump.
+            const bool bothStateful = tr.progressCurve && tr.progressCurve->isStateful() && old.progressCurve
+                && old.progressCurve->isStateful();
+            if (bothStateful) {
                 // A spring reads NOTHING from the linear clock: easeProgress
                 // integrates its CurveState by the inter-frame dt and returns
                 // state.value. Back-dating startTimeMs would therefore not move
@@ -587,6 +602,15 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     if (!cs || !cs->shader) {
         // Compile failed — abandon the transition rather than paint a black
         // screen; the normal scene paints the settled desktop.
+        //
+        // Drop the cache entry like the other never-painted show-leg exits: we
+        // are ahead of the capture block, so a PeekShow here has not consumed
+        // it, and compiledShader caches the failure as a sentinel — the next
+        // hide leg abandons at this same line and never re-seeds, so the
+        // texture would stay pinned for the rest of the session.
+        if (tr.kind == Kind::PeekShow && !tr.captured) {
+            m_peekDesktopCache.erase(screen);
+        }
         endOutput(screen);
         return false;
     }

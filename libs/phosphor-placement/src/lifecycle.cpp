@@ -1224,20 +1224,36 @@ void WindowTrackingService::validateLastUsedZone(const QString& targetScreen)
         return;
     }
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(targetScreen);
+    if (!layout) {
+        // No layout resolves for this screen, so nothing here can PROVE a zone
+        // is stale — and an unprovable claim must not be destructive. Falling
+        // through would clear the last-used on every store pointing at the
+        // screen, which is the same "no zone info, don't guess" posture the
+        // free-geometry loop takes when it cannot resolve a target.
+        return;
+    }
     // Last-used is per-key: clear the last-used on any store that points at
     // @p targetScreen but whose zone no longer exists in that screen's layout.
+    bool cleared = false;
     for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
         const QString lastZoneId = state->lastUsedZoneId();
         if (lastZoneId.isEmpty() || state->lastUsedScreenId() != targetScreen) {
             continue;
         }
-        if (layout) {
-            auto uuidOpt = parseUuid(lastZoneId);
-            if (uuidOpt && layout->zoneById(*uuidOpt)) {
-                continue;
-            }
+        const auto uuidOpt = parseUuid(lastZoneId);
+        if (uuidOpt && layout->zoneById(*uuidOpt)) {
+            continue;
         }
         state->restoreLastUsedZone({}, {}, {}, 0);
+        cleared = true;
+    }
+    // Mark dirty HERE rather than at each call site. The clear is an in-memory
+    // mutation, and a caller that does not otherwise schedule a save (the
+    // already-valid-VS branch of the lastUsedScreenId loop is exactly that
+    // case: it migrates nothing, so it sets no anyStateMigrated) would drop it
+    // on the floor and reload the stale zone from disk on the next start.
+    if (cleared) {
+        markDirty(DirtyLastUsedZone);
     }
 }
 

@@ -26,12 +26,22 @@ private:
     /// composition roots and tests own their own registries. Each test
     /// method gets a freshly cleared registry via init() / cleanup().
     PhosphorProfileRegistry m_profileRegistry;
-    void writeFile(const QString& path, const QString& contents) const
+    /// Returns false instead of QVERIFY-ing, so a failed write fails the
+    /// TEST rather than just returning from this helper. QVERIFY expands to
+    /// `if (!...) return;`, which in a void helper is silent: the fixture
+    /// carried on with an empty directory, and every rejection test then
+    /// "passed" because loadFromDirectory found nothing to reject. Call sites
+    /// must wrap this in QVERIFY.
+    [[nodiscard]] bool writeFile(const QString& path, const QString& contents) const
     {
         QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
+        if (!f.open(QIODevice::WriteOnly)) {
+            return false;
+        }
         QTextStream s(&f);
         s << contents;
+        s.flush();
+        return f.error() == QFileDevice::NoError;
     }
 
 private Q_SLOTS:
@@ -64,12 +74,12 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        writeFile(dir.filePath(QStringLiteral("overlay.fade.json")), QStringLiteral(R"({
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("overlay.fade.json")), QStringLiteral(R"({
             "name": "overlay.fade",
             "curve": "spring:14.0,0.6",
             "duration": 250,
             "minDistance": 0
-        })"));
+        })")));
 
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         QCOMPARE(loader.loadFromDirectory(dir.path()), 1);
@@ -84,9 +94,10 @@ private Q_SLOTS:
     void testMissingNameIsRejected()
     {
         QTemporaryDir dir;
-        writeFile(dir.filePath(QStringLiteral("nameless.json")), QStringLiteral(R"({
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("nameless.json")), QStringLiteral(R"({
             "duration": 250
-        })"));
+        })")));
 
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         QCOMPARE(loader.loadFromDirectory(dir.path()), 0);
@@ -96,7 +107,8 @@ private Q_SLOTS:
     void testMalformedJsonIsRejected()
     {
         QTemporaryDir dir;
-        writeFile(dir.filePath(QStringLiteral("broken.json")), QStringLiteral("{\"name\": \"x\", broken"));
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("broken.json")), QStringLiteral("{\"name\": \"x\", broken")));
 
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         QCOMPARE(loader.loadFromDirectory(dir.path()), 0);
@@ -110,14 +122,16 @@ private Q_SLOTS:
     {
         QTemporaryDir systemDir;
         QTemporaryDir userDir;
-        writeFile(systemDir.filePath(QStringLiteral("x.json")), QStringLiteral(R"({
+        QVERIFY(systemDir.isValid());
+        QVERIFY(userDir.isValid());
+        QVERIFY(writeFile(systemDir.filePath(QStringLiteral("x.json")), QStringLiteral(R"({
             "name": "x",
             "duration": 100
-        })"));
-        writeFile(userDir.filePath(QStringLiteral("x.json")), QStringLiteral(R"({
+        })")));
+        QVERIFY(writeFile(userDir.filePath(QStringLiteral("x.json")), QStringLiteral(R"({
             "name": "x",
             "duration": 500
-        })"));
+        })")));
 
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectories({systemDir.path(), userDir.path()});
@@ -137,11 +151,12 @@ private Q_SLOTS:
     void testNameDoesNotLeakIntoPresetName()
     {
         QTemporaryDir dir;
-        writeFile(dir.filePath(QStringLiteral("overlay.fade.json")), QStringLiteral(R"({
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("overlay.fade.json")), QStringLiteral(R"({
             "name": "overlay.fade",
             "presetName": "My Overlay Preset",
             "duration": 150
-        })"));
+        })")));
 
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
@@ -157,12 +172,13 @@ private Q_SLOTS:
     void testRescanFiresSignal_whenContentChanged()
     {
         QTemporaryDir dir;
+        QVERIFY(dir.isValid());
         const QString path = dir.filePath(QStringLiteral("a.json"));
-        writeFile(path, QStringLiteral(R"({
+        QVERIFY(writeFile(path, QStringLiteral(R"({
             "name": "a",
             "duration": 123,
             "minDistance": 7
-        })"));
+        })")));
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
 
@@ -175,11 +191,11 @@ private Q_SLOTS:
 
         // Mutate the file on disk — next rescan sees new values.
         QVERIFY(QFile::remove(path));
-        writeFile(path, QStringLiteral(R"({
+        QVERIFY(writeFile(path, QStringLiteral(R"({
             "name": "a",
             "duration": 456,
             "minDistance": 9
-        })"));
+        })")));
 
         loader.requestRescan();
         QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 500);

@@ -974,24 +974,31 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the animation cascade; rules whose match expression resolves for
     // the window override the filter at the resolver layer so a targeted
     // rule can re-enable animation for an otherwise-excluded app.
-    // Guard on isValid() like the sibling below. This member happens to init
-    // `false`, which is what toBool() would also yield for a failed reply — but
-    // that agreement is a coincidence of the default's polarity that nothing
-    // records, and flipping the default later would silently turn a missed
-    // fetch into the wrong filter.
+    // Type-guard like the decoration bool loaders above. This member happens to
+    // init `false`, which is also what toBool() yields for a non-bool reply —
+    // but that agreement is a coincidence of the default's polarity that
+    // nothing records, and flipping the default later would silently turn a
+    // bad reply into the wrong filter. isValid() is NOT enough: a valid
+    // empty-string reply (an older daemon answering an unknown key) passes it
+    // and then reads as false.
     loadSettingAsync(QStringLiteral("animationExcludeTransientWindows"), [this](const QVariant& v) {
-        if (v.isValid()) {
-            m_animationExcludeTransientWindows = v.toBool();
+        if (v.typeId() != QMetaType::Bool) {
+            return;
         }
+        m_animationExcludeTransientWindows = v.toBool();
     });
-    // Default true (exclude). Guard on isValid() so a failed reply
-    // leaves the member at its `true` init rather than `toBool()`'s
-    // false-on-invalid — otherwise a missed fetch would animate
-    // notifications/OSDs until the next successful settings load.
+    // Default true (exclude). Type-guard, not isValid(): an error reply never
+    // reaches this callback at all (ClientHelpers gates on reply.isValid() and
+    // leaves our default in place), so what has to be defended against is a
+    // reply that ARRIVES and is not a bool — an older daemon's valid
+    // empty-string answer for an unknown key. That passes isValid() and
+    // toBool()s to false, INVERTING this default-true setting and animating
+    // notifications/OSDs until the next successful load.
     loadSettingAsync(QStringLiteral("animationExcludeNotificationsAndOsd"), [this](const QVariant& v) {
-        if (v.isValid()) {
-            m_animationExcludeNotificationsAndOsd = v.toBool();
+        if (v.typeId() != QMetaType::Bool) {
+            return;
         }
+        m_animationExcludeNotificationsAndOsd = v.toBool();
     });
     // Clamp on the effect side as defence-in-depth — the daemon's schema
     // validator already bounds these to [0, 2000], but the daemon is a separate
@@ -1023,12 +1030,14 @@ void PlasmaZonesEffect::loadCachedSettings()
     // adds/removes borders on open windows live (mirroring the appearance
     // loaders above) — unlike the animation filter, decorations are persistent
     // state and won't self-correct on the next window event.
-    // Default true (exclude transients). Guard on isValid() so a failed reply
-    // leaves the member at its `true` init rather than `toBool()`'s
-    // false-on-invalid — otherwise a missed fetch would start drawing borders
-    // onto dialogs/popups until the next successful settings load.
+    // Default true (exclude transients). Type-guard, not isValid(), for the
+    // reason spelled out on the decoration bool loaders above: an error reply
+    // never reaches this callback, so the hazard is a reply that ARRIVES and is
+    // not a bool (an older daemon's valid empty-string answer), which passes
+    // isValid() and toBool()s to false — inverting this default-true setting
+    // and drawing borders onto dialogs/popups until the next successful load.
     loadSettingAsync(QStringLiteral("decorationExcludeTransientWindows"), [this](const QVariant& v) {
-        if (!v.isValid()) {
+        if (v.typeId() != QMetaType::Bool) {
             return;
         }
         const bool b = v.toBool();

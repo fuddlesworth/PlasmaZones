@@ -268,9 +268,13 @@ private Q_SLOTS:
     // just for the shader pick: a `desktop` curve/duration override must reach
     // BOTH screen-level leaves. The kwin-effect composes each leg's timing
     // through this exact call (overlayChainOnto onto the animator's global
-    // profile) in the desktopChanged / showingDesktopChanged handlers, so
-    // without this the peek and the switch could silently ignore the parent
-    // the settings page presents as governing them.
+    // profile) in the desktopChanged / showingDesktopChanged handlers.
+    //
+    // Honest scope: overlayChain walks parents by a generic dot-split with no
+    // desktop-specific branch, so this cannot fail while testParentPath and
+    // testOverlayChainOntoAppliesMovementAllToLeaf both pass. It is a cheap pin
+    // on the pair the settings page presents as governed by one parent, not an
+    // independent regression net.
     void testOverlayChainOntoAppliesDesktopAllToBothLeaves()
     {
         ProfileTree tree;
