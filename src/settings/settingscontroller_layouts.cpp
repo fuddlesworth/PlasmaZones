@@ -11,7 +11,6 @@
 
 #include "settingscontroller.h"
 
-#include "../common/layoutbundlebuilder.h"
 #include "../common/layoutpreviewserialize.h"
 #include "../config/configdefaults.h"
 #include "../core/geometryutils.h"
@@ -19,7 +18,6 @@
 #include "../core/utils.h"
 #include "../phosphor_i18n.h"
 #include "dbusutils.h"
-#include "kzonesimporter.h"
 
 // Most of the dependency graph (Settings, PhosphorZones layouts, daemon
 // D-Bus helpers, page controllers) is reached transitively through
@@ -34,6 +32,7 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
 #include <QStandardPaths>
 #include <QUrl>
 

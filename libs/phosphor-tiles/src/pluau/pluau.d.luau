@@ -108,10 +108,21 @@ export type Algorithm = {
     -- nothing). Two optional, independent outputs:
     --   * splitRatio: number — a new master/split ratio the engine applies to this
     --     state (clamped); ratio-based algorithms reflow on resize this way. The
-    --     change stays local to the current screen+desktop.
+    --     change stays local to the current screen+desktop+activity.
     --   * any other keys — the new ctx.state bag; persisted only when
     --     metadata.supportsScriptState is set (see `state` in Context).
     onWindowResized: ((state: HookState, resize: ResizeEvent) -> { [string]: any }?)?,
+    -- Module-level overrides: when present, each takes precedence over the
+    -- metadata field of the same name, so a value can be computed instead of
+    -- declared. The bundled algorithms all use plain metadata fields.
+    masterZoneIndex: (() -> number)?,
+    supportsMasterCount: (() -> boolean)?,
+    supportsSplitRatio: (() -> boolean)?,
+    producesOverlappingZones: (() -> boolean)?,
+    centerLayout: (() -> boolean)?,
+    minimumWindows: (() -> number)?,
+    defaultMaxWindows: (() -> number)?,
+    defaultSplitRatio: (() -> number)?,
 }
 
 export type Pluau = {

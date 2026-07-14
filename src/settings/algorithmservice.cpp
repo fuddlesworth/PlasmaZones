@@ -63,17 +63,18 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
 /// Write @p content to @p destPath via QSaveFile, so the file appears at its
 /// final path only once it is complete. The user algorithms directory is
 /// watched by the daemon's loader in another process: a plain QFile write
-/// would expose the empty file it creates before the content lands.
-/// Discards its temporary on any failure, leaving @p destPath untouched.
-bool writeAlgorithmFile(const QString& destPath, const QString& content)
+/// would expose the empty file it creates before the content lands. Takes
+/// bytes rather than a QString so an export can pass a source file through
+/// unchanged instead of round-tripping it. Discards its temporary on any
+/// failure, leaving @p destPath untouched.
+bool writeAlgorithmFile(const QString& destPath, const QByteArray& content)
 {
     QSaveFile out(destPath);
     if (!out.open(QIODevice::WriteOnly)) {
         qCWarning(PlasmaZones::lcCore) << "Failed to open algorithm file for writing:" << destPath;
         return false;
     }
-    const QByteArray encoded = content.toUtf8();
-    if (out.write(encoded) != encoded.size() || !out.commit()) {
+    if (out.write(content) != content.size() || !out.commit()) {
         qCWarning(PlasmaZones::lcCore) << "Failed to write algorithm content:" << destPath;
         return false;
     }
@@ -213,8 +214,7 @@ QVariantList AlgorithmService::generateAlgorithmDefaultPreview(const QString& al
 
 void AlgorithmService::openAlgorithmsFolder()
 {
-    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
-        + ScriptedAlgorithmSubdir;
+    const QString path = userAlgorithmsDir();
     QDir dir(path);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
@@ -498,6 +498,15 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
         return false;
     }
     QString content = QString::fromUtf8(sourceFile.readAll());
+    // readAll() returns what it managed to read: without this check a mid-file
+    // failure would be rewritten and registered as a truncated algorithm (the
+    // metadata regexes below sit near the top of the file and would still hit).
+    if (sourceFile.error() != QFileDevice::NoError) {
+        qCWarning(PlasmaZones::lcCore) << "Failed to read source algorithm file:" << canonicalSource
+                                       << sourceFile.errorString();
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not read source algorithm file."));
+        return false;
+    }
     sourceFile.close();
 
     // Update name and id in the copy's metadata object — strip all existing " (Copy)" suffixes to avoid accumulation.
@@ -547,7 +556,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     content.replace(idMatch2.capturedStart(), idMatch2.capturedLength(),
                     idMatch2.captured(1) + QStringLiteral("id = \"") + newFilename + QStringLiteral("\""));
 
-    if (!writeAlgorithmFile(destPath, content)) {
+    if (!writeAlgorithmFile(destPath, content.toUtf8())) {
         Q_EMIT algorithmOperationFailed(
             PhosphorI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
         return false;
@@ -591,15 +600,7 @@ bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString
     }
     source.close();
 
-    QSaveFile out(destPath);
-    if (!out.open(QIODevice::WriteOnly)) {
-        qCWarning(PlasmaZones::lcCore) << "Failed to open export destination:" << destPath;
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not write to export destination."));
-        return false;
-    }
-    if (out.write(contents) != contents.size() || !out.commit()) {
-        // QSaveFile discards the temporary on failure; dest is untouched.
-        qCWarning(PlasmaZones::lcCore) << "Failed to write export destination:" << destPath;
+    if (!writeAlgorithmFile(destPath, contents)) {
         Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not write to export destination."));
         return false;
     }
@@ -647,16 +648,19 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     // Build Luau content
     QString content;
 
-    // SPDX header — use current year and a placeholder author
+    // SPDX header — use current year and a placeholder author. A template
+    // copy takes only the copyright line and inherits the template's own
+    // license; the blank scaffold is our own code, so it takes both lines.
     const int currentYear = QDate::currentDate().year();
-    const QString header = QStringLiteral("-- SPDX-FileCopyrightText: ") + QString::number(currentYear)
-        + QStringLiteral(" <your name>\n") + QStringLiteral("-- SPDX-License-Identifier: GPL-3.0-or-later\n");
+    const QString copyrightLine =
+        QStringLiteral("-- SPDX-FileCopyrightText: ") + QString::number(currentYear) + QStringLiteral(" <your name>");
+    const QString blankHeader = copyrightLine + QStringLiteral("\n-- SPDX-License-Identifier: GPL-3.0-or-later\n");
 
     // Display name — strip newlines/quotes to prevent injection.
     const QString sanitizedDisplayName = AlgorithmScaffold::sanitizeMetadataString(name.trimmed());
 
     // Start from a base template by reusing its module locals + tile and
-    // patching in our own SPDX header + name/id. The template's other
+    // patching in the new owner's copyright + name/id. The template's other
     // metadata fields (capability flags, defaults, customParams) are kept
     // verbatim — the template's code depends on them. A template that cannot
     // be used is a hard failure: silently substituting the blank scaffold
@@ -698,9 +702,16 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
             return QString();
         }
         const QString templateContent = QString::fromUtf8(file.readAll());
+        if (file.error() != QFileDevice::NoError) {
+            qCWarning(PlasmaZones::lcCore)
+                << "createNewAlgorithm: failed to read template file:" << templateFile << file.errorString();
+            Q_EMIT algorithmOperationFailed(
+                PhosphorI18n::tr("The selected template could not be read. Pick another template or start blank."));
+            return QString();
+        }
         file.close();
 
-        content = AlgorithmScaffold::spliceTemplate(templateContent, header, sanitizedDisplayName, filename);
+        content = AlgorithmScaffold::spliceTemplate(templateContent, copyrightLine, sanitizedDisplayName, filename);
         if (content.isEmpty()) {
             qCWarning(PlasmaZones::lcCore) << "createNewAlgorithm: template" << baseTemplate
                                            << "has an unrecognized metadata shape at" << templateFile;
@@ -719,10 +730,10 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
         caps.scriptState = capabilities.value(QStringLiteral("supportsScriptState")).toBool();
         caps.singleWindow = capabilities.value(QStringLiteral("supportsSingleWindow")).toBool();
         caps.retileOnFocus = capabilities.value(QStringLiteral("retileOnFocus")).toBool();
-        content = AlgorithmScaffold::buildBlankScaffold(header, sanitizedDisplayName, filename, caps);
+        content = AlgorithmScaffold::buildBlankScaffold(blankHeader, sanitizedDisplayName, filename, caps);
     }
 
-    if (!writeAlgorithmFile(destPath, content)) {
+    if (!writeAlgorithmFile(destPath, content.toUtf8())) {
         Q_EMIT algorithmOperationFailed(
             PhosphorI18n::tr("Could not write algorithm file. Check disk space and permissions."));
         return QString();

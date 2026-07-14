@@ -293,7 +293,9 @@ Return a table (or `nil` to do nothing). Two optional, independent outputs:
   resize, horizontal)` implements the standard master/stack case.
 - **Any other keys** — persisted as the new `ctx.state` table, but only when
   `metadata.supportsScriptState = true`. On the next `tile` run, `ctx.state`
-  holds exactly what you returned; read your prior values from
+  holds what you returned, sanitized: non-finite numbers are dropped, and a
+  bag deeper than 16 levels, past 4096 entries, or over 64 KiB of JSON is
+  truncated or discarded. Keep it small and flat. Read your prior values from
   `state.scriptState` inside the hook. See `data/algorithms/aligned-grid.luau`
   for a full example (per-column widths that survive retiles).
 

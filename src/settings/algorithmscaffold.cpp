@@ -31,19 +31,24 @@ int firstLinePastSpdxHeader(const QStringList& lines)
     return i;
 }
 
-/// The template's own `-- SPDX-FileCopyrightText:` lines, in order. The copy
-/// keeps the template's code substantially verbatim, so it is a derivative
-/// work and must retain the upstream author's copyright notice.
-QStringList templateCopyrightLines(const QStringList& lines, int spdxHeaderEnd)
+/// The template's own `-- SPDX-*` lines, copyright lines first and license
+/// lines after (the order this project's files use). The copy keeps the
+/// template's code substantially verbatim, so it is a derivative work: it
+/// retains the upstream author's copyright and stays under the template's
+/// own license.
+QStringList templateSpdxLines(const QStringList& lines, int spdxHeaderEnd)
 {
-    QStringList out;
+    QStringList copyrights;
+    QStringList licenses;
     for (int i = 0; i < spdxHeaderEnd && i < lines.size(); ++i) {
         const QString t = lines[i].trimmed();
         if (t.startsWith(QLatin1String("-- SPDX-FileCopyrightText:"))) {
-            out += t;
+            copyrights += t;
+        } else if (t.startsWith(QLatin1String("-- SPDX-"))) {
+            licenses += t;
         }
     }
-    return out;
+    return copyrights + licenses;
 }
 
 QString quotedField(const QString& key, const QString& value)
@@ -148,7 +153,7 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
     return content;
 }
 
-QString spliceTemplate(const QString& templateContent, const QString& newHeader, const QString& displayName,
+QString spliceTemplate(const QString& templateContent, const QString& newCopyrightLine, const QString& displayName,
                        const QString& id)
 {
     QString normalized = templateContent;
@@ -235,12 +240,17 @@ QString spliceTemplate(const QString& templateContent, const QString& newHeader,
         metaLines.insert(1, quotedField(QStringLiteral("name"), displayName));
     }
 
-    QString out = newHeader;
-    // The copy keeps the template's code, so the upstream author's copyright
-    // rides along under the new owner's line.
-    const QStringList upstream = templateCopyrightLines(lines, firstCode);
+    // Header: the new owner's copyright, then the template's own SPDX lines
+    // (its copyright and its license) — the copy is a derivative work, so it
+    // credits the upstream author and stays under the upstream license. A
+    // template that already carries the caller's exact copyright line (a copy
+    // of a copy) does not get it twice.
+    QString out = newCopyrightLine.trimmed() + QLatin1Char('\n');
+    const QStringList upstream = templateSpdxLines(lines, firstCode);
     for (const QString& line : upstream) {
-        out += line + QLatin1Char('\n');
+        if (line != newCopyrightLine.trimmed()) {
+            out += line + QLatin1Char('\n');
+        }
     }
     out += QLatin1Char('\n');
     for (int i = firstCode; i < metaStart; ++i) {

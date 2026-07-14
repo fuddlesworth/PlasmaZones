@@ -43,14 +43,18 @@ QString sanitizeMetadataString(QString value);
 QString buildBlankScaffold(const QString& header, const QString& displayName, const QString& id,
                            const Capabilities& caps);
 
-/// Personalize a bundled `.luau` template: replace its leading `-- SPDX-*`
-/// lines with @p newHeader and rewrite only the top-level `name` / `id`
-/// fields of its `metadata = { ... }` table, keeping every other metadata
-/// field (capability flags, defaults, customParams) that the template's code
-/// depends on. The template's own `-- SPDX-FileCopyrightText:` lines are
-/// re-emitted under @p newHeader (the copy is a derivative work and keeps the
-/// upstream notice); other leading comments, e.g. a template's doc block,
-/// carry over verbatim.
+/// Personalize a bundled `.luau` template: rewrite only the top-level `name`
+/// / `id` fields of its `metadata = { ... }` table, keeping every other
+/// metadata field (capability flags, defaults, customParams) that the
+/// template's code depends on.
+///
+/// The copy is a derivative work of the template, so its header is @p
+/// newCopyrightLine (one `-- SPDX-FileCopyrightText:` line, with or without a
+/// trailing newline) followed by the template's own SPDX lines: its
+/// copyright, then its license, which the copy inherits rather than being
+/// restamped. A template already carrying @p newCopyrightLine verbatim (a
+/// copy of a copy) does not repeat it. Other leading comments, e.g. a
+/// template's doc block, carry over verbatim.
 ///
 /// Returns empty on an unrecognized shape — no metadata table, an opening
 /// line that does not end at the `{`, an unterminated table, a brace depth
@@ -60,7 +64,7 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
 /// (`[[...]]`) and multi-line short strings inside metadata are not
 /// supported. @p displayName must already be sanitizeMetadataString()'d — it
 /// is embedded in a Luau string literal without further escaping.
-QString spliceTemplate(const QString& templateContent, const QString& newHeader, const QString& displayName,
+QString spliceTemplate(const QString& templateContent, const QString& newCopyrightLine, const QString& displayName,
                        const QString& id);
 
 } // namespace AlgorithmScaffold
