@@ -1504,18 +1504,18 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // grab refs we just acquired so the window doesn't strand in
         // closing/added state, then bail. The new shader/redirect is not
         // installed because we never reach setShader/redirect below.
-        if (transitionHadAddedGrab && window) {
+        // Roll back only what THIS install freshly acquired: with an inherited
+        // grab (existing*HeldGrab) the prior entry still owns the role AND the
+        // ref — the only way this insert fails with one is the prior entry NOT
+        // having been erased — and clearing its role here would let KWin's
+        // stock fade/glide re-engage on a window it is mid-animating; its own
+        // endShaderTransition releases both, and unreffing here too would
+        // double-release.
+        if (holdAddedGrab && !existingAddedHeldGrab && window) {
             window->setData(KWin::WindowAddedGrabRole, QVariant());
         }
-        if (transitionHadCloseGrab && window) {
-            window->setData(KWin::WindowClosedGrabRole, QVariant());
-        }
-        // Unref only when THIS install acquired the ref (fresh grab): with an
-        // inherited grab (existingHeldGrab) the prior entry still owns the ref
-        // — the only way this insert fails with one is the prior entry NOT
-        // having been erased — and its own endShaderTransition will release
-        // it; unreffing here too would double-release.
         if (holdCloseGrab && !existingHeldGrab && window) {
+            window->setData(KWin::WindowClosedGrabRole, QVariant());
             QPointer<PlasmaZonesEffect> selfGuard(this);
             KWin::EffectWindow* heldWindow = window;
             QMetaObject::invokeMethod(

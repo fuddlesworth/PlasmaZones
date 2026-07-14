@@ -1252,8 +1252,11 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
             // instance records only what is currently loaded (nothing), so a
             // later pack unassign could never bring the builtins back until a
             // KCM apply or relogin. The cost of restoring is bounded — the new
-            // instance's bringup sync re-unloads within its first D-Bus round
-            // trip, a sub-second window where both animations could race.
+            // instance re-unloads during its daemon bringup (a few sequential
+            // D-Bus round trips plus the registry rescan, sub-second in
+            // practice; indefinitely if no daemon is running, in which case no
+            // peek pack resolves either), a window where both animations could
+            // race.
             for (const QString& name : toRestore) {
                 // Already loaded (a KCM reconcile beat us to it) is satisfied,
                 // not a failure — loadEffect returns false for a loaded effect.

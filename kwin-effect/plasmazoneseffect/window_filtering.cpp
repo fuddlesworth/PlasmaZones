@@ -306,6 +306,16 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         return rejectedBecause(rejectReason, "Plasma shell layer-shell surface");
     }
 
+    // Skip structural / transient / dialog / menu window types BEFORE the
+    // rule evaluation below: this is a cheap type check, while the rule slice
+    // builds the full ~30-accessor ruleQuery, and hot callers (buildWindowMap,
+    // the stacking walks) hit this filter for every tooltip/popup/menu. The
+    // predicate is shared verbatim with notifyWindowActivated() so the two
+    // filters can never drift — see isStructurallyUnmanageableWindowType().
+    if (isStructurallyUnmanageableWindowType(w, rejectReason)) {
+        return false;
+    }
+
     // Check user-authored / migrated Exclude rules (needed for drag gating —
     // daemon also enforces these for keyboard navigation, but the effect
     // must filter for drag operations and lifecycle reporting).
@@ -318,13 +328,6 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         if (m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded()) {
             return rejectedBecause(rejectReason, "user exclusion rule match");
         }
-    }
-
-    // Skip structural / transient / dialog / menu window types. The predicate
-    // is shared verbatim with notifyWindowActivated() so the two filters can
-    // never drift — see isStructurallyUnmanageableWindowType().
-    if (isStructurallyUnmanageableWindowType(w, rejectReason)) {
-        return false;
     }
 
     // Keep-above overlays (Spectacle, color pickers, screen rulers, screenshot

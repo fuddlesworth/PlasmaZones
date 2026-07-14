@@ -597,23 +597,24 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the effect's drag-gate exclusion rule set is now derived from the
     // store-side Exclude rules pulled via Rules.rulesChanged →
     // loadRuleAnimationsFromDbus. No D-Bus settings fetch needed.
-    // &ok gate + clamp: a failed reply OR an older daemon's valid-empty-string
-    // reply for an unknown key would otherwise toInt() to 0 and silently
-    // disable the min-size gate the permissive member defaults exist to
-    // protect across the startup race (same hardening as the sibling int
-    // loaders — isValid() alone passes the empty-string case).
+    // &ok gate + two-sided clamp: a failed reply OR an older daemon's
+    // valid-empty-string reply for an unknown key would otherwise toInt() to 0
+    // and silently disable the min-size gate the protective member defaults
+    // exist to keep active across the startup race, and an out-of-spec large
+    // reply would silently reject every window from eligibility (same
+    // hardening as the animation/decoration min-size loaders below).
     loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
         bool ok = false;
         const int i = v.toInt(&ok);
         if (ok) {
-            m_cachedMinWindowWidth = qMax(0, i);
+            m_cachedMinWindowWidth = qBound(0, i, 2000);
         }
     });
     loadSettingAsync(QStringLiteral("minimumWindowHeight"), [this](const QVariant& v) {
         bool ok = false;
         const int i = v.toInt(&ok);
         if (ok) {
-            m_cachedMinWindowHeight = qMax(0, i);
+            m_cachedMinWindowHeight = qBound(0, i, 2000);
         }
     });
     // System colours for window-border rules: the zone highlight / inactive

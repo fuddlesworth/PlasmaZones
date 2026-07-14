@@ -353,9 +353,10 @@ private:
     // before use. Drop sites: with its output (outputRemoved), on reset(), on
     // every beginPeek bail-out (reapPeekTransitions — a broken hide/show
     // pairing means the capture may no longer match the desktop's content),
-    // and when the wall-clock reap expires a never-painted SHOW leg
-    // (scheduleRepaints; hide legs are exempt there — their cache is the
-    // sibling output's pending show-leg endpoint).
+    // and when a never-painted SHOW leg expires — whether the wall-clock reap
+    // catches it (scheduleRepaints) or its own first-paint settle does
+    // (paintOutput; an output asleep for the whole leg). Hide legs are exempt
+    // from both expiry drops — their cache is the pending show-leg endpoint.
     std::unordered_map<KWin::LogicalOutput*, std::shared_ptr<KWin::GLTexture>> m_peekDesktopCache;
     bool m_fullScreenClaimed = false;
 };

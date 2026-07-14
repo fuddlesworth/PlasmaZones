@@ -424,6 +424,12 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     const qint64 elapsed = nowMs - tr.startTimeMs;
     if (elapsed >= tr.durationMs) {
+        // A show leg whose FIRST paint arrives after expiry (an output asleep
+        // for the whole leg) never consumed its bare-desktop cache entry —
+        // drop it here or the texture is retained until the next hide leg.
+        if (tr.kind == Kind::PeekShow && !tr.captured) {
+            m_peekDesktopCache.erase(screen);
+        }
         endOutput(screen);
         return false;
     }
