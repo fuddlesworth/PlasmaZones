@@ -65,10 +65,13 @@ public:
     bool exportAlgorithm(const QString& algorithmId, const QString& destPath);
     /// Create a new user algorithm. For a non-blank @p baseTemplate the
     /// bundled template's metadata is preserved (only name/id are rewritten)
-    /// and @p capabilities is ignored; for the blank scaffold @p capabilities
-    /// holds metadata flag names (supportsMasterCount, supportsSplitRatio,
-    /// producesOverlappingZones, supportsMemory, supportsScriptState,
-    /// supportsSingleWindow, retileOnFocus) mapped to bools.
+    /// and @p capabilities is ignored; a template that cannot be located,
+    /// read, or spliced fails the whole operation (algorithmOperationFailed +
+    /// empty return) rather than degrading to the blank scaffold. For the
+    /// blank scaffold @p capabilities holds metadata flag names
+    /// (supportsMasterCount, supportsSplitRatio, producesOverlappingZones,
+    /// supportsMemory, supportsScriptState, supportsSingleWindow,
+    /// retileOnFocus) mapped to bools.
     QString createNewAlgorithm(const QString& name, const QString& baseTemplate, const QVariantMap& capabilities);
 
 Q_SIGNALS:

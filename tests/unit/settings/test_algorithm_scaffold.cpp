@@ -58,7 +58,10 @@ private Q_SLOTS:
     void spliceInsertsMissingNameAndId();
     void spliceRejectsTemplateWithoutMetadata();
     void spliceRejectsSingleLineMetadata();
+    void spliceRejectsInlineFieldsOnOpeningLine();
     void spliceRejectsMultiFieldNameLine();
+    void spliceRejectsUnquotedNameValue();
+    void spliceIgnoresBracesInsideStrings();
     void splicePreservesLeadingDocComment();
     void spliceNormalizesCrlf();
     void spliceAllBundledAlgorithms();
@@ -144,6 +147,20 @@ void TestAlgorithmScaffold::spliceRejectsSingleLineMetadata()
     QVERIFY(spliceTemplate(oneLiner, kHeader, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
 }
 
+void TestAlgorithmScaffold::spliceRejectsInlineFieldsOnOpeningLine()
+{
+    // A multi-line table whose opening line carries inline fields would keep
+    // the original name/id strings; the splice must reject the shape.
+    const QString hybrid = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = { name = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(hybrid, kHeader, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+}
+
 void TestAlgorithmScaffold::spliceRejectsMultiFieldNameLine()
 {
     // A depth-1 name/id line carrying a second field would lose that field
@@ -156,6 +173,41 @@ void TestAlgorithmScaffold::spliceRejectsMultiFieldNameLine()
         "    tile = function(ctx) return {} end,\n"
         "}\n");
     QVERIFY(spliceTemplate(multiField, kHeader, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+}
+
+void TestAlgorithmScaffold::spliceRejectsUnquotedNameValue()
+{
+    const QString unquoted = QStringLiteral(
+        "local n = \"N\"\n"
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = n,\n"
+        "        id = \"x\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(unquoted, kHeader, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+}
+
+void TestAlgorithmScaffold::spliceIgnoresBracesInsideStrings()
+{
+    // Braces inside quoted values (or comments) must not desync the depth
+    // scan; the name/id lines after them still get rewritten.
+    const QString braced = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        description = \"a } weird { description\",\n"
+        "        -- a comment mentioning a } brace\n"
+        "        name = \"Braced\",\n"
+        "        id = \"braced\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    const QString out = spliceTemplate(braced, kHeader, QStringLiteral("My Braced"), QStringLiteral("my-braced"));
+    QVERIFY(out.contains(QStringLiteral("        name = \"My Braced\",")));
+    QVERIFY(out.contains(QStringLiteral("        id = \"my-braced\",")));
+    QVERIFY(out.contains(QStringLiteral("description = \"a } weird { description\"")));
+    QVERIFY(out.contains(QStringLiteral("tile = function(ctx) return {} end,")));
 }
 
 void TestAlgorithmScaffold::splicePreservesLeadingDocComment()
@@ -270,9 +322,9 @@ void TestAlgorithmScaffold::blankScaffoldOmitsUnsetNewFlags()
 void TestAlgorithmScaffold::sanitizeStripsBreakoutCharacters()
 {
     QCOMPARE(sanitizeMetadataString(QStringLiteral("a\"b\\c\nd\re")), QStringLiteral("a'b/c d e"));
-    // Braces would desync the splice depth scan when the generated file is
-    // later used as a splice source.
-    QCOMPARE(sanitizeMetadataString(QStringLiteral("My {Fancy} Grid")), QStringLiteral("My (Fancy) Grid"));
+    // Braces are legal in display names; the splice depth scan ignores
+    // braces inside quoted strings, so sanitize leaves them alone.
+    QCOMPARE(sanitizeMetadataString(QStringLiteral("My {Fancy} Grid")), QStringLiteral("My {Fancy} Grid"));
 }
 
 QTEST_GUILESS_MAIN(TestAlgorithmScaffold)

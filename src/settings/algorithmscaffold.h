@@ -28,9 +28,9 @@ struct Capabilities
 };
 
 /// Strip characters that would let a metadata display string break out of its
-/// Luau double-quoted literal (newlines, backslashes, quotes) or inject a
-/// brace that desyncs the brace-depth scan in spliceTemplate() (braces become
-/// parentheses).
+/// Luau double-quoted literal (newlines and quotes are replaced, backslashes
+/// become slashes). Braces are fine: spliceTemplate()'s depth scan ignores
+/// braces inside quoted strings.
 QString sanitizeMetadataString(QString value);
 
 /// Build a complete blank-scaffold module: SPDX @p header, a metadata table
@@ -47,10 +47,10 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
 /// its `metadata = { ... }` table, keeping every other metadata field
 /// (capability flags, defaults, customParams) that the template's code
 /// depends on. Returns empty on an unrecognized shape — no metadata table,
-/// an unterminated or single-line table, or a name/id field that is not a
-/// whole `field = "value",` line — and the caller falls back to a blank
-/// scaffold. Brace-depth scan; matches the bundled templates' formatting
-/// (no `{`/`}` inside metadata strings).
+/// an opening line that does not end at the `{`, an unterminated table, or a
+/// name/id field that is not a whole `field = "value",` line. Brace-depth
+/// scan that ignores braces inside quoted strings and after `--` comments;
+/// Luau long strings/comments (`[[...]]`) inside metadata are not supported.
 QString spliceTemplate(const QString& templateContent, const QString& newHeader, const QString& displayName,
                        const QString& id);
 

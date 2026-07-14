@@ -36,6 +36,37 @@ QString quotedField(const QString& key, const QString& value)
     return QStringLiteral("        ") + key + QStringLiteral(" = \"") + value + QStringLiteral("\",");
 }
 
+/// Net brace delta of one line, ignoring braces inside quoted Luau strings
+/// (double or single quoted, with backslash escapes) and after a `--` comment
+/// marker. Long strings/comments (`[[...]]`) are not handled; the bundled
+/// templates' metadata does not use them.
+int braceDelta(const QString& line)
+{
+    int delta = 0;
+    QChar quote;
+    for (int i = 0; i < line.size(); ++i) {
+        const QChar c = line[i];
+        if (!quote.isNull()) {
+            if (c == QLatin1Char('\\')) {
+                ++i;
+            } else if (c == quote) {
+                quote = QChar();
+            }
+            continue;
+        }
+        if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
+            quote = c;
+        } else if (c == QLatin1Char('-') && i + 1 < line.size() && line[i + 1] == QLatin1Char('-')) {
+            break;
+        } else if (c == QLatin1Char('{')) {
+            ++delta;
+        } else if (c == QLatin1Char('}')) {
+            --delta;
+        }
+    }
+    return delta;
+}
+
 } // anonymous namespace
 
 QString sanitizeMetadataString(QString value)
@@ -44,11 +75,6 @@ QString sanitizeMetadataString(QString value)
     value.replace(QLatin1Char('\r'), QLatin1Char(' '));
     value.replace(QLatin1Char('\\'), QLatin1Char('/'));
     value.replace(QLatin1Char('"'), QLatin1Char('\''));
-    // Braces inside a written string literal would desync the brace-depth
-    // scan when the generated file is later used as a splice source (user
-    // algorithm files shadow bundled template ids).
-    value.replace(QLatin1Char('{'), QLatin1Char('('));
-    value.replace(QLatin1Char('}'), QLatin1Char(')'));
     return value;
 }
 
@@ -115,6 +141,7 @@ QString spliceTemplate(const QString& templateContent, const QString& newHeader,
     const int firstCode = firstLinePastSpdxHeader(lines);
 
     static const QRegularExpression metaRe(QStringLiteral(R"(^\s*metadata\s*=\s*\{)"));
+    static const QRegularExpression metaOpenLineRe(QStringLiteral(R"(^\s*metadata\s*=\s*\{\s*$)"));
     int metaStart = -1;
     for (int i = firstCode; i < lines.size(); ++i) {
         if (metaRe.match(lines[i]).hasMatch()) {
@@ -123,6 +150,12 @@ QString spliceTemplate(const QString& templateContent, const QString& newHeader,
         }
     }
     if (metaStart < 0) {
+        return QString();
+    }
+    // The opening line must end at the `{`: a table that opens and closes on
+    // one line, or opens with inline fields, has name/id in positions the
+    // per-line rewrite cannot reach — unsupported shape, reject.
+    if (!metaOpenLineRe.match(lines[metaStart]).hasMatch()) {
         return QString();
     }
 
@@ -144,13 +177,7 @@ QString spliceTemplate(const QString& templateContent, const QString& newHeader,
     bool sawId = false;
     for (int i = metaStart; i < lines.size(); ++i) {
         const int depthAtLineStart = depth;
-        for (const QChar c : lines[i]) {
-            if (c == QLatin1Char('{')) {
-                ++depth;
-            } else if (c == QLatin1Char('}')) {
-                --depth;
-            }
-        }
+        depth += braceDelta(lines[i]);
 
         QString line = lines[i];
         if (i > metaStart && depthAtLineStart == 1) {
@@ -176,11 +203,6 @@ QString spliceTemplate(const QString& templateContent, const QString& newHeader,
         }
     }
     if (metaEnd < 0) {
-        return QString();
-    }
-    // A metadata table that opens and closes on one line has no per-field
-    // lines to rewrite or insert between — unsupported shape, reject.
-    if (metaEnd == metaStart) {
         return QString();
     }
 

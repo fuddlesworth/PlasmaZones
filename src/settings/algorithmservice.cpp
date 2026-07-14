@@ -107,9 +107,9 @@ QVariantList AlgorithmService::availableAlgorithms() const
         PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(id);
         if (algo) {
             QVariantMap algoMap;
-            algoMap[QStringLiteral("id")] = id;
-            algoMap[QStringLiteral("name")] = algo->name();
-            algoMap[QStringLiteral("description")] = algo->description();
+            algoMap[QLatin1String("id")] = id;
+            algoMap[QLatin1String("name")] = algo->name();
+            algoMap[QLatin1String("description")] = algo->description();
             algoMap[QLatin1String("defaultMaxWindows")] = algo->defaultMaxWindows();
             algoMap[QLatin1String("supportsSplitRatio")] = algo->supportsSplitRatio();
             algoMap[QLatin1String("supportsMasterCount")] = algo->supportsMasterCount();
@@ -478,13 +478,14 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     QString content = QString::fromUtf8(sourceFile.readAll());
     sourceFile.close();
 
-    // Update name and id in the copy's metadata object — strip all existing " (Copy)" suffixes to avoid accumulation
+    // Update name and id in the copy's metadata object — strip all existing " (Copy)" suffixes to avoid accumulation.
+    // Sanitize before stripping: sanitization maps braces to parentheses, so a
+    // name ending in "{Copy}" would otherwise dodge the strip and accumulate.
     const QString newFilename = QFileInfo(destPath).completeBaseName();
-    QString baseCopyName = algo->name();
+    QString baseCopyName = AlgorithmScaffold::sanitizeMetadataString(algo->name());
     while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
         baseCopyName.chop(7);
-    // Sanitize to prevent metadata injection.
-    const QString newName = AlgorithmScaffold::sanitizeMetadataString(baseCopyName + QStringLiteral(" (Copy)"));
+    const QString newName = baseCopyName + QStringLiteral(" (Copy)");
     // Replace the first name and id values inside the metadata table.
     // Anchored to line start to avoid matching inside algorithm body strings.
     // Capture leading whitespace so the replacement preserves indentation.
@@ -653,9 +654,20 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     // Start from a base template by reusing its module locals + tile and
     // patching in our own SPDX header + name/id. The template's other
     // metadata fields (capability flags, defaults, customParams) are kept
-    // verbatim — the template's code depends on them.
-    bool foundTemplate = false;
+    // verbatim — the template's code depends on them. A template that cannot
+    // be used is a hard failure: silently substituting the blank scaffold
+    // would hand the user something very different from what they picked.
     if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
+        // Defence in depth, mirroring openAlgorithm: a bare basename can
+        // never escape the algorithms subdir.
+        static const QRegularExpression safeTemplateName(QStringLiteral("^[A-Za-z0-9_-]+$"));
+        if (!safeTemplateName.match(baseTemplate).hasMatch()) {
+            qCWarning(PlasmaZones::lcCore)
+                << "createNewAlgorithm: unsafe template id (not a bare basename):" << baseTemplate;
+            Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("The selected template could not be used."));
+            return QString();
+        }
+
         // locate() checks the user's writable data dir first, so a user
         // algorithm file named after a bundled template id deliberately
         // shadows it here — the registry and the wizard's preview resolve
@@ -666,31 +678,32 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
                                    ScriptedAlgorithmSubdir + QLatin1Char('/') + baseTemplate + QStringLiteral(".luau"));
 
         if (templateFile.isEmpty()) {
-            qCWarning(PlasmaZones::lcCore) << "createNewAlgorithm: template file for" << baseTemplate
-                                           << "not found in any data location — using fallback body.";
-        } else {
-            QFile file(templateFile);
-            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                const QString templateContent = QString::fromUtf8(file.readAll());
-                file.close();
-
-                const QString spliced =
-                    AlgorithmScaffold::spliceTemplate(templateContent, header, sanitizedDisplayName, filename);
-                if (spliced.isEmpty()) {
-                    qCWarning(PlasmaZones::lcCore)
-                        << "createNewAlgorithm: template" << baseTemplate
-                        << "has no recognisable `metadata = { ... }` block — using fallback body.";
-                } else {
-                    content = spliced;
-                    foundTemplate = true;
-                }
-            } else {
-                qCWarning(PlasmaZones::lcCore) << "createNewAlgorithm: could not read template file:" << templateFile;
-            }
+            qCWarning(PlasmaZones::lcCore)
+                << "createNewAlgorithm: template file for" << baseTemplate << "not found in any data location";
+            Q_EMIT algorithmOperationFailed(
+                PhosphorI18n::tr("The selected template could not be found. Pick another template or start blank."));
+            return QString();
         }
-    }
 
-    if (!foundTemplate) {
+        QFile file(templateFile);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qCWarning(PlasmaZones::lcCore) << "createNewAlgorithm: could not read template file:" << templateFile;
+            Q_EMIT algorithmOperationFailed(
+                PhosphorI18n::tr("The selected template could not be read. Pick another template or start blank."));
+            return QString();
+        }
+        const QString templateContent = QString::fromUtf8(file.readAll());
+        file.close();
+
+        content = AlgorithmScaffold::spliceTemplate(templateContent, header, sanitizedDisplayName, filename);
+        if (content.isEmpty()) {
+            qCWarning(PlasmaZones::lcCore) << "createNewAlgorithm: template" << baseTemplate
+                                           << "has an unrecognized metadata shape at" << templateFile;
+            Q_EMIT algorithmOperationFailed(
+                PhosphorI18n::tr("The selected template could not be used. Pick another template or start blank."));
+            return QString();
+        }
+    } else {
         // Blank scaffold: a self-contained pluau.algorithm module the user
         // edits. The wizard's capability toggles only apply here.
         AlgorithmScaffold::Capabilities caps;
