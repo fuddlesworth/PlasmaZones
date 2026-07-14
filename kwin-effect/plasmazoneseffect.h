@@ -1424,12 +1424,13 @@ private:
 
     /// Unload KWin's show-desktop script effects (windowaperture / eyeonscreen)
     /// while a valid `desktop.peek` pack is assigned, and load back exactly the
-    /// ones WE unloaded when it is cleared. They never consult
-    /// activeFullScreenEffect(), so the peek transition's fullscreen claim does
-    /// not make them bow out the way Slide does — left loaded they would animate
-    /// invisibly under our blend AND leak their transforms into the peek
-    /// captures (the capture paths continue down the effect chain). Called after
-    /// every shader-profile-tree load; the destructor restores them on unload.
+    /// ones WE unloaded when it is cleared. Unloading is the only suppression
+    /// that works: they never consult activeFullScreenEffect() (and the peek
+    /// deliberately takes no fullscreen claim anyway, see
+    /// DesktopTransitionManager) — left loaded they would animate invisibly
+    /// under our blend AND leak their transforms into the peek captures (the
+    /// capture paths continue down the effect chain). Called after every
+    /// shader-profile-tree load; the destructor restores them on unload.
     void syncShowDesktopEffectSuppression();
 
     /// True when any decorated window's resolved chain carries an audio-reactive

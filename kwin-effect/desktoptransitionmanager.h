@@ -47,17 +47,24 @@ class PlasmaZonesEffect;
 /// The effect owns one instance. On `desktopChanged` / `showingDesktopChanged`
 /// the effect resolves the `desktop.switch` / `desktop.peek` shader from the
 /// shader profile tree and calls begin() / beginPeek(); if no shader is assigned
-/// the call is a no-op and KWin's normal behaviour proceeds. When a transition is
-/// live the manager claims `setActiveFullScreenEffect(m_effect)` so KWin's
-/// built-in Slide bows out, forces a full-screen paint via the mask, and routes
-/// paintScreen through paintOutput() which draws the blend instead of the live
-/// scene until progress reaches 1. The claim is taken only when no other effect
-/// holds the screen, and released only while KWin still reports it as ours.
+/// the call is a no-op and KWin's normal behaviour proceeds. Either way the
+/// manager forces a full-screen paint via the mask and routes paintScreen
+/// through paintOutput(), which draws the blend instead of the live scene until
+/// progress reaches 1.
 ///
-/// The claim does NOT suppress KWin's show-desktop script effects (windowaperture
-/// / eyeonscreen never consult activeFullScreenEffect()) — those are unloaded by
-/// PlasmaZonesEffect::syncShowDesktopEffectSuppression while a peek pack is
-/// assigned, which is also what keeps the peek captures free of their transforms.
+/// The fullscreen claim differs per kind. A desktop SWITCH claims
+/// `setActiveFullScreenEffect(m_effect)` so KWin's built-in Slide bows out —
+/// taken only when no other effect holds the screen, released only while KWin
+/// still reports it as ours. A PEEK never touches the claim:
+/// EffectsHandler::setActiveFullScreenEffect itself cancels show desktop on
+/// every null↔non-null transition, so claiming from the showingDesktopChanged
+/// handler would re-entrantly unhide every window (the "animation plays but
+/// windows don't hide" bug). beginPeek instead bows out if another effect
+/// already holds the screen. Suppressing KWin's show-desktop script effects
+/// doesn't need the claim either (windowaperture / eyeonscreen never consult
+/// it) — those are unloaded by syncShowDesktopEffectSuppression while a peek
+/// pack is assigned, which also keeps the peek captures free of their
+/// transforms.
 class DesktopTransitionManager
 {
 public:

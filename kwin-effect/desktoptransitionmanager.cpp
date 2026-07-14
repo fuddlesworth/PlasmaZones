@@ -265,6 +265,18 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     if (effectId.isEmpty()) {
         return; // no shader assigned — KWin's instant show-desktop proceeds
     }
+    // Bow out while ANY effect holds the fullscreen claim — Overview, Cube, or
+    // our own in-flight desktop switch. The peek never takes the claim itself
+    // (see the note above the repaint below), so for foreign holders this is
+    // the whole contention policy: their transition wins and KWin's instant
+    // hide/show proceeds under them. Our own switch claim is excluded too, not
+    // just foreign ones: proceeding would hand the claim's RELEASE (at the
+    // peek's settle, once m_active empties) the same setShowingDesktop(false)
+    // side effect the peek path exists to avoid, cancelling the shown state
+    // from under a completed hide leg.
+    if (KWin::effects->activeFullScreenEffect()) {
+        return;
+    }
     const int effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(durationMs, progressCurve.get());
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
 
@@ -274,7 +286,7 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     const PhosphorAnimationShaders::AnimationShaderEffect eff =
         m_effect->m_shaderManager.shaderRegistry().effect(effectId);
     if (!eff.isValid()) {
-        return; // uninstalled pack referenced by the profile — bail before claiming
+        return; // uninstalled pack referenced by the profile — KWin's instant hide proceeds
     }
     if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff, PhosphorAnimation::ProfilePaths::DesktopPeek)) {
         // Not a desktop-contract pack (a universal shader inherited from a
@@ -325,15 +337,18 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
         return;
     }
 
-    // Same claim discipline as begin(). NOTE: unlike Slide, KWin's show-desktop
-    // script effects never consult activeFullScreenEffect(), so the claim does
-    // NOT suppress them — syncShowDesktopEffectSuppression unloads them while a
-    // peek pack is assigned. The claim still keeps our pass from stomping a live
-    // Overview/Cube claim (and vice versa).
-    if (!m_fullScreenClaimed && !KWin::effects->activeFullScreenEffect()) {
-        KWin::effects->setActiveFullScreenEffect(m_effect);
-        m_fullScreenClaimed = true;
-    }
+    // Deliberately NO setActiveFullScreenEffect claim on the peek path, unlike
+    // begin(). EffectsHandler::setActiveFullScreenEffect itself calls
+    // Workspace::setShowingDesktop(false) on every null↔non-null transition
+    // (kwin effecthandler.cpp, "if (activeChanged) ... setShowingDesktop(false)").
+    // Claiming here — inside the showingDesktopChanged(true) handler — would
+    // re-entrantly CANCEL the very show-desktop state the peek animates: KWin
+    // unhides every window before our first frame and the blend plays over
+    // still-visible windows. Releasing at settle would fire it a second time.
+    // This is also why windowaperture/eyeonscreen never pass fullScreen: true.
+    // Nothing is lost by not claiming: the show-desktop script effects ignore
+    // the claim anyway (syncShowDesktopEffectSuppression unloads them), and
+    // contention with Overview/Cube is handled by the bow-out check at the top.
     KWin::effects->addRepaintFull();
 }
 

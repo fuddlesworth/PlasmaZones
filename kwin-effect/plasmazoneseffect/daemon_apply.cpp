@@ -51,6 +51,14 @@ void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& acti
 
 void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
 {
+    // Showing-desktop guard: this activation is daemon-driven (snap engine
+    // navigation/commit), not a user click, and Workspace::activateWindow on a
+    // hidden window synchronously cancels a peek — same guard as the autotile
+    // float/refocus paths (signals.cpp).
+    if (isShowingDesktop()) {
+        qCDebug(lcEffect) << "slotActivateWindowRequested: dropped during show desktop" << windowId;
+        return;
+    }
     KWin::EffectWindow* w = findWindowById(windowId);
     if (w) {
         KWin::effects->activateWindow(w);
