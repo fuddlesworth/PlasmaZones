@@ -1198,9 +1198,16 @@ void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
     // Keep names whose re-load failed: the wantOurs=false branch re-runs on
     // every later sync (tree edits, registry commits, reconfigure), so a
     // transient loader failure gets a free retry instead of permanently
-    // dropping the restore obligation for the session.
+    // dropping the restore obligation for the session. Already-loaded names
+    // are satisfied as-is (a KCM reconcile can re-load them behind our back,
+    // and loadEffect returns false for a loaded effect — treating that as a
+    // failure would pin the name in the retry list forever, warning on every
+    // sync for an effect that is in fact running).
     QStringList failed;
     for (const QString& name : std::as_const(m_suppressedShowDesktopEffects)) {
+        if (KWin::effects->isEffectLoaded(name)) {
+            continue;
+        }
         if (!KWin::effects->loadEffect(name)) {
             qCWarning(lcEffect) << "failed to restore show-desktop effect" << name << "— will retry on next sync";
             failed.append(name);
@@ -1222,7 +1229,9 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // never writes to.
     if (KWin::effects && !m_compositorShuttingDown) {
         for (const QString& name : std::as_const(m_suppressedShowDesktopEffects)) {
-            if (!KWin::effects->loadEffect(name)) {
+            // Already loaded (a KCM reconcile beat us to it) is satisfied, not
+            // a failure — loadEffect returns false for a loaded effect.
+            if (!KWin::effects->isEffectLoaded(name) && !KWin::effects->loadEffect(name)) {
                 qCWarning(lcEffect) << "failed to restore show-desktop effect" << name;
             }
         }

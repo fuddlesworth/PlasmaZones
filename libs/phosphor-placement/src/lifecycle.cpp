@@ -288,7 +288,9 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     // Migrate lastUsedScreenId per store: last-used is per-key, so rewrite the
     // stored screen on each store that points at the physical screen (or an old
     // virtual sub-screen on it) to the virtual screen its last-used zone falls in.
-    if (!virtualScreenIds.isEmpty()) {
+    // (No empty-list guard needed: the function early-returned on empty
+    // virtualScreenIds above.)
+    {
         for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
             if (!state) {
                 continue;

@@ -105,11 +105,14 @@ vec4 pTransition(vec2 uv, float t) {
     col += frontCol * band * env * glow * spark * 0.8;
 
     // Two opaque scenes blended stay opaque; the pass draws with blending off
-    // and replaces the screen, so alpha is a constant 1. Bound below only: the
-    // de-energize dim must not dip the result negative, but a full clamp would
-    // crush HDR capture values above 1.0 (the finalize hook runs after
-    // pTransition), and every additive glow term is exactly 0 at both endpoints.
-    return vec4(max(col, 0.0), 1.0);
+    // and replaces the screen, so alpha is a constant 1. NO bound on the rgb:
+    // the de-energize dim MULTIPLIES by a factor in [0.3, 1] (cannot flip
+    // sign) and the glow terms only ever ADD non-negative brand colour, so
+    // nothing here can push below the captures. Any clamp or max would only
+    // clip legitimate out-of-range capture values (HDR above 1.0, wide-gamut
+    // scRGB below 0), including at the exact endpoints (the finalize hook runs
+    // after pTransition).
+    return vec4(col, 1.0);
 #else
     // Desktop transitions are compositor-only; the daemon never runs them.
     // Return transparent so the pack still bakes for the daemon target.

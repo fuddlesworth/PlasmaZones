@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <PhosphorAnimation/AnimationLimits.h> // Limits::{Min,Max,Default}AnimationDurationMs
 #include <PhosphorAnimation/AnimationShaderContract.h> // kMaxCustomParams
 #include <PhosphorAnimation/Curve.h> // per-event timing curve + CurveState
 
@@ -14,7 +13,6 @@
 #include <QVector4D>
 
 #include <array>
-#include <chrono>
 #include <functional>
 #include <memory>
 #include <unordered_map>

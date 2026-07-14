@@ -116,7 +116,7 @@ PHOSPHORANIMATION_EXPORT extern const QString ShaderSwitch;
 
 // widget.* — per-archetype paths so library defaults preserve original motion.
 PHOSPHORANIMATION_EXPORT extern const QString Widget;
-PHOSPHORANIMATION_EXPORT extern const QString WidgetHover; ///< 150 ms OutCubic
+PHOSPHORANIMATION_EXPORT extern const QString WidgetHover; ///< 150 ms OutCubic (family seed)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPress; ///< 100 ms OutCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetDim; ///< 200 ms OutCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetTint; ///< 300 ms widget-out (family root)

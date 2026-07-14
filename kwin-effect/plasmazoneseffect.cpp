@@ -6,6 +6,7 @@
 #include <QEvent>
 #include <QKeyEvent>
 #include <QLoggingCategory>
+#include <QTimer>
 
 #include <effect/effect.h>
 
@@ -57,8 +58,15 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
     // the loaded-effects list against kwinrc, which RE-LOADS windowaperture /
     // eyeonscreen — the suppression never writes kwinrc, so this is the one
     // path that undoes the unload without any of the other sync triggers
-    // (tree load, registry commit, animations toggle) firing. Re-assert.
+    // (tree load, registry commit, animations toggle) firing. Re-assert now
+    // AND on the next event-loop turn: KWin's loader can service the KCM
+    // apply's re-loads through queued work that lands after this reconfigure
+    // dispatch, and the sync is idempotent, so the deferred second pass
+    // closes that ordering either way.
     syncShowDesktopEffectSuppression();
+    QTimer::singleShot(0, this, [this]() {
+        syncShowDesktopEffectSuppression();
+    });
 }
 
 bool PlasmaZonesEffect::isActive() const

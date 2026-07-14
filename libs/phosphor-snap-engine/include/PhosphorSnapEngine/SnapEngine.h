@@ -918,12 +918,19 @@ private:
     QPointer<QObject> m_autotileEngineObj;
     PhosphorEngine::IPlacementEngine* m_autotileEngineTyped = nullptr;
     IZoneAdjacencyResolver* m_zoneAdjacencyResolver = nullptr;
+    // QObject identity of m_zoneAdjacencyResolver, kept so a replacement can
+    // disconnect the previous resolver's destroyed guard (a stale guard firing
+    // later would null the LIVE replacement). Mirrors m_autotileEngineObj.
+    QPointer<QObject> m_zoneAdjacencyResolverObj;
     PhosphorEngine::ICrossSurfaceResolver* m_crossSurfaceResolver = nullptr;
     // Typed navigation-state provider — replaces the opaque QObject* m_wta
     // back-reference. Provides read-only access to compositor-layer shadows
     // (last-active window, last-active screen, last-cursor screen, frame
     // geometry). Not owned; must outlive SnapEngine.
     INavigationStateProvider* m_navState = nullptr;
+    // QObject identity of m_navState — same stale-destroyed-guard rationale
+    // as m_zoneAdjacencyResolverObj.
+    QPointer<QObject> m_navStateObj;
     // Snap-mode navigation target resolver. Owned by SnapEngine — moved
     // here in Phase 5E from WindowTrackingAdaptor. Constructed lazily on
     // first navigation call (so the construction order isn't constrained

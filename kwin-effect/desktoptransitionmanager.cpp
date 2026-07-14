@@ -7,7 +7,6 @@
 #include "shadertransitionmanager.h"
 #include "plasmazoneseffect/shader_internal.h"
 
-#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -285,6 +284,24 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     // side effect the peek path exists to avoid, cancelling the shown state
     // from under a completed hide leg.
     if (KWin::effects->activeFullScreenEffect()) {
+        // Bowing out must not strand live peek legs: a hide leg still blending
+        // here would keep painting the windows scene draining into the bare
+        // desktop while the toggle it animated is being reversed under a
+        // foreign claim. Reap peek entries (kind-guarded — a live switch is
+        // not ours to truncate) and repaint so the real scene draws.
+        bool reapedAny = false;
+        for (auto it = m_active.begin(); it != m_active.end();) {
+            if (it->second.kind != Kind::Switch) {
+                if (!reapedAny) {
+                    ensureGlContextCurrent();
+                    reapedAny = true;
+                }
+                KWin::effects->addRepaint(it->first->geometry());
+                it = m_active.erase(it);
+            } else {
+                ++it;
+            }
+        }
         return;
     }
     // Shared resolve prologue: pack validation + parameter pools + clamped
@@ -444,8 +461,10 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
             tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
             if (tr.toTex) {
                 m_peekDesktopCache[screen] = tr.toTex;
+                tr.fromTex = capturePeekWindowsScene(tr.toTex.get(), mask, screen, renderTarget, viewport);
             }
-            tr.fromTex = capturePeekWindowsScene(tr.toTex.get(), mask, screen, renderTarget, viewport);
+            // A null toTex abandons the transition below — no point rendering
+            // the FROM composite (a full scene pass) just to throw it away.
             break;
         case Kind::PeekShow: {
             // FROM = the hide leg's cached bare desktop; TO = the live scene

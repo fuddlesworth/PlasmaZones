@@ -270,10 +270,13 @@ private Q_SLOTS:
         QVERIFY(resolved.has_value());
         QCOMPARE(resolved->duration.value_or(0.0), 500.0);
 
-        // Delete user copy, request rescan.
+        // Delete user copy, request rescan. Spy attached BEFORE the trigger so
+        // a rescan that fires early (shortened debounce, future synchronous
+        // fast path) cannot slip past it — same ordering as
+        // testRescanFiresSignal_whenContentChanged.
+        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
         QVERIFY(QFile::remove(userDir.filePath(QStringLiteral("shared.json"))));
         loader.requestRescan();
-        QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
         QVERIFY(spy.wait(500));
 
         // System is restored via re-parse on the next rescan.

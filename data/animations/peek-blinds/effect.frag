@@ -50,11 +50,14 @@ vec4 pTransition(vec2 uv, float t) {
     col += vec3(edge) * o * (1.0 - o) * clamp(p_softness, 0.0, 1.0) * 0.25;
 
     // Two opaque scenes blended stay opaque; the pass draws with blending off
-    // and replaces the screen, so alpha is a constant 1. Bound below only: the
-    // additive edge highlight must not dip the result negative, but a full
-    // clamp would crush HDR capture values above 1.0 (the finalize hook runs
-    // after pTransition), and the highlight is exactly 0 at both endpoints.
-    return vec4(max(col, 0.0), 1.0);
+    // and replaces the screen, so alpha is a constant 1. NO bound on the rgb:
+    // the blend is convex and the edge highlight only ever ADDS a non-negative
+    // term (edge, o·(1−o) and the softness factor are all ≥ 0), so nothing here
+    // can push below the captures. Any clamp or max would only clip legitimate
+    // out-of-range capture values (HDR above 1.0, wide-gamut scRGB below 0),
+    // including at the exact endpoints (the finalize hook runs after
+    // pTransition).
+    return vec4(col, 1.0);
 #else
     // Desktop transitions are compositor-only; the daemon never runs them.
     // Return transparent so the pack still bakes for the daemon target.
