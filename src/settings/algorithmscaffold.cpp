@@ -13,14 +13,16 @@ namespace AlgorithmScaffold {
 
 namespace {
 
-/// Index of the first non-comment, non-blank line (skips the template's own
-/// SPDX header so the caller can substitute a fresh one).
-int firstCodeLine(const QStringList& lines)
+/// Index of the first line past the template's own SPDX header (leading blank
+/// lines and `-- SPDX-*` comment lines), so the caller can substitute a fresh
+/// header. Other leading comments — a template's explanatory doc block — are
+/// NOT skipped; they carry over into the personalized copy.
+int firstLinePastSpdxHeader(const QStringList& lines)
 {
     int i = 0;
     while (i < lines.size()) {
         const QString t = lines[i].trimmed();
-        if (t.isEmpty() || t.startsWith(QLatin1String("--"))) {
+        if (t.isEmpty() || t.startsWith(QLatin1String("-- SPDX-"))) {
             ++i;
             continue;
         }
@@ -42,6 +44,11 @@ QString sanitizeMetadataString(QString value)
     value.replace(QLatin1Char('\r'), QLatin1Char(' '));
     value.replace(QLatin1Char('\\'), QLatin1Char('/'));
     value.replace(QLatin1Char('"'), QLatin1Char('\''));
+    // Braces inside a written string literal would desync the brace-depth
+    // scan when the generated file is later used as a splice source (user
+    // algorithm files shadow bundled template ids).
+    value.replace(QLatin1Char('{'), QLatin1Char('('));
+    value.replace(QLatin1Char('}'), QLatin1Char(')'));
     return value;
 }
 
@@ -102,8 +109,10 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
 QString spliceTemplate(const QString& templateContent, const QString& newHeader, const QString& displayName,
                        const QString& id)
 {
-    const QStringList lines = templateContent.split(QLatin1Char('\n'));
-    const int firstCode = firstCodeLine(lines);
+    QString normalized = templateContent;
+    normalized.replace(QLatin1String("\r\n"), QLatin1String("\n"));
+    const QStringList lines = normalized.split(QLatin1Char('\n'));
+    const int firstCode = firstLinePastSpdxHeader(lines);
 
     static const QRegularExpression metaRe(QStringLiteral(R"(^\s*metadata\s*=\s*\{)"));
     int metaStart = -1;
@@ -119,9 +128,14 @@ QString spliceTemplate(const QString& templateContent, const QString& newHeader,
 
     // Walk the metadata table, tracking brace depth relative to it. Only
     // depth-1 lines are top-level metadata fields — customParams entries nest
-    // deeper and must keep their own `name` keys untouched.
-    static const QRegularExpression nameRe(QStringLiteral(R"(^\s*name\s*=)"));
-    static const QRegularExpression idRe(QStringLiteral(R"(^\s*id\s*=)"));
+    // deeper and must keep their own `name` keys untouched. A depth-1 name/id
+    // line is rewritten only when it is a whole single-field line; anything
+    // else (a second field on the same line, an unquoted value) is an
+    // unrecognized shape and rejects the splice rather than corrupting it.
+    static const QRegularExpression nameFieldRe(QStringLiteral(R"(^\s*name\s*=)"));
+    static const QRegularExpression idFieldRe(QStringLiteral(R"(^\s*id\s*=)"));
+    static const QRegularExpression nameLineRe(QStringLiteral(R"(^\s*name\s*=\s*"[^"]*"\s*,?\s*$)"));
+    static const QRegularExpression idLineRe(QStringLiteral(R"(^\s*id\s*=\s*"[^"]*"\s*,?\s*$)"));
 
     QStringList metaLines;
     int depth = 0;
@@ -140,10 +154,16 @@ QString spliceTemplate(const QString& templateContent, const QString& newHeader,
 
         QString line = lines[i];
         if (i > metaStart && depthAtLineStart == 1) {
-            if (nameRe.match(line).hasMatch()) {
+            if (nameFieldRe.match(line).hasMatch()) {
+                if (!nameLineRe.match(line).hasMatch()) {
+                    return QString();
+                }
                 line = quotedField(QStringLiteral("name"), displayName);
                 sawName = true;
-            } else if (idRe.match(line).hasMatch()) {
+            } else if (idFieldRe.match(line).hasMatch()) {
+                if (!idLineRe.match(line).hasMatch()) {
+                    return QString();
+                }
                 line = quotedField(QStringLiteral("id"), id);
                 sawId = true;
             }
@@ -156,6 +176,11 @@ QString spliceTemplate(const QString& templateContent, const QString& newHeader,
         }
     }
     if (metaEnd < 0) {
+        return QString();
+    }
+    // A metadata table that opens and closes on one line has no per-field
+    // lines to rewrite or insert between — unsupported shape, reject.
+    if (metaEnd == metaStart) {
         return QString();
     }
 

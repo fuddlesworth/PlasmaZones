@@ -133,9 +133,10 @@ A `Zone` is a plain table of **absolute pixel** coordinates:
 { x = 0, y = 0, width = 960, height = 1080 }
 ```
 
-Return `{}` for `windowCount <= 0`. Guard tiny areas with `pluau.guardArea`,
-which returns a plain fill when the work area is smaller than
-`pluau.MIN_ZONE_SIZE` on either axis (and `nil` otherwise):
+Return `{}` for `windowCount <= 0`. Guard tiny areas with `pluau.guardArea`.
+It returns `{}` for `count <= 0`, a plain fill when the work area is smaller
+than `pluau.MIN_ZONE_SIZE` on either axis, and `nil` when the layout should
+proceed normally:
 
 ```lua
 local early = pluau.guardArea(ctx.area, ctx.windowCount)
@@ -260,7 +261,7 @@ state (the `HookState` type in the stubs):
 | `splitRatio` | number | Current split ratio (clamped 0.1–0.9) |
 | `windows` | `{ {appId, focused, windowId} }` | Per-window info |
 | `focusedIndex` | number | 0-based; `-1` if none |
-| `scriptState` | table? | Prior persistent state (§9), when non-empty |
+| `scriptState` | table? | Prior persistent state (§9); present only when `supportsScriptState` is set and the bag is non-empty |
 | `countAfterRemoval` | number? | `onWindowRemoved` only: count minus the departing window |
 
 The snapshot is built fresh per call; mutating it has no effect. Memory
@@ -288,8 +289,8 @@ Return a table (or `nil` to do nothing). Two optional, independent outputs:
 
 - **`splitRatio`** — a new master/split ratio the engine applies (clamped).
   This is how ratio-based layouts reflow on resize; the change stays local to
-  the current screen and desktop. `pluau.masterStackResize(state, resize,
-  horizontal)` implements the standard master/stack case.
+  the current screen, desktop, and activity. `pluau.masterStackResize(state,
+  resize, horizontal)` implements the standard master/stack case.
 - **Any other keys** — persisted as the new `ctx.state` table, but only when
   `metadata.supportsScriptState = true`. On the next `tile` run, `ctx.state`
   holds exactly what you returned; read your prior values from
@@ -297,7 +298,8 @@ Return a table (or `nil` to do nothing). Two optional, independent outputs:
   for a full example (per-column widths that survive retiles).
 
 `supportsScriptState` is the lightweight alternative to the split tree: an
-opaque table you shape however you like, persisted per screen and desktop.
+opaque table you shape however you like, persisted per screen, desktop, and
+activity.
 
 ---
 

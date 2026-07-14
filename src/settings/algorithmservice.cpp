@@ -656,11 +656,19 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     // verbatim — the template's code depends on them.
     bool foundTemplate = false;
     if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
+        // locate() checks the user's writable data dir first, so a user
+        // algorithm file named after a bundled template id deliberately
+        // shadows it here — the registry and the wizard's preview resolve
+        // the same override, keeping what the user saw and what gets copied
+        // consistent.
         const QString templateFile =
             QStandardPaths::locate(QStandardPaths::GenericDataLocation,
                                    ScriptedAlgorithmSubdir + QLatin1Char('/') + baseTemplate + QStringLiteral(".luau"));
 
-        if (!templateFile.isEmpty()) {
+        if (templateFile.isEmpty()) {
+            qCWarning(PlasmaZones::lcCore) << "createNewAlgorithm: template file for" << baseTemplate
+                                           << "not found in any data location — using fallback body.";
+        } else {
             QFile file(templateFile);
             if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
                 const QString templateContent = QString::fromUtf8(file.readAll());

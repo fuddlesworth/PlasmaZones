@@ -43,7 +43,7 @@ export type HookState = {
     splitRatio: number,
     windows: { WindowInfo },
     focusedIndex: number, -- 0-based tiled index of the focused window (-1 if none)
-    scriptState: { [string]: any }?, -- prior persistent bag (see supportsScriptState)
+    scriptState: { [string]: any }?, -- prior persistent bag; only with supportsScriptState set and a non-empty bag
     countAfterRemoval: number?, -- onWindowRemoved only: windowCount minus the departing window
 }
 export type SplitNode = {

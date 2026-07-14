@@ -154,7 +154,7 @@ Kirigami.Dialog {
                     opacity: 0.7
                 }
 
-                // 3-column grid — one card per bundled template plus Blank
+                // 3-column grid — Blank plus a curated subset of the bundled algorithms
                 GridLayout {
                     Layout.fillWidth: true
                     columns: 3
@@ -344,74 +344,106 @@ Kirigami.Dialog {
                             columnSpacing: Kirigami.Units.largeSpacing * 2
                             rowSpacing: Kirigami.Units.smallSpacing
 
+                            // Each box uses `Binding on checked` (not a plain
+                            // `checked:` binding) so the onOpened property
+                            // resets still reach the control after a user
+                            // toggle severs a declarative binding.
                             CheckBox {
                                 text: i18n("Master count")
-                                checked: root.supportsMasterCount
                                 onToggled: root.supportsMasterCount = checked
-                                Accessible.name: i18n("Supports master count")
+                                Accessible.name: text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Configurable master/center windows")
+
+                                Binding on checked {
+                                    value: root.supportsMasterCount
+                                    restoreMode: Binding.RestoreNone
+                                }
                             }
 
                             CheckBox {
                                 text: i18n("Split ratio")
-                                checked: root.supportsSplitRatio
                                 onToggled: root.supportsSplitRatio = checked
-                                Accessible.name: i18n("Supports split ratio")
+                                Accessible.name: text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Adjustable master/stack ratio")
+
+                                Binding on checked {
+                                    value: root.supportsSplitRatio
+                                    restoreMode: Binding.RestoreNone
+                                }
                             }
 
                             CheckBox {
                                 text: i18n("Overlapping zones")
-                                checked: root.producesOverlappingZones
                                 onToggled: root.producesOverlappingZones = checked
-                                Accessible.name: i18n("Produces overlapping zones")
+                                Accessible.name: text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Zones can overlap each other")
+
+                                Binding on checked {
+                                    value: root.producesOverlappingZones
+                                    restoreMode: Binding.RestoreNone
+                                }
                             }
 
                             CheckBox {
                                 text: i18n("Persistent memory")
-                                checked: root.supportsMemory
                                 onToggled: root.supportsMemory = checked
-                                Accessible.name: i18n("Remembers split positions")
+                                Accessible.name: text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Remembers positions across changes")
+
+                                Binding on checked {
+                                    value: root.supportsMemory
+                                    restoreMode: Binding.RestoreNone
+                                }
                             }
 
                             CheckBox {
                                 text: i18n("Script state")
-                                checked: root.supportsScriptState
                                 onToggled: root.supportsScriptState = checked
-                                Accessible.name: i18n("Supports script state")
+                                Accessible.name: text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Keeps a persistent state table across retiles")
+
+                                Binding on checked {
+                                    value: root.supportsScriptState
+                                    restoreMode: Binding.RestoreNone
+                                }
                             }
 
                             CheckBox {
                                 text: i18n("Single window")
-                                checked: root.supportsSingleWindow
                                 onToggled: root.supportsSingleWindow = checked
-                                Accessible.name: i18n("Owns the single-window layout")
+                                Accessible.name: text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Lays out a lone window itself instead of filling the screen")
+
+                                Binding on checked {
+                                    value: root.supportsSingleWindow
+                                    restoreMode: Binding.RestoreNone
+                                }
                             }
 
                             CheckBox {
                                 text: i18n("Follows focus")
-                                checked: root.retileOnFocus
                                 onToggled: root.retileOnFocus = checked
-                                Accessible.name: i18n("Retiles when focus changes")
+                                Accessible.name: text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Reflows when focus moves between tiled windows")
+
+                                Binding on checked {
+                                    value: root.retileOnFocus
+                                    restoreMode: Binding.RestoreNone
+                                }
                             }
                         }
                     }
@@ -423,9 +455,13 @@ Kirigami.Dialog {
                     // Options
                     CheckBox {
                         text: i18n("Open in text editor after creation")
-                        checked: root.openInEditor
                         onToggled: root.openInEditor = checked
                         Accessible.name: text
+
+                        Binding on checked {
+                            value: root.openInEditor
+                            restoreMode: Binding.RestoreNone
+                        }
                     }
                 }
             }

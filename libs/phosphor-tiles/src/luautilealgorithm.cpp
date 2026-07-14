@@ -693,10 +693,14 @@ QVariantMap LuauTileAlgorithm::buildStateMap(const TilingState* state, bool incl
     st[QStringLiteral("focusedIndex")] = focusedIndex;
 
     // Persistent bag, so a hook can read its own prior state (e.g. column widths)
-    // before computing the update it returns.
-    const QJsonObject bag = state->scriptState();
-    if (!bag.isEmpty()) {
-        st[QStringLiteral("scriptState")] = bag.toVariantMap();
+    // before computing the update it returns. Gated on the same opt-in as
+    // buildContext's ctx.state, so a non-opted-in algorithm's hooks can't read
+    // a bag left behind by a different algorithm on the same TilingState.
+    if (m_metadata.supportsScriptState) {
+        const QJsonObject bag = state->scriptState();
+        if (!bag.isEmpty()) {
+            st[QStringLiteral("scriptState")] = bag.toVariantMap();
+        }
     }
 
     if (includeCountAfterRemoval) {

@@ -783,6 +783,7 @@ add_executable(test_algorithm_scaffold
     ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
 )
 target_link_libraries(test_algorithm_scaffold PRIVATE Qt6::Test Qt6::Core)
+target_compile_definitions(test_algorithm_scaffold PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_algorithm_scaffold COMMAND test_algorithm_scaffold)
 
 add_executable(test_window_appearance_controller

@@ -3,6 +3,8 @@
 
 #include "../../../src/settings/algorithmscaffold.h"
 
+#include <QDir>
+#include <QFile>
 #include <QtTest>
 
 using namespace PlasmaZones::AlgorithmScaffold;
@@ -55,6 +57,11 @@ private Q_SLOTS:
     void spliceLeavesCustomParamNamesAlone();
     void spliceInsertsMissingNameAndId();
     void spliceRejectsTemplateWithoutMetadata();
+    void spliceRejectsSingleLineMetadata();
+    void spliceRejectsMultiFieldNameLine();
+    void splicePreservesLeadingDocComment();
+    void spliceNormalizesCrlf();
+    void spliceAllBundledAlgorithms();
     void blankScaffoldEmitsRequestedFlags();
     void blankScaffoldOmitsUnsetNewFlags();
     void sanitizeStripsBreakoutCharacters();
@@ -124,6 +131,104 @@ void TestAlgorithmScaffold::spliceRejectsTemplateWithoutMetadata()
                 .isEmpty());
 }
 
+void TestAlgorithmScaffold::spliceRejectsSingleLineMetadata()
+{
+    // A table that opens and closes on one line has no per-field lines; the
+    // splice must reject it rather than append name/id after the closing
+    // brace (which would be corrupt Luau).
+    const QString oneLiner = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = { name = \"A\", id = \"a\" },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(oneLiner, kHeader, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+}
+
+void TestAlgorithmScaffold::spliceRejectsMultiFieldNameLine()
+{
+    // A depth-1 name/id line carrying a second field would lose that field
+    // if rewritten wholesale; the splice must reject the shape instead.
+    const QString multiField = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"A\", description = \"D\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(multiField, kHeader, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+}
+
+void TestAlgorithmScaffold::splicePreservesLeadingDocComment()
+{
+    const QString documented = QStringLiteral(
+        "-- SPDX-FileCopyrightText: 2026 fuddlesworth\n"
+        "-- SPDX-License-Identifier: LGPL-2.1-or-later\n"
+        "\n"
+        "-- How this layout works, in two lines\n"
+        "-- of explanatory prose a user needs.\n"
+        "local pluau = pluau\n"
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"Doc\",\n"
+        "        id = \"doc\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    const QString out = spliceTemplate(documented, kHeader, QStringLiteral("My Doc"), QStringLiteral("my-doc"));
+    // The SPDX pair is replaced, the doc block survives.
+    QVERIFY(out.startsWith(kHeader));
+    QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 1);
+    QVERIFY(
+        out.contains(QStringLiteral("-- How this layout works, in two lines\n"
+                                    "-- of explanatory prose a user needs.")));
+}
+
+void TestAlgorithmScaffold::spliceNormalizesCrlf()
+{
+    QString crlf = kTemplate;
+    crlf.replace(QStringLiteral("\n"), QStringLiteral("\r\n"));
+    const QString out = spliceTemplate(crlf, kHeader, QStringLiteral("My Theater"), QStringLiteral("my-theater"));
+    QVERIFY(!out.isEmpty());
+    QVERIFY(!out.contains(QLatin1Char('\r')));
+    QVERIFY(out.contains(QStringLiteral("        name = \"My Theater\",")));
+}
+
+void TestAlgorithmScaffold::spliceAllBundledAlgorithms()
+{
+    // Pin the load-bearing formatting assumption against the real bundled
+    // set: every algorithm must splice cleanly, get the new name/id, and
+    // keep every non-header, non-name/non-id line verbatim (doc comments,
+    // capability flags, customParams, the whole body).
+    const QDir dir(QStringLiteral(P_SOURCE_DIR "/data/algorithms"));
+    const QStringList files = dir.entryList({QStringLiteral("*.luau")}, QDir::Files);
+    QVERIFY(!files.isEmpty());
+
+    static const QRegularExpression topLevelNameOrId(QStringLiteral(R"(^\s*(name|id)\s*=)"));
+    for (const QString& fileName : files) {
+        QFile f(dir.filePath(fileName));
+        QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(fileName));
+        const QString content = QString::fromUtf8(f.readAll());
+
+        const QString out = spliceTemplate(content, kHeader, QStringLiteral("My Copy"), QStringLiteral("my-copy"));
+        QVERIFY2(!out.isEmpty(), qPrintable(fileName));
+        QVERIFY2(out.contains(QStringLiteral("        name = \"My Copy\",")), qPrintable(fileName));
+        QVERIFY2(out.contains(QStringLiteral("        id = \"my-copy\",")), qPrintable(fileName));
+        QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 1);
+
+        // Every original line survives except the SPDX header and the
+        // top-level name/id lines (nested customParams `{ name = ...` lines
+        // start with a brace, so the anchored regex skips them).
+        const QStringList lines = content.split(QLatin1Char('\n'));
+        for (const QString& line : lines) {
+            const QString trimmed = line.trimmed();
+            if (trimmed.startsWith(QLatin1String("-- SPDX-")) || topLevelNameOrId.match(line).hasMatch()) {
+                continue;
+            }
+            QVERIFY2(out.contains(line), qPrintable(fileName + QStringLiteral(": lost line: ") + line));
+        }
+    }
+}
+
 void TestAlgorithmScaffold::blankScaffoldEmitsRequestedFlags()
 {
     Capabilities caps;
@@ -165,6 +270,9 @@ void TestAlgorithmScaffold::blankScaffoldOmitsUnsetNewFlags()
 void TestAlgorithmScaffold::sanitizeStripsBreakoutCharacters()
 {
     QCOMPARE(sanitizeMetadataString(QStringLiteral("a\"b\\c\nd\re")), QStringLiteral("a'b/c d e"));
+    // Braces would desync the splice depth scan when the generated file is
+    // later used as a splice source.
+    QCOMPARE(sanitizeMetadataString(QStringLiteral("My {Fancy} Grid")), QStringLiteral("My (Fancy) Grid"));
 }
 
 QTEST_GUILESS_MAIN(TestAlgorithmScaffold)
