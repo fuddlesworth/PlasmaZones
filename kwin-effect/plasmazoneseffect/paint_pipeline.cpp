@@ -1226,10 +1226,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // extension isolation that protects the daemon's zone
                     // shaders from BaseUniforms growth doesn't apply on this
                     // runtime (kwin uses default-block uniforms, no UBO).
-                    // .xy is the redirected surface's origin — the same
-                    // anchor rect the anchorRemap uniforms describe, so
-                    // fly-in's edge-distance math (iSurfaceScreenPos +
-                    // iAnchorSize) stays internally consistent.
+                    // .xy is the redirected surface's origin in GLOBAL
+                    // workspace coordinates — the same anchor rect the
+                    // anchorRemap uniforms describe, so the minimize-to-icon
+                    // packs' window-rect reconstruction (iSurfaceScreenPos.xy
+                    // + iAnchorSize, paired with the same-space iIconRect)
+                    // stays internally consistent.
                     QVector4D surfaceScreenPos(static_cast<float>(anchorGeo.x()), static_cast<float>(anchorGeo.y()),
                                                0.0f, 0.0f);
                     if (const auto* output = w->screen()) {
@@ -1461,6 +1463,17 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (cached->iToRectLoc >= 0) {
                     const QRectF& t = transition.toGeometry;
                     shader->setUniform(cached->iToRectLoc, QVector4D(t.x(), t.y(), t.width(), t.height()));
+                }
+                // Task-manager icon rect for minimize-to-icon packs
+                // (genie, phosphor-siphon). Same space and same per-frame push discipline
+                // as the morph rects above — the shader program is shared
+                // across windows, so an install-time push would let two
+                // concurrent transitions on the same pack clobber each
+                // other's target. Null rect (no task-manager entry)
+                // pushes (0, 0, 0, 0) = "no icon target".
+                if (cached->iIconRectLoc >= 0) {
+                    const QRectF& ic = transition.iconRect;
+                    shader->setUniform(cached->iIconRectLoc, QVector4D(ic.x(), ic.y(), ic.width(), ic.height()));
                 }
                 // User textures: bind each cached GLTexture to texture
                 // unit (1 + slot) — TEXTURE0 holds the redirected window
@@ -1803,6 +1816,23 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // owns its own teardown — leave it alone.
                 },
                 Qt::QueuedConnection);
+        }
+        // A reverse (going-to-minimized) leg ends fully swallowed / faded
+        // out, and the window is only paintable at all because the
+        // transition's visible ref holds it. Falling through to the plain
+        // chain continuation below would paint the raw window at its rest
+        // geometry for the expiry frame(s) — a one-frame flash of a window
+        // the user just watched disappear into its icon. Paint nothing
+        // instead; the queued teardown (or the pending one from a prior
+        // frame) drops the ref and the window leaves the scene. Guarded on
+        // isMinimized rather than the leg direction so an un-minimize leg
+        // whose window was re-minimized mid-flight is covered too.
+        // Returning without the tail chain continuation is deliberate:
+        // later-chained effects have nothing meaningful to paint for a
+        // window that is only in the scene via our visible ref (same
+        // precedent as the restore-suppression early return above).
+        if (w->isMinimized()) {
+            return;
         }
     }
 
@@ -2275,9 +2305,12 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // surface-extent draws with Region::infinite (see paintWindow), so
     // they are not clipped.
     if (st->gridSubdivisions > 0) {
-        // Destination frame rect == iToRect. The window already jumped
-        // there via moveResize, so the live frameGeometry is a safe
-        // fallback if a transition somehow lacks a recorded destination.
+        // Destination frame rect == iToRect for a geometry morph (the
+        // window already jumped there via moveResize). A minimize-to-icon
+        // leg (genie, phosphor-siphon) records NO morph destination by
+        // design — its target is iIconRect, consumed in the pack's vertex
+        // stage — so it takes the live-frameGeometry branch and the grid
+        // sits on the window's resting rect.
         QRectF frameRect = st->toGeometry;
         if (!frameRect.isValid() || frameRect.isEmpty()) {
             frameRect = window->frameGeometry();

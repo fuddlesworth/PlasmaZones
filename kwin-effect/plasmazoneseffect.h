@@ -96,6 +96,15 @@ static_assert(
     static_cast<int>(EffectAutotileDragBehavior::Reorder) == 1,
     "EffectAutotileDragBehavior::Reorder must encode as 1 to match PhosphorTiles::AutotileDragBehavior::Reorder");
 
+// Plasmashell notification stacking makes KWin emit spurious
+// minimizedChanged(true) events on tiled windows, with the matching
+// unminimize ~1-2 ms later. Two suppressions key off this window and MUST
+// agree on its width: the autotile minimize→float debounce
+// (autotilehandler/signals.cpp) and the minimize shader-event
+// spurious-pair cancel (plasmazoneseffect/daemon_apply.cpp,
+// slotWindowMinimizedChanged). Shared here so the two can never desync.
+inline constexpr int kSpuriousMinimizePairMs = 75;
+
 // Forward declarations for helper classes
 class AutotileHandler;
 class SnapHandler;
@@ -217,7 +226,8 @@ private Q_SLOTS:
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
 
-    // Snap-mode minimize/unminimize float tracking
+    // Minimize shader event (both directions, spurious-pair suppression)
+    // plus the snap-mode minimize/unminimize float tracking tail
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
 
     // Daemon lifecycle
@@ -1656,7 +1666,8 @@ private:
     ///
     ///   (b) Pre-commit short-circuit — install short-circuited before
     ///       any state was committed: empty effectId / null window,
-    ///       global animations toggle off, collapsed/minimised surface,
+    ///       global animations toggle off, collapsed surface, a
+    ///       minimized surface without @p animateMinimized,
     ///       registry miss, a desktop-class pack refused on a window
     ///       event, the cached null-shader sentinel from a prior compile
     ///       failure, shader file open / read / include-expansion
@@ -1677,9 +1688,18 @@ private:
     /// (@p durationMs == 0) it is dropped with a warning: that leg reads its
     /// progress from the WindowAnimator, whose own profile already carries the
     /// curve, so honouring it here would double-ease.
+    ///
+    /// @p animateMinimized opts a MINIMIZED window into the install. Only the
+    /// going-to-minimized leg of window.appearance.minimize passes true: it is
+    /// the one event whose semantic is "animate this window although it is
+    /// minimized", and the install then holds an EffectWindowVisibleRef so the
+    /// window has frames to paint. Every other event reaching a minimized
+    /// window (a snap batch, focus, a racing geometry apply) is rejected as it
+    /// always was — installing there would force-show a window the user
+    /// believes is minimized.
     bool beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
-                               bool holdAddedGrab = false,
+                               bool holdAddedGrab = false, bool animateMinimized = false,
                                std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
     void endShaderTransition(KWin::EffectWindow* window);
 
@@ -1694,7 +1714,8 @@ private:
     void loadMotionProfileTreeFromDbus();
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
-                                bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false);
+                                bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false,
+                                bool animateMinimized = false);
     /// Arm the duration teardown for a time-driven transition, generation-guarded.
     ///
     /// Re-arms itself when the transition's own clock says the leg is not finished.
@@ -2070,6 +2091,25 @@ private:
     // erased on settle, on a negative resolve, on the deadline, and on
     // window close/delete.
     QHash<KWin::EffectWindow*, RestoreSuppression> m_restoreSuppress;
+
+    // Stamp of the last going-to-minimized shader install per window, used
+    // by slotWindowMinimizedChanged to detect KWin's spurious
+    // minimize→unminimize pairs (plasmashell notification stacking emits
+    // them on tiled windows ~1-2 ms apart; the float side debounces the
+    // same quirk with the shared kSpuriousMinimizePairMs — see
+    // autotilehandler/signals.cpp). An unminimize landing inside the
+    // window silently drops the reverse leg instead of replaying a full
+    // un-minimize animation. `generation` pins the stamp to the exact
+    // transition the minimize event installed (or kept running), so the
+    // cancel can never hit an unrelated reverse leg (a superseding leg,
+    // or any future reverse event). Entries are erased on consume and on
+    // windowDeleted (raw-pointer-keyed, bounded like its siblings above).
+    struct MinimizeShaderStamp
+    {
+        qint64 timeMs = 0;
+        quint64 generation = 0;
+    };
+    QHash<KWin::EffectWindow*, MinimizeShaderStamp> m_minimizeShaderStamp;
 
     // Cursor output tracking (for daemon shortcut screen detection on Wayland)
     // Stores the connector name of the last output the cursor was on.

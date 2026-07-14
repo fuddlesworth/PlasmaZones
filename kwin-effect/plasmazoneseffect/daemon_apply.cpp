@@ -3,6 +3,8 @@
 
 #include "../plasmazoneseffect.h"
 
+#include "shader_internal.h"
+
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -561,36 +563,106 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
 
 void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 {
-    if (!w || !shouldHandleWindow(w) || !isTileableWindow(w)) {
+    if (!w) {
         return;
     }
-    const QString windowId = getWindowId(w);
-    const QString screenId = getWindowScreenId(w);
     const bool minimized = w->isMinimized();
 
-    // window.minimize shader transition fires for BOTH snap and autotile
-    // screens — the shader event is screen-mode-independent and the
-    // autotile handler's own minimised-change slot does not fire it
-    // (which would otherwise be asymmetric per-screen UX for the same
-    // user-configured "WindowMinimize" event).
+    // window.minimize shader transition fires for EVERY window the
+    // animation filter admits — like the open / close / focus events, it
+    // gates only on `shouldAnimateWindow` (enforced inside
+    // tryBeginShaderForEvent), NOT on the tiling filters below. A window
+    // excluded from tiling (min-size, exclusion rule) still animates its
+    // other lifecycle events, so it must animate minimize too. It also
+    // fires for BOTH snap and autotile screens — the shader event is
+    // screen-mode-independent and the autotile handler's own
+    // minimised-change slot does not fire it (which would otherwise be
+    // asymmetric per-screen UX for the same user-configured
+    // "WindowMinimize" event).
     //
-    // We only fire on UN-minimize (forward 0→1, "appear"). The
-    // going-to-minimized direction is intentionally not a shader event
-    // on the kwin-effect path: KWin pulls the surface (collapses frame
-    // geometry to 0×0 / sets isMinimized=true) BEFORE this signal fires,
-    // and beginShaderTransition's collapsed-surface guard rejects the
-    // install — the FBO allocation aborts on a 0×0 redirect target.
-    // A genuine "going away" minimise animation would need an
-    // unredirect-time hook that captures the last live frame before
-    // KWin tears the surface down; that's out of scope for this layer.
-    if (!minimized) {
+    // Un-minimize plays forward (0→1, "appear"); going-to-minimized plays
+    // the same shader in reverse (1→0, "going away"), matching the
+    // close / unmaximize reverse-leg convention.
+    //
+    // The going-to-minimized direction was historically skipped on the
+    // claim that KWin pulls the surface (collapses the frame to 0×0)
+    // before this signal fires. That was a misdiagnosis: minimizing keeps
+    // the frame geometry and the last committed buffer intact and only
+    // disables painting via PAINT_DISABLED_BY_MINIMIZE, which
+    // beginShaderTransition lifts with an EffectWindowVisibleRef for the
+    // transition's lifetime (the mechanism KWin's own Magic Lamp / Squash
+    // minimize effects use).
+    // animateMinimized opts the going-to-minimized leg past the
+    // begin-side minimized-window reject; the un-minimize leg runs on a
+    // visible window where the flag is moot.
+    //
+    // Spurious-pair suppression: plasmashell notification stacking makes
+    // KWin emit minimizedChanged(true) on tiled windows with the matching
+    // unminimize ~1-2 ms later (the same quirk kMinimizeFloatDebounceMs
+    // in autotilehandler/signals.cpp debounces on the float side). The
+    // reverse leg installs immediately — a genuine minimize must not
+    // start late, and a spurious pair paints at most one barely-started
+    // frame — but an unminimize landing inside the window means the pair
+    // was noise: silently drop the reverse leg instead of superseding it
+    // with a full un-minimize replay, which with an icon pack made every
+    // tiled window pour out of its taskbar icon on every notification.
+    if (minimized) {
+        // Stamp only a leg that is provably OURS, identified by generation.
+        // tryBeginShaderForEvent can install nothing (no pack assigned,
+        // null-shader sentinel, animation filter), and stamping blindly
+        // would let a spurious pair kill an unrelated leg mid-animation —
+        // a future reverse leg, or a superseding one. A fresh install is
+        // detected by the generation changing; a repeated minimize event
+        // whose prior minimize leg is still live (same-effect
+        // short-circuit) refreshes the stamp's timestamp while keeping
+        // the same generation.
+        const auto* pre = m_shaderManager.findTransition(w);
+        const quint64 preGeneration = pre ? pre->generation : 0;
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
-                               /*reverse=*/false);
+                               /*reverse=*/true, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
+                               /*animateMinimized=*/true);
+        if (const auto* post = m_shaderManager.findTransition(w); post && post->reverse) {
+            const auto stampIt = m_minimizeShaderStamp.constFind(w);
+            const bool freshInstall = post->generation != preGeneration;
+            const bool ourLiveLeg =
+                stampIt != m_minimizeShaderStamp.constEnd() && stampIt->generation == post->generation;
+            if (freshInstall || ourLiveLeg) {
+                // Stamp with a FRESH clock sample, not the slot-entry
+                // nowMs: a cold-cache install compiles the pack on this
+                // thread (tens of ms for a heavy shader), and the paired
+                // spurious unminimize measures its gap from ITS slot
+                // entry — an entry-time stamp would inflate the measured
+                // gap by the compile cost and let the session's first
+                // notification-induced pair escape suppression.
+                m_minimizeShaderStamp.insert(w, {ShaderInternal::shaderClockNowMs(), post->generation});
+            }
+        }
+    } else {
+        const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+        const MinimizeShaderStamp stamp = m_minimizeShaderStamp.take(w);
+        const bool spuriousPair = stamp.timeMs > 0 && nowMs - stamp.timeMs < kSpuriousMinimizePairMs;
+        if (spuriousPair) {
+            // Only the exact leg we stamped is ours to drop — the
+            // generation check keeps a superseding leg (or anything else
+            // live on the window) on its own teardown.
+            if (const auto* st = m_shaderManager.findTransition(w);
+                st && st->reverse && st->generation == stamp.generation) {
+                endShaderTransition(w);
+            }
+        } else {
+            tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
+                                   /*reverse=*/false);
+        }
     }
 
-    // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler (mirrors
-    // AutotileHandler running its own minimize→float machine for autotile screens).
-    m_snapHandler->handleMinimizeChanged(w, windowId, screenId, minimized);
+    // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler
+    // (mirrors AutotileHandler running its own minimize→float machine for
+    // autotile screens). Unlike the shader event above, this state
+    // machine only concerns windows the tiling system manages.
+    if (!shouldHandleWindow(w) || !isTileableWindow(w)) {
+        return;
+    }
+    m_snapHandler->handleMinimizeChanged(w, getWindowId(w), getWindowScreenId(w), minimized);
 }
 
 void PlasmaZonesEffect::slotRunningWindowsRequested()
