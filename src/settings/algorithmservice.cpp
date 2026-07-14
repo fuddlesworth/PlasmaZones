@@ -3,6 +3,8 @@
 
 #include "algorithmservice.h"
 
+#include "algorithmscaffold.h"
+
 #include "../config/settings.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
@@ -38,18 +40,6 @@ namespace PlasmaZones {
 
 namespace {
 
-// Strip characters that would let a metadata display string break out of its
-// Luau double-quoted literal, or inject a brace that desyncs the brace-depth
-// template splicer in spliceLuauTemplate().
-QString sanitizeLuauMetadataString(QString value)
-{
-    value.replace(QLatin1Char('\n'), QLatin1Char(' '));
-    value.replace(QLatin1Char('\r'), QLatin1Char(' '));
-    value.replace(QLatin1Char('\\'), QLatin1Char('/'));
-    value.replace(QLatin1Char('"'), QLatin1Char('\''));
-    return value;
-}
-
 QString userAlgorithmsDir()
 {
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
@@ -67,98 +57,6 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
             return path;
     }
     return QString();
-}
-
-/// Build a `metadata = { ... }` Luau table block (4-space indented, as it
-/// appears inside `pluau.algorithm{ ... }`). Ends with `},` so it drops in ahead
-/// of the tile field.
-QString buildLuauMetadata(const QString& name, const QString& id, bool overlapping, bool masterCount, bool splitRatio,
-                          bool memory)
-{
-    const auto b = [](bool v) {
-        return v ? QStringLiteral("true") : QStringLiteral("false");
-    };
-    QString m;
-    m += QStringLiteral("    metadata = {\n");
-    m += QStringLiteral("        name = \"") + name + QStringLiteral("\",\n");
-    m += QStringLiteral("        id = \"") + id + QStringLiteral("\",\n");
-    m += QStringLiteral("        description = \"Custom tiling algorithm\",\n");
-    m += QStringLiteral("        producesOverlappingZones = ") + b(overlapping) + QStringLiteral(",\n");
-    m += QStringLiteral("        supportsMasterCount = ") + b(masterCount) + QStringLiteral(",\n");
-    m += QStringLiteral("        supportsSplitRatio = ") + b(splitRatio) + QStringLiteral(",\n");
-    m += QStringLiteral("        defaultSplitRatio = 0.5,\n");
-    m += QStringLiteral("        defaultMaxWindows = 6,\n");
-    m += QStringLiteral("        minimumWindows = 1,\n");
-    m += QStringLiteral("        zoneNumberDisplay = \"all\",\n");
-    m += QStringLiteral("        supportsMemory = ") + b(memory) + QStringLiteral(",\n");
-    m += QStringLiteral("    },");
-    return m;
-}
-
-/// Splice a bundled `.luau` template: replace its leading SPDX comment block
-/// with @p newHeader and its `metadata = { ... }` table with @p metadataBlock,
-/// preserving the module locals + tile function. Returns empty on a template
-/// whose `metadata = {` block can't be located (caller falls back to a blank
-/// scaffold). Brace-depth scan; matches the bundled templates' formatting (no
-/// `{`/`}` inside metadata strings).
-QString spliceLuauTemplate(const QString& templateContent, const QString& newHeader, const QString& metadataBlock)
-{
-    const QStringList lines = templateContent.split(QLatin1Char('\n'));
-
-    // Skip the template's own leading comment / blank lines (its SPDX header).
-    int firstCode = 0;
-    while (firstCode < lines.size()) {
-        const QString t = lines[firstCode].trimmed();
-        if (t.isEmpty() || t.startsWith(QLatin1String("--"))) {
-            ++firstCode;
-            continue;
-        }
-        break;
-    }
-
-    static const QRegularExpression metaRe(QStringLiteral(R"(^\s*metadata\s*=\s*\{)"));
-    int metaStart = -1;
-    for (int i = firstCode; i < lines.size(); ++i) {
-        if (metaRe.match(lines[i]).hasMatch()) {
-            metaStart = i;
-            break;
-        }
-    }
-    if (metaStart < 0) {
-        return QString();
-    }
-
-    int depth = 0;
-    int metaEnd = -1;
-    for (int i = metaStart; i < lines.size(); ++i) {
-        for (const QChar c : lines[i]) {
-            if (c == QLatin1Char('{')) {
-                ++depth;
-            } else if (c == QLatin1Char('}')) {
-                --depth;
-            }
-        }
-        if (depth == 0) {
-            metaEnd = i;
-            break;
-        }
-    }
-    if (metaEnd < 0) {
-        return QString();
-    }
-
-    QString out = newHeader + QStringLiteral("\n");
-    for (int i = firstCode; i < metaStart; ++i) {
-        out += lines[i] + QLatin1Char('\n');
-    }
-    out += metadataBlock + QLatin1Char('\n');
-    for (int i = metaEnd + 1; i < lines.size(); ++i) {
-        out += lines[i];
-        if (i < lines.size() - 1) {
-            out += QLatin1Char('\n');
-        }
-    }
-    return out;
 }
 
 } // anonymous namespace
@@ -586,7 +484,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
         baseCopyName.chop(7);
     // Sanitize to prevent metadata injection.
-    const QString newName = sanitizeLuauMetadataString(baseCopyName + QStringLiteral(" (Copy)"));
+    const QString newName = AlgorithmScaffold::sanitizeMetadataString(baseCopyName + QStringLiteral(" (Copy)"));
     // Replace the first name and id values inside the metadata table.
     // Anchored to line start to avoid matching inside algorithm body strings.
     // Capture leading whitespace so the replacement preserves indentation.
@@ -705,9 +603,8 @@ bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString
     return true;
 }
 
-QString AlgorithmService::createNewAlgorithm(const QString& name, const QString& baseTemplate, bool supportsMasterCount,
-                                             bool supportsSplitRatio, bool producesOverlappingZones,
-                                             bool supportsMemory)
+QString AlgorithmService::createNewAlgorithm(const QString& name, const QString& baseTemplate,
+                                             const QVariantMap& capabilities)
 {
     // Sanitize name to a filename: lowercase, replace non-alphanumeric (except hyphens) with
     // hyphens, collapse multiple hyphens, strip leading/trailing hyphens
@@ -750,13 +647,13 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     const QString header = QStringLiteral("-- SPDX-FileCopyrightText: ") + QString::number(currentYear)
         + QStringLiteral(" <your name>\n") + QStringLiteral("-- SPDX-License-Identifier: GPL-3.0-or-later\n");
 
-    // Metadata table — strip newlines/quotes to prevent injection.
-    const QString sanitizedDisplayName = sanitizeLuauMetadataString(name.trimmed());
-    const QString metadataBlock = buildLuauMetadata(sanitizedDisplayName, filename, producesOverlappingZones,
-                                                    supportsMasterCount, supportsSplitRatio, supportsMemory);
+    // Display name — strip newlines/quotes to prevent injection.
+    const QString sanitizedDisplayName = AlgorithmScaffold::sanitizeMetadataString(name.trimmed());
 
     // Start from a base template by reusing its module locals + tile and
-    // swapping in our own SPDX header + metadata table.
+    // patching in our own SPDX header + name/id. The template's other
+    // metadata fields (capability flags, defaults, customParams) are kept
+    // verbatim — the template's code depends on them.
     bool foundTemplate = false;
     if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
         const QString templateFile =
@@ -769,7 +666,8 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
                 const QString templateContent = QString::fromUtf8(file.readAll());
                 file.close();
 
-                const QString spliced = spliceLuauTemplate(templateContent, header, metadataBlock);
+                const QString spliced =
+                    AlgorithmScaffold::spliceTemplate(templateContent, header, sanitizedDisplayName, filename);
                 if (spliced.isEmpty()) {
                     qCWarning(PlasmaZones::lcCore)
                         << "createNewAlgorithm: template" << baseTemplate
@@ -785,12 +683,17 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     }
 
     if (!foundTemplate) {
-        // Blank scaffold: a self-contained pluau.algorithm module the user edits.
-        content = header + QStringLiteral("\nlocal pluau = pluau\n\nreturn pluau.algorithm {\n") + metadataBlock
-            + QStringLiteral("\n\n") + QStringLiteral("    tile = function(ctx)\n")
-            + QStringLiteral("        if ctx.windowCount <= 0 then return {} end\n")
-            + QStringLiteral("        return pluau.fillArea(ctx.area, ctx.windowCount)\n")
-            + QStringLiteral("    end,\n}\n");
+        // Blank scaffold: a self-contained pluau.algorithm module the user
+        // edits. The wizard's capability toggles only apply here.
+        AlgorithmScaffold::Capabilities caps;
+        caps.masterCount = capabilities.value(QStringLiteral("supportsMasterCount")).toBool();
+        caps.splitRatio = capabilities.value(QStringLiteral("supportsSplitRatio")).toBool();
+        caps.overlappingZones = capabilities.value(QStringLiteral("producesOverlappingZones")).toBool();
+        caps.memory = capabilities.value(QStringLiteral("supportsMemory")).toBool();
+        caps.scriptState = capabilities.value(QStringLiteral("supportsScriptState")).toBool();
+        caps.singleWindow = capabilities.value(QStringLiteral("supportsSingleWindow")).toBool();
+        caps.retileOnFocus = capabilities.value(QStringLiteral("retileOnFocus")).toBool();
+        content = AlgorithmScaffold::buildBlankScaffold(header, sanitizedDisplayName, filename, caps);
     }
 
     // Write the file

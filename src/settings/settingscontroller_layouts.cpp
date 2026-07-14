@@ -552,10 +552,8 @@ bool SettingsController::exportAlgorithm(const QString& algorithmId, const QStri
 }
 
 QString SettingsController::createNewAlgorithm(const QString& name, const QString& baseTemplate,
-                                               bool supportsMasterCount, bool supportsSplitRatio,
-                                               bool producesOverlappingZones, bool supportsMemory)
+                                               const QVariantMap& capabilities)
 {
-    return m_algorithmService->createNewAlgorithm(name, baseTemplate, supportsMasterCount, supportsSplitRatio,
-                                                  producesOverlappingZones, supportsMemory);
+    return m_algorithmService->createNewAlgorithm(name, baseTemplate, capabilities);
 }
 } // namespace PlasmaZones

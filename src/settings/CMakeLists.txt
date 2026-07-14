@@ -189,6 +189,8 @@ set(plasmazones_settings_SRCS
     kzonesimporter.cpp
     stagingservice.h
     stagingservice.cpp
+    algorithmscaffold.h
+    algorithmscaffold.cpp
     algorithmservice.h
     algorithmservice.cpp
     settingslaunchcontroller.h

@@ -63,8 +63,13 @@ public:
     bool deleteAlgorithm(const QString& algorithmId);
     bool duplicateAlgorithm(const QString& algorithmId);
     bool exportAlgorithm(const QString& algorithmId, const QString& destPath);
-    QString createNewAlgorithm(const QString& name, const QString& baseTemplate, bool supportsMasterCount,
-                               bool supportsSplitRatio, bool producesOverlappingZones, bool supportsMemory);
+    /// Create a new user algorithm. For a non-blank @p baseTemplate the
+    /// bundled template's metadata is preserved (only name/id are rewritten)
+    /// and @p capabilities is ignored; for the blank scaffold @p capabilities
+    /// holds metadata flag names (supportsMasterCount, supportsSplitRatio,
+    /// producesOverlappingZones, supportsMemory, supportsScriptState,
+    /// supportsSingleWindow, retileOnFocus) mapped to bools.
+    QString createNewAlgorithm(const QString& name, const QString& baseTemplate, const QVariantMap& capabilities);
 
 Q_SIGNALS:
     void availableAlgorithmsChanged();

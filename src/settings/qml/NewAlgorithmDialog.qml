@@ -25,6 +25,9 @@ Kirigami.Dialog {
     property bool supportsSplitRatio: false
     property bool producesOverlappingZones: false
     property bool supportsMemory: false
+    property bool supportsScriptState: false
+    property bool supportsSingleWindow: false
+    property bool retileOnFocus: false
     property bool openInEditor: true
     property string _previousAutoName: ""
     readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
@@ -40,30 +43,47 @@ Kirigami.Dialog {
         {
             "name": i18n("Blank"),
             "id": "blank",
-            "desc": i18n("Minimal skeleton to implement yourself"),
-            "hasMaster": false,
-            "hasSplit": false
+            "desc": i18n("Minimal skeleton to implement yourself")
         },
         {
             "name": i18n("Master + Stack"),
             "id": "master-stack",
-            "desc": i18n("Large master area with stacked windows"),
-            "hasMaster": true,
-            "hasSplit": true
+            "desc": i18n("Large master area with stacked windows")
         },
         {
             "name": i18n("Grid"),
             "id": "grid",
-            "desc": i18n("Equal-sized NxM grid layout"),
-            "hasMaster": false,
-            "hasSplit": false
+            "desc": i18n("Equal-sized NxM grid layout")
         },
         {
             "name": i18n("Binary Split"),
             "id": "bsp",
-            "desc": i18n("Balanced recursive BSP splitting"),
-            "hasMaster": false,
-            "hasSplit": true
+            "desc": i18n("Balanced recursive BSP splitting")
+        },
+        {
+            "name": i18n("Aligned Grid"),
+            "id": "aligned-grid",
+            "desc": i18n("Resize-aware grid that moves whole rows and columns")
+        },
+        {
+            "name": i18n("Dwindle (Memory)"),
+            "id": "dwindle-memory",
+            "desc": i18n("Remembers split positions across changes")
+        },
+        {
+            "name": i18n("Cluster"),
+            "id": "cluster",
+            "desc": i18n("Groups windows by application, with custom parameters")
+        },
+        {
+            "name": i18n("Theater"),
+            "id": "theater",
+            "desc": i18n("Spotlight that follows focus, with windows on side rails")
+        },
+        {
+            "name": i18n("Deck"),
+            "id": "deck",
+            "desc": i18n("Overlapping stack with the focused window in front")
         }
     ]
     // Resolve selected template data for step 2
@@ -77,10 +97,6 @@ Kirigami.Dialog {
 
     function selectTemplate(templateData) {
         root.baseTemplate = templateData.id;
-        root.supportsMasterCount = templateData.hasMaster;
-        root.supportsSplitRatio = templateData.hasSplit;
-        root.producesOverlappingZones = false;
-        root.supportsMemory = false;
         if (nameField.text === "" || nameField.text === root._previousAutoName) {
             let autoName = i18n("My %1", templateData.name);
             nameField.text = autoName;
@@ -101,6 +117,9 @@ Kirigami.Dialog {
         root.supportsSplitRatio = false;
         root.producesOverlappingZones = false;
         root.supportsMemory = false;
+        root.supportsScriptState = false;
+        root.supportsSingleWindow = false;
+        root.retileOnFocus = false;
         root.openInEditor = true;
         root.screenAspectRatio = WizardUtils.clampedScreenAspectRatio(Screen.width, Screen.height);
         wizardFooter.errorText = "";
@@ -135,10 +154,10 @@ Kirigami.Dialog {
                     opacity: 0.7
                 }
 
-                // 2x2 grid — matches layout wizard's visual pattern
+                // 3-column grid — one card per bundled template plus Blank
                 GridLayout {
                     Layout.fillWidth: true
-                    columns: 2
+                    columns: 3
                     columnSpacing: Kirigami.Units.mediumSpacing
                     rowSpacing: Kirigami.Units.mediumSpacing
 
@@ -287,7 +306,9 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
                     }
 
-                    // Capabilities
+                    // Capabilities — editable for the blank scaffold only. A
+                    // template's capabilities are part of its metadata and
+                    // travel with the copied script.
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
@@ -308,7 +329,17 @@ Kirigami.Dialog {
                             }
                         }
 
+                        Label {
+                            visible: root.baseTemplate !== "blank"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: i18n("Capabilities are inherited from the template so its layout code keeps working.")
+                            font: Kirigami.Theme.smallFont
+                            opacity: 0.6
+                        }
+
                         GridLayout {
+                            visible: root.baseTemplate === "blank"
                             columns: 2
                             columnSpacing: Kirigami.Units.largeSpacing * 2
                             rowSpacing: Kirigami.Units.smallSpacing
@@ -352,6 +383,36 @@ Kirigami.Dialog {
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Remembers positions across changes")
                             }
+
+                            CheckBox {
+                                text: i18n("Script state")
+                                checked: root.supportsScriptState
+                                onToggled: root.supportsScriptState = checked
+                                Accessible.name: i18n("Supports script state")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                ToolTip.text: i18n("Keeps a persistent state table across retiles")
+                            }
+
+                            CheckBox {
+                                text: i18n("Single window")
+                                checked: root.supportsSingleWindow
+                                onToggled: root.supportsSingleWindow = checked
+                                Accessible.name: i18n("Owns the single-window layout")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                ToolTip.text: i18n("Lays out a lone window itself instead of filling the screen")
+                            }
+
+                            CheckBox {
+                                text: i18n("Follows focus")
+                                checked: root.retileOnFocus
+                                onToggled: root.retileOnFocus = checked
+                                Accessible.name: i18n("Retiles when focus changes")
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                ToolTip.text: i18n("Reflows when focus moves between tiled windows")
+                            }
                         }
                     }
 
@@ -392,7 +453,15 @@ Kirigami.Dialog {
         onNextClicked: root.currentStep = 1
         onCreateClicked: {
             wizardFooter.errorText = "";
-            let result = root.controller.createNewAlgorithm(nameField.text.trim(), root.baseTemplate, root.supportsMasterCount, root.supportsSplitRatio, root.producesOverlappingZones, root.supportsMemory);
+            let result = root.controller.createNewAlgorithm(nameField.text.trim(), root.baseTemplate, {
+                "supportsMasterCount": root.supportsMasterCount,
+                "supportsSplitRatio": root.supportsSplitRatio,
+                "producesOverlappingZones": root.producesOverlappingZones,
+                "supportsMemory": root.supportsMemory,
+                "supportsScriptState": root.supportsScriptState,
+                "supportsSingleWindow": root.supportsSingleWindow,
+                "retileOnFocus": root.retileOnFocus
+            });
             if (result && result.length > 0) {
                 if (root.openInEditor)
                     root.controller.openAlgorithm(result);

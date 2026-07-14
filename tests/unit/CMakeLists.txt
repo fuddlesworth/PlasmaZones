@@ -775,6 +775,16 @@ target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::C
     PhosphorControl::PhosphorControl)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
+# Pure string helpers behind AlgorithmService::createNewAlgorithm (blank
+# scaffold + template splice). Compiled directly because they live in the
+# plasmazones-settings executable rather than plasmazones_core.
+add_executable(test_algorithm_scaffold
+    settings/test_algorithm_scaffold.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_scaffold PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_algorithm_scaffold COMMAND test_algorithm_scaffold)
+
 add_executable(test_window_appearance_controller
     settings/test_window_appearance_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowappearancecontroller.cpp
