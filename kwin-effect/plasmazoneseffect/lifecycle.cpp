@@ -717,7 +717,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
     // Reap any live desktop transition whose OUTGOING desktop is removed from the
     // pager mid-switch: it captured a raw VirtualDesktop* in begin() that the
-    // deferred captureDesktop() dereferences up to the transition's duration later.
+    // deferred captureDesktop() still COMPARES (isOnDesktop) up to the
+    // transition's duration later. It never derefs it, so this is not a crash
+    // guard — a freed pointer must simply not linger and be matched against a
+    // live desktop.
     connect(KWin::effects, &KWin::EffectsHandler::desktopRemoved, this, [this](KWin::VirtualDesktop* desktop) {
         m_desktopTransition.desktopRemoved(desktop);
     });

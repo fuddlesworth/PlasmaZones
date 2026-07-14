@@ -154,6 +154,12 @@ public:
         /// the production resolver's QPointer arm after engine destruction.
         std::function<PhosphorSnapEngine::SnapState*()> globals;
         /// Every store, including the global holder, for aggregate iteration.
+        /// CONTRACT: the returned list never contains a null element. An unset
+        /// resolver yields an empty list rather than a list of nulls, and both
+        /// wirings filter (SnapEngine::allSnapStates() skips nulls; the
+        /// single-store convenience wiring rejects a null state outright). Every
+        /// caller dereferences the elements unguarded, so a resolver that
+        /// breaks this crashes them all.
         std::function<QList<PhosphorSnapEngine::SnapState*>()> allStates;
         /// Drop a window's reverse-map entry (window closed / fully removed).
         std::function<void(const QString& windowId)> forgetWindow;
@@ -1178,6 +1184,8 @@ private:
     {
         return m_snapResolver.globals ? m_snapResolver.globals() : nullptr;
     }
+    /// Every store, for aggregate iteration. Elements are never null (see the
+    /// resolver's `allStates` contract), so callers deref them directly.
     QList<PhosphorSnapEngine::SnapState*> snapAllStates() const
     {
         return m_snapResolver.allStates ? m_snapResolver.allStates() : QList<PhosphorSnapEngine::SnapState*>{};

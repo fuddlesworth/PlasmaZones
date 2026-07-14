@@ -249,6 +249,17 @@ private:
         bool captured = false;
     };
 
+    /// An array of @p N uniform locations, every slot "unset" (-1).
+    template<std::size_t N>
+    static constexpr std::array<int, N> makeUnsetLocations()
+    {
+        std::array<int, N> locs{};
+        for (int& loc : locs) {
+            loc = -1;
+        }
+        return locs;
+    }
+
     /// Compiled desktop-transition shader + cached uniform locations. Keyed by
     /// effectId, mirroring ShaderTransitionManager's per-effect cache.
     struct CompiledDesktopShader
@@ -262,8 +273,15 @@ private:
         int iSwitchDeltaLoc = -1;
         // customParams[slot] / customColors[slot] uniform locations (-1 when the
         // shader omits the slot — the GLSL compiler prunes unreferenced ones).
-        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsLoc{};
-        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColorsLoc{};
+        // Filled with -1 rather than left value-initialised: `{}` would default
+        // every slot to 0, which is a VALID location, so an early-out between the
+        // cache emplace and the location loop would hand out slot 0 for every
+        // pruned uniform. The scalar members above default to -1 for the same
+        // reason; these have to agree with them.
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsLoc =
+            makeUnsetLocations<PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams>();
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColorsLoc =
+            makeUnsetLocations<PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors>();
     };
 
     /// Render every window on @p desktop that intersects @p screen into a fresh
@@ -332,8 +350,10 @@ private:
                                     OutputTransition* proto);
 
     /// Compile (or fetch from cache) the desktop-transition shader for @p effectId.
-    /// Returns nullptr when the effect id is unknown or compilation failed.
-    /// Implemented in desktoptransitionshader.cpp (the assembly half).
+    /// NEVER null: returns the cache entry, whose `shader` is null when the id is
+    /// unknown or compilation failed. Callers must check `->shader`. Caching the
+    /// failure as a non-null sentinel is what keeps a broken pack from recompiling
+    /// every frame. Implemented in desktoptransitionshader.cpp (the assembly part).
     CompiledDesktopShader* compiledShader(const QString& effectId);
 
     /// Drop every live PEEK transition (kind-guarded; switches keep running),
@@ -358,7 +378,21 @@ private:
     /// that Overview or Cube took while our transition was in flight, unsuppressing
     /// every effect that was bowing out to THEM. The claim in begin() is guarded
     /// symmetrically: it only takes the screen when nobody else holds it.
-    void releaseFullScreenClaimIfIdle();
+    ///
+    /// DEFERS while show-desktop is active, keeping both the claim and the flag.
+    /// setActiveFullScreenEffect cancels show desktop in EITHER direction, so a
+    /// switch that claimed before the user triggered show-desktop would, on
+    /// settling, hide the windows and then spontaneously bring them back. begin()'s
+    /// `!isShowingDesktop()` guard only covers TAKING the claim; this covers
+    /// dropping it. The deferred release is retried by the peek path: every
+    /// showingDesktopChanged runs beginPeek, whose every bail-out reaps and lands
+    /// back here, and by the showing=false edge KWin has already cleared its own
+    /// state, so the write is a no-op against it.
+    ///
+    /// @param force skip the show-desktop deferral. For teardown only (reset()),
+    /// where a claim pointing at a dying effect must not outlive it — the cancel
+    /// is moot when the compositor is dropping the effect anyway.
+    void releaseFullScreenClaimIfIdle(bool force = false);
 
     /// Make the compositor GL context current so GLTexture/GLShader frees issue
     /// their glDelete* against a live context. Every off-paint-thread mutator that

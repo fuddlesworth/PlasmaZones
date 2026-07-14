@@ -16,7 +16,7 @@
 // the show leg automatically retraces it (the circuit re-energizes). Retracing
 // covers everything keyed off `t`: the front, the de-energize drain, and the
 // glow envelope. The two iFrame-driven terms below (the trace dashes and the
-// ember sparks) are decoration that runs forward on both legs, since iFrame
+// draining sparks) are decoration that runs forward on both legs, since iFrame
 // counts up per leg and this pass binds no iIsReversed.
 // Run by the screen-level desktop-transition pass, which binds uFromDesktop and
 // uToDesktop, pushes progress as iTime, and binds the p_color* slots from the
@@ -24,7 +24,6 @@
 #include <desktop_transition.glsl>
 #include <noise.glsl>
 
-const float PZ_PI = 3.141592653589793;
 
 // Four-stop brand gradient, t in [0, 1]: cyan -> blue -> purple -> rose. Each
 // stop falls back to its brand default when its colour slot is unset.

@@ -235,6 +235,15 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         if (!screen) {
             continue;
         }
+        // Displacing a peek leg on this output drops its bare-desktop cache too.
+        // The entry is only consumed by a show leg in paintOutput, so a peek
+        // replaced before it painted would strand an output-sized texture until
+        // the next hide leg. The capture is stale regardless: a switch means this
+        // output's desktop content is no longer what the hide leg captured.
+        const auto displaced = m_active.find(screen);
+        if (displaced != m_active.end() && displaced->second.kind != Kind::Switch) {
+            m_peekDesktopCache.erase(screen);
+        }
         OutputTransition tr = proto;
         tr.from = from;
         tr.switchDelta = switchDelta;

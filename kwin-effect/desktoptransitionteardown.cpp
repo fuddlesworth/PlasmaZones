@@ -29,9 +29,19 @@ void DesktopTransitionManager::endOutput(KWin::LogicalOutput* screen)
     releaseFullScreenClaimIfIdle();
 }
 
-void DesktopTransitionManager::releaseFullScreenClaimIfIdle()
+void DesktopTransitionManager::releaseFullScreenClaimIfIdle(bool force)
 {
     if (!m_active.empty() || !m_fullScreenClaimed || !KWin::effects) {
+        return;
+    }
+    // Hold the claim while show-desktop is up. setActiveFullScreenEffect cancels
+    // show desktop in EITHER direction, so releasing here would cancel a peek the
+    // user triggered DURING our switch: the windows hide, then spontaneously come
+    // back the moment the switch settles. begin()'s !isShowingDesktop() arm only
+    // stops us TAKING the claim across that state; this stops us dropping it.
+    // Keeping m_fullScreenClaimed set is what makes the retry work — see the
+    // header for the showingDesktopChanged → beginPeek → reap → here path.
+    if (!force && PlasmaZonesEffect::isShowingDesktop()) {
         return;
     }
     // Clear the claim only while KWin still reports it as OURS. Overview or Cube
@@ -143,7 +153,10 @@ void DesktopTransitionManager::desktopRemoved(KWin::VirtualDesktop* desktop)
     // outgoing desktop just vanished.
     bool erasedAny = false;
     for (auto it = m_active.begin(); it != m_active.end();) {
-        if (it->second.from == desktop) {
+        // Kind-guarded rather than pointer-matched alone: peek legs carry a null
+        // `from` as their sentinel, so a null @p desktop would otherwise match
+        // every one of them and reap the whole peek path.
+        if (it->second.kind == Kind::Switch && it->second.from == desktop) {
             // Erasing frees the entry's captured GLTextures; desktopRemoved fires
             // off the paint thread, so make the context current before the first
             // free — only when there is actually something to free.
@@ -190,7 +203,10 @@ void DesktopTransitionManager::reset()
     m_active.clear();
     m_shaderCache.clear();
     m_peekDesktopCache.clear();
-    releaseFullScreenClaimIfIdle();
+    // force: the show-desktop deferral must not apply here. A claim pointing at an
+    // effect the compositor is dropping would outlive it, and the cancel the
+    // deferral protects against is moot when the effect is going away anyway.
+    releaseFullScreenClaimIfIdle(true);
 }
 
 } // namespace PlasmaZones

@@ -203,13 +203,14 @@ QList<SnapState*> SnapEngine::allSnapStates() const
 
 bool SnapEngine::isFloating(const QString& windowId) const
 {
-    if (const SnapState* state = stateForWindow(windowId)) {
-        if (state->isFloating(windowId)) {
-            return true;
-        }
+    // stateForWindow never returns null (see setFloating), so no guard here.
+    if (stateForWindow(windowId)->isFloating(windowId)) {
+        return true;
     }
     // Screenless float bookkeeping falls to the global holder, which is not in the
     // reverse map; check it explicitly so isFloating stays symmetric with setFloating.
+    // This fall-through IS load-bearing: a tracked window resolves to its own store
+    // above, which never sees a screenless float.
     return m_globals && m_globals->isFloating(windowId);
 }
 
@@ -235,10 +236,10 @@ QStringList SnapEngine::floatingWindows() const
 
 QString SnapEngine::zoneForWindow(const QString& windowId) const
 {
-    if (const SnapState* state = stateForWindow(windowId)) {
-        return state->zoneForWindow(windowId);
-    }
-    return {};
+    // stateForWindow never returns null (see setFloating); an untracked window
+    // reads an empty zone out of the global holder, which is what the old null
+    // branch returned anyway.
+    return stateForWindow(windowId)->zoneForWindow(windowId);
 }
 
 void SnapEngine::syncGlobalLastUsedForRemovedZones(const QStringList& removedZones)

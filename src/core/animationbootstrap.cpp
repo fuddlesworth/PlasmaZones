@@ -83,11 +83,9 @@ AnimationLoaderHandles constructAnimationLoaders(PhosphorAnimation::CurveRegistr
     QDir().mkpath(writableUserDir(QLatin1StringView{"plasmazones/profiles"}));
 
     // Construct loaders with NO initial load — callers run the scan
-    // explicitly (via runInitialAnimationLoad) AFTER they have wired
-    // any consumer-side signals so the initial scan's emits are
-    // observed. The daemon needs this; secondary processes call
-    // runInitialAnimationLoad immediately and have no pre-load wiring
-    // to set up.
+    // explicitly (runInitialCurveLoad → seedShellAnimationFamilies →
+    // runInitialProfileLoad) AFTER they have wired any consumer-side
+    // signals so the initial scan's emits are observed.
     //
     // Registry reference is captured at loader construction — this
     // prevents any later async rescan from landing on a different
@@ -131,16 +129,6 @@ void runInitialProfileLoad(PhosphorAnimation::ProfileLoader& profileLoader, cons
 
     profileLoader.loadLibraryBuiltins();
     profileLoader.loadFromDirectories(dirs.profileDirs, LiveReload::On);
-}
-
-void runInitialAnimationLoad(PhosphorAnimation::CurveLoader& curveLoader,
-                             PhosphorAnimation::ProfileLoader& profileLoader, const AnimationLoaderDirs& dirs)
-{
-    // Curves first so any profile JSON referencing a user-authored curve
-    // resolves on first parse rather than waiting for the curveLoader→
-    // profileLoader rescan wire to fire on the second pass.
-    runInitialCurveLoad(curveLoader, dirs);
-    runInitialProfileLoad(profileLoader, dirs);
 }
 
 void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& registry,

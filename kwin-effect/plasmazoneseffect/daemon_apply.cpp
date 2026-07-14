@@ -627,8 +627,8 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
             const bool ourLiveLeg =
                 stampIt != m_minimizeShaderStamp.constEnd() && stampIt->generation == post->generation;
             if (freshInstall || ourLiveLeg) {
-                // Stamp with a FRESH clock sample, not the slot-entry
-                // nowMs: a cold-cache install compiles the pack on this
+                // Stamp with a FRESH clock sample, not one taken at slot
+                // entry: a cold-cache install compiles the pack on this
                 // thread (tens of ms for a heavy shader), and the paired
                 // spurious unminimize measures its gap from ITS slot
                 // entry — an entry-time stamp would inflate the measured

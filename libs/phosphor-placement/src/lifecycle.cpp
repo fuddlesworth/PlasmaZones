@@ -290,9 +290,6 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     // virtualScreenIds above.)
     {
         for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-            if (!state) {
-                continue;
-            }
             const QString lastScreenId = state->lastUsedScreenId();
             if (lastScreenId != physicalScreenId && !lastScreenId.startsWith(prefix)) {
                 continue;
@@ -482,9 +479,6 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     // physical monitor back to the physical id. Last-used is per-key, so sweep every
     // store rather than a single global scalar.
     for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        if (!state) {
-            continue;
-        }
         const QString lastScreenId = state->lastUsedScreenId();
         if (PhosphorIdentity::VirtualScreenId::isVirtual(lastScreenId)
             && PhosphorIdentity::VirtualScreenId::extractPhysicalId(lastScreenId) == physicalScreenId) {
@@ -1214,9 +1208,6 @@ void WindowTrackingService::validateLastUsedZone(const QString& targetScreen)
     // Last-used is per-key: clear the last-used on any store that points at
     // @p targetScreen but whose zone no longer exists in that screen's layout.
     for (PhosphorSnapEngine::SnapState* state : snapAllStates()) {
-        if (!state) {
-            continue;
-        }
         const QString lastZoneId = state->lastUsedZoneId();
         if (lastZoneId.isEmpty() || state->lastUsedScreenId() != targetScreen) {
             continue;

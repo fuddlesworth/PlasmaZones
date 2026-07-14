@@ -154,8 +154,9 @@ public:
     // Per-window borders are rendered by routing the redirected window through
     // the offscreen border MapTexture shader (see the drawWindow override below +
     // decorations.cpp), NOT here. paintScreen is overridden solely for the
-    // full-screen virtual-desktop switch transition: while one is live,
-    // m_desktopTransition.paintOutput draws the two-desktop blend for that output
+    // full-screen desktop transitions (the virtual-desktop switch and the
+    // show-desktop peek, which share the same path): while one is live,
+    // m_desktopTransition.paintOutput draws the two-texture blend for that output
     // and we skip the normal scene; otherwise this chains straight through.
     void paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, int mask,
                      const KWin::Region& deviceRegion, KWin::LogicalOutput* screen) override;

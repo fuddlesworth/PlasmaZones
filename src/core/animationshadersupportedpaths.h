@@ -13,13 +13,18 @@
 namespace PlasmaZones {
 
 /// Leaf event paths the daemon's overlay service AND the KWin effect
-/// actually resolve a shader effect for. Each appears as a
-/// @c resolveShaderEffect(tree, ...) call inside one of
+/// actually resolve a shader effect for, by one of three mechanisms:
+/// a @c resolveShaderEffect(tree, ...) call inside one of
 /// @c OverlayService::buildOsdConfig / @c buildLayoutPickerConfig /
-/// @c buildZoneSelectorConfig / @c buildSnapAssistConfig, OR as a
-/// @c tryBeginShaderForEvent(...) call in @c kwin-effect/plasmazoneseffect.cpp
-/// — when a future surface adds a shader leg, append its leg paths
-/// here in lockstep.
+/// @c buildZoneSelectorConfig / @c buildSnapAssistConfig; a
+/// @c tryBeginShaderForEvent(...) call under
+/// @c kwin-effect/plasmazoneseffect/ (window_lifecycle, drag_snap,
+/// daemon_apply, shader_transitions); or a
+/// @c resolveShaderWithDefault(tree, ...) call driving
+/// DesktopTransitionManager from
+/// @c kwin-effect/plasmazoneseffect/lifecycle.cpp (the two desktop
+/// legs, which are screen-level rather than per-window). When a future
+/// surface adds a shader leg, append its leg paths here in lockstep.
 inline QStringList shaderConsumedLeafEventPaths()
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
@@ -35,8 +40,8 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::PopupSnapAssistShow,
         PP::PopupSnapAssistHide,
         //
-        // Window family — driven by the KWin OffscreenEffect at
-        // kwin-effect/plasmazoneseffect.cpp via tryBeginShaderForEvent
+        // Window family — driven by the KWin OffscreenEffect under
+        // kwin-effect/plasmazoneseffect/ via tryBeginShaderForEvent
         // on each window-lifecycle hook: windowAdded/windowClosed for
         // open/close, windowStartUserMovedResized for the held move,
         // and windowMaximizedStateChanged/minimizedChanged/
