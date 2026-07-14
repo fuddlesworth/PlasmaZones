@@ -12,6 +12,7 @@
 
 #include <PhosphorZones/AssignmentEntry.h>
 
+#include <QJsonArray>
 #include <QLatin1StringView>
 #include <QUuid>
 
@@ -86,9 +87,11 @@ QVariantList ruleTemplates()
     // Templates mirror the flows the per-settings pages used to author
     // before the unified rule store: monitor → layout / algorithm
     // (assignments) and app → exclusion (per-mode disable + animation
-    // exclusion lists). That's where the bulk of real-world rules live, so
-    // these give one-click starting points for the common cases — plus a
-    // size-based animation-exclusion showcase for the Width match field.
+    // exclusion lists). Plus the classic per-app window rules (zone
+    // placement, screen routing, floating) and two context showcases
+    // (smart gaps for TiledWindowCount, portrait layout for
+    // ScreenOrientation) — one-click starting points for the common cases,
+    // ordered context band first, then application band, then animation.
     QVariantList out;
     out.append(entry(QLatin1String("layoutOnMonitor"), PhosphorI18n::tr("Set a layout on a monitor"),
                      PhosphorI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
@@ -99,6 +102,27 @@ QVariantList ruleTemplates()
                      PhosphorI18n::tr("Pin the active layout on one monitor so it can't be switched. This is the "
                                       "rule-driven version of the lock-layout shortcut."),
                      QLatin1String("object-locked")));
+    out.append(entry(QLatin1String("layoutOnDesktop"), PhosphorI18n::tr("Set a layout on a virtual desktop"),
+                     PhosphorI18n::tr("Pick a snapping layout to use on one virtual desktop."),
+                     QLatin1String("virtual-desktops")));
+    out.append(entry(QLatin1String("portraitLayout"), PhosphorI18n::tr("Set a layout for portrait monitors"),
+                     PhosphorI18n::tr("Pick a snapping layout to use whenever a monitor is in portrait "
+                                      "orientation. Handy for rotating screens."),
+                     QLatin1String("object-rotate-right")));
+    out.append(entry(QLatin1String("smartGaps"), PhosphorI18n::tr("No gaps for a lone window"),
+                     PhosphorI18n::tr("Remove the inner and outer gaps when only one window is tiled, so a single "
+                                      "window uses the whole screen."),
+                     QLatin1String("distribute-horizontal-equal")));
+    out.append(entry(QLatin1String("snapAppToZone"), PhosphorI18n::tr("Open an app in a zone"),
+                     PhosphorI18n::tr("Snap one application's windows into a chosen zone when they open."),
+                     QLatin1String("window-pin")));
+    out.append(entry(QLatin1String("routeAppToScreen"), PhosphorI18n::tr("Open an app on a monitor"),
+                     PhosphorI18n::tr("Send one application's windows to a chosen monitor when they open."),
+                     QLatin1String("monitor")));
+    out.append(entry(QLatin1String("floatApp"), PhosphorI18n::tr("Float an app"),
+                     PhosphorI18n::tr("Keep one application's windows floating instead of tiled. The windows stay "
+                                      "managed, unlike a full exclusion."),
+                     QLatin1String("window-restore")));
     out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from tiling"),
                      PhosphorI18n::tr("Keep one application's windows out of the snap and autotile engines entirely."),
                      QLatin1String("edit-delete-remove")));
@@ -159,6 +183,85 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         lockAction.type = QString::fromLatin1(ActionType::LockContext);
         lockAction.params.insert(ActionParam::Value, true);
         rule.actions.append(lockAction);
+    } else if (templateId == QLatin1String("layoutOnDesktop")) {
+        rule.name = PhosphorI18n::tr("Snapping layout on virtual desktop");
+        rule.priority = kContextBandBase;
+        // Desktop twin of layoutOnMonitor — same seeded action pair, keyed on
+        // the desktop number instead of the screen picker. Seed desktop 1 for
+        // the same reason newEmptyRule("desktop") does: 0 means "all desktops"
+        // and the validator rejects it.
+        rule.match = MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 1);
+        RuleAction engineMode;
+        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
+        engineMode.params.insert(ActionParam::Mode,
+                                 PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping));
+        rule.actions.append(engineMode);
+        RuleAction layoutAction;
+        layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
+        layoutAction.params.insert(ActionParam::LayoutId, QString());
+        rule.actions.append(layoutAction);
+    } else if (templateId == QLatin1String("portraitLayout")) {
+        rule.name = PhosphorI18n::tr("Layout for portrait monitors");
+        rule.priority = kContextBandBase;
+        // ScreenOrientation showcase: matches ANY portrait screen, so one rule
+        // covers a rotating monitor in both positions (it simply stops
+        // matching when the screen returns to landscape).
+        rule.match = MatchExpression::makeLeaf(Field::ScreenOrientation, Operator::Equals, QStringLiteral("portrait"));
+        RuleAction engineMode;
+        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
+        engineMode.params.insert(ActionParam::Mode,
+                                 PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping));
+        rule.actions.append(engineMode);
+        RuleAction layoutAction;
+        layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
+        layoutAction.params.insert(ActionParam::LayoutId, QString());
+        rule.actions.append(layoutAction);
+    } else if (templateId == QLatin1String("smartGaps")) {
+        rule.name = PhosphorI18n::tr("No gaps for a lone window");
+        rule.priority = kContextBandBase;
+        // TiledWindowCount showcase: the classic "smart gaps" tiling-WM
+        // behavior. Both gap slots are seeded to 0 so a single tiled window
+        // fills the screen; with two or more windows the rule stops matching
+        // and the configured gaps return. The count field is absent when the
+        // context isn't autotiling, so the rule is a no-op for snap contexts.
+        rule.match = MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::Equals, 1);
+        RuleAction innerGap;
+        innerGap.type = QString::fromLatin1(ActionType::SetInnerGap);
+        innerGap.params.insert(ActionParam::Value, 0);
+        rule.actions.append(innerGap);
+        RuleAction outerGap;
+        outerGap.type = QString::fromLatin1(ActionType::SetOuterGap);
+        outerGap.params.insert(ActionParam::Value, 0);
+        rule.actions.append(outerGap);
+    } else if (templateId == QLatin1String("snapAppToZone")) {
+        rule.name = PhosphorI18n::tr("Open an app in a zone");
+        rule.priority = kApplicationBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
+        // Seed zone ordinal 1 (the validator requires a non-empty list); the
+        // user picks the real zone in the editor. Ordinals are layout-agnostic,
+        // matching the snapToZone1..9 shortcuts.
+        RuleAction action;
+        action.type = QString::fromLatin1(ActionType::SnapToZone);
+        action.params.insert(ActionParam::Zones, QJsonArray{1});
+        rule.actions.append(action);
+    } else if (templateId == QLatin1String("routeAppToScreen")) {
+        rule.name = PhosphorI18n::tr("Open an app on a monitor");
+        rule.priority = kApplicationBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
+        RuleAction action;
+        action.type = QString::fromLatin1(ActionType::RouteToScreen);
+        action.params.insert(ActionParam::TargetScreenId, QString());
+        rule.actions.append(action);
+    } else if (templateId == QLatin1String("floatApp")) {
+        rule.name = PhosphorI18n::tr("Float an app");
+        rule.priority = kApplicationBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
+        // Float keeps the window managed but out of tiling — the gentler
+        // sibling of Exclude, and what most "this app shouldn't tile" asks
+        // actually want (media players, calculators, launcher popups).
+        RuleAction action;
+        action.type = QString::fromLatin1(ActionType::Float);
+        rule.actions.append(action);
     } else if (templateId == QLatin1String("excludeApp")) {
         rule.name = PhosphorI18n::tr("Exclude an app from tiling");
         rule.priority = kApplicationBandBase;
