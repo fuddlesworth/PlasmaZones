@@ -721,6 +721,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);
+        // Spurious-minimize-pair stamp — raw-pointer-keyed like its
+        // siblings below, so erase here both to stay bounded and so a
+        // reused address can't inherit a stale stamp that would swallow
+        // the new window's first genuine un-minimize animation.
+        m_minimizeShaderStamp.remove(w);
         // Drop per-window shader-event bookkeeping. m_lastFocusShaderWindow is
         // a QPointer that auto-nulls on destroy, so it's already cleaned up;
         // m_shaderManager.m_lastFullyMaximized is a raw-pointer-keyed QHash so we explicitly
@@ -1231,6 +1236,16 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // synchronous dispatch from the dtor body is sound.
         QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
     }
+    // When KWin::effects is null (compositor teardown) the drain above is
+    // skipped and any still-installed ShaderTransition is destroyed by
+    // member destruction instead. Each entry's `visibleRef` dtor then
+    // dereferences its stored EffectWindow* (`unrefVisible`) — there is no
+    // way to neutralise an EffectWindowVisibleRef without touching the
+    // window. This relies on KWin destroying effects before it destroys
+    // windows, which is the same lifetime assumption KWin's own Magic
+    // Lamp / Squash effects make: both hold visible refs in member
+    // containers destroyed at effect destruction with no null-effects
+    // special-casing.
 }
 
 } // namespace PlasmaZones

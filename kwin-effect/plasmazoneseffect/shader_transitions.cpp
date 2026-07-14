@@ -580,6 +580,7 @@ void PlasmaZonesEffect::warmUserTextureAsync(const QString& absolutePath)
 bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
                                               const PhosphorAnimationShaders::ShaderProfile& profile, int durationMs,
                                               bool reverse, bool holdCloseGrab, bool holdAddedGrab,
+                                              bool animateMinimized,
                                               std::shared_ptr<const PhosphorAnimation::Curve> progressCurve)
 {
     const QString effectId = profile.effectiveEffectId();
@@ -614,20 +615,35 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     }
 
     // OffscreenEffect's `redirect()` allocates an FBO sized to the
-    // window's frame geometry. A window that's already minimised /
-    // unmapped reports 0×0 (or 1×1) here, and FBO creation aborts
+    // window's frame geometry. A window with a genuinely collapsed
+    // geometry reports 0×0 (or 1×1) here, and FBO creation aborts
     // with `GL_INVALID_VALUE … <levels>, <width> and <height> must
     // be 1 or greater` followed by `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`
     // — the redirect silently leaves the window in a half-broken
     // state that contaminates every subsequent transition until KWin
     // itself reallocates the offscreen data. Skip the install on
-    // collapsed surfaces. The minimize lifecycle event in particular
-    // fires AFTER KWin has already pulled the surface, so its shader
-    // assignment is intrinsically a no-op on this code path; users
-    // who want a minimise animation need an unredirect-time hook,
-    // which is out of scope here.
+    // collapsed surfaces.
+    //
+    // A MINIMIZED window is rejected UNLESS the caller opted in via
+    // animateMinimized (the going-to-minimized leg of
+    // window.appearance.minimize is the only opt-in). Minimizing keeps
+    // the frame geometry and the last committed buffer intact; painting
+    // is merely disabled via PAINT_DISABLED_BY_MINIMIZE, which the
+    // EffectWindowVisibleRef installed below lifts for the transition's
+    // lifetime (KWin's own Magic Lamp / Squash mechanism). Every OTHER
+    // event that can reach here on a minimized window — a snap-commit
+    // batch racing the minimize→float bookkeeping, window.focus, a
+    // maximizedChanged race — must keep the historical silent no-op:
+    // installing (and force-showing) there would animate a window the
+    // user believes is minimized. A genuinely 0-sized geometry always
+    // bails.
     const QRectF geo = window->frameGeometry();
-    if (window->isMinimized() || geo.width() < 1.0 || geo.height() < 1.0) {
+    if (window->isMinimized() && !animateMinimized) {
+        qCDebug(lcEffect) << "beginShaderTransition: skipping minimized window for non-minimize event" << effectId
+                          << "window=" << window->windowClass();
+        return false;
+    }
+    if (geo.width() < 1.0 || geo.height() < 1.0) {
         qCDebug(lcEffect) << "beginShaderTransition: skipping collapsed surface" << effectId
                           << "window=" << window->windowClass() << "geo=" << geo
                           << "isMinimized=" << window->isMinimized();
@@ -970,6 +986,10 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // pay nothing.
         cached.iFromRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIFromRect);
         cached.iToRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIToRect);
+        // Task-manager icon rect for minimize-to-icon packs (genie,
+        // phosphor-siphon). -1 for every pack that doesn't declare it —
+        // same pay-nothing guard.
+        cached.iIconRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIIconRect);
         cached.iOldWindowLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUOldWindow);
         // Surface-layer-stack uniforms — every animation shader resolves these
         // (declared in the shared header and read through surfaceColor()), so
@@ -1106,6 +1126,19 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // grab, the new transition's endShaderTransition will balance.
     const bool existingHeldGrab = isSameWindowSupersession ? existing->closeGrabHeld : false;
     const bool existingAddedHeldGrab = isSameWindowSupersession ? existing->addedGrabHeld : false;
+    // Acquire the minimized-window paint lifeline BEFORE the supersession
+    // erase below drops the prior transition's ref, so the per-reason
+    // visible count never transiently hits zero across a supersession on a
+    // still-minimized window. Held in a local so every early-return path
+    // between here and the transition stamp releases it automatically
+    // (RAII); the stamp copies it into the transition, and KWin's
+    // per-reason accounting keeps the copy churn balanced. Reaching here
+    // minimized implies animateMinimized — the guard at the top already
+    // rejected the other case.
+    KWin::EffectWindowVisibleRef minimizedPaintLifeline;
+    if (window->isMinimized()) {
+        minimizedPaintLifeline = KWin::EffectWindowVisibleRef(window, KWin::EffectWindow::PAINT_DISABLED_BY_MINIMIZE);
+    }
     if (isSameWindowSupersession) {
         // Erase the prior bookkeeping but skip the unredirect — we're
         // about to re-shader this same window. setShader() below
@@ -1357,6 +1390,27 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // held — the new transition's endShaderTransition will balance.
     transition.closeGrabHeld = holdCloseGrab || existingHeldGrab;
     transition.addedGrabHeld = holdAddedGrab || existingAddedHeldGrab;
+    // Keep a minimized window paintable for the transition's lifetime.
+    // The ref was acquired into `minimizedPaintLifeline` BEFORE the
+    // supersession erase (see the comment there), so a superseding
+    // install on a still-minimized window genuinely holds its own ref
+    // before the prior one drops. RAII — released when the transition
+    // entry is erased (endShaderTransition / windowDeleted / supersession
+    // all destroy the ShaderTransition, whose member dtor unrefs; the
+    // copy here refs and the local's scope-end unrefs, balanced by
+    // KWin's per-reason accounting).
+    transition.visibleRef = minimizedPaintLifeline;
+    // Icon target for minimize-to-icon packs. Captured unconditionally —
+    // the rect is a stored value on the EffectWindow, and only shaders
+    // that declare iIconRect ever read the pushed uniform. A window in no
+    // task manager reports an empty rect, which stays a null QRectF here
+    // and reaches the shader as (0, 0, 0, 0) = "no icon target".
+    {
+        const auto icon = window->iconGeometry();
+        if (icon.width() >= 1.0 && icon.height() >= 1.0) {
+            transition.iconRect = QRectF(icon.x(), icon.y(), icon.width(), icon.height());
+        }
+    }
     if (durationMs > 0) {
         transition.durationMs = durationMs;
         transition.startTimeMs = shaderClockNowMs();
@@ -1778,7 +1832,8 @@ bool PlasmaZonesEffect::resolvedShaderAppliesToEvent(const QString& effectId, co
 }
 
 void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
-                                               bool reverse, bool holdCloseGrab, bool holdAddedGrab)
+                                               bool reverse, bool holdCloseGrab, bool holdAddedGrab,
+                                               bool animateMinimized)
 {
     if (!window || durationMs <= 0) {
         // Defensive guard. The current call sites all pass
@@ -1919,7 +1974,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         return;
     }
     const bool installed = beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab,
-                                                 holdAddedGrab, progressCurve);
+                                                 holdAddedGrab, animateMinimized, progressCurve);
     auto* transition = m_shaderManager.findTransition(window);
     // Mark the held-move leg by IDENTITY. The drag handlers must not infer it from
     // liveness: `window.movement.move` is opt-in with no default shader, so the

@@ -177,9 +177,12 @@ namespace PhosphorAnimationShaders {
 ///     `uTexture0`. `surfaceColor()` folds it in so a card-space [0, 1]
 ///     sample addresses the card's region of the padded texture. A
 ///     bare card-sized anchor carries the (0, 0, 1, 1) identity.
-///   • `iSurfaceScreenPos` — the surface's global screen origin (.xy)
-///     plus host screen size (.zw). Edge-distance math (fly-in's
-///     nearest-edge pick) reads this.
+///   • `iSurfaceScreenPos` — the surface's origin (.xy — global
+///     workspace coordinates on the kwin path, position within the host
+///     wl_surface on the daemon) plus the host extent (.zw — screen size
+///     on the kwin path, the host surface's size on the daemon). The
+///     minimize-to-icon packs reconstruct the window rect from it, and
+///     position-keyed noise seeds hash it.
 ///
 /// `iFlipBufferY`, `qt_Matrix`, `qt_Opacity`, `_appField0` /
 /// `_appField1` are daemon-only and absent from the canonical header's
@@ -270,11 +273,18 @@ inline constexpr const char* kIDate = "iDate";
 /// encode this rule once.
 inline constexpr const char* kIIsReversed = "iIsReversed";
 
-/// `vec4 iSurfaceScreenPos` — the shader surface's position in screen
-/// coords plus the host screen dimensions, both in logical pixels.
-///   .xy = (surfaceX, surfaceY) — top-left of the shader surface
-///         relative to the screen origin
-///   .zw = (screenWidth, screenHeight) of the host screen
+/// `vec4 iSurfaceScreenPos` — the shader surface's position plus the
+/// host screen dimensions, both in logical pixels.
+///   .xy = (surfaceX, surfaceY) — top-left of the shader surface. On the
+///         kwin path this is the window's GLOBAL (workspace) origin —
+///         the raw `frameGeometry()` top-left, the same space as
+///         `iFromRect` / `iToRect` / `iIconRect` — which coincides with
+///         screen-relative only on a single output at the workspace
+///         origin. The daemon pushes the anchor's position within its
+///         host wl_surface (the playing field), whose size fills .zw
+///         there.
+///   .zw = (screenWidth, screenHeight) of the host screen on the kwin
+///         path; the host surface's size on the daemon path
 ///
 /// Daemon: written to the appended `AnimationUniformExtension` (UBO
 /// offset 672 = sizeof(BaseUniforms)). The extension is installed by
@@ -286,10 +296,18 @@ inline constexpr const char* kIIsReversed = "iIsReversed";
 /// name. Independent of the UBO mechanism — the UBO contract isolation
 /// only matters on the daemon path.
 ///
-/// Vertex / fragment shaders that need to know where the surface sits
-/// on its host screen (fly-in from closest edge, screen-relative noise)
-/// read this. Both runtimes populate it once per leg attach + on every
-/// anchor or window geometry signal.
+/// Shaders that need the surface's position read this: the
+/// minimize-to-icon packs (genie, phosphor-siphon) reconstruct the
+/// window rect as `vec4(iSurfaceScreenPos.xy, iAnchorSize)`, valid
+/// because they pair it with the same-space `iIconRect`, and
+/// `surfaceSeed()` in noise.glsl hashes it for position-keyed noise.
+/// It is NOT suitable for per-output edge-distance math — fly-in's
+/// nearest-edge pick deliberately avoids it (a global coordinate does
+/// not share an origin with a per-output extent on multi-monitor
+/// setups) and uses `iAnchorPosInFbo` / `iResolution` instead.
+/// Population cadence: the daemon writes it on leg attach and on every
+/// anchor or window geometry signal; the kwin path pushes it every
+/// paint frame.
 inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
 
 /// `vec2 iAnchorSize` — captured anchor (card) pixel size in logical
@@ -359,6 +377,26 @@ inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
 /// strict SPIR-V bake from ever seeing the loose declarations.
 inline constexpr const char* kIFromRect = "iFromRect";
 inline constexpr const char* kIToRect = "iToRect";
+
+/// `vec4 iIconRect` — the window's task-manager icon rectangle in logical
+/// screen pixels `(x, y, width, height)`, same coordinate space as
+/// `iFromRect` / `iToRect` and as `iSurfaceScreenPos.xy` + `iAnchorSize`
+/// (the window's frame rect). Captured from `EffectWindow::iconGeometry()`
+/// when the transition installs and pushed every frame, so a
+/// minimize-to-icon pack (genie, phosphor-siphon) can deform the window
+/// toward its taskbar icon. The rect comes from the task manager via
+/// PlasmaWindowManagement; a window that sits in no task manager carries
+/// `(0, 0, 0, 0)`, which a pack MUST treat as "no icon target" and
+/// degrade to an in-place animation. The rect may sit on a DIFFERENT
+/// output than the window (a taskbar on another monitor); the
+/// window is painted only during its own output's pass, so a
+/// deformation toward a foreign-output icon clips at that output's
+/// edge. COMPOSITOR PATH ONLY and deliberately NOT declared by the
+/// canonical shared header, exactly like `iFromRect` / `iToRect`: a pack
+/// that reads it declares it inside its own `#ifdef PLASMAZONES_KWIN`
+/// block, keeping the daemon's strict SPIR-V bake away from the loose
+/// declaration.
+inline constexpr const char* kIIconRect = "iIconRect";
 
 /// `sampler2D uOldWindow` — snapshot of the window's content captured at
 /// the old frame size just before the instant `moveResize`. The morph
