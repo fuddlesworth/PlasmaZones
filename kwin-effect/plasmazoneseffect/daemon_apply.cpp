@@ -599,25 +599,40 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // was noise: silently drop the reverse leg instead of superseding it
     // with a full un-minimize replay, which with an icon pack made every
     // tiled window pour out of its taskbar icon on every notification.
-    static constexpr qint64 kSpuriousMinimizePairMs = 75;
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     if (minimized) {
-        m_minimizeShaderStampMs.insert(w, nowMs);
+        // Stamp only a leg that is provably OURS, identified by generation.
+        // tryBeginShaderForEvent can install nothing (no pack assigned,
+        // null-shader sentinel, animation filter), and a pre-existing
+        // reverse leg — reachably a going-to-unmaximized morph — may still
+        // be live; stamping blindly would let a spurious pair kill that
+        // unrelated leg mid-animation. A fresh install is detected by the
+        // generation changing; a repeated minimize event whose prior
+        // minimize leg is still live (same-effect short-circuit) refreshes
+        // the stamp's timestamp while keeping the same generation.
+        const auto* pre = m_shaderManager.findTransition(w);
+        const quint64 preGeneration = pre ? pre->generation : 0;
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
                                /*reverse=*/true, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
                                /*animateMinimized=*/true);
-    } else {
-        const auto stampIt = m_minimizeShaderStampMs.find(w);
-        const bool spuriousPair =
-            stampIt != m_minimizeShaderStampMs.end() && nowMs - stampIt.value() < kSpuriousMinimizePairMs;
-        if (stampIt != m_minimizeShaderStampMs.end()) {
-            m_minimizeShaderStampMs.erase(stampIt);
+        if (const auto* post = m_shaderManager.findTransition(w); post && post->reverse) {
+            const auto stampIt = m_minimizeShaderStamp.constFind(w);
+            const bool freshInstall = post->generation != preGeneration;
+            const bool ourLiveLeg =
+                stampIt != m_minimizeShaderStamp.constEnd() && stampIt->generation == post->generation;
+            if (freshInstall || ourLiveLeg) {
+                m_minimizeShaderStamp.insert(w, {nowMs, post->generation});
+            }
         }
+    } else {
+        const MinimizeShaderStamp stamp = m_minimizeShaderStamp.take(w);
+        const bool spuriousPair = stamp.timeMs > 0 && nowMs - stamp.timeMs < kSpuriousMinimizePairMs;
         if (spuriousPair) {
-            // Only the reverse minimize leg is ours to drop. Anything else
-            // live on the window (a focus fade that outlived the noise)
-            // keeps its own teardown.
-            if (const auto* st = m_shaderManager.findTransition(w); st && st->reverse) {
+            // Only the exact leg we stamped is ours to drop — the
+            // generation check keeps a superseding leg (or anything else
+            // live on the window) on its own teardown.
+            if (const auto* st = m_shaderManager.findTransition(w);
+                st && st->reverse && st->generation == stamp.generation) {
                 endShaderTransition(w);
             }
         } else {

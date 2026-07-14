@@ -1825,6 +1825,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // frame) drops the ref and the window leaves the scene. Guarded on
         // isMinimized rather than the leg direction so an un-minimize leg
         // whose window was re-minimized mid-flight is covered too.
+        // Returning without the tail chain continuation is deliberate:
+        // later-chained effects have nothing meaningful to paint for a
+        // window that is only in the scene via our visible ref (same
+        // precedent as the restore-suppression early return above).
         if (w->isMinimized()) {
             return;
         }

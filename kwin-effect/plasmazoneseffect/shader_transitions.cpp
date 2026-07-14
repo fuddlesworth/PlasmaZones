@@ -1132,7 +1132,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // still-minimized window. Held in a local so every early-return path
     // between here and the transition stamp releases it automatically
     // (RAII); the stamp copies it into the transition, and KWin's
-    // per-holder accounting keeps the copy churn balanced. Reaching here
+    // per-reason accounting keeps the copy churn balanced. Reaching here
     // minimized implies animateMinimized — the guard at the top already
     // rejected the other case.
     KWin::EffectWindowVisibleRef minimizedPaintLifeline;
@@ -1398,7 +1398,7 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // entry is erased (endShaderTransition / windowDeleted / supersession
     // all destroy the ShaderTransition, whose member dtor unrefs; the
     // copy here refs and the local's scope-end unrefs, balanced by
-    // KWin's per-holder accounting).
+    // KWin's per-reason accounting).
     transition.visibleRef = minimizedPaintLifeline;
     // Icon target for minimize-to-icon packs. Captured unconditionally —
     // the rect is a stored value on the EffectWindow, and only shaders

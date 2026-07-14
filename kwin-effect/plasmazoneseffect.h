@@ -96,6 +96,15 @@ static_assert(
     static_cast<int>(EffectAutotileDragBehavior::Reorder) == 1,
     "EffectAutotileDragBehavior::Reorder must encode as 1 to match PhosphorTiles::AutotileDragBehavior::Reorder");
 
+// Plasmashell notification stacking makes KWin emit spurious
+// minimizedChanged(true) events on tiled windows, with the matching
+// unminimize ~1-2 ms later. Two suppressions key off this window and MUST
+// agree on its width: the autotile minimize→float debounce
+// (autotilehandler/signals.cpp) and the minimize shader-event
+// spurious-pair cancel (plasmazoneseffect/daemon_apply.cpp,
+// slotWindowMinimizedChanged). Shared here so the two can never desync.
+inline constexpr qint64 kSpuriousMinimizePairMs = 75;
+
 // Forward declarations for helper classes
 class AutotileHandler;
 class SnapHandler;
@@ -2057,16 +2066,24 @@ private:
     // window close/delete.
     QHash<KWin::EffectWindow*, RestoreSuppression> m_restoreSuppress;
 
-    // Timestamp (shaderClockNowMs) of the last going-to-minimized shader
-    // install per window, used by slotWindowMinimizedChanged to detect
-    // KWin's spurious minimize→unminimize pairs (plasmashell notification
-    // stacking emits them on tiled windows ~1-2 ms apart — see
-    // kMinimizeFloatDebounceMs in autotilehandler/signals.cpp for the
-    // same quirk's float-side debounce). An unminimize landing inside the
+    // Stamp of the last going-to-minimized shader install per window, used
+    // by slotWindowMinimizedChanged to detect KWin's spurious
+    // minimize→unminimize pairs (plasmashell notification stacking emits
+    // them on tiled windows ~1-2 ms apart; the float side debounces the
+    // same quirk with the shared kSpuriousMinimizePairMs — see
+    // autotilehandler/signals.cpp). An unminimize landing inside the
     // window silently drops the reverse leg instead of replaying a full
-    // un-minimize animation. Entries are erased on consume and on
+    // un-minimize animation. `generation` pins the stamp to the exact
+    // transition the minimize event installed (or kept running), so the
+    // cancel can never hit an unrelated reverse leg such as a
+    // going-to-unmaximized morph. Entries are erased on consume and on
     // windowDeleted (raw-pointer-keyed, bounded like its siblings above).
-    QHash<KWin::EffectWindow*, qint64> m_minimizeShaderStampMs;
+    struct MinimizeShaderStamp
+    {
+        qint64 timeMs = 0;
+        quint64 generation = 0;
+    };
+    QHash<KWin::EffectWindow*, MinimizeShaderStamp> m_minimizeShaderStamp;
 
     // Cursor output tracking (for daemon shortcut screen detection on Wayland)
     // Stores the connector name of the last output the cursor was on.

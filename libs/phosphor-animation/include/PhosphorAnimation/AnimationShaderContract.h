@@ -177,9 +177,11 @@ namespace PhosphorAnimationShaders {
 ///     `uTexture0`. `surfaceColor()` folds it in so a card-space [0, 1]
 ///     sample addresses the card's region of the padded texture. A
 ///     bare card-sized anchor carries the (0, 0, 1, 1) identity.
-///   • `iSurfaceScreenPos` — the surface's global screen origin (.xy)
-///     plus host screen size (.zw). Edge-distance math (fly-in's
-///     nearest-edge pick) reads this.
+///   • `iSurfaceScreenPos` — the surface's origin (.xy — global
+///     workspace coordinates on the kwin path, position within the host
+///     wl_surface on the daemon) plus host screen size (.zw). The
+///     minimize-to-icon packs reconstruct the window rect from it, and
+///     position-keyed noise seeds hash it.
 ///
 /// `iFlipBufferY`, `qt_Matrix`, `qt_Opacity`, `_appField0` /
 /// `_appField1` are daemon-only and absent from the canonical header's
@@ -277,9 +279,11 @@ inline constexpr const char* kIIsReversed = "iIsReversed";
 ///         the raw `frameGeometry()` top-left, the same space as
 ///         `iFromRect` / `iToRect` / `iIconRect` — which coincides with
 ///         screen-relative only on a single output at the workspace
-///         origin. The daemon pushes the overlay surface's position on
-///         its host screen.
-///   .zw = (screenWidth, screenHeight) of the host screen
+///         origin. The daemon pushes the anchor's position within its
+///         host wl_surface (the playing field), whose size fills .zw
+///         there.
+///   .zw = (screenWidth, screenHeight) of the host screen on the kwin
+///         path; the host surface's size on the daemon path
 ///
 /// Daemon: written to the appended `AnimationUniformExtension` (UBO
 /// offset 672 = sizeof(BaseUniforms)). The extension is installed by
@@ -291,10 +295,18 @@ inline constexpr const char* kIIsReversed = "iIsReversed";
 /// name. Independent of the UBO mechanism — the UBO contract isolation
 /// only matters on the daemon path.
 ///
-/// Vertex / fragment shaders that need to know where the surface sits
-/// on its host screen (fly-in from closest edge, screen-relative noise)
-/// read this. Both runtimes populate it once per leg attach + on every
-/// anchor or window geometry signal.
+/// Shaders that need the surface's position read this: the
+/// minimize-to-icon packs (genie, phosphor-siphon) reconstruct the
+/// window rect as `vec4(iSurfaceScreenPos.xy, iAnchorSize)`, valid
+/// because they pair it with the same-space `iIconRect`, and
+/// `surfaceSeed()` in noise.glsl hashes it for position-keyed noise.
+/// It is NOT suitable for per-output edge-distance math — fly-in's
+/// nearest-edge pick deliberately avoids it (a global coordinate does
+/// not share an origin with a per-output extent on multi-monitor
+/// setups) and uses `iAnchorPosInFbo` / `iResolution` instead.
+/// Population cadence: the daemon writes it on leg attach and on every
+/// anchor or window geometry signal; the kwin path pushes it every
+/// paint frame.
 inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
 
 /// `vec2 iAnchorSize` — captured anchor (card) pixel size in logical
