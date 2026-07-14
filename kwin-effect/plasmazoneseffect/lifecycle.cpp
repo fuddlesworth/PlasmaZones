@@ -685,14 +685,22 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // into the peek captures.
     connect(KWin::effects, &KWin::EffectsHandler::showingDesktopChanged, this, [this](bool showing) {
         // Honour the global animations master toggle, exactly as the
-        // desktop-switch handler above does.
-        if (!m_windowAnimator->isEnabled()) {
-            return;
+        // desktop-switch handler above does — folded into the resolve so the
+        // empty-id call below still happens.
+        QString effectId;
+        PhosphorAnimationShaders::ShaderProfile profile;
+        if (m_windowAnimator->isEnabled()) {
+            profile = PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
+                                                                         PhosphorAnimation::ProfilePaths::DesktopPeek);
+            effectId = profile.effectiveEffectId();
         }
-        const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::resolveShaderWithDefault(
-            m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::DesktopPeek);
-        const QString effectId = profile.effectiveEffectId();
         if (effectId.isEmpty()) {
+            // No pack runnable for THIS toggle — but beginPeek must still see
+            // the signal: its empty-id contract reaps any live peek leg, so a
+            // hide leg begun while a pack WAS assigned (since unassigned, or
+            // animations since disabled) cannot keep blending against the
+            // reversed toggle or poison the bare-desktop cache.
+            m_desktopTransition.beginPeek(showing, QString(), QVariantMap(), 0, nullptr);
             return;
         }
         // Same one-walk motion resolve as desktop.switch: global animator
@@ -1228,13 +1236,24 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // the next session loads the effects from kwinrc, which the suppression
     // never writes to.
     if (KWin::effects && !m_compositorShuttingDown) {
-        for (const QString& name : std::as_const(m_suppressedShowDesktopEffects)) {
-            // Already loaded (a KCM reconcile beat us to it) is satisfied, not
-            // a failure — loadEffect returns false for a loaded effect.
-            if (!KWin::effects->isEffectLoaded(name) && !KWin::effects->loadEffect(name)) {
-                qCWarning(lcEffect) << "failed to restore show-desktop effect" << name;
+        // Deferred, detached (no `this` context — we are dying): this
+        // destructor runs from KWin's unloadEffect, and if that unload
+        // originated from a KCM-apply reconcile iterating the loaded-effects
+        // list, a synchronous loadEffect here would mutate the container
+        // mid-iteration — the same hazard reconfigure() defers around.
+        const QStringList toRestore = m_suppressedShowDesktopEffects;
+        QTimer::singleShot(0, [toRestore]() {
+            if (!KWin::effects) {
+                return;
             }
-        }
+            for (const QString& name : toRestore) {
+                // Already loaded (a KCM reconcile beat us to it) is satisfied,
+                // not a failure — loadEffect returns false for a loaded effect.
+                if (!KWin::effects->isEffectLoaded(name) && !KWin::effects->loadEffect(name)) {
+                    qCWarning(lcEffect) << "failed to restore show-desktop effect" << name;
+                }
+            }
+        });
         m_suppressedShowDesktopEffects.clear();
     }
 

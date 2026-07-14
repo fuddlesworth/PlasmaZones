@@ -1509,6 +1509,13 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         }
         if (transitionHadCloseGrab && window) {
             window->setData(KWin::WindowClosedGrabRole, QVariant());
+        }
+        // Unref only when THIS install acquired the ref (fresh grab): with an
+        // inherited grab (existingHeldGrab) the prior entry still owns the ref
+        // — the only way this insert fails with one is the prior entry NOT
+        // having been erased — and its own endShaderTransition will release
+        // it; unreffing here too would double-release.
+        if (holdCloseGrab && !existingHeldGrab && window) {
             QPointer<PlasmaZonesEffect> selfGuard(this);
             KWin::EffectWindow* heldWindow = window;
             QMetaObject::invokeMethod(

@@ -275,14 +275,23 @@ void DesktopTransitionManager::reapPeekTransitions()
     // bare desktop while the toggle it animated has already been reversed
     // (under a foreign claim, or with the pack since unassigned). Reap peek
     // entries (kind-guarded — a live switch is not ours to truncate) and
-    // repaint so the real scene draws a frame nothing else schedules.
-    bool reapedAny = false;
+    // repaint so the real scene draws a frame nothing else schedules. The
+    // bare-desktop cache goes too: a reaped leg breaks the "show leg
+    // immediately follows its hide leg" pairing, so a cached capture may no
+    // longer match the desktop's content (wallpaper or panel changes are
+    // invisible to the size/format validation); the next show leg then
+    // settles instantly, which is KWin's default.
+    const bool hasPeekEntries = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
+        return entry.second.kind != Kind::Switch;
+    });
+    if (!hasPeekEntries && m_peekDesktopCache.empty()) {
+        return;
+    }
+    // Both the entry erases and the cache clear free GLTextures; callers run
+    // off the paint thread.
+    ensureGlContextCurrent();
     for (auto it = m_active.begin(); it != m_active.end();) {
         if (it->second.kind != Kind::Switch) {
-            if (!reapedAny) {
-                ensureGlContextCurrent();
-                reapedAny = true;
-            }
             // Same defensive posture as desktopRemoved's reap: both callers
             // run inside KWin signal handlers where effects is live, but the
             // guard keeps the two loops from expressing opposite assumptions.
@@ -294,6 +303,7 @@ void DesktopTransitionManager::reapPeekTransitions()
             ++it;
         }
     }
+    m_peekDesktopCache.clear();
 }
 
 void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, const QVariantMap& params,

@@ -709,17 +709,29 @@ void PlasmaZonesEffect::loadCachedSettings()
         // Clamp at the D-Bus boundary like every sibling int loader — the
         // daemon is a separate process and must not be trusted with the range.
         // DecorationDefaults is the SSOT the daemon's own schema clamps from.
+        // The &ok gate keeps an older daemon's valid-empty reply for an
+        // unknown key from coercing to 0 and clobbering the seeded default.
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
         namespace DD = PhosphorCompositor::DecorationDefaults;
-        const int i = qBound(DD::BorderWidthMin, v.toInt(), DD::BorderWidthMax);
+        const int i = qBound(DD::BorderWidthMin, raw, DD::BorderWidthMax);
         if (m_windowAppearanceDefault.borderWidth != i) {
             m_windowAppearanceDefault.borderWidth = i;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderRadius"), [this](const QVariant& v) {
-        // Same boundary clamp as windowBorderWidth above.
+        // Same boundary clamp and &ok gate as windowBorderWidth above.
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
         namespace DD = PhosphorCompositor::DecorationDefaults;
-        const int i = qBound(DD::BorderRadiusMin, v.toInt(), DD::BorderRadiusMax);
+        const int i = qBound(DD::BorderRadiusMin, raw, DD::BorderRadiusMax);
         if (m_windowAppearanceDefault.borderRadius != i) {
             m_windowAppearanceDefault.borderRadius = i;
             scheduleBorderSweep();
