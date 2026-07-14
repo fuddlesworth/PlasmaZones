@@ -422,40 +422,46 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
         if (displaced != m_active.end() && displaced->second.kind != Kind::Switch
             && displaced->second.kind != tr.kind) {
             const OutputTransition& old = displaced->second;
-            // BOTH curves must be stateful to hand the spring state over. The
-            // displaced leg only HAS integration state if it was itself driven
-            // by a spring — easeProgress never writes CurveState for a
-            // stateless curve, so old.progressCurveState would still read its
-            // default value 0, and seeding `1 - 0` would start the new leg at
-            // the far endpoint: the exact snap this resume exists to prevent.
-            // The mirror case is just as wrong (a spring's integrated value has
-            // no relation to its raw wall-clock progress), so a curve-kind
-            // change between the legs — reachable when the daemon pushes a
-            // motion-tree edit between the two showingDesktopChanged edges —
-            // falls through to the clock back-date, which at least degrades to
-            // a proportional resume rather than a jump.
-            const bool bothStateful = tr.progressCurve && tr.progressCurve->isStateful() && old.progressCurve
-                && old.progressCurve->isStateful();
-            if (bothStateful) {
-                // A spring reads NOTHING from the linear clock: easeProgress
-                // integrates its CurveState by the inter-frame dt and returns
-                // state.value. Back-dating startTimeMs would therefore not move
-                // it at all, and would only make the leg expire early — settling
-                // mid-spring, which pops harder than the restart it was meant to
-                // fix. Carry the state over MIRRORED instead, which is the
-                // continuity CurveState's own doc says stateful curves derive
-                // from value/velocity.
-                //
-                // Both legs read t off the same value: hide as t = value, show as
-                // t = 1 - value. So seeding value = 1 - old.value lands the new
-                // leg's t exactly where the displaced leg's t was, in EITHER
-                // direction, and negating velocity preserves its momentum across
-                // the handover (t keeps travelling briefly, then springs back)
-                // rather than restarting the spring from rest. lastPaintTimeMs
-                // starts at -1, so the first step takes dt 0 and the seed
-                // survives into the first frame intact.
-                tr.progressCurveState.value = 1.0 - old.progressCurveState.value;
-                tr.progressCurveState.velocity = -old.progressCurveState.velocity;
+            // The split is on the NEW leg's curve, because that alone decides
+            // how paintOutput reads t back out: easeProgress returns
+            // state.value for a stateful curve and IGNORES the linear clock,
+            // and evaluates the clock for a stateless one. So a spring must be
+            // seeded and must NOT be back-dated (the back-date could not move
+            // it, and would only eat its settle lifetime via the expiry check),
+            // while a stateless curve must be back-dated and has no state to
+            // seed. What the DISPLACED leg was running only decides where the
+            // seed value comes from.
+            //
+            // durationMs is floored at Limits::MinAnimationDurationMs by
+            // resolveTransitionLifetimeMs, so the divisor below is positive.
+            const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+            const qreal displacedProgress =
+                qBound<qreal>(0.0, qreal(nowMs - old.startTimeMs) / qreal(old.durationMs), 1.0);
+            if (tr.progressCurve && tr.progressCurve->isStateful()) {
+                // Both legs read t off the same value: hide as t = value, show
+                // as t = 1 - value. So seeding value = 1 - <where the displaced
+                // leg was> lands the new leg's t exactly where the old one's
+                // was, in EITHER direction. lastPaintTimeMs starts at -1, so
+                // the first step takes dt 0 and the seed survives into the
+                // first frame intact. startTimeMs stays fresh: a spring's
+                // lifetime IS its settle time, not a fraction of one.
+                if (old.progressCurve && old.progressCurve->isStateful()) {
+                    // Spring displaced by spring: hand the integration state
+                    // over mirrored. Negating velocity preserves momentum
+                    // across the handover (t keeps travelling briefly, then
+                    // springs back) rather than restarting from rest.
+                    tr.progressCurveState.value = 1.0 - old.progressCurveState.value;
+                    tr.progressCurveState.velocity = -old.progressCurveState.velocity;
+                } else {
+                    // Spring displacing a STATELESS leg, which has no
+                    // integration state at all — easeProgress never wrote to
+                    // its CurveState, so reading old.progressCurveState would
+                    // hand back a default 0 and seed the far endpoint. Its raw
+                    // clock progress is the only record of where it got to, so
+                    // resume off that and start the spring from rest.
+                    tr.progressCurveState.value = 1.0 - displacedProgress;
+                    tr.progressCurveState.velocity = 0.0;
+                }
             } else {
                 // Stateless: t is a pure function of the linear clock, so
                 // resuming IS a clock back-date. The displaced leg's raw
@@ -464,11 +470,14 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
                 // settles in proportion to how far it actually got. Exact for a
                 // symmetric curve; an asymmetric one retraces off its own easing
                 // by the curve's own asymmetry, still continuous at the
-                // handover. durationMs is floored at Limits::MinAnimationDurationMs
-                // by resolveTransitionLifetimeMs, so the divisor is positive.
-                const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-                const qreal displacedProgress =
-                    qBound<qreal>(0.0, qreal(nowMs - old.startTimeMs) / qreal(old.durationMs), 1.0);
+                // handover.
+                //
+                // When the DISPLACED leg was a spring, p is its wall-clock
+                // fraction rather than its integrated value, so the handover is
+                // a bounded jump rather than a seam. There is nothing better
+                // available — the two curves share no common progress term —
+                // and the jump is bounded by how far the two disagree, unlike
+                // the full-endpoint snap a fresh t = 0 would give.
                 tr.startTimeMs = nowMs - qint64((1.0 - displacedProgress) * qreal(tr.durationMs));
             }
         }

@@ -214,11 +214,12 @@ private Q_SLOTS:
     void testRescanDoesNotFireSignal_whenContentUnchanged()
     {
         QTemporaryDir dir;
-        writeFile(dir.filePath(QStringLiteral("stable.json")), QStringLiteral(R"({
+        QVERIFY(dir.isValid());
+        QVERIFY(writeFile(dir.filePath(QStringLiteral("stable.json")), QStringLiteral(R"({
             "name": "stable",
             "duration": 200,
             "minDistance": 5
-        })"));
+        })")));
         ProfileLoader loader(m_profileRegistry, m_curveRegistry, QStringLiteral("test"));
         loader.loadFromDirectory(dir.path());
 
@@ -249,8 +250,9 @@ private Q_SLOTS:
 
         // User drops ONE profile JSON for a different path.
         QTemporaryDir userDir;
-        writeFile(userDir.filePath(QStringLiteral("Zone.json")),
-                  QStringLiteral(R"({"name": "Zone", "duration": 200})"));
+        QVERIFY(userDir.isValid());
+        QVERIFY(writeFile(userDir.filePath(QStringLiteral("Zone.json")),
+                          QStringLiteral(R"({"name": "Zone", "duration": 200})")));
         ProfileLoader loader(reg, m_curveRegistry, QStringLiteral("test-user-profiles"));
         loader.loadFromDirectory(userDir.path());
 
@@ -273,10 +275,12 @@ private Q_SLOTS:
 
         QTemporaryDir systemDir;
         QTemporaryDir userDir;
-        writeFile(systemDir.filePath(QStringLiteral("shared.json")),
-                  QStringLiteral(R"({"name": "shared", "duration": 100})"));
-        writeFile(userDir.filePath(QStringLiteral("shared.json")),
-                  QStringLiteral(R"({"name": "shared", "duration": 500})"));
+        QVERIFY(systemDir.isValid());
+        QVERIFY(userDir.isValid());
+        QVERIFY(writeFile(systemDir.filePath(QStringLiteral("shared.json")),
+                          QStringLiteral(R"({"name": "shared", "duration": 100})")));
+        QVERIFY(writeFile(userDir.filePath(QStringLiteral("shared.json")),
+                          QStringLiteral(R"({"name": "shared", "duration": 500})")));
 
         ProfileLoader loader(reg, m_curveRegistry, QStringLiteral("test-restore"));
         loader.loadFromDirectories({systemDir.path(), userDir.path()});

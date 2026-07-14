@@ -587,7 +587,10 @@ bool WindowTrackingService::pruneMigratedWindows(const QStringList& windowsToRem
         }
         clearFreeGeometry(wId); // drop the record's shared free geometry
         clearPreFloatZoneForWindow(wId);
-        m_windowStickyStates.remove(wId);
+        // Canonical key, as windowClosed does: the sticky map is keyed on the
+        // first-seen composite (issue #628), so a window that renamed itself
+        // (Electron/CEF) would leak its entry if removed under the raw id.
+        m_windowStickyStates.remove(canonicalizeForLookup(wId));
         // Notify zone-state consumers, as the interactive unassign path does
         // (WindowTrackingService::unassignWindow) — a prune that lands in
         // storage but never reaches listeners leaves them tracking a window
