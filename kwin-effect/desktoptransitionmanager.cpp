@@ -396,10 +396,12 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     KWin::effects->addRepaintFull();
 }
 
-// captureDesktop, captureLiveScene and capturePeekWindowsScene live in
-// desktoptransitioncapture.cpp, along with the texture allocation and format
-// helpers they share. compiledShader (the pack-source → GLShader assembly)
-// lives in desktoptransitionshader.cpp.
+// This TU is the DRIVE half: resolve a pack, start a transition, blend a frame.
+// The other three halves of the class live beside it — captureDesktop /
+// captureLiveScene / capturePeekWindowsScene (plus the texture allocation and
+// format helpers they share) in desktoptransitioncapture.cpp, compiledShader
+// (the pack-source → GLShader assembly) in desktoptransitionshader.cpp, and the
+// settle / reap / removal / release handlers in desktoptransitionteardown.cpp.
 
 bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                            int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
@@ -449,7 +451,16 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     const qreal easedT = ShaderInternal::easeProgress(tr.progressCurve.get(), tr.progressCurveState, tr.lastPaintTimeMs,
                                                       nowMs, linearT, /*stepCurve=*/true);
     tr.lastPaintTimeMs = nowMs;
-    const float t = float(easedT);
+    // The peek SHOW leg is the hide leg played BACKWARDS: same endpoints (FROM
+    // = windows scene, TO = bare desktop), progress running 1 → 0. Reversing
+    // TIME rather than swapping the textures is what makes an ASYMMETRIC pack
+    // retrace its own motion — swap-with-forward-t is only equivalent to a
+    // reverse for a symmetric crossfade. Peek Recede's hide leg shrinks the
+    // windows away; under a swap its show leg would shrink the WALLPAPER away
+    // to reveal static windows, where a reverse correctly grows the windows
+    // back. Matches windowaperture's own return leg (redirect Backward) and
+    // the packs' documented "FROM is always the windows scene" contract.
+    const float t = float(tr.kind == Kind::PeekShow ? 1.0 - easedT : easedT);
 
     // Compile BEFORE capturing. Each capture allocates an output-sized texture and
     // renders the entire stacking order, so doing it first would burn two
@@ -494,8 +505,12 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
             // the FROM composite (a full scene pass) just to throw it away.
             break;
         case Kind::PeekShow: {
-            // FROM = the hide leg's cached bare desktop; TO = the live scene
-            // with the windows restored. The cache entry is single-consumption,
+            // Endpoints are IDENTICAL to the hide leg — FROM = the windows
+            // scene (live: KWin unhid the windows before showingDesktopChanged
+            // fired, so a plain live capture has them), TO = the hide leg's
+            // cached bare desktop — because this leg reverses TIME rather than
+            // swapping textures (see the t computation above). The cache entry
+            // is single-consumption,
             // taken out of the map here whatever happens next: a bare desktop
             // is only valid for the show leg that immediately follows its hide
             // leg (the next hide re-seeds it), and holding an output-sized GPU
@@ -524,8 +539,8 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
                     desktopTex = nullptr;
                 }
             }
-            tr.fromTex = desktopTex;
-            tr.toTex = desktopTex
+            tr.toTex = desktopTex;
+            tr.fromTex = desktopTex
                 ? std::shared_ptr<KWin::GLTexture>(captureLiveScene(mask, screen, renderTarget, viewport))
                 : nullptr;
             break;
@@ -638,176 +653,6 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
         KWin::GLFramebuffer::popFramebuffer();
     }
     return true;
-}
-
-void DesktopTransitionManager::endOutput(KWin::LogicalOutput* screen)
-{
-    m_active.erase(screen);
-    releaseFullScreenClaimIfIdle();
-}
-
-void DesktopTransitionManager::releaseFullScreenClaimIfIdle()
-{
-    if (!m_active.empty() || !m_fullScreenClaimed || !KWin::effects) {
-        return;
-    }
-    // Clear the claim only while KWin still reports it as OURS. Overview or Cube
-    // can take the screen while our transition is in flight; writing nullptr
-    // unconditionally would drop THEIR claim and unsuppress every effect that was
-    // bowing out to them. Dropping our own flag either way keeps us from later
-    // clearing a claim we no longer hold.
-    if (KWin::effects->activeFullScreenEffect() == m_effect) {
-        KWin::effects->setActiveFullScreenEffect(nullptr);
-    }
-    m_fullScreenClaimed = false;
-}
-
-void DesktopTransitionManager::ensureGlContextCurrent()
-{
-    if (KWin::effects) {
-        KWin::effects->makeOpenGLContextCurrent();
-    }
-}
-
-void DesktopTransitionManager::scheduleRepaints()
-{
-    if (!KWin::effects) {
-        return; // only reached from postPaintScreen (effects live), guard for parity
-    }
-    // Reap expired transitions by WALL CLOCK, not by being painted. paintOutput()
-    // is the only other settle path, and it runs only for an output that is
-    // actually painting — so an output that stops being painted mid-transition
-    // (DPMS-asleep but enabled, or one KWin has stopped rendering) would sit in
-    // m_active forever while a sibling kept painting, and the fullscreen claim
-    // would never release. postPaintScreen calls us on every frame regardless of
-    // which output painted, so expiry is handled here even for an unpainted one.
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-    bool erasedAny = false;
-    for (auto it = m_active.begin(); it != m_active.end();) {
-        if (nowMs - it->second.startTimeMs >= it->second.durationMs) {
-            if (!erasedAny) {
-                // The captured GLTextures free on erase and want a live context.
-                ensureGlContextCurrent();
-                erasedAny = true;
-            }
-            // Repaint the output we are about to drop. The blend was the last
-            // thing painted on it, and the settled scene still has to be drawn —
-            // KWin only composites on damage, so without this the output keeps
-            // presenting the frozen final blend frame until something unrelated
-            // damages it. paintOutput's settle path does not need this because it
-            // returns false and paintScreen falls through to the real scene in the
-            // SAME frame; a reap has no such frame to fall through to.
-            KWin::effects->addRepaint(it->first->geometry());
-            // A reaped SHOW leg also drops its output's bare-desktop cache
-            // entry: an expired never-painted PeekShow would otherwise retain
-            // an output-sized GPU texture until the next hide leg (the cache
-            // is consumed only in paintOutput). PeekShow ONLY — never a hide
-            // leg's: all outputs' legs share one expiry, so on multi-monitor
-            // the first output to settle in paintOutput reaches this reap
-            // before the sibling's own settling paint has run, and erasing the
-            // sibling's hide-leg cache here would silently kill its show-leg
-            // animation on essentially every peek. A reaped PeekHide's
-            // retained cache matches the post-settle retention the design
-            // already accepts.
-            if (it->second.kind == Kind::PeekShow) {
-                m_peekDesktopCache.erase(it->first);
-            }
-            it = m_active.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    if (erasedAny) {
-        releaseFullScreenClaimIfIdle();
-    }
-    // Keys are always non-null: begin() skips null outputs and outputRemoved()
-    // reaps a disconnected one, so a null screen can never be stored.
-    for (const auto& entry : m_active) {
-        KWin::effects->addRepaint(entry.first->geometry());
-    }
-}
-
-void DesktopTransitionManager::outputRemoved(KWin::LogicalOutput* screen)
-{
-    // A disconnected output must not linger as a key in m_active: paintOutput()
-    // and scheduleRepaints() deref the key (UAF), and the fullscreen-effect claim
-    // would never release once its output vanished mid-transition. endOutput()
-    // drops the entry and releases the claim when the last transition goes. The
-    // peek-desktop cache entry goes with it — its texture is output-sized and
-    // its key would dangle.
-    const bool hasTransition = m_active.find(screen) != m_active.end();
-    const bool hasPeekCache = m_peekDesktopCache.find(screen) != m_peekDesktopCache.end();
-    if (!hasTransition && !hasPeekCache) {
-        return; // nothing held for this output
-    }
-    // screenRemoved fires off the paint thread; both erases free GLTextures,
-    // which want a current GL context (endOutput's other caller, paintOutput, is
-    // already on the paint thread with one current).
-    ensureGlContextCurrent();
-    m_peekDesktopCache.erase(screen);
-    if (hasTransition) {
-        endOutput(screen);
-    }
-}
-
-void DesktopTransitionManager::desktopRemoved(KWin::VirtualDesktop* desktop)
-{
-    // A desktop removed mid-switch leaves any OutputTransition still referencing
-    // it as `from` holding a dangling VirtualDesktop*: the deferred
-    // captureDesktop(tr.from, ...) only ever compares the pointer (isOnDesktop),
-    // never derefs it, so this is not a crash — but a freed pointer must not
-    // linger and be compared against a live desktop. Drop every transition whose
-    // outgoing desktop just vanished.
-    bool erasedAny = false;
-    for (auto it = m_active.begin(); it != m_active.end();) {
-        if (it->second.from == desktop) {
-            // Erasing frees the entry's captured GLTextures; desktopRemoved fires
-            // off the paint thread, so make the context current before the first
-            // free — only when there is actually something to free.
-            if (!erasedAny) {
-                ensureGlContextCurrent();
-                erasedAny = true;
-            }
-            // Repaint the output for the same reason the wall-clock reap does: the
-            // blend was the last thing drawn on it and the settled scene still
-            // needs a frame, which nothing else will schedule.
-            if (KWin::effects) {
-                KWin::effects->addRepaint(it->first->geometry());
-            }
-            it = m_active.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    if (erasedAny) {
-        releaseFullScreenClaimIfIdle();
-    }
-}
-
-void DesktopTransitionManager::invalidateShaderCache()
-{
-    // Fires from the AnimationShaderRegistry file watcher between frames, where the
-    // compositor GL context is NOT current. m_shaderCache owns GLShaders whose
-    // destruction issues glDelete* calls that want a current context — the same
-    // discipline reset() applies. Teardown (!effects) reclaims them regardless.
-    ensureGlContextCurrent();
-    m_shaderCache.clear();
-}
-
-void DesktopTransitionManager::reset()
-{
-    // Teardown path (compositor reset / plugin unload). Make the compositor
-    // context current so the captured GLTextures (m_active) and compiled
-    // GLShaders (m_shaderCache) free on a live context; when KWin::effects is
-    // already gone the driver is tearing GL down and reclaims them regardless.
-    // Clearing m_shaderCache HERE — not leaving it for ~DesktopTransitionManager,
-    // which deliberately can't make a context current — is what makes this the
-    // real "release GL resources" path the header documents.
-    ensureGlContextCurrent();
-    m_active.clear();
-    m_shaderCache.clear();
-    m_peekDesktopCache.clear();
-    releaseFullScreenClaimIfIdle();
 }
 
 } // namespace PlasmaZones

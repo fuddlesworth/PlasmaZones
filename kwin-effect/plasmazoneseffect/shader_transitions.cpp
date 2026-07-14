@@ -1498,12 +1498,6 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     const bool transitionHadCloseGrab = transition.closeGrabHeld;
     const bool transitionHadAddedGrab = transition.addedGrabHeld;
     auto* inserted = m_shaderManager.insertTransition(window, std::move(transition));
-    // Pin the invariant the inherited-grab rollback below relies on:
-    // insertTransition can only fail on a duplicate key, which the
-    // supersession erase above makes impossible for a same-window install. A
-    // future insertTransition failure mode (capacity policy etc.) would leak
-    // an inherited refWindow with no owner through the skip-release branch.
-    Q_ASSERT(!(isSameWindowSupersession && !inserted));
     if (!inserted) {
         // Contract violation: the supersession branch above did not erase
         // the prior entry, or a concurrent install raced us. Release the
@@ -1517,6 +1511,15 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // stock fade/glide re-engage on a window it is mid-animating; its own
         // endShaderTransition releases both, and unreffing here too would
         // double-release.
+        //
+        // The inherited-grab case is deliberately given NO release action
+        // rather than a defensive one: the two ways an insert could fail with
+        // a grab inherited imply OPPOSITE rollbacks (prior entry erased →
+        // must release; prior entry alive → releasing double-releases), so
+        // with no safe action available, leaking on a path the supersession
+        // erase already makes impossible is the right trade. insertTransition
+        // asserts the duplicate-key contract itself and logs a release-build
+        // breadcrumb, which is where that invariant is pinned.
         if (holdAddedGrab && !existingAddedHeldGrab && window) {
             window->setData(KWin::WindowAddedGrabRole, QVariant());
         }

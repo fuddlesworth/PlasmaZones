@@ -46,8 +46,7 @@ const QString WindowLayoutSwitch = QStringLiteral("window.movement.layoutSwitch"
 // desktop.* — full-screen two-texture from/to blends driven by the
 // kwin-effect's screen-level paint pass: the virtual-desktop switch, and the
 // show-desktop peek (windows scene ↔ bare desktop; both peek legs resolve one
-// node, with the show-back leg blending in the opposite direction from the
-// hide leg's cached bare-desktop capture).
+// node, with the show-back leg running the same blend with time reversed).
 const QString Desktop = QStringLiteral("desktop");
 const QString DesktopSwitch = QStringLiteral("desktop.switch");
 const QString DesktopPeek = QStringLiteral("desktop.peek");

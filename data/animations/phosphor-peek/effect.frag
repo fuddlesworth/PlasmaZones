@@ -8,10 +8,12 @@
 // those traces into the brand gradient (cyan #22D3EE, blue #3B82F6, purple
 // #A855F7, rose #F43F5E), and the bare desktop is left behind the front.
 //
-// `t` is forward peek progress in [0,1]: the FROM texture is the scene with
-// windows, the TO texture is the bare desktop. The kwin-effect swaps the two
-// textures for the show-back leg, so this shader only ever animates from the
-// windows scene toward the desktop and needs no direction or reversal logic.
+// `t` is peek progress in [0,1]: the FROM texture is ALWAYS the scene with
+// windows and the TO texture ALWAYS the bare desktop, on both legs. The
+// kwin-effect reverses TIME rather than the textures — the hide leg drives t
+// 0 → 1 and the show-back leg drives it 1 → 0 — so this shader only ever
+// describes the windows-to-desktop direction and needs no reversal logic, and
+// the show leg automatically retraces this motion (the circuit re-energizes).
 // Run by the screen-level desktop-transition pass, which binds uFromDesktop and
 // uToDesktop, pushes progress as iTime, and binds the p_color* slots from the
 // customColors pool at parity with the per-window and surface contracts.

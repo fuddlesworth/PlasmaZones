@@ -346,7 +346,17 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             QHash<QString, QString> chosenSource;
             for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
                 QString screen = it.key();
-                if (screen == physicalScreenId || screen.startsWith(prefix)) {
+                // Already a valid VS in the CURRENT config — leave it as its own
+                // identity source, exactly as the live-screen / pre-float /
+                // pending-restore / lastUsed loops do. Re-resolving on a VS
+                // RECONFIGURATION would push a still-valid vs:1 key through
+                // resolveVirtualScreen, whose per-VS-layout candidate branch can
+                // return vs:0 for a zone that resolves uniquely there, silently
+                // relocating (and possibly collision-dropping) that float-back
+                // rect — and would force a save for a no-op re-resolution.
+                const bool alreadyValidVs =
+                    PhosphorIdentity::VirtualScreenId::isVirtual(screen) && virtualScreenIds.contains(screen);
+                if (!alreadyValidVs && (screen == physicalScreenId || screen.startsWith(prefix))) {
                     screen = resolveVirtualScreen(ptZoneIds, screen);
                     any = true;
                 }

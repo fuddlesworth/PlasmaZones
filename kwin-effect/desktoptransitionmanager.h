@@ -41,8 +41,9 @@ class PlasmaZonesEffect;
 /// desktop-class transition shader (data/animations/<id>, appliesTo
 /// ["desktop"], sampling uFromDesktop / uToDesktop via desktop_transition.glsl).
 /// A desktop SWITCH blends the OUTGOING desktop into the INCOMING one; a
-/// show-desktop PEEK blends the windows scene into the bare desktop (hide leg)
-/// and back (show leg), driven by the same shader node (`desktop.peek`).
+/// show-desktop PEEK blends the windows scene into the bare desktop, forwards
+/// on the hide leg and backwards on the show leg, driven by the same shader
+/// node (`desktop.peek`).
 ///
 /// The effect owns one instance. On `desktopChanged` / `showingDesktopChanged`
 /// the effect resolves the `desktop.switch` / `desktop.peek` shader from the
@@ -90,14 +91,22 @@ public:
                std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
 
     /// Start a show-desktop peek transition on every output. @p showing follows
-    /// EffectsHandler::showingDesktopChanged: true is the HIDE leg (windows scene
-    /// → bare desktop), false the SHOW leg (bare desktop → restored windows
-    /// scene). Inputs mirror begin() and are resolved by the caller from the
-    /// `desktop.peek` node. The show leg blends FROM the bare-desktop texture the
-    /// hide leg cached per output (the bare desktop cannot be re-captured once the
-    /// windows are back — visible windows render black through the per-window
-    /// composite, see captureDesktop's incoming-desktop note); outputs with no
-    /// usable cache entry are skipped and settle instantly.
+    /// EffectsHandler::showingDesktopChanged: true is the HIDE leg, false the
+    /// SHOW leg. Inputs mirror begin() and are resolved by the caller from the
+    /// `desktop.peek` node.
+    ///
+    /// Both legs share ONE endpoint pair — FROM = the windows scene, TO = the
+    /// bare desktop — and differ only in the direction time runs: the hide leg
+    /// drives progress 0 → 1, the show leg 1 → 0, so the show leg is literally
+    /// the hide leg played backwards and an asymmetric pack retraces its own
+    /// motion (see paintOutput's t computation for why swapping the textures
+    /// with forward progress would NOT be equivalent). The show leg takes its
+    /// TO from the bare-desktop texture the hide leg cached per output — that
+    /// scene cannot be re-captured once the windows are back (visible windows
+    /// render black through the per-window composite, see captureDesktop's
+    /// incoming-desktop note) — and captures its FROM live, since KWin unhides
+    /// the windows before the signal. Outputs with no usable cache entry are
+    /// skipped and settle instantly.
     void beginPeek(bool showing, const QString& effectId, const QVariantMap& params, int durationMs,
                    std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
 
@@ -323,6 +332,11 @@ private:
 
     /// Free an output's transition and, when the last one goes, release the
     /// active-fullscreen-effect claim.
+    ///
+    /// This and the teardown members below it (releaseFullScreenClaimIfIdle,
+    /// ensureGlContextCurrent, scheduleRepaints, outputRemoved, desktopRemoved,
+    /// invalidateShaderCache, reset) are implemented in
+    /// desktoptransitionteardown.cpp — the class's teardown half.
     void endOutput(KWin::LogicalOutput* screen);
 
     /// Release the active-fullscreen-effect claim once no transition is left.

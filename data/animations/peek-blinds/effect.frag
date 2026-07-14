@@ -4,11 +4,13 @@
 // Peek Blinds — the show-desktop peek as a set of venetian slats. The screen is
 // split into slats that tilt open one after another, so the windows scene
 // collapses to thin bands and the desktop shows through the gaps while the
-// reveal sweeps across the slats. `t` is forward peek progress in [0,1]: the
-// FROM texture is the scene with windows, the TO texture is the bare desktop.
-// The kwin-effect swaps the two textures for the show-back leg, so this shader
-// only ever animates from the windows scene toward the desktop and needs no
-// direction or reversal logic. Run by the screen-level desktop-transition pass,
+// reveal sweeps across the slats. `t` is peek progress in [0,1]: the FROM
+// texture is ALWAYS the scene with windows and the TO texture ALWAYS the bare
+// desktop, on both legs. The kwin-effect reverses TIME rather than the textures
+// — the hide leg drives t 0 → 1 and the show-back leg drives it 1 → 0 — so this
+// shader only ever describes the windows-to-desktop direction and needs no
+// reversal logic, and the show leg automatically retraces this motion (the
+// slats tilt shut again). Run by the screen-level desktop-transition pass,
 // which binds uFromDesktop and uToDesktop and pushes progress as iTime.
 #include <desktop_transition.glsl>
 

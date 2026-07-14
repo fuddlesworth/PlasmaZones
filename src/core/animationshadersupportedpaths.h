@@ -75,9 +75,9 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::DesktopSwitch,
         // Show-desktop peek — same manager, resolved in the
         // showingDesktopChanged handler (lifecycle.cpp). One node drives both
-        // legs: the hide leg blends the windows scene into the bare desktop
-        // and the show-back leg blends the other way, replaying the hide leg's
-        // cached bare-desktop capture.
+        // legs: the hide leg blends the windows scene into the bare desktop,
+        // and the show-back leg replays that same blend with time reversed
+        // (its bare-desktop endpoint comes from the hide leg's cache).
         PP::DesktopPeek,
     };
 }

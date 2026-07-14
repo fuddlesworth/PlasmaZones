@@ -24,10 +24,10 @@
 
 // The assembly half of DesktopTransitionManager: how a pack's source BECOMES a
 // compiled GLShader with cached uniform locations. desktoptransitionmanager.cpp
-// keeps the lifecycle/blend half and desktoptransitioncapture.cpp the capture
-// half; the compile pipeline (read → entry-point scaffold → include expansion →
-// param preamble → KWin define → generateCustomShader) only serves this
-// question, so it lives here.
+// keeps the drive half (resolve, begin, blend), desktoptransitioncapture.cpp the
+// capture half, and desktoptransitionteardown.cpp the teardown half; the compile
+// pipeline (read → entry-point scaffold → include expansion → param preamble →
+// KWin define → generateCustomShader) only serves this question, so it lives here.
 namespace PlasmaZones {
 
 DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compiledShader(const QString& effectId)

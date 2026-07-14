@@ -129,7 +129,11 @@ public:
     /// degrades to the historical "no SnapState wired" no-op behaviour.
     struct SnapStateResolver
     {
-        /// Owning state for a window (reverse-map lookup); nullptr when untracked.
+        /// Owning state for a window (reverse-map lookup). The production and
+        /// test resolvers both forward to SnapEngine::stateForWindow, which
+        /// falls back to the global holder rather than returning null, so a
+        /// wired resolver never yields nullptr; only an UNSET resolver does
+        /// (see snapForWindow, which is the genuine null case).
         std::function<PhosphorSnapEngine::SnapState*(const QString& windowId)> forWindow;
         /// Owning state for a window placed/acting on a screen: resolves the state
         /// (creating it on first placement) AND records the reverse-map entry.

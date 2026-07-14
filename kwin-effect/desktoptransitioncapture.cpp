@@ -24,10 +24,11 @@
 #include <memory>
 
 // The capture half of DesktopTransitionManager: how a desktop BECOMES a texture.
-// desktoptransitionmanager.cpp keeps the lifecycle half (blend, settle,
-// teardown) and desktoptransitionshader.cpp the assembly half (pack source →
-// compiled GLShader). The capture paths and the texture allocation/format
-// helpers they share only serve the first question, so they live here.
+// desktoptransitionmanager.cpp keeps the drive half (resolve, begin, blend),
+// desktoptransitionshader.cpp the assembly half (pack source → compiled
+// GLShader), and desktoptransitionteardown.cpp the teardown half (settle, reap,
+// release). The capture paths and the texture allocation/format helpers they
+// share only serve the first question, so they live here.
 namespace PlasmaZones {
 
 namespace {

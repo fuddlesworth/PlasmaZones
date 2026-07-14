@@ -977,10 +977,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     // Clamp on the effect side as a defence-in-depth — the daemon's
     // schema validator already bounds these to [0, 2000], but a
-    // malformed reply (`toInt()` returning 0 on a non-int variant or
-    // a negative value from an out-of-spec callsite) would otherwise
-    // silently disable / invert the min-size gate. Kept symmetric with
-    // `animationDuration`'s `qBound` clamp above.
+    // &ok gate + two-sided clamp, same hardening as the snapping/decoration
+    // min-size loaders: a non-int variant (an older daemon's valid-empty reply
+    // for an unknown key) is rejected outright rather than coerced to 0, and a
+    // negative or absurd value from an out-of-spec callsite is clamped, so the
+    // min-size gate can be neither silently disabled nor inverted.
     loadSettingAsync(QStringLiteral("animationMinimumWindowWidth"), [this](const QVariant& v) {
         bool ok = false;
         const int i = v.toInt(&ok);

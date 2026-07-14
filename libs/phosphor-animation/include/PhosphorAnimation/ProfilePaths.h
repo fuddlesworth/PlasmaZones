@@ -62,8 +62,8 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
 // own two-texture shader contract rather than the single-surface pipeline.
 // `switch` blends the OUTGOING desktop against the INCOMING desktop; `peek`
 // (show desktop) blends the windows scene against the bare desktop, and its
-// show-back leg reuses the same node, running the blend in the opposite
-// direction from the hide leg's cached bare-desktop capture.
+// show-back leg reuses the same node, running the same blend with time
+// reversed so an asymmetric pack retraces its own motion.
 PHOSPHORANIMATION_EXPORT extern const QString Desktop;
 PHOSPHORANIMATION_EXPORT extern const QString DesktopSwitch;
 PHOSPHORANIMATION_EXPORT extern const QString DesktopPeek;

@@ -94,6 +94,7 @@ set(plasmazones_effect_SRCS
     desktoptransitionmanager.cpp
     desktoptransitioncapture.cpp
     desktoptransitionshader.cpp
+    desktoptransitionteardown.cpp
     desktoptransitionmanager.h
     navigationhandler.cpp
     navigationhandler.h
@@ -140,6 +141,9 @@ set_source_files_properties(desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_B
 # desktoptransitionshader.cpp is the assembly half (compiledShader + its
 # function-local vertex-source constant); same class, same exclusion.
 set_source_files_properties(desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+# desktoptransitionteardown.cpp is the teardown half (settle, reap, removal
+# handlers, cache/shader release); same class, same exclusion.
+set_source_files_properties(desktoptransitionteardown.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE

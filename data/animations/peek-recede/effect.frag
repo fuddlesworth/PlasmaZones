@@ -3,13 +3,14 @@
 //
 // Peek Recede — the show-desktop peek. The windows scene shrinks toward a
 // configurable centre and fades out while it darkens, so it recedes into depth
-// and leaves the bare desktop behind it. `t` is forward peek progress in [0,1]:
-// the FROM texture is the scene with windows, the TO texture is the bare
-// desktop. The kwin-effect swaps the two textures for the show-back leg, so
-// this shader only ever animates from the windows scene toward the desktop and
-// needs no direction or reversal logic. Run by the screen-level
-// desktop-transition pass, which binds uFromDesktop and uToDesktop and pushes
-// progress as iTime.
+// and leaves the bare desktop behind it. `t` is peek progress in [0,1]: the FROM
+// texture is ALWAYS the scene with windows and the TO texture ALWAYS the bare
+// desktop, on both legs. The kwin-effect reverses TIME rather than the textures
+// — the hide leg drives t 0 → 1 and the show-back leg drives it 1 → 0 — so this
+// shader only ever describes the windows-to-desktop direction and needs no
+// reversal logic, and the show leg automatically retraces this motion (the
+// windows grow back out of depth). Run by the screen-level desktop-transition
+// pass, which binds uFromDesktop and uToDesktop and pushes progress as iTime.
 #include <desktop_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
