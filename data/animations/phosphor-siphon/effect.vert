@@ -6,7 +6,8 @@
 // streams.
 //
 // Genie's icon-targeted grid mechanics (the grid sits on the window's
-// frame rect; each vertex travels from its place in the window to its
+// frame rect, or its padded decoration canvas with frame-relative
+// texcoords; each vertex travels from its place in the window to its
 // place in iIconRect, staggered so the icon-facing edge leads) crossed
 // with phosphor-stream's LANES: the card is cut into strips parallel to
 // the travel axis, each lane runs its own slightly offset clock and bows

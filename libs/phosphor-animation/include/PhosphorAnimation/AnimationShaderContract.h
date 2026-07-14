@@ -270,10 +270,15 @@ inline constexpr const char* kIDate = "iDate";
 /// encode this rule once.
 inline constexpr const char* kIIsReversed = "iIsReversed";
 
-/// `vec4 iSurfaceScreenPos` — the shader surface's position in screen
-/// coords plus the host screen dimensions, both in logical pixels.
-///   .xy = (surfaceX, surfaceY) — top-left of the shader surface
-///         relative to the screen origin
+/// `vec4 iSurfaceScreenPos` — the shader surface's position plus the
+/// host screen dimensions, both in logical pixels.
+///   .xy = (surfaceX, surfaceY) — top-left of the shader surface. On the
+///         kwin path this is the window's GLOBAL (workspace) origin —
+///         the raw `frameGeometry()` top-left, the same space as
+///         `iFromRect` / `iToRect` / `iIconRect` — which coincides with
+///         screen-relative only on a single output at the workspace
+///         origin. The daemon pushes the overlay surface's position on
+///         its host screen.
 ///   .zw = (screenWidth, screenHeight) of the host screen
 ///
 /// Daemon: written to the appended `AnimationUniformExtension` (UBO

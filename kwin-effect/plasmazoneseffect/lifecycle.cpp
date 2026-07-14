@@ -721,6 +721,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);
+        // Spurious-minimize-pair stamp — raw-pointer-keyed like its
+        // siblings below, so erase here both to stay bounded and so a
+        // reused address can't inherit a stale stamp that would swallow
+        // the new window's first genuine un-minimize animation.
+        m_minimizeShaderStampMs.remove(w);
         // Drop per-window shader-event bookkeeping. m_lastFocusShaderWindow is
         // a QPointer that auto-nulls on destroy, so it's already cleaned up;
         // m_shaderManager.m_lastFullyMaximized is a raw-pointer-keyed QHash so we explicitly

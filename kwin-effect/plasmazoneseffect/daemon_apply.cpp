@@ -3,6 +3,8 @@
 
 #include "../plasmazoneseffect.h"
 
+#include "shader_internal.h"
+
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -586,9 +588,43 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // animateMinimized opts the going-to-minimized leg past the
     // begin-side minimized-window reject; the un-minimize leg runs on a
     // visible window where the flag is moot.
-    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
-                           /*reverse=*/minimized, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
-                           /*animateMinimized=*/minimized);
+    //
+    // Spurious-pair suppression: plasmashell notification stacking makes
+    // KWin emit minimizedChanged(true) on tiled windows with the matching
+    // unminimize ~1-2 ms later (the same quirk kMinimizeFloatDebounceMs
+    // in autotilehandler/signals.cpp debounces on the float side). The
+    // reverse leg installs immediately — a genuine minimize must not
+    // start late, and a spurious pair paints at most one barely-started
+    // frame — but an unminimize landing inside the window means the pair
+    // was noise: silently drop the reverse leg instead of superseding it
+    // with a full un-minimize replay, which with an icon pack made every
+    // tiled window pour out of its taskbar icon on every notification.
+    static constexpr qint64 kSpuriousMinimizePairMs = 75;
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (minimized) {
+        m_minimizeShaderStampMs.insert(w, nowMs);
+        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
+                               /*reverse=*/true, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
+                               /*animateMinimized=*/true);
+    } else {
+        const auto stampIt = m_minimizeShaderStampMs.find(w);
+        const bool spuriousPair =
+            stampIt != m_minimizeShaderStampMs.end() && nowMs - stampIt.value() < kSpuriousMinimizePairMs;
+        if (stampIt != m_minimizeShaderStampMs.end()) {
+            m_minimizeShaderStampMs.erase(stampIt);
+        }
+        if (spuriousPair) {
+            // Only the reverse minimize leg is ours to drop. Anything else
+            // live on the window (a focus fade that outlived the noise)
+            // keeps its own teardown.
+            if (const auto* st = m_shaderManager.findTransition(w); st && st->reverse) {
+                endShaderTransition(w);
+            }
+        } else {
+            tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
+                                   /*reverse=*/false);
+        }
+    }
 
     // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler
     // (mirrors AutotileHandler running its own minimize→float machine for

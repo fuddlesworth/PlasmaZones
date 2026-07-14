@@ -2057,6 +2057,17 @@ private:
     // window close/delete.
     QHash<KWin::EffectWindow*, RestoreSuppression> m_restoreSuppress;
 
+    // Timestamp (shaderClockNowMs) of the last going-to-minimized shader
+    // install per window, used by slotWindowMinimizedChanged to detect
+    // KWin's spurious minimize→unminimize pairs (plasmashell notification
+    // stacking emits them on tiled windows ~1-2 ms apart — see
+    // kMinimizeFloatDebounceMs in autotilehandler/signals.cpp for the
+    // same quirk's float-side debounce). An unminimize landing inside the
+    // window silently drops the reverse leg instead of replaying a full
+    // un-minimize animation. Entries are erased on consume and on
+    // windowDeleted (raw-pointer-keyed, bounded like its siblings above).
+    QHash<KWin::EffectWindow*, qint64> m_minimizeShaderStampMs;
+
     // Cursor output tracking (for daemon shortcut screen detection on Wayland)
     // Stores the connector name of the last output the cursor was on.
     // Used for deduplication only — the actual D-Bus call sends the EDID screen ID.
