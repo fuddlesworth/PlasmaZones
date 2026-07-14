@@ -1,0 +1,14 @@
+{
+    "id": "genie",
+    "name": "Genie",
+    "description": "Minimize transition modelled on the classic genie lamp. The window stretches toward its task manager icon, with the edge nearest the icon leading the pour, and slips inside. Restoring plays the same motion back out of the icon. A window without a task manager entry collapses into its own bottom edge instead.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Reveal",
+    "appliesTo": ["appearance"],
+    "fragmentShader": "effect.frag",
+    "vertexShader": "effect.vert",
+    "fboExtent": "surface",
+    "geometryGrid": 40,
+    "parameters": []
+}
