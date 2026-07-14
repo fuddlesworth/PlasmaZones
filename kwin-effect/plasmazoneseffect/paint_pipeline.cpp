@@ -1830,15 +1830,28 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         }
     }
 
-    // Continue the PAINT chain, never a jump to the draw chain. Our default
-    // chain position is 0, so we run FIRST in the paintWindow chain; every
-    // effect ordered after us (windowaperture's show-desktop park-at-edges at
-    // position 50, dialogparent, dimscreen, highlightwindow, ...) applies its
-    // WindowPaintData mutations in ITS paintWindow. The old direct
-    // `effects->drawWindow` jump here skipped all of them for every window on
-    // every frame — most visibly, KDE's Peek at Desktop held windows
-    // force-visible while its translation was never applied, so peek showed
-    // nothing while our effect was loaded.
+    // Desktop-transition capture: captureDesktop drives this paintWindow
+    // DIRECTLY, outside KWin's chain walk. Terminate with a raw draw there —
+    // the chain iterator sits at begin() in that context, so continuing the
+    // paint chain below would re-enter this very function (double fold, the
+    // animator transform applied twice to the capture) and then drive later
+    // effects' paintWindow hooks without the prePaintWindow they key off,
+    // which the capture's design explicitly forbids (its windows were never
+    // in this frame's scene walk).
+    if (m_directPaintCapture) {
+        KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+        return;
+    }
+
+    // Continue the PAINT chain, never a jump to the draw chain. Our chain
+    // position is the default 0, so we run FIRST in the paintWindow chain,
+    // and every effect ordered after us applies its WindowPaintData
+    // mutations in ITS paintWindow. The old direct `effects->drawWindow`
+    // jump here skipped all of them for every window on every frame — most
+    // visibly windowaperture (KDE's show-desktop effect, chain position 50),
+    // which held windows force-visible while its park-at-the-edges
+    // translation was never applied, so Peek at Desktop showed nothing while
+    // our effect was loaded.
     //
     // The re-entrancy rationale that moved this off a direct
     // OffscreenEffect::drawWindow call (ghost trails: the shared draw-window

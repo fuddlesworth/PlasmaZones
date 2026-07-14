@@ -1726,6 +1726,18 @@ private:
     // pass (no morph quad deform / re-capture).
     bool m_capturingSnapshot = false;
 
+    /// True while DesktopTransitionManager::captureDesktop drives paintWindow
+    /// DIRECTLY (outside KWin's chain walk). paintWindow's tail then terminates
+    /// with effects->drawWindow instead of continuing the paintWindow chain:
+    /// the chain iterator sits at begin() in that context, so chaining would
+    /// re-enter our own paintWindow (double fold, animator transform applied
+    /// twice to the capture) and drive later effects' paintWindow hooks without
+    /// the prePaintWindow they key off — the capture deliberately runs windows
+    /// that were never in this frame's scene walk. Unlike m_capturingSnapshot
+    /// this must NOT suppress the fold: the capture exists to bake the
+    /// decorated composite into the transition texture.
+    bool m_directPaintCapture = false;
+
     /// True while WE schedule a repaint on a window (postPaintScreen's per-frame
     /// repaint that keeps an animated decoration chain ticking). KWin's
     /// `windowDamaged` fires on repaint SCHEDULING, not just on client content

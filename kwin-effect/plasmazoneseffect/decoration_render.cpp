@@ -74,12 +74,12 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
         "layout(location = 0) in vec2 vTexCoord;\n\n"
         "layout(location = 0) out vec4 fragColor;\n\n"
         "uniform sampler2D uFinal;\n\n"
-        // Final opacity modulation (premultiplied multiply). Now a constant
-        // 1.0 push: SetOpacity is layer-backed (the plain opacity-tint
-        // layer's folded param) and custom chains dim through their own
-        // pack params (frost/glass contentOpacity), so no KWin-style final
-        // ghosting ever applies. The uniform stays in the contract so the
-        // shared program keeps a defined value.
+        // Final opacity modulation (premultiplied multiply). Fed KWin's live
+        // WindowPaintData opacity at present time (see drawWindow): our OWN
+        // rule opacity (SetOpacity) is layer-backed and never lands here, but
+        // this carries EXTERNAL modulation — other effects' fades and KWin
+        // window-rule opacity — whose ModulationConstant push silently no-ops
+        // on this custom program.
         "uniform float uOpacity;\n\n"
         // Colour management. Installing our own shader via OffscreenEffect::
         // setShader REPLACES KWin's present shader, which carries

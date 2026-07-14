@@ -17,6 +17,7 @@
 
 #include <QPoint>
 #include <QRectF>
+#include <QScopeGuard>
 #include <QSize>
 
 #include <memory>
@@ -130,6 +131,17 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
         // Bottom-to-top: stackingOrder() is already bottom→top, so the wallpaper
         // (an on-all-desktops window) lands first and app windows composite over
         // it. Windows outside this output are clipped by the viewport.
+        // Direct-drive mode for the loop below: paintWindow's tail must
+        // terminate with a raw draw instead of continuing the paintWindow
+        // chain (see m_directPaintCapture's doc — the chain iterator is at
+        // begin() here, so chaining would re-enter paintWindow and drive
+        // later effects without prePaintWindow). Scope-guarded so a throw
+        // from the draw chain cannot leak the mode into live painting.
+        m_effect->m_directPaintCapture = true;
+        const auto directPaintGuard = qScopeGuard([this] {
+            m_effect->m_directPaintCapture = false;
+        });
+
         const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* w : stack) {
             // isHiddenByShowDesktop: a capture taken while a peek is active
@@ -151,8 +163,9 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
             // Drive the window through OUR OWN per-window pipeline, exactly as the
             // live scene does for the incoming desktop (captureLiveScene →
             // effects->paintScreen → scene → our paintWindow). paintWindow builds
-            // the decoration composite and its tail calls effects->drawWindow —
-            // the same call this used to make directly — whose present branch then
+            // the decoration composite, and under m_directPaintCapture (set
+            // above) its tail terminates with effects->drawWindow — the same
+            // call this used to make directly — whose present branch then
             // binds that FRESH composite. Going straight to effects->drawWindow
             // skipped all of it, so the outgoing texture lost not just borders but
             // rule opacity, the animator's translate/scale, and any in-flight
