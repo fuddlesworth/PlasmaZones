@@ -397,10 +397,10 @@ void SettingsController::importLayout(const QString& filePath)
         }
     } else if (reply.type() == QDBusMessage::ErrorMessage) {
         // Surface the daemon's rejection (corrupt JSON, permission denied,
-        // layout-id collision, etc.) — without this branch the page
-        // silently refreshes and the user has no feedback, mirroring the
-        // pattern that Pass-4 hardening already applied to setLayoutHidden
-        // / setLayoutAutoAssign / setLayoutAspectRatio.
+        // layout-id collision, etc.) — without this branch the page silently
+        // refreshes and the user has no feedback. Mirrors setLayoutHidden /
+        // setLayoutAutoAssign / setLayoutAspectRatio, which all surface a
+        // daemon rejection the same way.
         qCWarning(lcCore) << "importLayout failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Failed to import layout: %1").arg(reply.errorMessage()));
     }

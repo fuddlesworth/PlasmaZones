@@ -264,6 +264,15 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
             PhosphorI18n::tr("Algorithm file names may contain only letters, digits, hyphens, and underscores."));
         return false;
     }
+    // Same reason as the two checks above: the engine refuses to load a script
+    // this large, so copying it in would leave the user a success toast for an
+    // algorithm that never appears. Checked on the source's size, so an
+    // oversized file is never read into memory either.
+    if (source.size() > PhosphorTiles::AutotileDefaults::MaxScriptSizeBytes) {
+        Q_EMIT algorithmOperationFailed(
+            PhosphorI18n::tr("That algorithm file is too large to load. Algorithms are limited to 1 MB."));
+        return false;
+    }
 
     const QString destDir = userAlgorithmsDir();
     QDir dir(destDir);

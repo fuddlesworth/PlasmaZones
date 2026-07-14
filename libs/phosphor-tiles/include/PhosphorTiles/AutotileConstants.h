@@ -86,6 +86,11 @@ constexpr int ScriptStateMaxKeys = 4096; ///< Max total object keys across the b
 constexpr qreal SplitRatioHysteresis = 0.05; ///< Band within which algorithm-switch ratio reset is suppressed
 constexpr int MinMetadataWindows = 1;
 constexpr int MaxMetadataWindows = 100;
+/// Largest algorithm script the engine will load. LuauTileAlgorithm refuses
+/// anything bigger, so a writer that lands a larger file on disk leaves the
+/// user an algorithm that never appears. Shared so the settings app's import
+/// can reject it up front instead.
+constexpr qint64 MaxScriptSizeBytes = 1024 * 1024;
 constexpr int MinInsertPosition = 0;
 constexpr int MaxInsertPosition = 2;
 // Bounds for AutotileOverflowBehavior (Float=0 .. Unlimited=1), defined below.

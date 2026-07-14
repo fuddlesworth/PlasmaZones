@@ -42,7 +42,7 @@ return pluau.algorithm {
 )");
 
 // A template copy takes only the new owner's copyright line and inherits the
-// template's license; the blank scaffold is our own code and takes both.
+// template's license. kHeader is the multi-line form the splice must refuse.
 const QString kCopyright = QStringLiteral("-- SPDX-FileCopyrightText: 2026 <your name>");
 const QString kHeader = kCopyright + QStringLiteral("\n-- SPDX-License-Identifier: GPL-3.0-or-later\n");
 
@@ -76,7 +76,7 @@ private Q_SLOTS:
     void spliceHandlesMultiLineLongBrackets();
     void spliceHandlesLevelNLongBrackets();
     void spliceKeepsQuotesAndLongBracketsApart();
-    void spliceRejectsTrailingNameOrIdField();
+    void spliceHandlesTrailingNameOrIdField();
     void spliceOrdersSpdxCopyrightBeforeLicense();
     void splicePreservesLeadingDocComment();
     void spliceNormalizesCrlf();
@@ -532,7 +532,7 @@ void TestAlgorithmScaffold::spliceKeepsQuotesAndLongBracketsApart()
     verifyRewrittenOnce(out);
 }
 
-void TestAlgorithmScaffold::spliceRejectsTrailingNameOrIdField()
+void TestAlgorithmScaffold::spliceHandlesTrailingNameOrIdField()
 {
     // A name/id that does not lead its line is invisible to the anchored
     // rewrite. Inserting our own pair anyway would leave two, and Luau takes
@@ -547,6 +547,33 @@ void TestAlgorithmScaffold::spliceRejectsTrailingNameOrIdField()
     // same either way.
     const QString semicolon = moduleWithMetadataBody(QStringLiteral("        a = 1; name = \"x\";\n"));
     QVERIFY(spliceTemplate(semicolon, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
+
+    // A nested table's closer does not end the line's own fields. These are the
+    // reject mirror of the inline-customParams accept below: together they pin
+    // that the scan elides a nested table's contents without also losing the
+    // real field after it.
+    const QString afterInlineNested =
+        moduleWithMetadataBody(QStringLiteral("        customParams = { key = \"g\" }, name = \"x\",\n"));
+    QVERIFY(spliceTemplate(afterInlineNested, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
+
+    const QString afterInlineNestedSemi =
+        moduleWithMetadataBody(QStringLiteral("        customParams = { a = 1 }; id = \"x\",\n"));
+    QVERIFY(spliceTemplate(afterInlineNestedSemi, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
+
+    // The same field trailing a MULTI-line nested table's closer. This line
+    // opens at depth 2, so a scan that only looks at lines opening at depth 1
+    // never sees it and lets the pair duplicate.
+    const QString afterBlockNested =
+        moduleWithMetadataBody(QStringLiteral("        customParams = {\n"
+                                              "            { a = 1 },\n"
+                                              "        }, name = \"x\",\n"));
+    QVERIFY(spliceTemplate(afterBlockNested, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
+
+    const QString afterBlockNestedId =
+        moduleWithMetadataBody(QStringLiteral("        customParams = {\n"
+                                              "            { a = 1 },\n"
+                                              "        }, id = \"x\",\n"));
+    QVERIFY(spliceTemplate(afterBlockNestedId, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
 
     // A line that opens inside a long bracket can still close it and carry a
     // real field. Skipping the whole line would leave this to duplicate.
@@ -570,11 +597,22 @@ void TestAlgorithmScaffold::spliceRejectsTrailingNameOrIdField()
     QVERIFY(!out.contains(QStringLiteral("name = \"A\"")));
     QVERIFY(out.contains(QStringLiteral("        customParams = { key = \"g\", name = \"Gap\" },")));
 
+    // A nested table written across lines keeps its own name key too.
+    out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        customParams = {\n"
+                                                               "            { name = \"Gap\", d = 1 },\n"
+                                                               "        },\n")),
+                         kCopyright, QStringLiteral("B"), QStringLiteral("b"));
+    QVERIFY(!out.isEmpty());
+    QVERIFY(out.contains(QStringLiteral("        name = \"B\",")));
+    QVERIFY(!out.contains(QStringLiteral("name = \"A\"")));
+    QVERIFY(out.contains(QStringLiteral("            { name = \"Gap\", d = 1 },")));
+
     // An identifier that merely ends in `name` is not a name field.
     out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        a = 1, myname = \"x\",\n")), kCopyright,
                          QStringLiteral("B"), QStringLiteral("b"));
     QVERIFY(!out.isEmpty());
     QVERIFY(out.contains(QStringLiteral("        name = \"B\",")));
+    QVERIFY(!out.contains(QStringLiteral("name = \"A\"")));
     QVERIFY(out.contains(QStringLiteral("        a = 1, myname = \"x\",")));
 
     // A `name =` inside a string value is text, not a field. (verifyRewrittenOnce

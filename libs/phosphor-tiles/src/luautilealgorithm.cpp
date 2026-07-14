@@ -26,8 +26,6 @@ using namespace AutotileDefaults;
 
 namespace {
 
-constexpr qint64 MaxScriptSizeBytes = 1024 * 1024; // 1 MB
-
 ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
 {
     ScriptedHelpers::CustomParamDef d;
@@ -38,7 +36,7 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     // A non-finite bound (a script writing 0/0 or math.huge) must not reach the
     // normalisation below: every NaN comparison is false, so the swap silently
     // does nothing and the NaN survives into minValue/maxValue, which
-    // toVariantMap() hands to the settings spinbox as its range. Keep the
+    // toVariantMap() hands to the settings slider as its range. Keep the
     // default bound instead, as resolveReal() does for the metadata reals.
     const QVariant minV = m.value(QStringLiteral("min"));
     const QVariant maxV = m.value(QStringLiteral("max"));
@@ -746,7 +744,14 @@ void LuauTileAlgorithm::onWindowAdded(TilingState* state, int windowIndex)
         return;
     }
     const QVariantMap st = buildStateMap(state, false);
-    m_engine->callModule(m_module, QStringLiteral("onWindowAdded"), {st, windowIndex}, ScriptWatchdogTimeoutMs);
+    const auto out =
+        m_engine->callModule(m_module, QStringLiteral("onWindowAdded"), {st, windowIndex}, ScriptWatchdogTimeoutMs);
+    // The hook returns nothing, so a failure has no effect on the layout to
+    // give it away. Log it, as every other call into a script here does.
+    if (out.status != LuauEngine::CallStatus::Ok) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "LuauTileAlgorithm: onWindowAdded() failed script=" << m_scriptId << ":" << out.message;
+    }
 }
 
 void LuauTileAlgorithm::onWindowRemoved(TilingState* state, int windowIndex)
@@ -755,7 +760,12 @@ void LuauTileAlgorithm::onWindowRemoved(TilingState* state, int windowIndex)
         return;
     }
     const QVariantMap st = buildStateMap(state, true);
-    m_engine->callModule(m_module, QStringLiteral("onWindowRemoved"), {st, windowIndex}, ScriptWatchdogTimeoutMs);
+    const auto out =
+        m_engine->callModule(m_module, QStringLiteral("onWindowRemoved"), {st, windowIndex}, ScriptWatchdogTimeoutMs);
+    if (out.status != LuauEngine::CallStatus::Ok) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "LuauTileAlgorithm: onWindowRemoved() failed script=" << m_scriptId << ":" << out.message;
+    }
 }
 
 bool LuauTileAlgorithm::supportsResizeHook() const noexcept

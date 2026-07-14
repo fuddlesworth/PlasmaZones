@@ -116,16 +116,18 @@ int findLongBracketClose(const QString& line, int level, int from)
 /// close on one line, span lines, or repeat, and @p longBracketLevel carries an
 /// open one across the line boundary.
 ///
-/// When @p codeOnly is non-null, the line's own TOP-LEVEL code is appended to
-/// it: text is elided, and so are the contents of any table nested on the line
-/// (its braces remain). A caller can pattern-match that without matching inside
-/// a string, a comment, or a nested table's fields.
+/// @p startDepth is the brace depth the line opens at, so the scan can speak in
+/// depths the caller shares rather than line-relative ones. When @p codeOnly is
+/// non-null it collects the line's code at depth 1 exactly — the metadata
+/// table's own fields, wherever on the line they fall. Text is elided, and so
+/// is anything nested deeper, so a caller can ask "is there a field here"
+/// without a string, a comment, or a nested table's keys answering.
 ///
 /// Not handled: short strings continued across lines (backslash-newline, `\z`).
 /// No bundled template's metadata uses one.
-int braceDelta(const QString& line, int& longBracketLevel, QString* codeOnly = nullptr)
+int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, QString* codeOnly = nullptr)
 {
-    int delta = 0;
+    int depth = startDepth;
     int i = 0;
 
     // A long bracket left open by an earlier line: everything up to its closer
@@ -139,9 +141,6 @@ int braceDelta(const QString& line, int& longBracketLevel, QString* codeOnly = n
         i = past;
     }
 
-    // Brace depth within this line alone, so codeOnly can tell a nested table's
-    // contents from the line's own top-level code.
-    int lineDepth = 0;
     QChar quote;
     for (; i < line.size(); ++i) {
         const QChar c = line[i];
@@ -163,12 +162,12 @@ int braceDelta(const QString& line, int& longBracketLevel, QString* codeOnly = n
             int pastOpener = 0;
             const int level = i + 2 < line.size() ? matchLongBracketOpen(line, i + 2, pastOpener) : kNoLongBracket;
             if (level == kNoLongBracket) {
-                return delta;
+                return depth - startDepth;
             }
             const int past = findLongBracketClose(line, level, pastOpener);
             if (past < 0) {
                 longBracketLevel = level;
-                return delta;
+                return depth - startDepth;
             }
             i = past - 1;
             continue;
@@ -179,33 +178,30 @@ int braceDelta(const QString& line, int& longBracketLevel, QString* codeOnly = n
             const int past = findLongBracketClose(line, level, pastOpener);
             if (past < 0) {
                 longBracketLevel = level;
-                return delta;
+                return depth - startDepth;
             }
             i = past - 1;
             continue;
         }
-        // codeOnly records this line's own TOP-LEVEL code: a nested table's
-        // braces survive but its contents do not, so a caller asking "is there
-        // a second field on this line" cannot mistake a nested table's key for
-        // one. Without that, `customParams = { name = "x" }` reads the same as
-        // a genuine trailing `name` field.
+        // Record only what sits at depth 1: the metadata table's own fields. A
+        // nested table's contents are deeper and elided, so
+        // `customParams = { name = "x" }` cannot read as a trailing `name`
+        // field, while a real one after that table's closer still does.
         if (c == QLatin1Char('{')) {
-            if (codeOnly && lineDepth == 0) {
+            if (codeOnly && depth == 1) {
                 codeOnly->append(c);
             }
-            ++lineDepth;
-            ++delta;
+            ++depth;
         } else if (c == QLatin1Char('}')) {
-            --lineDepth;
-            if (codeOnly && lineDepth <= 0) {
+            --depth;
+            if (codeOnly && depth == 1) {
                 codeOnly->append(c);
             }
-            --delta;
-        } else if (codeOnly && lineDepth <= 0) {
+        } else if (codeOnly && depth == 1) {
             codeOnly->append(c);
         }
     }
-    return delta;
+    return depth - startDepth;
 }
 
 } // anonymous namespace
@@ -344,19 +340,12 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
         // a `name = "..."` in it is content rather than a field to rewrite.
         const bool lineStartsInText = longBracketLevel != kNoLongBracket;
         QString codeOnly;
-        depth += braceDelta(lines[i], longBracketLevel, &codeOnly);
+        depth += braceDelta(lines[i], longBracketLevel, depthAtLineStart, &codeOnly);
 
         QString line = lines[i];
-        if (i > metaStart && depthAtLineStart == 1 && lineStartsInText) {
-            // The line opens inside a long bracket, so its leading text is not a
-            // field. It can still close the bracket and carry real code, and a
-            // name/id there can be neither rewritten in place nor left to
-            // duplicate, so reject. A line that is text all the way through
-            // contributes no code and falls past this untouched.
-            if (anyNameOrIdFieldRe.match(codeOnly).hasMatch()) {
-                return QString();
-            }
-        } else if (i > metaStart && depthAtLineStart == 1) {
+        bool rewrote = false;
+        // The anchored rewrite only fits a field that LEADS its line, in code.
+        if (i > metaStart && depthAtLineStart == 1 && !lineStartsInText) {
             const QString trimmed = line.trimmed();
             if (fieldIndent.isEmpty() && !trimmed.isEmpty() && !trimmed.startsWith(QLatin1Char('}'))) {
                 fieldIndent = leadingWhitespace(line);
@@ -367,17 +356,24 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
                 }
                 line = quotedField(leadingWhitespace(line), QStringLiteral("name"), displayName);
                 sawName = true;
+                rewrote = true;
             } else if (idFieldRe.match(line).hasMatch()) {
                 if (!idLineRe.match(line).hasMatch()) {
                     return QString();
                 }
                 line = quotedField(leadingWhitespace(line), QStringLiteral("id"), id);
                 sawId = true;
-            } else if (anyNameOrIdFieldRe.match(codeOnly).hasMatch()) {
-                // A name/id sharing its line with another field: not rewritable
-                // in place, and not safe to leave.
-                return QString();
+                rewrote = true;
             }
+        }
+        // Any OTHER field of the table on this line, wherever it falls: after a
+        // sibling, after a nested table's closer, after a long bracket's
+        // closer, or on a line that opened deeper. None can be rewritten in
+        // place, and leaving one lets Luau's last-wins keep the template's
+        // value. `depth >= 1` skips the table's own closing line, whose trailing
+        // code belongs to the enclosing table rather than to metadata.
+        if (i > metaStart && !rewrote && depth >= 1 && anyNameOrIdFieldRe.match(codeOnly).hasMatch()) {
+            return QString();
         }
         metaLines += line;
 

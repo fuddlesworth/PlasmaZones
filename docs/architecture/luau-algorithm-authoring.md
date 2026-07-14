@@ -202,7 +202,7 @@ pluau.applyTreeGeometry(node, rect, gap)   -- memory algorithms
 pluau.guardArea(area, count)      -- early-return fill for tiny work areas
 pluau.clamp(v, lo, hi)            -- NaN-safe; returns nil for non-numbers (pair with `or default`)
 pluau.center(start, total, size)
-pluau.gridShape(count)            -- rows, cols for a near-square grid
+pluau.gridShape(count)            -- cols, rows for a near-square grid
 pluau.rect(x, y, w, h)
 pluau.join(...lists)
 pluau.clampSplitRatio(r)
@@ -320,9 +320,10 @@ return every key you want to keep. When a branch has nothing to change, return
 `state.scriptState` unchanged. This is why `aligned-grid` returns it verbatim on
 its early-outs. Returning `nil` leaves the bag alone, but returning only
 `splitRatio` clears it, because `splitRatio` is stripped before the rest is
-stored. `pluau.masterStackResize` returns exactly that, so a `supportsScriptState`
-algorithm must merge its own keys into what the helper returns rather than
-returning it directly.
+stored. `pluau.masterStackResize` returns either `nil` or a table holding only
+`splitRatio`, so a `supportsScriptState` algorithm cannot return it directly.
+Build your own table, copy the helper's ratio into it when there is one, and
+treat the `nil` as the case where the drag missed the seam.
 
 `supportsScriptState` is the lightweight alternative to the split tree: an
 opaque table you shape however you like, persisted per screen, desktop, and
