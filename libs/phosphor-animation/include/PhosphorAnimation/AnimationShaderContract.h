@@ -360,6 +360,22 @@ inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
 inline constexpr const char* kIFromRect = "iFromRect";
 inline constexpr const char* kIToRect = "iToRect";
 
+/// `vec4 iIconRect` — the window's task-manager icon rectangle in logical
+/// screen pixels `(x, y, width, height)`, same coordinate space as
+/// `iFromRect` / `iToRect` and as `iSurfaceScreenPos.xy` + `iAnchorSize`
+/// (the window's frame rect). Captured from `EffectWindow::iconGeometry()`
+/// when the transition installs and pushed every frame, so a
+/// minimize-to-icon pack (genie) can deform the window toward its taskbar
+/// icon. The rect comes from the task manager via PlasmaWindowManagement;
+/// a window that sits in no task manager carries `(0, 0, 0, 0)`, which a
+/// pack MUST treat as "no icon target" and degrade to an in-place
+/// animation. COMPOSITOR PATH ONLY and deliberately NOT declared by the
+/// canonical shared header, exactly like `iFromRect` / `iToRect`: a pack
+/// that reads it declares it inside its own `#ifdef PLASMAZONES_KWIN`
+/// block, keeping the daemon's strict SPIR-V bake away from the loose
+/// declaration.
+inline constexpr const char* kIIconRect = "iIconRect";
+
 /// `sampler2D uOldWindow` — snapshot of the window's content captured at
 /// the old frame size just before the instant `moveResize`. The morph
 /// shader cross-fades this (alpha `1 - iTime`) against the live new

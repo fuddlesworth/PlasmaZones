@@ -614,20 +614,23 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     }
 
     // OffscreenEffect's `redirect()` allocates an FBO sized to the
-    // window's frame geometry. A window that's already minimised /
-    // unmapped reports 0×0 (or 1×1) here, and FBO creation aborts
+    // window's frame geometry. A window with a genuinely collapsed
+    // geometry reports 0×0 (or 1×1) here, and FBO creation aborts
     // with `GL_INVALID_VALUE … <levels>, <width> and <height> must
     // be 1 or greater` followed by `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`
     // — the redirect silently leaves the window in a half-broken
     // state that contaminates every subsequent transition until KWin
     // itself reallocates the offscreen data. Skip the install on
-    // collapsed surfaces. The minimize lifecycle event in particular
-    // fires AFTER KWin has already pulled the surface, so its shader
-    // assignment is intrinsically a no-op on this code path; users
-    // who want a minimise animation need an unredirect-time hook,
-    // which is out of scope here.
+    // collapsed surfaces.
+    //
+    // A MINIMIZED window is deliberately NOT rejected here. Minimizing
+    // keeps the frame geometry and the last committed buffer intact;
+    // painting is merely disabled via PAINT_DISABLED_BY_MINIMIZE, which
+    // the EffectWindowVisibleRef installed below lifts for the
+    // transition's lifetime (KWin's own Magic Lamp / Squash mechanism).
+    // Only a genuinely 0-sized geometry bails.
     const QRectF geo = window->frameGeometry();
-    if (window->isMinimized() || geo.width() < 1.0 || geo.height() < 1.0) {
+    if (geo.width() < 1.0 || geo.height() < 1.0) {
         qCDebug(lcEffect) << "beginShaderTransition: skipping collapsed surface" << effectId
                           << "window=" << window->windowClass() << "geo=" << geo
                           << "isMinimized=" << window->isMinimized();
@@ -970,6 +973,9 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // pay nothing.
         cached.iFromRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIFromRect);
         cached.iToRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIToRect);
+        // Task-manager icon rect for minimize-to-icon packs (genie). -1 for
+        // every pack that doesn't declare it — same pay-nothing guard.
+        cached.iIconRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIIconRect);
         cached.iOldWindowLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUOldWindow);
         // Surface-layer-stack uniforms — every animation shader resolves these
         // (declared in the shared header and read through surfaceColor()), so
@@ -1357,6 +1363,27 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // held — the new transition's endShaderTransition will balance.
     transition.closeGrabHeld = holdCloseGrab || existingHeldGrab;
     transition.addedGrabHeld = holdAddedGrab || existingAddedHeldGrab;
+    // Keep a minimized window paintable for the transition's lifetime.
+    // RAII — released when the transition entry is erased
+    // (endShaderTransition / windowDeleted / supersession all destroy the
+    // ShaderTransition, whose member dtor unrefs). Holding it
+    // per-transition rather than per-window means a superseding install
+    // on the still-minimized window simply acquires its own ref before
+    // the prior one drops; KWin's ref accounting is per-holder.
+    if (window->isMinimized()) {
+        transition.visibleRef = KWin::EffectWindowVisibleRef(window, KWin::EffectWindow::PAINT_DISABLED_BY_MINIMIZE);
+    }
+    // Icon target for minimize-to-icon packs. Captured unconditionally —
+    // the rect is a stored value on the EffectWindow, and only shaders
+    // that declare iIconRect ever read the pushed uniform. A window in no
+    // task manager reports an empty rect, which stays a null QRectF here
+    // and reaches the shader as (0, 0, 0, 0) = "no icon target".
+    {
+        const auto icon = window->iconGeometry();
+        if (icon.width() >= 1.0 && icon.height() >= 1.0) {
+            transition.iconRect = QRectF(icon.x(), icon.y(), icon.width(), icon.height());
+        }
+    }
     if (durationMs > 0) {
         transition.durationMs = durationMs;
         transition.startTimeMs = shaderClockNowMs();

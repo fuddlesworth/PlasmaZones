@@ -567,19 +567,20 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // (which would otherwise be asymmetric per-screen UX for the same
     // user-configured "WindowMinimize" event).
     //
-    // We only fire on UN-minimize (forward 0→1, "appear"). The
-    // going-to-minimized direction is intentionally not a shader event
-    // on the kwin-effect path: KWin pulls the surface (collapses frame
-    // geometry to 0×0 / sets isMinimized=true) BEFORE this signal fires,
-    // and beginShaderTransition's collapsed-surface guard rejects the
-    // install — the FBO allocation aborts on a 0×0 redirect target.
-    // A genuine "going away" minimise animation would need an
-    // unredirect-time hook that captures the last live frame before
-    // KWin tears the surface down; that's out of scope for this layer.
-    if (!minimized) {
-        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
-                               /*reverse=*/false);
-    }
+    // Un-minimize plays forward (0→1, "appear"); going-to-minimized plays
+    // the same shader in reverse (1→0, "going away"), matching the
+    // close / unmaximize reverse-leg convention.
+    //
+    // The going-to-minimized direction was historically skipped on the
+    // claim that KWin pulls the surface (collapses the frame to 0×0)
+    // before this signal fires. That was a misdiagnosis: minimizing keeps
+    // the frame geometry and the last committed buffer intact and only
+    // disables painting via PAINT_DISABLED_BY_MINIMIZE, which
+    // beginShaderTransition lifts with an EffectWindowVisibleRef for the
+    // transition's lifetime (the mechanism KWin's own Magic Lamp / Squash
+    // minimize effects use).
+    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
+                           /*reverse=*/minimized);
 
     // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler (mirrors
     // AutotileHandler running its own minimize→float machine for autotile screens).

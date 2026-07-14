@@ -14,6 +14,7 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/Curve.h>
 
+#include <effect/effectwindow.h>
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
 
@@ -26,10 +27,6 @@
 
 #include <array>
 #include <memory>
-
-namespace KWin {
-class EffectWindow;
-}
 
 namespace PlasmaZones {
 
@@ -120,6 +117,10 @@ struct CachedShader
     /// non-morph shader leaves all three at -1 and pays nothing.
     int iFromRectLoc = -1;
     int iToRectLoc = -1;
+    /// `iIconRect` — the window's task-manager icon rect (see
+    /// AnimationShaderContract::kIIconRect). -1 when the shader doesn't
+    /// read it; only minimize-to-icon packs (genie) declare it.
+    int iIconRectLoc = -1;
     int iOldWindowLoc = -1;
     /// `iHasOldWindow` — 1 when a captured old-content snapshot is bound for
     /// this transition, 0 otherwise (the shader then falls back to
@@ -304,6 +305,26 @@ struct ShaderTransition
     /// unconditionally — clearing the role on a window with no
     /// pending built-in open animation is a no-op.
     bool addedGrabHeld = false;
+    /// Forces KWin to keep painting a MINIMIZED window for this
+    /// transition's lifetime — the same mechanism KWin's own Magic Lamp /
+    /// Squash effects use. Minimizing does not destroy the surface or its
+    /// geometry; it only sets PAINT_DISABLED_BY_MINIMIZE on the window
+    /// item, and this ref lifts exactly that bit, so the going-to-minimized
+    /// leg of window.appearance.minimize has live frames to paint.
+    /// Installed by @c beginShaderTransition whenever the target window is
+    /// already minimized at install time; released automatically when the
+    /// transition entry is destroyed (RAII — expiry, supersession, and the
+    /// windowDeleted handler all erase the entry; the ref's copy ctor
+    /// re-refs and its dtor unrefs, so the move-into-map stays balanced).
+    KWin::EffectWindowVisibleRef visibleRef;
+    /// The window's task-manager icon rect in logical screen pixels,
+    /// captured from `EffectWindow::iconGeometry()` at install time and
+    /// pushed per frame as `iIconRect` for packs that declare it (genie).
+    /// Stays a null QRectF — pushed as (0, 0, 0, 0) — when the window sits
+    /// in no task manager; packs treat that as "no icon target". Captured
+    /// once rather than read per frame so a taskbar relayout mid-animation
+    /// can't teleport the deformation target.
+    QRectF iconRect;
     /// Cached texcoord handedness derived from the first quad of the source
     /// list at the first `apply()` call. The handedness depends on KWin's
     /// WindowQuad texcoord convention which doesn't change between frames,

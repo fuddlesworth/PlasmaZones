@@ -1462,6 +1462,17 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     const QRectF& t = transition.toGeometry;
                     shader->setUniform(cached->iToRectLoc, QVector4D(t.x(), t.y(), t.width(), t.height()));
                 }
+                // Task-manager icon rect for minimize-to-icon packs
+                // (genie). Same space and same per-frame push discipline
+                // as the morph rects above — the shader program is shared
+                // across windows, so an install-time push would let two
+                // concurrent transitions on the same pack clobber each
+                // other's target. Null rect (no task-manager entry)
+                // pushes (0, 0, 0, 0) = "no icon target".
+                if (cached->iIconRectLoc >= 0) {
+                    const QRectF& ic = transition.iconRect;
+                    shader->setUniform(cached->iIconRectLoc, QVector4D(ic.x(), ic.y(), ic.width(), ic.height()));
+                }
                 // User textures: bind each cached GLTexture to texture
                 // unit (1 + slot) — TEXTURE0 holds the redirected window
                 // texture KWin's OffscreenData::paint binds during
