@@ -119,7 +119,8 @@ struct CachedShader
     int iToRectLoc = -1;
     /// `iIconRect` — the window's task-manager icon rect (see
     /// AnimationShaderContract::kIIconRect). -1 when the shader doesn't
-    /// read it; only minimize-to-icon packs (genie) declare it.
+    /// read it; only minimize-to-icon packs (genie, phosphor-siphon)
+    /// declare it.
     int iIconRectLoc = -1;
     int iOldWindowLoc = -1;
     /// `iHasOldWindow` — 1 when a captured old-content snapshot is bound for
@@ -319,11 +320,12 @@ struct ShaderTransition
     KWin::EffectWindowVisibleRef visibleRef;
     /// The window's task-manager icon rect in logical screen pixels,
     /// captured from `EffectWindow::iconGeometry()` at install time and
-    /// pushed per frame as `iIconRect` for packs that declare it (genie).
-    /// Stays a null QRectF — pushed as (0, 0, 0, 0) — when the window sits
-    /// in no task manager; packs treat that as "no icon target". Captured
-    /// once rather than read per frame so a taskbar relayout mid-animation
-    /// can't teleport the deformation target.
+    /// pushed per frame as `iIconRect` for packs that declare it (genie,
+    /// phosphor-siphon). Stays a null QRectF — pushed as (0, 0, 0, 0) —
+    /// when the window sits in no task manager; packs treat that as "no
+    /// icon target". Captured once rather than read per frame so a
+    /// taskbar relayout mid-animation can't teleport the deformation
+    /// target.
     QRectF iconRect;
     /// Cached texcoord handedness derived from the first quad of the source
     /// list at the first `apply()` call. The handedness depends on KWin's

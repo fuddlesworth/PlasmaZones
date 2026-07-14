@@ -1631,7 +1631,8 @@ private:
     ///
     ///   (b) Pre-commit short-circuit — install short-circuited before
     ///       any state was committed: empty effectId / null window,
-    ///       global animations toggle off, collapsed/minimised surface,
+    ///       global animations toggle off, collapsed surface, a
+    ///       minimized surface without @p animateMinimized,
     ///       registry miss, a desktop-class pack refused on a window
     ///       event, the cached null-shader sentinel from a prior compile
     ///       failure, shader file open / read / include-expansion
@@ -1652,9 +1653,18 @@ private:
     /// (@p durationMs == 0) it is dropped with a warning: that leg reads its
     /// progress from the WindowAnimator, whose own profile already carries the
     /// curve, so honouring it here would double-ease.
+    ///
+    /// @p animateMinimized opts a MINIMIZED window into the install. Only the
+    /// going-to-minimized leg of window.appearance.minimize passes true: it is
+    /// the one event whose semantic is "animate this window although it is
+    /// minimized", and the install then holds an EffectWindowVisibleRef so the
+    /// window has frames to paint. Every other event reaching a minimized
+    /// window (a snap batch, focus, a racing geometry apply) is rejected as it
+    /// always was — installing there would force-show a window the user
+    /// believes is minimized.
     bool beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
-                               bool holdAddedGrab = false,
+                               bool holdAddedGrab = false, bool animateMinimized = false,
                                std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
     void endShaderTransition(KWin::EffectWindow* window);
 
@@ -1669,7 +1679,8 @@ private:
     void loadMotionProfileTreeFromDbus();
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
-                                bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false);
+                                bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false,
+                                bool animateMinimized = false);
     /// Arm the duration teardown for a time-driven transition, generation-guarded.
     ///
     /// Re-arms itself when the transition's own clock says the leg is not finished.

@@ -1815,6 +1815,19 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 },
                 Qt::QueuedConnection);
         }
+        // A reverse (going-to-minimized) leg ends fully swallowed / faded
+        // out, and the window is only paintable at all because the
+        // transition's visible ref holds it. Falling through to the plain
+        // chain continuation below would paint the raw window at its rest
+        // geometry for the expiry frame(s) — a one-frame flash of a window
+        // the user just watched disappear into its icon. Paint nothing
+        // instead; the queued teardown (or the pending one from a prior
+        // frame) drops the ref and the window leaves the scene. Guarded on
+        // isMinimized rather than the leg direction so an un-minimize leg
+        // whose window was re-minimized mid-flight is covered too.
+        if (w->isMinimized()) {
+            return;
+        }
     }
 
     // Decoration fold for every (non-transition) decorated window. It runs

@@ -579,8 +579,12 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // beginShaderTransition lifts with an EffectWindowVisibleRef for the
     // transition's lifetime (the mechanism KWin's own Magic Lamp / Squash
     // minimize effects use).
+    // animateMinimized opts the going-to-minimized leg past the
+    // begin-side minimized-window reject; the un-minimize leg runs on a
+    // visible window where the flag is moot.
     tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
-                           /*reverse=*/minimized);
+                           /*reverse=*/minimized, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
+                           /*animateMinimized=*/minimized);
 
     // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler (mirrors
     // AutotileHandler running its own minimize→float machine for autotile screens).

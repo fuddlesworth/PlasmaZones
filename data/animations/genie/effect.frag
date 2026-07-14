@@ -5,12 +5,12 @@
 //
 // The vertex stage (effect.vert) does the minimize-to-icon deformation
 // and hands each fragment its card uv and swallow progress through
-// vGenie. This stage samples the window at that card uv, masks
-// everything outside the window's [0, 1] card rect (the grid spans the
-// whole output, but only the window is drawn), and fades the content out
-// over the last stretch of the swallow so the icon-sized remnant never
-// pops on the teardown frame. Restoring runs the progress the other way,
-// so the same ramp fades the window in out of the icon.
+// vGenie. This stage samples the window at that card uv, feathers the
+// card's edges (and crops the decoration halo band, where the grid sits
+// on a padded canvas and cuv runs past [0, 1]), and fades the content
+// out over the last stretch of the swallow so the icon-sized remnant
+// never pops on the teardown frame. Restoring runs the progress the
+// other way, so the same ramp fades the window in out of the icon.
 
 #ifdef PLASMAZONES_KWIN
 // .xy = card uv, .z = swallow progress (0 = window at rest, 1 = fully
@@ -26,7 +26,9 @@ vec4 pTransition(vec2 uv, float t) {
     vec2 cuv = vGenie.xy;
     float p = clamp(vGenie.z, 0.0, 1.0);
 
-    // Feathered window mask in card space — same construction as flow.
+    // Feathered card-edge mask in card space — same construction as flow
+    // (the grid sits on the window's frame rect, or its padded decoration
+    // canvas, so this feathers the edges and crops any halo band).
     vec2 fw = max(fwidth(cuv), vec2(1.0e-4));
     vec2 edge = min(smoothstep(vec2(0.0), fw, cuv), smoothstep(vec2(0.0), fw, 1.0 - cuv));
     float mask = edge.x * edge.y;

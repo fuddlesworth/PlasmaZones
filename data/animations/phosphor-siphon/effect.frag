@@ -46,8 +46,9 @@ vec4 pTransition(vec2 uv, float t) {
     float e = clamp(vSiphon.z, 0.0, 1.0);
     float lane = vSiphon.w;
 
-    // Feathered window mask in card space — the grid spans the whole
-    // output, so only cells inside [0, 1] carry window content.
+    // Feathered card-edge mask in card space — the grid sits on the
+    // window's frame rect (or its padded decoration canvas), so this
+    // feathers the edges and crops any halo band past [0, 1].
     vec2 fw = max(fwidth(cuv), vec2(1.0e-4));
     vec2 edge = min(smoothstep(vec2(0.0), fw, cuv), smoothstep(vec2(0.0), fw, 1.0 - cuv));
     float mask = edge.x * edge.y;

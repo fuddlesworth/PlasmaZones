@@ -1231,6 +1231,16 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // synchronous dispatch from the dtor body is sound.
         QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
     }
+    // When KWin::effects is null (compositor teardown) the drain above is
+    // skipped and any still-installed ShaderTransition is destroyed by
+    // member destruction instead. Each entry's `visibleRef` dtor then
+    // dereferences its stored EffectWindow* (`unrefVisible`) — there is no
+    // way to neutralise an EffectWindowVisibleRef without touching the
+    // window. This relies on KWin destroying effects before it destroys
+    // windows, which is the same lifetime assumption KWin's own Magic
+    // Lamp / Squash effects make: both hold visible refs in member
+    // containers destroyed at effect destruction with no null-effects
+    // special-casing.
 }
 
 } // namespace PlasmaZones

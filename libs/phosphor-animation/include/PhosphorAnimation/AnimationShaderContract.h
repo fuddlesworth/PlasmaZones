@@ -365,14 +365,16 @@ inline constexpr const char* kIToRect = "iToRect";
 /// `iFromRect` / `iToRect` and as `iSurfaceScreenPos.xy` + `iAnchorSize`
 /// (the window's frame rect). Captured from `EffectWindow::iconGeometry()`
 /// when the transition installs and pushed every frame, so a
-/// minimize-to-icon pack (genie) can deform the window toward its taskbar
-/// icon. The rect comes from the task manager via PlasmaWindowManagement;
-/// a window that sits in no task manager carries `(0, 0, 0, 0)`, which a
-/// pack MUST treat as "no icon target" and degrade to an in-place
-/// animation. COMPOSITOR PATH ONLY and deliberately NOT declared by the
-/// canonical shared header, exactly like `iFromRect` / `iToRect`: a pack
-/// that reads it declares it inside its own `#ifdef PLASMAZONES_KWIN`
-/// block, keeping the daemon's strict SPIR-V bake away from the loose
+/// minimize-to-icon pack (genie, phosphor-siphon) can deform the window
+/// toward its taskbar icon. The rect comes from the task manager via
+/// PlasmaWindowManagement; a window that sits in no task manager carries
+/// `(0, 0, 0, 0)`, which a pack MUST treat as "no icon target" and
+/// degrade to an in-place animation. The rect may sit on a DIFFERENT
+/// output than the window (a taskbar on another monitor); the
+/// surface-extent quad spans only the window's own output, so a
+/// deformation toward a foreign-output icon clips at the output edge. COMPOSITOR PATH ONLY and deliberately NOT
+/// declared by the canonical shared header, exactly like `iFromRect` / `iToRect`: a pack that reads it declares it
+/// inside its own `#ifdef PLASMAZONES_KWIN` block, keeping the daemon's strict SPIR-V bake away from the loose
 /// declaration.
 inline constexpr const char* kIIconRect = "iIconRect";
 

@@ -77,7 +77,7 @@ void main() {
         lead = (d.x >= 0.0) ? cuv.x : 1.0 - cuv.x;
     }
     const float SPREAD = 0.45;
-    float pv = clamp((p - (1.0 - lead) * SPREAD) / (1.0 - SPREAD), 0.0, 1.0);
+    float pv = clamp((p - (1.0 - lead) * SPREAD) / max(1.0 - SPREAD, 1.0e-3), 0.0, 1.0);
     pv = pv * pv * (3.0 - 2.0 * pv);
 
     // Each card point travels from its place in the window to its place
