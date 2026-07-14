@@ -110,12 +110,14 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     }
 
     // Only clear resnap entries for this physical screen — preserve entries for
-    // other screens so concurrent layout + VS config changes don't lose resnap data.
+    // other screens so concurrent layout + VS config changes don't lose resnap
+    // data. The virtual-sub-screen prefix is hoisted out of the lambda,
+    // matching the FromVirtual sibling, and reused for the store rewrites
+    // below (it matches old virtual IDs so a VS re-configuration re-migrates).
+    const QString prefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
     m_resnapBuffer.erase(std::remove_if(m_resnapBuffer.begin(), m_resnapBuffer.end(),
                                         [&](const ResnapEntry& e) {
-                                            return e.screenId == physicalScreenId
-                                                || e.screenId.startsWith(
-                                                    physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator);
+                                            return e.screenId == physicalScreenId || e.screenId.startsWith(prefix);
                                         }),
                          m_resnapBuffer.end());
 
@@ -198,10 +200,6 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
     int migrated = 0;
     bool anyStateMigrated = false;
-    // Match both the physical screen ID and any existing virtual screen IDs on it,
-    // so re-configuration (VS config changed) re-migrates windows from old virtual IDs to new ones.
-    const QString prefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
-
     // Rewrite each per-screen store's OWN live-screen map in place. A window's
     // screen VALUE moves from the physical id (or an old virtual id) to the new
     // virtual sub-screen its zone falls in; the store the window lives in is
@@ -1234,6 +1232,12 @@ PhosphorZones::Zone* WindowTrackingService::findZoneById(const QString& zoneId) 
 
 WindowTrackingService::ZoneLookupResult WindowTrackingService::findZoneInAllLayouts(const QUuid& zoneUuid) const
 {
+    // Guard locally like every other m_layoutManager consumer in this file
+    // (onLayoutChanged, validateLastUsedZone) — the API does not promise a
+    // non-null manager.
+    if (!m_layoutManager) {
+        return {};
+    }
     // Search all layouts, not just the active one, to support per-screen layouts
     for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
         PhosphorZones::Zone* zone = layout->zoneById(zoneUuid);

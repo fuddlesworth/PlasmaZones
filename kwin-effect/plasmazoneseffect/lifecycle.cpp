@@ -1246,6 +1246,14 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
             if (!KWin::effects) {
                 return;
             }
+            // A rapid unload→reload (KCM toggle off then on in one reconcile)
+            // constructs a NEW PlasmaZones instance before this timer fires;
+            // restoring the builtins then would double-animate show desktop
+            // until the new instance's next async sync. If we are loaded
+            // again, the new instance owns the suppression decision.
+            if (KWin::effects->isEffectLoaded(QStringLiteral("kwin_effect_plasmazones"))) {
+                return;
+            }
             for (const QString& name : toRestore) {
                 // Already loaded (a KCM reconcile beat us to it) is satisfied,
                 // not a failure — loadEffect returns false for a loaded effect.

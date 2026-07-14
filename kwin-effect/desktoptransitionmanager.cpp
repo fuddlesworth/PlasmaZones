@@ -270,17 +270,12 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
 
 void DesktopTransitionManager::reapPeekTransitions()
 {
-    // Any bail-out from beginPeek must not strand live peek legs: a hide leg
-    // still blending would keep painting the windows scene draining into the
-    // bare desktop while the toggle it animated has already been reversed
-    // (under a foreign claim, or with the pack since unassigned). Reap peek
-    // entries (kind-guarded — a live switch is not ours to truncate) and
-    // repaint so the real scene draws a frame nothing else schedules. The
-    // bare-desktop cache goes too: a reaped leg breaks the "show leg
-    // immediately follows its hide leg" pairing, so a cached capture may no
-    // longer match the desktop's content (wallpaper or panel changes are
-    // invisible to the size/format validation); the next show leg then
-    // settles instantly, which is KWin's default.
+    // See the header doc: every beginPeek bail-out reaps live peek legs
+    // (kind-guarded — a live switch is not ours to truncate), repaints so the
+    // real scene draws a frame nothing else schedules, and drops the
+    // bare-desktop cache (a broken hide/show pairing means the capture may no
+    // longer match the desktop's content, which size/format validation cannot
+    // see; the next show leg then settles instantly, KWin's default).
     const bool hasPeekEntries = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
         return entry.second.kind != Kind::Switch;
     });
@@ -310,9 +305,7 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
                                          int durationMs, std::shared_ptr<const PhosphorAnimation::Curve> progressCurve)
 {
     if (effectId.isEmpty()) {
-        // No shader assigned — KWin's instant show-desktop proceeds. Reap so a
-        // hide leg begun before the pack was unassigned cannot keep blending
-        // against the reversed toggle.
+        // No shader assigned — KWin's instant show-desktop proceeds.
         reapPeekTransitions();
         return;
     }
@@ -334,10 +327,8 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     OutputTransition proto;
     if (!prepareTransitionPrototype(effectId, params, PhosphorAnimation::ProfilePaths::DesktopPeek, durationMs,
                                     std::move(progressCurve), &proto)) {
-        // Reap here too (the pack was uninstalled or lost its desktop contract
-        // via hot-reload between the legs): a stranded not-yet-captured hide
-        // leg would otherwise deferred-capture the restored-windows scene as
-        // the "bare desktop" and poison the cache.
+        // The pack was uninstalled or lost its desktop contract via hot-reload
+        // between the legs.
         reapPeekTransitions();
         return;
     }
@@ -701,6 +692,13 @@ void DesktopTransitionManager::scheduleRepaints()
             // returns false and paintScreen falls through to the real scene in the
             // SAME frame; a reap has no such frame to fall through to.
             KWin::effects->addRepaint(it->first->geometry());
+            // A reaped peek leg also drops its output's bare-desktop cache
+            // entry: an expired never-painted PeekShow would otherwise retain
+            // an output-sized GPU texture until the next hide leg (the cache
+            // is consumed only in paintOutput).
+            if (it->second.kind != Kind::Switch) {
+                m_peekDesktopCache.erase(it->first);
+            }
             it = m_active.erase(it);
         } else {
             ++it;
