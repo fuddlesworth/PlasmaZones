@@ -5,7 +5,7 @@
 
 PlasmaZones autotiling layouts are [Luau](https://luau.org/) scripts. A script
 takes the current window count and screen area and returns a list of zones
-(rectangles) to place windows into. The 25 built-in layouts (columns, dwindle,
+(rectangles) to place windows into. The 27 built-in layouts (columns, dwindle,
 master-stack, …) are written with the exact same API documented here, so the
 bundled `data/algorithms/*.luau` files are the best reference once you know the
 shape.
@@ -72,8 +72,9 @@ That is a complete algorithm. `pluau.algorithm{…}` wraps the table and returns
 |---|---|---|---|
 | `metadata` | yes | table | Display name, capabilities, defaults (§4) |
 | `tile` | yes | `(ctx) -> {Zone}` | Computes the zones (§5) |
-| `onWindowAdded` | no | `(state, index) -> ()` | Memory-aware hook (§8) |
-| `onWindowRemoved` | no | `(state, index) -> ()` | Memory-aware hook (§8) |
+| `onWindowAdded` | no | `(state, index) -> ()` | Lifecycle hook (§8) |
+| `onWindowRemoved` | no | `(state, index) -> ()` | Lifecycle hook (§8) |
+| `onWindowResized` | no | `(state, resize) -> table?` | Interactive-resize hook (§9) |
 
 ---
 
@@ -93,7 +94,10 @@ to sensible defaults.
 | `supportsSplitRatio` | boolean | Exposes the split-ratio slider; sets `ctx.splitRatio` |
 | `defaultSplitRatio` | number | Initial split ratio (0.1–0.9) |
 | `supportsMinSizes` | boolean | Honours per-window minimum sizes (default `true`) |
-| `supportsMemory` | boolean | Uses the persistent split tree + hooks (§8) |
+| `supportsMemory` | boolean | Uses the persistent split tree + hooks (§10) |
+| `supportsScriptState` | boolean | Persists an opaque `ctx.state` table across retiles (§9) |
+| `supportsSingleWindow` | boolean | Owns the lone-window case; without it the host fills the work area when one window is tiled |
+| `retileOnFocus` | boolean | Re-runs `tile` when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight) |
 | `producesOverlappingZones` | boolean | Zones may overlap (e.g. stacked/deck layouts) |
 | `centerLayout` | boolean | Layout is centered rather than filling the screen |
 | `masterZoneIndex` | number | Index of the “master” zone (for highlighting); `-1` = none |
@@ -115,11 +119,13 @@ fields:
 | `masterCount` | number | Master windows (when `supportsMasterCount`) |
 | `splitRatio` | number | Master/stack split 0.1–0.9 (when `supportsSplitRatio`) |
 | `minSizes` | `{ {w, h} }` | Per-window minimum sizes, 1-indexed |
-| `focusedIndex` | number | Index of the focused window |
-| `windows` | `{ {appId, focused} }?` | Per-window info, when available |
+| `focusedIndex` | number | 0-based tiled index of the focused window (`-1` if none) |
+| `windows` | `{ {appId, focused, windowId} }?` | Per-window info, when available |
 | `screen` | `{id, portrait, aspectRatio}?` | Output info |
 | `tree` | `SplitNode?` | Persistent split tree (memory algorithms only) |
 | `custom` | `{[string]: any}?` | Your `customParams` values, keyed by name |
+| `currentGeometries` | `{Zone}?` | Last applied zones (advisory; post-enforcement) |
+| `state` | `{[string]: any}?` | Persistent script-state table (§9, `supportsScriptState` only) |
 
 A `Zone` is a plain table of **absolute pixel** coordinates:
 
@@ -127,8 +133,14 @@ A `Zone` is a plain table of **absolute pixel** coordinates:
 { x = 0, y = 0, width = 960, height = 1080 }
 ```
 
-Return `{}` for `windowCount <= 0`. Guard tiny areas — when the work area is
-smaller than `pluau.MIN_ZONE_SIZE` on either axis, fall back to `pluau.fillArea`.
+Return `{}` for `windowCount <= 0`. Guard tiny areas with `pluau.guardArea`,
+which returns a plain fill when the work area is smaller than
+`pluau.MIN_ZONE_SIZE` on either axis (and `nil` otherwise):
+
+```lua
+local early = pluau.guardArea(ctx.area, ctx.windowCount)
+if early then return early end
+```
 
 ---
 
@@ -161,21 +173,46 @@ algorithms use):
 
 ```
 pluau.fillArea(area, count)
+pluau.fillRegion(x, y, w, h, count)
 pluau.equalColumnsLayout(area, count, gap, minSizes)
 pluau.masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, horizontal)
 pluau.deckLayout(area, count, focusedFraction, horizontal)
 pluau.lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight)
 pluau.dwindleLayout(area, count, splitRatio, innerGap, minSizes)
 pluau.threeColumnLayout(area, count, gap, splitRatio, masterCount, minSizes)
+pluau.stripLayout(zones, startX, startY, panelW, panelH, count, gap, horizontal)
 pluau.applyTreeGeometry(node, rect, gap)   -- memory algorithms
 ```
 
-### Utilities
+### Guards & general utilities
 
-`pluau.rect(x, y, w, h)`, `pluau.join(...lists)`, `pluau.clampSplitRatio(r)`, and the
-distribution/min-size primitives (`pluau.distributeWithGaps`,
-`pluau.distributeWithMinSizes`, `pluau.extractMinWidths`, …). Full signatures are in
-the type stubs (`pluau.d.luau`) and `data/algorithms/*.luau`.
+```
+pluau.guardArea(area, count)      -- early-return fill for tiny work areas
+pluau.clamp(v, lo, hi)            -- NaN-safe; returns nil for non-numbers (pair with `or default`)
+pluau.center(start, total, size)
+pluau.gridShape(count)            -- rows, cols for a near-square grid
+pluau.rect(x, y, w, h)
+pluau.join(...lists)
+pluau.clampSplitRatio(r)
+```
+
+### Distribution & min-size primitives
+
+`pluau.distributeWithGaps`, `pluau.distributeWithMinSizes`,
+`pluau.distributeWithOptionalMins`, `pluau.distributeEvenly`,
+`pluau.cumulativeOffsets`, `pluau.extractMinWidths`, `pluau.extractMinHeights`,
+`pluau.extractRegionMaxMin`, `pluau.minSizeAt`, `pluau.applyPerWindowMinSize`,
+`pluau.computeCumulativeMinDims`, `pluau.solveTwoPart`, `pluau.solveThreeColumn`,
+`pluau.appendGracefulDegradation`.
+
+### Resize helpers (§9)
+
+`pluau.masterStackResize(state, resize, horizontal)` implements the standard
+master/stack ratio-reflow for `onWindowResized`; `pluau.resizeRatioGrow` /
+`pluau.resizeRatioShrink` are the lower-level ratio math.
+
+Full signatures are in the type stubs (`pluau.d.luau`) and
+`data/algorithms/*.luau`.
 
 ---
 
@@ -209,18 +246,73 @@ daemon passes back in `ctx.custom`.
 
 ---
 
-## 8. Memory-aware algorithms (advanced)
+## 8. Lifecycle hooks
+
+`onWindowAdded(state, index)` and `onWindowRemoved(state, index)` fire when a
+window joins or leaves the tiled set. `index` is the **0-based** tiled index
+(not Luau-1-based). `state` is a read-only snapshot of the engine's tiling
+state (the `HookState` type in the stubs):
+
+| Field | Type | Notes |
+|---|---|---|
+| `windowCount` | number | Currently tiled windows |
+| `masterCount` | number | Master windows |
+| `splitRatio` | number | Current split ratio (clamped 0.1–0.9) |
+| `windows` | `{ {appId, focused, windowId} }` | Per-window info |
+| `focusedIndex` | number | 0-based; `-1` if none |
+| `scriptState` | table? | Prior persistent state (§9), when non-empty |
+| `countAfterRemoval` | number? | `onWindowRemoved` only: count minus the departing window |
+
+The snapshot is built fresh per call; mutating it has no effect. Memory
+algorithms (§10) use these hooks to keep their split tree in step; script-state
+algorithms persist through the `onWindowResized` return value instead.
+
+---
+
+## 9. Interactive resize & script state
+
+Implement `onWindowResized(state, resize)` to react when the user drags a
+tiled window's edge. `state` is the same snapshot as §8; `resize` describes
+the drag:
+
+```lua
+resize = {
+    index = 2,                    -- 0-based tiled index of the resized window
+    oldRect = { x, y, width, height },
+    newRect = { x, y, width, height },
+    edges = { left = false, right = true, top = false, bottom = false },
+}
+```
+
+Return a table (or `nil` to do nothing). Two optional, independent outputs:
+
+- **`splitRatio`** — a new master/split ratio the engine applies (clamped).
+  This is how ratio-based layouts reflow on resize; the change stays local to
+  the current screen and desktop. `pluau.masterStackResize(state, resize,
+  horizontal)` implements the standard master/stack case.
+- **Any other keys** — persisted as the new `ctx.state` table, but only when
+  `metadata.supportsScriptState = true`. On the next `tile` run, `ctx.state`
+  holds exactly what you returned; read your prior values from
+  `state.scriptState` inside the hook. See `data/algorithms/aligned-grid.luau`
+  for a full example (per-column widths that survive retiles).
+
+`supportsScriptState` is the lightweight alternative to the split tree: an
+opaque table you shape however you like, persisted per screen and desktop.
+
+---
+
+## 10. Memory-aware algorithms (advanced)
 
 Set `metadata.supportsMemory = true` to receive a persistent `ctx.tree`
-(`SplitNode`) that survives across window add/remove events, and implement
-`onWindowAdded(state, index)` / `onWindowRemoved(state, index)` to mutate it.
-Use `pluau.applyTreeGeometry(ctx.tree, ctx.area, ctx.innerGap)` in `tile` to turn
+(`SplitNode`) that survives across window add/remove events; the host keeps
+the tree in step with the lifecycle hooks (§8). Use
+`pluau.applyTreeGeometry(ctx.tree, ctx.area, ctx.innerGap)` in `tile` to turn
 the tree into zones. See `data/algorithms/dwindle-memory.luau` for a full
 example. Most layouts are stateless and don't need this.
 
 ---
 
-## 9. Editor support & validation
+## 11. Editor support & validation
 
 Drop a `.luaurc` next to your algorithms so [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp)
 autocomplete and `luau-analyze` know about the injected `pluau` global:
@@ -251,7 +343,7 @@ A parse or type error means the daemon will skip the algorithm, so a clean
 
 ---
 
-## 10. Sandbox & limits
+## 12. Sandbox & limits
 
 - `pluau` and the standard library are **frozen** before your script runs — you
   cannot monkey-patch them or reach outside the sandbox (no `io`, `os.execute`,
@@ -264,4 +356,4 @@ A parse or type error means the daemon will skip the algorithm, so a clean
   running.
 - Keep `tile` pure and fast: it runs on every relevant layout change. Return
   early for `windowCount <= 0`, and guard against tiny areas with
-  `pluau.MIN_ZONE_SIZE`.
+  `pluau.guardArea`.

@@ -33,6 +33,19 @@ export type ResizeEvent = {
     newRect: Zone,
     edges: { left: boolean, right: boolean, top: boolean, bottom: boolean },
 }
+-- Snapshot of the engine's tiling state, passed as the first argument to the
+-- lifecycle hooks (onWindowAdded / onWindowRemoved / onWindowResized). Built
+-- fresh per call; mutating it has no effect — persist via the onWindowResized
+-- return value instead.
+export type HookState = {
+    windowCount: number,
+    masterCount: number,
+    splitRatio: number,
+    windows: { WindowInfo },
+    focusedIndex: number, -- 0-based tiled index of the focused window (-1 if none)
+    scriptState: { [string]: any }?, -- prior persistent bag (see supportsScriptState)
+    countAfterRemoval: number?, -- onWindowRemoved only: windowCount minus the departing window
+}
 export type SplitNode = {
     splitRatio: number,
     splitHorizontal: boolean,
@@ -89,8 +102,8 @@ export type Algorithm = {
     metadata: Metadata,
     tile: (ctx: Context) -> { Zone },
     -- index is the 0-based tiled index (NOT Luau-1-based).
-    onWindowAdded: ((state: any, index: number) -> ())?,
-    onWindowRemoved: ((state: any, index: number) -> ())?,
+    onWindowAdded: ((state: HookState, index: number) -> ())?,
+    onWindowRemoved: ((state: HookState, index: number) -> ())?,
     -- Called after an interactive resize. Return a control table (or nil to do
     -- nothing). Two optional, independent outputs:
     --   * splitRatio: number — a new master/split ratio the engine applies to this
@@ -98,7 +111,7 @@ export type Algorithm = {
     --     change stays local to the current screen+desktop.
     --   * any other keys — the new ctx.state bag; persisted only when
     --     metadata.supportsScriptState is set (see `state` in Context).
-    onWindowResized: ((state: any, resize: ResizeEvent) -> { [string]: any }?)?,
+    onWindowResized: ((state: HookState, resize: ResizeEvent) -> { [string]: any }?)?,
 }
 
 export type Pluau = {
