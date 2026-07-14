@@ -2305,9 +2305,12 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // surface-extent draws with Region::infinite (see paintWindow), so
     // they are not clipped.
     if (st->gridSubdivisions > 0) {
-        // Destination frame rect == iToRect. The window already jumped
-        // there via moveResize, so the live frameGeometry is a safe
-        // fallback if a transition somehow lacks a recorded destination.
+        // Destination frame rect == iToRect for a geometry morph (the
+        // window already jumped there via moveResize). A minimize-to-icon
+        // leg (genie, phosphor-siphon) records NO morph destination by
+        // design — its target is iIconRect, consumed in the pack's vertex
+        // stage — so it takes the live-frameGeometry branch and the grid
+        // sits on the window's resting rect.
         QRectF frameRect = st->toGeometry;
         if (!frameRect.isValid() || frameRect.isEmpty()) {
             frameRect = window->frameGeometry();
