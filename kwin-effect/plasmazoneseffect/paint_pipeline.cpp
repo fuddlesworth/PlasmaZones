@@ -1830,13 +1830,25 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         }
     }
 
-    // Route through the draw chain (not a direct OffscreenEffect::drawWindow
-    // call) so KWin's `m_currentDrawWindowIterator` is advanced past us
-    // before any redirected window's `OffscreenData::maybeRender` re-enters
-    // the chain to capture — see the detailed rationale at the shader-branch
-    // drawWindow call above. This path also covers redirected windows in
-    // their post-transition expiry frame, which are still offscreen-backed.
-    KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+    // Continue the PAINT chain, never a jump to the draw chain. Our default
+    // chain position is 0, so we run FIRST in the paintWindow chain; every
+    // effect ordered after us (windowaperture's show-desktop park-at-edges at
+    // position 50, dialogparent, dimscreen, highlightwindow, ...) applies its
+    // WindowPaintData mutations in ITS paintWindow. The old direct
+    // `effects->drawWindow` jump here skipped all of them for every window on
+    // every frame — most visibly, KDE's Peek at Desktop held windows
+    // force-visible while its translation was never applied, so peek showed
+    // nothing while our effect was loaded.
+    //
+    // The re-entrancy rationale that moved this off a direct
+    // OffscreenEffect::drawWindow call (ghost trails: the shared draw-window
+    // iterator parked at the start) is preserved: the chain terminates in the
+    // scene's finalPaintWindow, which enters the draw-window chain with the
+    // iterator advancing normally, and redirected windows still present
+    // through our drawWindow override from inside that chain. This path also
+    // covers redirected windows in their post-transition expiry frame, which
+    // are still offscreen-backed.
+    KWin::effects->paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
 void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, KWin::EffectWindow* window)
