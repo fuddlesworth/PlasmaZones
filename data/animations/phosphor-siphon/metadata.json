@@ -1,0 +1,87 @@
+{
+    "id": "phosphor-siphon",
+    "name": "Phosphor Siphon",
+    "description": "The window is siphoned into its task manager icon as separated luminous streams. Each stream runs on its own slightly offset clock and bows apart mid flight, carrying a different stop of the brand gradient, with ember sparks shed in the wake. Each region fades into the icon as it arrives, and restoring pours the streams back out. A window without a task manager entry drains into its own bottom edge instead.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Reveal",
+    "appliesTo": ["appearance"],
+    "fboExtent": "surface",
+    "geometryGrid": 40,
+    "fragmentShader": "effect.frag",
+    "vertexShader": "effect.vert",
+    "parameters": [
+        {
+            "id": "lanes",
+            "name": "Streams",
+            "type": "float",
+            "default": 9.0,
+            "min": 2.0,
+            "max": 24.0
+        },
+        {
+            "id": "spread",
+            "name": "Trail Lag",
+            "type": "float",
+            "default": 0.55,
+            "min": 0.0,
+            "max": 0.8
+        },
+        {
+            "id": "streamLag",
+            "name": "Stream Stagger",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "bow",
+            "name": "Stream Bow",
+            "type": "float",
+            "default": 26.0,
+            "min": 0.0,
+            "max": 80.0
+        },
+        {
+            "id": "frontGlow",
+            "name": "Transit Glow",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "sparks",
+            "name": "Ember Sparks",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient Cyan",
+            "type": "color",
+            "default": "#22D3EE"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient Blue",
+            "type": "color",
+            "default": "#3B82F6"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient Purple",
+            "type": "color",
+            "default": "#A855F7"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient Rose",
+            "type": "color",
+            "default": "#F43F5E"
+        }
+    ]
+}
