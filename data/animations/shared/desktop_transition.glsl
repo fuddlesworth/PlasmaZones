@@ -1,14 +1,27 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Shared two-texture sampler pair for full-screen virtual-desktop switch
-// transitions. The kwin-effect's screen-level desktop-transition pass captures
-// the OUTGOING desktop into uFromDesktop and the INCOMING desktop into
-// uToDesktop, then draws a full-screen quad running the pack's pTransition over
-// forward switch progress (bound as iTime). getFromColor / getToColor sample at
-// a full-screen uv in [0,1]; orientation is normalised by the capture + quad on
-// the effect side, so shaders sample uv directly (the GL-Transitions
-// convention) and port unchanged.
+// Shared two-texture sampler pair for the full-screen desktop transitions: the
+// virtual-desktop SWITCH (`desktop.switch`) and the show-desktop PEEK
+// (`desktop.peek`). The kwin-effect's screen-level desktop-transition pass
+// captures the two endpoints into uFromDesktop / uToDesktop, then draws a
+// full-screen quad running the pack's pTransition over progress bound as iTime.
+// getFromColor / getToColor sample at a full-screen uv in [0,1]; orientation is
+// normalised by the capture + quad on the effect side, so shaders sample uv
+// directly (the GL-Transitions convention) and port unchanged.
+//
+// What the endpoints mean, and which way iTime runs, depends on the event:
+//   desktop.switch — FROM = the outgoing desktop, TO = the incoming one. iTime
+//     always runs forward, 0 -> 1.
+//   desktop.peek   — FROM = the windows scene, TO = the bare desktop, for BOTH
+//     legs. The hide leg runs iTime forward 0 -> 1; the SHOW leg reverses time,
+//     1 -> 0, over that same unswapped pair, so it is literally the hide leg
+//     played backwards and an asymmetric pack retraces its own motion. Do not
+//     assume iTime is monotonically increasing, and do not assume FROM is
+//     whatever is currently on screen.
+// A stateful/overshooting curve can drive iTime slightly outside [0,1] on
+// either event (the show leg mirrors an overshoot past 1 into negative t), so
+// packs clamp themselves.
 //
 // Desktop transitions only ever run in the kwin-effect. The samplers live in
 // the PLASMAZONES_KWIN branch only, mirroring old_content.glsl's uOldWindow:

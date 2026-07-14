@@ -307,9 +307,18 @@ DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, 
         // Layer 1: the bare desktop. Prefer a straight framebuffer blit from
         // the caller's TO capture — a raster copy has no orientation or
         // colour-space semantics to get wrong and skips a second full scene
-        // render. Fall back to re-rendering the live scene (identical output,
-        // one extra scene pass) when there is no source texture or the
-        // hardware cannot blit.
+        // render. Fall back to re-rendering the live scene (identical output)
+        // when there is no source texture or the hardware cannot blit.
+        //
+        // The fallback's cost is not just the extra pass: the caller already
+        // drove effects->paintScreen once this frame to make the very capture
+        // handed to us as bareDesktop, so re-rendering gives every DOWNSTREAM
+        // effect a second paintScreen under one prePaintScreen. Accepted rather
+        // than papered over: the no-source-texture case has no alternative (we
+        // cannot draw a texture we were not given), and the no-blit case wants
+        // GL 3.0 / ARB_framebuffer_object to be absent, which no KWin OpenGL
+        // session realistically hits. Both fire once per transition (the
+        // capture is deferred and runs on a single frame), not once per frame.
         // Blit capability lives on the GL context in this KWin (the
         // GLFramebuffer doc still names the old blitSupported() accessor);
         // desktop framebuffer blits need GL 3.0 / ARB_framebuffer_object,

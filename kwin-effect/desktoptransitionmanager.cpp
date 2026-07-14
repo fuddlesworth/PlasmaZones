@@ -235,15 +235,16 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         if (!screen) {
             continue;
         }
-        // Displacing a peek leg on this output drops its bare-desktop cache too.
-        // The entry is only consumed by a show leg in paintOutput, so a peek
-        // replaced before it painted would strand an output-sized texture until
-        // the next hide leg. The capture is stale regardless: a switch means this
-        // output's desktop content is no longer what the hide leg captured.
-        const auto displaced = m_active.find(screen);
-        if (displaced != m_active.end() && displaced->second.kind != Kind::Switch) {
-            m_peekDesktopCache.erase(screen);
-        }
+        // A switch drops this output's bare-desktop cache unconditionally: the
+        // capture is of the OUTGOING desktop, so whether or not a peek leg is
+        // still live, the entry no longer matches what a later show leg would
+        // blend back to. Size/format validation cannot see that mismatch. Gating
+        // this on a live peek entry would keep a SETTLED hide leg's capture
+        // across the switch and blend the wrong desktop's content. Erasing when
+        // there is no live leg also releases an output-sized texture the next
+        // hide leg would otherwise overwrite. The entry is a shared_ptr, so a
+        // live leg holding the same texture keeps it alive for its own paint.
+        m_peekDesktopCache.erase(screen);
         OutputTransition tr = proto;
         tr.from = from;
         tr.switchDelta = switchDelta;
@@ -404,6 +405,32 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
         // tr.switchDelta stays zero: a peek has no pager direction, so
         // direction-aware packs fall back to their configured params via
         // switchDirection()'s fallback path.
+        //
+        // Re-toggling inside the transition window (peek, then un-peek before
+        // the hide leg settled) RESUMES from what is on screen instead of
+        // restarting. Both legs share one endpoint pair and one t (0 = windows
+        // scene, 1 = bare desktop), differing only in time's direction, so the
+        // displaced leg's raw progress p maps to the incoming leg's start at
+        // 1 - p. The new leg then retraces exactly the ground the displaced one
+        // covered and settles in proportion to how far it actually got. Without
+        // the back-date, prepareTransitionPrototype's fresh startTimeMs starts
+        // every leg at its own t = 0, so reversing at 30% snaps the screen to
+        // the far endpoint and animates back from there — the opposite of the
+        // "played backwards" contract in the header. Exact for a symmetric
+        // curve; an asymmetric one retraces off its own easing by the curve's
+        // own asymmetry, still continuous at the handover. A displaced SWITCH is
+        // excluded: it blends different endpoints, so its progress means nothing
+        // here.
+        const auto displaced = m_active.find(screen);
+        if (displaced != m_active.end() && displaced->second.kind != Kind::Switch
+            && displaced->second.kind != tr.kind) {
+            // durationMs is floored at Limits::MinAnimationDurationMs by
+            // resolveTransitionLifetimeMs, so the divisor is positive.
+            const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+            const qreal displacedProgress = qBound<qreal>(
+                0.0, qreal(nowMs - displaced->second.startTimeMs) / qreal(displaced->second.durationMs), 1.0);
+            tr.startTimeMs = nowMs - qint64((1.0 - displacedProgress) * qreal(tr.durationMs));
+        }
         m_active.insert_or_assign(screen, std::move(tr));
         insertedAny = true;
     }
@@ -534,8 +561,15 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
             // why a live capture cannot include them this frame.
             tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
             if (tr.toTex) {
-                m_peekDesktopCache[screen] = tr.toTex;
                 tr.fromTex = capturePeekWindowsScene(tr.toTex.get(), mask, screen, renderTarget, viewport);
+                // Seed the cache only once BOTH captures succeed. A failed FROM
+                // composite abandons this leg below, and a cache entry seeded by
+                // a leg that never blended would hand the next show leg a bare
+                // desktop whose paired hide leg never painted — the cache's
+                // invariant is that a hide leg actually ran against it.
+                if (tr.fromTex) {
+                    m_peekDesktopCache[screen] = tr.toTex;
+                }
             }
             // A null toTex abandons the transition below — no point rendering
             // the FROM composite (a full scene pass) just to throw it away.

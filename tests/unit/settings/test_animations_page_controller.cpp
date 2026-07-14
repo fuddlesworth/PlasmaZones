@@ -444,15 +444,20 @@ private Q_SLOTS:
 
     // ─── Shader-leg support gate ──────────────────────────────────────────
 
-    /// Pin the shader-leg-support predicate against the daemon-side list.
-    /// `supportsShaderLeg` is the predicate the QML shader-picker visibility
-    /// is bound to; if the surface set in
-    /// `src/core/animationshadersupportedpaths.h` drifts away from the
-    /// `resolveShaderEffect` call sites in
-    /// `src/daemon/overlayservice.cpp`, the QML would either expose
-    /// pickers that do nothing (drift in one direction) or hide pickers
-    /// for events that DO produce shader legs (drift in the other).
-    void supportsShaderLeg_matchesDaemonOverlayConsumers()
+    /// Pin the shader-leg-support predicate against the call sites that
+    /// actually consume a leg. `supportsShaderLeg` is the predicate the QML
+    /// shader-picker visibility is bound to; if the surface set in
+    /// `src/core/animationshadersupportedpaths.h` drifts away from those call
+    /// sites, the QML would either expose pickers that do nothing (drift in one
+    /// direction) or hide pickers for events that DO produce shader legs (drift
+    /// in the other). Per that header, consumption runs through three
+    /// mechanisms, not just the daemon's: `resolveShaderEffect` in
+    /// `src/daemon/overlayservice.cpp` (osd + popup families),
+    /// `tryBeginShaderForEvent` under `kwin-effect/plasmazoneseffect/` (window
+    /// family), and `resolveShaderWithDefault` driving DesktopTransitionManager
+    /// from `kwin-effect/plasmazoneseffect/lifecycle.cpp` (the screen-level
+    /// desktop switch and peek legs).
+    void supportsShaderLeg_matchesConsumedLegCallSites()
     {
         AnimationsPageController c;
 
@@ -498,7 +503,7 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.peek")));
 
         // Ancestors of consumed leaves — supported because the
-        // daemon's resolver walks them on the way to the leaf, so a
+        // resolver walks them on the way to the leaf, so a
         // shader override here cascades to every descendant. Without
         // this, the user would have to set the same shader on every
         // popup leaf individually instead of once at the parent.
