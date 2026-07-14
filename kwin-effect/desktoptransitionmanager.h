@@ -228,16 +228,18 @@ private:
         QVector4D switchDelta;
         qint64 startTimeMs = 0;
         int durationMs = 0;
-        // Per-event timing curve for `desktop.switch`, resolved through the
-        // cascade `global → desktop → desktop.switch` (an override on the bare
-        // `desktop` node would apply, though the UI exposes only the leaf, so it
-        // has no separate user-facing "All"). paintOutput eases the linear
+        // Per-event timing curve, resolved through the cascade
+        // `global → desktop → desktop.switch` or `→ desktop.peek` for whichever
+        // event began this leg. paintOutput eases the linear
         // `elapsed / durationMs` through it before uploading iTime, so the node's
-        // curve (e.g. "Ease Out") shapes the switch exactly as it shapes the
+        // curve (e.g. "Ease Out") shapes the transition exactly as it shapes the
         // per-window shader path. Null → linear iTime.
         std::shared_ptr<const PhosphorAnimation::Curve> progressCurve;
         // Integration state for a STATEFUL (spring) progressCurve; stepped toward
         // target 1 by the inter-frame dt in paintOutput. Unused for stateless.
+        // A peek leg displaced by its opposite re-seeds this mirrored
+        // (value = 1 - old, velocity negated) — see beginPeek, which is where the
+        // resume for a spring lives, since a spring reads nothing from the clock.
         PhosphorAnimation::CurveState progressCurveState;
         // Previous paintOutput tick time (shader-clock ms) for the spring dt.
         // -1 = no prior paint (first step gets dt 0).

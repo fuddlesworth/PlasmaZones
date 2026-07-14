@@ -408,28 +408,54 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
         //
         // Re-toggling inside the transition window (peek, then un-peek before
         // the hide leg settled) RESUMES from what is on screen instead of
-        // restarting. Both legs share one endpoint pair and one t (0 = windows
-        // scene, 1 = bare desktop), differing only in time's direction, so the
-        // displaced leg's raw progress p maps to the incoming leg's start at
-        // 1 - p. The new leg then retraces exactly the ground the displaced one
-        // covered and settles in proportion to how far it actually got. Without
-        // the back-date, prepareTransitionPrototype's fresh startTimeMs starts
-        // every leg at its own t = 0, so reversing at 30% snaps the screen to
-        // the far endpoint and animates back from there — the opposite of the
-        // "played backwards" contract in the header. Exact for a symmetric
-        // curve; an asymmetric one retraces off its own easing by the curve's
-        // own asymmetry, still continuous at the handover. A displaced SWITCH is
-        // excluded: it blends different endpoints, so its progress means nothing
-        // here.
+        // restarting. Without this, prepareTransitionPrototype's fresh start
+        // stamps every leg at its own t = 0, so reversing at 30% snaps the
+        // screen to the far endpoint and animates back from there — the
+        // opposite of the "played backwards" contract in the header. A
+        // displaced SWITCH is excluded: it blends different endpoints, so its
+        // progress means nothing here.
+        //
+        // How to resume depends on the curve, because easeProgress treats the
+        // two kinds completely differently.
         const auto displaced = m_active.find(screen);
         if (displaced != m_active.end() && displaced->second.kind != Kind::Switch
             && displaced->second.kind != tr.kind) {
-            // durationMs is floored at Limits::MinAnimationDurationMs by
-            // resolveTransitionLifetimeMs, so the divisor is positive.
-            const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-            const qreal displacedProgress = qBound<qreal>(
-                0.0, qreal(nowMs - displaced->second.startTimeMs) / qreal(displaced->second.durationMs), 1.0);
-            tr.startTimeMs = nowMs - qint64((1.0 - displacedProgress) * qreal(tr.durationMs));
+            const OutputTransition& old = displaced->second;
+            if (tr.progressCurve && tr.progressCurve->isStateful()) {
+                // A spring reads NOTHING from the linear clock: easeProgress
+                // integrates its CurveState by the inter-frame dt and returns
+                // state.value. Back-dating startTimeMs would therefore not move
+                // it at all, and would only make the leg expire early — settling
+                // mid-spring, which pops harder than the restart it was meant to
+                // fix. Carry the state over MIRRORED instead, which is the
+                // continuity CurveState's own doc says stateful curves derive
+                // from value/velocity.
+                //
+                // Both legs read t off the same value: hide as t = value, show as
+                // t = 1 - value. So seeding value = 1 - old.value lands the new
+                // leg's t exactly where the displaced leg's t was, in EITHER
+                // direction, and negating velocity preserves its momentum across
+                // the handover (t keeps travelling briefly, then springs back)
+                // rather than restarting the spring from rest. lastPaintTimeMs
+                // starts at -1, so the first step takes dt 0 and the seed
+                // survives into the first frame intact.
+                tr.progressCurveState.value = 1.0 - old.progressCurveState.value;
+                tr.progressCurveState.velocity = -old.progressCurveState.velocity;
+            } else {
+                // Stateless: t is a pure function of the linear clock, so
+                // resuming IS a clock back-date. The displaced leg's raw
+                // progress p maps to the incoming leg's start at 1 - p, so the
+                // new leg retraces the ground the displaced one covered and
+                // settles in proportion to how far it actually got. Exact for a
+                // symmetric curve; an asymmetric one retraces off its own easing
+                // by the curve's own asymmetry, still continuous at the
+                // handover. durationMs is floored at Limits::MinAnimationDurationMs
+                // by resolveTransitionLifetimeMs, so the divisor is positive.
+                const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+                const qreal displacedProgress =
+                    qBound<qreal>(0.0, qreal(nowMs - old.startTimeMs) / qreal(old.durationMs), 1.0);
+                tr.startTimeMs = nowMs - qint64((1.0 - displacedProgress) * qreal(tr.durationMs));
+            }
         }
         m_active.insert_or_assign(screen, std::move(tr));
         insertedAny = true;
