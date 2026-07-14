@@ -440,14 +440,17 @@ private:
      * @brief Whether KWin is currently in the show-desktop / peek state.
      *
      * Workspace::activateWindow() cancels show-desktop the moment any hidden
-     * window is activated, so every DAEMON-RELAYED activation path must bail
-     * while this is true or a peek collapses on the first cursor move or
-     * engine relayout: focus-follows-mouse, retile reactivation, unfloat
-     * refocus, the snap engine's activate requests, and the autotile engine's
-     * post-relayout focus flush. The effect cannot tell a user-initiated
-     * daemon request (a keyboard navigation shortcut) from an engine-initiated
-     * one — both arrive on the same D-Bus signals — so all of them are gated;
-     * only KWin-native activation (clicking a surface) ends a peek.
+     * window is activated, so every activation path the EFFECT ITSELF drives
+     * must bail while this is true or a peek collapses on the first cursor move
+     * or engine relayout. Both origins are covered: effect-local paths that
+     * never touch the bus (focus-follows-mouse in snaphandler and
+     * autotilehandler) and daemon-relayed ones (retile reactivation, unfloat
+     * refocus, the snap engine's activate requests, the autotile engine's
+     * post-relayout focus flush, and the compositor bridge's activateWindow).
+     * For the relayed ones the effect cannot tell a user-initiated daemon
+     * request (a keyboard navigation shortcut) from an engine-initiated one —
+     * both arrive on the same D-Bus signals — so all of them are gated; only
+     * KWin-native activation (clicking a surface) ends a peek.
      */
     static bool isShowingDesktop();
 

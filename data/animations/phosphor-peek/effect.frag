@@ -24,7 +24,6 @@
 #include <desktop_transition.glsl>
 #include <noise.glsl>
 
-
 // Four-stop brand gradient, t in [0, 1]: cyan -> blue -> purple -> rose. Each
 // stop falls back to its brand default when its colour slot is unset.
 vec3 fluxGradient(float t) {

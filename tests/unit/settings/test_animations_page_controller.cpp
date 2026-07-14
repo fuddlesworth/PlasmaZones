@@ -506,6 +506,11 @@ private Q_SLOTS:
         // not per-window tryBeginShaderForEvent legs).
         QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.switch")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.peek")));
+        // The "All Desktop Events" parent row is shader-pickable too (its
+        // picker binds to this), and a pack set there cascades to both legs —
+        // so it is supported for the same reason the popup/osd parents below
+        // are, not merely as an ancestor of a consumed leaf.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
 
         // Ancestors of consumed leaves — supported because the
         // resolver walks them on the way to the leaf, so a
