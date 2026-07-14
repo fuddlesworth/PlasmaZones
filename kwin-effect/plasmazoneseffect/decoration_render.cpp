@@ -74,12 +74,12 @@ KWin::GLShader* PlasmaZonesEffect::surfacePresentShader()
         "layout(location = 0) in vec2 vTexCoord;\n\n"
         "layout(location = 0) out vec4 fragColor;\n\n"
         "uniform sampler2D uFinal;\n\n"
-        // Final opacity modulation (premultiplied multiply). Now a constant
-        // 1.0 push: SetOpacity is layer-backed (the plain opacity-tint
-        // layer's folded param) and custom chains dim through their own
-        // pack params (frost/glass contentOpacity), so no KWin-style final
-        // ghosting ever applies. The uniform stays in the contract so the
-        // shared program keeps a defined value.
+        // Final opacity modulation (premultiplied multiply). Fed KWin's live
+        // WindowPaintData opacity at present time (see drawWindow): our OWN
+        // rule opacity (SetOpacity) is layer-backed and never lands here, but
+        // this carries EXTERNAL modulation — other effects' fades and KWin
+        // window-rule opacity — whose ModulationConstant push silently no-ops
+        // on this custom program.
         "uniform float uOpacity;\n\n"
         // Colour management. Installing our own shader via OffscreenEffect::
         // setShader REPLACES KWin's present shader, which carries
@@ -494,15 +494,19 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
                 // with the same render target, after this pre-bind. Setting them
                 // again here would write identical values that KWin then
                 // overwrites with identical values.
-                // Present opacity is a constant 1.0: SetOpacity is
-                // layer-backed (folded into the plain opacity-tint layer's
-                // param) and custom chains dim through their own pack params
-                // (frost/glass contentOpacity), so no final KWin-style
-                // modulation ever applies. Still pushed EVERY frame: the
-                // program is shared across windows and a stale value from an
-                // older build would leak.
+                // Present opacity = KWin's live WindowPaintData opacity. Our
+                // OWN rule opacity (SetOpacity) is layer-backed and never
+                // lands here, but data.opacity() carries EXTERNAL modulation:
+                // other effects' fades (windowaperture's peek fade, the
+                // translucency effect) and KWin window-rule opacity. KWin
+                // pushes those through the ModulationConstant uniform, which
+                // silently no-ops on this custom shader (no `modulation`
+                // uniform), so uOpacity is the single application point —
+                // hardcoding 1.0 here made every decorated window ignore all
+                // external opacity. Pushed EVERY frame: the program is shared
+                // across windows.
                 if (m_surfacePresentOpacityLoc >= 0) {
-                    present->setUniform(m_surfacePresentOpacityLoc, 1.0f);
+                    present->setUniform(m_surfacePresentOpacityLoc, static_cast<float>(data.opacity()));
                 }
                 glActiveTexture(GL_TEXTURE0);
                 boundChannels = 1; // unit kSurfaceChannelBaseUnit+0, freed in the cleanup below

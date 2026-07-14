@@ -426,6 +426,18 @@ private:
     static bool isOwnPassthroughOverlayClass(const QString& windowClass);
 
     /**
+     * @brief Whether KWin is currently in the show-desktop / peek state.
+     *
+     * Workspace::activateWindow() cancels show-desktop the moment any hidden
+     * window is activated, so every AUTOMATIC activation path (focus-follows-
+     * mouse, retile reactivation, unfloat refocus) must bail while this is
+     * true or a peek collapses on the first cursor move. Deliberate user
+     * actions (daemon focus requests, D-Bus activate) stay ungated — ending
+     * the peek is the correct response to explicit intent, matching KWin.
+     */
+    static bool isShowingDesktop();
+
+    /**
      * @brief Reject XDG desktop portal surfaces by window class.
      *
      * File dialogs / color pickers / screenshot pickers brokered by
@@ -1730,6 +1742,18 @@ private:
     // the chain, so paint/apply hooks behave plainly during the raw capture
     // pass (no morph quad deform / re-capture).
     bool m_capturingSnapshot = false;
+
+    /// True while DesktopTransitionManager::captureDesktop drives paintWindow
+    /// DIRECTLY (outside KWin's chain walk). paintWindow's tail then terminates
+    /// with effects->drawWindow instead of continuing the paintWindow chain:
+    /// the chain iterator sits at begin() in that context, so chaining would
+    /// re-enter our own paintWindow (double fold, animator transform applied
+    /// twice to the capture) and drive later effects' paintWindow hooks without
+    /// the prePaintWindow they key off — the capture deliberately runs windows
+    /// that were never in this frame's scene walk. Unlike m_capturingSnapshot
+    /// this must NOT suppress the fold: the capture exists to bake the
+    /// decorated composite into the transition texture.
+    bool m_directPaintCapture = false;
 
     /// True while WE schedule a repaint on a window (postPaintScreen's per-frame
     /// repaint that keeps an animated decoration chain ticking). KWin's
