@@ -226,7 +226,8 @@ private Q_SLOTS:
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
 
-    // Snap-mode minimize/unminimize float tracking
+    // Minimize shader event (both directions, spurious-pair suppression)
+    // plus the snap-mode minimize/unminimize float tracking tail
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
 
     // Daemon lifecycle

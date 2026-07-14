@@ -1226,10 +1226,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // extension isolation that protects the daemon's zone
                     // shaders from BaseUniforms growth doesn't apply on this
                     // runtime (kwin uses default-block uniforms, no UBO).
-                    // .xy is the redirected surface's origin — the same
-                    // anchor rect the anchorRemap uniforms describe, so
-                    // fly-in's edge-distance math (iSurfaceScreenPos +
-                    // iAnchorSize) stays internally consistent.
+                    // .xy is the redirected surface's origin in GLOBAL
+                    // workspace coordinates — the same anchor rect the
+                    // anchorRemap uniforms describe, so the minimize-to-icon
+                    // packs' window-rect reconstruction (iSurfaceScreenPos.xy
+                    // + iAnchorSize, paired with the same-space iIconRect)
+                    // stays internally consistent.
                     QVector4D surfaceScreenPos(static_cast<float>(anchorGeo.x()), static_cast<float>(anchorGeo.y()),
                                                0.0f, 0.0f);
                     if (const auto* output = w->screen()) {
