@@ -12,6 +12,7 @@
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
@@ -705,14 +706,20 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderWidth"), [this](const QVariant& v) {
-        const int i = v.toInt();
+        // Clamp at the D-Bus boundary like every sibling int loader — the
+        // daemon is a separate process and must not be trusted with the range.
+        // DecorationDefaults is the SSOT the daemon's own schema clamps from.
+        namespace DD = PhosphorCompositor::DecorationDefaults;
+        const int i = qBound(DD::BorderWidthMin, v.toInt(), DD::BorderWidthMax);
         if (m_windowAppearanceDefault.borderWidth != i) {
             m_windowAppearanceDefault.borderWidth = i;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderRadius"), [this](const QVariant& v) {
-        const int i = v.toInt();
+        // Same boundary clamp as windowBorderWidth above.
+        namespace DD = PhosphorCompositor::DecorationDefaults;
+        const int i = qBound(DD::BorderRadiusMin, v.toInt(), DD::BorderRadiusMax);
         if (m_windowAppearanceDefault.borderRadius != i) {
             m_windowAppearanceDefault.borderRadius = i;
             scheduleBorderSweep();

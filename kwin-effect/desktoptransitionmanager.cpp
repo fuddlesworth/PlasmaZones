@@ -283,7 +283,12 @@ void DesktopTransitionManager::reapPeekTransitions()
                 ensureGlContextCurrent();
                 reapedAny = true;
             }
-            KWin::effects->addRepaint(it->first->geometry());
+            // Same defensive posture as desktopRemoved's reap: both callers
+            // run inside KWin signal handlers where effects is live, but the
+            // guard keeps the two loops from expressing opposite assumptions.
+            if (KWin::effects) {
+                KWin::effects->addRepaint(it->first->geometry());
+            }
             it = m_active.erase(it);
         } else {
             ++it;
@@ -319,6 +324,11 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     OutputTransition proto;
     if (!prepareTransitionPrototype(effectId, params, PhosphorAnimation::ProfilePaths::DesktopPeek, durationMs,
                                     std::move(progressCurve), &proto)) {
+        // Reap here too (the pack was uninstalled or lost its desktop contract
+        // via hot-reload between the legs): a stranded not-yet-captured hide
+        // leg would otherwise deferred-capture the restored-windows scene as
+        // the "bare desktop" and poison the cache.
+        reapPeekTransitions();
         return;
     }
 

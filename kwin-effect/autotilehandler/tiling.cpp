@@ -452,10 +452,13 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             if (!snap.window || snap.window->isDeleted()) {
                 // The QPointer was captured when this batch was built; under the
                 // rapid window churn of a cross-output move it can go stale
-                // before this staggered timer fires. Re-resolve by id rather
-                // than silently dropping the window — dropping it stranded the
-                // source monitor's reflow (windows past the first never moved).
-                snap.window = m_effect->findWindowById(snap.windowId);
+                // before this staggered timer fires. Re-resolve by EXACT id
+                // rather than silently dropping the window — dropping it
+                // stranded the source monitor's reflow (windows past the first
+                // never moved). Exact, not the fuzzy findWindowById: the appId
+                // fallback could resolve a SIBLING same-app window (which has
+                // its own batch entry) and hand it this window's geometry.
+                snap.window = m_effect->findWindowByIdExact(snap.windowId);
             }
             if (!snap.window || snap.window->isDeleted()) {
                 qCInfo(lcEffect) << "Autotile apply: window unresolvable at apply time, skipping" << snap.windowId;

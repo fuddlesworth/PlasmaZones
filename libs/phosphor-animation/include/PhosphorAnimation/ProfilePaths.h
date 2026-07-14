@@ -17,8 +17,10 @@ namespace PhosphorAnimation {
 /// Naming convention (apply to new paths):
 ///   show / hide                 — ephemeral surfaces (osd, popup, badge)
 ///   open / close                — persistent surfaces with a stateful open/closed
-///   <verb>In / <verb>Out        — directional motion (slideIn, snapIn, switchIn,
-///                                 fadeIn, layoutSwitchIn …)
+///   <verb>In / <verb>Out        — directional motion (slideIn, snapIn,
+///                                 fadeIn …); `switch`, `layoutSwitch` and
+///                                 `peek` are bidirectional-leg exceptions
+///                                 with no In/Out suffix
 ///   expand / collapse           — size reveal of inline content (accordion)
 ///   on / off                    — bistable controls (toggle)
 ///   <event>.<variant>           — speed/intensity variants (pulse.fast, tint.fast)

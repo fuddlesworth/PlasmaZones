@@ -134,6 +134,11 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
         // taken while a peek is active must not bake the hidden windows into
         // the transition texture — the scene isn't painting them, so the
         // capture shouldn't either.
+        // No isDeleted exclusion here, unlike the peek filter: a mid-close
+        // window still visible on the outgoing desktop belongs in its capture
+        // (matching KWin's close-animation semantics), while the peek filter
+        // must never resurrect a deleted window off a lingering
+        // hiddenByShowDesktop flag.
         compositeWindowsInto(renderTarget, viewport, logicalGeometry, [desktop](KWin::EffectWindow* w) {
             return !w->isMinimized() && !w->isHiddenByShowDesktop()
                 && (w->isOnDesktop(desktop) || w->isOnAllDesktops());
