@@ -77,9 +77,15 @@ void TestAlgorithmScaffold::spliceRewritesNameAndId()
     QVERIFY(out.contains(QStringLiteral("        id = \"my-theater\",")));
     QVERIFY(!out.contains(QStringLiteral("name = \"Theater\"")));
     QVERIFY(!out.contains(QStringLiteral("id = \"theater\",")));
-    // The fresh header replaced the template's own SPDX block.
+    // The fresh header leads; the template's own license line is replaced but
+    // its copyright line rides along beneath (the copy is a derivative work).
     QVERIFY(out.startsWith(kHeader));
-    QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 1);
+    QCOMPARE(out.count(QStringLiteral("SPDX-License-Identifier")), 1);
+    QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 2);
+    QVERIFY(
+        out.contains(QStringLiteral("-- SPDX-FileCopyrightText: 2026 <your name>\n"
+                                    "-- SPDX-License-Identifier: GPL-3.0-or-later\n"
+                                    "-- SPDX-FileCopyrightText: 2026 fuddlesworth\n")));
 }
 
 void TestAlgorithmScaffold::splicePreservesCapabilityMetadata()
@@ -177,6 +183,16 @@ void TestAlgorithmScaffold::spliceRejectsMultiFieldNameLine()
         "    tile = function(ctx) return {} end,\n"
         "}\n");
     QVERIFY(spliceTemplate(multiField, kHeader, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+
+    // Same shape on the id line — the symmetric reject branch.
+    const QString multiFieldId = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        id = \"a\", description = \"D\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(multiFieldId, kHeader, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
 }
 
 void TestAlgorithmScaffold::spliceRejectsUnquotedNameValue()
@@ -191,6 +207,18 @@ void TestAlgorithmScaffold::spliceRejectsUnquotedNameValue()
         "    tile = function(ctx) return {} end,\n"
         "}\n");
     QVERIFY(spliceTemplate(unquoted, kHeader, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+
+    // Same shape on the id line — the symmetric reject branch.
+    const QString unquotedId = QStringLiteral(
+        "local n = \"N\"\n"
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"N\",\n"
+        "        id = n,\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(unquotedId, kHeader, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
 }
 
 void TestAlgorithmScaffold::spliceIgnoresBracesInsideStrings()
@@ -235,9 +263,12 @@ void TestAlgorithmScaffold::splicePreservesLeadingDocComment()
         "    tile = function(ctx) return {} end,\n"
         "}\n");
     const QString out = spliceTemplate(documented, kHeader, QStringLiteral("My Doc"), QStringLiteral("my-doc"));
-    // The SPDX pair is replaced, the doc block survives.
+    // The license line is replaced, the upstream copyright and the doc block
+    // both survive.
     QVERIFY(out.startsWith(kHeader));
-    QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 1);
+    QCOMPARE(out.count(QStringLiteral("SPDX-License-Identifier")), 1);
+    QVERIFY(!out.contains(QStringLiteral("LGPL-2.1-or-later")));
+    QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 2);
     QVERIFY(
         out.contains(QStringLiteral("-- How this layout works, in two lines\n"
                                     "-- of explanatory prose a user needs.")));
@@ -273,7 +304,9 @@ void TestAlgorithmScaffold::spliceAllBundledAlgorithms()
         QVERIFY2(!out.isEmpty(), qPrintable(fileName));
         QVERIFY2(out.contains(QStringLiteral("        name = \"My Copy\",")), qPrintable(fileName));
         QVERIFY2(out.contains(QStringLiteral("        id = \"my-copy\",")), qPrintable(fileName));
-        QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 1);
+        // The new owner's line plus the bundled author's carried-over one.
+        QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 2);
+        QCOMPARE(out.count(QStringLiteral("SPDX-License-Identifier")), 1);
 
         // Every original line survives except the SPDX header and the
         // top-level name/id lines. The anchored regex is a conservative

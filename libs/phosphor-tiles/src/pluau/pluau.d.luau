@@ -85,7 +85,7 @@ export type Metadata = {
     supportsSplitRatio: boolean?,
     supportsMemory: boolean?,
     supportsScriptState: boolean?, -- persists ctx.state across retiles (non-tree memory)
-    supportsMinSizes: boolean?,
+    supportsMinSizes: boolean?, -- defaults to TRUE when omitted (unlike every other flag); set false to opt out
     producesOverlappingZones: boolean?,
     centerLayout: boolean?,
     supportsSingleWindow: boolean?, -- algorithm lays out the lone window itself (else the host fills the work area for a lone window)
@@ -163,7 +163,7 @@ export type Pluau = {
     minSizeAt: (minSizes: { MinSize }?, i: number) -> (number, number),
     resizeRatioGrow: (newSize: number, oldSize: number, oldRatio: number) -> number,
     resizeRatioShrink: (newSize: number, oldSize: number, oldRatio: number) -> number,
-    masterStackResize: (state: any, resize: ResizeEvent, horizontal: boolean) -> { [string]: any }?,
+    masterStackResize: (state: HookState, resize: ResizeEvent, horizontal: boolean) -> { [string]: any }?,
     stripLayout: (zones: { Zone }, startX: number, startY: number, panelW: number, panelH: number,
         count: number, gap: number, horizontal: boolean) -> (),
 }

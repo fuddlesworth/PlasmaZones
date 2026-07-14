@@ -60,6 +60,26 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
     return QString();
 }
 
+/// Write @p content to @p destPath via QSaveFile, so the file appears at its
+/// final path only once it is complete. The user algorithms directory is
+/// watched by the daemon's loader in another process: a plain QFile write
+/// would expose the empty file it creates before the content lands.
+/// Discards its temporary on any failure, leaving @p destPath untouched.
+bool writeAlgorithmFile(const QString& destPath, const QString& content)
+{
+    QSaveFile out(destPath);
+    if (!out.open(QIODevice::WriteOnly)) {
+        qCWarning(PlasmaZones::lcCore) << "Failed to open algorithm file for writing:" << destPath;
+        return false;
+    }
+    const QByteArray encoded = content.toUtf8();
+    if (out.write(encoded) != encoded.size() || !out.commit()) {
+        qCWarning(PlasmaZones::lcCore) << "Failed to write algorithm content:" << destPath;
+        return false;
+    }
+    return true;
+}
+
 } // anonymous namespace
 
 AlgorithmService::AlgorithmService(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
@@ -450,7 +470,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     if (!dir.exists())
         dir.mkpath(QStringLiteral("."));
 
-    // Generate unique filename: <source>-copy.luau, <source>-copy-2.luau, etc.
+    // Generate unique filename: <source>-copy.luau, <source>-copy-1.luau, etc.
     // Derived from the source FILE name, not the registry id: the loader
     // validates basenames but takes metadata ids verbatim, so an id is not
     // guaranteed to be a safe path component.
@@ -527,20 +547,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     content.replace(idMatch2.capturedStart(), idMatch2.capturedLength(),
                     idMatch2.captured(1) + QStringLiteral("id = \"") + newFilename + QStringLiteral("\""));
 
-    QFile destFile(destPath);
-    if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        qCWarning(PlasmaZones::lcCore) << "Failed to write duplicate algorithm file:" << destPath;
-        Q_EMIT algorithmOperationFailed(
-            PhosphorI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
-        return false;
-    }
-    const QByteArray encoded = content.toUtf8();
-    const qint64 written = destFile.write(encoded);
-    destFile.close();
-    if (written < 0 || written != encoded.size()) {
-        qCWarning(PlasmaZones::lcCore) << "Failed to write duplicate algorithm content:" << destPath
-                                       << "written=" << written << "expected=" << encoded.size();
-        QFile::remove(destPath);
+    if (!writeAlgorithmFile(destPath, content)) {
         Q_EMIT algorithmOperationFailed(
             PhosphorI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
         return false;
@@ -574,15 +581,25 @@ bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString
         return false;
     }
     const QByteArray contents = source.readAll();
+    // readAll() returns what it managed to read, so a mid-file failure would
+    // otherwise export a silently truncated script.
+    if (source.error() != QFileDevice::NoError) {
+        qCWarning(PlasmaZones::lcCore) << "Failed to read algorithm file for export:" << sourcePath
+                                       << source.errorString();
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not read the algorithm file for export."));
+        return false;
+    }
     source.close();
 
     QSaveFile out(destPath);
     if (!out.open(QIODevice::WriteOnly)) {
+        qCWarning(PlasmaZones::lcCore) << "Failed to open export destination:" << destPath;
         Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not write to export destination."));
         return false;
     }
     if (out.write(contents) != contents.size() || !out.commit()) {
         // QSaveFile discards the temporary on failure; dest is untouched.
+        qCWarning(PlasmaZones::lcCore) << "Failed to write export destination:" << destPath;
         Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not write to export destination."));
         return false;
     }
@@ -705,21 +722,7 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
         content = AlgorithmScaffold::buildBlankScaffold(header, sanitizedDisplayName, filename, caps);
     }
 
-    // Write the file
-    QFile outFile(destPath);
-    if (!outFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        qCWarning(PlasmaZones::lcCore) << "Failed to write algorithm file:" << destPath;
-        Q_EMIT algorithmOperationFailed(
-            PhosphorI18n::tr("Could not write algorithm file. Check disk space and permissions."));
-        return QString();
-    }
-    const QByteArray encoded = content.toUtf8();
-    const qint64 written = outFile.write(encoded);
-    outFile.close();
-    if (written < 0 || written != encoded.size()) {
-        qCWarning(PlasmaZones::lcCore) << "Failed to write algorithm content:" << destPath << "written=" << written
-                                       << "expected=" << encoded.size();
-        QFile::remove(destPath);
+    if (!writeAlgorithmFile(destPath, content)) {
         Q_EMIT algorithmOperationFailed(
             PhosphorI18n::tr("Could not write algorithm file. Check disk space and permissions."));
         return QString();

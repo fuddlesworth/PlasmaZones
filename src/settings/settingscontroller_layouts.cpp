@@ -346,7 +346,9 @@ void SettingsController::openLayoutsFolder()
 //     also reject leading-`..` shapes (`../foo`, plain `..`) that
 //     cleanPath preserves verbatim — those are filesystem-root-escape
 //     attempts that the QFileDialog path never produces.
-// Returns the canonical path or empty on rejection. Caller logs.
+// Returns the lexically cleaned absolute path, or empty on rejection. Caller
+// logs. Symlinks are NOT resolved, so a caller needing a containment check
+// must canonicalize the result itself (see AlgorithmService::deleteAlgorithm).
 QString SettingsController::sanitizeIOPath(const QString& raw)
 {
     if (raw.isEmpty() || raw.contains(QLatin1Char('\0'))) {
@@ -385,7 +387,7 @@ void SettingsController::importLayout(const QString& filePath)
     const QString safe = sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "importLayout: refusing unsafe path" << filePath;
-        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Import refused: unsafe path"));
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That file path is not allowed."));
         return;
     }
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
@@ -414,6 +416,7 @@ void SettingsController::exportLayout(const QString& layoutId, const QString& fi
     const QString safe = sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "exportLayout: refusing unsafe path" << filePath;
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That export path is not allowed."));
         return;
     }
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
@@ -496,7 +499,7 @@ bool SettingsController::importAlgorithm(const QString& filePath)
     const QString safe = sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "importAlgorithm: refusing unsafe path" << filePath;
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Import refused: unsafe path"));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("That file path is not allowed."));
         return false;
     }
     return m_algorithmService->importAlgorithm(safe);
@@ -553,7 +556,7 @@ bool SettingsController::exportAlgorithm(const QString& algorithmId, const QStri
     const QString safe = sanitizeIOPath(destPath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "exportAlgorithm: refusing unsafe path" << destPath;
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Export refused: unsafe path"));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("That export path is not allowed."));
         return false;
     }
     return m_algorithmService->exportAlgorithm(algorithmId, safe);
