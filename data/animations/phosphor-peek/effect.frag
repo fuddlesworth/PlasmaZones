@@ -13,7 +13,11 @@
 // kwin-effect reverses TIME rather than the textures — the hide leg drives t
 // 0 → 1 and the show-back leg drives it 1 → 0 — so this shader only ever
 // describes the windows-to-desktop direction and needs no reversal logic, and
-// the show leg automatically retraces this motion (the circuit re-energizes).
+// the show leg automatically retraces it (the circuit re-energizes). Retracing
+// covers everything keyed off `t`: the front, the de-energize drain, and the
+// glow envelope. The two iFrame-driven terms below (the trace dashes and the
+// ember sparks) are decoration that runs forward on both legs, since iFrame
+// counts up per leg and this pass binds no iIsReversed.
 // Run by the screen-level desktop-transition pass, which binds uFromDesktop and
 // uToDesktop, pushes progress as iTime, and binds the p_color* slots from the
 // customColors pool at parity with the per-window and surface contracts.

@@ -16,6 +16,8 @@
 
 namespace PlasmaZones {
 
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
 using namespace PhosphorCompositor;
 
 KWinCompositorBridge::KWinCompositorBridge(PlasmaZonesEffect& effect)
@@ -259,10 +261,14 @@ void KWinCompositorBridge::activateWindow(WindowHandle w)
     auto* ew = toEffectWindow(w);
     if (!ew)
         return;
-    // Showing-desktop guard: everything reaching the bridge is engine/daemon
-    // driven, and Workspace::activateWindow on a hidden window synchronously
-    // cancels a peek — same policy as every direct activateWindow site in the
-    // effect (see PlasmaZonesEffect::isShowingDesktop).
+    // Showing-desktop guard: Workspace::activateWindow on a hidden window
+    // synchronously cancels a peek, so this carries the same policy as every
+    // direct activateWindow site in the effect (see
+    // PlasmaZonesEffect::isShowingDesktop). Nothing calls this today — real
+    // activations route engine → activateWindowRequested → D-Bus →
+    // slotActivateWindowRequested, which is guarded separately — so the guard is
+    // here to keep the bridge honest the day something does, not because a live
+    // path needs it.
     if (PlasmaZonesEffect::isShowingDesktop()) {
         qCDebug(lcEffect) << "bridge activateWindow: dropped during show desktop";
         return;

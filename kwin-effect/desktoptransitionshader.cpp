@@ -19,6 +19,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLoggingCategory>
 
 #include <memory>
 
@@ -29,6 +30,8 @@
 // pipeline (read → entry-point scaffold → include expansion → param preamble →
 // KWin define → generateCustomShader) only serves this question, so it lives here.
 namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compiledShader(const QString& effectId)
 {
@@ -44,14 +47,20 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
     ShaderTransitionManager& mgr = m_effect->m_shaderManager;
     const PhosphorAnimationShaders::AnimationShaderEffect eff = mgr.shaderRegistry().effect(effectId);
     if (!eff.isValid()) {
+        qCWarning(lcEffect) << "Unknown desktop transition effect id" << effectId;
         return &compiled; // sentinel: unknown id
     }
 
     QFile shaderFile(eff.fragmentShaderPath);
     if (!shaderFile.open(QIODevice::ReadOnly)) {
+        qCWarning(lcEffect) << "Failed to open desktop shader file" << eff.fragmentShaderPath;
         return &compiled;
     }
     const QString rawSource = QString::fromUtf8(shaderFile.readAll());
+    if (rawSource.isEmpty()) {
+        qCWarning(lcEffect) << "Desktop shader file is empty" << eff.fragmentShaderPath;
+        return &compiled;
+    }
 
     QStringList animIncludePaths;
     for (const QString& sp : mgr.shaderRegistry().searchPaths()) {
@@ -71,6 +80,7 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
     QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembledSource, currentDir,
                                                                               animIncludePaths, &includeError);
     if (expanded.isEmpty()) {
+        qCWarning(lcEffect) << "Failed to expand desktop shader includes for" << effectId << ":" << includeError;
         return &compiled;
     }
     expanded = PhosphorShaders::spliceAfterVersion(
@@ -114,6 +124,8 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
             compiled.customColorsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomColorsElementNames[slot]);
         }
         compiled.shader = std::move(shader);
+    } else {
+        qCWarning(lcEffect) << "Failed to compile desktop transition shader for" << effectId;
     }
     return &compiled;
 }

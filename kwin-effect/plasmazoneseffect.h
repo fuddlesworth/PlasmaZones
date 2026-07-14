@@ -1784,8 +1784,10 @@ private:
     // pass (no morph quad deform / re-capture).
     bool m_capturingSnapshot = false;
 
-    /// True while DesktopTransitionManager::captureDesktop drives paintWindow
-    /// DIRECTLY (outside KWin's chain walk). paintWindow's tail then terminates
+    /// True while DesktopTransitionManager::compositeWindowsInto drives
+    /// paintWindow DIRECTLY (outside KWin's chain walk). That is the shared tail
+    /// of BOTH desktop captures — captureDesktop (the switch legs) and
+    /// capturePeekWindowsScene (the peek's windows layer). paintWindow's tail then terminates
     /// with effects->drawWindow instead of continuing the paintWindow chain:
     /// the chain iterator sits at begin() in that context, so chaining would
     /// re-enter our own paintWindow (double fold, animator transform applied

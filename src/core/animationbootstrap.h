@@ -109,8 +109,8 @@ PLASMAZONES_EXPORT void runInitialProfileLoad(PhosphorAnimation::ProfileLoader& 
 /// unconfigured leaf inherits a sensible curve/duration shape rather
 /// than the library default of 150 ms OutCubic. Reproduces the
 /// per-family character of the prior bundled per-leaf JSONs (popups
-/// feel different from windows feel different from workspace
-/// transitions) without reintroducing the per-leaf shadowing problem
+/// feel different from windows feel different from OSDs) without
+/// reintroducing the per-leaf shadowing problem
 /// that motivated their deletion: every entry is registered under the
 /// `kShellAnimationFamilySeedsOwnerTag` partition, so a Settings-UI
 /// edit (direct-owner) or a user-authored JSON (loader-tagged owner)

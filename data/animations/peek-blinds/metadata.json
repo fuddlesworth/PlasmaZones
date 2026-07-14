@@ -5,9 +5,7 @@
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Reveal",
-    "appliesTo": [
-        "desktop"
-    ],
+    "appliesTo": ["desktop"],
     "fragmentShader": "effect.frag",
     "parameters": [
         {

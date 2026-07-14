@@ -130,18 +130,18 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
 # KWin's GL headers) would break that ordering. Mirrors the daemon's identical
 # guard on dmabufglimport.cpp (src/CMakeLists.txt).
 set_source_files_properties(snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-# desktoptransitionmanager.cpp defines a file-local drawDesktopBlendQuad + a
-# fullscreen vertex-source constant; keep it out of the Unity blob so those
-# never ODR-collide with surfacelayers.cpp's equivalents.
+# desktoptransitionmanager.cpp defines a file-local drawDesktopBlendQuad; keep
+# it out of the Unity blob so it never ODR-collides with surfacelayers.cpp's
+# equivalent.
 set_source_files_properties(desktoptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-# desktoptransitioncapture.cpp holds the capture half of the same class, including
+# desktoptransitioncapture.cpp holds the capture part of the same class, including
 # its own file-local helpers (captureFormatFor, allocateOutputTexture); same
 # reason, same exclusion.
 set_source_files_properties(desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-# desktoptransitionshader.cpp is the assembly half (compiledShader + its
+# desktoptransitionshader.cpp is the assembly part (compiledShader + its
 # function-local vertex-source constant); same class, same exclusion.
 set_source_files_properties(desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
-# desktoptransitionteardown.cpp is the teardown half (settle, reap, removal
+# desktoptransitionteardown.cpp is the teardown part (settle, reap, removal
 # handlers, cache/shader release); same class, same exclusion.
 set_source_files_properties(desktoptransitionteardown.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 

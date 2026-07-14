@@ -291,7 +291,8 @@ QString defaultShaderEffectIdForPath(const QString& path)
     // effects (Slide for the switch, windowaperture/eyeonscreen for the peek —
     // the latter are even unloaded while a peek pack is assigned), so they
     // stay opt-in. A fresh config animates them only once the user picks a
-    // desktop pack (e.g. Desktop Fade) on the Virtual Desktops animation page.
+    // desktop pack (e.g. Desktop Fade) on the Animations → Transitions →
+    // Desktop page.
     // Every other event defaults to no shader.
     return QString();
 }

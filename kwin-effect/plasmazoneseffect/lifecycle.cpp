@@ -1175,16 +1175,19 @@ void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
     }
     // Our peek owns the show-desktop animation only when the resolved pack
     // would actually RUN: animations enabled, installed, AND a desktop-contract
-    // pack. Mirrors the showingDesktopChanged handler's gates end to end — a
-    // stale or inherited non-desktop override (or a pack assigned while the
-    // animations master toggle is off) must not unload KWin's effects and then
-    // no-op at the signal, leaving the user with no show-desktop animation at
-    // all.
+    // pack. Mirrors the whole peek path's runnability gates, not just the
+    // showingDesktopChanged handler's: the handler itself only checks the
+    // animations toggle and a non-empty id, while the isValid/appliesTo pair
+    // lives downstream in DesktopTransitionManager::prepareTransitionPrototype.
+    // This has to be the stricter of the two — a stale or inherited non-desktop
+    // override (or a pack assigned while the animations master toggle is off)
+    // must not unload KWin's effects and then bail at the signal, leaving the
+    // user with no show-desktop animation at all.
     bool wantOurs = false;
     const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::resolveShaderWithDefault(
         m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::DesktopPeek);
     const QString effectId = profile.effectiveEffectId();
-    if (!effectId.isEmpty() && m_windowAnimator && m_windowAnimator->isEnabled()) {
+    if (!effectId.isEmpty() && m_windowAnimator->isEnabled()) {
         const PhosphorAnimationShaders::AnimationShaderEffect eff = m_shaderManager.shaderRegistry().effect(effectId);
         wantOurs = eff.isValid()
             && PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff,
@@ -1207,7 +1210,7 @@ void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
         return;
     }
     // Keep names whose re-load failed: the wantOurs=false branch re-runs on
-    // every later sync (tree edits, registry commits, reconfigure), so a
+    // every later sync (see the four trigger sites on the header decl), so a
     // transient loader failure gets a free retry instead of permanently
     // dropping the restore obligation for the session. Already-loaded names
     // are satisfied as-is (a KCM reconcile can re-load them behind our back,

@@ -284,39 +284,43 @@ void DesktopTransitionManager::reapPeekTransitions()
     // longer match the desktop's content, which size/format validation cannot
     // see; the next show leg then settles instantly, KWin's default).
     //
-    // Release like every other erase site. A peek can never coexist with a
-    // claim KWin still reports as OURS (beginPeek bails while ANY claim is
-    // held), so this cannot strand a real claim — but m_fullScreenClaimed can
-    // outlive the claim itself: our switch claims, Overview overwrites it,
-    // Overview closes with setActiveFullScreenEffect(nullptr), and nothing
-    // re-validates our flag. beginPeek then sees a null claim and proceeds,
-    // so peeks CAN coexist with a stale flag, and reaping them without this
-    // call would leave it set until the next switch wasted its own claim on
-    // the !m_fullScreenClaimed guard.
-    releaseFullScreenClaimIfIdle();
     const bool hasPeekEntries = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
         return entry.second.kind != Kind::Switch;
     });
-    if (!hasPeekEntries && m_peekDesktopCache.empty()) {
-        return;
-    }
-    // Both the entry erases and the cache clear free GLTextures; callers run
-    // off the paint thread.
-    ensureGlContextCurrent();
-    for (auto it = m_active.begin(); it != m_active.end();) {
-        if (it->second.kind != Kind::Switch) {
-            // Same defensive posture as desktopRemoved's reap: both callers
-            // run inside KWin signal handlers where effects is live, but the
-            // guard keeps the two loops from expressing opposite assumptions.
-            if (KWin::effects) {
-                KWin::effects->addRepaint(it->first->geometry());
+    if (hasPeekEntries || !m_peekDesktopCache.empty()) {
+        // Both the entry erases and the cache clear free GLTextures; callers run
+        // off the paint thread.
+        ensureGlContextCurrent();
+        for (auto it = m_active.begin(); it != m_active.end();) {
+            if (it->second.kind != Kind::Switch) {
+                // Same defensive posture as desktopRemoved's reap: both callers
+                // run inside KWin signal handlers where effects is live, but the
+                // guard keeps the two loops from expressing opposite assumptions.
+                if (KWin::effects) {
+                    KWin::effects->addRepaint(it->first->geometry());
+                }
+                it = m_active.erase(it);
+            } else {
+                ++it;
             }
-            it = m_active.erase(it);
-        } else {
-            ++it;
         }
+        m_peekDesktopCache.clear();
     }
-    m_peekDesktopCache.clear();
+
+    // Release like every other erase site, and AFTER the erase for the same
+    // reason they all are: releaseFullScreenClaimIfIdle() early-returns while
+    // m_active is non-empty, so releasing before the loop could never clear the
+    // flag it exists to clear.
+    //
+    // A peek can never coexist with a claim KWin still reports as OURS
+    // (beginPeek bails while ANY claim is held), so this cannot strand a real
+    // claim — but m_fullScreenClaimed can outlive the claim itself: our switch
+    // claims, Overview overwrites it, Overview closes with
+    // setActiveFullScreenEffect(nullptr), and nothing re-validates our flag.
+    // beginPeek then sees a null claim and proceeds, so peeks CAN coexist with
+    // a stale flag, and reaping them without this call would leave it set until
+    // the next switch wasted its own claim on the !m_fullScreenClaimed guard.
+    releaseFullScreenClaimIfIdle();
 }
 
 void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, const QVariantMap& params,
@@ -396,6 +400,10 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     }
 
     if (!insertedAny) {
+        // Every output took the no-cache branch, so the stale-hide-leg erases
+        // above may have emptied m_active without going through endOutput().
+        // Release for the same stale-flag reason reapPeekTransitions() does.
+        releaseFullScreenClaimIfIdle();
         return;
     }
 

@@ -162,8 +162,6 @@ private Q_SLOTS:
         }
         // The pre-float bookkeeping still names B regardless of screen availability.
         QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
-
-        restoreFixtureWiring();
     }
 
     // =====================================================================
@@ -204,8 +202,6 @@ private Q_SLOTS:
             QVERIFY(m_service->isWindowSnapped(windowId));
             QVERIFY(!m_service->isWindowFloating(windowId));
         }
-
-        restoreFixtureWiring();
     }
 
     // =====================================================================
@@ -271,8 +267,6 @@ private Q_SLOTS:
         QCOMPARE(m_service->snappedWindows(), QStringList{winB});
         // winA's own store no longer counts it as snapped.
         QVERIFY(!stateA->isWindowSnapped(winA));
-
-        restoreFixtureWiring();
     }
 
     // =====================================================================
@@ -462,13 +456,6 @@ private:
             e->forgetWindow(id);
         };
         m_service->setSnapStateResolver(resolver);
-    }
-
-    /// Restore the fixture's single-store wiring so the shared teardown runs
-    /// against the same holder init() set up.
-    void restoreFixtureWiring()
-    {
-        m_service->setSnapState(m_engine->snapState());
     }
 
     std::unique_ptr<IsolatedConfigGuard> m_guard;

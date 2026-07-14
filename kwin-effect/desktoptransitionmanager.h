@@ -19,7 +19,6 @@
 
 namespace KWin {
 class EffectWindow;
-class GLFramebuffer;
 class GLShader;
 class GLTexture;
 class LogicalOutput;
@@ -47,11 +46,12 @@ class PlasmaZonesEffect;
 ///
 /// The effect owns one instance. On `desktopChanged` / `showingDesktopChanged`
 /// the effect resolves the `desktop.switch` / `desktop.peek` shader from the
-/// shader profile tree and calls begin() / beginPeek(); if no shader is assigned
-/// the call is a no-op and KWin's normal behaviour proceeds. Either way the
-/// manager forces a full-screen paint via the mask and routes paintScreen
-/// through paintOutput(), which draws the blend instead of the live scene until
-/// progress reaches 1.
+/// shader profile tree and calls begin() / beginPeek(). With no shader assigned
+/// begin() returns immediately, while beginPeek() still reaps any live peek leg
+/// (see its empty-id contract below). Either way KWin's normal behaviour
+/// proceeds. When a transition does start the manager forces a full-screen paint
+/// via the mask and routes paintScreen through paintOutput(), which draws the
+/// blend instead of the live scene until progress reaches 1.
 ///
 /// The fullscreen claim differs per kind. A desktop SWITCH claims
 /// `setActiveFullScreenEffect(m_effect)` so KWin's built-in Slide bows out —
@@ -107,6 +107,14 @@ public:
     /// incoming-desktop note) — and captures its FROM live, since KWin unhides
     /// the windows before the signal. Outputs with no usable cache entry are
     /// skipped and settle instantly.
+    ///
+    /// An EMPTY @p effectId is NOT a no-op: it reaps any live peek leg and drops
+    /// the bare-desktop cache, then returns. Callers rely on this — the
+    /// showingDesktopChanged handler calls beginPeek unconditionally, with an
+    /// empty id when no pack is runnable, so that clearing the pack mid-peek
+    /// tears the leg down instead of stranding it. The same reap runs on every
+    /// other bail-out (a foreign fullscreen claim, a pack that failed to
+    /// prepare).
     void beginPeek(bool showing, const QString& effectId, const QVariantMap& params, int durationMs,
                    std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
 
