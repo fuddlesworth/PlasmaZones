@@ -28,7 +28,7 @@
  *    (including its virtual sub-screens) are reclaimed; the other monitor and the
  *    global holder survive.
  * 6. pruneRemovedDesktopDropsOnlyThatDesktop: a destroyed desktop's stores are
- *    reclaimed; other desktops and the desktop-0 global holder survive.
+ *    reclaimed; other desktops and the empty-screenId global holder survive.
  * 7. pruneRemovedActivityDropsOnlyThatActivity: removed activities' stores are
  *    reclaimed; the empty-activity global holder is never a target.
  */
@@ -364,14 +364,18 @@ private Q_SLOTS:
         QCOMPARE(m_engine->stateForWindow(winAvs), m_engine->globalState());
         // The other monitor's store and the global holder survive.
         QCOMPARE(m_engine->stateForWindow(winB), storeB);
-        QCOMPARE(m_engine->globalState(), global); // the SAME holder survives, un-pruned
+        // The holder survives IN THE STATES MAP, un-pruned. Comparing
+        // globalState() to its earlier copy is vacuous (the member is never
+        // reassigned); reading the map genuinely fails if the prune removed it.
+        QVERIFY(m_engine->allSnapStates().contains(global));
         QCOMPARE(m_engine->allSnapStates().size(), before - 2);
     }
 
     // =====================================================================
     // Test 6 (#724 follow-up): a destroyed virtual desktop's per-key stores are
     // reclaimed. pruneStatesForDesktop drops stores on that desktop only; other
-    // desktops and the desktop-0 global holder survive.
+    // desktops and the empty-screenId global holder survive (its key's desktop
+    // defaults to 1, but the empty screenId is what exempts it).
     // =====================================================================
     void pruneRemovedDesktopDropsOnlyThatDesktop()
     {
@@ -425,7 +429,8 @@ private Q_SLOTS:
 
         QCOMPARE(m_engine->stateForWindow(winB), m_engine->globalState()); // removed-activity store gone
         QCOMPARE(m_engine->stateForWindow(winA), storeKeep); // kept-activity store survives
-        QCOMPARE(m_engine->globalState(), global); // the SAME empty-activity holder survives, un-pruned
+        // Map-membership check, not a pointer self-compare — see test 5.
+        QVERIFY(m_engine->allSnapStates().contains(global));
         QCOMPARE(m_engine->allSnapStates().size(), before - 1);
     }
 

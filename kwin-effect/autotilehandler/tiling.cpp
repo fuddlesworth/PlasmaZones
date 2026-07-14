@@ -765,11 +765,9 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
 
 void AutotileHandler::slotFocusWindowRequested(const QString& windowId)
 {
-    // Showing-desktop guard: the tile engine re-emits this after every
-    // relayout, and Workspace::activateWindow on a hidden window synchronously
-    // cancels a peek — same guard as the float/unfloat paths (signals.cpp).
-    // The pending id is not recorded either: a deferred reactivate landing
-    // after the peek ends would be just as unrequested.
+    // Showing-desktop guard (see isShowingDesktop's doc): the tile engine
+    // re-emits this after every relayout, and activating a hidden window
+    // cancels a peek. The pending id is deliberately not recorded either.
     if (PlasmaZonesEffect::isShowingDesktop()) {
         qCDebug(lcEffect) << "Autotile: focus request dropped during show desktop:" << windowId;
         return;

@@ -3,7 +3,7 @@
 //
 // Phosphor Peek — the show-desktop peek in the official Phosphor style, the
 // peek leg of the phosphor-flux / phosphor-bloom / desktop-phosphor set. The
-// windows scene de-energises like a powered circuit shutting down: a front
+// windows scene de-energizes like a powered circuit shutting down: a front
 // sweeps across the screen along glowing traces, the windows drain out along
 // those traces into the brand gradient (cyan #22D3EE, blue #3B82F6, purple
 // #A855F7, rose #F43F5E), and the bare desktop is left behind the front.
@@ -43,8 +43,11 @@ vec4 pTransition(vec2 uv, float t) {
 
     // Drain direction. iSwitchDelta is all zeros for a peek, so the configured
     // direction is used directly; the default (1, 1) drains along the brand's
-    // top-left-to-bottom-right diagonal.
-    vec2 dir = normalize(vec2(p_dirX, p_dirY) + vec2(1.0e-6, 0.0));
+    // top-left-to-bottom-right diagonal. Guard the degenerate zero vector the
+    // way desktop_transition.glsl's switchDirection() does — an epsilon nudge
+    // alone still normalizes to NaN for tiny opposing components.
+    vec2 rawDir = vec2(p_dirX, p_dirY);
+    vec2 dir = dot(rawDir, rawDir) > 1.0e-6 ? normalize(rawDir) : vec2(1.0, 0.0);
     vec2 perp = vec2(-dir.y, dir.x);
 
     // Position of this fragment projected onto the drain direction, in [0,1].

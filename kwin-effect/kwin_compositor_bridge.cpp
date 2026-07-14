@@ -257,6 +257,13 @@ void KWinCompositorBridge::activateWindow(WindowHandle w)
     auto* ew = toEffectWindow(w);
     if (!ew)
         return;
+    // Showing-desktop guard: everything reaching the bridge is engine/daemon
+    // driven, and Workspace::activateWindow on a hidden window synchronously
+    // cancels a peek — same policy as every direct activateWindow site in the
+    // effect (see PlasmaZonesEffect::isShowingDesktop).
+    if (PlasmaZonesEffect::isShowingDesktop()) {
+        return;
+    }
     KWin::effects->activateWindow(ew);
 }
 

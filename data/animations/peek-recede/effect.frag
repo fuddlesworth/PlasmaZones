@@ -26,8 +26,9 @@ vec4 pTransition(vec2 uv, float t) {
     // Coordinate inside the shrinking windows image. At t = 0 scale is 1 and
     // this is exactly uv, so the layer covers the screen; as it shrinks the
     // content coordinate runs outside [0,1] near the edges and those fragments
-    // fall through to the desktop.
-    vec2 contentUV = center + (uv - center) / max(scale, 1.0e-3);
+    // fall through to the desktop. scale >= 0.05 by the clamp above, so the
+    // division is always safe.
+    vec2 contentUV = center + (uv - center) / scale;
 
     // Soft rectangular mask: 1 inside the receded windows image, 0 outside.
     // Both smoothstep calls keep edge0 < edge1 (undefined otherwise), so the
@@ -53,8 +54,11 @@ vec4 pTransition(vec2 uv, float t) {
     vec3 col = mix(desktop, windows, windowsAlpha);
 
     // Two opaque scenes blended stay opaque; the pass draws with blending off
-    // and replaces the screen, so alpha is a constant 1.
-    return vec4(clamp(col, 0.0, 1.0), 1.0);
+    // and replaces the screen, so alpha is a constant 1. NO clamp on the rgb:
+    // a pure blend of the two captures cannot exceed their range, and an HDR
+    // capture legitimately carries values above 1.0 that a pre-clamp would
+    // crush at the endpoints (the finalize hook runs after pTransition).
+    return vec4(col, 1.0);
 #else
     // Desktop transitions are compositor-only; the daemon never runs them.
     // Return transparent so the pack still bakes for the daemon target.

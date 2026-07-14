@@ -251,11 +251,10 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         {QLatin1StringView{"widget.zoneHighlight"}, QLatin1StringView{"widget-out"}, 200.0},
 
         // No `workspace.*` / `desktop.*` motion seeds: the opt-in desktop
-        // switch transition (desktop.switch) carries no motion-Profile seed
-        // because its timing rides the shader path (the kwin-effect's
-        // DesktopTransitionManager), not this per-event Profile tree. It stays
-        // off until the user assigns a desktop shader, coexisting with KWin's
-        // own Slide via an effect-only fullscreen claim.
+        // transitions (desktop.switch and desktop.peek) carry no
+        // motion-Profile seed because their timing rides the shader path (the
+        // kwin-effect's DesktopTransitionManager), not this per-event Profile
+        // tree. Both stay off until the user assigns a desktop shader.
     }};
 
     for (const auto& seed : seeds) {

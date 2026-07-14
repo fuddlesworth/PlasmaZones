@@ -894,6 +894,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("animationsEnabled"), [this](const QVariant& v) {
         m_windowAnimator->setEnabled(v.toBool());
+        // The animations master toggle is part of the suppression predicate:
+        // with animations off the peek never runs, so KWin's own show-desktop
+        // effects must come back rather than leave the user with no
+        // show-desktop animation at all.
+        syncShowDesktopEffectSuppression();
     });
     loadSettingAsync(QStringLiteral("animationDuration"), [this](const QVariant& v) {
         // Clamp against the canonical settings-UI bounds. The earlier

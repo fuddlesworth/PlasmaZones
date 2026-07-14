@@ -1,11 +1,13 @@
 {
     "id": "phosphor-peek",
     "name": "Phosphor Peek",
-    "description": "Reveals the desktop in the official Phosphor style. The windows de-energise like a circuit shutting down, a front sweeps across along glowing traces, and the pixels drain along them into the brand gradient as the desktop is left behind.",
+    "description": "Reveals the desktop in the official Phosphor style. The windows de-energize like a circuit shutting down, a front sweeps across along glowing traces, and the pixels drain along them into the brand gradient as the desktop is left behind.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Reveal",
-    "appliesTo": ["desktop"],
+    "appliesTo": [
+        "desktop"
+    ],
     "fragmentShader": "effect.frag",
     "parameters": [
         {

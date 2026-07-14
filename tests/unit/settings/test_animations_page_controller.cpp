@@ -518,7 +518,7 @@ private Q_SLOTS:
         // The intermediate cascade parents the parent-card UX relies on.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance")));
-        // The desktop family root, ancestor of the consumed switch leaf.
+        // The desktop family root, ancestor of the consumed switch and peek leaves.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
 
         // Paths the resolver never walks through — any assignment would

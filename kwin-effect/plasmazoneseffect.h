@@ -429,11 +429,14 @@ private:
      * @brief Whether KWin is currently in the show-desktop / peek state.
      *
      * Workspace::activateWindow() cancels show-desktop the moment any hidden
-     * window is activated, so every AUTOMATIC activation path (focus-follows-
-     * mouse, retile reactivation, unfloat refocus) must bail while this is
-     * true or a peek collapses on the first cursor move. Deliberate user
-     * actions (daemon focus requests, D-Bus activate) stay ungated — ending
-     * the peek is the correct response to explicit intent, matching KWin.
+     * window is activated, so every DAEMON-RELAYED activation path must bail
+     * while this is true or a peek collapses on the first cursor move or
+     * engine relayout: focus-follows-mouse, retile reactivation, unfloat
+     * refocus, the snap engine's activate requests, and the autotile engine's
+     * post-relayout focus flush. The effect cannot tell a user-initiated
+     * daemon request (a keyboard navigation shortcut) from an engine-initiated
+     * one — both arrive on the same D-Bus signals — so all of them are gated;
+     * only KWin-native activation (clicking a surface) ends a peek.
      */
     static bool isShowingDesktop();
 
@@ -1394,6 +1397,10 @@ private:
     /// loads back exactly what the user had — never an effect KWin left
     /// disabled in kwinrc.
     QStringList m_suppressedShowDesktopEffects;
+    /// Set by the aboutToQuit latch (constructor): distinguishes a runtime
+    /// unload of this effect from compositor shutdown in the destructor's
+    /// suppressed-effect restore. See ~PlasmaZonesEffect.
+    bool m_compositorShuttingDown = false;
     /// Coalescing latch for scheduleEffectAudioSync: many decoration/settings
     /// callbacks can fire in one event-loop turn (a focus change removes then
     /// re-adds a decoration); collapsing them to one syncEffectAudioState keeps

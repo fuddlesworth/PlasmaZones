@@ -286,11 +286,12 @@ QString defaultShaderEffectIdForPath(const QString& path)
         || path == PopupSnapAssistHide) {
         return QStringLiteral("fade");
     }
-    // Virtual-desktop switch has NO built-in default: it is a full-screen,
-    // intrusive transition that also contends with KWin's own Slide effect, so
-    // it stays opt-in. A fresh config animates desktop switches only once the
-    // user picks a desktop pack (e.g. Desktop Fade) on the Virtual Desktops
-    // animation page.
+    // The desktop transitions (switch AND peek) have NO built-in default: both
+    // are full-screen, intrusive transitions that contend with KWin's own
+    // effects (Slide for the switch, windowaperture/eyeonscreen for the peek —
+    // the latter are even unloaded while a peek pack is assigned), so they
+    // stay opt-in. A fresh config animates them only once the user picks a
+    // desktop pack (e.g. Desktop Fade) on the Virtual Desktops animation page.
     // Every other event defaults to no shader.
     return QString();
 }

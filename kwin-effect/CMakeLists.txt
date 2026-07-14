@@ -93,6 +93,7 @@ set(plasmazones_effect_SRCS
     snaphandler.h
     desktoptransitionmanager.cpp
     desktoptransitioncapture.cpp
+    desktoptransitionshader.cpp
     desktoptransitionmanager.h
     navigationhandler.cpp
     navigationhandler.h
@@ -136,6 +137,9 @@ set_source_files_properties(desktoptransitionmanager.cpp PROPERTIES SKIP_UNITY_B
 # its own file-local helpers (captureFormatFor, allocateOutputTexture); same
 # reason, same exclusion.
 set_source_files_properties(desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+# desktoptransitionshader.cpp is the assembly half (compiledShader + its
+# function-local vertex-source constant); same class, same exclusion.
+set_source_files_properties(desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE

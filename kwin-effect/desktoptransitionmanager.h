@@ -8,12 +8,14 @@
 #include <PhosphorAnimation/Curve.h> // per-event timing curve + CurveState
 
 #include <QHash> // std::hash<QString> specialization (used by the unordered_map key below)
+#include <QRectF>
 #include <QString>
 #include <QVariant> // QVariantMap
 #include <QVector4D>
 
 #include <array>
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 
@@ -273,21 +275,47 @@ private:
                                                       const KWin::RenderTarget& outputTarget,
                                                       const KWin::RenderViewport& outputViewport);
 
-    /// The peek hide leg's FROM texture: the bare desktop (live scene — the
-    /// windows are already out of this frame's scene walk by the time
-    /// showingDesktopChanged fires) with every show-desktop-hidden window
-    /// composited back on top through the direct per-window path, the same way
-    /// captureDesktop reconstructs the outgoing desktop's non-scene windows.
-    /// Visibility refs cannot do this job: a ref taken during paintOutput only
-    /// affects the NEXT frame's scene walk, so a "live scene with refs held"
-    /// capture returns the bare desktop and the peek degrades to an instant
-    /// hide with a decorative sweep over it.
-    std::unique_ptr<KWin::GLTexture> capturePeekWindowsScene(int mask, KWin::LogicalOutput* screen,
+    /// The peek hide leg's FROM texture: the bare desktop with every
+    /// show-desktop-hidden window composited back on top through the direct
+    /// per-window path, the same way captureDesktop reconstructs the outgoing
+    /// desktop's non-scene windows (the windows are already out of this frame's
+    /// scene walk by the time showingDesktopChanged fires, so a live capture
+    /// cannot include them; visibility refs cannot do the job either — a ref
+    /// taken during paintOutput only affects the NEXT frame's scene walk).
+    ///
+    /// @p bareDesktop is the already-captured TO texture: it is blitted in as
+    /// the base layer when the hardware supports framebuffer blits, so the
+    /// bare-desktop scene is rendered once per peek, not twice. Pass null (or
+    /// run on a no-blit GPU) and the base layer re-renders via
+    /// effects->paintScreen instead — identical output, one extra scene pass.
+    std::unique_ptr<KWin::GLTexture> capturePeekWindowsScene(KWin::GLTexture* bareDesktop, int mask,
+                                                             KWin::LogicalOutput* screen,
                                                              const KWin::RenderTarget& outputTarget,
                                                              const KWin::RenderViewport& outputViewport);
 
+    /// Composite every stacking-order window that passes @p includeWindow into
+    /// the CURRENTLY PUSHED framebuffer, bottom-to-top, through the effect's
+    /// own per-window pipeline in direct-drive mode (m_directPaintCapture).
+    /// Shared tail of captureDesktop and capturePeekWindowsScene — both
+    /// reconstruct windows that are NOT in this frame's scene walk; windows the
+    /// live scene IS painting render black through this path, so filters must
+    /// exclude them.
+    void compositeWindowsInto(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                              const QRectF& logicalGeometry,
+                              const std::function<bool(KWin::EffectWindow*)>& includeWindow);
+
+    /// Shared resolve prologue of begin() and beginPeek(): validates the pack
+    /// (installed + desktop-contract via shaderEffectAppliesToEventPath against
+    /// @p eventPath) and fills @p proto's effectId, parameter pools, start time,
+    /// clamped duration and curve. Returns false when the transition must not
+    /// run (the caller bails and KWin's native behaviour proceeds).
+    bool prepareTransitionPrototype(const QString& effectId, const QVariantMap& params, const QString& eventPath,
+                                    int durationMs, std::shared_ptr<const PhosphorAnimation::Curve> progressCurve,
+                                    OutputTransition* proto);
+
     /// Compile (or fetch from cache) the desktop-transition shader for @p effectId.
     /// Returns nullptr when the effect id is unknown or compilation failed.
+    /// Implemented in desktoptransitionshader.cpp (the assembly half).
     CompiledDesktopShader* compiledShader(const QString& effectId);
 
     /// Free an output's transition and, when the last one goes, release the

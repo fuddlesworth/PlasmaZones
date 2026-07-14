@@ -166,13 +166,14 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassGeometry;
 /// popup show/hide — a single surface materialising or dissolving.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassAppearance;
 
-/// Desktop transitions: a full-screen virtual-desktop switch blending the
-/// outgoing desktop against the incoming one. A distinct TWO-texture contract
-/// (from/to full-screen samplers), incompatible with the single-surface
-/// geometry/appearance shaders — a shader must opt into it explicitly via
-/// `appliesTo: ["desktop"]`. A universal single-surface effect (empty
-/// `appliesTo`) does NOT apply to desktop paths, because its lone surface
-/// sampler would be unbound in the two-texture pass.
+/// Desktop transitions: full-screen blends of two scene captures — the
+/// virtual-desktop switch (outgoing desktop against incoming one) and the
+/// show-desktop peek (windows scene against bare desktop). A distinct
+/// TWO-texture contract (from/to full-screen samplers), incompatible with the
+/// single-surface geometry/appearance shaders — a shader must opt into it
+/// explicitly via `appliesTo: ["desktop"]`. A universal single-surface effect
+/// (empty `appliesTo`) does NOT apply to desktop paths, because its lone
+/// surface sampler would be unbound in the two-texture pass.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassDesktop;
 
 /// Interactive-drag transitions: the `window.movement.move` leaf only. A drag

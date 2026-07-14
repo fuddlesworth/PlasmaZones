@@ -128,69 +128,77 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Bottom-to-top: stackingOrder() is already bottom→top, so the wallpaper
-        // (an on-all-desktops window) lands first and app windows composite over
-        // it. Windows outside this output are clipped by the viewport.
-        // Direct-drive mode for the loop below: paintWindow's tail must
-        // terminate with a raw draw instead of continuing the paintWindow
-        // chain (see m_directPaintCapture's doc — the chain iterator is at
-        // begin() here, so chaining would re-enter paintWindow and drive
-        // later effects without prePaintWindow). Scope-guarded so a throw
-        // from the draw chain cannot leak the mode into live painting.
-        m_effect->m_directPaintCapture = true;
-        const auto directPaintGuard = qScopeGuard([this] {
-            m_effect->m_directPaintCapture = false;
+        // Bottom-to-top: the wallpaper (an on-all-desktops window) lands first
+        // and app windows composite over it. isHiddenByShowDesktop: a capture
+        // taken while a peek is active must not bake the hidden windows into
+        // the transition texture — the scene isn't painting them, so the
+        // capture shouldn't either.
+        compositeWindowsInto(renderTarget, viewport, logicalGeometry, [desktop](KWin::EffectWindow* w) {
+            return !w->isMinimized() && !w->isHiddenByShowDesktop()
+                && (w->isOnDesktop(desktop) || w->isOnAllDesktops());
         });
-
-        const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
-        for (KWin::EffectWindow* w : stack) {
-            // isHiddenByShowDesktop: a capture taken while a peek is active
-            // must not bake the hidden windows into the transition texture —
-            // the scene isn't painting them, so the capture shouldn't either.
-            if (!w || w->isMinimized() || w->isHiddenByShowDesktop()) {
-                continue;
-            }
-            if (!(w->isOnDesktop(desktop) || w->isOnAllDesktops())) {
-                continue;
-            }
-            if (!w->expandedGeometry().intersects(logicalGeometry)) {
-                continue;
-            }
-            KWin::ItemEffect keepRenderable(w->windowItem());
-            KWin::WindowPaintData captureData;
-            captureData.setOpacity(1.0);
-            const int captureMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
-            // Drive the window through OUR OWN per-window pipeline, exactly as the
-            // live scene does for the incoming desktop (captureLiveScene →
-            // effects->paintScreen → scene → our paintWindow). paintWindow builds
-            // the decoration composite, and under m_directPaintCapture (set
-            // above) its tail terminates with effects->drawWindow — the same
-            // call this used to make directly — whose present branch then
-            // binds that FRESH composite. Going straight to effects->drawWindow
-            // skipped all of it, so the outgoing texture lost not just borders but
-            // rule opacity, the animator's translate/scale, and any in-flight
-            // transition's true progress.
-            //
-            // NOT effects->paintWindow (the whole chain): these windows were not in
-            // this frame's scene walk, so they never got prePaintWindow, and a
-            // third-party paintWindow hook that keys off that state would be driven
-            // with none. Our paintWindow explicitly tolerates the missing
-            // prePaintWindow (it falls back to a live opacity resolve).
-            //
-            // Stepping an in-flight transition's spring here is safe. Within a
-            // frame it cannot double-step: paintWindow's dt comes from the frame
-            // clock pinned in prePaintScreen, and the first step of a frame
-            // stamps lastPaintTimeMs to that same pinned value, so a second call
-            // sees dt = 0. Across frames an extra step is a no-op by
-            // construction: Spring::step is an exact exponential integrator, so
-            // step(a) then step(b) lands bit-for-bit where step(a+b) does.
-            m_effect->paintWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
-        }
 
         KWin::GLFramebuffer::popFramebuffer();
     }
 
     return tex;
+}
+
+void DesktopTransitionManager::compositeWindowsInto(const KWin::RenderTarget& renderTarget,
+                                                    const KWin::RenderViewport& viewport, const QRectF& logicalGeometry,
+                                                    const std::function<bool(KWin::EffectWindow*)>& includeWindow)
+{
+    // Direct-drive mode for the loop below: paintWindow's tail must
+    // terminate with a raw draw instead of continuing the paintWindow
+    // chain (see m_directPaintCapture's doc — the chain iterator is at
+    // begin() here, so chaining would re-enter paintWindow and drive
+    // later effects without prePaintWindow). Scope-guarded so a throw
+    // from the draw chain cannot leak the mode into live painting.
+    m_effect->m_directPaintCapture = true;
+    const auto directPaintGuard = qScopeGuard([this] {
+        m_effect->m_directPaintCapture = false;
+    });
+
+    // Bottom-to-top: stackingOrder() is already bottom→top. Windows outside
+    // this output are clipped by the viewport.
+    const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : stack) {
+        if (!w || !includeWindow(w)) {
+            continue;
+        }
+        if (!w->expandedGeometry().intersects(logicalGeometry)) {
+            continue;
+        }
+        KWin::ItemEffect keepRenderable(w->windowItem());
+        KWin::WindowPaintData captureData;
+        captureData.setOpacity(1.0);
+        const int captureMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
+        // Drive the window through OUR OWN per-window pipeline, exactly as the
+        // live scene does for the incoming desktop (captureLiveScene →
+        // effects->paintScreen → scene → our paintWindow). paintWindow builds
+        // the decoration composite, and under m_directPaintCapture (set
+        // above) its tail terminates with effects->drawWindow — the same
+        // call this used to make directly — whose present branch then
+        // binds that FRESH composite. Going straight to effects->drawWindow
+        // skipped all of it, so the outgoing texture lost not just borders but
+        // rule opacity, the animator's translate/scale, and any in-flight
+        // transition's true progress.
+        //
+        // NOT effects->paintWindow (the whole chain): these windows were not in
+        // this frame's scene walk, so they never got prePaintWindow, and a
+        // third-party paintWindow hook that keys off that state would be driven
+        // with none. Our paintWindow explicitly tolerates the missing
+        // prePaintWindow (it falls back to a live opacity resolve).
+        //
+        // Stepping an in-flight transition's spring here is safe. Within a
+        // frame it cannot double-step: paintWindow's dt comes from the frame
+        // clock pinned in prePaintScreen, and the first step of a frame
+        // stamps lastPaintTimeMs to that same pinned value, so a second call
+        // sees dt = 0. Across frames an extra step is a no-op by
+        // construction: Spring::step is an exact exponential integrator, so
+        // step(a) then step(b) lands bit-for-bit where step(a+b) does.
+        m_effect->paintWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
+    }
 }
 
 std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int mask, KWin::LogicalOutput* screen,
@@ -241,7 +249,7 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
 }
 
 std::unique_ptr<KWin::GLTexture>
-DesktopTransitionManager::capturePeekWindowsScene(int mask, KWin::LogicalOutput* screen,
+DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, int mask, KWin::LogicalOutput* screen,
                                                   const KWin::RenderTarget& outputTarget,
                                                   const KWin::RenderViewport& outputViewport)
 {
@@ -255,8 +263,10 @@ DesktopTransitionManager::capturePeekWindowsScene(int mask, KWin::LogicalOutput*
     // followed by a decorative sweep).
     //
     // Instead the windows scene is reconstructed in two layers:
-    //   1. the live scene as it paints right now — wallpaper, docks, panels —
-    //      which with the windows hidden IS the bare desktop;
+    //   1. the bare desktop — wallpaper, docks, panels — blitted from the
+    //      already-captured TO texture (raster copy: same size, format and
+    //      colour space by construction), or re-rendered via the live scene
+    //      when no blit is possible;
     //   2. every show-desktop-hidden window composited back on top through the
     //      direct per-window path, exactly how captureDesktop reconstructs the
     //      outgoing desktop's non-scene windows. Being out of the scene walk is
@@ -286,39 +296,42 @@ DesktopTransitionManager::capturePeekWindowsScene(int mask, KWin::LogicalOutput*
         KWin::RenderTarget renderTarget(&fbo, outputTarget.colorDescription());
         KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
-        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
 
-        // Layer 1: the bare desktop, via KWin's own composite (same call and
-        // device-space region reasoning as captureLiveScene).
-        KWin::effects->paintScreen(renderTarget, viewport, mask,
-                                   KWin::Region(KWin::Rect(QPoint(), viewport.deviceSize())), screen);
+        // Layer 1: the bare desktop. Prefer a straight framebuffer blit from
+        // the caller's TO capture — a raster copy has no orientation or
+        // colour-space semantics to get wrong and skips a second full scene
+        // render. Fall back to re-rendering the live scene (identical output,
+        // one extra scene pass) when there is no source texture or the
+        // hardware cannot blit.
+        bool baseCopied = false;
+        if (bareDesktop && bareDesktop->size() == tex->size() && KWin::GLFramebuffer::blitSupported()) {
+            KWin::GLFramebuffer srcFbo(bareDesktop);
+            if (srcFbo.valid()) {
+                // blitFromFramebuffer reads from the CURRENT framebuffer and
+                // draws into the object it is called on.
+                KWin::GLFramebuffer::pushFramebuffer(&srcFbo);
+                fbo.blitFromFramebuffer(KWin::Rect(), KWin::Rect(), GL_NEAREST);
+                KWin::GLFramebuffer::popFramebuffer();
+                baseCopied = true;
+            }
+        }
+        if (!baseCopied) {
+            glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            // Same call and device-space region reasoning as captureLiveScene.
+            KWin::effects->paintScreen(renderTarget, viewport, mask,
+                                       KWin::Region(KWin::Rect(QPoint(), viewport.deviceSize())), screen);
+        }
 
         // Layer 2: the hidden windows, bottom-to-top in stacking order through
-        // the direct-drive per-window pipeline (see captureDesktop for why the
-        // tail must terminate with a raw draw here).
-        m_effect->m_directPaintCapture = true;
-        const auto directPaintGuard = qScopeGuard([this] {
-            m_effect->m_directPaintCapture = false;
+        // the direct-drive per-window pipeline (see compositeWindowsInto for
+        // why the tail must terminate with a raw draw here). isOnCurrentDesktop
+        // already covers on-all-desktops windows, but no such window can be
+        // hiddenByShowDesktop anyway (the wallpaper and docks are exempt from
+        // show-desktop hiding).
+        compositeWindowsInto(renderTarget, viewport, logicalGeometry, [](KWin::EffectWindow* w) {
+            return w->isHiddenByShowDesktop() && !w->isDeleted() && !w->isMinimized() && w->isOnCurrentDesktop();
         });
-
-        const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
-        for (KWin::EffectWindow* w : stack) {
-            if (!w || w->isDeleted() || !w->isHiddenByShowDesktop() || w->isMinimized()) {
-                continue;
-            }
-            if (!(w->isOnCurrentDesktop() || w->isOnAllDesktops())) {
-                continue;
-            }
-            if (!w->expandedGeometry().intersects(logicalGeometry)) {
-                continue;
-            }
-            KWin::ItemEffect keepRenderable(w->windowItem());
-            KWin::WindowPaintData captureData;
-            captureData.setOpacity(1.0);
-            const int captureMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
-            m_effect->paintWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
-        }
 
         KWin::GLFramebuffer::popFramebuffer();
     }

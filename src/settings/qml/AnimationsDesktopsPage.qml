@@ -3,10 +3,11 @@
 import QtQuick
 
 // Virtual-desktop animation events. Unlike the per-window / per-surface
-// pages, a desktop switch is a full-screen two-texture transition (the
-// outgoing desktop blended into the incoming one), driven by the
-// kwin-effect's DesktopTransitionManager. Only desktop-class shaders
-// (metadata appliesTo ["desktop"], e.g. Desktop Fade) are selectable here;
+// pages, these are full-screen two-texture transitions driven by the
+// kwin-effect's DesktopTransitionManager: the switch blends the outgoing
+// desktop into the incoming one, and the peek blends the windows scene
+// against the bare desktop (and back). Only desktop-class shaders (metadata
+// appliesTo ["desktop"], e.g. Desktop Fade) are selectable here;
 // single-surface effects are filtered out of the shader picker by
 // eventClassForPath's opt-in desktop class.
 //

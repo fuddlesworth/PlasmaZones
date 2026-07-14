@@ -71,6 +71,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 {
     PhosphorProtocol::registerWireTypes();
 
+    // Latch compositor shutdown so the destructor can tell a runtime unload
+    // (KCM toggle — restore the suppressed show-desktop effects) from session
+    // teardown (do NOT call loadEffect into the list KWin is unloading).
+    // aboutToQuit fires when the event loop exits, before destructors run.
+    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [this]() {
+        m_compositorShuttingDown = true;
+    });
+
     // Decoration-manager wiring (veto + signal connections) lives with the
     // rest of the border/decoration code in decorations.cpp.
     setupDecorationManager();
@@ -229,6 +237,17 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // A pack reload can flip a pack's `audio` metadata flag, which
                 // feeds the cava run gate via hasAudioReactiveAnimation().
                 scheduleEffectAudioSync();
+                // The registry commit is also the FIRST moment (bringup) and
+                // the ONLY moment (pack install/uninstall) the desktop.peek
+                // pack's validity can change without a tree edit: the profile
+                // tree arrives on an EARLIER D-Bus reply than the registry
+                // scan, so the tree-load sync at loadShaderProfileFromDbus
+                // resolves against an empty registry on session start, and
+                // deleting the assigned pack from disk never touches the tree
+                // at all. Re-run the suppression sync here so KWin's
+                // show-desktop effects are unloaded exactly when the peek pack
+                // becomes runnable and restored the moment it stops being.
+                syncShowDesktopEffectSuppression();
             });
 
     // Surface shader pack hot-reload: when a data/surface pack changes on disk,
@@ -1139,15 +1158,17 @@ void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
         return;
     }
     // Our peek owns the show-desktop animation only when the resolved pack
-    // would actually RUN: installed AND a desktop-contract pack. Mirrors
-    // beginPeek's own gate — a stale or inherited non-desktop override must not
-    // unload KWin's effects and then no-op at the signal, leaving the user with
-    // no show-desktop animation at all.
+    // would actually RUN: animations enabled, installed, AND a desktop-contract
+    // pack. Mirrors the showingDesktopChanged handler's gates end to end — a
+    // stale or inherited non-desktop override (or a pack assigned while the
+    // animations master toggle is off) must not unload KWin's effects and then
+    // no-op at the signal, leaving the user with no show-desktop animation at
+    // all.
     bool wantOurs = false;
     const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::resolveShaderWithDefault(
         m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::DesktopPeek);
     const QString effectId = profile.effectiveEffectId();
-    if (!effectId.isEmpty()) {
+    if (!effectId.isEmpty() && m_windowAnimator && m_windowAnimator->isEnabled()) {
         const PhosphorAnimationShaders::AnimationShaderEffect eff = m_shaderManager.shaderRegistry().effect(effectId);
         wantOurs = eff.isValid()
             && PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff,
@@ -1170,7 +1191,9 @@ void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
         return;
     }
     for (const QString& name : std::as_const(m_suppressedShowDesktopEffects)) {
-        KWin::effects->loadEffect(name);
+        if (!KWin::effects->loadEffect(name)) {
+            qCWarning(lcEffect) << "failed to restore show-desktop effect" << name;
+        }
     }
     m_suppressedShowDesktopEffects.clear();
 }
@@ -1178,11 +1201,19 @@ void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
 PlasmaZonesEffect::~PlasmaZonesEffect()
 {
     // Give KWin back the show-desktop script effects the peek suppression
-    // unloaded — a runtime unload of THIS effect must not leave the user with
-    // no show-desktop animation. First, while everything is still alive.
-    if (KWin::effects) {
+    // unloaded — a runtime unload of THIS effect (KCM toggle) must not leave
+    // the user with no show-desktop animation. First, while everything is
+    // still alive. Skipped during compositor shutdown (the aboutToQuit latch):
+    // there the destructor runs from EffectsHandler's own unload-everything
+    // sequence, and loadEffect would re-instantiate a script effect into the
+    // list KWin is tearing down mid-iteration. Nothing is lost by skipping —
+    // the next session loads the effects from kwinrc, which the suppression
+    // never writes to.
+    if (KWin::effects && !m_compositorShuttingDown) {
         for (const QString& name : std::as_const(m_suppressedShowDesktopEffects)) {
-            KWin::effects->loadEffect(name);
+            if (!KWin::effects->loadEffect(name)) {
+                qCWarning(lcEffect) << "failed to restore show-desktop effect" << name;
+            }
         }
         m_suppressedShowDesktopEffects.clear();
     }

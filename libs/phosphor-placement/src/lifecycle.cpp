@@ -373,25 +373,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
                     windowsToRemove.append(windowId);
                 }
             });
-        bool lastUsedCleared = false;
-        for (const QString& wId : windowsToRemove) {
-            if (PhosphorSnapEngine::SnapState* store = snapForWindow(wId)) {
-                const QStringList removedZones = store->zonesForWindow(wId);
-                auto unResult = store->unassignWindow(wId);
-                lastUsedCleared |= unResult.lastUsedZoneCleared;
-                // Scrub the disk-restored representative on the global holder too, as
-                // unassignWindow / unsnapForFloat do — a migrated-away zone must not
-                // linger as the global last-used.
-                lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, store);
-            }
-            clearFreeGeometry(wId); // drop the record's shared free geometry
-            clearPreFloatZoneForWindow(wId);
-            m_windowStickyStates.remove(wId);
-            anyStateMigrated = true;
-        }
-        if (lastUsedCleared) {
-            markDirty(DirtyLastUsedZone);
-        }
+        anyStateMigrated |= pruneMigratedWindows(windowsToRemove);
     }
 
     if (migrated > 0 || anyStateMigrated) {
@@ -531,25 +513,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
                     windowsToRemove.append(windowId);
                 }
             });
-        bool lastUsedCleared = false;
-        for (const QString& wId : windowsToRemove) {
-            if (PhosphorSnapEngine::SnapState* store = snapForWindow(wId)) {
-                const QStringList removedZones = store->zonesForWindow(wId);
-                auto unResult = store->unassignWindow(wId);
-                lastUsedCleared |= unResult.lastUsedZoneCleared;
-                // Scrub the disk-restored representative on the global holder too, as
-                // unassignWindow / unsnapForFloat do — a migrated-away zone must not
-                // linger as the global last-used.
-                lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, store);
-            }
-            clearFreeGeometry(wId); // drop the record's shared free geometry
-            clearPreFloatZoneForWindow(wId);
-            m_windowStickyStates.remove(wId);
-            anyStateMigrated = true;
-        }
-        if (lastUsedCleared) {
-            markDirty(DirtyLastUsedZone);
-        }
+        anyStateMigrated |= pruneMigratedWindows(windowsToRemove);
     }
 
     if (migrated > 0 || anyStateMigrated) {
@@ -557,6 +521,34 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
                             << physicalScreenId;
         scheduleSaveState();
     }
+}
+
+bool WindowTrackingService::pruneMigratedWindows(const QStringList& windowsToRemove)
+{
+    bool lastUsedCleared = false;
+    for (const QString& wId : windowsToRemove) {
+        if (PhosphorSnapEngine::SnapState* store = snapForWindow(wId)) {
+            const QStringList removedZones = store->zonesForWindow(wId);
+            auto unResult = store->unassignWindow(wId);
+            lastUsedCleared |= unResult.lastUsedZoneCleared;
+            // Scrub the disk-restored representative on the global holder too, as
+            // unassignWindow / unsnapForFloat do — a migrated-away zone must not
+            // linger as the global last-used.
+            lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, store);
+        }
+        clearFreeGeometry(wId); // drop the record's shared free geometry
+        clearPreFloatZoneForWindow(wId);
+        m_windowStickyStates.remove(wId);
+        // Notify zone-state consumers exactly as the interactive unassign path
+        // does (WindowTrackingService::unassignWindow) — a prune that lands in
+        // storage but never reaches listeners leaves them tracking a window
+        // this service no longer considers snapped.
+        Q_EMIT windowZoneChanged(wId, QString());
+    }
+    if (lastUsedCleared) {
+        markDirty(DirtyLastUsedZone);
+    }
+    return !windowsToRemove.isEmpty();
 }
 
 QSet<QString>

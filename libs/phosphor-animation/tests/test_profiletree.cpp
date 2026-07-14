@@ -42,9 +42,10 @@ private Q_SLOTS:
         QCOMPARE(PP::parentPath(QString()), QString());
     }
 
-    // The desktop-switch classifier underpins the whole opt-in policy: a
-    // desktop.switch path must classify as EventClassDesktop so the two-texture
-    // packs surface only there, and desktop's parent 'global' must NOT.
+    // The desktop-family classifier underpins the whole opt-in policy: the
+    // desktop.switch and desktop.peek paths must classify as EventClassDesktop
+    // so the two-texture packs surface only there, and desktop's parent
+    // 'global' must NOT.
     void testEventClassForDesktopPaths()
     {
         QCOMPARE(PP::eventClassForPath(PP::DesktopSwitch), PP::EventClassDesktop);

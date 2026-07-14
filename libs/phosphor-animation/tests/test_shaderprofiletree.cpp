@@ -238,6 +238,12 @@ private Q_SLOTS:
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowMove).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowOpen).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowClose).isEmpty());
+        // The desktop transitions are OPT-IN by contract: both are intrusive
+        // full-screen blends that contend with KWin's own effects, so a
+        // regression adding a default here would silently auto-enable them on
+        // fresh configs.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopSwitch).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopPeek).isEmpty());
     }
 
     void testDefaultShaderForPathOverlayEvents()
