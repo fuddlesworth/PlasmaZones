@@ -115,8 +115,16 @@ vec4 pTransition(vec2 uv, float t) {
     // sign) and the glow terms only ever ADD non-negative brand colour, so
     // nothing here can push below the captures. Any clamp or max would only
     // clip legitimate out-of-range capture values (HDR above 1.0, wide-gamut
-    // scRGB below 0), including at the exact endpoints (the finalize hook runs
-    // after pTransition).
+    // scRGB below 0), including at the exact endpoints. Nothing runs after
+    // this return to normalise it: the desktop pass keeps PZ_FINALIZE_COLOR at
+    // its identity default, because the capture FBOs already inherit the
+    // output's colorDescription and converting again would double-transform
+    // (see the kFinalizeColorBlock note in shader_transitions.cpp).
+    //
+    // This deliberately diverges from desktop-phosphor and desktop-aretha,
+    // which DO clamp their additive glow. Their clamp is the anomaly: on an HDR
+    // output it crushes capture values the blend never created. Do not "restore"
+    // it here for consistency.
     return vec4(col, 1.0);
 #else
     // Desktop transitions are compositor-only; the daemon never runs them.

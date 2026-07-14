@@ -58,7 +58,11 @@ vec4 pTransition(vec2 uv, float t) {
     // and replaces the screen, so alpha is a constant 1. NO clamp on the rgb:
     // a pure blend of the two captures cannot exceed their range, and an HDR
     // capture legitimately carries values above 1.0 that a pre-clamp would
-    // crush at the endpoints (the finalize hook runs after pTransition).
+    // crush at the endpoints. Nothing runs after this return to normalise it:
+    // the desktop pass keeps PZ_FINALIZE_COLOR at its identity default,
+    // because the capture FBOs already inherit the output's colorDescription
+    // and converting again would double-transform (see the kFinalizeColorBlock
+    // note in shader_transitions.cpp). What this returns is written out as-is.
     return vec4(col, 1.0);
 #else
     // Desktop transitions are compositor-only; the daemon never runs them.

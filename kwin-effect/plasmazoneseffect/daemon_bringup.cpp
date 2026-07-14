@@ -923,6 +923,17 @@ void PlasmaZonesEffect::loadCachedSettings()
         scheduleEffectAudioSync();
     });
     loadSettingAsync(QStringLiteral("animationsEnabled"), [this](const QVariant& v) {
+        // Type-guard before reading, for exactly the reason the decoration
+        // loaders above spell out: a reply that ARRIVES but is not a bool (an
+        // older daemon, a mid-restart half-answer, a getter's invalid-variant
+        // fallback) coerces through toBool() to false, and m_enabled defaults
+        // to TRUE (windowanimator.h) — so an unguarded read INVERTS the default
+        // and silently disables every animation. It would drag the suppression
+        // sync below with it too, reloading KWin's show-desktop effects as a
+        // side effect of a malformed reply.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_windowAnimator->setEnabled(v.toBool());
         // The animations master toggle is part of the suppression predicate:
         // with animations off the peek never runs, so KWin's own show-desktop

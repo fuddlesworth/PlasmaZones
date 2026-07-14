@@ -57,8 +57,11 @@ vec4 pTransition(vec2 uv, float t) {
     // term (edge, o·(1−o) and the softness factor are all ≥ 0), so nothing here
     // can push below the captures. Any clamp or max would only clip legitimate
     // out-of-range capture values (HDR above 1.0, wide-gamut scRGB below 0),
-    // including at the exact endpoints (the finalize hook runs after
-    // pTransition).
+    // including at the exact endpoints. Nothing runs after this return to
+    // normalise it: the desktop pass keeps PZ_FINALIZE_COLOR at its identity
+    // default, because the capture FBOs already inherit the output's
+    // colorDescription and converting again would double-transform (see the
+    // kFinalizeColorBlock note in shader_transitions.cpp).
     return vec4(col, 1.0);
 #else
     // Desktop transitions are compositor-only; the daemon never runs them.

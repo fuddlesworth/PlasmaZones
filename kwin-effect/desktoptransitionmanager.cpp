@@ -490,6 +490,32 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
         endOutput(screen);
         return false;
     }
+    // Contention re-check, peek legs only. beginPeek bows out when another
+    // effect already holds the screen, but a claim taken AFTER the leg began
+    // never passed that gate, and returning true here suppresses the holder's
+    // paint entirely — PlasmaZonesEffect::paintScreen does not chain while we
+    // are painting the blend, and chaining is not an option (the live scene
+    // would overpaint the blend). The HIDE leg closes this gap by itself:
+    // setActiveFullScreenEffect cancels show desktop, which fires
+    // showingDesktopChanged(false) and reaps us through beginPeek's own bail.
+    // The SHOW leg has no such backstop — show desktop is already false, so
+    // that signal never comes — and without this the holder would stay
+    // invisible for the rest of the leg. Same policy beginPeek states for a
+    // foreign holder: their transition wins, and the peek's remaining frames
+    // are not worth suppressing it. A claim held by US (our own switch, which
+    // may still be live on another output) is not contention, and a SWITCH leg
+    // is excluded outright: it either owns the claim or was begun deliberately
+    // unclaimed under a holder that has since released.
+    if (tr.kind != Kind::Switch && KWin::effects) {
+        KWin::Effect* const holder = KWin::effects->activeFullScreenEffect();
+        if (holder && holder != m_effect) {
+            if (tr.kind == Kind::PeekShow && !tr.captured) {
+                m_peekDesktopCache.erase(screen);
+            }
+            endOutput(screen);
+            return false;
+        }
+    }
     // Ease the linear time progress through the per-event timing curve (resolved
     // global → desktop → leaf at begin time; both legs are windowless events,
     // so the callers pass an empty WindowQuery and the rule layer is skipped),

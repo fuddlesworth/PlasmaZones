@@ -451,12 +451,14 @@ private Q_SLOTS:
     /// sites, the QML would either expose pickers that do nothing (drift in one
     /// direction) or hide pickers for events that DO produce shader legs (drift
     /// in the other). Per that header, consumption runs through three
-    /// mechanisms, not just the daemon's: `resolveShaderEffect` in
-    /// `src/daemon/overlayservice.cpp` (osd + popup families),
-    /// `tryBeginShaderForEvent` under `kwin-effect/plasmazoneseffect/` (window
-    /// family), and `resolveShaderWithDefault` driving DesktopTransitionManager
-    /// from `kwin-effect/plasmazoneseffect/lifecycle.cpp` (the screen-level
-    /// desktop switch and peek legs).
+    /// mechanisms, not just the daemon's: `resolveShaderEffect` from
+    /// `OverlayService::buildOsdConfig` / `buildLayoutPickerConfig` /
+    /// `buildZoneSelectorConfig` / `buildSnapAssistConfig` (osd + popup
+    /// families), `tryBeginShaderForEvent` under
+    /// `kwin-effect/plasmazoneseffect/` (window family), and
+    /// `resolveShaderWithDefault` driving DesktopTransitionManager from
+    /// `kwin-effect/plasmazoneseffect/lifecycle.cpp` (the screen-level desktop
+    /// switch and peek legs).
     void supportsShaderLeg_matchesConsumedLegCallSites()
     {
         AnimationsPageController c;
@@ -474,7 +476,8 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.hide")));
 
         // Window family — consumed leaves driven by the KWin effect's
-        // tryBeginShaderForEvent at kwin-effect/plasmazoneseffect.cpp.
+        // tryBeginShaderForEvent, under kwin-effect/plasmazoneseffect/
+        // (window_lifecycle, drag_snap, daemon_apply, shader_transitions).
         // Each maps to a window-lifecycle hook (windowAdded, windowClosed,
         // windowStartUserMovedResized for the held move,
         // windowMaximizedStateChanged, minimizedChanged, windowActivated)
