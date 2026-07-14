@@ -371,10 +371,12 @@ inline constexpr const char* kIToRect = "iToRect";
 /// `(0, 0, 0, 0)`, which a pack MUST treat as "no icon target" and
 /// degrade to an in-place animation. The rect may sit on a DIFFERENT
 /// output than the window (a taskbar on another monitor); the
-/// surface-extent quad spans only the window's own output, so a
-/// deformation toward a foreign-output icon clips at the output edge. COMPOSITOR PATH ONLY and deliberately NOT
-/// declared by the canonical shared header, exactly like `iFromRect` / `iToRect`: a pack that reads it declares it
-/// inside its own `#ifdef PLASMAZONES_KWIN` block, keeping the daemon's strict SPIR-V bake away from the loose
+/// window is painted only during its own output's pass, so a
+/// deformation toward a foreign-output icon clips at that output's
+/// edge. COMPOSITOR PATH ONLY and deliberately NOT declared by the
+/// canonical shared header, exactly like `iFromRect` / `iToRect`: a pack
+/// that reads it declares it inside its own `#ifdef PLASMAZONES_KWIN`
+/// block, keeping the daemon's strict SPIR-V bake away from the loose
 /// declaration.
 inline constexpr const char* kIIconRect = "iIconRect";
 

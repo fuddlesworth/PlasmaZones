@@ -1463,7 +1463,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     shader->setUniform(cached->iToRectLoc, QVector4D(t.x(), t.y(), t.width(), t.height()));
                 }
                 // Task-manager icon rect for minimize-to-icon packs
-                // (genie). Same space and same per-frame push discipline
+                // (genie, phosphor-siphon). Same space and same per-frame push discipline
                 // as the morph rects above — the shader program is shared
                 // across windows, so an install-time push would let two
                 // concurrent transitions on the same pack clobber each

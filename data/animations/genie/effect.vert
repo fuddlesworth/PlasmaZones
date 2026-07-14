@@ -4,7 +4,8 @@
 // Genie vertex shader — grid-deformed minimize-to-icon ("magic lamp").
 //
 // Runs on the same tessellated window grid as flow (metadata
-// `geometryGrid`; apply() builds it over the window's frame rect, since a
+// `geometryGrid`; apply() builds it over the window's frame rect — or its
+// padded decoration canvas, with frame-relative texcoords — since a
 // minimize leg records no morph destination). Each grid vertex travels
 // from its place in the window toward its place in the task-manager icon
 // rect (iIconRect), staggered so the edge facing the icon leads and the

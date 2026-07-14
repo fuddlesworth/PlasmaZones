@@ -554,18 +554,22 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
 
 void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 {
-    if (!w || !shouldHandleWindow(w) || !isTileableWindow(w)) {
+    if (!w) {
         return;
     }
-    const QString windowId = getWindowId(w);
-    const QString screenId = getWindowScreenId(w);
     const bool minimized = w->isMinimized();
 
-    // window.minimize shader transition fires for BOTH snap and autotile
-    // screens — the shader event is screen-mode-independent and the
-    // autotile handler's own minimised-change slot does not fire it
-    // (which would otherwise be asymmetric per-screen UX for the same
-    // user-configured "WindowMinimize" event).
+    // window.minimize shader transition fires for EVERY window the
+    // animation filter admits — like the open / close / focus events, it
+    // gates only on `shouldAnimateWindow` (enforced inside
+    // tryBeginShaderForEvent), NOT on the tiling filters below. A window
+    // excluded from tiling (min-size, exclusion rule) still animates its
+    // other lifecycle events, so it must animate minimize too. It also
+    // fires for BOTH snap and autotile screens — the shader event is
+    // screen-mode-independent and the autotile handler's own
+    // minimised-change slot does not fire it (which would otherwise be
+    // asymmetric per-screen UX for the same user-configured
+    // "WindowMinimize" event).
     //
     // Un-minimize plays forward (0→1, "appear"); going-to-minimized plays
     // the same shader in reverse (1→0, "going away"), matching the
@@ -586,9 +590,14 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
                            /*reverse=*/minimized, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
                            /*animateMinimized=*/minimized);
 
-    // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler (mirrors
-    // AutotileHandler running its own minimize→float machine for autotile screens).
-    m_snapHandler->handleMinimizeChanged(w, windowId, screenId, minimized);
+    // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler
+    // (mirrors AutotileHandler running its own minimize→float machine for
+    // autotile screens). Unlike the shader event above, this state
+    // machine only concerns windows the tiling system manages.
+    if (!shouldHandleWindow(w) || !isTileableWindow(w)) {
+        return;
+    }
+    m_snapHandler->handleMinimizeChanged(w, getWindowId(w), getWindowScreenId(w), minimized);
 }
 
 void PlasmaZonesEffect::slotRunningWindowsRequested()
