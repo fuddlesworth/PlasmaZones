@@ -179,7 +179,8 @@ namespace PhosphorAnimationShaders {
 ///     bare card-sized anchor carries the (0, 0, 1, 1) identity.
 ///   • `iSurfaceScreenPos` — the surface's origin (.xy — global
 ///     workspace coordinates on the kwin path, position within the host
-///     wl_surface on the daemon) plus host screen size (.zw). The
+///     wl_surface on the daemon) plus the host extent (.zw — screen size
+///     on the kwin path, the host surface's size on the daemon). The
 ///     minimize-to-icon packs reconstruct the window rect from it, and
 ///     position-keyed noise seeds hash it.
 ///

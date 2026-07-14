@@ -2075,8 +2075,8 @@ private:
     // window silently drops the reverse leg instead of replaying a full
     // un-minimize animation. `generation` pins the stamp to the exact
     // transition the minimize event installed (or kept running), so the
-    // cancel can never hit an unrelated reverse leg such as a
-    // going-to-unmaximized morph. Entries are erased on consume and on
+    // cancel can never hit an unrelated reverse leg (a superseding leg,
+    // or any future reverse event). Entries are erased on consume and on
     // windowDeleted (raw-pointer-keyed, bounded like its siblings above).
     struct MinimizeShaderStamp
     {

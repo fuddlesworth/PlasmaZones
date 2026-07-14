@@ -599,17 +599,16 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // was noise: silently drop the reverse leg instead of superseding it
     // with a full un-minimize replay, which with an icon pack made every
     // tiled window pour out of its taskbar icon on every notification.
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     if (minimized) {
         // Stamp only a leg that is provably OURS, identified by generation.
         // tryBeginShaderForEvent can install nothing (no pack assigned,
-        // null-shader sentinel, animation filter), and a pre-existing
-        // reverse leg — reachably a going-to-unmaximized morph — may still
-        // be live; stamping blindly would let a spurious pair kill that
-        // unrelated leg mid-animation. A fresh install is detected by the
-        // generation changing; a repeated minimize event whose prior
-        // minimize leg is still live (same-effect short-circuit) refreshes
-        // the stamp's timestamp while keeping the same generation.
+        // null-shader sentinel, animation filter), and stamping blindly
+        // would let a spurious pair kill an unrelated leg mid-animation —
+        // a future reverse leg, or a superseding one. A fresh install is
+        // detected by the generation changing; a repeated minimize event
+        // whose prior minimize leg is still live (same-effect
+        // short-circuit) refreshes the stamp's timestamp while keeping
+        // the same generation.
         const auto* pre = m_shaderManager.findTransition(w);
         const quint64 preGeneration = pre ? pre->generation : 0;
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
@@ -621,10 +620,18 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
             const bool ourLiveLeg =
                 stampIt != m_minimizeShaderStamp.constEnd() && stampIt->generation == post->generation;
             if (freshInstall || ourLiveLeg) {
-                m_minimizeShaderStamp.insert(w, {nowMs, post->generation});
+                // Stamp with a FRESH clock sample, not the slot-entry
+                // nowMs: a cold-cache install compiles the pack on this
+                // thread (tens of ms for a heavy shader), and the paired
+                // spurious unminimize measures its gap from ITS slot
+                // entry — an entry-time stamp would inflate the measured
+                // gap by the compile cost and let the session's first
+                // notification-induced pair escape suppression.
+                m_minimizeShaderStamp.insert(w, {ShaderInternal::shaderClockNowMs(), post->generation});
             }
         }
     } else {
+        const qint64 nowMs = ShaderInternal::shaderClockNowMs();
         const MinimizeShaderStamp stamp = m_minimizeShaderStamp.take(w);
         const bool spuriousPair = stamp.timeMs > 0 && nowMs - stamp.timeMs < kSpuriousMinimizePairMs;
         if (spuriousPair) {
