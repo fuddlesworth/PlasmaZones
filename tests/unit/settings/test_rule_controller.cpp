@@ -1137,21 +1137,6 @@ void TestRuleController::templatesProduceSeededRules()
     QCOMPARE(portraitActions.at(1).toMap().value(QStringLiteral("type")).toString(),
              QStringLiteral("setSnappingLayout"));
 
-    // `smartGaps` showcases TiledWindowCount: `tiledWindowCount == 1` +
-    // both gap slots seeded to 0. The zero seeds are the contract — the
-    // template's whole point is "no gaps for a lone window", so a dropped
-    // or non-zero seed authors a rule that silently does nothing.
-    const QVariantMap gapsRule = controller.newRuleFromTemplate(QStringLiteral("smartGaps"));
-    const QVariantMap gapsMatch = gapsRule.value(QStringLiteral("match")).toMap();
-    QCOMPARE(gapsMatch.value(QStringLiteral("field")).toString(), QStringLiteral("tiledWindowCount"));
-    QCOMPARE(gapsMatch.value(QStringLiteral("value")).toInt(), 1);
-    const QVariantList gapsActions = gapsRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(gapsActions.size(), 2);
-    QCOMPARE(gapsActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setInnerGap"));
-    QCOMPARE(gapsActions.at(0).toMap().value(QStringLiteral("value")).toInt(), 0);
-    QCOMPARE(gapsActions.at(1).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setOuterGap"));
-    QCOMPARE(gapsActions.at(1).toMap().value(QStringLiteral("value")).toInt(), 0);
-
     // `snapAppToZone` is the flagship per-app placement rule: AppId leaf +
     // SnapToZone seeded with ordinal 1 (the validator requires a non-empty
     // zones list, so the seed must survive the round-trip).

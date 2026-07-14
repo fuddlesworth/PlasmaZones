@@ -88,10 +88,13 @@ QVariantList ruleTemplates()
     // before the unified rule store: monitor → layout / algorithm
     // (assignments) and app → exclusion (per-mode disable + animation
     // exclusion lists). Plus the classic per-app window rules (zone
-    // placement, screen routing, floating) and two context showcases
-    // (smart gaps for TiledWindowCount, portrait layout for
-    // ScreenOrientation) — one-click starting points for the common cases,
-    // ordered context band first, then application band, then animation.
+    // placement, screen routing, floating) and a ScreenOrientation context
+    // showcase — one-click starting points for the common cases, ordered
+    // context band first, then application band, then animation. There is
+    // deliberately NO smart-gaps (TiledWindowCount + gap actions) template:
+    // the gap resolver never stamps tiledWindowCount into its context query
+    // (see layoutregistry_assignments.cpp, resolveAssignmentEntry), so such
+    // a rule would silently never fire.
     QVariantList out;
     out.append(entry(QLatin1String("layoutOnMonitor"), PhosphorI18n::tr("Set a layout on a monitor"),
                      PhosphorI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
@@ -109,10 +112,6 @@ QVariantList ruleTemplates()
                      PhosphorI18n::tr("Pick a snapping layout to use whenever a monitor is in portrait "
                                       "orientation. Handy for rotating screens."),
                      QLatin1String("object-rotate-right")));
-    out.append(entry(QLatin1String("smartGaps"), PhosphorI18n::tr("No gaps for a lone window"),
-                     PhosphorI18n::tr("Remove the inner and outer gaps when only one window is tiled, so a single "
-                                      "window uses the whole screen."),
-                     QLatin1String("distribute-horizontal-equal")));
     out.append(entry(QLatin1String("snapAppToZone"), PhosphorI18n::tr("Open an app in a zone"),
                      PhosphorI18n::tr("Snap one application's windows into a chosen zone when they open."),
                      QLatin1String("window-pin")));
@@ -216,23 +215,6 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
         layoutAction.params.insert(ActionParam::LayoutId, QString());
         rule.actions.append(layoutAction);
-    } else if (templateId == QLatin1String("smartGaps")) {
-        rule.name = PhosphorI18n::tr("No gaps for a lone window");
-        rule.priority = kContextBandBase;
-        // TiledWindowCount showcase: the classic "smart gaps" tiling-WM
-        // behavior. Both gap slots are seeded to 0 so a single tiled window
-        // fills the screen; with two or more windows the rule stops matching
-        // and the configured gaps return. The count field is absent when the
-        // context isn't autotiling, so the rule is a no-op for snap contexts.
-        rule.match = MatchExpression::makeLeaf(Field::TiledWindowCount, Operator::Equals, 1);
-        RuleAction innerGap;
-        innerGap.type = QString::fromLatin1(ActionType::SetInnerGap);
-        innerGap.params.insert(ActionParam::Value, 0);
-        rule.actions.append(innerGap);
-        RuleAction outerGap;
-        outerGap.type = QString::fromLatin1(ActionType::SetOuterGap);
-        outerGap.params.insert(ActionParam::Value, 0);
-        rule.actions.append(outerGap);
     } else if (templateId == QLatin1String("snapAppToZone")) {
         rule.name = PhosphorI18n::tr("Open an app in a zone");
         rule.priority = kApplicationBandBase;
