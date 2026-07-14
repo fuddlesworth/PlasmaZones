@@ -86,9 +86,15 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
         // A window maximized and THEN made fullscreen has a fullscreenGeometryRestore()
         // equal to the maximized (full work-area) rect, so it would still float back
         // maximized-sized. When the pre-fullscreen state was itself maximized, prefer
-        // the un-maximized geometryRestore() (the true free size).
-        const QRectF restore(kw->maximizeMode() != KWin::MaximizeRestore ? QRectF(kw->geometryRestore())
-                                                                         : QRectF(kw->fullscreenGeometryRestore()));
+        // the un-maximized geometryRestore() (the true free size), then the fullscreen
+        // restore rect, before giving up to the fallback.
+        if (kw->maximizeMode() != KWin::MaximizeRestore) {
+            const QRectF unmaximized(kw->geometryRestore());
+            if (unmaximized.width() > 0 && unmaximized.height() > 0) {
+                return unmaximized;
+            }
+        }
+        const QRectF restore(kw->fullscreenGeometryRestore());
         if (restore.width() > 0 && restore.height() > 0) {
             return restore;
         }

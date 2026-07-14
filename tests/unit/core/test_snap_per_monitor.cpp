@@ -352,7 +352,8 @@ private Q_SLOTS:
         m_engine->stateForWindowOnScreen(winB, monitorB)->assignWindowToZone(winB, m_zoneIds[0], monitorB, 1);
 
         SnapState* storeB = m_engine->stateForWindow(winB);
-        QVERIFY(storeB != m_engine->globalState());
+        SnapState* global = m_engine->globalState();
+        QVERIFY(storeB != global);
         const int before = m_engine->allSnapStates().size();
 
         m_engine->pruneStatesForRemovedScreen(monitorAphys);
@@ -363,7 +364,7 @@ private Q_SLOTS:
         QCOMPARE(m_engine->stateForWindow(winAvs), m_engine->globalState());
         // The other monitor's store and the global holder survive.
         QCOMPARE(m_engine->stateForWindow(winB), storeB);
-        QVERIFY(m_engine->globalState() != nullptr);
+        QCOMPARE(m_engine->globalState(), global); // the SAME holder survives, un-pruned
         QCOMPARE(m_engine->allSnapStates().size(), before - 2);
     }
 
@@ -417,13 +418,14 @@ private Q_SLOTS:
         m_engine->stateForWindowOnScreen(winB, monitor)->assignWindowToZone(winB, m_zoneIds[1], monitor, 1);
 
         SnapState* storeKeep = m_engine->stateForWindow(winA);
+        SnapState* global = m_engine->globalState();
         const int before = m_engine->allSnapStates().size();
 
         m_engine->pruneStatesForActivities(QStringList{actKeep});
 
         QCOMPARE(m_engine->stateForWindow(winB), m_engine->globalState()); // removed-activity store gone
         QCOMPARE(m_engine->stateForWindow(winA), storeKeep); // kept-activity store survives
-        QVERIFY(m_engine->globalState() != nullptr); // empty-activity global untouched
+        QCOMPARE(m_engine->globalState(), global); // the SAME empty-activity holder survives, un-pruned
         QCOMPARE(m_engine->allSnapStates().size(), before - 1);
     }
 

@@ -376,8 +376,13 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         bool lastUsedCleared = false;
         for (const QString& wId : windowsToRemove) {
             if (PhosphorSnapEngine::SnapState* store = snapForWindow(wId)) {
+                const QStringList removedZones = store->zonesForWindow(wId);
                 auto unResult = store->unassignWindow(wId);
                 lastUsedCleared |= unResult.lastUsedZoneCleared;
+                // Scrub the disk-restored representative on the global holder too, as
+                // unassignWindow / unsnapForFloat do — a migrated-away zone must not
+                // linger as the global last-used.
+                lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, store);
             }
             clearFreeGeometry(wId); // drop the record's shared free geometry
             clearPreFloatZoneForWindow(wId);
@@ -529,8 +534,13 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         bool lastUsedCleared = false;
         for (const QString& wId : windowsToRemove) {
             if (PhosphorSnapEngine::SnapState* store = snapForWindow(wId)) {
+                const QStringList removedZones = store->zonesForWindow(wId);
                 auto unResult = store->unassignWindow(wId);
                 lastUsedCleared |= unResult.lastUsedZoneCleared;
+                // Scrub the disk-restored representative on the global holder too, as
+                // unassignWindow / unsnapForFloat do — a migrated-away zone must not
+                // linger as the global last-used.
+                lastUsedCleared |= clearGlobalLastUsedIfRemoved(removedZones, store);
             }
             clearFreeGeometry(wId); // drop the record's shared free geometry
             clearPreFloatZoneForWindow(wId);
