@@ -148,7 +148,10 @@ public:
         /// store a screen-scoped write (last-used-zone) targets. An empty screenId
         /// resolves to the global holder.
         std::function<PhosphorSnapEngine::SnapState*(const QString& screenId)> forScreen;
-        /// The global-scalar holder (never null once wired).
+        /// The global-scalar holder. Non-null by construction in every wiring
+        /// (SnapEngine::globalState() returns the ctor-constructed holder); the
+        /// same two null cases as @ref forWindow apply — an unset resolver, and
+        /// the production resolver's QPointer arm after engine destruction.
         std::function<PhosphorSnapEngine::SnapState*()> globals;
         /// Every store, including the global holder, for aggregate iteration.
         std::function<QList<PhosphorSnapEngine::SnapState*>()> allStates;

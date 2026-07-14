@@ -311,8 +311,8 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // rule evaluation below: this is a cheap type check, while the rule slice
     // builds the full ~30-accessor ruleQuery, and hot callers (buildWindowMap,
     // the stacking walks) hit this filter for every tooltip/popup/menu. The
-    // predicate is shared verbatim with notifyWindowActivated() so the two
-    // filters can never drift — see isStructurallyUnmanageableWindowType().
+    // predicate is shared verbatim with the other structural filters so they
+    // can never drift — see isStructurallyUnmanageableWindowType().
     if (isStructurallyUnmanageableWindowType(w, rejectReason)) {
         return false;
     }

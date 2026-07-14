@@ -326,10 +326,10 @@ private:
      *
      * Returns true when @p w is a structurally unmanageable window kind
      * (special/desktop/dock/fullscreen/skipSwitcher, or the transient/dialog/
-     * menu/popup/tooltip family). Single source of truth behind both
-     * shouldHandleWindow()'s structural clause and notifyWindowActivated()'s
-     * focus-tracking filter, so the two can never drift (discussion #461
-     * item 11).
+     * menu/popup/tooltip family). Single source of truth behind
+     * shouldHandleWindow()'s structural clause, notifyWindowActivated()'s
+     * focus-tracking filter and classifyWindowKind(), so they can never drift
+     * (discussion #461 item 11).
      *
      * @param w            window to classify; must be non-null.
      * @param rejectReason when non-null, set to a human-readable reason on a

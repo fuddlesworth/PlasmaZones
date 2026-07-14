@@ -28,6 +28,13 @@
 #include <array>
 #include <cmath>
 
+// The drive part of DesktopTransitionManager: resolve a pack, start a
+// transition, blend a frame. The other three parts of the class live beside it —
+// captureDesktop / captureLiveScene / capturePeekWindowsScene (plus the texture
+// allocation and format helpers they share) in desktoptransitioncapture.cpp,
+// compiledShader (the pack-source → GLShader assembly) in
+// desktoptransitionshader.cpp, and the settle / reap / removal / release
+// handlers in desktoptransitionteardown.cpp.
 namespace PlasmaZones {
 
 namespace {
@@ -277,12 +284,16 @@ void DesktopTransitionManager::reapPeekTransitions()
     // longer match the desktop's content, which size/format validation cannot
     // see; the next show leg then settles instantly, KWin's default).
     //
-    // No releaseFullScreenClaimIfIdle() after the erase, unlike every other
-    // erase site: a peek entry can never coexist with our claim (begin() only
-    // claims when no peek is live, and beginPeek bails outright while ANY
-    // claim is held), so emptying m_active of peeks cannot strand one. The
-    // call would be a harmless no-op — it is omitted to keep that invariant
-    // stated rather than silently relied on.
+    // Release like every other erase site. A peek can never coexist with a
+    // claim KWin still reports as OURS (beginPeek bails while ANY claim is
+    // held), so this cannot strand a real claim — but m_fullScreenClaimed can
+    // outlive the claim itself: our switch claims, Overview overwrites it,
+    // Overview closes with setActiveFullScreenEffect(nullptr), and nothing
+    // re-validates our flag. beginPeek then sees a null claim and proceeds,
+    // so peeks CAN coexist with a stale flag, and reaping them without this
+    // call would leave it set until the next switch wasted its own claim on
+    // the !m_fullScreenClaimed guard.
+    releaseFullScreenClaimIfIdle();
     const bool hasPeekEntries = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
         return entry.second.kind != Kind::Switch;
     });
@@ -403,13 +414,6 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     KWin::effects->addRepaintFull();
 }
 
-// This TU is the DRIVE half: resolve a pack, start a transition, blend a frame.
-// The other three halves of the class live beside it — captureDesktop /
-// captureLiveScene / capturePeekWindowsScene (plus the texture allocation and
-// format helpers they share) in desktoptransitioncapture.cpp, compiledShader
-// (the pack-source → GLShader assembly) in desktoptransitionshader.cpp, and the
-// settle / reap / removal / release handlers in desktoptransitionteardown.cpp.
-
 bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                            int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
@@ -443,7 +447,9 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
         return false;
     }
     // Ease the linear time progress through the per-event timing curve (resolved
-    // global → node → rule at begin time), so a `desktop.switch` node's curve
+    // global → desktop → leaf at begin time; both legs are windowless events,
+    // so the callers pass an empty WindowQuery and the rule layer is skipped),
+    // so a `desktop.switch` node's curve
     // (e.g. "Ease Out") shapes iTime — matching the per-window shader path. A
     // stateless curve evaluates the linear point; a stateful spring integrates
     // its CurveState toward target 1 by the inter-frame dt, mirroring

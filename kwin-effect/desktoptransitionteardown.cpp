@@ -11,10 +11,10 @@
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
 
-// The teardown half of DesktopTransitionManager: how a transition ENDS and how
-// its GPU resources go back. desktoptransitionmanager.cpp keeps the drive half
-// (resolve, begin, blend), desktoptransitioncapture.cpp the capture half, and
-// desktoptransitionshader.cpp the assembly half. Settling one output, releasing
+// The teardown part of DesktopTransitionManager: how a transition ENDS and how
+// its GPU resources go back. desktoptransitionmanager.cpp keeps the drive part
+// (resolve, begin, blend), desktoptransitioncapture.cpp the capture part, and
+// desktoptransitionshader.cpp the assembly part. Settling one output, releasing
 // the fullscreen claim, the wall-clock reap, the removal handlers and the cache
 // clears all serve the one question of ending cleanly, so they live here.
 //
