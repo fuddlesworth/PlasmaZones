@@ -619,7 +619,9 @@ void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool is
     if (!isFloating) {
         m_effect->m_navigationHandler->setWindowFloating(windowId, false);
         KWin::EffectWindow* unfloatWin = m_effect->findWindowById(windowId);
-        if (unfloatWin && unfloatWin == KWin::effects->activeWindow()) {
+        // Showing-desktop guard: this refocus is automatic (daemon float-state
+        // signal), and activateWindow() would synchronously cancel a peek.
+        if (unfloatWin && unfloatWin == KWin::effects->activeWindow() && !PlasmaZonesEffect::isShowingDesktop()) {
             m_pendingAutotileFocusWindowId = windowId;
             KWin::effects->activateWindow(unfloatWin);
         }
@@ -630,7 +632,11 @@ void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool is
         KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
         if (!floatWin) {
             qCDebug(lcEffect) << "Autotile: window not found for float raise:" << windowId;
-        } else if (floatWin == KWin::effects->activeWindow()) {
+        } else if (floatWin == KWin::effects->activeWindow() && !PlasmaZonesEffect::isShowingDesktop()) {
+            // Showing-desktop guard mirrors the unfloat branch above. The
+            // == activeWindow() predicate usually covers this (peek focuses
+            // the desktop window), but with no desktop window to take focus
+            // the floated window can still be "active" while hidden.
             m_pendingAutotileFocusWindowId = windowId;
             auto* ws = KWin::Workspace::self();
             if (ws) {
