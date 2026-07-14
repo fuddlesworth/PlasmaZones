@@ -54,13 +54,16 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapOut;
 PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
 
-// desktop.* — full-screen virtual-desktop switch transitions driven by the
-// kwin-effect's screen-level paint pass. Unlike the per-window window.*
-// events, a desktop switch blends the OUTGOING desktop against the INCOMING
-// desktop (two full-screen textures), so it uses the desktop event class and
-// its own two-texture shader contract rather than the single-surface pipeline.
+// desktop.* — full-screen two-texture transitions driven by the kwin-effect's
+// screen-level paint pass. Unlike the per-window window.* events, these blend
+// two full-screen scene captures, so they use the desktop event class and its
+// own two-texture shader contract rather than the single-surface pipeline.
+// `switch` blends the OUTGOING desktop against the INCOMING desktop; `peek`
+// (show desktop) blends the windows scene against the bare desktop, and its
+// show-back leg reuses the same node with the captures swapped.
 PHOSPHORANIMATION_EXPORT extern const QString Desktop;
 PHOSPHORANIMATION_EXPORT extern const QString DesktopSwitch;
+PHOSPHORANIMATION_EXPORT extern const QString DesktopPeek;
 
 // editor.* — Layout-editor-only zone manipulation animations
 // (fill-preview, drag-resize-preview). NOT triggered by runtime

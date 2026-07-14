@@ -3,6 +3,7 @@
 
 #include "../plasmazoneseffect.h"
 
+#include <PhosphorAnimation/AnimationShaderEffect.h> // shaderEffectAppliesToEventPath (peek suppression gate)
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
@@ -654,6 +655,36 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                                           durationMs, eventMotion.curve);
             });
 
+    // Full-screen show-desktop PEEK transition, the sibling of the desktop
+    // switch above. Resolve the `desktop.peek` shader; when one is assigned,
+    // run the windows-scene / bare-desktop blend (hide leg on true, show-back
+    // leg on false — beginPeek swaps the captures). An empty resolve is a
+    // no-op, so KWin's default show-desktop behaviour proceeds untouched.
+    // While a pack IS assigned, KWin's windowaperture / eyeonscreen script
+    // effects are unloaded (syncShowDesktopEffectSuppression) — they ignore
+    // the fullscreen claim, and left loaded they would leak their transforms
+    // into the peek captures.
+    connect(KWin::effects, &KWin::EffectsHandler::showingDesktopChanged, this, [this](bool showing) {
+        // Honour the global animations master toggle, exactly as the
+        // desktop-switch handler above does.
+        if (!m_windowAnimator->isEnabled()) {
+            return;
+        }
+        const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::resolveShaderWithDefault(
+            m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::DesktopPeek);
+        const QString effectId = profile.effectiveEffectId();
+        if (effectId.isEmpty()) {
+            return;
+        }
+        // Same one-walk motion resolve as desktop.switch: global animator
+        // profile → `desktop` → `desktop.peek` motion-tree overrides. Peek is
+        // a windowless event, so the empty WindowQuery skips the rule layer.
+        const PhosphorAnimation::Profile eventMotion = resolveEventMotionProfile(
+            PhosphorAnimation::ProfilePaths::DesktopPeek, PhosphorRules::WindowQuery{}, QString());
+        m_desktopTransition.beginPeek(showing, effectId, profile.effectiveParameters(),
+                                      qRound(eventMotion.effectiveDuration()), eventMotion.curve);
+    });
+
     // Reap any live desktop transition whose OUTGOING desktop is removed from the
     // pager mid-switch: it captured a raw VirtualDesktop* in begin() that the
     // deferred captureDesktop() dereferences up to the transition's duration later.
@@ -1102,8 +1133,60 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
                                                 QStringLiteral("hideOverlay"));
 }
 
+void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
+{
+    if (!KWin::effects) {
+        return;
+    }
+    // Our peek owns the show-desktop animation only when the resolved pack
+    // would actually RUN: installed AND a desktop-contract pack. Mirrors
+    // beginPeek's own gate — a stale or inherited non-desktop override must not
+    // unload KWin's effects and then no-op at the signal, leaving the user with
+    // no show-desktop animation at all.
+    bool wantOurs = false;
+    const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::resolveShaderWithDefault(
+        m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::DesktopPeek);
+    const QString effectId = profile.effectiveEffectId();
+    if (!effectId.isEmpty()) {
+        const PhosphorAnimationShaders::AnimationShaderEffect eff = m_shaderManager.shaderRegistry().effect(effectId);
+        wantOurs = eff.isValid()
+            && PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff,
+                                                                        PhosphorAnimation::ProfilePaths::DesktopPeek);
+    }
+    static const QString kBuiltinShowDesktopEffects[] = {QStringLiteral("windowaperture"),
+                                                         QStringLiteral("eyeonscreen")};
+    if (wantOurs) {
+        for (const QString& name : kBuiltinShowDesktopEffects) {
+            // Record then unload only what is actually loaded, so the restore
+            // path re-loads exactly the user's own configuration and never
+            // force-loads an effect they had disabled.
+            if (KWin::effects->isEffectLoaded(name)) {
+                if (!m_suppressedShowDesktopEffects.contains(name)) {
+                    m_suppressedShowDesktopEffects.append(name);
+                }
+                KWin::effects->unloadEffect(name);
+            }
+        }
+        return;
+    }
+    for (const QString& name : std::as_const(m_suppressedShowDesktopEffects)) {
+        KWin::effects->loadEffect(name);
+    }
+    m_suppressedShowDesktopEffects.clear();
+}
+
 PlasmaZonesEffect::~PlasmaZonesEffect()
 {
+    // Give KWin back the show-desktop script effects the peek suppression
+    // unloaded — a runtime unload of THIS effect must not leave the user with
+    // no show-desktop animation. First, while everything is still alive.
+    if (KWin::effects) {
+        for (const QString& name : std::as_const(m_suppressedShowDesktopEffects)) {
+            KWin::effects->loadEffect(name);
+        }
+        m_suppressedShowDesktopEffects.clear();
+    }
+
     // Sever the registry's `effectsChanged` connection BEFORE anything
     // else runs. The slot lambda touches `m_shaderManager.m_shaderTransitions`,
     // `m_shaderManager.m_shaderCache`, and `m_shaderManager.m_textureCache` — all

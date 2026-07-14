@@ -18,6 +18,11 @@ AnimationEventCardList {
             "eventPath": "desktop.switch",
             "eventLabel": i18n("Desktop Switched"),
             "isParentNode": false
+        },
+        {
+            "eventPath": "desktop.peek",
+            "eventLabel": i18n("Peeked at Desktop"),
+            "isParentNode": false
         }
     ]
 }

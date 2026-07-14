@@ -1375,6 +1375,13 @@ private:
     /// an unchanged set and restarts capture at most once per change).
     bool m_enableAudioVisualizer = false;
     PhosphorAudio::SpectrumOptions m_audioOptions;
+
+    /// KWin show-desktop script effects syncShowDesktopEffectSuppression
+    /// unloaded because a `desktop.peek` pack is assigned. Only names WE
+    /// unloaded are recorded, so clearing the pack (or unloading this effect)
+    /// loads back exactly what the user had — never an effect KWin left
+    /// disabled in kwinrc.
+    QStringList m_suppressedShowDesktopEffects;
     /// Coalescing latch for scheduleEffectAudioSync: many decoration/settings
     /// callbacks can fire in one event-loop turn (a focus change removes then
     /// re-adds a decoration); collapsing them to one syncEffectAudioState keeps
@@ -1402,6 +1409,16 @@ private:
     /// async settings replies settle to ONE net decision at event-loop return and
     /// the compositor thread never blocks on cava stop()+respawn mid-refresh.
     void scheduleEffectAudioSync();
+
+    /// Unload KWin's show-desktop script effects (windowaperture / eyeonscreen)
+    /// while a valid `desktop.peek` pack is assigned, and load back exactly the
+    /// ones WE unloaded when it is cleared. They never consult
+    /// activeFullScreenEffect(), so the peek transition's fullscreen claim does
+    /// not make them bow out the way Slide does — left loaded they would animate
+    /// invisibly under our blend AND leak their transforms into the peek
+    /// captures (the capture paths continue down the effect chain). Called after
+    /// every shader-profile-tree load; the destructor restores them on unload.
+    void syncShowDesktopEffectSuppression();
 
     /// True when any decorated window's resolved chain carries an audio-reactive
     /// pack (SurfaceShaderEffect::audio). Read from pack METADATA (no compile

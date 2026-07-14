@@ -73,6 +73,11 @@ inline QStringList shaderConsumedLeafEventPaths()
         // per-window tryBeginShaderForEvent leg. Its shaders are the two-texture
         // desktop class (appliesTo ["desktop"]).
         PP::DesktopSwitch,
+        // Show-desktop peek — same manager, resolved in the
+        // showingDesktopChanged handler (lifecycle.cpp). One node drives both
+        // legs: the hide leg blends the windows scene into the bare desktop and
+        // the show-back leg swaps the captures.
+        PP::DesktopPeek,
     };
 }
 

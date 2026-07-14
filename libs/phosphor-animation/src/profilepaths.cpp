@@ -43,10 +43,13 @@ const QString WindowSnapIn = QStringLiteral("window.movement.snapIn");
 const QString WindowSnapOut = QStringLiteral("window.movement.snapOut");
 const QString WindowLayoutSwitch = QStringLiteral("window.movement.layoutSwitch");
 
-// desktop.* — full-screen virtual-desktop switch transitions (two-texture
-// from/to blend), driven by the kwin-effect's screen-level paint pass.
+// desktop.* — full-screen two-texture from/to blends driven by the
+// kwin-effect's screen-level paint pass: the virtual-desktop switch, and the
+// show-desktop peek (windows scene ↔ bare desktop; the peek's two legs reuse
+// one node — the effect swaps the from/to captures for the show-back leg).
 const QString Desktop = QStringLiteral("desktop");
 const QString DesktopSwitch = QStringLiteral("desktop.switch");
+const QString DesktopPeek = QStringLiteral("desktop.peek");
 
 // editor.* — Layout-editor-only zone manipulation. NOT runtime
 // window snapping (that's KWin's domain).
@@ -140,6 +143,7 @@ QStringList allBuiltInPaths()
         WindowLayoutSwitch,
         Desktop,
         DesktopSwitch,
+        DesktopPeek,
         Editor,
         EditorSnapIn,
         EditorSnapOut,

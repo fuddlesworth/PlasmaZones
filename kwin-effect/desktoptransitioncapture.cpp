@@ -20,6 +20,7 @@
 #include <QSize>
 
 #include <memory>
+#include <vector>
 
 // The capture half of DesktopTransitionManager: how a desktop BECOMES a texture.
 // desktoptransitionmanager.cpp keeps the other half — how two textures become a
@@ -222,6 +223,45 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
         KWin::GLFramebuffer::popFramebuffer();
     }
     return tex;
+}
+
+std::unique_ptr<KWin::GLTexture>
+DesktopTransitionManager::captureLiveSceneHoldingHiddenWindows(int mask, KWin::LogicalOutput* screen,
+                                                               const KWin::RenderTarget& outputTarget,
+                                                               const KWin::RenderViewport& outputViewport)
+{
+    // The peek HIDE leg's "windows scene" endpoint. showingDesktopChanged fires
+    // AFTER KWin marks the windows hiddenByShowDesktop, so by this first
+    // paintOutput they are already out of the scene walk and a plain
+    // captureLiveScene would return the bare desktop. Hold each one renderable
+    // for the duration of this single capture with the same pair a running
+    // AnimationEffect keeps for its animated hidden windows: an
+    // EffectWindowVisibleRef with PAINT_DISABLED (the generic hidden reason —
+    // WindowItem's PAINT_DISABLED_BY_HIDDEN, which covers show-desktop hiding)
+    // plus an ItemEffect so the scene keeps the item's buffers alive. Both drop
+    // when `holds` leaves scope, so the frames after the capture — and the scene
+    // KWin paints once the transition settles — see the windows hidden again.
+    //
+    // The per-window composite (captureDesktop) is NOT an option here even
+    // though it tolerates non-scene windows: the wallpaper and docks stay
+    // visible during show-desktop, and already-visible windows render black
+    // through that path (see the incoming-desktop note in paintOutput).
+    struct Hold
+    {
+        KWin::EffectWindowVisibleRef visibleRef;
+        KWin::ItemEffect itemEffect;
+    };
+    std::vector<Hold> holds;
+    const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
+    holds.reserve(stack.size());
+    for (KWin::EffectWindow* w : stack) {
+        if (!w || w->isDeleted() || !w->isHiddenByShowDesktop()) {
+            continue;
+        }
+        holds.push_back(Hold{KWin::EffectWindowVisibleRef(w, KWin::EffectWindow::PAINT_DISABLED),
+                             KWin::ItemEffect(w->windowItem())});
+    }
+    return captureLiveScene(mask, screen, outputTarget, outputViewport);
 }
 
 } // namespace PlasmaZones

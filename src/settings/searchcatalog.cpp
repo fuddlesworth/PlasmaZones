@@ -125,7 +125,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("overlay"), PhosphorI18n::tr("popup"), PhosphorI18n::tr("animation")});
     search->setPageKeywords(QStringLiteral("animations-desktops"),
                             {PhosphorI18n::tr("desktop"), PhosphorI18n::tr("virtual desktop"),
-                             PhosphorI18n::tr("workspace"), PhosphorI18n::tr("switch")});
+                             PhosphorI18n::tr("workspace"), PhosphorI18n::tr("switch"), PhosphorI18n::tr("peek"),
+                             PhosphorI18n::tr("show desktop")});
     search->setPageKeywords(QStringLiteral("animations-side-panels"),
                             {PhosphorI18n::tr("side panel"), PhosphorI18n::tr("panel"), PhosphorI18n::tr("drawer")});
     search->setPageKeywords(QStringLiteral("animations-widgets"),
@@ -654,6 +655,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // Desktop page.
     addSetting(search, QStringLiteral("animations-desktops"), QStringLiteral("desktop.switch"),
                PhosphorI18n::tr("Desktop Switched"));
+    addSetting(search, QStringLiteral("animations-desktops"), QStringLiteral("desktop.peek"),
+               PhosphorI18n::tr("Peeked at Desktop"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideIn"),
                PhosphorI18n::tr("Slide In"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideOut"),

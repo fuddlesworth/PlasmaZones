@@ -403,6 +403,7 @@ private Q_SLOTS:
         // The desktop class is opt-in: a universal single-surface effect must NOT
         // bleed onto a desktop path (its lone surface sampler would be unbound).
         QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::DesktopPeek));
         QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::Desktop));
         // The move class is opt-in for the same structural reason: a universal
         // pack cannot drive the held interactive drag.
@@ -426,6 +427,8 @@ private Q_SLOTS:
         desktop.fragmentShaderPath = QStringLiteral("effect.frag");
         desktop.appliesTo = QStringList{QStringLiteral("desktop")};
         QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::DesktopSwitch));
+        // The show-desktop peek leaf accepts the same desktop-contract packs.
+        QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::DesktopPeek));
         QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::Desktop));
         QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::WindowOpen));
         QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::WindowMove));

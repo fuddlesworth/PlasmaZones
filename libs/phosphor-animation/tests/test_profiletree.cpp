@@ -33,8 +33,10 @@ private Q_SLOTS:
         QCOMPARE(PP::parentPath(PP::WindowMove), PP::WindowMovement);
         QCOMPARE(PP::parentPath(PP::WindowMovement), PP::Window);
         QCOMPARE(PP::parentPath(PP::Window), PP::Global);
-        // Desktop-switch transition family walks up desktop.switch → desktop → global.
+        // Desktop transition family walks up desktop.switch / desktop.peek →
+        // desktop → global.
         QCOMPARE(PP::parentPath(PP::DesktopSwitch), PP::Desktop);
+        QCOMPARE(PP::parentPath(PP::DesktopPeek), PP::Desktop);
         QCOMPARE(PP::parentPath(PP::Desktop), PP::Global);
         QCOMPARE(PP::parentPath(PP::Global), QString());
         QCOMPARE(PP::parentPath(QString()), QString());
@@ -46,6 +48,9 @@ private Q_SLOTS:
     void testEventClassForDesktopPaths()
     {
         QCOMPARE(PP::eventClassForPath(PP::DesktopSwitch), PP::EventClassDesktop);
+        // The show-desktop peek leaf shares the desktop class so the same
+        // two-texture packs drive it.
+        QCOMPARE(PP::eventClassForPath(PP::DesktopPeek), PP::EventClassDesktop);
         QCOMPARE(PP::eventClassForPath(PP::Desktop), PP::EventClassDesktop);
         // A geometry/appearance path never classifies as desktop.
         QVERIFY(PP::eventClassForPath(PP::WindowOpen) != PP::EventClassDesktop);
@@ -99,9 +104,10 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::WidgetZoneHighlightPop));
         QVERIFY(paths.contains(PP::WidgetZoneHighlightBorder));
         QVERIFY(paths.contains(PP::WidgetZoneOverlayFlash));
-        // Desktop-switch transition family (full-screen two-texture blend).
+        // Desktop transition family (full-screen two-texture blends).
         QVERIFY(paths.contains(PP::Desktop));
         QVERIFY(paths.contains(PP::DesktopSwitch));
+        QVERIFY(paths.contains(PP::DesktopPeek));
         // No regression: legacy zone.* strings must not reappear.
         for (const QString& path : paths) {
             QVERIFY2(!path.startsWith(QLatin1String("zone.")) && path != QLatin1String("zone"),

@@ -490,10 +490,12 @@ private Q_SLOTS:
         // paths must prune, so they stay unsupported.
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.snapResize")));
-        // Desktop family — the two-texture switch is a consumed leaf too
-        // (the KWin effect's DesktopTransitionManager resolves it in the
-        // desktopChanged handler, not a per-window tryBeginShaderForEvent leg).
+        // Desktop family — the two-texture switch and the show-desktop peek
+        // are consumed leaves too (the KWin effect's DesktopTransitionManager
+        // resolves them in the desktopChanged / showingDesktopChanged handlers,
+        // not per-window tryBeginShaderForEvent legs).
         QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.switch")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.peek")));
 
         // Ancestors of consumed leaves — supported because the
         // daemon's resolver walks them on the way to the leaf, so a

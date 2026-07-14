@@ -33,23 +33,31 @@ namespace PlasmaZones {
 
 class PlasmaZonesEffect;
 
-/// Full-screen virtual-desktop switch transition.
+/// Full-screen two-texture transitions: virtual-desktop switch + show-desktop peek.
 ///
 /// Unlike the per-window shader transitions (ShaderTransitionManager, which runs
-/// on the OffscreenEffect's redirected per-window quad), a desktop switch is a
-/// full-screen TWO-texture blend: it captures the OUTGOING desktop and the
-/// INCOMING desktop into per-output FBOs and cross-fades between them with a
-/// `desktop.switch` transition shader (data/animations/<id>, appliesTo
+/// on the OffscreenEffect's redirected per-window quad), these are full-screen
+/// TWO-texture blends: two per-output scene captures cross-faded with a
+/// desktop-class transition shader (data/animations/<id>, appliesTo
 /// ["desktop"], sampling uFromDesktop / uToDesktop via desktop_transition.glsl).
+/// A desktop SWITCH blends the OUTGOING desktop into the INCOMING one; a
+/// show-desktop PEEK blends the windows scene into the bare desktop (hide leg)
+/// and back (show leg), driven by the same shader node (`desktop.peek`).
 ///
-/// The effect owns one instance. On `desktopChanged` the effect resolves the
-/// `desktop.switch` shader from the shader profile tree and calls begin(); if no
-/// shader is assigned begin() is a no-op and KWin's normal switch proceeds. When
-/// a transition is live begin() claims `setActiveFullScreenEffect(m_effect)` so
-/// KWin's built-in Slide bows out, forces a full-screen paint via the mask, and
-/// routes paintScreen through paintOutput() which draws the blend instead of the
-/// live scene until progress reaches 1. The claim is taken only when no other
-/// effect holds the screen, and released only while KWin still reports it as ours.
+/// The effect owns one instance. On `desktopChanged` / `showingDesktopChanged`
+/// the effect resolves the `desktop.switch` / `desktop.peek` shader from the
+/// shader profile tree and calls begin() / beginPeek(); if no shader is assigned
+/// the call is a no-op and KWin's normal behaviour proceeds. When a transition is
+/// live the manager claims `setActiveFullScreenEffect(m_effect)` so KWin's
+/// built-in Slide bows out, forces a full-screen paint via the mask, and routes
+/// paintScreen through paintOutput() which draws the blend instead of the live
+/// scene until progress reaches 1. The claim is taken only when no other effect
+/// holds the screen, and released only while KWin still reports it as ours.
+///
+/// The claim does NOT suppress KWin's show-desktop script effects (windowaperture
+/// / eyeonscreen never consult activeFullScreenEffect()) — those are unloaded by
+/// PlasmaZonesEffect::syncShowDesktopEffectSuppression while a peek pack is
+/// assigned, which is also what keeps the peek captures free of their transforms.
 class DesktopTransitionManager
 {
 public:
@@ -73,6 +81,18 @@ public:
     void begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
                const QString& effectId, const QVariantMap& params, int durationMs,
                std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
+
+    /// Start a show-desktop peek transition on every output. @p showing follows
+    /// EffectsHandler::showingDesktopChanged: true is the HIDE leg (windows scene
+    /// → bare desktop), false the SHOW leg (bare desktop → restored windows
+    /// scene). Inputs mirror begin() and are resolved by the caller from the
+    /// `desktop.peek` node. The show leg blends FROM the bare-desktop texture the
+    /// hide leg cached per output (the bare desktop cannot be re-captured once the
+    /// windows are back — visible windows render black through the per-window
+    /// composite, see captureDesktop's incoming-desktop note); outputs with no
+    /// usable cache entry are skipped and settle instantly.
+    void beginPeek(bool showing, const QString& effectId, const QVariantMap& params, int durationMs,
+                   std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
 
     /// True while any output has a live transition. Feeds PlasmaZonesEffect::isActive()
     /// so KWin keeps the effect in the paint chain.
@@ -139,11 +159,29 @@ public:
     void reset();
 
 private:
+    /// What a transition blends. Switch reconstructs the outgoing desktop and
+    /// captures the incoming live scene; the two peek legs pair a live-scene
+    /// capture with the bare desktop (captured fresh on the hide leg while the
+    /// just-hidden windows are held renderable, replayed from the per-output
+    /// cache on the show leg).
+    enum class Kind {
+        Switch,
+        PeekHide,
+        PeekShow,
+    };
+
     struct OutputTransition
     {
+        Kind kind = Kind::Switch;
+        // Outgoing desktop for Kind::Switch (captureDesktop derefs it deferred,
+        // see desktopRemoved). Stays null for the peek kinds — they reference no
+        // desktop, so desktop removal never reaps them.
         KWin::VirtualDesktop* from = nullptr;
-        std::unique_ptr<KWin::GLTexture> fromTex;
-        std::unique_ptr<KWin::GLTexture> toTex;
+        // shared_ptr, not unique_ptr: the peek hide leg shares its bare-desktop
+        // capture with m_peekDesktopCache, which outlives the transition to feed
+        // the show leg. The switch kind still holds the only reference.
+        std::shared_ptr<KWin::GLTexture> fromTex;
+        std::shared_ptr<KWin::GLTexture> toTex;
         QString effectId;
         // Resolved p_<name> values packed into customParams[] slots (metadata
         // defaults merged with the profile's overrides). Same value for every
@@ -228,6 +266,17 @@ private:
                                                       const KWin::RenderTarget& outputTarget,
                                                       const KWin::RenderViewport& outputViewport);
 
+    /// captureLiveScene with every show-desktop-hidden window held renderable for
+    /// the duration of the capture (EffectWindowVisibleRef(PAINT_DISABLED) +
+    /// ItemEffect per window, the same pair a running AnimationEffect holds).
+    /// Used for the peek hide leg's FROM texture: the windows were hidden the
+    /// instant show-desktop toggled, so without the holds the "windows scene"
+    /// endpoint would capture as a bare desktop. The refs drop before returning,
+    /// so the scene KWin paints after the transition is untouched.
+    std::unique_ptr<KWin::GLTexture> captureLiveSceneHoldingHiddenWindows(int mask, KWin::LogicalOutput* screen,
+                                                                          const KWin::RenderTarget& outputTarget,
+                                                                          const KWin::RenderViewport& outputViewport);
+
     /// Compile (or fetch from cache) the desktop-transition shader for @p effectId.
     /// Returns nullptr when the effect id is unknown or compilation failed.
     CompiledDesktopShader* compiledShader(const QString& effectId);
@@ -257,6 +306,12 @@ private:
     // QHash, which is copy-on-write and would instantiate a deleted copy ctor.
     std::unordered_map<KWin::LogicalOutput*, OutputTransition> m_active;
     std::unordered_map<QString, CompiledDesktopShader> m_shaderCache;
+    // Per-output bare-desktop capture seeded by the peek HIDE leg and consumed
+    // by the SHOW leg (which cannot re-capture it — the windows are visible
+    // again by the time showingDesktopChanged(false) fires). Refreshed on every
+    // hide leg; validated against the show leg's viewport size and target format
+    // before use; dropped with its output and on reset().
+    std::unordered_map<KWin::LogicalOutput*, std::shared_ptr<KWin::GLTexture>> m_peekDesktopCache;
     bool m_fullScreenClaimed = false;
 };
 

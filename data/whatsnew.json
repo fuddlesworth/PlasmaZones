@@ -12,6 +12,7 @@
                 "The managed default rules for borders, title bars, and gaps live in a System section on the Rules page and can't be deleted (#699)",
                 "The rule editor's action and condition pickers are alphabetized and grouped so they are easier to scan (#699)",
                 "A new Theater tiling layout keeps one window centered at a width you set per monitor, and with more windows the focused one moves to a centered spotlight while the rest line up on rails down both sides. It starts hidden, so turn it on from the Algorithms list to try it (#704)",
+                "Peeking at the desktop can now play a full-screen animation. Pick a pack for the new Peeked at Desktop event on the Virtual Desktops animation page. Three new packs ship with it, Peek Recede, Peek Blinds, and Phosphor Peek, and every desktop transition pack works there too (#776)",
                 "Fixed: dragging a window could briefly stutter at the start and end of a drag on some systems, because a shortcut config file was rewritten on every drag. That write is gone, so dragging stays smooth (#714)"
             ]
         },
