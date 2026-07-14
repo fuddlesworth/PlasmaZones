@@ -76,6 +76,11 @@ That is a complete algorithm. `pluau.algorithm{…}` wraps the table and returns
 | `onWindowRemoved` | no | `(state, index) -> ()` | Lifecycle hook (§8) |
 | `onWindowResized` | no | `(state, resize) -> table?` | Interactive-resize hook (§9) |
 
+The stubs also allow a function of the same name as a metadata field (for
+example `defaultSplitRatio`) when a value must be computed instead of declared.
+It is called once at load and cached, so it cannot vary per retile. The bundled
+algorithms all use plain metadata fields.
+
 ---
 
 ## 4. `metadata`
@@ -88,8 +93,8 @@ to sensible defaults.
 | `name` | string | Display name in the settings UI |
 | `id` | string | Stable identifier (defaults to the file name) |
 | `description` | string | One-line description |
-| `defaultMaxWindows` | number | Default window cap shown in the UI (0 = unset) |
-| `minimumWindows` | number | Smallest window count the layout supports |
+| `defaultMaxWindows` | number | Default window cap shown in the UI (omit or 0 to use the built-in default of 6) |
+| `minimumWindows` | number | Smallest window count the layout supports (clamped to 1–100) |
 | `supportsMasterCount` | boolean | Exposes the “master count” control; sets `ctx.masterCount` |
 | `supportsSplitRatio` | boolean | Exposes the split-ratio slider; sets `ctx.splitRatio` |
 | `defaultSplitRatio` | number | Initial split ratio (0.1–0.9) |
@@ -181,7 +186,7 @@ pluau.deckLayout(area, count, focusedFraction, horizontal)
 pluau.lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight)
 pluau.dwindleLayout(area, count, splitRatio, innerGap, minSizes)
 pluau.threeColumnLayout(area, count, gap, splitRatio, masterCount, minSizes)
-pluau.stripLayout(zones, startX, startY, panelW, panelH, count, gap, horizontal)
+pluau.stripLayout(zones, startX, startY, panelW, panelH, count, gap, horizontal)  -- appends into `zones`, returns nothing
 pluau.applyTreeGeometry(node, rect, gap)   -- memory algorithms
 ```
 
@@ -209,8 +214,8 @@ pluau.clampSplitRatio(r)
 ### Resize helpers (§9)
 
 `pluau.masterStackResize(state, resize, horizontal)` implements the standard
-master/stack ratio-reflow for `onWindowResized`; `pluau.resizeRatioGrow` /
-`pluau.resizeRatioShrink` are the lower-level ratio math.
+master/stack ratio-reflow for `onWindowResized`. For the lower-level ratio math,
+use `pluau.resizeRatioGrow` and `pluau.resizeRatioShrink`.
 
 Full signatures are in the type stubs (`pluau.d.luau`) and
 `data/algorithms/*.luau`.
@@ -264,9 +269,11 @@ state (the `HookState` type in the stubs):
 | `scriptState` | table? | Prior persistent state (§9); present only when `supportsScriptState` is set and the bag is non-empty |
 | `countAfterRemoval` | number? | `onWindowRemoved` only: count minus the departing window |
 
-The snapshot is built fresh per call; mutating it has no effect. Memory
-algorithms (§10) use these hooks to keep their split tree in step; script-state
-algorithms persist through the `onWindowResized` return value instead.
+The snapshot is built fresh per call and mutating it has no effect. Both hooks
+return nothing, so they are notifications: use them to observe the tiled set,
+not to change it. Memory algorithms (§10) do not need them, because the host
+maintains the split tree itself. Script-state algorithms persist through the
+`onWindowResized` return value instead.
 
 ---
 
@@ -299,6 +306,11 @@ Return a table (or `nil` to do nothing). Two optional, independent outputs:
   `state.scriptState` inside the hook. See `data/algorithms/aligned-grid.luau`
   for a full example (per-column widths that survive retiles).
 
+The table you return replaces the whole bag rather than merging into it, so
+return every key you want to keep. When a branch has nothing to change, return
+`state.scriptState` unchanged. This is why `aligned-grid` returns it verbatim on
+its early-outs.
+
 `supportsScriptState` is the lightweight alternative to the split tree: an
 opaque table you shape however you like, persisted per screen, desktop, and
 activity.
@@ -308,8 +320,8 @@ activity.
 ## 10. Memory-aware algorithms (advanced)
 
 Set `metadata.supportsMemory = true` to receive a persistent `ctx.tree`
-(`SplitNode`) that survives across window add/remove events; the host keeps
-the tree in step with the lifecycle hooks (§8). Use
+(`SplitNode`) that survives across window add/remove events. The host keeps the
+tree in step for you, so a memory algorithm implements no hooks of its own. Use
 `pluau.applyTreeGeometry(ctx.tree, ctx.area, ctx.innerGap)` in `tile` to turn
 the tree into zones. See `data/algorithms/dwindle-memory.luau` for a full
 example. Most layouts are stateless and don't need this.

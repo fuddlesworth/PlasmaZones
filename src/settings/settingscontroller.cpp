@@ -291,8 +291,7 @@ SettingsController::SettingsController(QObject* parent)
     // future consumer that relies on the transition (rather than
     // querying availableAlgorithms() directly) silently misses initial
     // population.
-    m_algorithmService =
-        std::make_unique<AlgorithmService>(&m_settings, m_localAlgorithmRegistry.get(), m_scriptLoader.get());
+    m_algorithmService = std::make_unique<AlgorithmService>(m_settings, *m_localAlgorithmRegistry, *m_scriptLoader);
     connect(m_algorithmService.get(), &AlgorithmService::algorithmCreated, this, &SettingsController::algorithmCreated);
     connect(m_algorithmService.get(), &AlgorithmService::algorithmOperationFailed, this,
             &SettingsController::algorithmOperationFailed);

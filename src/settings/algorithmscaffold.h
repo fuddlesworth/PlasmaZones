@@ -40,13 +40,16 @@ QString sanitizeMetadataString(QString value);
 ///
 /// Returns empty on an unrecognized shape: no metadata table, an opening line
 /// that does not end at the `{`, an unterminated table, a brace depth that
-/// goes negative, or a name/id field that is not a whole `field = "value",`
-/// line. Only depth-1 fields are touched, so nested `customParams` entries
-/// keep their own `name` keys. The brace-depth scan ignores braces inside
-/// quoted strings and after `--` comments; Luau long strings/comments
-/// (`[[...]]`) and multi-line short strings inside metadata are not
-/// supported. @p displayName must already be sanitizeMetadataString()'d — it
-/// is embedded in a Luau string literal without further escaping.
+/// goes negative, a metadata line that leaves a Luau long bracket (`[[...]]`,
+/// long string or long comment) open past its end, or a name/id field that is
+/// not a whole `field = "value",` line. Only depth-1 fields are touched, so
+/// nested `customParams` entries keep their own `name` keys. The brace-depth
+/// scan ignores braces inside quoted strings and after `--` comments. A long
+/// bracket opened and closed on one line is fine; multi-line short strings
+/// inside metadata are not supported.
+/// @p displayName must already be sanitizeMetadataString()'d and
+/// @p id must be a bare `[A-Za-z0-9_-]` basename — both are embedded in Luau
+/// string literals without further escaping.
 QString rewriteMetadataNameId(const QString& content, const QString& displayName, const QString& id);
 
 /// Build a complete blank-scaffold module: SPDX @p header (which must end

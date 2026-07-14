@@ -30,6 +30,9 @@ Kirigami.Dialog {
     property bool retileOnFocus: false
     property bool openInEditor: true
     property string _previousAutoName: ""
+    // Set for the duration of a create, so the button and the Return key
+    // cannot both land a second createNewAlgorithm call.
+    property bool _creating: false
     readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
     readonly property color _subtleBg: _colors.subtleBg
     readonly property color _accentBorder: _colors.accentBorder
@@ -80,7 +83,7 @@ Kirigami.Dialog {
         {
             "name": i18n("Deck"),
             "id": "deck",
-            "desc": i18n("Overlapping stack with the focused window in front")
+            "desc": i18n("Focused window on the left with the rest peeking from the right edge")
         }
     ]
     // Resolve selected template data for step 2
@@ -118,6 +121,7 @@ Kirigami.Dialog {
         root.supportsSingleWindow = false;
         root.retileOnFocus = false;
         root.openInEditor = true;
+        root._creating = false;
         root.screenAspectRatio = WizardUtils.clampedScreenAspectRatio(Screen.width, Screen.height);
         wizardFooter.errorText = "";
     }
@@ -178,7 +182,11 @@ Kirigami.Dialog {
                             AlgorithmPreview {
                                 anchors.fill: parent
                                 visible: templateDelegate.modelData.id !== "blank"
-                                algorithmId: templateDelegate.modelData.id
+                                // There is no blank.luau to preview — the empty
+                                // id is AlgorithmPreview's "nothing to render"
+                                // contract, and skips a lookup plus its
+                                // empty-result retry.
+                                algorithmId: templateDelegate.modelData.id === "blank" ? "" : templateDelegate.modelData.id
                                 windowCount: 4
                                 showLabel: false
                                 appSettings: root.controller
@@ -231,7 +239,7 @@ Kirigami.Dialog {
                         anchors.margins: Kirigami.Units.largeSpacing
                         anchors.bottomMargin: Kirigami.Units.largeSpacing * 2
                         visible: root.baseTemplate !== "blank"
-                        algorithmId: root.baseTemplate
+                        algorithmId: root.baseTemplate === "blank" ? "" : root.baseTemplate
                         appSettings: root.controller
                         windowCount: 6
                         showLabel: false
@@ -347,7 +355,7 @@ Kirigami.Dialog {
                             CheckBox {
                                 text: i18n("Master count")
                                 onToggled: root.supportsMasterCount = checked
-                                Accessible.name: text
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Configurable master/center windows")
@@ -361,7 +369,7 @@ Kirigami.Dialog {
                             CheckBox {
                                 text: i18n("Split ratio")
                                 onToggled: root.supportsSplitRatio = checked
-                                Accessible.name: text
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Adjustable master/stack ratio")
@@ -375,7 +383,7 @@ Kirigami.Dialog {
                             CheckBox {
                                 text: i18n("Overlapping zones")
                                 onToggled: root.producesOverlappingZones = checked
-                                Accessible.name: text
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Zones can overlap each other")
@@ -389,7 +397,7 @@ Kirigami.Dialog {
                             CheckBox {
                                 text: i18n("Persistent memory")
                                 onToggled: root.supportsMemory = checked
-                                Accessible.name: text
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Remembers positions across changes")
@@ -403,7 +411,7 @@ Kirigami.Dialog {
                             CheckBox {
                                 text: i18n("Script state")
                                 onToggled: root.supportsScriptState = checked
-                                Accessible.name: text
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Keeps a persistent state table across retiles")
@@ -417,7 +425,7 @@ Kirigami.Dialog {
                             CheckBox {
                                 text: i18n("Single window")
                                 onToggled: root.supportsSingleWindow = checked
-                                Accessible.name: text
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Lays out a lone window itself instead of filling the screen")
@@ -431,7 +439,7 @@ Kirigami.Dialog {
                             CheckBox {
                                 text: i18n("Follows focus")
                                 onToggled: root.retileOnFocus = checked
-                                Accessible.name: text
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Reflows when focus moves between tiled windows")
@@ -450,9 +458,11 @@ Kirigami.Dialog {
 
                     // Options
                     CheckBox {
+                        // No Accessible.name: CheckBox already exposes `text`.
+                        // No tooltip here either, so there is nothing to add as
+                        // a description.
                         text: i18n("Open in text editor after creation")
                         onToggled: root.openInEditor = checked
-                        Accessible.name: text
 
                         Binding on checked {
                             value: root.openInEditor
@@ -480,10 +490,17 @@ Kirigami.Dialog {
 
         currentStep: root.currentStep
         createText: i18n("Create Algorithm")
-        createEnabled: nameField.text.trim().length > 0
+        createEnabled: nameField.text.trim().length > 0 && !root._creating
         onBackClicked: root.currentStep = 0
         onNextClicked: root.currentStep = 1
         onCreateClicked: {
+            // close() runs an exit transition during which the footer stays
+            // live, so without this a second click would create a second
+            // algorithm under the rolled-over "<name>-1" filename.
+            if (root._creating)
+                return;
+
+            root._creating = true;
             wizardFooter.errorText = "";
             let result = root.controller.createNewAlgorithm(nameField.text.trim(), root.baseTemplate, {
                 "supportsMasterCount": root.supportsMasterCount,
@@ -499,6 +516,10 @@ Kirigami.Dialog {
                     root.controller.openAlgorithm(result);
 
                 root.close();
+            } else {
+                // Creation failed and the dialog stays open showing why, so
+                // release the guard for the retry.
+                root._creating = false;
             }
         }
         onCancelClicked: root.close()

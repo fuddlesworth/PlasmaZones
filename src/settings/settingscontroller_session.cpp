@@ -762,7 +762,15 @@ int SettingsController::importFromKZones()
 
 int SettingsController::importFromKZonesFile(const QString& filePath)
 {
-    const auto result = KZonesImporter::importFromFile(filePath);
+    // Defence-in-depth: same sanitiser, and same QFileDialog entry point, as
+    // the layout and algorithm imports.
+    const QString safe = sanitizeIOPath(filePath);
+    if (safe.isEmpty()) {
+        qCWarning(lcCore) << "importFromKZonesFile: refusing unsafe path" << filePath;
+        Q_EMIT kzonesImportFinished(0, PhosphorI18n::tr("That file path is not allowed."));
+        return 0;
+    }
+    const auto result = KZonesImporter::importFromFile(safe);
     if (result.imported > 0) {
         m_pendingSelectLayoutId = result.pendingSelectLayoutId;
         scheduleLayoutLoad();

@@ -45,8 +45,11 @@ class AlgorithmService : public QObject
     Q_OBJECT
 
 public:
-    AlgorithmService(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
-                     PhosphorTiles::ScriptedAlgorithmLoader* loader, QObject* parent = nullptr);
+    /// The three collaborators are mandatory and are dereferenced unguarded
+    /// throughout, so they arrive by reference to make null unrepresentable
+    /// rather than debug-only-asserted (matching TilingAlgorithmController).
+    AlgorithmService(Settings& settings, PhosphorTiles::AlgorithmRegistry& registry,
+                     PhosphorTiles::ScriptedAlgorithmLoader& loader, QObject* parent = nullptr);
     ~AlgorithmService() override;
 
     // ── Catalog queries ─────────────────────────────────────────────────

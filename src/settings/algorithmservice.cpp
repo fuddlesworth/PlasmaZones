@@ -5,6 +5,7 @@
 
 #include "algorithmscaffold.h"
 
+#include "../config/configdefaults.h"
 #include "../config/settings.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
@@ -46,15 +47,36 @@ QString userAlgorithmsDir()
         + ScriptedAlgorithmSubdir + QLatin1Char('/');
 }
 
+/// True when @p baseName.luau already exists anywhere on the data search path,
+/// user directory or any system directory.
+///
+/// A user file does not merely sit alongside a bundled algorithm of the same
+/// basename, it displaces it: the loader registers each script under the `id`
+/// in its metadata, scans the user directory first, and keeps the first
+/// registration (ScriptedAlgorithmLoader::performScan). Both writers here
+/// derive the new `id` from the same slug as the filename, so landing on a
+/// bundled basename unregisters that bundled algorithm outright. Probing only
+/// the user directory would therefore let "Grid" delete Grid from the catalog.
+/// Deliberate overrides still work, they just go through hand-placing or
+/// editing a file rather than through create and import.
+bool algorithmBaseNameTaken(const QString& baseName)
+{
+    return !QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                   ScriptedAlgorithmSubdir + QLatin1Char('/') + baseName + QStringLiteral(".luau"))
+                .isEmpty();
+}
+
+/// Resolve a free "<baseName>.luau" (or "<baseName>-N.luau") under @p dir whose
+/// basename is claimed nowhere on the search path. Returns an empty string when
+/// every candidate is taken.
 QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
 {
-    QString path = dir + baseName + QStringLiteral(".luau");
-    if (!QFile::exists(path))
-        return path;
+    if (!algorithmBaseNameTaken(baseName))
+        return dir + baseName + QStringLiteral(".luau");
     for (int i = 1; i <= 999; ++i) {
-        path = dir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".luau");
-        if (!QFile::exists(path))
-            return path;
+        const QString candidate = baseName + QStringLiteral("-") + QString::number(i);
+        if (!algorithmBaseNameTaken(candidate))
+            return dir + candidate + QStringLiteral(".luau");
     }
     return QString();
 }
@@ -82,17 +104,13 @@ bool writeAlgorithmFile(const QString& destPath, const QByteArray& content)
 
 } // anonymous namespace
 
-AlgorithmService::AlgorithmService(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
-                                   PhosphorTiles::ScriptedAlgorithmLoader* loader, QObject* parent)
+AlgorithmService::AlgorithmService(Settings& settings, PhosphorTiles::AlgorithmRegistry& registry,
+                                   PhosphorTiles::ScriptedAlgorithmLoader& loader, QObject* parent)
     : QObject(parent)
-    , m_settings(settings)
-    , m_registry(registry)
-    , m_loader(loader)
+    , m_settings(&settings)
+    , m_registry(&registry)
+    , m_loader(&loader)
 {
-    Q_ASSERT(m_settings);
-    Q_ASSERT(m_registry);
-    Q_ASSERT(m_loader);
-
     // When scripted algorithms change (hot-reload), notify UI consumers.
     // Forwarded to SettingsController via a signal-to-signal connect in its
     // constructor so QML's availableAlgorithmsChanged binding stays stable.
@@ -261,8 +279,11 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
         return true;
     }
     // A different file owns the name: pick a unique "<name>-N.luau" rather than
-    // clobbering it (no destructive remove-then-copy; matches duplicate/create).
-    if (destInfo.exists()) {
+    // displacing it (no destructive remove-then-copy; matches duplicate/create).
+    // The probe spans the whole search path, so importing a third-party
+    // "grid.luau" rolls over instead of shadowing the bundled Grid out of the
+    // registry.
+    if (algorithmBaseNameTaken(source.completeBaseName())) {
         destPath = findUniqueAlgorithmPath(destDir, source.completeBaseName());
         if (destPath.isEmpty()) {
             Q_EMIT algorithmOperationFailed(
@@ -390,8 +411,8 @@ void AlgorithmService::openLayoutFile(const QString& layoutId)
     const QString bareId = uuid.toString(QUuid::WithoutBraces);
     const QString filename = bareId + QStringLiteral(".json");
     // Search user dir first, then all system dirs
-    const QString located =
-        QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/layouts/") + filename);
+    const QString located = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                                   ConfigDefaults::layoutsSubdir() + QLatin1Char('/') + filename);
     if (located.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "Layout file not found:" << filename;
         return;
@@ -612,7 +633,7 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     const QString destPath = findUniqueAlgorithmPath(destDir, filename);
     if (destPath.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "Could not find unique filename for algorithm:" << filename
-                                       << "— all 999 slots exhausted";
+                                       << "— the bare name and all 999 numbered slots are taken";
         Q_EMIT algorithmOperationFailed(
             PhosphorI18n::tr("Too many algorithms already share this name. "
                              "Rename or delete some before creating another."));

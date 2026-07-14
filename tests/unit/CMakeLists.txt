@@ -783,6 +783,13 @@ add_executable(test_algorithm_scaffold
     ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
 )
 target_link_libraries(test_algorithm_scaffold PRIVATE Qt6::Test Qt6::Core)
+# Headers only, no link: the scaffold reads the constexpr metadata defaults out
+# of AutotileConstants.h so a generated algorithm agrees with the engine's own
+# fallbacks. Include paths alone keep this target off the registry/loader stack.
+target_include_directories(test_algorithm_scaffold PRIVATE
+    ${CMAKE_SOURCE_DIR}/libs/phosphor-tiles/include
+    ${CMAKE_SOURCE_DIR}/libs/phosphor-layout-api/include
+)
 target_compile_definitions(test_algorithm_scaffold PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_algorithm_scaffold COMMAND test_algorithm_scaffold)
 

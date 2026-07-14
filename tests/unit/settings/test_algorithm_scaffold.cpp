@@ -3,6 +3,8 @@
 
 #include "../../../src/settings/algorithmscaffold.h"
 
+#include <PhosphorTiles/AutotileConstants.h>
+
 #include <QDir>
 #include <QFile>
 #include <QtTest>
@@ -64,16 +66,19 @@ private Q_SLOTS:
     void splicePreservesCapabilityMetadata();
     void spliceLeavesCustomParamNamesAlone();
     void spliceInsertsMissingNameAndId();
-    void spliceRejectsTemplateWithoutMetadata();
+    void spliceRejectsMalformedTemplates();
     void spliceRejectsSingleLineMetadata();
     void spliceRejectsInlineFieldsOnOpeningLine();
     void spliceRejectsMultiFieldNameLine();
     void spliceRejectsUnquotedNameValue();
     void spliceIgnoresBracesInsideStrings();
+    void spliceRejectsUnclosedLongBracket();
+    void spliceAllowsSingleLineLongBracket();
     void splicePreservesLeadingDocComment();
     void spliceNormalizesCrlf();
     void spliceAllBundledAlgorithms();
     void blankScaffoldEmitsRequestedFlags();
+    void blankScaffoldMapsEachFlagToItsOwnField();
     void blankScaffoldOmitsUnsetNewFlags();
     void sanitizeStripsBreakoutCharacters();
 };
@@ -225,8 +230,8 @@ void TestAlgorithmScaffold::spliceLeavesCustomParamNamesAlone()
 {
     const QString out =
         spliceTemplate(kTemplate, kCopyright, QStringLiteral("My Theater"), QStringLiteral("my-theater"));
-    // The nested customParams entry has its own `name` key at depth 2 and 3;
-    // only the top-level metadata `name` may be rewritten.
+    // The nested customParams entry has its own `name` key on a line that
+    // opens at depth 2. Only the top-level metadata `name` may be rewritten.
     QVERIFY(out.contains(QStringLiteral("{ name = \"widthRatio\", type = \"number\"")));
 }
 
@@ -241,13 +246,16 @@ void TestAlgorithmScaffold::spliceInsertsMissingNameAndId()
         "    tile = function(ctx) return {} end,\n"
         "}\n");
     const QString out = spliceTemplate(noIdent, kCopyright, QStringLiteral("Bare Copy"), QStringLiteral("bare-copy"));
-    QVERIFY(out.contains(QStringLiteral("        name = \"Bare Copy\",")));
-    QVERIFY(out.contains(QStringLiteral("        id = \"bare-copy\",")));
-    // Inserted inside the metadata table, before its closing brace.
-    QVERIFY(out.indexOf(QStringLiteral("name = \"Bare Copy\"")) < out.indexOf(QStringLiteral("description")));
+    // Inserted immediately after the opening brace, in that order, indented
+    // like the field already in the table.
+    QVERIFY(
+        out.contains(QStringLiteral("    metadata = {\n"
+                                    "        name = \"Bare Copy\",\n"
+                                    "        id = \"bare-copy\",\n"
+                                    "        description = \"Bare\",\n")));
 }
 
-void TestAlgorithmScaffold::spliceRejectsTemplateWithoutMetadata()
+void TestAlgorithmScaffold::spliceRejectsMalformedTemplates()
 {
     QVERIFY(
         spliceTemplate(QStringLiteral("return {}"), kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
@@ -337,6 +345,63 @@ void TestAlgorithmScaffold::spliceRejectsUnquotedNameValue()
         "    tile = function(ctx) return {} end,\n"
         "}\n");
     QVERIFY(spliceTemplate(unquotedId, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+}
+
+void TestAlgorithmScaffold::spliceRejectsUnclosedLongBracket()
+{
+    // A long comment spanning lines: the continuation carries no `--`, so its
+    // brace reaches the depth scan and ends the metadata walk early. Left
+    // unchecked this emits a second name/id pair (last-wins in Luau, so the
+    // copy would silently keep the source's id and collide with it). Reject.
+    const QString longComment = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        --[[ note\n"
+        "        } still inside the comment ]]\n"
+        "        name = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(longComment, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
+
+    // The same hazard as a long string value.
+    const QString longString = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"A\",\n"
+        "        id = \"a\",\n"
+        "        description = [[opens here\n"
+        "        } and runs on ]],\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(longString, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
+}
+
+void TestAlgorithmScaffold::spliceAllowsSingleLineLongBracket()
+{
+    // A long bracket that opens and closes on one line never desyncs the scan,
+    // so it stays supported rather than being rejected with the multi-line one.
+    const QString oneLine = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        --[[ note } here ]]\n"
+        "        name = \"A\",\n"
+        "        id = \"a\",\n"
+        "        description = [[a { brace]],\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    const QString out = spliceTemplate(oneLine, kCopyright, QStringLiteral("B"), QStringLiteral("b"));
+    QVERIFY(!out.isEmpty());
+    QCOMPARE(out.count(QStringLiteral("name = ")), 1);
+    QCOMPARE(out.count(QStringLiteral("id = ")), 1);
+    QVERIFY(out.contains(QStringLiteral("        name = \"B\",")));
+    QVERIFY(out.contains(QStringLiteral("        id = \"b\",")));
+    // The long-bracket lines carry over untouched.
+    QVERIFY(out.contains(QStringLiteral("        --[[ note } here ]]")));
+    QVERIFY(out.contains(QStringLiteral("        description = [[a { brace]],")));
 }
 
 void TestAlgorithmScaffold::spliceIgnoresBracesInsideStrings()
@@ -454,6 +519,9 @@ void TestAlgorithmScaffold::blankScaffoldEmitsRequestedFlags()
     caps.singleWindow = true;
     caps.retileOnFocus = true;
     const QString out = buildBlankScaffold(kHeader, QStringLiteral("Mine"), QStringLiteral("mine"), caps);
+    // The header is passed through verbatim, so a generated algorithm carries
+    // its SPDX lines.
+    QVERIFY(out.startsWith(kHeader));
     QVERIFY(out.contains(QStringLiteral("name = \"Mine\"")));
     QVERIFY(out.contains(QStringLiteral("id = \"mine\"")));
     QVERIFY(out.contains(QStringLiteral("supportsMasterCount = true")));
@@ -467,6 +535,40 @@ void TestAlgorithmScaffold::blankScaffoldEmitsRequestedFlags()
     QVERIFY(out.contains(QStringLiteral("onWindowResized = function(state, resize)")));
     // Tile body guards tiny areas.
     QVERIFY(out.contains(QStringLiteral("pluau.guardArea(ctx.area, ctx.windowCount)")));
+    // The unconditional metadata fields. Stripping these from a template was
+    // the bug this file exists to pin, so the blank path pins them too. The
+    // two defaults track the engine's own constants, so a generated algorithm
+    // that drops either line keeps the same behaviour.
+    QVERIFY(out.contains(QStringLiteral("description = \"Custom tiling algorithm\"")));
+    QVERIFY(out.contains(QStringLiteral("defaultSplitRatio = 0.5,")));
+    QVERIFY(out.contains(QStringLiteral("defaultMaxWindows = 6,")));
+    QVERIFY(out.contains(QStringLiteral("minimumWindows = 1,")));
+    QVERIFY(out.contains(QStringLiteral("zoneNumberDisplay = \"all\",")));
+    QCOMPARE(PhosphorTiles::AutotileDefaults::DefaultSplitRatio, 0.5);
+    QCOMPARE(PhosphorTiles::AutotileDefaults::ScriptedDefaultMaxWindows, 6);
+}
+
+void TestAlgorithmScaffold::blankScaffoldMapsEachFlagToItsOwnField()
+{
+    // The all-true and all-false cases above cannot tell two flags apart:
+    // swapping any pair of gates leaves both green. Pin a mixed permutation so
+    // each flag is tied to the field it actually writes.
+    Capabilities caps;
+    caps.splitRatio = true;
+    caps.retileOnFocus = true;
+    const QString out = buildBlankScaffold(kHeader, QStringLiteral("Mine"), QStringLiteral("mine"), caps);
+
+    QVERIFY(out.contains(QStringLiteral("supportsSplitRatio = true")));
+    QVERIFY(out.contains(QStringLiteral("retileOnFocus = true")));
+
+    QVERIFY(out.contains(QStringLiteral("supportsMasterCount = false")));
+    QVERIFY(out.contains(QStringLiteral("producesOverlappingZones = false")));
+    QVERIFY(out.contains(QStringLiteral("supportsMemory = false")));
+    // Unset opt-in flags are omitted entirely rather than written false.
+    QVERIFY(!out.contains(QStringLiteral("supportsScriptState")));
+    QVERIFY(!out.contains(QStringLiteral("supportsSingleWindow")));
+    // No script state means no resize-hook stub.
+    QVERIFY(!out.contains(QStringLiteral("onWindowResized")));
 }
 
 void TestAlgorithmScaffold::blankScaffoldOmitsUnsetNewFlags()

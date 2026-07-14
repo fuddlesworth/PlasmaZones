@@ -41,6 +41,11 @@ namespace AutotileDefaults {
 constexpr qreal DefaultSplitRatio = 0.5; ///< 50/50 split when nothing else specified
 constexpr int DefaultMasterCount = 1; ///< Single master window
 constexpr int DefaultMaxWindows = 5; ///< Maximum tiled windows before overflow
+/// Window cap for a scripted algorithm whose metadata omits `defaultMaxWindows`.
+/// Scripted layouts carry more windows comfortably than the built-in default of
+/// 5, so they resolve to this instead. Shared with the settings app's blank
+/// scaffold, which writes this value into every algorithm it generates.
+constexpr int ScriptedDefaultMaxWindows = 6;
 inline constexpr QLatin1String DefaultAlgorithmId{"bsp"}; ///< Default tiling algorithm
 constexpr qreal DefaultSplitRatioStep = 0.05;
 constexpr qreal MinSplitRatioStep = 0.01;

@@ -141,11 +141,21 @@ QVariantMap splitNodeToVariant(const SplitNode* node, int depth)
     m[QStringLiteral("splitHorizontal")] = node->splitHorizontal;
     m[QStringLiteral("windowId")] = node->windowId;
     m[QStringLiteral("isLeaf")] = node->isLeaf();
+    // At the depth cap the recursion yields an empty map. Assigning it anyway
+    // would hand the script a non-nil child whose every field is nil, which the
+    // `first: SplitNode?` / `second: SplitNode?` contract says cannot happen —
+    // so an exhausted child stays absent instead.
     if (node->first) {
-        m[QStringLiteral("first")] = splitNodeToVariant(node->first.get(), depth + 1);
+        const QVariantMap first = splitNodeToVariant(node->first.get(), depth + 1);
+        if (!first.isEmpty()) {
+            m[QStringLiteral("first")] = first;
+        }
     }
     if (node->second) {
-        m[QStringLiteral("second")] = splitNodeToVariant(node->second.get(), depth + 1);
+        const QVariantMap second = splitNodeToVariant(node->second.get(), depth + 1);
+        if (!second.isEmpty()) {
+            m[QStringLiteral("second")] = second;
+        }
     }
     return m;
 }
@@ -331,16 +341,17 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
     }
 
     // Seed caches from metadata. An unset field falls back to this class's own
-    // default, which for defaultMaxWindows is 6 (matching the window cap the
-    // settings app writes into a new blank scaffold) rather than
-    // TilingAlgorithm's base 5.
+    // default, which for defaultMaxWindows is ScriptedDefaultMaxWindows rather
+    // than TilingAlgorithm's base 5. Only a hand-authored script reaches that
+    // fallback: everything the settings app generates writes the field out.
     m_cachedMasterZoneIndex = m_metadata.masterZoneIndex;
     m_cachedSupportsMasterCount = m_metadata.supportsMasterCount;
     m_cachedSupportsSplitRatio = m_metadata.supportsSplitRatio;
     m_cachedProducesOverlappingZones = m_metadata.producesOverlappingZones;
     m_cachedCenterLayout = m_metadata.centerLayout;
     m_cachedMinimumWindows = (m_metadata.minimumWindows > 0) ? m_metadata.minimumWindows : 1;
-    m_cachedDefaultMaxWindows = (m_metadata.defaultMaxWindows > 0) ? m_metadata.defaultMaxWindows : 6;
+    m_cachedDefaultMaxWindows =
+        (m_metadata.defaultMaxWindows > 0) ? m_metadata.defaultMaxWindows : ScriptedDefaultMaxWindows;
     m_cachedDefaultSplitRatio = (m_metadata.defaultSplitRatio > 0.0) ? m_metadata.defaultSplitRatio : DefaultSplitRatio;
 
     // Optional override functions: called once at load, result cached (the
@@ -594,7 +605,7 @@ QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QR
     // metadata.supportsScriptState, so a non-opted-in algorithm can't read a bag
     // left behind by a different algorithm on the same TilingState. Scripts write
     // it back via the onWindowResized hook return.
-    if (m_metadata.supportsScriptState && params.state) {
+    if (supportsScriptState() && params.state) {
         const QJsonObject bag = params.state->scriptState();
         if (!bag.isEmpty()) {
             ctx[QStringLiteral("state")] = bag.toVariantMap();
@@ -683,7 +694,10 @@ QVariantMap LuauTileAlgorithm::buildStateMap(const TilingState* state, bool incl
     st[QStringLiteral("splitRatio")] = std::clamp(state->splitRatio(), MinSplitRatio, MaxSplitRatio);
 
     int focusedIndex = -1;
-    const QVector<WindowInfo> infos = buildWindowInfos(state, state->tiledWindowCount(), appIdResolver(), focusedIndex);
+    // Cap like buildContext's own window list, so the hook-side and tile-side
+    // views of the same state cannot disagree on length.
+    const int windowCap = std::min<int>(state->tiledWindowCount(), MaxZones);
+    const QVector<WindowInfo> infos = buildWindowInfos(state, windowCap, appIdResolver(), focusedIndex);
     QVariantList windows;
     for (const WindowInfo& info : infos) {
         QVariantMap w;
@@ -699,7 +713,7 @@ QVariantMap LuauTileAlgorithm::buildStateMap(const TilingState* state, bool incl
     // before computing the update it returns. Gated on the same opt-in as
     // buildContext's ctx.state, so a non-opted-in algorithm's hooks can't read
     // a bag left behind by a different algorithm on the same TilingState.
-    if (m_metadata.supportsScriptState) {
+    if (supportsScriptState()) {
         const QJsonObject bag = state->scriptState();
         if (!bag.isEmpty()) {
             st[QStringLiteral("scriptState")] = bag.toVariantMap();
@@ -789,7 +803,7 @@ void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& r
             }
         }
 
-        if (m_metadata.supportsScriptState) {
+        if (supportsScriptState()) {
             // "splitRatio" is a reserved control key, not part of the persistent
             // bag (see pluau.d.luau) — strip it so it can't round-trip into
             // ctx.state on the next retile.

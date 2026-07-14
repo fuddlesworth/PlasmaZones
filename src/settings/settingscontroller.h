@@ -916,7 +916,7 @@ private:
     static void sortMergedLayoutList(QVariantList& list);
     // Defence-in-depth path sanitizer shared by importLayout/exportLayout and
     // importAlgorithm/exportAlgorithm (layouts TU) and
-    // importAllSettings/exportAllSettings (session TU).
+    // importAllSettings/exportAllSettings/importFromKZonesFile (session TU).
     // See the implementation comment for the rejection rules.
     static QString sanitizeIOPath(const QString& raw);
 };

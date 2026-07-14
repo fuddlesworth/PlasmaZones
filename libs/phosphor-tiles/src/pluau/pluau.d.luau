@@ -58,7 +58,12 @@ export type SplitNode = {
 
 -- The context passed to an algorithm's tile() function. `count`/`gap` are the
 -- ergonomic names; `windowCount`/`innerGap` are the equivalents the bundled
--- (faithfully-ported) algorithms use. `area` arrives as a Rect with methods.
+-- (faithfully-ported) algorithms use.
+--
+-- `area` is a Rect (with its split/columns/rows methods) only for an algorithm
+-- declared through `pluau.algorithm{}`, which re-wraps it on the way in. The
+-- host marshals a plain {x,y,width,height} table, so a module exporting `tile`
+-- directly gets that instead. Every bundled algorithm uses the wrapper.
 export type Context = {
     count: number,
     windowCount: number,

@@ -3,6 +3,8 @@
 
 #include "algorithmscaffold.h"
 
+#include <PhosphorTiles/AutotileConstants.h>
+
 #include <QLatin1Char>
 #include <QLatin1String>
 #include <QRegularExpression>
@@ -51,16 +53,32 @@ QStringList templateSpdxLines(const QStringList& lines, int spdxHeaderEnd)
     return copyrights + others;
 }
 
-QString quotedField(const QString& key, const QString& value)
+/// Our own blank-scaffold indent. The rewrite path passes the source file's
+/// indent instead, so a copy keeps the formatting its author chose.
+const QLatin1String ScaffoldFieldIndent("        ");
+
+QString quotedField(const QString& indent, const QString& key, const QString& value)
 {
-    return QStringLiteral("        ") + key + QStringLiteral(" = \"") + value + QStringLiteral("\",");
+    return indent + key + QStringLiteral(" = \"") + value + QStringLiteral("\",");
+}
+
+/// The run of whitespace @p line opens with.
+QString leadingWhitespace(const QString& line)
+{
+    int i = 0;
+    while (i < line.size() && line[i].isSpace()) {
+        ++i;
+    }
+    return line.left(i);
 }
 
 /// Net brace delta of one line, ignoring braces inside quoted Luau strings
 /// (double or single quoted, with backslash escapes) and after a `--` comment
-/// marker. Line-scoped: long strings/comments (`[[...]]`) and short strings
-/// continued across lines (backslash-newline, `\z`) are not handled; the
-/// bundled templates' metadata uses neither.
+/// marker. Line-scoped: short strings continued across lines
+/// (backslash-newline, `\z`) are not handled; the bundled templates' metadata
+/// uses none. A long bracket that stays open past the end of the line defeats
+/// the scan outright, so opensUnclosedLongBracket() rejects that shape before
+/// this delta is trusted.
 int braceDelta(const QString& line)
 {
     int delta = 0;
@@ -88,6 +106,49 @@ int braceDelta(const QString& line)
     return delta;
 }
 
+/// True when @p line opens a Luau long bracket (`[[`, as a long string or, via
+/// `--[[`, a long comment) that does not close on the same line.
+///
+/// Such a bracket makes every following line unreadable to a line-scoped scan:
+/// its text is data, but braces in it still reach braceDelta(), which then
+/// mistracks depth and can end the metadata walk early. A long bracket that
+/// opens and closes on one line is harmless and stays supported. Only the
+/// unclosed shape is detected, and rewriteMetadataNameId() rejects the file
+/// rather than corrupting it.
+bool opensUnclosedLongBracket(const QString& line)
+{
+    QChar quote;
+    for (int i = 0; i < line.size(); ++i) {
+        const QChar c = line[i];
+        if (!quote.isNull()) {
+            if (c == QLatin1Char('\\')) {
+                ++i;
+            } else if (c == quote) {
+                quote = QChar();
+            }
+            continue;
+        }
+        if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
+            quote = c;
+            continue;
+        }
+        // `[[` opens a long bracket whether or not a `--` precedes it, so this
+        // check runs before the comment break below.
+        if (c == QLatin1Char('[') && i + 1 < line.size() && line[i + 1] == QLatin1Char('[')) {
+            return line.indexOf(QLatin1String("]]"), i + 2) < 0;
+        }
+        if (c == QLatin1Char('-') && i + 1 < line.size() && line[i + 1] == QLatin1Char('-')) {
+            // A `--` comment: only a long-comment opener matters past here.
+            const int longOpen = line.indexOf(QLatin1String("[["), i + 2);
+            if (longOpen < 0) {
+                return false;
+            }
+            return line.indexOf(QLatin1String("]]"), longOpen + 2) < 0;
+        }
+    }
+    return false;
+}
+
 } // anonymous namespace
 
 QString sanitizeMetadataString(QString value)
@@ -108,14 +169,19 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
 
     QString m;
     m += QStringLiteral("    metadata = {\n");
-    m += quotedField(QStringLiteral("name"), displayName) + QLatin1Char('\n');
-    m += quotedField(QStringLiteral("id"), id) + QLatin1Char('\n');
-    m += quotedField(QStringLiteral("description"), QStringLiteral("Custom tiling algorithm")) + QLatin1Char('\n');
+    m += quotedField(ScaffoldFieldIndent, QStringLiteral("name"), displayName) + QLatin1Char('\n');
+    m += quotedField(ScaffoldFieldIndent, QStringLiteral("id"), id) + QLatin1Char('\n');
+    m += quotedField(ScaffoldFieldIndent, QStringLiteral("description"), QStringLiteral("Custom tiling algorithm"))
+        + QLatin1Char('\n');
     m += QStringLiteral("        producesOverlappingZones = ") + b(caps.overlappingZones) + QStringLiteral(",\n");
     m += QStringLiteral("        supportsMasterCount = ") + b(caps.masterCount) + QStringLiteral(",\n");
     m += QStringLiteral("        supportsSplitRatio = ") + b(caps.splitRatio) + QStringLiteral(",\n");
-    m += QStringLiteral("        defaultSplitRatio = 0.5,\n");
-    m += QStringLiteral("        defaultMaxWindows = 6,\n");
+    m += QStringLiteral("        defaultSplitRatio = ")
+        + QString::number(PhosphorTiles::AutotileDefaults::DefaultSplitRatio) + QStringLiteral(",\n");
+    // Write the same cap a script omitting the field would resolve to, so
+    // deleting the line from a generated algorithm changes nothing.
+    m += QStringLiteral("        defaultMaxWindows = ")
+        + QString::number(PhosphorTiles::AutotileDefaults::ScriptedDefaultMaxWindows) + QStringLiteral(",\n");
     m += QStringLiteral("        minimumWindows = 1,\n");
     m += QStringLiteral("        zoneNumberDisplay = \"all\",\n");
     m += QStringLiteral("        supportsMemory = ") + b(caps.memory) + QStringLiteral(",\n");
@@ -143,8 +209,10 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
     if (caps.scriptState) {
         content += QStringLiteral("\n")
             + QStringLiteral("    -- Called after an interactive resize. Return a table to persist as\n")
-            + QStringLiteral("    -- ctx.state for the next tile() run; include a splitRatio key to have\n")
+            + QStringLiteral("    -- ctx.state for the next tile() run. Include a splitRatio key to have\n")
             + QStringLiteral("    -- the engine apply a new master/split ratio. Return nil to do nothing.\n")
+            + QStringLiteral("    -- The table you return replaces the whole bag rather than merging\n")
+            + QStringLiteral("    -- into it, so return every key you want to keep.\n")
             + QStringLiteral("    onWindowResized = function(state, resize)\n") + QStringLiteral("        return nil\n")
             + QStringLiteral("    end,\n");
     }
@@ -194,23 +262,37 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     int metaEnd = -1;
     bool sawName = false;
     bool sawId = false;
+    // Indent to give an inserted name/id, taken from the table's first existing
+    // top-level field so the insert matches its siblings. Stays empty for a
+    // table with no other field, and the fallback below covers that.
+    QString fieldIndent;
     for (int i = metaStart; i < lines.size(); ++i) {
+        // A long bracket left open past this line turns the rest of the table
+        // into text the line scan would misread as code. Reject rather than
+        // rewrite on a depth we know is wrong.
+        if (opensUnclosedLongBracket(lines[i])) {
+            return QString();
+        }
         const int depthAtLineStart = depth;
         depth += braceDelta(lines[i]);
 
         QString line = lines[i];
         if (i > metaStart && depthAtLineStart == 1) {
+            const QString trimmed = line.trimmed();
+            if (fieldIndent.isEmpty() && !trimmed.isEmpty() && !trimmed.startsWith(QLatin1Char('}'))) {
+                fieldIndent = leadingWhitespace(line);
+            }
             if (nameFieldRe.match(line).hasMatch()) {
                 if (!nameLineRe.match(line).hasMatch()) {
                     return QString();
                 }
-                line = quotedField(QStringLiteral("name"), displayName);
+                line = quotedField(leadingWhitespace(line), QStringLiteral("name"), displayName);
                 sawName = true;
             } else if (idFieldRe.match(line).hasMatch()) {
                 if (!idLineRe.match(line).hasMatch()) {
                     return QString();
                 }
-                line = quotedField(QStringLiteral("id"), id);
+                line = quotedField(leadingWhitespace(line), QStringLiteral("id"), id);
                 sawId = true;
             }
         }
@@ -230,12 +312,17 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     }
 
     // A file without its own name/id line still needs ours — insert right
-    // after the opening `metadata = {`.
+    // after the opening `metadata = {`, indented like the table's other
+    // fields. A table with no other field to copy takes the opening line's
+    // indent plus one four-space level.
+    if (fieldIndent.isEmpty()) {
+        fieldIndent = leadingWhitespace(lines[metaStart]) + QStringLiteral("    ");
+    }
     if (!sawId) {
-        metaLines.insert(1, quotedField(QStringLiteral("id"), id));
+        metaLines.insert(1, quotedField(fieldIndent, QStringLiteral("id"), id));
     }
     if (!sawName) {
-        metaLines.insert(1, quotedField(QStringLiteral("name"), displayName));
+        metaLines.insert(1, quotedField(fieldIndent, QStringLiteral("name"), displayName));
     }
 
     QString out;
