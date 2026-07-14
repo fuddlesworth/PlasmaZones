@@ -352,7 +352,7 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     KWin::effects->addRepaintFull();
 }
 
-// captureDesktop, captureLiveScene and captureLiveSceneHoldingHiddenWindows live
+// captureDesktop, captureLiveScene and capturePeekWindowsScene live
 // in desktoptransitioncapture.cpp, along with the texture allocation and format
 // helpers they share.
 
@@ -515,13 +515,14 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
             tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
             break;
         case Kind::PeekHide:
-            // FROM = the windows scene. The windows were hidden the instant
-            // show-desktop toggled, so hold them renderable for this one
-            // capture. TO = the live scene as-is, which with the windows hidden
-            // IS the bare desktop (wallpaper + docks). The bare-desktop capture
-            // is shared into the per-output cache so the later show leg has a
-            // FROM endpoint it can no longer capture itself.
-            tr.fromTex = captureLiveSceneHoldingHiddenWindows(mask, screen, renderTarget, viewport);
+            // FROM = the windows scene, reconstructed as bare desktop + the
+            // hidden windows composited back on top (see capturePeekWindowsScene
+            // for why a live capture cannot include them this frame). TO = the
+            // live scene as-is, which with the windows hidden IS the bare
+            // desktop (wallpaper + docks). The bare-desktop capture is shared
+            // into the per-output cache so the later show leg has a FROM
+            // endpoint it can no longer capture itself.
+            tr.fromTex = capturePeekWindowsScene(mask, screen, renderTarget, viewport);
             tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
             if (tr.toTex) {
                 m_peekDesktopCache[screen] = tr.toTex;

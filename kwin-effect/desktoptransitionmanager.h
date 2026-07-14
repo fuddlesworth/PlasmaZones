@@ -273,16 +273,18 @@ private:
                                                       const KWin::RenderTarget& outputTarget,
                                                       const KWin::RenderViewport& outputViewport);
 
-    /// captureLiveScene with every show-desktop-hidden window held renderable for
-    /// the duration of the capture (EffectWindowVisibleRef(PAINT_DISABLED) +
-    /// ItemEffect per window, the same pair a running AnimationEffect holds).
-    /// Used for the peek hide leg's FROM texture: the windows were hidden the
-    /// instant show-desktop toggled, so without the holds the "windows scene"
-    /// endpoint would capture as a bare desktop. The refs drop before returning,
-    /// so the scene KWin paints after the transition is untouched.
-    std::unique_ptr<KWin::GLTexture> captureLiveSceneHoldingHiddenWindows(int mask, KWin::LogicalOutput* screen,
-                                                                          const KWin::RenderTarget& outputTarget,
-                                                                          const KWin::RenderViewport& outputViewport);
+    /// The peek hide leg's FROM texture: the bare desktop (live scene — the
+    /// windows are already out of this frame's scene walk by the time
+    /// showingDesktopChanged fires) with every show-desktop-hidden window
+    /// composited back on top through the direct per-window path, the same way
+    /// captureDesktop reconstructs the outgoing desktop's non-scene windows.
+    /// Visibility refs cannot do this job: a ref taken during paintOutput only
+    /// affects the NEXT frame's scene walk, so a "live scene with refs held"
+    /// capture returns the bare desktop and the peek degrades to an instant
+    /// hide with a decorative sweep over it.
+    std::unique_ptr<KWin::GLTexture> capturePeekWindowsScene(int mask, KWin::LogicalOutput* screen,
+                                                             const KWin::RenderTarget& outputTarget,
+                                                             const KWin::RenderViewport& outputViewport);
 
     /// Compile (or fetch from cache) the desktop-transition shader for @p effectId.
     /// Returns nullptr when the effect id is unknown or compilation failed.

@@ -21,7 +21,6 @@
 #include <QSize>
 
 #include <memory>
-#include <vector>
 
 // The capture half of DesktopTransitionManager: how a desktop BECOMES a texture.
 // desktoptransitionmanager.cpp keeps the other half — how two textures become a
@@ -242,42 +241,88 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
 }
 
 std::unique_ptr<KWin::GLTexture>
-DesktopTransitionManager::captureLiveSceneHoldingHiddenWindows(int mask, KWin::LogicalOutput* screen,
-                                                               const KWin::RenderTarget& outputTarget,
-                                                               const KWin::RenderViewport& outputViewport)
+DesktopTransitionManager::capturePeekWindowsScene(int mask, KWin::LogicalOutput* screen,
+                                                  const KWin::RenderTarget& outputTarget,
+                                                  const KWin::RenderViewport& outputViewport)
 {
     // The peek HIDE leg's "windows scene" endpoint. showingDesktopChanged fires
-    // AFTER KWin marks the windows hiddenByShowDesktop, so by this first
-    // paintOutput they are already out of the scene walk and a plain
-    // captureLiveScene would return the bare desktop. Hold each one renderable
-    // for the duration of this single capture with the same pair a running
-    // AnimationEffect keeps for its animated hidden windows: an
-    // EffectWindowVisibleRef with PAINT_DISABLED (the generic hidden reason —
-    // WindowItem's PAINT_DISABLED_BY_HIDDEN, which covers show-desktop hiding)
-    // plus an ItemEffect so the scene keeps the item's buffers alive. Both drop
-    // when `holds` leaves scope, so the frames after the capture — and the scene
-    // KWin paints once the transition settles — see the windows hidden again.
+    // AFTER KWin marks the windows hiddenByShowDesktop and their WindowItems
+    // invisible, and this frame's scene walk was already built in prePaint
+    // WITHOUT them — so a live-scene capture cannot show the windows, no matter
+    // what visibility refs are taken now (a ref changes NEXT frame's walk, not
+    // this one's; the first attempt did exactly that and the transition's FROM
+    // came out as the bare desktop, making the peek look like an instant hide
+    // followed by a decorative sweep).
     //
-    // The per-window composite (captureDesktop) is NOT an option here even
-    // though it tolerates non-scene windows: the wallpaper and docks stay
-    // visible during show-desktop, and already-visible windows render black
-    // through that path (see the incoming-desktop note in paintOutput).
-    struct Hold
-    {
-        KWin::EffectWindowVisibleRef visibleRef;
-        KWin::ItemEffect itemEffect;
-    };
-    std::vector<Hold> holds;
-    const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
-    holds.reserve(stack.size());
-    for (KWin::EffectWindow* w : stack) {
-        if (!w || w->isDeleted() || !w->isHiddenByShowDesktop()) {
-            continue;
-        }
-        holds.push_back(Hold{KWin::EffectWindowVisibleRef(w, KWin::EffectWindow::PAINT_DISABLED),
-                             KWin::ItemEffect(w->windowItem())});
+    // Instead the windows scene is reconstructed in two layers:
+    //   1. the live scene as it paints right now — wallpaper, docks, panels —
+    //      which with the windows hidden IS the bare desktop;
+    //   2. every show-desktop-hidden window composited back on top through the
+    //      direct per-window path, exactly how captureDesktop reconstructs the
+    //      outgoing desktop's non-scene windows. Being out of the scene walk is
+    //      the case that path is built for (the black-render problem only
+    //      affects windows the live scene IS painting this frame).
+    //
+    // Known simplification: the hidden windows land ABOVE the docks/panels
+    // baked into layer 1, so a window that overlapped a panel paints over it
+    // for the transition's duration instead of under it. The packs start
+    // shrinking/fading the windows layer immediately, so this reads correctly.
+    const qreal scale = screen->scale();
+    const QRectF logicalGeometry = screen->geometryF();
+
+    const ShaderInternal::ScopedGlState glStateGuard;
+
+    std::unique_ptr<KWin::GLTexture> tex =
+        allocateOutputTexture(outputViewport.deviceSize(), captureFormatFor(outputTarget));
+    if (!tex) {
+        return nullptr;
     }
-    return captureLiveScene(mask, screen, outputTarget, outputViewport);
+    KWin::GLFramebuffer fbo(tex.get());
+    if (!fbo.valid()) {
+        return nullptr;
+    }
+
+    {
+        KWin::RenderTarget renderTarget(&fbo, outputTarget.colorDescription());
+        KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
+        KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        // Layer 1: the bare desktop, via KWin's own composite (same call and
+        // device-space region reasoning as captureLiveScene).
+        KWin::effects->paintScreen(renderTarget, viewport, mask,
+                                   KWin::Region(KWin::Rect(QPoint(), viewport.deviceSize())), screen);
+
+        // Layer 2: the hidden windows, bottom-to-top in stacking order through
+        // the direct-drive per-window pipeline (see captureDesktop for why the
+        // tail must terminate with a raw draw here).
+        m_effect->m_directPaintCapture = true;
+        const auto directPaintGuard = qScopeGuard([this] {
+            m_effect->m_directPaintCapture = false;
+        });
+
+        const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* w : stack) {
+            if (!w || w->isDeleted() || !w->isHiddenByShowDesktop() || w->isMinimized()) {
+                continue;
+            }
+            if (!(w->isOnCurrentDesktop() || w->isOnAllDesktops())) {
+                continue;
+            }
+            if (!w->expandedGeometry().intersects(logicalGeometry)) {
+                continue;
+            }
+            KWin::ItemEffect keepRenderable(w->windowItem());
+            KWin::WindowPaintData captureData;
+            captureData.setOpacity(1.0);
+            const int captureMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
+            m_effect->paintWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
+        }
+
+        KWin::GLFramebuffer::popFramebuffer();
+    }
+    return tex;
 }
 
 } // namespace PlasmaZones
