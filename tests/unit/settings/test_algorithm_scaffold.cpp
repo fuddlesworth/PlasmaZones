@@ -484,7 +484,7 @@ void TestAlgorithmScaffold::blankScaffoldOmitsUnsetNewFlags()
 void TestAlgorithmScaffold::sanitizeStripsBreakoutCharacters()
 {
     QCOMPARE(sanitizeMetadataString(QStringLiteral("a\"b\\c\nd\re")), QStringLiteral("a'b/c d e"));
-    // Braces are legal in display names; the splice depth scan ignores
+    // Braces are legal in display names; the metadata-rewrite depth scan ignores
     // braces inside quoted strings, so sanitize leaves them alone.
     QCOMPARE(sanitizeMetadataString(QStringLiteral("My {Fancy} Grid")), QStringLiteral("My {Fancy} Grid"));
 }

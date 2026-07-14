@@ -29,8 +29,8 @@ struct Capabilities
 
 /// Strip characters that would let a metadata display string break out of its
 /// Luau double-quoted literal (newlines and quotes are replaced, backslashes
-/// become slashes). Braces are fine: spliceTemplate()'s depth scan ignores
-/// braces inside quoted strings.
+/// become slashes). Braces are fine: rewriteMetadataNameId()'s depth scan
+/// ignores braces inside quoted strings.
 QString sanitizeMetadataString(QString value);
 
 /// Rewrite the top-level `name` / `id` fields of a `.luau` algorithm's

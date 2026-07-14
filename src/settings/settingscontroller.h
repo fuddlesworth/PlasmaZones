@@ -794,11 +794,14 @@ private:
     // bundle's sources AND by m_scriptLoader below. Reverse-order member
     // destruction must tear down the loader and the bundle BEFORE the
     // registries those consumers borrow. With the order below:
-    //   1. ~m_scriptLoader first (unregisters scripted algorithms while
-    //      the registry is still alive — fixes a UAF the QObject-child-
-    //      parent pattern had, where ~QObject ran after unique_ptr reset).
-    //   2. ~m_localSources drops borrowed source pointers.
-    //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
+    //   1. The registry/loader borrowers declared after them run first:
+    //      ~m_snappingShadersPage, ~m_tilingAlgorithmPage, ~m_algorithmService
+    //      (which disconnects its watchers — see algorithmservice.h).
+    //   2. ~m_scriptLoader (unregisters scripted algorithms while the
+    //      registry is still alive — fixes a UAF the QObject-child-parent
+    //      pattern had, where ~QObject ran after unique_ptr reset).
+    //   3. ~m_localSources drops borrowed source pointers.
+    //   4. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
@@ -911,7 +914,7 @@ private:
     // Manual layouts sort first; within each category alphabetical by
     // displayName (case-insensitive).
     static void sortMergedLayoutList(QVariantList& list);
-    // Defence-in-depth path sanitiser shared by importLayout/exportLayout and
+    // Defence-in-depth path sanitizer shared by importLayout/exportLayout and
     // importAlgorithm/exportAlgorithm (layouts TU) and
     // importAllSettings/exportAllSettings (session TU).
     // See the implementation comment for the rejection rules.

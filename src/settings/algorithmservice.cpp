@@ -10,7 +10,6 @@
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
 
-#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
@@ -500,7 +499,8 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     QString content = QString::fromUtf8(sourceFile.readAll());
     // readAll() returns what it managed to read: without this check a mid-file
     // failure would be rewritten and registered as a truncated algorithm (the
-    // metadata regexes below sit near the top of the file and would still hit).
+    // metadata table the rewrite below targets sits near the top of the file,
+    // so the rewrite would still succeed on a truncated read).
     if (sourceFile.error() != QFileDevice::NoError) {
         qCWarning(PlasmaZones::lcCore) << "Failed to read source algorithm file:" << canonicalSource
                                        << sourceFile.errorString();
@@ -527,8 +527,8 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     if (content.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "duplicateAlgorithm: unrecognized metadata shape in" << canonicalSource;
         Q_EMIT algorithmOperationFailed(
-            PhosphorI18n::tr("Could not duplicate the algorithm. Its metadata format is not recognized. "
-                             "Expected `name = \"...\"` and `id = \"...\"` on separate lines."));
+            PhosphorI18n::tr("Could not duplicate the algorithm. Its metadata table is not in a shape "
+                             "this app can rewrite."));
         return false;
     }
 
