@@ -88,7 +88,16 @@ private:
     PhosphorTiles::AlgorithmRegistry* m_registry = nullptr;
     PhosphorTiles::ScriptedAlgorithmLoader* m_loader = nullptr;
 
-    QHash<QString, QMetaObject::Connection> m_algorithmWatchers;
+    /// One registration watcher per expected algorithm id. The generation
+    /// pins each watcher's timeout timer to the watcher it was armed with,
+    /// so a stale timer cannot tear down a successor watching the same id.
+    struct RegistrationWatcher
+    {
+        QMetaObject::Connection connection;
+        quint64 generation = 0;
+    };
+    QHash<QString, RegistrationWatcher> m_algorithmWatchers;
+    quint64 m_watcherGeneration = 0;
 };
 
 } // namespace PlasmaZones

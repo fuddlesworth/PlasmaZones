@@ -29,6 +29,7 @@
 #include <QLoggingCategory>
 #include <QRect>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QStringLiteral>
 #include <QTimer>
@@ -90,7 +91,7 @@ AlgorithmService::~AlgorithmService()
     // watcher signal queued mid-destruction cannot fire into a
     // half-destructed service.
     for (auto it = m_algorithmWatchers.cbegin(); it != m_algorithmWatchers.cend(); ++it) {
-        disconnect(it.value());
+        disconnect(it.value().connection);
     }
     m_algorithmWatchers.clear();
 }
@@ -102,9 +103,8 @@ AlgorithmService::~AlgorithmService()
 QVariantList AlgorithmService::availableAlgorithms() const
 {
     QVariantList algorithms;
-    auto* registry = m_registry;
-    for (const QString& id : registry->availableAlgorithms()) {
-        PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(id);
+    for (const QString& id : m_registry->availableAlgorithms()) {
+        PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(id);
         if (algo) {
             QVariantMap algoMap;
             algoMap[QLatin1String("id")] = id;
@@ -131,8 +131,7 @@ QVariantList AlgorithmService::availableAlgorithms() const
 QVariantList AlgorithmService::generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
                                                         int masterCount, const QVariantMap& customParams) const
 {
-    auto* registry = m_registry;
-    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(algorithmId);
     if (!algo) {
         return {};
     }
@@ -176,8 +175,7 @@ QVariantList AlgorithmService::generateAlgorithmPreview(const QString& algorithm
 
 QVariantList AlgorithmService::generateAlgorithmDefaultPreview(const QString& algorithmId) const
 {
-    auto* registry = m_registry;
-    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(algorithmId);
     if (!algo) {
         return {};
     }
@@ -270,8 +268,7 @@ QString AlgorithmService::scriptedFilePath(const QString& algorithmId) const
 {
     if (algorithmId.isEmpty())
         return QString();
-    auto* registry = m_registry;
-    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(algorithmId);
     if (!algo)
         return QString();
     auto* scripted = qobject_cast<PhosphorTiles::LuauTileAlgorithm*>(algo);
@@ -287,7 +284,7 @@ void AlgorithmService::cancelAlgorithmWatcher(const QString& expectedId)
 {
     auto it = m_algorithmWatchers.find(expectedId);
     if (it != m_algorithmWatchers.end()) {
-        disconnect(it.value());
+        disconnect(it.value().connection);
         m_algorithmWatchers.erase(it);
     }
 }
@@ -297,27 +294,31 @@ void AlgorithmService::watchForAlgorithmRegistration(const QString& expectedId)
     // Cancel any existing watcher for this ID to prevent stacking
     cancelAlgorithmWatcher(expectedId);
 
-    m_algorithmWatchers.insert(expectedId,
-                               connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this,
-                                       [this, expectedId](const QString& registeredId) {
-                                           if (registeredId != expectedId) {
-                                               return;
-                                           }
-                                           auto it = m_algorithmWatchers.find(expectedId);
-                                           if (it != m_algorithmWatchers.end()) {
-                                               disconnect(it.value());
-                                               m_algorithmWatchers.erase(it);
-                                           }
-                                           Q_EMIT algorithmCreated(expectedId);
-                                       }));
+    const quint64 generation = ++m_watcherGeneration;
+    const QMetaObject::Connection conn = connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered,
+                                                 this, [this, expectedId](const QString& registeredId) {
+                                                     if (registeredId != expectedId) {
+                                                         return;
+                                                     }
+                                                     auto it = m_algorithmWatchers.find(expectedId);
+                                                     if (it != m_algorithmWatchers.end()) {
+                                                         disconnect(it.value().connection);
+                                                         m_algorithmWatchers.erase(it);
+                                                     }
+                                                     Q_EMIT algorithmCreated(expectedId);
+                                                 });
+    m_algorithmWatchers.insert(expectedId, {conn, generation});
     // The context object (this) ensures the lambda is not invoked if AlgorithmService
     // is destroyed before the timer fires — QTimer::singleShot with a context guarantees this.
-    QTimer::singleShot(10000, this, [this, expectedId]() {
+    // The captured generation pins the timer to THIS watcher: if the watcher
+    // resolves and a new one is created for the same id within the window,
+    // the stale timer must not tear the newcomer down.
+    QTimer::singleShot(10000, this, [this, expectedId, generation]() {
         auto it = m_algorithmWatchers.find(expectedId);
-        if (it == m_algorithmWatchers.end()) {
+        if (it == m_algorithmWatchers.end() || it.value().generation != generation) {
             return;
         }
-        disconnect(it.value());
+        disconnect(it.value().connection);
         m_algorithmWatchers.erase(it);
         qCWarning(PlasmaZones::lcCore) << "Algorithm registration timed out for:" << expectedId;
         Q_EMIT algorithmOperationFailed(
@@ -386,8 +387,7 @@ bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
         return false;
     }
 
-    auto* registry = m_registry;
-    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(algorithmId);
     if (!algo || !algo->isUserScript()) {
         qCWarning(PlasmaZones::lcCore) << "Cannot delete algorithm — not a user script:" << algorithmId;
         Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Only user-created algorithms can be deleted."));
@@ -439,8 +439,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
         return false;
     }
 
-    auto* registry = m_registry;
-    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(algorithmId);
     if (!algo) {
         Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("That algorithm is no longer registered."));
         return false;
@@ -451,8 +450,11 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     if (!dir.exists())
         dir.mkpath(QStringLiteral("."));
 
-    // Generate unique filename: algorithmId-copy.luau, algorithmId-copy-2.luau, etc.
-    const QString baseName = algorithmId + QStringLiteral("-copy");
+    // Generate unique filename: <source>-copy.luau, <source>-copy-2.luau, etc.
+    // Derived from the source FILE name, not the registry id: the loader
+    // validates basenames but takes metadata ids verbatim, so an id is not
+    // guaranteed to be a safe path component.
+    const QString baseName = QFileInfo(sourcePath).completeBaseName() + QStringLiteral("-copy");
     const QString destPath = findUniqueAlgorithmPath(destDir, baseName);
     if (destPath.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "Could not find unique filename for duplicate:" << baseName;
@@ -562,46 +564,27 @@ bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString
         return false;
     }
 
-    // Atomic-ish replace: copy source → tmp, move existing dest → backup,
-    // rename tmp → dest, delete backup on success. On any failure along
-    // the way, restore the backup so the user's pre-existing file is never
-    // lost. QFile::rename fails if dest exists, so we can't skip the
-    // backup step on POSIX like POSIX rename(2) would.
-    const QString tmpPath = destPath + QStringLiteral(".tmp");
-    const QString backupPath = destPath + QStringLiteral(".bak");
-    QFile::remove(tmpPath);
-    QFile::remove(backupPath);
-
-    if (!QFile::copy(sourcePath, tmpPath)) {
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not copy algorithm file for export."));
+    // Atomic replace via QSaveFile: it writes to a uniquely named temporary
+    // in the destination directory and renames over the target on commit,
+    // so a pre-existing destination is never lost on failure and no fixed
+    // ".tmp"/".bak" sibling files are touched.
+    QFile source(sourcePath);
+    if (!source.open(QIODevice::ReadOnly)) {
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not read the algorithm file for export."));
         return false;
     }
+    const QByteArray contents = source.readAll();
+    source.close();
 
-    const bool destExisted = QFile::exists(destPath);
-    if (destExisted && !QFile::rename(destPath, backupPath)) {
-        QFile::remove(tmpPath);
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not replace existing file at export destination."));
+    QSaveFile out(destPath);
+    if (!out.open(QIODevice::WriteOnly)) {
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not write to export destination."));
         return false;
     }
-
-    if (!QFile::rename(tmpPath, destPath)) {
-        // rename() fails across filesystems — fall back to copy+remove.
-        if (!QFile::copy(tmpPath, destPath)) {
-            // Restore the original file so the caller's dest is never lost.
-            if (destExisted) {
-                QFile::rename(backupPath, destPath);
-            }
-            QFile::remove(tmpPath);
-            Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not write to export destination."));
-            return false;
-        }
-        if (!QFile::remove(tmpPath)) {
-            qCWarning(PlasmaZones::lcCore) << "Failed to clean up temporary export file:" << tmpPath;
-        }
-    }
-
-    if (destExisted) {
-        QFile::remove(backupPath);
+    if (out.write(contents) != contents.size() || !out.commit()) {
+        // QSaveFile discards the temporary on failure; dest is untouched.
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not write to export destination."));
+        return false;
     }
     return true;
 }
@@ -610,18 +593,18 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
                                              const QVariantMap& capabilities)
 {
     // Sanitize name to a filename: lowercase, replace non-alphanumeric (except hyphens) with
-    // hyphens, collapse multiple hyphens, strip leading digits, then strip
-    // leading/trailing hyphens (in that order, so a digit strip cannot leave
-    // a leading hyphen behind)
+    // hyphens, collapse multiple hyphens, then strip the whole leading run of
+    // digits and hyphens in one pass (so the result can start with neither,
+    // e.g. "12-3col" cannot resurface a leading digit) plus trailing hyphens
     QString filename = name.trimmed().toLower();
     static const QRegularExpression nonAlnum(QStringLiteral("[^a-z0-9-]"));
     filename.replace(nonAlnum, QStringLiteral("-"));
     static const QRegularExpression multiHyphen(QStringLiteral("-{2,}"));
     filename.replace(multiHyphen, QStringLiteral("-"));
-    static const QRegularExpression leadDigits(QStringLiteral("^[0-9]+"));
-    filename.replace(leadDigits, QString());
-    static const QRegularExpression leadTrailHyphen(QStringLiteral("^-|-$"));
-    filename.replace(leadTrailHyphen, QString());
+    static const QRegularExpression leadDigitsHyphens(QStringLiteral("^[0-9-]+"));
+    filename.replace(leadDigitsHyphens, QString());
+    static const QRegularExpression trailHyphens(QStringLiteral("-+$"));
+    filename.replace(trailHyphens, QString());
     if (filename.isEmpty())
         filename = QStringLiteral("untitled-algorithm");
 

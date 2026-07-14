@@ -132,6 +132,10 @@ void TestAlgorithmScaffold::spliceRejectsTemplateWithoutMetadata()
     QVERIFY(spliceTemplate(QStringLiteral("metadata = {\n name = \"a\",\n"), kHeader, QStringLiteral("X"),
                            QStringLiteral("x"))
                 .isEmpty());
+    // Malformed table whose depth goes negative (more closers than openers).
+    QVERIFY(spliceTemplate(QStringLiteral("metadata = {\n    }},\n    name = \"a\",\n}\n"), kHeader,
+                           QStringLiteral("X"), QStringLiteral("x"))
+                .isEmpty());
 }
 
 void TestAlgorithmScaffold::spliceRejectsSingleLineMetadata()

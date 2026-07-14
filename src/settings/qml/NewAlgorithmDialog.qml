@@ -32,10 +32,7 @@ Kirigami.Dialog {
     property string _previousAutoName: ""
     readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
     readonly property color _subtleBg: _colors.subtleBg
-    readonly property color _subtleBorder: _colors.subtleBorder
     readonly property color _accentBorder: _colors.accentBorder
-    readonly property color _badgeBg: _colors.badgeBg
-    readonly property color _badgeBorder: _colors.badgeBorder
     // Re-evaluated on open so it picks up the correct screen.
     // Clamped to [1.0, 3.6] to keep the preview usable on extreme aspect ratios (e.g. 32:9).
     property real screenAspectRatio: 16 / 9

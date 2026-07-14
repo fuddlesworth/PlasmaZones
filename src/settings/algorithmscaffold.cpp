@@ -198,8 +198,12 @@ QString spliceTemplate(const QString& templateContent, const QString& newHeader,
         }
         metaLines += line;
 
-        if (depth == 0) {
-            metaEnd = i;
+        if (depth <= 0) {
+            // A negative depth means more closers than openers — malformed
+            // input; leave metaEnd at -1 so the splice rejects it.
+            if (depth == 0) {
+                metaEnd = i;
+            }
             break;
         }
     }

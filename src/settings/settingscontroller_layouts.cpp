@@ -493,7 +493,13 @@ void SettingsController::openAlgorithmsFolder()
 
 bool SettingsController::importAlgorithm(const QString& filePath)
 {
-    return m_algorithmService->importAlgorithm(filePath);
+    const QString safe = sanitizeIOPath(filePath);
+    if (safe.isEmpty()) {
+        qCWarning(lcCore) << "importAlgorithm: refusing unsafe path" << filePath;
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Import refused: unsafe path"));
+        return false;
+    }
+    return m_algorithmService->importAlgorithm(safe);
 }
 
 QString SettingsController::algorithmIdFromLayoutId(const QString& layoutId)
@@ -544,7 +550,13 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
 
 bool SettingsController::exportAlgorithm(const QString& algorithmId, const QString& destPath)
 {
-    return m_algorithmService->exportAlgorithm(algorithmId, destPath);
+    const QString safe = sanitizeIOPath(destPath);
+    if (safe.isEmpty()) {
+        qCWarning(lcCore) << "exportAlgorithm: refusing unsafe path" << destPath;
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Export refused: unsafe path"));
+        return false;
+    }
+    return m_algorithmService->exportAlgorithm(algorithmId, safe);
 }
 
 QString SettingsController::createNewAlgorithm(const QString& name, const QString& baseTemplate,

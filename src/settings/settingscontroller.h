@@ -363,8 +363,6 @@ public:
     // PhosphorZones::Layout CRUD (D-Bus to daemon)
     Q_INVOKABLE void createNewLayout();
     Q_INVOKABLE bool createNewLayout(const QString& name, const QString& type, int aspectRatioClass, bool openInEditor);
-    Q_INVOKABLE QString createNewAlgorithm(const QString& name, const QString& baseTemplate,
-                                           const QVariantMap& capabilities);
     Q_INVOKABLE void deleteLayout(const QString& layoutId);
     Q_INVOKABLE void duplicateLayout(const QString& layoutId);
     Q_INVOKABLE void editLayout(const QString& layoutId);
@@ -504,6 +502,8 @@ public:
                                                       int masterCount, const QVariantMap& customParams) const;
     Q_INVOKABLE QVariantList generateAlgorithmDefaultPreview(const QString& algorithmId) const;
     Q_INVOKABLE void openAlgorithmsFolder();
+    Q_INVOKABLE QString createNewAlgorithm(const QString& name, const QString& baseTemplate,
+                                           const QVariantMap& capabilities);
     Q_INVOKABLE bool importAlgorithm(const QString& filePath);
     Q_INVOKABLE static QString algorithmIdFromLayoutId(const QString& layoutId);
     Q_INVOKABLE void openAlgorithm(const QString& algorithmId);
