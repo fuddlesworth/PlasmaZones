@@ -38,7 +38,9 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 // autotile layout never sees the transient 1-window state that causes the
 // master to balloon to the full screen. Real user minimizes always last
 // longer than this, so they commit normally.
-static constexpr int kMinimizeFloatDebounceMs = 75;
+// Pinned to the shared spurious-pair window (plasmazoneseffect.h) so this
+// debounce and the minimize shader-event suppression can never desync.
+static constexpr int kMinimizeFloatDebounceMs = kSpuriousMinimizePairMs;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // D-Bus signal slot handlers
