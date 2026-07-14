@@ -268,11 +268,38 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     KWin::effects->addRepaintFull();
 }
 
+void DesktopTransitionManager::reapPeekTransitions()
+{
+    // Any bail-out from beginPeek must not strand live peek legs: a hide leg
+    // still blending would keep painting the windows scene draining into the
+    // bare desktop while the toggle it animated has already been reversed
+    // (under a foreign claim, or with the pack since unassigned). Reap peek
+    // entries (kind-guarded — a live switch is not ours to truncate) and
+    // repaint so the real scene draws a frame nothing else schedules.
+    bool reapedAny = false;
+    for (auto it = m_active.begin(); it != m_active.end();) {
+        if (it->second.kind != Kind::Switch) {
+            if (!reapedAny) {
+                ensureGlContextCurrent();
+                reapedAny = true;
+            }
+            KWin::effects->addRepaint(it->first->geometry());
+            it = m_active.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, const QVariantMap& params,
                                          int durationMs, std::shared_ptr<const PhosphorAnimation::Curve> progressCurve)
 {
     if (effectId.isEmpty()) {
-        return; // no shader assigned — KWin's instant show-desktop proceeds
+        // No shader assigned — KWin's instant show-desktop proceeds. Reap so a
+        // hide leg begun before the pack was unassigned cannot keep blending
+        // against the reversed toggle.
+        reapPeekTransitions();
+        return;
     }
     // Bow out while ANY effect holds the fullscreen claim — Overview, Cube, or
     // our own in-flight desktop switch. The peek never takes the claim itself
@@ -284,24 +311,7 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     // side effect the peek path exists to avoid, cancelling the shown state
     // from under a completed hide leg.
     if (KWin::effects->activeFullScreenEffect()) {
-        // Bowing out must not strand live peek legs: a hide leg still blending
-        // here would keep painting the windows scene draining into the bare
-        // desktop while the toggle it animated is being reversed under a
-        // foreign claim. Reap peek entries (kind-guarded — a live switch is
-        // not ours to truncate) and repaint so the real scene draws.
-        bool reapedAny = false;
-        for (auto it = m_active.begin(); it != m_active.end();) {
-            if (it->second.kind != Kind::Switch) {
-                if (!reapedAny) {
-                    ensureGlContextCurrent();
-                    reapedAny = true;
-                }
-                KWin::effects->addRepaint(it->first->geometry());
-                it = m_active.erase(it);
-            } else {
-                ++it;
-            }
-        }
+        reapPeekTransitions();
         return;
     }
     // Shared resolve prologue: pack validation + parameter pools + clamped

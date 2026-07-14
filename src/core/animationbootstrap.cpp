@@ -233,8 +233,9 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         {QLatin1StringView{"widget.pulse.slow"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1500.0},
 
         // ── Windows ───────────────────────────────────────────────
-        // Family ease-out for open/move/resize/focus/maximize;
-        // close is the notable ease-in exception.
+        // Family ease-out for open/move/focus/maximize;
+        // close is the notable ease-in exception. (No resize legs exist —
+        // they were dropped from the taxonomy, see profilepaths.cpp.)
         {QLatin1StringView{"window"}, QLatin1StringView{"widget-out"}, 200.0},
         {QLatin1StringView{"window.appearance.close"}, QLatin1StringView{"cubic-in"}, 150.0},
 

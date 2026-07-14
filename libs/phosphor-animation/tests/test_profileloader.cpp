@@ -272,12 +272,13 @@ private Q_SLOTS:
 
         // Delete user copy, request rescan. Spy attached BEFORE the trigger so
         // a rescan that fires early (shortened debounce, future synchronous
-        // fast path) cannot slip past it — same ordering as
-        // testRescanFiresSignal_whenContentChanged.
+        // fast path) cannot slip past it, and QTRY instead of spy.wait so a
+        // synchronous emission already sitting in the spy still passes — same
+        // pattern as testRescanFiresSignal_whenContentChanged.
         QSignalSpy spy(&loader, &ProfileLoader::profilesChanged);
         QVERIFY(QFile::remove(userDir.filePath(QStringLiteral("shared.json"))));
         loader.requestRescan();
-        QVERIFY(spy.wait(500));
+        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 500);
 
         // System is restored via re-parse on the next rescan.
         resolved = reg.resolve(QStringLiteral("shared"));

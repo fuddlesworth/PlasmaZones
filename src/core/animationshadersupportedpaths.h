@@ -118,15 +118,22 @@ inline QStringList shaderSupportedEventPaths()
     return out;
 }
 
-/// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged)
-/// and the daemon's optional verification path.
-inline bool eventPathSupportsShaderLeg(const QString& path)
+/// The supported-path set as a QSet, built once. Shared by the predicate and
+/// the pruner below so their membership source cannot drift.
+inline const QSet<QString>& supportedShaderPathSet()
 {
     static const QSet<QString> kSupported = []() {
         const QStringList list = shaderSupportedEventPaths();
         return QSet<QString>(list.cbegin(), list.cend());
     }();
-    return kSupported.contains(path);
+    return kSupported;
+}
+
+/// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged)
+/// and the daemon's optional verification path.
+inline bool eventPathSupportsShaderLeg(const QString& path)
+{
+    return supportedShaderPathSet().contains(path);
 }
 
 /// Drop every per-path override from @p src whose path is NOT in
@@ -149,10 +156,7 @@ inline bool eventPathSupportsShaderLeg(const QString& path)
 inline PhosphorAnimationShaders::ShaderProfileTree
 pruneShaderProfileTreeToSupportedPaths(const PhosphorAnimationShaders::ShaderProfileTree& src)
 {
-    static const QSet<QString> kSupported = []() {
-        const QStringList list = shaderSupportedEventPaths();
-        return QSet<QString>(list.cbegin(), list.cend());
-    }();
+    const QSet<QString>& kSupported = supportedShaderPathSet();
 
     PhosphorAnimationShaders::ShaderProfileTree pruned;
     pruned.setBaseline(src.baseline());

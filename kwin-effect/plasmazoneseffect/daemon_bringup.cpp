@@ -696,7 +696,10 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("windowBorderScope"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.borderScope != s) {
+        // Reject the empty string (an older daemon answers unknown keys with a
+        // valid empty reply): scopes carry a seeded non-empty default, and an
+        // empty scope silently contributes nothing to the appearance match.
+        if (!s.isEmpty() && m_windowAppearanceDefault.borderScope != s) {
             m_windowAppearanceDefault.borderScope = s;
             scheduleBorderSweep();
         }
@@ -738,7 +741,8 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("windowTitleBarScope"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.titleBarScope != s) {
+        // Empty-reply guard — see windowBorderScope above.
+        if (!s.isEmpty() && m_windowAppearanceDefault.titleBarScope != s) {
             m_windowAppearanceDefault.titleBarScope = s;
             scheduleBorderSweep();
         }
@@ -754,7 +758,8 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("windowOpacityTintScope"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.opacityTintScope != s) {
+        // Empty-reply guard — see windowBorderScope above.
+        if (!s.isEmpty() && m_windowAppearanceDefault.opacityTintScope != s) {
             m_windowAppearanceDefault.opacityTintScope = s;
             scheduleBorderSweep();
         }

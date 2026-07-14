@@ -374,9 +374,10 @@ int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
     // The return mixes two buckets: per-store state prunes from the base class
     // and runtime effect-reported-flag erasures below, so a window present in
-    // both counts once per bucket. Diagnostic value only (the caller sums it
-    // into a cleanup log line); no consumer treats it as a distinct-window
-    // count.
+    // both counts once per bucket. The caller sums it into a cleanup log line
+    // and gates its dirty-mark on > 0 — safe either way, since any positive
+    // value means something was erased — but no consumer may treat it as a
+    // distinct-window count.
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
     for (auto it = m_effectReportedWindows.begin(); it != m_effectReportedWindows.end();) {
         if (!aliveWindowIds.contains(*it)) {
@@ -409,7 +410,11 @@ void SnapEngine::setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver)
 {
     // Drop the previous resolver's destroyed guard first: left connected, its
     // eventual destruction would null the LIVE replacement below. Mirrors
-    // setAutotileEngine.
+    // setAutotileEngine. NOTE: this severs EVERY destroyed-guard this engine
+    // holds on that sender, which is safe only while each guarded role
+    // (autotile engine / adjacency resolver / nav-state provider) lives on a
+    // distinct QObject — true for all production implementors today. A future
+    // combined adaptor implementing two roles must split this per-role.
     if (m_zoneAdjacencyResolverObj) {
         disconnect(m_zoneAdjacencyResolverObj, &QObject::destroyed, this, nullptr);
     }

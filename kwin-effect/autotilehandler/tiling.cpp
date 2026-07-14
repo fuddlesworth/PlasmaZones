@@ -85,7 +85,16 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
     // a single end-of-turn flush, so this is cheap and is a no-op when no
     // appearance/animation rules are loaded.
     for (const auto& req : validatedRequests) {
-        m_effect->invalidateRuleCacheForStateChange(req.windowId);
+        // Re-key to the window's LIVE id: the rule-match cache keys on
+        // getWindowId, and after a cross-session restore the daemon can still
+        // send the pre-restore UUID (slotWindowStateChanged spells out why).
+        // Unresolved falls back to the daemon id, correct for the ordinary
+        // same-session case where the two are identical.
+        QString liveWindowId = req.windowId;
+        if (KWin::EffectWindow* const w = m_effect->findWindowById(req.windowId)) {
+            liveWindowId = m_effect->getWindowId(w);
+        }
+        m_effect->invalidateRuleCacheForStateChange(liveWindowId);
     }
 
     // Stagger generations are bumped PER SCREEN below, once this batch's target
@@ -305,7 +314,7 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
         genByScreen.insert(it.key(), ++m_autotileStaggerGenByScreen[it.key()]);
     }
 
-    auto onComplete = [this, toApply, newTiledByScreen, savedGlobalStack, gen, genByScreen]() {
+    auto onComplete = [this, newTiledByScreen, savedGlobalStack, gen, genByScreen]() {
         if (m_autotileStaggerGeneration != gen) {
             return;
         }

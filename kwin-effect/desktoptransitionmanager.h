@@ -316,6 +316,11 @@ private:
     /// Implemented in desktoptransitionshader.cpp (the assembly half).
     CompiledDesktopShader* compiledShader(const QString& effectId);
 
+    /// Drop every live PEEK transition (kind-guarded; switches keep running),
+    /// repainting each affected output. Called by every beginPeek bail-out so
+    /// a stranded hide leg never keeps blending against a reversed toggle.
+    void reapPeekTransitions();
+
     /// Free an output's transition and, when the last one goes, release the
     /// active-fullscreen-effect claim.
     void endOutput(KWin::LogicalOutput* screen);
