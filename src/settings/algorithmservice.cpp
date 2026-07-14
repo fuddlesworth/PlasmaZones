@@ -479,8 +479,10 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     sourceFile.close();
 
     // Update name and id in the copy's metadata object — strip all existing " (Copy)" suffixes to avoid accumulation.
-    // Sanitize before stripping: sanitization maps braces to parentheses, so a
-    // name ending in "{Copy}" would otherwise dodge the strip and accumulate.
+    // Sanitize before stripping so the strip sees the text that will actually
+    // be written: sanitization can materialize a trailing " (Copy)" (e.g. a
+    // newline before "(Copy)" becomes a space) that stripping afterwards
+    // would miss, and the suffix appended below must never be re-mangled.
     const QString newFilename = QFileInfo(destPath).completeBaseName();
     QString baseCopyName = AlgorithmScaffold::sanitizeMetadataString(algo->name());
     while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
@@ -608,16 +610,18 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
                                              const QVariantMap& capabilities)
 {
     // Sanitize name to a filename: lowercase, replace non-alphanumeric (except hyphens) with
-    // hyphens, collapse multiple hyphens, strip leading/trailing hyphens
+    // hyphens, collapse multiple hyphens, strip leading digits, then strip
+    // leading/trailing hyphens (in that order, so a digit strip cannot leave
+    // a leading hyphen behind)
     QString filename = name.trimmed().toLower();
     static const QRegularExpression nonAlnum(QStringLiteral("[^a-z0-9-]"));
     filename.replace(nonAlnum, QStringLiteral("-"));
     static const QRegularExpression multiHyphen(QStringLiteral("-{2,}"));
     filename.replace(multiHyphen, QStringLiteral("-"));
-    static const QRegularExpression leadTrailHyphen(QStringLiteral("^-|-$"));
-    filename.replace(leadTrailHyphen, QString());
     static const QRegularExpression leadDigits(QStringLiteral("^[0-9]+"));
     filename.replace(leadDigits, QString());
+    static const QRegularExpression leadTrailHyphen(QStringLiteral("^-|-$"));
+    filename.replace(leadTrailHyphen, QString());
     if (filename.isEmpty())
         filename = QStringLiteral("untitled-algorithm");
 
@@ -664,7 +668,8 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
         if (!safeTemplateName.match(baseTemplate).hasMatch()) {
             qCWarning(PlasmaZones::lcCore)
                 << "createNewAlgorithm: unsafe template id (not a bare basename):" << baseTemplate;
-            Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("The selected template could not be used."));
+            Q_EMIT algorithmOperationFailed(
+                PhosphorI18n::tr("The selected template could not be used. Pick another template or start blank."));
             return QString();
         }
 

@@ -50,7 +50,8 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
 /// an opening line that does not end at the `{`, an unterminated table, or a
 /// name/id field that is not a whole `field = "value",` line. Brace-depth
 /// scan that ignores braces inside quoted strings and after `--` comments;
-/// Luau long strings/comments (`[[...]]`) inside metadata are not supported.
+/// Luau long strings/comments (`[[...]]`) and multi-line short strings
+/// inside metadata are not supported.
 QString spliceTemplate(const QString& templateContent, const QString& newHeader, const QString& displayName,
                        const QString& id);
 

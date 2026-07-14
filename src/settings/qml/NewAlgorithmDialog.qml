@@ -168,7 +168,6 @@ Kirigami.Dialog {
                             id: templateDelegate
 
                             required property var modelData
-                            required property int index
 
                             templateName: modelData.name
                             templateDesc: modelData.desc

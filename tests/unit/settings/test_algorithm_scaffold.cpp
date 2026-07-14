@@ -197,6 +197,8 @@ void TestAlgorithmScaffold::spliceIgnoresBracesInsideStrings()
         "return pluau.algorithm {\n"
         "    metadata = {\n"
         "        description = \"a } weird { description\",\n"
+        "        summary = \"escaped \\\" and a } brace\",\n"
+        "        hint = 'single } quoted { too',\n"
         "        -- a comment mentioning a } brace\n"
         "        name = \"Braced\",\n"
         "        id = \"braced\",\n"
@@ -207,6 +209,8 @@ void TestAlgorithmScaffold::spliceIgnoresBracesInsideStrings()
     QVERIFY(out.contains(QStringLiteral("        name = \"My Braced\",")));
     QVERIFY(out.contains(QStringLiteral("        id = \"my-braced\",")));
     QVERIFY(out.contains(QStringLiteral("description = \"a } weird { description\"")));
+    QVERIFY(out.contains(QStringLiteral("summary = \"escaped \\\" and a } brace\"")));
+    QVERIFY(out.contains(QStringLiteral("hint = 'single } quoted { too'")));
     QVERIFY(out.contains(QStringLiteral("tile = function(ctx) return {} end,")));
 }
 
@@ -268,8 +272,11 @@ void TestAlgorithmScaffold::spliceAllBundledAlgorithms()
         QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 1);
 
         // Every original line survives except the SPDX header and the
-        // top-level name/id lines (nested customParams `{ name = ...` lines
-        // start with a brace, so the anchored regex skips them).
+        // top-level name/id lines. The anchored regex is a conservative
+        // filter: it exempts any line that starts with `name =` / `id =` at
+        // any depth (bundled customParams entries open with `{ name = ...`,
+        // which it does not match), so it can only under-check a nested
+        // own-line name, never fail on a preserved one.
         const QStringList lines = content.split(QLatin1Char('\n'));
         for (const QString& line : lines) {
             const QString trimmed = line.trimmed();

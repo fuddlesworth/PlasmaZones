@@ -38,8 +38,9 @@ QString quotedField(const QString& key, const QString& value)
 
 /// Net brace delta of one line, ignoring braces inside quoted Luau strings
 /// (double or single quoted, with backslash escapes) and after a `--` comment
-/// marker. Long strings/comments (`[[...]]`) are not handled; the bundled
-/// templates' metadata does not use them.
+/// marker. Line-scoped: long strings/comments (`[[...]]`) and short strings
+/// continued across lines (backslash-newline, `\z`) are not handled; the
+/// bundled templates' metadata uses neither.
 int braceDelta(const QString& line)
 {
     int delta = 0;
