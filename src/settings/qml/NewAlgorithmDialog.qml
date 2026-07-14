@@ -349,14 +349,15 @@ Kirigami.Dialog {
                             rowSpacing: Kirigami.Units.smallSpacing
 
                             // Each box drives its flag through `onToggled` and
-                            // reads it back through `Binding on checked` with
-                            // an explicit RestoreNone, so the onOpened resets
-                            // land and nothing is restored behind them when a
-                            // binding goes away. A plain `checked:` binding
-                            // would also survive the toggle (setChecked() is a
-                            // C++ setter and does not sever a binding); this
-                            // form just states the restore policy rather than
-                            // inheriting a default.
+                            // reads it back through a binding, so the onOpened
+                            // resets land on the control. There is no
+                            // write-back loop: toggle() reaches `checked`
+                            // through a C++ setter, which neither severs the
+                            // binding nor re-emits toggled(). `Binding on
+                            // checked` is equivalent to a plain `checked:`
+                            // binding here, and its RestoreNone never comes up
+                            // because these bindings carry no `when` and so
+                            // never deactivate.
                             CheckBox {
                                 text: i18n("Master count")
                                 onToggled: root.supportsMasterCount = checked

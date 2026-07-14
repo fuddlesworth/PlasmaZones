@@ -77,10 +77,14 @@ private Q_SLOTS:
     void spliceHandlesLongBrackets();
     void spliceHandlesMultiLineLongBrackets();
     void spliceHandlesLevelNLongBrackets();
+    void spliceKeepsQuotesAndLongBracketsApart();
+    void spliceRejectsTrailingNameOrIdField();
+    void spliceOrdersSpdxCopyrightBeforeLicense();
     void splicePreservesLeadingDocComment();
     void spliceNormalizesCrlf();
     void spliceAllBundledAlgorithms();
     void blankScaffoldEmitsRequestedFlags();
+    void blankScaffoldMapsEachFlagToItsOwnField_data();
     void blankScaffoldMapsEachFlagToItsOwnField();
     void blankScaffoldOmitsUnsetNewFlags();
     void sanitizeStripsBreakoutCharacters();
@@ -493,6 +497,71 @@ void TestAlgorithmScaffold::spliceHandlesLevelNLongBrackets()
     verifyRewrittenOnce(out);
 }
 
+void TestAlgorithmScaffold::spliceOrdersSpdxCopyrightBeforeLicense()
+{
+    // templateSpdxLines emits copyrights first, then every other SPDX tag. No
+    // bundled algorithm is license-first, so only a hand-authored template
+    // reaches the reorder.
+    const QString licenseFirst = QStringLiteral(
+        "-- SPDX-License-Identifier: MIT\n"
+        "-- SPDX-FileCopyrightText: 2026 upstream\n"
+        "\n"
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    const QString out = spliceTemplate(licenseFirst, kCopyright, QStringLiteral("B"), QStringLiteral("b"));
+    QVERIFY(!out.isEmpty());
+    // Both copyrights lead, in new-owner-then-upstream order, and the
+    // template's license follows them.
+    QVERIFY(
+        out.startsWith(QStringLiteral("-- SPDX-FileCopyrightText: 2026 <your name>\n"
+                                      "-- SPDX-FileCopyrightText: 2026 upstream\n"
+                                      "-- SPDX-License-Identifier: MIT\n")));
+}
+
+void TestAlgorithmScaffold::spliceKeepsQuotesAndLongBracketsApart()
+{
+    // A `[[` inside a quoted string is that string's text, not a bracket. Were
+    // the long-bracket check to run before the quote check, this would open a
+    // bracket that never closes and swallow the rest of the table.
+    QString out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        description = \"see [[ docs\",\n")),
+                                 kCopyright, QStringLiteral("B"), QStringLiteral("b"));
+    verifyRewrittenOnce(out);
+
+    // The mirror: a lone quote inside a long bracket is that bracket's text,
+    // and must not open a string.
+    out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        description = [[it's a } thing]],\n")),
+                         kCopyright, QStringLiteral("B"), QStringLiteral("b"));
+    verifyRewrittenOnce(out);
+}
+
+void TestAlgorithmScaffold::spliceRejectsTrailingNameOrIdField()
+{
+    // A name/id that does not lead its line is invisible to the anchored
+    // rewrite. Inserting our own pair anyway would leave two, and Luau takes
+    // the last, so the copy would silently keep the template's name and id.
+    const QString trailingName = moduleWithMetadataBody(QStringLiteral("        a = 1, name = \"x\",\n"));
+    QVERIFY(spliceTemplate(trailingName, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
+
+    const QString trailingId = moduleWithMetadataBody(QStringLiteral("        a = 1, id = \"x\",\n"));
+    QVERIFY(spliceTemplate(trailingId, kCopyright, QStringLiteral("B"), QStringLiteral("b")).isEmpty());
+
+    // But a `name =` inside a string value is text, not a field, so it must
+    // not trip the reject. (verifyRewrittenOnce does not fit here: its
+    // substring count would also see the one inside the value.)
+    const QString inString = moduleWithMetadataBody(QStringLiteral("        description = \"name = x, id = y\",\n"));
+    const QString out = spliceTemplate(inString, kCopyright, QStringLiteral("B"), QStringLiteral("b"));
+    QVERIFY(!out.isEmpty());
+    QVERIFY(out.contains(QStringLiteral("        name = \"B\",")));
+    QVERIFY(out.contains(QStringLiteral("        id = \"b\",")));
+    QVERIFY(!out.contains(QStringLiteral("name = \"A\"")));
+    QVERIFY(out.contains(QStringLiteral("        description = \"name = x, id = y\",")));
+}
+
 void TestAlgorithmScaffold::spliceIgnoresBracesInsideStrings()
 {
     // Braces inside quoted values (or comments) must not desync the depth
@@ -633,48 +702,68 @@ void TestAlgorithmScaffold::blankScaffoldEmitsRequestedFlags()
     QVERIFY(out.contains(QStringLiteral("defaultMaxWindows = 6,")));
     QVERIFY(out.contains(QStringLiteral("minimumWindows = 1,")));
     QVERIFY(out.contains(QStringLiteral("zoneNumberDisplay = \"all\",")));
+    // The literals above pin the values a user sees; these pin that the two
+    // defaults are still written FROM the engine's constants, so a generated
+    // algorithm that drops either line keeps the same behaviour. Hardcoding
+    // either value back into the scaffold fails here while the literals pass.
+    QVERIFY(out.contains(QStringLiteral("defaultSplitRatio = ")
+                         + QString::number(PhosphorTiles::AutotileDefaults::DefaultSplitRatio) + QStringLiteral(",")));
+    QVERIFY(out.contains(QStringLiteral("defaultMaxWindows = ")
+                         + QString::number(PhosphorTiles::AutotileDefaults::ScriptedDefaultMaxWindows)
+                         + QStringLiteral(",")));
+}
+
+void TestAlgorithmScaffold::blankScaffoldMapsEachFlagToItsOwnField_data()
+{
+    QTest::addColumn<int>("index");
+    QTest::addColumn<QString>("field");
+
+    // One row per flag, each setting only that flag. Any two flags therefore
+    // hold different values in at least one row, so swapping a pair of gates
+    // fails here. A pair of mixed permutations does not have that property: two
+    // flags on the same side of every permutation stay indistinguishable.
+    QTest::newRow("masterCount") << 0 << QStringLiteral("supportsMasterCount");
+    QTest::newRow("splitRatio") << 1 << QStringLiteral("supportsSplitRatio");
+    QTest::newRow("overlappingZones") << 2 << QStringLiteral("producesOverlappingZones");
+    QTest::newRow("memory") << 3 << QStringLiteral("supportsMemory");
+    QTest::newRow("scriptState") << 4 << QStringLiteral("supportsScriptState");
+    QTest::newRow("singleWindow") << 5 << QStringLiteral("supportsSingleWindow");
+    QTest::newRow("retileOnFocus") << 6 << QStringLiteral("retileOnFocus");
 }
 
 void TestAlgorithmScaffold::blankScaffoldMapsEachFlagToItsOwnField()
 {
-    // The all-true and all-false cases cannot tell two flags apart: swapping
-    // any pair of gates leaves both green. Two complementary permutations pin
-    // every flag, because each one is true in exactly one of them — so any
-    // swapped pair disagrees in at least one case.
-    Capabilities first;
-    first.splitRatio = true;
-    first.memory = true;
-    first.retileOnFocus = true;
-    QString out = buildBlankScaffold(kHeader, QStringLiteral("Mine"), QStringLiteral("mine"), first);
+    QFETCH(int, index);
+    QFETCH(QString, field);
 
-    QVERIFY(out.contains(QStringLiteral("supportsSplitRatio = true")));
-    QVERIFY(out.contains(QStringLiteral("supportsMemory = true")));
-    QVERIFY(out.contains(QStringLiteral("retileOnFocus = true")));
-    QVERIFY(out.contains(QStringLiteral("supportsMasterCount = false")));
-    QVERIFY(out.contains(QStringLiteral("producesOverlappingZones = false")));
-    // Unset opt-in flags are omitted entirely rather than written false.
-    QVERIFY(!out.contains(QStringLiteral("supportsScriptState")));
-    QVERIFY(!out.contains(QStringLiteral("supportsSingleWindow")));
-    // No script state means no resize-hook stub.
-    QVERIFY(!out.contains(QStringLiteral("onWindowResized")));
+    // The four always-written flags, then the three opt-in ones.
+    const QStringList alwaysWritten = {QStringLiteral("supportsMasterCount"), QStringLiteral("supportsSplitRatio"),
+                                       QStringLiteral("producesOverlappingZones"), QStringLiteral("supportsMemory")};
+    const QStringList optIn = {QStringLiteral("supportsScriptState"), QStringLiteral("supportsSingleWindow"),
+                               QStringLiteral("retileOnFocus")};
 
-    // The complement: every flag true above is false here and vice versa.
-    Capabilities second;
-    second.masterCount = true;
-    second.overlappingZones = true;
-    second.scriptState = true;
-    second.singleWindow = true;
-    out = buildBlankScaffold(kHeader, QStringLiteral("Mine"), QStringLiteral("mine"), second);
+    Capabilities caps;
+    bool* const flags[] = {&caps.masterCount, &caps.splitRatio,   &caps.overlappingZones, &caps.memory,
+                           &caps.scriptState, &caps.singleWindow, &caps.retileOnFocus};
+    *flags[index] = true;
+    const QString out = buildBlankScaffold(kHeader, QStringLiteral("Mine"), QStringLiteral("mine"), caps);
 
-    QVERIFY(out.contains(QStringLiteral("supportsMasterCount = true")));
-    QVERIFY(out.contains(QStringLiteral("producesOverlappingZones = true")));
-    QVERIFY(out.contains(QStringLiteral("supportsScriptState = true")));
-    QVERIFY(out.contains(QStringLiteral("supportsSingleWindow = true")));
-    QVERIFY(out.contains(QStringLiteral("supportsSplitRatio = false")));
-    QVERIFY(out.contains(QStringLiteral("supportsMemory = false")));
-    QVERIFY(!out.contains(QStringLiteral("retileOnFocus")));
-    // Script state brings the stub back.
-    QVERIFY(out.contains(QStringLiteral("onWindowResized")));
+    // The one set flag turns its own field true.
+    QVERIFY2(out.contains(field + QStringLiteral(" = true")), qPrintable(field));
+    // Every other always-written field is false, and every other opt-in field
+    // is absent rather than written false.
+    for (const QString& other : alwaysWritten) {
+        if (other != field) {
+            QVERIFY2(out.contains(other + QStringLiteral(" = false")), qPrintable(other));
+        }
+    }
+    for (const QString& other : optIn) {
+        if (other != field) {
+            QVERIFY2(!out.contains(other), qPrintable(other));
+        }
+    }
+    // The resize-hook stub rides on script state alone.
+    QCOMPARE(out.contains(QStringLiteral("onWindowResized")), field == QLatin1String("supportsScriptState"));
 }
 
 void TestAlgorithmScaffold::blankScaffoldOmitsUnsetNewFlags()

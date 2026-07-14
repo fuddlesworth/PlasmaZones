@@ -60,7 +60,7 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     // Keep a number param's default inside its own [min, max] range so the
     // settings control never initialises outside its track (mirrors the
     // metadata clamping applied to defaultSplitRatio / window counts). A
-    // non-finite default is dropped for the same reason as a non-finite bound.
+    // non-finite default cannot be clamped, so it falls back to the low bound.
     if (d.type == QLatin1String("number") && d.defaultValue.canConvert<double>()) {
         const double v = d.defaultValue.toDouble();
         d.defaultValue = std::isfinite(v) ? std::clamp(v, d.minValue, d.maxValue) : d.minValue;

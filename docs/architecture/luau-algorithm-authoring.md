@@ -76,12 +76,15 @@ That is a complete algorithm. `pluau.algorithm{…}` wraps the table and returns
 | `onWindowRemoved` | no | `(state, index) -> ()` | Lifecycle hook (§8) |
 | `onWindowResized` | no | `(state, resize) -> table?` | Interactive-resize hook (§9) |
 
-The stubs also allow a function in place of any of eight metadata fields
-(`masterZoneIndex`, `supportsMasterCount`, `supportsSplitRatio`,
-`producesOverlappingZones`, `centerLayout`, `minimumWindows`,
-`defaultMaxWindows`, `defaultSplitRatio`) when a value must be computed instead
-of declared. Each is called once at load and cached, so it cannot vary per
-retile. The bundled algorithms all use plain metadata fields.
+Eight of the `metadata` fields can also be supplied as a function on the
+algorithm table itself, alongside `metadata` rather than inside it, when a value
+must be computed instead of declared: `masterZoneIndex`, `supportsMasterCount`,
+`supportsSplitRatio`, `producesOverlappingZones`, `centerLayout`,
+`minimumWindows`, `defaultMaxWindows`, `defaultSplitRatio`. A function there
+takes precedence over the metadata field of the same name. Each is called once
+at load and cached, so it cannot vary per retile. A function written inside
+`metadata` is not an override and is ignored, so the field falls back to its
+default. The bundled algorithms all use plain metadata fields.
 
 ---
 
@@ -123,8 +126,8 @@ fields:
 | `windowCount` / `count` | number | Windows to place (same value, two names) |
 | `area` | `Rect` | Screen work area, in **absolute pixels**, with split helpers (§6) |
 | `innerGap` / `gap` | number | Pixels between adjacent zones |
-| `masterCount` | number | Master windows (when `supportsMasterCount`) |
-| `splitRatio` | number | Master/stack split 0.1–0.9 (when `supportsSplitRatio`) |
+| `masterCount` | number | Master windows (always set; user-adjustable only with `supportsMasterCount`) |
+| `splitRatio` | number | Master/stack split 0.1–0.9 (always set; user-adjustable only with `supportsSplitRatio`) |
 | `minSizes` | `{ {w, h} }` | Per-window minimum sizes, 1-indexed |
 | `focusedIndex` | number | 0-based tiled index of the focused window (`-1` if none) |
 | `windows` | `{ {appId, focused, windowId} }?` | Per-window info, when available |
@@ -300,8 +303,8 @@ resize = {
 Return a table (or `nil` to do nothing). Two optional, independent outputs:
 
 - **`splitRatio`** — a new master/split ratio the engine applies (clamped).
-  This is how ratio-based layouts reflow on resize; the change stays local to
-  the current screen, desktop, and activity. `pluau.masterStackResize(state,
+  This is how ratio-based layouts reflow on resize, and the change stays local
+  to the current screen, desktop, and activity. `pluau.masterStackResize(state,
   resize, horizontal)` implements the standard master/stack case.
 - **Any other keys** — persisted as the new `ctx.state` table, but only when
   `metadata.supportsScriptState = true`. On the next `tile` run, `ctx.state`

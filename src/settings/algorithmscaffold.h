@@ -41,8 +41,9 @@ QString sanitizeMetadataString(QString value);
 /// Returns empty on an unrecognized shape: no metadata table, an opening line
 /// that does not end at the `{`, an unterminated table, a brace depth that
 /// goes negative, or a name/id field that is not a whole `field = "value",`
-/// line. Only depth-1 fields are touched, so nested `customParams` entries
-/// keep their own `name` keys.
+/// line (including one sharing its line with another field, in either order).
+/// Only depth-1 fields are touched, so nested `customParams` entries keep their
+/// own `name` keys.
 ///
 /// The brace-depth scan counts a brace only where it is code. Quoted strings,
 /// `--` line comments, and long brackets at any level (`[[`, `[=[`, ...,

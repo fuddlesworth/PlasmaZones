@@ -73,15 +73,16 @@ QString leadingWhitespace(const QString& line)
 }
 
 /// No Luau long bracket is open.
-constexpr int NoLongBracket = -1;
+constexpr int kNoLongBracket = -1;
 
 /// If a Luau long-bracket opener (`[`, N `=`, `[`) starts at @p pos in @p line,
 /// return its level N and set @p pastOpener to the index just past it.
-/// Otherwise return NoLongBracket.
+/// Otherwise return kNoLongBracket. An out-of-range @p pos simply does not
+/// match, so callers need not bounds-check before asking.
 int matchLongBracketOpen(const QString& line, int pos, int& pastOpener)
 {
-    if (line[pos] != QLatin1Char('[')) {
-        return NoLongBracket;
+    if (pos < 0 || pos >= line.size() || line[pos] != QLatin1Char('[')) {
+        return kNoLongBracket;
     }
     int i = pos + 1;
     int level = 0;
@@ -90,7 +91,7 @@ int matchLongBracketOpen(const QString& line, int pos, int& pastOpener)
         ++i;
     }
     if (i >= line.size() || line[i] != QLatin1Char('[')) {
-        return NoLongBracket;
+        return kNoLongBracket;
     }
     pastOpener = i + 1;
     return level;
@@ -115,21 +116,24 @@ int findLongBracketClose(const QString& line, int level, int from)
 /// close on one line, span lines, or repeat, and @p longBracketLevel carries an
 /// open one across the line boundary.
 ///
+/// When @p codeOnly is non-null, every character counted as code is appended to
+/// it, so a caller can pattern-match a line without matching inside its text.
+///
 /// Not handled: short strings continued across lines (backslash-newline, `\z`).
 /// No bundled template's metadata uses one.
-int braceDelta(const QString& line, int& longBracketLevel)
+int braceDelta(const QString& line, int& longBracketLevel, QString* codeOnly = nullptr)
 {
     int delta = 0;
     int i = 0;
 
     // A long bracket left open by an earlier line: everything up to its closer
     // is text.
-    if (longBracketLevel != NoLongBracket) {
+    if (longBracketLevel != kNoLongBracket) {
         const int past = findLongBracketClose(line, longBracketLevel, 0);
         if (past < 0) {
             return 0;
         }
-        longBracketLevel = NoLongBracket;
+        longBracketLevel = kNoLongBracket;
         i = past;
     }
 
@@ -152,8 +156,8 @@ int braceDelta(const QString& line, int& longBracketLevel)
             // `--[[` opens a long comment, which can close and let code resume.
             // A plain `--` runs to end of line.
             int pastOpener = 0;
-            const int level = i + 2 < line.size() ? matchLongBracketOpen(line, i + 2, pastOpener) : NoLongBracket;
-            if (level == NoLongBracket) {
+            const int level = i + 2 < line.size() ? matchLongBracketOpen(line, i + 2, pastOpener) : kNoLongBracket;
+            if (level == kNoLongBracket) {
                 return delta;
             }
             const int past = findLongBracketClose(line, level, pastOpener);
@@ -166,7 +170,7 @@ int braceDelta(const QString& line, int& longBracketLevel)
         }
         int pastOpener = 0;
         const int level = matchLongBracketOpen(line, i, pastOpener);
-        if (level != NoLongBracket) {
+        if (level != kNoLongBracket) {
             const int past = findLongBracketClose(line, level, pastOpener);
             if (past < 0) {
                 longBracketLevel = level;
@@ -174,6 +178,9 @@ int braceDelta(const QString& line, int& longBracketLevel)
             }
             i = past - 1;
             continue;
+        }
+        if (codeOnly) {
+            codeOnly->append(c);
         }
         if (c == QLatin1Char('{')) {
             ++delta;
@@ -291,6 +298,13 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     static const QRegularExpression idFieldRe(QStringLiteral(R"(^\s*id\s*=)"));
     static const QRegularExpression nameLineRe(QStringLiteral(R"(^\s*name\s*=\s*"[^"]*"\s*,?\s*$)"));
     static const QRegularExpression idLineRe(QStringLiteral(R"(^\s*id\s*=\s*"[^"]*"\s*,?\s*$)"));
+    // A name/id key anywhere on the line, not just at its start. The two
+    // anchored patterns above only see a field that leads its line, so without
+    // this a trailing `a = 1, name = "x",` would be neither rewritten nor
+    // rejected: we would insert our own pair and Luau, which takes the last
+    // duplicate key, would keep the template's. Matched against the line's code
+    // only, so a `description = "name = x"` value cannot trip it.
+    static const QRegularExpression anyNameOrIdFieldRe(QStringLiteral(R"((?:^|,)\s*(?:name|id)\s*=)"));
 
     QStringList metaLines;
     int depth = 0;
@@ -303,13 +317,14 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     QString fieldIndent;
     // Carries an unclosed long bracket across the line boundary, so the text
     // inside a multi-line long string or comment is never read as code.
-    int longBracketLevel = NoLongBracket;
+    int longBracketLevel = kNoLongBracket;
     for (int i = metaStart; i < lines.size(); ++i) {
         const int depthAtLineStart = depth;
         // A line that opens inside a long bracket is that bracket's text, so
         // a `name = "..."` in it is content rather than a field to rewrite.
-        const bool lineStartsInText = longBracketLevel != NoLongBracket;
-        depth += braceDelta(lines[i], longBracketLevel);
+        const bool lineStartsInText = longBracketLevel != kNoLongBracket;
+        QString codeOnly;
+        depth += braceDelta(lines[i], longBracketLevel, &codeOnly);
 
         QString line = lines[i];
         if (i > metaStart && depthAtLineStart == 1 && !lineStartsInText) {
@@ -329,6 +344,10 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
                 }
                 line = quotedField(leadingWhitespace(line), QStringLiteral("id"), id);
                 sawId = true;
+            } else if (anyNameOrIdFieldRe.match(codeOnly).hasMatch()) {
+                // A name/id sharing its line with another field: not rewritable
+                // in place, and not safe to leave.
+                return QString();
             }
         }
         metaLines += line;

@@ -115,7 +115,11 @@ export type Algorithm = {
     --     state (clamped); ratio-based algorithms reflow on resize this way. The
     --     change stays local to the current screen+desktop+activity.
     --   * any other keys — the new ctx.state bag; persisted only when
-    --     metadata.supportsScriptState is set (see `state` in Context).
+    --     metadata.supportsScriptState is set (see `state` in Context). The
+    --     table replaces the whole bag rather than merging into it, so return
+    --     every key you want to keep, and return nil to leave it untouched.
+    --     Returning only splitRatio from a supportsScriptState algorithm
+    --     therefore clears the bag, since splitRatio is stripped first.
     onWindowResized: ((state: HookState, resize: ResizeEvent) -> { [string]: any }?)?,
     -- Module-level overrides: when present, each takes precedence over the
     -- metadata field of the same name, so a value can be computed instead of

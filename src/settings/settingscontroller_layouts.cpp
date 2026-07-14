@@ -329,8 +329,8 @@ void SettingsController::openLayoutsFolder()
 
 // Path validation for import/export dialogs. Promoted out of an
 // anonymous namespace and into a static member so the cross-TU
-// `settingscontroller_session.cpp` (import/export-all-settings) can
-// reuse the same defence-in-depth path sanitiser.
+// `settingscontroller_session.cpp` (import/export-all-settings and the
+// KZones file import) can reuse the same defence-in-depth path sanitiser.
 //
 // User-driven calls come from QFileDialog (already canonical), but the
 // methods are Q_INVOKABLE so a compromised page resource — or a future

@@ -34,7 +34,7 @@ class SplitNode;
  *    fault-isolated heap and per-engine memory cap — a runaway script can only
  *    exhaust its own VM.
  *  - **Shared engine** (engine-arg ctor): the module is loaded into a VM shared
- *    across many *trusted* bundled scripts, so the ~per-VM baseline + 42 KB
+ *    across many *trusted* bundled scripts, so the per-VM baseline plus the
  *    `pluau` prelude is paid once instead of per script. The shared engine is
  *    held by `shared_ptr` so a deferred-deleted algorithm keeps it alive until
  *    its own teardown (which releases just this algorithm's module handle).
