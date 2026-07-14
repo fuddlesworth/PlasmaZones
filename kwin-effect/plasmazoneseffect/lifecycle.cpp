@@ -1246,14 +1246,14 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
             if (!KWin::effects) {
                 return;
             }
-            // A rapid unload→reload (KCM toggle off then on in one reconcile)
-            // constructs a NEW PlasmaZones instance before this timer fires;
-            // restoring the builtins then would double-animate show desktop
-            // until the new instance's next async sync. If we are loaded
-            // again, the new instance owns the suppression decision.
-            if (KWin::effects->isEffectLoaded(QStringLiteral("kwin_effect_plasmazones"))) {
-                return;
-            }
+            // Restore UNCONDITIONALLY, even when a rapid unload→reload has
+            // already constructed a new PlasmaZones instance. Skipping in that
+            // case would lose the suppression record for good: the new
+            // instance records only what is currently loaded (nothing), so a
+            // later pack unassign could never bring the builtins back until a
+            // KCM apply or relogin. The cost of restoring is bounded — the new
+            // instance's bringup sync re-unloads within its first D-Bus round
+            // trip, a sub-second window where both animations could race.
             for (const QString& name : toRestore) {
                 // Already loaded (a KCM reconcile beat us to it) is satisfied,
                 // not a failure — loadEffect returns false for a loaded effect.

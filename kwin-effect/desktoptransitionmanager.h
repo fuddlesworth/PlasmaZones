@@ -350,9 +350,12 @@ private:
     // by the SHOW leg (which cannot re-capture it — the windows are visible
     // again by the time showingDesktopChanged(false) fires). Refreshed on every
     // hide leg; validated against the show leg's viewport size and target format
-    // before use; dropped with its output, on reset(), and whenever a peek leg
-    // is reaped (reapPeekTransitions — a broken hide/show pairing means the
-    // capture may no longer match the desktop's content).
+    // before use. Drop sites: with its output (outputRemoved), on reset(), on
+    // every beginPeek bail-out (reapPeekTransitions — a broken hide/show
+    // pairing means the capture may no longer match the desktop's content),
+    // and when the wall-clock reap expires a never-painted SHOW leg
+    // (scheduleRepaints; hide legs are exempt there — their cache is the
+    // sibling output's pending show-leg endpoint).
     std::unordered_map<KWin::LogicalOutput*, std::shared_ptr<KWin::GLTexture>> m_peekDesktopCache;
     bool m_fullScreenClaimed = false;
 };

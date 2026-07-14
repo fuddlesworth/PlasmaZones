@@ -692,11 +692,18 @@ void DesktopTransitionManager::scheduleRepaints()
             // returns false and paintScreen falls through to the real scene in the
             // SAME frame; a reap has no such frame to fall through to.
             KWin::effects->addRepaint(it->first->geometry());
-            // A reaped peek leg also drops its output's bare-desktop cache
+            // A reaped SHOW leg also drops its output's bare-desktop cache
             // entry: an expired never-painted PeekShow would otherwise retain
             // an output-sized GPU texture until the next hide leg (the cache
-            // is consumed only in paintOutput).
-            if (it->second.kind != Kind::Switch) {
+            // is consumed only in paintOutput). PeekShow ONLY — never a hide
+            // leg's: all outputs' legs share one expiry, so on multi-monitor
+            // the first output to settle in paintOutput reaches this reap
+            // before the sibling's own settling paint has run, and erasing the
+            // sibling's hide-leg cache here would silently kill its show-leg
+            // animation on essentially every peek. A reaped PeekHide's
+            // retained cache matches the post-settle retention the design
+            // already accepts.
+            if (it->second.kind == Kind::PeekShow) {
                 m_peekDesktopCache.erase(it->first);
             }
             it = m_active.erase(it);
