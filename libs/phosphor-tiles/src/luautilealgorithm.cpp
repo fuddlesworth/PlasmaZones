@@ -330,7 +330,10 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         m_metadata = parseMetadata(md.toMap());
     }
 
-    // Seed caches from metadata (with unset → base default).
+    // Seed caches from metadata. An unset field falls back to this class's own
+    // default, which for defaultMaxWindows is 6 (matching the window cap the
+    // settings app writes into a new blank scaffold) rather than
+    // TilingAlgorithm's base 5.
     m_cachedMasterZoneIndex = m_metadata.masterZoneIndex;
     m_cachedSupportsMasterCount = m_metadata.supportsMasterCount;
     m_cachedSupportsSplitRatio = m_metadata.supportsSplitRatio;
@@ -762,7 +765,8 @@ void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& r
     //     apply to this state — used by the ratio-based algorithms (master-stack,
     //     deck, …) to reflow on an interactive resize. setSplitRatio clamps to
     //     [MinSplitRatio, MaxSplitRatio]. The engine marks the state user-tuned
-    //     (per-desktop, survives a settings refresh) only when the value changes.
+    //     (per screen+desktop+activity, survives a settings refresh) only when
+    //     the value changes.
     //
     //   * the persistent state bag: opt-in via metadata.supportsScriptState — a
     //     script that reacts to resize without declaring it gets no stored bag

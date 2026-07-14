@@ -31,24 +31,24 @@ int firstLinePastSpdxHeader(const QStringList& lines)
     return i;
 }
 
-/// The template's own `-- SPDX-*` lines, copyright lines first and license
-/// lines after (the order this project's files use). The copy keeps the
+/// The template's own `-- SPDX-*` lines: copyright lines first, then every
+/// other SPDX tag (the order this project's files use). The copy keeps the
 /// template's code substantially verbatim, so it is a derivative work: it
 /// retains the upstream author's copyright and stays under the template's
 /// own license.
 QStringList templateSpdxLines(const QStringList& lines, int spdxHeaderEnd)
 {
     QStringList copyrights;
-    QStringList licenses;
-    for (int i = 0; i < spdxHeaderEnd && i < lines.size(); ++i) {
+    QStringList others;
+    for (int i = 0; i < spdxHeaderEnd; ++i) {
         const QString t = lines[i].trimmed();
         if (t.startsWith(QLatin1String("-- SPDX-FileCopyrightText:"))) {
             copyrights += t;
         } else if (t.startsWith(QLatin1String("-- SPDX-"))) {
-            licenses += t;
+            others += t;
         }
     }
-    return copyrights + licenses;
+    return copyrights + others;
 }
 
 QString quotedField(const QString& key, const QString& value)
@@ -153,18 +153,16 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
     return content;
 }
 
-QString spliceTemplate(const QString& templateContent, const QString& newCopyrightLine, const QString& displayName,
-                       const QString& id)
+QString rewriteMetadataNameId(const QString& content, const QString& displayName, const QString& id)
 {
-    QString normalized = templateContent;
+    QString normalized = content;
     normalized.replace(QLatin1String("\r\n"), QLatin1String("\n"));
     const QStringList lines = normalized.split(QLatin1Char('\n'));
-    const int firstCode = firstLinePastSpdxHeader(lines);
 
     static const QRegularExpression metaRe(QStringLiteral(R"(^\s*metadata\s*=\s*\{)"));
     static const QRegularExpression metaOpenLineRe(QStringLiteral(R"(^\s*metadata\s*=\s*\{\s*$)"));
     int metaStart = -1;
-    for (int i = firstCode; i < lines.size(); ++i) {
+    for (int i = 0; i < lines.size(); ++i) {
         if (metaRe.match(lines[i]).hasMatch()) {
             metaStart = i;
             break;
@@ -185,7 +183,7 @@ QString spliceTemplate(const QString& templateContent, const QString& newCopyrig
     // deeper and must keep their own `name` keys untouched. A depth-1 name/id
     // line is rewritten only when it is a whole single-field line; anything
     // else (a second field on the same line, an unquoted value) is an
-    // unrecognized shape and rejects the splice rather than corrupting it.
+    // unrecognized shape and rejects the rewrite rather than corrupting it.
     static const QRegularExpression nameFieldRe(QStringLiteral(R"(^\s*name\s*=)"));
     static const QRegularExpression idFieldRe(QStringLiteral(R"(^\s*id\s*=)"));
     static const QRegularExpression nameLineRe(QStringLiteral(R"(^\s*name\s*=\s*"[^"]*"\s*,?\s*$)"));
@@ -220,7 +218,7 @@ QString spliceTemplate(const QString& templateContent, const QString& newCopyrig
 
         if (depth <= 0) {
             // A negative depth means more closers than openers — malformed
-            // input; leave metaEnd at -1 so the splice rejects it.
+            // input; leave metaEnd at -1 so the rewrite rejects it.
             if (depth == 0) {
                 metaEnd = i;
             }
@@ -231,8 +229,8 @@ QString spliceTemplate(const QString& templateContent, const QString& newCopyrig
         return QString();
     }
 
-    // A template without its own name/id line still needs ours — insert
-    // right after the opening `metadata = {`.
+    // A file without its own name/id line still needs ours — insert right
+    // after the opening `metadata = {`.
     if (!sawId) {
         metaLines.insert(1, quotedField(QStringLiteral("id"), id));
     }
@@ -240,24 +238,51 @@ QString spliceTemplate(const QString& templateContent, const QString& newCopyrig
         metaLines.insert(1, quotedField(QStringLiteral("name"), displayName));
     }
 
+    QString out;
+    for (int i = 0; i < metaStart; ++i) {
+        out += lines[i] + QLatin1Char('\n');
+    }
+    out += metaLines.join(QLatin1Char('\n')) + QLatin1Char('\n');
+    for (int i = metaEnd + 1; i < lines.size(); ++i) {
+        out += lines[i];
+        if (i < lines.size() - 1) {
+            out += QLatin1Char('\n');
+        }
+    }
+    return out;
+}
+
+QString spliceTemplate(const QString& templateContent, const QString& newCopyrightLine, const QString& displayName,
+                       const QString& id)
+{
+    const QString ownCopyright = newCopyrightLine.trimmed();
+    // One line only: a multi-line header here would slip past the dedupe below
+    // and leave the copy with two license identifiers.
+    if (ownCopyright.contains(QLatin1Char('\n'))) {
+        return QString();
+    }
+
+    const QString rewritten = rewriteMetadataNameId(templateContent, displayName, id);
+    if (rewritten.isEmpty()) {
+        return QString();
+    }
+    const QStringList lines = rewritten.split(QLatin1Char('\n'));
+    const int firstCode = firstLinePastSpdxHeader(lines);
+
     // Header: the new owner's copyright, then the template's own SPDX lines
     // (its copyright and its license) — the copy is a derivative work, so it
     // credits the upstream author and stays under the upstream license. A
     // template that already carries the caller's exact copyright line (a copy
     // of a copy) does not get it twice.
-    QString out = newCopyrightLine.trimmed() + QLatin1Char('\n');
+    QString out = ownCopyright + QLatin1Char('\n');
     const QStringList upstream = templateSpdxLines(lines, firstCode);
     for (const QString& line : upstream) {
-        if (line != newCopyrightLine.trimmed()) {
+        if (line != ownCopyright) {
             out += line + QLatin1Char('\n');
         }
     }
     out += QLatin1Char('\n');
-    for (int i = firstCode; i < metaStart; ++i) {
-        out += lines[i] + QLatin1Char('\n');
-    }
-    out += metaLines.join(QLatin1Char('\n')) + QLatin1Char('\n');
-    for (int i = metaEnd + 1; i < lines.size(); ++i) {
+    for (int i = firstCode; i < lines.size(); ++i) {
         out += lines[i];
         if (i < lines.size() - 1) {
             out += QLatin1Char('\n');

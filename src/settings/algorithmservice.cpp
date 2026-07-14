@@ -519,42 +519,18 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
         baseCopyName.chop(7);
     const QString newName = baseCopyName + QStringLiteral(" (Copy)");
-    // Replace the first name and id values inside the metadata table.
-    // Anchored to line start to avoid matching inside algorithm body strings.
-    // Capture leading whitespace so the replacement preserves indentation.
-    //
-    // These patterns only match double-quoted values on metadata-object lines
-    // (the form every bundled template uses). Single-quoted, JSDoc-style, or
-    // property-shorthand metadata is unsupported — if either match fails, the
-    // duplicate would otherwise be written with the original name + id,
-    // colliding with the source in the registry. Bail out instead.
-    static const QRegularExpression nameRe(QStringLiteral(R"(^(\s*)name\s*=\s*"[^"]*")"),
-                                           QRegularExpression::MultilineOption);
-    static const QRegularExpression idRe(QStringLiteral(R"(^(\s*)id\s*=\s*"[^"]*")"),
-                                         QRegularExpression::MultilineOption);
-    const QRegularExpressionMatch nameMatch = nameRe.match(content);
-    const QRegularExpressionMatch idMatch = idRe.match(content);
-    if (!nameMatch.hasMatch() || !idMatch.hasMatch()) {
-        qCWarning(PlasmaZones::lcCore) << "duplicateAlgorithm: could not locate metadata name/id in" << canonicalSource
-                                       << "(nameMatch=" << nameMatch.hasMatch() << "idMatch=" << idMatch.hasMatch()
-                                       << ")";
+    // Same depth-aware metadata rewrite the wizard's template path uses: it
+    // touches only the top-level name/id fields, so a table elsewhere in the
+    // file (or a nested customParams `name`) is never mistaken for metadata.
+    // A copy is the source's own code, so the header carries over untouched.
+    content = AlgorithmScaffold::rewriteMetadataNameId(content, newName, newFilename);
+    if (content.isEmpty()) {
+        qCWarning(PlasmaZones::lcCore) << "duplicateAlgorithm: unrecognized metadata shape in" << canonicalSource;
         Q_EMIT algorithmOperationFailed(
-            PhosphorI18n::tr("Could not duplicate the algorithm. Its metadata format is not recognised. "
+            PhosphorI18n::tr("Could not duplicate the algorithm. Its metadata format is not recognized. "
                              "Expected `name = \"...\"` and `id = \"...\"` on separate lines."));
         return false;
     }
-    content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(),
-                    nameMatch.captured(1) + QStringLiteral("name = \"") + newName + QStringLiteral("\""));
-    // idMatch captured positions may have shifted after the name replacement;
-    // re-run id match over the updated content so we don't corrupt bytes.
-    const QRegularExpressionMatch idMatch2 = idRe.match(content);
-    if (!idMatch2.hasMatch()) {
-        qCWarning(PlasmaZones::lcCore) << "duplicateAlgorithm: id match disappeared after name replacement";
-        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not rewrite the algorithm's metadata."));
-        return false;
-    }
-    content.replace(idMatch2.capturedStart(), idMatch2.capturedLength(),
-                    idMatch2.captured(1) + QStringLiteral("id = \"") + newFilename + QStringLiteral("\""));
 
     if (!writeAlgorithmFile(destPath, content.toUtf8())) {
         Q_EMIT algorithmOperationFailed(
@@ -723,13 +699,13 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
         // Blank scaffold: a self-contained pluau.algorithm module the user
         // edits. The wizard's capability toggles only apply here.
         AlgorithmScaffold::Capabilities caps;
-        caps.masterCount = capabilities.value(QStringLiteral("supportsMasterCount")).toBool();
-        caps.splitRatio = capabilities.value(QStringLiteral("supportsSplitRatio")).toBool();
-        caps.overlappingZones = capabilities.value(QStringLiteral("producesOverlappingZones")).toBool();
-        caps.memory = capabilities.value(QStringLiteral("supportsMemory")).toBool();
-        caps.scriptState = capabilities.value(QStringLiteral("supportsScriptState")).toBool();
-        caps.singleWindow = capabilities.value(QStringLiteral("supportsSingleWindow")).toBool();
-        caps.retileOnFocus = capabilities.value(QStringLiteral("retileOnFocus")).toBool();
+        caps.masterCount = capabilities.value(QLatin1String("supportsMasterCount")).toBool();
+        caps.splitRatio = capabilities.value(QLatin1String("supportsSplitRatio")).toBool();
+        caps.overlappingZones = capabilities.value(QLatin1String("producesOverlappingZones")).toBool();
+        caps.memory = capabilities.value(QLatin1String("supportsMemory")).toBool();
+        caps.scriptState = capabilities.value(QLatin1String("supportsScriptState")).toBool();
+        caps.singleWindow = capabilities.value(QLatin1String("supportsSingleWindow")).toBool();
+        caps.retileOnFocus = capabilities.value(QLatin1String("retileOnFocus")).toBool();
         content = AlgorithmScaffold::buildBlankScaffold(blankHeader, sanitizedDisplayName, filename, caps);
     }
 

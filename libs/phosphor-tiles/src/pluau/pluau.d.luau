@@ -114,15 +114,17 @@ export type Algorithm = {
     onWindowResized: ((state: HookState, resize: ResizeEvent) -> { [string]: any }?)?,
     -- Module-level overrides: when present, each takes precedence over the
     -- metadata field of the same name, so a value can be computed instead of
-    -- declared. The bundled algorithms all use plain metadata fields.
+    -- declared. Each is called once when the script loads and the result is
+    -- cached for the algorithm's lifetime, so it cannot vary per retile. The
+    -- bundled algorithms all use plain metadata fields.
     masterZoneIndex: (() -> number)?,
     supportsMasterCount: (() -> boolean)?,
     supportsSplitRatio: (() -> boolean)?,
     producesOverlappingZones: (() -> boolean)?,
     centerLayout: (() -> boolean)?,
-    minimumWindows: (() -> number)?,
-    defaultMaxWindows: (() -> number)?,
-    defaultSplitRatio: (() -> number)?,
+    minimumWindows: (() -> number)?, -- clamped to 1..100
+    defaultMaxWindows: (() -> number)?, -- clamped to 1..100
+    defaultSplitRatio: (() -> number)?, -- clamped to MIN_SPLIT..MAX_SPLIT
 }
 
 export type Pluau = {

@@ -54,6 +54,9 @@ class TestAlgorithmScaffold : public QObject
 
 private Q_SLOTS:
     void spliceRewritesNameAndId();
+    void spliceToleratesTrailingNewlineOnCopyright();
+    void spliceRejectsMultiLineCopyright();
+    void rewriteKeepsHeaderAndOtherTables();
     void spliceInheritsTemplateLicense();
     void spliceDoesNotRepeatOwnCopyright();
     void spliceCarriesEveryUpstreamCopyright();
@@ -92,6 +95,62 @@ void TestAlgorithmScaffold::spliceRewritesNameAndId()
                                       "-- SPDX-FileCopyrightText: 2026 fuddlesworth\n"
                                       "-- SPDX-License-Identifier: GPL-3.0-or-later\n"
                                       "\n")));
+}
+
+void TestAlgorithmScaffold::spliceToleratesTrailingNewlineOnCopyright()
+{
+    // The contract accepts the copyright line with or without a trailing
+    // newline, and both must produce identical output.
+    const QString bare = spliceTemplate(kTemplate, kCopyright, QStringLiteral("My Copy"), QStringLiteral("my-copy"));
+    const QString withNewline = spliceTemplate(kTemplate, kCopyright + QStringLiteral("\n"), QStringLiteral("My Copy"),
+                                               QStringLiteral("my-copy"));
+    QVERIFY(!bare.isEmpty());
+    QCOMPARE(withNewline, bare);
+}
+
+void TestAlgorithmScaffold::spliceRejectsMultiLineCopyright()
+{
+    // A full header here would slip past the copy-of-a-copy dedupe and leave
+    // the copy with two license identifiers, so it is rejected outright.
+    QVERIFY(spliceTemplate(kTemplate, kHeader, QStringLiteral("My Copy"), QStringLiteral("my-copy")).isEmpty());
+}
+
+void TestAlgorithmScaffold::rewriteKeepsHeaderAndOtherTables()
+{
+    // The duplicate path rewrites metadata in place: the header stays put, and
+    // a same-shaped table elsewhere in the file must not be mistaken for it.
+    const QString withOtherTable = QStringLiteral(
+        "-- SPDX-FileCopyrightText: 2026 someone\n"
+        "-- SPDX-License-Identifier: MIT\n"
+        "\n"
+        "local presets = {\n"
+        "    name = \"wide\",\n"
+        "    id = \"wide\",\n"
+        "}\n"
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"Real\",\n"
+        "        id = \"real\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    const QString out =
+        rewriteMetadataNameId(withOtherTable, QStringLiteral("Real (Copy)"), QStringLiteral("real-copy"));
+    // The unrelated table is untouched.
+    QVERIFY(
+        out.contains(QStringLiteral("local presets = {\n"
+                                    "    name = \"wide\",\n"
+                                    "    id = \"wide\",\n"
+                                    "}")));
+    // The metadata table is rewritten.
+    QVERIFY(out.contains(QStringLiteral("        name = \"Real (Copy)\",")));
+    QVERIFY(out.contains(QStringLiteral("        id = \"real-copy\",")));
+    // The source's own header carries over verbatim: a duplicate is the same
+    // author's code, so nothing about its licensing changes.
+    QVERIFY(
+        out.startsWith(QStringLiteral("-- SPDX-FileCopyrightText: 2026 someone\n"
+                                      "-- SPDX-License-Identifier: MIT\n")));
+    QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 1);
 }
 
 void TestAlgorithmScaffold::spliceInheritsTemplateLicense()

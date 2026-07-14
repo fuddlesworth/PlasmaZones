@@ -27,7 +27,6 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/LayoutComputeService.h>
 
-#include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDesktopServices>
 #include <QDir>
