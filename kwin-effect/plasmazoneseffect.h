@@ -103,7 +103,7 @@ static_assert(
 // (autotilehandler/signals.cpp) and the minimize shader-event
 // spurious-pair cancel (plasmazoneseffect/daemon_apply.cpp,
 // slotWindowMinimizedChanged). Shared here so the two can never desync.
-inline constexpr qint64 kSpuriousMinimizePairMs = 75;
+inline constexpr int kSpuriousMinimizePairMs = 75;
 
 // Forward declarations for helper classes
 class AutotileHandler;
