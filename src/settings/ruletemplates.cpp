@@ -92,9 +92,11 @@ QVariantList ruleTemplates()
     // showcase — one-click starting points for the common cases, ordered
     // context band first, then application band, then animation. There is
     // deliberately NO smart-gaps (TiledWindowCount + gap actions) template:
-    // the gap resolver never stamps tiledWindowCount into its context query
-    // (see layoutregistry_assignments.cpp, resolveAssignmentEntry), so such
-    // a rule would silently never fire.
+    // smart gaps already ships as a plain autotile setting
+    // (AutotileConfig::smartGaps, Settings → Tiling), and such a rule would
+    // silently never fire anyway — the gap resolver never stamps
+    // tiledWindowCount into its context query (see
+    // layoutregistry_assignments.cpp, resolveAssignmentEntry).
     QVariantList out;
     out.append(entry(QLatin1String("layoutOnMonitor"), PhosphorI18n::tr("Set a layout on a monitor"),
                      PhosphorI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
