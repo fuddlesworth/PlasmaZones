@@ -400,28 +400,28 @@ void LayoutRegistry::saveAssignments()
     writeQuickLayouts();
 }
 
-void LayoutRegistry::importLayout(const QString& filePath)
+bool LayoutRegistry::importLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
         qCWarning(lcZonesLib) << "Cannot import layout: file path is empty";
-        return;
+        return false;
     }
 
     QFile file(filePath);
     if (!file.exists()) {
         qCWarning(lcZonesLib) << "Cannot import layout: file does not exist:" << filePath;
-        return;
+        return false;
     }
 
     if (!file.open(QIODevice::ReadOnly)) {
         qCWarning(lcZonesLib) << "Failed to open layout file for import:" << filePath << "Error:" << file.errorString();
-        return;
+        return false;
     }
 
     const QByteArray data = file.readAll();
     if (data.isEmpty()) {
         qCWarning(lcZonesLib) << "Cannot import layout: file is empty:" << filePath;
-        return;
+        return false;
     }
 
     QJsonParseError parseError;
@@ -429,7 +429,7 @@ void LayoutRegistry::importLayout(const QString& filePath)
     if (parseError.error != QJsonParseError::NoError) {
         qCWarning(lcZonesLib) << "Failed to parse layout file for import:" << filePath
                               << "Error:" << parseError.errorString() << "at offset" << parseError.offset;
-        return;
+        return false;
     }
 
     // Import is an untrusted-input load path (a user-picked file), so gate it on
@@ -438,13 +438,13 @@ void LayoutRegistry::importLayout(const QString& filePath)
     if (const auto errors = layoutSchemaValidator().validate(doc.object())) {
         qCWarning(lcZonesLib) << "Cannot import layout: file failing schema validation:" << filePath;
         PhosphorFsLoader::logSchemaErrors(lcZonesLib(), *errors);
-        return;
+        return false;
     }
 
     auto* parsed = PhosphorZones::Layout::fromJson(doc.object(), this);
     if (!parsed) {
         qCWarning(lcZonesLib) << "Failed to create layout from imported JSON:" << filePath;
-        return;
+        return false;
     }
 
     // Regenerate IDs if UUID collides with an existing layout
@@ -464,24 +464,31 @@ void LayoutRegistry::importLayout(const QString& filePath)
     addLayout(layout);
 
     qCInfo(lcZonesLib) << "Imported layout:" << layout->name() << "from" << filePath;
+    return true;
 }
 
-void LayoutRegistry::exportLayout(PhosphorZones::Layout* layout, const QString& filePath)
+bool LayoutRegistry::exportLayout(PhosphorZones::Layout* layout, const QString& filePath)
 {
     if (!layout) {
         qCWarning(lcZonesLib) << "Cannot export layout: layout is null";
-        return;
+        return false;
     }
 
     if (filePath.isEmpty()) {
         qCWarning(lcZonesLib) << "Cannot export layout: file path is empty";
-        return;
+        return false;
     }
 
-    QFile file(filePath);
+    // QSaveFile for the same reason saveLayout uses it, and one more: the
+    // destination is a file the user picked, which may already hold something
+    // they want. A plain QFile opened WriteOnly truncates it the moment it
+    // opens, so a write that then failed left them with neither their old file
+    // nor an export. The temp-write plus rename only replaces the destination
+    // once the whole document is down.
+    QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly)) {
         qCWarning(lcZonesLib) << "Failed to open file for layout export:" << filePath << "Error:" << file.errorString();
-        return;
+        return false;
     }
 
     QJsonDocument doc(layout->toJson());
@@ -489,14 +496,19 @@ void LayoutRegistry::exportLayout(PhosphorZones::Layout* layout, const QString& 
 
     if (file.write(data) != data.size()) {
         qCWarning(lcZonesLib) << "Failed to write layout to file:" << filePath << "Error:" << file.errorString();
-        return;
+        return false;
     }
 
-    if (!file.flush()) {
-        qCWarning(lcZonesLib) << "Failed to flush layout export file:" << filePath << "Error:" << file.errorString();
+    // commit() flushes, closes and renames. It is the only point at which the
+    // export is known to have landed: a buffered write can still fail here, and
+    // the previous form reported success after logging a failed flush.
+    if (!file.commit()) {
+        qCWarning(lcZonesLib) << "Failed to commit layout export file:" << filePath << "Error:" << file.errorString();
+        return false;
     }
 
     qCInfo(lcZonesLib) << "Exported layout:" << layout->name() << "to" << filePath;
+    return true;
 }
 
 PhosphorZones::Layout* LayoutRegistry::restoreSystemLayout(const QUuid& id, const QString& systemPath)

@@ -392,19 +392,22 @@ void SettingsController::importLayout(const QString& filePath)
     }
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("importLayout"), {safe});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString newLayoutId = reply.arguments().first().toString();
-        if (!newLayoutId.isEmpty()) {
-            m_pendingSelectLayoutId = newLayoutId;
-        }
-    } else if (reply.type() == QDBusMessage::ErrorMessage) {
-        // Surface the daemon's rejection (corrupt JSON, permission denied,
-        // layout-id collision, etc.) — without this branch the page silently
-        // refreshes and the user has no feedback. Mirrors setLayoutHidden /
-        // setLayoutAutoAssign / setLayoutAspectRatio, which all surface a
-        // daemon rejection the same way.
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        // The transport itself failed: the daemon is not running, or the method
+        // is missing. The daemon's own rejections do NOT arrive here (it has no
+        // QDBusContext and never sends an error reply) — they come back as an
+        // empty id below.
         qCWarning(lcCore) << "importLayout failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Failed to import layout: %1").arg(reply.errorMessage()));
+    } else if (reply.arguments().isEmpty() || reply.arguments().first().toString().isEmpty()) {
+        // An empty id is how the daemon reports every rejection it can name: a
+        // file that is not there, not readable, not JSON, or not a layout. It is
+        // a ReplyMessage, so without this branch the page just refreshes and the
+        // user is left to work out that nothing was imported.
+        qCWarning(lcCore) << "importLayout: daemon rejected" << safe;
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That file is not a layout this app can read."));
+    } else {
+        m_pendingSelectLayoutId = reply.arguments().first().toString();
     }
     scheduleLayoutLoad();
 }
@@ -419,8 +422,25 @@ void SettingsController::exportLayout(const QString& layoutId, const QString& fi
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That export path is not allowed."));
         return;
     }
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                QStringLiteral("exportLayout"), {layoutId, safe});
+    // A replying call, not sendOneWay. The write happens in the daemon, so a
+    // one-way send has nowhere to put "the folder is not writable" and the file
+    // picker just closed on a user who is owed an answer. Mirrors importLayout
+    // below, which has always waited for its reply.
+    const QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                      QStringLiteral("exportLayout"), {layoutId, safe});
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(lcCore) << "exportLayout failed:" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Failed to export layout: %1").arg(reply.errorMessage()));
+        return;
+    }
+    // The daemon answers false for a destination it could not open, write or
+    // commit. That is a ReplyMessage, not an ErrorMessage, so it needs its own
+    // branch or it reads as success.
+    if (reply.arguments().isEmpty() || !reply.arguments().first().toBool()) {
+        qCWarning(lcCore) << "exportLayout: daemon could not write" << safe;
+        Q_EMIT layoutOperationFailed(
+            PhosphorI18n::tr("Could not write the export. Check that the folder is writable."));
+    }
 }
 
 void SettingsController::setLayoutHidden(const QString& layoutId, bool hidden)

@@ -102,12 +102,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="exportLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Export a layout to a JSON file at the given path."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Export a layout to a JSON file at the given path. Returns whether the export was written."/>
             <arg name="layoutId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to export."/>
             </arg>
             <arg name="filePath" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Destination file path."/>
+            </arg>
+            <arg name="written" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the layout reached the destination. False when it could not be opened, written or committed; the destination is left untouched in that case."/>
             </arg>
         </method>
         <method name="setLayoutHidden">

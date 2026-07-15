@@ -131,7 +131,7 @@ public Q_SLOTS:
 
     // Import/Export
     QString importLayout(const QString& filePath);
-    void exportLayout(const QString& layoutId, const QString& filePath);
+    bool exportLayout(const QString& layoutId, const QString& filePath);
 
     // Visibility filtering
     void setLayoutHidden(const QString& layoutId, bool hidden);

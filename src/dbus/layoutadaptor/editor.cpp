@@ -61,35 +61,46 @@ QString LayoutAdaptor::importLayout(const QString& filePath)
         return QString();
     }
 
-    int layoutCountBefore = m_layoutManager->layouts().size();
-    m_layoutManager->importLayout(filePath);
-
-    const auto layouts = m_layoutManager->layouts();
-    if (layouts.size() > layoutCountBefore) {
-        PhosphorZones::Layout* newLayout = layouts.last();
-        qCInfo(lcDbusLayout) << "Imported layout from" << filePath << "with ID" << newLayout->id();
-        const QString newId = newLayout->id().toString();
-        Q_EMIT layoutCreated(newId);
-        return newId;
+    // Ask the registry whether the import landed rather than inferring it from
+    // the layout count: a count that did not grow cannot say why, and the
+    // caller needs the difference between "not a layout file" and "it worked".
+    if (!m_layoutManager->importLayout(filePath)) {
+        qCWarning(lcDbusLayout) << "Failed to import layout from" << filePath;
+        return QString();
     }
 
-    qCWarning(lcDbusLayout) << "Failed to import layout from" << filePath;
-    return QString();
+    const auto layouts = m_layoutManager->layouts();
+    if (layouts.isEmpty()) {
+        qCWarning(lcDbusLayout) << "importLayout reported success but the registry is empty:" << filePath;
+        return QString();
+    }
+    PhosphorZones::Layout* newLayout = layouts.last();
+    qCInfo(lcDbusLayout) << "Imported layout from" << filePath << "with ID" << newLayout->id();
+    const QString newId = newLayout->id().toString();
+    Q_EMIT layoutCreated(newId);
+    return newId;
 }
 
-void LayoutAdaptor::exportLayout(const QString& layoutId, const QString& filePath)
+bool LayoutAdaptor::exportLayout(const QString& layoutId, const QString& filePath)
 {
     if (!validateNonEmpty(filePath, QStringLiteral("file path"), QStringLiteral("export layout"))) {
-        return;
+        return false;
     }
 
     auto* layout = getValidatedLayout(layoutId, QStringLiteral("export layout"));
     if (!layout) {
-        return;
+        return false;
     }
 
-    m_layoutManager->exportLayout(layout, filePath);
+    // Report what the write actually did. The previous form logged success
+    // unconditionally, so the journal said "Exported layout" for an export that
+    // never reached the disk.
+    if (!m_layoutManager->exportLayout(layout, filePath)) {
+        qCWarning(lcDbusLayout) << "Failed to export layout" << layoutId << "to" << filePath;
+        return false;
+    }
     qCInfo(lcDbusLayout) << "Exported layout" << layoutId << "to" << filePath;
+    return true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

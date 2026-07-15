@@ -930,10 +930,13 @@ void EditorController::importLayout(const QString& filePath)
         return;
     }
 
+    // An empty id is how the daemon reports a rejection: a file that is not
+    // there, not readable, not JSON, or not a layout. Nothing was imported, so
+    // say that rather than describing the empty reply.
     const QString newLayoutId = reply.arguments().value(0).toString();
     if (newLayoutId.isEmpty()) {
-        QString error = PhosphorI18n::tr("Imported layout but received empty ID");
-        qCWarning(lcEditor) << error;
+        const QString error = PhosphorI18n::tr("That file is not a layout this app can read.");
+        qCWarning(lcEditor) << "importLayout: daemon rejected" << filePath;
         Q_EMIT layoutLoadFailed(error);
         return;
     }
@@ -970,7 +973,17 @@ void EditorController::exportLayout(const QString& filePath)
         return;
     }
 
-    // Export successful - emit layoutSaved signal for success notification
+    // A reply arrived, which only says the daemon was reachable. It answers
+    // false for a destination it could not open, write or commit, and that is a
+    // ReplyMessage like any other, so reporting saved on the strength of the
+    // message type alone would call a failed export a success.
+    if (reply.arguments().isEmpty() || !reply.arguments().first().toBool()) {
+        const QString error = PhosphorI18n::tr("Could not write the export. Check that the folder is writable.");
+        qCWarning(lcEditor) << "exportLayout: daemon could not write" << filePath;
+        Q_EMIT layoutSaveFailed(error);
+        return;
+    }
+
     Q_EMIT layoutSaved();
 }
 

@@ -410,6 +410,11 @@ p_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 p_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
 p_add_test(test_layout_registry_cache core/test_layout_registry_cache.cpp)
 
+# exportLayout / importLayout report their outcome rather than logging it and
+# returning void, and the export writes atomically so a failure leaves the
+# user's chosen destination alone.
+p_add_test(test_layoutregistry_transfer core/test_layoutregistry_transfer.cpp)
+
 # Regression guard for the in-process dual-RuleStore data-loss race
 # where Settings used to construct its own store pointed at the same file
 # as the daemon's. Pins the share-via-borrow-ctor wiring in daemon.cpp.
