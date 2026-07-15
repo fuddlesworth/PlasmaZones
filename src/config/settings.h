@@ -1541,7 +1541,6 @@ private:
 
     // PhosphorZones::Zone Selector
     // PhosphorZones::Zone selector is stored in m_store.
-    // (remaining zone selector members stored in m_store)
 
     // Virtual screen configurations (physicalScreenId -> config)
     QHash<QString, PhosphorScreens::VirtualScreenConfig> m_virtualScreenConfigs;

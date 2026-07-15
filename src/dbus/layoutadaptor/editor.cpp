@@ -24,13 +24,6 @@
 
 namespace PlasmaZones {
 
-namespace {
-// D-Bus boundary counterpart of the editor's client-side name cap
-// (TopBar.qml TextField maximumLength). Callers can bypass the UI,
-// so layout and zone names are clamped again here.
-constexpr int MAX_NAME_LENGTH = 40;
-} // namespace
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Editor Launch Helper
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -75,6 +68,15 @@ QString LayoutAdaptor::importLayout(const QString& filePath)
     if (!newLayout) {
         qCWarning(lcDbusLayout) << "Failed to import layout from" << filePath;
         return QString();
+    }
+
+    // Imported files bypass the editor UI, so apply the same D-Bus boundary
+    // name clamp the other entry points enforce. The setters only emit when
+    // the value actually changes, so re-setting an already-short name is free.
+    newLayout->setName(newLayout->name().left(MaxLayoutNameLength));
+    const auto zones = newLayout->zones();
+    for (PhosphorZones::Zone* zone : zones) {
+        zone->setName(zone->name().left(MaxLayoutNameLength));
     }
 
     qCInfo(lcDbusLayout) << "Imported layout from" << filePath << "with ID" << newLayout->id();
@@ -176,7 +178,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     });
 
     // Update basic properties (name clamped at the D-Bus boundary)
-    layout->setName(obj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MAX_NAME_LENGTH));
+    layout->setName(obj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MaxLayoutNameLength));
 
     // Update per-layout gap overrides (-1 = use global setting)
     if (obj.contains(::PhosphorZones::ZoneJsonKeys::ZonePadding)) {
@@ -247,7 +249,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         QJsonObject zoneObj = zoneVal.toObject();
         auto* zone = new PhosphorZones::Zone(layout);
 
-        zone->setName(zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MAX_NAME_LENGTH));
+        zone->setName(zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MaxLayoutNameLength));
         zone->setZoneNumber(zoneObj[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt());
 
         QJsonObject relGeo = zoneObj[::PhosphorZones::ZoneJsonKeys::RelativeGeometry].toObject();
@@ -323,14 +325,14 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
     QJsonObject obj = *objOpt;
     if (obj.contains(::PhosphorZones::ZoneJsonKeys::Name)) {
         obj[::PhosphorZones::ZoneJsonKeys::Name] =
-            obj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MAX_NAME_LENGTH);
+            obj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MaxLayoutNameLength);
     }
     QJsonArray zones = obj[::PhosphorZones::ZoneJsonKeys::Zones].toArray();
     for (auto zoneRef : zones) {
         QJsonObject zoneObj = zoneRef.toObject();
         if (zoneObj.contains(::PhosphorZones::ZoneJsonKeys::Name)) {
             zoneObj[::PhosphorZones::ZoneJsonKeys::Name] =
-                zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MAX_NAME_LENGTH);
+                zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MaxLayoutNameLength);
             zoneRef = zoneObj;
         }
     }

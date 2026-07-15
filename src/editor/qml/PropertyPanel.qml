@@ -353,6 +353,9 @@ Rectangle {
 
                     visible: panelMode === "single"
                     Kirigami.FormData.label: i18nc("@label", "Name:")
+                    // Mirrors PlasmaZones::MaxLayoutNameLength (core/constants.h),
+                    // same client-side cap as TopBar's layout name field.
+                    maximumLength: 40
                     text: selectedZone ? (selectedZone.name || "") : ""
                     enabled: editorController !== null
                     Accessible.name: i18nc("@label", "Zone name")
@@ -849,7 +852,10 @@ Rectangle {
                         if (zoneId === selectedZoneId) {
                             zoneNameField.validationError = error;
                             Qt.callLater(function () {
-                                if (selectedZone)
+                                // Only reset to the committed name while the field
+                                // is not being edited; mid-retype input stays put
+                                // (same guard as syncNameAndNumber).
+                                if (selectedZone && !zoneNameField.activeFocus)
                                     zoneNameField.text = selectedZone.name || "";
                             });
                         }

@@ -179,7 +179,7 @@ Item {
             border.width: constants.handleBorderWidth
             // Handles are always present for mouse detection, only visible when hovered/selected
             visible: parent.width > 0 && parent.height > 0
-            opacity: (resizeHandles.root.isSelected || resizeHandles.root.mouseOverZone) ? 1 : 0
+            opacity: hasValidRoot && (resizeHandles.root.isSelected || resizeHandles.root.mouseOverZone) ? 1 : 0
             z: 200
 
             // Drop shadow for depth

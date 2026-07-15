@@ -74,6 +74,11 @@ Item {
     Accessible.name: modelData.displayName || i18n("Unnamed Layout")
     Accessible.description: i18n("Layout with %1 zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
+    Accessible.focusable: true
+    // Keyboard reachability for the Keys handlers below (matches
+    // WizardTemplateCard): without a tab stop this Item can never gain
+    // active focus inside the hosting Flow, making them dead code.
+    activeFocusOnTab: true
     Keys.onReturnPressed: root.activated(root.modelData.id)
     Keys.onDeletePressed: {
         if (!root.modelData.isSystem && !root.modelData.isAutotile)
@@ -121,8 +126,14 @@ Item {
 
             return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03);
         }
-        border.width: Math.round(Screen.devicePixelRatio)
+        border.width: root.activeFocus ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
         border.color: {
+            // Keyboard-focus indicator (tab stop on the root Item); takes
+            // precedence over the selection/hover tints so the focused card
+            // is always visually identifiable.
+            if (root.activeFocus)
+                return Kirigami.Theme.highlightColor;
+
             if (root.isSelected)
                 return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
 

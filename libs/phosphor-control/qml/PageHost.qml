@@ -145,6 +145,10 @@ Item {
             Component.onCompleted: if (pageLoader.isCurrent)
                 pageLoader._everCurrent = true
             source: {
+                // Depend on registryRevision (same idiom as currentEntry):
+                // pageData() is non-notifying, so a re-registration that
+                // changes a page's qmlSource must force re-evaluation here.
+                root.registryRevision;
                 const data = root.controller.registry.pageData(pageLoader.pageId);
                 return (data && data.id) ? data.qmlSource : "";
             }

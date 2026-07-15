@@ -87,6 +87,16 @@ constexpr int MinimumZoneDisplaySizePx = 10; // Minimum zone size for display (c
 inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"};
 
 /**
+ * @brief Maximum length for user-visible layout and zone names.
+ *
+ * Client-side cap in the editor UI (TopBar.qml / PropertyPanel.qml
+ * @c maximumLength) and the matching D-Bus boundary clamp in the layout
+ * adaptor. Callers can bypass the UI, so every adaptor entry point that
+ * accepts a name re-applies it with QString::left().
+ */
+inline constexpr int MaxLayoutNameLength = 40;
+
+/**
  * @brief Editor-specific constants
  */
 namespace EditorConstants {

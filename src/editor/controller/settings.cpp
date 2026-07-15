@@ -23,9 +23,9 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
         return QString();
     }
 
-    // Check maximum length
-    if (name.length() > 100) {
-        return PhosphorI18n::tr("Zone name cannot exceed 100 characters");
+    // Check maximum length (shared with the daemon's D-Bus boundary clamp)
+    if (name.length() > MaxLayoutNameLength) {
+        return PhosphorI18n::tr("Zone name cannot exceed %1 characters").arg(MaxLayoutNameLength);
     }
 
     // Check for invalid characters (allow alphanumeric, spaces, hyphens, underscores)

@@ -549,7 +549,8 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
         return QString();
     }
 
-    layout->setName(name);
+    // D-Bus boundary clamp: callers can bypass the editor UI's name cap.
+    layout->setName(name.left(MaxLayoutNameLength));
 
     // Auto-detect aspect ratio class from the primary screen (virtual-screen-aware)
     QScreen* screen = Utils::primaryScreen();
@@ -611,6 +612,16 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
     if (!duplicate) {
         qCWarning(lcDbusLayout) << "Failed to duplicate layout:" << id;
         return QString();
+    }
+
+    // The registry appends " (Copy)" without regard to length (it has no name
+    // limit of its own), so re-apply the boundary clamp here like every other
+    // name-producing adaptor entry point. Trim the BASE, not the result: a
+    // tail clamp on a long name would cut the suffix off and leave the copy
+    // visually identical to its source.
+    if (duplicate->name().size() > MaxLayoutNameLength) {
+        const QString suffix = QStringLiteral(" (Copy)");
+        duplicate->setName(duplicate->name().chopped(suffix.size()).left(MaxLayoutNameLength - suffix.size()) + suffix);
     }
 
     qCInfo(lcDbusLayout) << "Duplicated layout" << id << "to" << duplicate->id();

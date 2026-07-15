@@ -57,9 +57,13 @@ endif()
 # CANNOT use the if(NOT TARGET) find_package fallback the other deps use:
 # in-tree the engine subdirectory is added after this one, so the target
 # does not exist yet at this point and the fallback would wrongly pull an
-# installed copy. CMake resolves link-target names at generate time, so the
-# in-tree link works without it; standalone consumers get the dependency
-# through PhosphorTilesConfig.cmake.in's find_dependency instead.
+# installed copy. In-tree, CMake resolves the link-target name at generate
+# time, so no find_package is needed. For a standalone configure (this
+# directory IS the top level), resolve it explicitly here; the guard below
+# never fires in-tree.
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    find_package(PhosphorEngine CONFIG REQUIRED)
+endif()
 
 # phosphor-scripting — the embedded Luau host that LuauTileAlgorithm and
 # ScriptedAlgorithmLoader evaluate scripts through. PUBLIC link dep, so a
