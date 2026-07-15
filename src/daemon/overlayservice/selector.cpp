@@ -290,9 +290,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 if (!indexOk || cardIndex < 0 || cardIndex >= layouts.size()) {
                     continue;
                 }
-                cards.insert(
-                    cardIndex,
-                    LaidOutCard{cell, cell->mapRectToItem(contentRoot, QRectF(0, 0, cell->width(), cell->height()))});
+                cards.insert(cardIndex, LaidOutCard{cell, mapVisibleRectToItem(cell, contentRoot)});
             }
         }
 
@@ -370,9 +368,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     if (!zoneIndexOk || zoneIndex < 0) {
                         continue;
                     }
-                    zoneRectsInWindow.insert(
-                        zoneIndex,
-                        zoneItem->mapRectToItem(contentRoot, QRectF(0, 0, zoneItem->width(), zoneItem->height())));
+                    zoneRectsInWindow.insert(zoneIndex, mapVisibleRectToItem(zoneItem, contentRoot));
                 }
 
                 for (int z = 0; z < zones.size(); ++z) {

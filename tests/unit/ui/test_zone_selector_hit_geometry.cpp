@@ -17,7 +17,14 @@
 
 #include <QtPlugin>
 
+// The functions under test. overlay_helpers.h is the overlayservice header with
+// no config / registry dependency, precisely so test TUs can include it.
+#include "daemon/overlayservice/overlay_helpers.h"
+
 Q_IMPORT_PLUGIN(org_plasmazones_commonPlugin)
+
+using PlasmaZones::collectQmlItemsByName;
+using PlasmaZones::mapVisibleRectToItem;
 
 /**
  * @brief The C++/QML contract the zone selector's cursor hit test relies on.
@@ -73,22 +80,6 @@ private:
         return zones;
     }
 
-    /// Mirror of internal.h::collectQmlItemsByName — the traversal selector.cpp
-    /// performs against a laid-out card.
-    static void collectByName(QQuickItem* item, const QString& name, QVector<QQuickItem*>& out)
-    {
-        if (!item) {
-            return;
-        }
-        if (item->objectName() == name) {
-            out.append(item);
-        }
-        const auto children = item->childItems();
-        for (auto* child : children) {
-            collectByName(child, name, out);
-        }
-    }
-
     /// Build a LayoutCard for a layout tagged `aspectRatioClass`, force a layout
     /// pass, and return each zone's rendered rect keyed by its model index —
     /// exactly what updateSelectorPosition reads.
@@ -126,7 +117,7 @@ private:
         card->setHeight(kPreviewHeight + kCardLabelSpace + kCardPadding);
 
         QVector<QQuickItem*> zoneItems;
-        collectByName(card, zoneObjectName(), zoneItems);
+        collectQmlItemsByName(card, zoneObjectName(), zoneItems);
         for (QQuickItem* zoneItem : std::as_const(zoneItems)) {
             bool ok = false;
             const int index = zoneItem->property("index").toInt(&ok);
@@ -187,6 +178,56 @@ private Q_SLOTS:
         QCOMPARE(indices, QList<int>({0, 1, 2}));
         QVERIFY2(childrenWithoutIndex >= 1, "expected the Repeater itself to expose no model index");
         delete grid;
+    }
+
+    /// The zone selector's ScrollView clips once the layout list overflows. A
+    /// card scrolled out of the viewport keeps a scene-graph position, so a bare
+    /// mapRectToItem hands back coordinates where it paints nothing — and the
+    /// selector's slot is a fullscreen transparent Item, so the cursor really
+    /// can sit there mid-drag. mapVisibleRectToItem must clip it away.
+    void testClippedItemReportsNoVisibleRect()
+    {
+        QQmlComponent component(&m_engine);
+        component.setData(
+            "import QtQuick\n"
+            "Item {\n"
+            "    width: 200; height: 200\n"
+            "    Item {\n"
+            "        objectName: \"viewport\"\n"
+            "        x: 0; y: 100; width: 200; height: 50\n"
+            "        clip: true\n"
+            "        Item { objectName: \"inside\";  x: 0; y: 10;   width: 40; height: 20 }\n"
+            "        Item { objectName: \"scrolled\"; x: 0; y: -80; width: 40; height: 20 }\n"
+            "    }\n"
+            "}\n",
+            QUrl(QStringLiteral("qrc:/test_clip.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+        auto* root = qobject_cast<QQuickItem*>(component.create());
+        QVERIFY(root);
+
+        QVector<QQuickItem*> inside;
+        QVector<QQuickItem*> scrolled;
+        collectQmlItemsByName(root, QStringLiteral("inside"), inside);
+        collectQmlItemsByName(root, QStringLiteral("scrolled"), scrolled);
+        QCOMPARE(inside.size(), 1);
+        QCOMPARE(scrolled.size(), 1);
+
+        // Visible child: clipping leaves it alone.
+        const QRectF visible = mapVisibleRectToItem(inside.at(0), root);
+        QCOMPARE(visible, QRectF(0, 110, 40, 20));
+
+        // Scrolled-out child: a bare map still reports a rect inside the root,
+        // which is exactly what would mis-hit. The clipped map rejects it.
+        const QRectF bare =
+            scrolled.at(0)->mapRectToItem(root, QRectF(0, 0, scrolled.at(0)->width(), scrolled.at(0)->height()));
+        QCOMPARE(bare, QRectF(0, 20, 40, 20));
+        QVERIFY2(bare.contains(QPointF(20, 30)), "precondition: the unclipped rect would swallow this cursor");
+
+        const QRectF clipped = mapVisibleRectToItem(scrolled.at(0), root);
+        QVERIFY2(clipped.isEmpty(), "a fully clipped item must report no visible rect");
+        QVERIFY2(!clipped.contains(QPointF(20, 30)), "clipped item must not hit-test");
+        delete root;
     }
 
     /// The delegates must be findable by objectName and expose their model

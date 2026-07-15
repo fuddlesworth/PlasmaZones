@@ -20,6 +20,9 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QJsonParseError>
+#include <QQuickItem>
+#include <QRectF>
+#include <QVector>
 #include <atomic>
 
 #include <PhosphorWayland/LayerSurface.h>
@@ -33,6 +36,51 @@ namespace LayerSurfaceProps = PhosphorWayland::LayerSurfaceProps;
 } // namespace PlasmaZones
 
 namespace PlasmaZones {
+
+/// Recursive QML item search collecting every match, for repeated delegates
+/// where findQmlItemByName's first-hit contract is not enough.
+inline void collectQmlItemsByName(QQuickItem* item, const QString& objectName, QVector<QQuickItem*>& out)
+{
+    if (!item) {
+        return;
+    }
+
+    if (item->objectName() == objectName) {
+        out.append(item);
+    }
+
+    const auto children = item->childItems();
+    for (auto* child : children) {
+        collectQmlItemsByName(child, objectName, out);
+    }
+}
+
+/// Map @p item's bounding rect into @p target's coordinates, intersected with
+/// every clipping ancestor along the way. Returns an empty rect when @p item is
+/// entirely clipped away.
+///
+/// Cursor hit-testing must use this rather than a bare mapRectToItem: an item
+/// scrolled outside a clipping ancestor (the zone selector's ScrollView clips
+/// once the layout list overflows) still holds a position in the scene graph, so
+/// its unclipped rect maps to coordinates where the item paints nothing. Hit
+/// testing that rect matches the cursor against something the user cannot see.
+inline QRectF mapVisibleRectToItem(QQuickItem* item, QQuickItem* target)
+{
+    if (!item || !target) {
+        return QRectF();
+    }
+
+    QRectF visible = item->mapRectToItem(target, QRectF(0, 0, item->width(), item->height()));
+    for (QQuickItem* ancestor = item->parentItem(); ancestor; ancestor = ancestor->parentItem()) {
+        if (ancestor->clip()) {
+            visible &= ancestor->mapRectToItem(target, QRectF(0, 0, ancestor->width(), ancestor->height()));
+        }
+        if (ancestor == target) {
+            break;
+        }
+    }
+    return visible;
+}
 
 inline void writeQmlProperty(QObject* object, const QString& name, const QVariant& value)
 {

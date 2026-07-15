@@ -562,7 +562,7 @@ add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)
 # rendered geometry that tracks LayoutCard's aspect-ratio letterboxing. All of
 # it fails silently at runtime — the highlight just stops following the cursor.
 add_executable(test_zone_selector_hit_geometry ui/test_zone_selector_hit_geometry.cpp)
-target_link_libraries(test_zone_selector_hit_geometry PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
+target_link_libraries(test_zone_selector_hit_geometry PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_core)
 add_test(NAME test_zone_selector_hit_geometry COMMAND test_zone_selector_hit_geometry)
 
 add_executable(test_surface_shader_item ui/test_surface_shader_item.cpp)
