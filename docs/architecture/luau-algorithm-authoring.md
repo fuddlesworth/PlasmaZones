@@ -364,12 +364,18 @@ autocomplete and `luau-analyze` know about the injected `pluau` global:
 }
 ```
 
-For full `pluau.*` type information, point your tooling at the shipped stubs:
-set luau-lsp's `luau-lsp.types.definitionFiles` to
-`/usr/share/plasmazones/pluau.d.luau`, or pass
-`--definitions=/usr/share/plasmazones/pluau.d.luau` to `luau-analyze`. Leave the
-file where it is installed rather than copying it into the algorithms directory,
-which the loader scans for `*.luau` and would log a skip warning for it.
+For full `pluau.*` type information, register the shipped stubs
+(`/usr/share/plasmazones/pluau.d.luau`) as a definition file in luau-lsp, which
+is what gives an editor `pluau.*` completion and type checking. See luau-lsp's
+own documentation for the setting, which its editor integrations spell
+differently. The bundled `luau-analyze` takes no definitions flag, so it never
+reads the stub: §11's `.luaurc` is what keeps it from calling `pluau` an unknown
+global, and a command-line check therefore tells you the script parses, not that
+your `pluau` calls typecheck. The editor is where that happens.
+
+Leave the stub where it is installed rather than copying it into the algorithms
+directory, which the loader scans for `*.luau` and would log a skip warning for
+it.
 
 Type-check before relying on a layout (CI runs exactly this over the bundled
 set):

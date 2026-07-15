@@ -42,10 +42,11 @@ Item {
 
     // The miniature uses Kirigami.Units for all structural sizing/spacing/margins.
     // The small integer literals below are intentional fixed drawing dimensions
-    // of this custom-painted preview: bar thicknesses, insets, corner radii, and
-    // the caps that stop a bar outgrowing its cell. They are visual detail of
-    // the diagram itself rather than layout spacing, and are deliberately not
-    // theme-scaled so the drawing keeps its proportions at every gridUnit.
+    // of this custom-painted preview: bar thicknesses, insets, corner radii, the
+    // 1-2px borders, and the caps that stop a bar outgrowing its cell. They are
+    // visual detail of the diagram itself rather than layout spacing, and are
+    // deliberately not theme-scaled so the drawing keeps its proportions at
+    // every gridUnit. Same rationale as ZoneSelectorSection's sample zones.
     ColumnLayout {
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
@@ -85,6 +86,13 @@ Item {
                             property bool isCenter: index === 4
                             property bool isSelected: index === root.position
                             property bool isHovered: cellMouse.containsMouse
+                            // The cells are the control: one of nine, exclusive,
+                            // named by the same labels the tooltips use. Without
+                            // these the whole picker is a silent 3x3 of
+                            // rectangles to a screen reader.
+                            Accessible.role: Accessible.RadioButton
+                            Accessible.name: root.positionLabels[cell.index]
+                            Accessible.checked: cell.isSelected
                             // Zone selector indicator bars, drawn per edge this
                             // cell sits on: a corner is on two, a side on one.
                             property bool isTopRow: cell.index <= 2

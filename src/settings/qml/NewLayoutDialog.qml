@@ -271,7 +271,6 @@ Kirigami.Dialog {
 
         // ── Page stack ─────────────────────────────────────────────────
         StackLayout {
-
             Layout.fillWidth: true
             currentIndex: root.currentStep
 
@@ -439,10 +438,10 @@ Kirigami.Dialog {
 
                     // Options
                     CheckBox {
+                        // AbstractButton already names itself from `text`.
                         text: i18n("Open in editor after creation")
                         checked: root.openInEditor
                         onToggled: root.openInEditor = checked
-                        Accessible.name: text
                     }
                 }
             }

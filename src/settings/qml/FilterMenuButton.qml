@@ -122,10 +122,12 @@ ToolButton {
                 role: "type"
 
                 // Checkable filter item that keeps the menu open on toggle
-                // (StayOpenMenuItem). `checked` is driven by a Binding that
-                // reads the filter set back, so a programmatic change to it
-                // lands on the item. Same idiom as
-                // LayoutFilterBar.FilterMenuItem.
+                // (StayOpenMenuItem). `checked` is driven by a `Binding on`
+                // that reads the filter set back, so a programmatic change to
+                // it lands on the item. It has to be `Binding on` and not a
+                // plain binding, because StayOpenMenuItem flips `checked` with
+                // a JS assignment, which severs a plain one. Same idiom, and
+                // same reason, as LayoutFilterBar.FilterMenuItem.
                 DelegateChoice {
                     roleValue: "item"
 

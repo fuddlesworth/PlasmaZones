@@ -176,12 +176,12 @@ Kirigami.Dialog {
 
                             required property var modelData
 
-                            templateName: modelData.name
-                            templateDesc: modelData.desc
-                            selected: root.baseTemplate === modelData.id
-                            onClicked: root.selectTemplate(modelData)
+                            templateName: templateDelegate.modelData.name
+                            templateDesc: templateDelegate.modelData.desc
+                            selected: root.baseTemplate === templateDelegate.modelData.id
+                            onClicked: root.selectTemplate(templateDelegate.modelData)
                             onDoubleClicked: {
-                                root.selectTemplate(modelData);
+                                root.selectTemplate(templateDelegate.modelData);
                                 root.currentStep = 1;
                             }
 
@@ -375,13 +375,16 @@ Kirigami.Dialog {
                             // Each box drives its flag through `onToggled` and
                             // reads it back through a binding, so the onOpened
                             // resets land on the control. There is no
-                            // write-back loop: toggle() reaches `checked`
-                            // through a C++ setter, which neither severs the
-                            // binding nor re-emits toggled(). `Binding on
-                            // checked` is equivalent to a plain `checked:`
-                            // binding here, and its RestoreNone never comes up
-                            // because these bindings carry no `when` and so
-                            // never deactivate.
+                            // write-back loop: a plain CheckBox flips `checked`
+                            // through toggle(), a C++ setter, which neither
+                            // severs the binding nor re-emits toggled(). That
+                            // makes `Binding on checked` equivalent to a plain
+                            // `checked:` binding here, which is NOT true of the
+                            // StayOpenMenuItems in LayoutFilterBar: those
+                            // assign `checked` from JS, and only `Binding on`
+                            // survives that. RestoreNone never comes up either
+                            // way, because these bindings carry no `when` and
+                            // so never deactivate.
                             CheckBox {
                                 text: i18n("Master count")
                                 onToggled: root.supportsMasterCount = checked
