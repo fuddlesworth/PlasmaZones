@@ -302,14 +302,6 @@ overlayOverrideForScreen(PhosphorZones::IZoneLayoutRegistry* layoutRegistry, con
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PhosphorZones::Zone selector helpers shared across overlayservice_selector*.cpp TUs
-// ═══════════════════════════════════════════════════════════════════════════════
-// The QML item search / geometry helpers (findQmlItemByName,
-// collectQmlItemsByName, mapVisibleRectToItem) live in overlay_helpers.h,
-// included above: they carry no config / registry dependency, which is what lets
-// test TUs include them.
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Window destroy helpers (per-screen state struct fields)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Individual destroy functions are implemented inline in each TU
@@ -347,7 +339,8 @@ inline void writeColorSettings(QObject* window, const IZoneVisualizationSettings
                      ov && ov->inactiveOpacity ? *ov->inactiveOpacity : settings->inactiveOpacity());
 }
 
-// patchZonesWithHighlight, parseZonesJson, ensureShaderTimerStarted, getAnchorsForPosition
+// patchZonesWithHighlight, parseZonesJson, ensureShaderTimerStarted, getAnchorsForPosition,
+// findQmlItemByName, collectQmlItemsByName, mapVisibleRectToItem
 // are defined in overlay_helpers.h (included above)
 
 } // namespace PlasmaZones
