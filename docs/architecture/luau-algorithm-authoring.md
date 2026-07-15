@@ -108,7 +108,7 @@ to sensible defaults.
 | `supportsMasterCount` | boolean | Exposes the “master count” control, so the user can adjust `ctx.masterCount` |
 | `supportsSplitRatio` | boolean | Exposes the split-ratio slider, so the user can adjust `ctx.splitRatio` |
 | `defaultSplitRatio` | number | Initial split ratio (0.1–0.9) |
-| `supportsMinSizes` | boolean | Honours per-window minimum sizes (default `true`) |
+| `supportsMinSizes` | boolean | Honours per-window minimum sizes (default `true`). Describes the layout for a caller that asks, and no built-in feature reads it: whether the host runs its min-size pass follows `producesOverlappingZones` and the user's own setting, so declaring this `false` changes nothing today |
 | `supportsMemory` | boolean | Uses the persistent split tree (§10) |
 | `supportsScriptState` | boolean | Persists an opaque `ctx.state` table across retiles (§9) |
 | `supportsSingleWindow` | boolean | Owns the lone-window case. Without it the host fills the work area when one window is tiled |
@@ -370,8 +370,8 @@ For full `pluau.*` type information, register the shipped stubs
 is what gives an editor `pluau.*` completion and type checking. See luau-lsp's
 own documentation for the setting, which its editor integrations spell
 differently. The bundled `luau-analyze` takes no definitions flag, so it never
-reads the stub: §11's `.luaurc` is what keeps it from calling `pluau` an unknown
-global, and a command-line check therefore tells you the script parses, not that
+reads the stub: the `.luaurc` above is what keeps it from calling `pluau` an
+unknown global, and a command-line check therefore tells you the script parses, not that
 your `pluau` calls typecheck. The editor is where that happens.
 
 Leave the stub where it is installed rather than copying it into the algorithms
