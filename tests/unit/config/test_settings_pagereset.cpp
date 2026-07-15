@@ -106,12 +106,11 @@ private Q_SLOTS:
         const QString perScreenGroup = PerScreenPathResolver::perScreenKey() + QLatin1Char('.')
             + PerScreenPathResolver::prefixToCategory(QStringLiteral("ZoneSelector")) + QLatin1Char('.') + screenName;
         const QString perScreenKey = QLatin1String(ZoneSelectorConfigKey::MaxRows);
-        int saved = 0;
 
         {
             Settings s;
             const int def = s.borderWidth();
-            saved = (def == 3) ? 4 : 3;
+            const int saved = (def == 3) ? 4 : 3;
             // `saved` is always 3 or 4, so 7 differs from both `saved` and the
             // default; the export/live-config/baseline assertions below can only
             // distinguish the three values if all three are distinct.

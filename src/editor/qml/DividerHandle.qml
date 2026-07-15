@@ -24,6 +24,8 @@ Rectangle {
     required property real spacing
     required property Item drawingArea
     required property Repeater zonesRepeater
+    // Floor the grab thickness: with zone padding 0, spacing is 0 and the divider would be ungrabbable
+    readonly property real handleThickness: Math.max(spacing, Kirigami.Units.smallSpacing)
     // Derived properties from dividerInfo
     property bool isVertical: dividerInfo ? dividerInfo.isVertical : false
     property real dividerPosition: dividerInfo ? dividerInfo.position : 0
@@ -71,10 +73,10 @@ Rectangle {
     // Position divider in the gap between displayed zones
     // Zones are displayed with x+spacing/2, so divider must align with that
     // Use dragPosition if dragging or if dividerInfo hasn't caught up yet
-    x: dividerInfo ? (dividerInfo.isVertical ? (shouldUseDragPosition ? dragPosition * drawingArea.width - spacing / 2 : dividerInfo.x - spacing / 2) : dividerInfo.x + spacing / 2) : 0
-    y: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.y + spacing / 2 : (shouldUseDragPosition ? dragPosition * drawingArea.height - spacing / 2 : dividerInfo.y - spacing / 2)) : 0
-    width: dividerInfo ? (dividerInfo.isVertical ? spacing : dividerInfo.width - spacing) : 0 // Horizontal: span minus margins
-    height: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.height - spacing : spacing) : 0 // Horizontal divider height = spacing
+    x: dividerInfo ? (dividerInfo.isVertical ? (shouldUseDragPosition ? dragPosition * drawingArea.width - handleThickness / 2 : dividerInfo.x - handleThickness / 2) : dividerInfo.x + spacing / 2) : 0
+    y: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.y + spacing / 2 : (shouldUseDragPosition ? dragPosition * drawingArea.height - handleThickness / 2 : dividerInfo.y - handleThickness / 2)) : 0
+    width: dividerInfo ? (dividerInfo.isVertical ? handleThickness : dividerInfo.width - spacing) : 0 // Horizontal: span minus margins
+    height: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.height - spacing : handleThickness) : 0 // Horizontal divider height = floored spacing
     // Background - subtle base color, more visible on hover/drag
     color: (dividerMouseArea.containsMouse || isDragging) ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, isDragging ? 0.4 : 0.25) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
     border.color: (dividerMouseArea.containsMouse || isDragging) ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)

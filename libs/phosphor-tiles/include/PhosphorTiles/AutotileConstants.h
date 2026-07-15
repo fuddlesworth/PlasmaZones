@@ -116,7 +116,9 @@ constexpr int MaxOverflowBehavior = 1;
 constexpr int ScriptWatchdogTimeoutMs = 100;
 
 /// Returns true if typeId is a numeric QMetaType (Double, Float, Int, UInt, LongLong, ULongLong).
-/// Used for fuzzy-comparing QVariant values after JSON round-trip type drift.
+/// Two uses: gating untrusted Luau metadata/override returns before they are
+/// accepted as numbers (the primary use since the finiteNumber validation),
+/// and fuzzy-comparing QVariant values after JSON round-trip type drift.
 constexpr bool isNumericMetaType(int typeId)
 {
     return typeId == QMetaType::Double || typeId == QMetaType::Float || typeId == QMetaType::Int

@@ -43,9 +43,12 @@ class TilingState;
  * - Master count adjustment
  * - Split ratio adjustment
  *
- * @note Thread Safety: All algorithms are stateless — their const public
- *       methods can be called concurrently on the same instance. The
- *       TilingState parameter must not be modified during the call.
+ * @note Thread Safety: Built-in geometry algorithms are stateless — their
+ *       const public methods can be called concurrently on the same instance.
+ *       Scripted algorithms are main-thread-only: LuauTileAlgorithm runs on a
+ *       shared lua_State and must not be called concurrently (see its class
+ *       documentation). In all cases the TilingState parameter must not be
+ *       modified during the call.
  */
 class PHOSPHORTILES_EXPORT TilingAlgorithm : public QObject
 {

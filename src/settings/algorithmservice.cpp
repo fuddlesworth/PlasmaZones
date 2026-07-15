@@ -350,18 +350,21 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
             PhosphorI18n::tr("Could not read the algorithm file. Check that it still exists and is readable."));
         return false;
     }
-    // Re-check the cap on the open handle: the pre-open check raced against
-    // the filesystem, and readAll() would read whatever is there now.
-    if (in.size() > PhosphorTiles::AutotileDefaults::MaxScriptSizeBytes) {
-        Q_EMIT algorithmOperationFailed(
-            PhosphorI18n::tr("That algorithm file is too large to load. Algorithms are limited to 1 MB."));
-        return false;
-    }
-    const QByteArray contents = in.readAll();
+    // Bounded read: the pre-open size check raced against the filesystem, and
+    // an unbounded readAll() would read whatever is there at read time, so a
+    // file that grows between check and read would be read whole. Reading at
+    // most cap+1 bytes both detects the over-cap case (one extra byte read)
+    // and bounds memory regardless of what the file has become.
+    const QByteArray contents = in.read(PhosphorTiles::AutotileDefaults::MaxScriptSizeBytes + 1);
     if (in.error() != QFileDevice::NoError) {
         qCWarning(PlasmaZones::lcCore) << "importAlgorithm: failed to read" << filePath << in.errorString();
         Q_EMIT algorithmOperationFailed(
             PhosphorI18n::tr("Could not read the algorithm file. Check that it still exists and is readable."));
+        return false;
+    }
+    if (contents.size() > PhosphorTiles::AutotileDefaults::MaxScriptSizeBytes) {
+        Q_EMIT algorithmOperationFailed(
+            PhosphorI18n::tr("That algorithm file is too large to load. Algorithms are limited to 1 MB."));
         return false;
     }
     in.close();

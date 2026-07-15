@@ -2829,14 +2829,13 @@ bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop
     const QStringList namesToCheck = PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName);
     for (const QString& name : namesToCheck) {
         if (virtualDesktop > 0 && !activity.isEmpty()) {
-            const QString k =
-                name + QStringLiteral(":") + QString::number(virtualDesktop) + QStringLiteral(":") + activity;
+            const QString k = name + QLatin1Char(':') + QString::number(virtualDesktop) + QLatin1Char(':') + activity;
             if (locked.contains(k)) {
                 return true;
             }
         }
         if (virtualDesktop > 0) {
-            const QString k = name + QStringLiteral(":") + QString::number(virtualDesktop);
+            const QString k = name + QLatin1Char(':') + QString::number(virtualDesktop);
             if (locked.contains(k)) {
                 return true;
             }
@@ -2869,9 +2868,9 @@ void Settings::setContextLocked(const QString& screenIdOrName, int virtualDeskto
     }
     QString key = screenIdOrName;
     if (virtualDesktop > 0) {
-        key += QStringLiteral(":") + QString::number(virtualDesktop);
+        key += QLatin1Char(':') + QString::number(virtualDesktop);
         if (!activity.isEmpty()) {
-            key += QStringLiteral(":") + activity;
+            key += QLatin1Char(':') + activity;
         }
     }
     QStringList current = lockedScreens();

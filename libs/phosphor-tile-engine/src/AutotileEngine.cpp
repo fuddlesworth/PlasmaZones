@@ -3307,8 +3307,14 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         return true; // Successfully computed (empty) layout
     }
 
-    // Cap to user's max windows setting — excess windows are not tiled
-    const int windowCount = std::min(tiledCount, effectiveMaxWindows(screenId));
+    // Cap to user's max windows setting — excess windows are not tiled.
+    // Also cap at MaxZones: every scripted-algorithm zone path caps its output
+    // there, so the engine and algorithm must agree on that ceiling (relevant
+    // under Unlimited overflow, where effectiveMaxWindows returns a huge
+    // sentinel). Without it, >MaxZones tiled windows would fail the
+    // zones.size() == windowCount check below on every retile.
+    const int windowCount =
+        std::min({tiledCount, effectiveMaxWindows(screenId), PhosphorTiles::AutotileDefaults::MaxZones});
 
     const QRect screen = screenGeometry(screenId);
     if (!screen.isValid()) {
@@ -3468,11 +3474,14 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     //
     // minSizes is populated iff respectMin (see above). windowCount is
     // tiledCount (>= 1 past the early return at the top) capped by
-    // effectiveMaxWindows, and every source feeding that cap is clamped to
-    // MinMaxWindows or above (the settings-schema validator on the global
-    // setting, perAlgoFromVariantMap on per-algorithm entries,
-    // AutotileConfig::fromJson, and the algorithms' defaultMaxWindows), so a
-    // zero windowCount is not reachable here. It is a pure backstop anyway:
+    // effectiveMaxWindows and by MaxZones. Every source feeding the
+    // effectiveMaxWindows cap is clamped to MinMaxWindows or above (the
+    // settings-schema validator on the global setting, perAlgoFromVariantMap
+    // on per-algorithm entries, AutotileConfig::fromJson, the algorithms'
+    // defaultMaxWindows, the qBound on the per-screen MaxWindows override in
+    // PerScreenConfigResolver::effectiveMaxWindows, and the Unlimited
+    // sentinel), and MaxZones is well above 1, so a zero windowCount is not
+    // reachable here. It is a pure backstop anyway:
     // a zero windowCount yields empty zones, which pass the equality check
     // above and leave this block a no-op.
     if (respectMin && algo->supportsMinSizes() && !algo->producesOverlappingZones()) {

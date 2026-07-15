@@ -474,12 +474,23 @@ bool SettingsController::exportAllSettings(const QString& filePath)
     // picker can reach the config directory. Canonical paths, so a symlink or a
     // `.` segment pointing at the same file is caught too. canonicalFilePath()
     // is empty for a file that does not exist yet, which on a fresh profile is
-    // exactly the live config path; compare cleaned lexical paths in that case
-    // so the export cannot write the in-memory settings onto it.
+    // exactly the live config path; in that case canonicalize the PARENT
+    // directory and rejoin the filename, so `<symlink-to-config-dir>/config.json`
+    // is still caught, and fall back to cleaned lexical paths only when the
+    // parent does not exist either (nothing on disk to resolve).
     const QFileInfo destInfo(safeFilePath);
-    const bool destIsLiveConfig = destInfo.exists()
-        ? destInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath()
-        : QDir::cleanPath(safeFilePath) == QDir::cleanPath(configPath);
+    bool destIsLiveConfig = false;
+    if (destInfo.exists()) {
+        destIsLiveConfig = destInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath();
+    } else {
+        const auto resolveThroughParent = [](const QFileInfo& info) -> QString {
+            const QString parentCanonical = info.dir().canonicalPath();
+            if (parentCanonical.isEmpty())
+                return QDir::cleanPath(info.filePath());
+            return parentCanonical + QLatin1Char('/') + info.fileName();
+        };
+        destIsLiveConfig = resolveThroughParent(destInfo) == resolveThroughParent(QFileInfo(configPath));
+    }
     if (destIsLiveConfig) {
         qCWarning(PlasmaZones::lcCore) << "exportAllSettings: destination is the live config file, refusing"
                                        << safeFilePath;

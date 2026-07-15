@@ -4,8 +4,9 @@
 // The shapes rewriteMetadataNameId() / spliceTemplate() refuse.
 //
 // Split out of test_algorithm_scaffold.cpp on the same rule that put the blank
-// scaffold in its own file: one file for every surface passed the 800-line
-// guideline. These share no fixture with the rewrite tests beyond the copyright
+// scaffold in its own file: one file for every surface passed the file-size
+// rule (target under 1000 lines, hard ceiling 1150). These share no fixture
+// with the rewrite tests beyond the copyright
 // line, and they all assert the same thing — an unrecognized shape returns
 // empty rather than a corrupted script.
 //

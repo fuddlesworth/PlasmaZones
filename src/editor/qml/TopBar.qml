@@ -167,8 +167,9 @@ ToolBar {
 
                 readonly property int maxLength: 40
                 readonly property int currentLength: text ? text.length : 0
-                readonly property bool showCounter: currentLength > maxLength * 0.8 || currentLength > maxLength
+                readonly property bool showCounter: currentLength > maxLength * 0.8
 
+                maximumLength: maxLength
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                 readOnly: topBar.previewMode
                 enabled: editorController !== null && editorController !== undefined
@@ -194,7 +195,7 @@ ToolBar {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: layoutNameField.showCounter || layoutNameField.activeFocus
                         text: i18nc("@info", "%1/%2", layoutNameField.currentLength, layoutNameField.maxLength)
-                        color: layoutNameField.currentLength > layoutNameField.maxLength ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.disabledTextColor
+                        color: Kirigami.Theme.disabledTextColor
                         font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         opacity: layoutNameField.activeFocus ? 1 : 0.6
                         Accessible.name: i18nc("@info", "Character count: %1 of %2", layoutNameField.currentLength, layoutNameField.maxLength)

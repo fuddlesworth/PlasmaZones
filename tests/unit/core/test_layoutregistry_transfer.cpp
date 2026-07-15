@@ -16,6 +16,7 @@
 #include <QDir>
 #include <QFile>
 #include <memory>
+#include <vector>
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -116,6 +117,29 @@ private Q_SLOTS:
         const QByteArray written = f.readAll();
         QVERIFY(!written.contains("stale"));
         QVERIFY(written.contains("Replacement"));
+    }
+
+    // Importing the same file twice collides on the layout's UUID. The registry
+    // resolves that by registering a copy with regenerated IDs rather than
+    // refusing, and the pointer it answers is the copy it actually registered,
+    // not the parsed original it deleted.
+    void importRegeneratesIdsOnUuidCollision()
+    {
+        QObject owner;
+        auto* registry = createRegistry(&owner);
+        auto* layout = createTestLayout(QStringLiteral("Exported"), &owner);
+
+        const QString dest = tempPath(QStringLiteral("collide.json"));
+        QVERIFY(registry->exportLayout(layout, dest));
+
+        auto* first = registry->importLayout(dest);
+        QVERIFY(first != nullptr);
+        const QUuid firstId = first->id();
+
+        auto* second = registry->importLayout(dest);
+        QVERIFY(second != nullptr);
+        QCOMPARE(registry->layoutById(second->id()), second);
+        QVERIFY(second->id() != firstId);
     }
 
     // Every rejection the registry can name answers nullptr. Each of these was

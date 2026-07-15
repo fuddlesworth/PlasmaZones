@@ -67,15 +67,18 @@ Rectangle {
     // Imperative sync for the geometry controls. Their declarative bindings
     // die on the first user edit (QQC2) or imperative write, so both the
     // selection-change and zonesChanged paths re-apply the model state here.
-    function syncGeometryControls() {
-        if (!selectedZone)
+    // Callers that observe the controller's signal directly can pass a fresh
+    // zone map, since the panel's own selectedZone property lags that signal.
+    function syncGeometryControls(freshZone) {
+        const zone = (freshZone && freshZone.id) ? freshZone : selectedZone;
+        if (!zone)
             return;
 
-        fixedGeometryCheck.checked = selectedZone.geometryMode === 1;
-        fixedXSpin.value = selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0;
-        fixedYSpin.value = selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0;
-        fixedWidthSpin.value = selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50;
-        fixedHeightSpin.value = selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50;
+        fixedGeometryCheck.checked = zone.geometryMode === 1;
+        fixedXSpin.value = zone.fixedX !== undefined ? zone.fixedX : 0;
+        fixedYSpin.value = zone.fixedY !== undefined ? zone.fixedY : 0;
+        fixedWidthSpin.value = zone.fixedWidth !== undefined ? zone.fixedWidth : 50;
+        fixedHeightSpin.value = zone.fixedHeight !== undefined ? zone.fixedHeight : 50;
     }
 
     // Layout properties
@@ -795,12 +798,14 @@ Rectangle {
                 // Handle validation errors and selection changes
                 Connections {
                     function onSelectedZoneIdChanged() {
-                        // Guard here rather than in `enabled`: gating enabled on
-                        // selectedZoneId races this very signal (the binding
-                        // update and the handler invocation ride the same
-                        // notification), so the ""-to-id transition could be
-                        // skipped entirely.
-                        if (selectedZoneId === "")
+                        // This Connections fires on the CONTROLLER's signal,
+                        // before EditorWindow's copy of the id (which feeds
+                        // propertyPanel.selectedZoneId/selectedZone) updates in
+                        // its own, later handler of the same signal. Inside this
+                        // handler the panel's properties are one step stale, so
+                        // read the authoritative controller state directly.
+                        const id = editorController.selectedZoneId;
+                        if (id === "")
                             return;
 
                         // Re-sync every editable control imperatively: their
@@ -808,11 +813,12 @@ Rectangle {
                         // or imperative sync, after which a selection change
                         // would keep showing the previous zone's values and any
                         // edit would stamp those stale values onto the new zone.
-                        if (selectedZone) {
-                            zoneNameField.text = selectedZone.name || "";
-                            zoneNumberSpinBox.value = selectedZone.zoneNumber || 1;
+                        const zone = editorController.getZoneById(id);
+                        if (zone && zone.id) {
+                            zoneNameField.text = zone.name || "";
+                            zoneNumberSpinBox.value = zone.zoneNumber || 1;
                         }
-                        propertyPanel.syncGeometryControls();
+                        propertyPanel.syncGeometryControls(zone);
                         zoneNameField.updateTimer.stop();
                         zoneNameField.validationError = "";
                         zoneNumberSpinBox.validationError = "";

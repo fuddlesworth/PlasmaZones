@@ -187,10 +187,11 @@ Window {
             // If no layout loaded and not in preview mode, create new
             if (editorWindow._editorController.layoutId === "" && !editorWindow.previewMode)
                 editorWindow._editorController.createNewLayout();
+
+            // Set screen and show via C++ Q_INVOKABLE — QML Window.screen assignment
+            // doesn't reliably call QWindow::setScreen() on Wayland (type mismatch)
+            editorWindow._editorController.showFullScreenOnTargetScreen(editorWindow);
         }
-        // Set screen and show via C++ Q_INVOKABLE — QML Window.screen assignment
-        // doesn't reliably call QWindow::setScreen() on Wayland (type mismatch)
-        editorWindow._editorController.showFullScreenOnTargetScreen(editorWindow);
         // Request focus on drawingArea for keyboard navigation
         // Use a timer to ensure focus is set after window is fully shown
         Qt.callLater(function () {
@@ -869,9 +870,6 @@ Window {
 
         function onTargetScreenChanged() {
             editorWindow.moveToTargetScreen();
-        }
-
-        function onLayoutNameChanged() {
         }
 
         target: editorWindow._editorController
