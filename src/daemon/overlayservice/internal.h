@@ -304,31 +304,10 @@ overlayOverrideForScreen(PhosphorZones::IZoneLayoutRegistry* layoutRegistry, con
 // ═══════════════════════════════════════════════════════════════════════════════
 // PhosphorZones::Zone selector helpers shared across overlayservice_selector*.cpp TUs
 // ═══════════════════════════════════════════════════════════════════════════════
-
-// Recursive QML item search by objectName
-inline QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName)
-{
-    if (!item) {
-        return nullptr;
-    }
-
-    if (item->objectName() == objectName) {
-        return item;
-    }
-
-    const auto children = item->childItems();
-    for (auto* child : children) {
-        if (auto* found = findQmlItemByName(child, objectName)) {
-            return found;
-        }
-    }
-
-    return nullptr;
-}
-
-// collectQmlItemsByName and mapVisibleRectToItem live in overlay_helpers.h
-// (included above): they are pure QQuickItem geometry helpers with no config /
-// registry dependency, and that header is the one test TUs can include.
+// The QML item search / geometry helpers (findQmlItemByName,
+// collectQmlItemsByName, mapVisibleRectToItem) live in overlay_helpers.h,
+// included above: they carry no config / registry dependency, which is what lets
+// test TUs include them.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window destroy helpers (per-screen state struct fields)

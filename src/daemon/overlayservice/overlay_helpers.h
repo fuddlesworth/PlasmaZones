@@ -37,6 +37,27 @@ namespace LayerSurfaceProps = PhosphorWayland::LayerSurfaceProps;
 
 namespace PlasmaZones {
 
+/// Recursive QML item search by objectName, returning the first match.
+inline QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName)
+{
+    if (!item) {
+        return nullptr;
+    }
+
+    if (item->objectName() == objectName) {
+        return item;
+    }
+
+    const auto children = item->childItems();
+    for (auto* child : children) {
+        if (auto* found = findQmlItemByName(child, objectName)) {
+            return found;
+        }
+    }
+
+    return nullptr;
+}
+
 /// Recursive QML item search collecting every match, for repeated delegates
 /// where findQmlItemByName's first-hit contract is not enough.
 inline void collectQmlItemsByName(QQuickItem* item, const QString& objectName, QVector<QQuickItem*>& out)
