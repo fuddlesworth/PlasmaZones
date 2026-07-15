@@ -825,6 +825,14 @@ QString JsonBackend::readRootString(const QString& key, const QString& defaultVa
     return defaultValue;
 }
 
+// writeRootString / removeRootKey deliberately carry NO active-group guard
+// (unlike deleteGroup / replaceRoot / reparseConfiguration): a live JsonGroup
+// never caches its object — every read/write re-resolves through
+// groupObject() against the shared root — so a single-key mutation of the
+// rootGroupName object cannot leave a group dangling. It is no different in
+// character from a concurrent write through another JsonGroup, which is
+// likewise permitted. The guarded operations, by contrast, delete or swap
+// whole subtrees a live group may be scoped to.
 void JsonBackend::writeRootString(const QString& key, const QString& value)
 {
     QJsonObject general = d->root.value(d->rootGroupName).toObject();

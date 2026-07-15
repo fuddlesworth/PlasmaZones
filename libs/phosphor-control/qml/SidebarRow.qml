@@ -48,7 +48,9 @@ QQC2.ItemDelegate {
     signal categoryToggleRequested(string pageId)
     signal drillIntoRequested(string pageId)
 
-    width: ListView.view.width
+    // Guard against a null attached view: a pooled/destroyed delegate is
+    // detached from its ListView and the bare access would throw.
+    width: ListView.view ? ListView.view.width : 0
     // Legacy row height — explicit so the rail's vertical rhythm is
     // stable regardless of label metrics. Dividers get a shorter slot
     // than nav rows so the breaks read as breathing-room rather than

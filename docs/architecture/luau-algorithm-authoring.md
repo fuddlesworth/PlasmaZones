@@ -26,7 +26,9 @@ shape.
 
 Each `*.luau` file in the user directory is one algorithm. The file name (minus
 extension) is the fallback id; `metadata.id` overrides it. User algorithms
-override a bundled one with the same id. The daemon **hot-reloads** the
+override a bundled one with the same id. A script cannot take the id of an
+algorithm registered in C++ code, such as one provided by a plugin. Such a
+file is skipped with a warning in the daemon log. The daemon **hot-reloads** the
 directory — save the file and the algorithm list refreshes; no restart needed.
 The settings app's *Algorithms* page can also create, duplicate, and edit them.
 Duplicating personalizes the copy's `name` and `id` in place, which needs them

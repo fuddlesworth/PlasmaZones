@@ -976,27 +976,36 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         }
     }
 
-    // Clear stale split trees when switching away from a memory algorithm.
+    // Clear stale per-algorithm state, but only on states whose effective
+    // algorithm follows the global one. Screens with a per-screen Algorithm
+    // override keep their effective algorithm across this global switch (see
+    // the retile loop below), so their split trees and script state are still
+    // live and must survive.
+    //
+    // Split trees: cleared when switching away from a memory algorithm.
     // Without this, deserialized trees from a previous DwindleMemory session
     // persist after algorithm switch, wasting memory and risking confusion.
+    //
+    // Script state: the per-algorithm script-state bag is opaque state private
+    // to the previous algorithm (e.g. an aligned grid's column fractions) with
+    // no meaning to the next — a different scripted algorithm that also opts
+    // into supportsScriptState must not inherit it. Unlike the split tree
+    // (which two memory algorithms can meaningfully share), script state has
+    // no cross-algorithm validity, so it is wiped on every effective change.
+    //
     // Must happen BEFORE emitting algorithmChanged so that listeners see
-    // consistent state (no stale trees from the old algorithm).
-    if (newAlgo && !newAlgo->supportsMemory()) {
-        for (auto* state : m_states.states()) {
-            state->clearSplitTree();
+    // consistent state (no stale trees from the old algorithm). Safe because
+    // this point is reached only when the algorithm id changed (early return
+    // above), so every non-overridden state's effective algorithm changed.
+    const bool clearSplitTrees = newAlgo && !newAlgo->supportsMemory();
+    for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
+        if (!it.value() || hasPerScreenOverride(it.key().screenId, PerScreenKeys::Algorithm)) {
+            continue;
         }
-    }
-
-    // Clear the per-algorithm script-state bag on every switch. It is opaque
-    // state private to the previous algorithm (e.g. an aligned grid's column
-    // fractions) with no meaning to the next — a different scripted algorithm
-    // that also opts into supportsScriptState must not inherit it. Unlike the
-    // split tree above (which two memory algorithms can meaningfully share),
-    // script state has no cross-algorithm validity, so this is unconditional.
-    // Safe because this point is reached only when the algorithm id changed
-    // (early return above).
-    for (auto* state : m_states.states()) {
-        state->setScriptState({});
+        if (clearSplitTrees) {
+            it.value()->clearSplitTree();
+        }
+        it.value()->setScriptState({});
     }
 
     Q_EMIT algorithmChanged(m_algorithmId);

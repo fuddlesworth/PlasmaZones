@@ -1753,11 +1753,26 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
                 // that happens to contain a '/' (rare but legal in the
                 // disambiguated `Manuf:Model:Serial/CONNECTOR` shape)
                 // doesn't truncate.
+                //
+                // Drop entries the parse loop below would reject (missing or
+                // edge '/', and for Desktop a non-positive or non-numeric
+                // desktop segment). canonical() must yield the EFFECTIVE set:
+                // keeping a malformed entry here would defeat the no-op guard
+                // and fire disabled*Changed + settingsChanged for a write
+                // whose every kept entry already matches the current rules.
                 const int slash = value.lastIndexOf(QLatin1Char('/'));
-                if (slash > 0 && slash < value.size() - 1) {
-                    const QString screen = resolveScreen(value.left(slash));
-                    value = screen + QLatin1Char('/') + value.mid(slash + 1);
+                if (slash <= 0 || slash == value.size() - 1) {
+                    continue;
                 }
+                if (axis == DisableAxis::Desktop) {
+                    bool ok = false;
+                    const int desktop = value.mid(slash + 1).toInt(&ok);
+                    if (!ok || desktop <= 0) {
+                        continue;
+                    }
+                }
+                const QString screen = resolveScreen(value.left(slash));
+                value = screen + QLatin1Char('/') + value.mid(slash + 1);
             }
             if (!value.isEmpty() && !c.contains(value)) {
                 c.append(value);

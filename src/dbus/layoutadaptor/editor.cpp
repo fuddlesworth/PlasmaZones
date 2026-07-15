@@ -3,6 +3,7 @@
 
 #include "../layoutadaptor.h"
 #include "../../core/interfaces.h"
+#include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutFactory.h>
 #include <PhosphorZones/Zone.h>
@@ -215,9 +216,18 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Update full screen geometry mode
     layout->setUseFullScreenGeometry(obj[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false));
 
-    // Update aspect ratio classification
+    // Update aspect ratio classification. Accept both serialized forms, the
+    // same way the editor's loader does: getLayout/Layout::toJson emit the
+    // canonical string ("ultrawide"), while editor save round-trips carry the
+    // int, so an int-only read would reset a get→modify→update cycle to Any.
     if (obj.contains(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)) {
-        layout->setAspectRatioClassInt(obj[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey].toInt(0));
+        const QJsonValue arVal = obj[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey];
+        if (arVal.isString()) {
+            layout->setAspectRatioClassInt(
+                static_cast<int>(PhosphorLayout::ScreenClassification::fromString(arVal.toString())));
+        } else {
+            layout->setAspectRatioClassInt(arVal.toInt(0));
+        }
     } else {
         layout->setAspectRatioClassInt(0);
     }

@@ -290,6 +290,7 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     // Save old tracking map so we can detect stale entries afterwards
     QHash<QString, QString> oldScriptIdToPath = m_scriptIdToPath;
     m_scriptIdToPath.clear();
+    m_refusedFilePaths.clear();
 
     // `algorithmDirectories()` returns dirs in [sys-lowest, ...,
     // sys-highest, user] order (system-first / user-last). Reverse-
@@ -386,9 +387,17 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     // atomic-rename inode-replacement window the legacy followup timer
     // used to cover.
     QStringList desiredFileWatches;
-    desiredFileWatches.reserve(m_scriptIdToPath.size());
+    desiredFileWatches.reserve(m_scriptIdToPath.size() + m_refusedFilePaths.size());
     for (auto it = m_scriptIdToPath.constBegin(); it != m_scriptIdToPath.constEnd(); ++it) {
         desiredFileWatches.append(it.value());
+    }
+    // Refused files (invalid script, duplicate id, built-in collision) stay
+    // watched too. They own no registry entry, but an in-place write that
+    // fixes the script (repaired source, changed id metadata) must trigger a
+    // rescan just like an edit to a registered script — the directory watch
+    // alone misses in-place inode writes.
+    for (const QString& path : std::as_const(m_refusedFilePaths)) {
+        desiredFileWatches.append(path);
     }
     return desiredFileWatches;
 }
@@ -465,6 +474,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         if (!algo->isValid()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
             delete algo;
+            m_refusedFilePaths.insert(fullPath);
             continue;
         }
 
@@ -505,6 +515,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
                     << "' (first registration wins)";
             }
             delete algo;
+            m_refusedFilePaths.insert(fullPath);
             continue;
         }
 
@@ -522,6 +533,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
                 << "Script '" << fullPath << "' declares id '" << scriptId
                 << "' which collides with a built-in algorithm — skipped (scripts cannot replace built-ins)";
             delete algo;
+            m_refusedFilePaths.insert(fullPath);
             continue;
         }
 

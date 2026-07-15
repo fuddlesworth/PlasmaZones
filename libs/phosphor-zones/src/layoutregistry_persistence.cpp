@@ -203,13 +203,21 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
                     connect(layout, &PhosphorZones::Layout::layoutModified, this, [this, layout]() {
                         saveLayout(layout);
                     });
-                    delete existing;
+                    // deleteLater, not delete (project rule: no manual delete).
+                    // The replaced object is inert from here — removed from
+                    // m_layouts and disconnected above — and the daemon spins
+                    // its event loop after loadLayouts(), so the deferred
+                    // deletion runs. No layoutRemoved is emitted: bulk load is
+                    // deliberately signal-silent per layout, loadLayouts()
+                    // emits a single layoutsChanged at the end.
+                    existing->deleteLater();
                     qCInfo(lcZonesLib) << "User layout overrides system layout name=" << layout->name()
                                        << "from=" << filePath;
                 } else {
                     // Same source type or system trying to override user - skip
                     qCInfo(lcZonesLib) << "Skipping duplicate layout name=" << layout->name() << "id=" << layout->id();
-                    delete layout;
+                    // deleteLater, not delete — see the override branch above.
+                    layout->deleteLater();
                 }
             }
         } else {
@@ -219,7 +227,8 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
                 QFile::remove(filePath);
                 qCInfo(lcZonesLib) << "Removed orphaned layout file:" << filePath;
             }
-            delete layout;
+            // deleteLater, not delete — see the override branch above.
+            layout->deleteLater();
         }
     }
 }
@@ -269,6 +278,16 @@ void LayoutRegistry::saveLayout(PhosphorZones::Layout* layout)
     // disk; a full-format layout file remains loadable (the load path's
     // mergeSettings preserves keys the file already carries, see
     // loadLayoutsFromDirectory), and a later successful save re-splits it.
+    //
+    // Write ORDER (sidecar first, layout file second) is safe: if the
+    // layout-file commit below fails after the sidecar landed, the old layout
+    // file survives untouched (atomic QSaveFile), leaving a fresher sidecar
+    // against an older file. That is harmless because mergeSettings gives the
+    // SIDECAR precedence on key conflict at load (QJsonObject::insert
+    // overwrites the file's inline value, and sidecar zone appearance likewise
+    // replaces inline appearance), so stale inline settings in an old
+    // full-format file cannot shadow the fresh sidecar. The order also lets us
+    // know sidecarSaved before choosing stripped-vs-full content above.
     const bool sidecarSaved = m_layoutSettings.saveToFile(layoutSettingsFilePath());
     if (!sidecarSaved) {
         qCWarning(lcZonesLib) << "Failed to persist layout settings sidecar for" << layout->id().toString()

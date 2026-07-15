@@ -90,10 +90,14 @@ Rectangle {
         if (!zone)
             return;
 
-        if (!zoneNameField.activeFocus)
+        if (!zoneNameField.activeFocus) {
             zoneNameField.text = zone.name || "";
-        if (!zoneNumberSpinBox.activeFocus)
+            zoneNameField.validationError = "";
+        }
+        if (!zoneNumberSpinBox.activeFocus) {
             zoneNumberSpinBox.value = zone.zoneNumber || 1;
+            zoneNumberSpinBox.validationError = "";
+        }
     }
 
     // Layout properties

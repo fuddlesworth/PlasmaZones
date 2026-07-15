@@ -8,6 +8,7 @@
 #include <QByteArray>
 #include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QString>
 
 #include <memory>
@@ -139,6 +140,12 @@ private:
     std::unique_ptr<LuauScanStrategy> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path
+    /// Files the last scan refused (failed to load, duplicate id, or
+    /// built-in collision). Rebuilt every scan by loadFromDirectory and
+    /// merged into the desired per-file watch list so an in-place fix of
+    /// a broken script still triggers a rescan; these files own no
+    /// registry entry, so they never appear in m_scriptIdToPath.
+    QSet<QString> m_refusedFilePaths;
     /// Signature of the last registered script set — sorted (id, path,
     /// size, mtime) digest. Used by scanAndRegister() to suppress
     /// redundant algorithmsChanged() emissions on filesystem pokes that
