@@ -29,16 +29,20 @@ using PlasmaZones::mapVisibleRectToItem;
 /**
  * @brief The C++/QML contract the zone selector's cursor hit test relies on.
  *
- * OverlayService::updateSelectorPosition finds a LayoutCard's zone delegates by
- * objectName and reads their rendered geometry, rather than recomputing where
- * QML put them. It reads geometry because recomputing drifted: LayoutCard fits
- * the preview to the layout's aspectRatioClass and letterboxes it inside the
- * indicator box, then insets it by smallSpacing. The old arithmetic modelled
- * neither, so the cursor mapped to the wrong zone (or to none) near card edges.
+ * OverlayService::updateSelectorPosition identifies cards and zones by the
+ * `index` and `objectName` on their delegates, and reads back the geometry QML
+ * rendered rather than recomputing where QML put it. It reads geometry because
+ * recomputing drifted: LayoutCard fits the preview to the layout's
+ * aspectRatioClass and letterboxes it inside the indicator box, then insets it
+ * by smallSpacing. The old arithmetic modelled neither, so the cursor mapped to
+ * the wrong zone (or to none) near card edges.
  *
- * Both halves of that contract fail silently at runtime — a renamed objectName
- * or a dropped `index` just stops the highlight from tracking the cursor — so
- * they are pinned here.
+ * Three things are pinned here, each of which fails silently at runtime rather
+ * than loudly: the delegates stay discoverable (a renamed objectName or a
+ * dropped `index` just stops the highlight from tracking the cursor), clipped
+ * items report no visible rect (or the cursor matches a card scrolled out of
+ * view), and the letterbox actually moves the zones (or the drift this all
+ * exists to fix is not being measured at all).
  */
 class TestZoneSelectorHitGeometry : public QObject
 {
@@ -80,9 +84,10 @@ private:
         return zones;
     }
 
-    /// Build a LayoutCard for a layout tagged `aspectRatioClass`, force a layout
-    /// pass, and return each zone's rendered rect keyed by its model index —
-    /// exactly what updateSelectorPosition reads.
+    /// Build a LayoutCard for a layout tagged `aspectRatioClass` and return each
+    /// zone's rendered rect keyed by its model index, the way
+    /// updateSelectorPosition reads them. Anchors resolve during construction,
+    /// so no explicit layout pass is needed to read geometry back.
     QHash<int, QRectF> renderedZoneRects(const QString& aspectRatioClass)
     {
         QQmlComponent component(&m_engine);
@@ -124,7 +129,7 @@ private:
             if (!ok) {
                 continue;
             }
-            rects.insert(index, zoneItem->mapRectToItem(card, QRectF(0, 0, zoneItem->width(), zoneItem->height())));
+            rects.insert(index, mapVisibleRectToItem(zoneItem, card));
         }
 
         delete card;
