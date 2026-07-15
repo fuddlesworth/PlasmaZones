@@ -508,6 +508,23 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             continue;
         }
 
+        // A script may shadow another script (XDG priority, enforced by the
+        // first-wins guard above) but must NEVER shadow a C++ built-in:
+        // registerAlgorithm() replaces on duplicate id, and the stale sweep
+        // in scanAndRegister would later unregister the id outright when the
+        // script file disappears — leaving the built-in gone until restart.
+        // Probe the live registry: a non-scripted entry under this id is a
+        // built-in, so refuse the file. The refusal must keep the id OUT of
+        // m_scriptIdToPath so neither the stale sweep nor the file-watch
+        // bookkeeping ever sees it.
+        if (const TilingAlgorithm* existing = m_registry->algorithm(scriptId); existing && !existing->isScripted()) {
+            qCWarning(PhosphorTiles::lcTilesLib).nospace()
+                << "Script '" << fullPath << "' declares id '" << scriptId
+                << "' which collides with a built-in algorithm — skipped (scripts cannot replace built-ins)";
+            delete algo;
+            continue;
+        }
+
         registry->registerAlgorithm(scriptId, algo);
         m_scriptIdToPath[scriptId] = fullPath;
 

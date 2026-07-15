@@ -360,8 +360,18 @@ Rectangle {
                     enabled: editorController !== null
                     Accessible.name: i18nc("@label", "Zone name")
                     onTextChanged: {
-                        if (selectedZoneId && editorController)
+                        // Only user edits (field focused) arm the auto-commit
+                        // timer. Programmatic writes — the declarative binding
+                        // on selection change and syncNameAndNumber() — also
+                        // fire onTextChanged, and a legacy >40-char zone name
+                        // truncated by maximumLength would otherwise auto-commit
+                        // a rename (undo entry + unsaved mark) on mere selection.
+                        // The stop() also kills a pending timer from a previous
+                        // zone so its text can't commit under the new zone's id.
+                        if (activeFocus && selectedZoneId && editorController)
                             updateTimer.restart();
+                        else
+                            updateTimer.stop();
                     }
                     onEditingFinished: {
                         updateTimer.stop();

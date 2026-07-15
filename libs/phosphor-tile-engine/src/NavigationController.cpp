@@ -697,7 +697,13 @@ void NavigationController::setGlobalSplitRatio(qreal ratio)
     ratio = std::clamp(ratio, PhosphorTiles::AutotileDefaults::MinSplitRatio,
                        PhosphorTiles::AutotileDefaults::MaxSplitRatio);
     m_engine->config()->splitRatio = ratio;
-    applyToAllStates([ratio](PhosphorTiles::TilingState* state) {
+    applyToAllStates([this, ratio](const QString& screenId, PhosphorTiles::TilingState* state) {
+        // Screens carrying an explicit per-screen SplitRatio override keep it,
+        // mirroring propagateGlobalSplitRatio — writing them here would only
+        // last until the next settings refresh resurfaces the override.
+        if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::SplitRatio)) {
+            return;
+        }
         state->setSplitRatio(ratio);
     });
 }
@@ -707,7 +713,12 @@ void NavigationController::setGlobalMasterCount(int count)
     count = std::clamp(count, PhosphorTiles::AutotileDefaults::MinMasterCount,
                        PhosphorTiles::AutotileDefaults::MaxMasterCount);
     m_engine->config()->masterCount = count;
-    applyToAllStates([count](PhosphorTiles::TilingState* state) {
+    applyToAllStates([this, count](const QString& screenId, PhosphorTiles::TilingState* state) {
+        // Screens carrying an explicit per-screen MasterCount override keep
+        // it, mirroring propagateGlobalMasterCount.
+        if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::MasterCount)) {
+            return;
+        }
         state->setMasterCount(count);
     });
 }
@@ -885,7 +896,8 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     return {};
 }
 
-void NavigationController::applyToAllStates(const std::function<void(PhosphorTiles::TilingState*)>& operation)
+void NavigationController::applyToAllStates(
+    const std::function<void(const QString& screenId, PhosphorTiles::TilingState*)>& operation)
 {
     if (m_engine->m_states.states().isEmpty()) {
         return; // No states to modify
@@ -897,7 +909,7 @@ void NavigationController::applyToAllStates(const std::function<void(PhosphorTil
     for (auto it = m_engine->m_states.states().constBegin(); it != m_engine->m_states.states().constEnd(); ++it) {
         if (it.key().desktop == m_engine->currentKeyForScreen(it.key().screenId).desktop
             && it.key().activity == m_engine->m_context.currentActivity() && it.value()) {
-            operation(it.value());
+            operation(it.key().screenId, it.value());
         }
     }
 

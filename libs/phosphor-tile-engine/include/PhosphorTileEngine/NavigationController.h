@@ -204,8 +204,12 @@ private:
 
     /**
      * @brief Helper to apply an operation to all screen states
+     *
+     * The callback receives each state's screen id so callers can skip
+     * screens carrying a per-screen config override (mirroring
+     * propagateGlobalSplitRatio / propagateGlobalMasterCount).
      */
-    void applyToAllStates(const std::function<void(PhosphorTiles::TilingState*)>& operation);
+    void applyToAllStates(const std::function<void(const QString& screenId, PhosphorTiles::TilingState*)>& operation);
 
     AutotileEngine* m_engine = nullptr;
 };

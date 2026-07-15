@@ -111,7 +111,8 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // the skip-list as a one-release safety net in case a stale copy lingers
         // in a system data dir the migration didn't delete.
         if (entry == QStringLiteral("assignments.json") || entry == QStringLiteral("autotile-overrides.json")
-            || entry == QStringLiteral("rules.json") || entry == QStringLiteral("quicklayouts.json")) {
+            || entry == QStringLiteral("rules.json") || entry == QStringLiteral("quicklayouts.json")
+            || entry == QStringLiteral("layout-settings.json")) {
             continue;
         }
 

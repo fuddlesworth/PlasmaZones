@@ -79,9 +79,25 @@ Item {
     // WizardTemplateCard): without a tab stop this Item can never gain
     // active focus inside the hosting Flow, making them dead code.
     activeFocusOnTab: true
-    Keys.onReturnPressed: root.activated(root.modelData.id)
+    // Select before activating, matching the mouse path (single-click selects,
+    // double-click delivers selection then activation) so keyboard activation
+    // never leaves a stale selection highlight on another card.
+    Keys.onReturnPressed: {
+        root.selected(root.index);
+        root.activated(root.modelData.id);
+    }
+    // Numpad Enter alias, matching the sibling card components.
+    Keys.onEnterPressed: {
+        root.selected(root.index);
+        root.activated(root.modelData.id);
+    }
+    // Space selects without activating (WizardTemplateCard/PositionPicker
+    // semantics).
+    Keys.onSpacePressed: root.selected(root.index)
     Keys.onDeletePressed: {
-        if (!root.modelData.isSystem && !root.modelData.isAutotile)
+        // Only system items are undeletable; user (non-system) algorithms are
+        // deletable via the context menu, so keyboard Delete matches that path.
+        if (!root.modelData.isSystem)
             root.deleteRequested(root.modelData);
     }
 
@@ -98,6 +114,10 @@ Item {
         acceptedButtons: root.contextMenuEnabled ? (Qt.LeftButton | Qt.RightButton) : Qt.LeftButton
         hoverEnabled: false
         onClicked: mouse => {
+            // Move active focus to the clicked card so a previously
+            // keyboard-focused card doesn't keep the focus ring and receive
+            // subsequent Return/Delete presses.
+            root.forceActiveFocus();
             if (mouse.button === Qt.RightButton) {
                 root.selected(root.index);
                 root.contextMenuRequested(root.modelData);

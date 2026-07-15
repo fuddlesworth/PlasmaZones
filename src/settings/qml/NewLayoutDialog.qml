@@ -364,8 +364,15 @@ Kirigami.Dialog {
 
                             Layout.fillWidth: true
                             placeholderText: i18n("My Layout")
+                            // Mirrors PlasmaZones::MaxLayoutNameLength (core/constants.h),
+                            // same client-side cap as the editor's layout name field.
+                            maximumLength: 40
                             Accessible.name: i18n("Layout name")
                             Keys.onReturnPressed: {
+                                if (wizardFooter.createEnabled)
+                                    wizardFooter.createClicked();
+                            }
+                            Keys.onEnterPressed: {
                                 if (wizardFooter.createEnabled)
                                     wizardFooter.createClicked();
                             }

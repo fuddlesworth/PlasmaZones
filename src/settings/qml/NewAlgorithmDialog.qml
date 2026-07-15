@@ -299,6 +299,10 @@ Kirigami.Dialog {
                                 if (wizardFooter.createEnabled)
                                     wizardFooter.createClicked();
                             }
+                            Keys.onEnterPressed: {
+                                if (wizardFooter.createEnabled)
+                                    wizardFooter.createClicked();
+                            }
                         }
 
                         Connections {

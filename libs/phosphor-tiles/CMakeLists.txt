@@ -69,19 +69,19 @@ endif()
 # ScriptedAlgorithmLoader evaluate scripts through. PUBLIC link dep, so a
 # standalone configure must resolve it here too.
 if(NOT TARGET PhosphorScripting::PhosphorScripting)
-    find_package(PhosphorScripting 0.1.0 REQUIRED)
+    find_package(PhosphorScripting 0.1.0 CONFIG REQUIRED)
 endif()
 
 # phosphor-fsloader — shared filesystem-loader scaffolding (used by
 # ScriptedAlgorithmLoader's WatchedDirectorySet + LuauScanStrategy).
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
-    find_package(PhosphorFsLoader 0.1.0 REQUIRED)
+    find_package(PhosphorFsLoader 0.1.0 CONFIG REQUIRED)
 endif()
 
 # phosphor-registry — AlgorithmRegistry's storage is a Registry<TileAlgorithmEntry>.
 # Used only in algorithmregistry.cpp (the header is pimpl), so a PRIVATE link.
 if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
-    find_package(PhosphorRegistry 0.1.0 REQUIRED)
+    find_package(PhosphorRegistry 0.1.0 CONFIG REQUIRED)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════

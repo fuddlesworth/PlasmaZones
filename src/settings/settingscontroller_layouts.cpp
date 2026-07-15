@@ -207,6 +207,9 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
     QString sanitizedName = name.trimmed();
     if (sanitizedName.isEmpty())
         sanitizedName = PhosphorI18n::tr("New Layout");
+    // Clamp client-side to the daemon's cap so the pending-select name matches
+    // what the daemon actually stores (it silently truncates at this length).
+    sanitizedName = sanitizedName.left(MaxLayoutNameLength);
 
     const QString layoutType = type.isEmpty() ? QStringLiteral("custom") : type;
 

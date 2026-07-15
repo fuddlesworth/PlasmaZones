@@ -165,6 +165,8 @@ ToolBar {
             TextField {
                 id: layoutNameField
 
+                // Mirrors PlasmaZones::MaxLayoutNameLength (core/constants.h),
+                // same client-side cap as PropertyPanel's zone name field.
                 readonly property int maxLength: 40
                 readonly property int currentLength: text ? text.length : 0
                 readonly property bool showCounter: currentLength > maxLength * 0.8

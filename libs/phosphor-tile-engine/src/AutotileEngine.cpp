@@ -220,10 +220,14 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 // Signal connections
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::onWindowZoneChanged(const QString& windowId, const QString& zoneId)
+void AutotileEngine::onWindowZoneChanged(const QString& rawWindowId, const QString& zoneId)
 {
     if (m_retiling)
         return;
+    // Canonicalize at the event boundary like windowClosed()/windowFocused():
+    // a mutated-appId alias would otherwise miss the isFloating() check below
+    // and hand onWindowRemoved() an id no state tracks.
+    const QString windowId = canonicalizeWindowId(rawWindowId);
     if (zoneId.isEmpty()) {
         for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
             if (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
