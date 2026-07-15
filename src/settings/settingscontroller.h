@@ -638,8 +638,9 @@ private Q_SLOTS:
     // Debounce slot: all layout-mutation D-Bus signals (layoutCreated,
     // layoutDeleted, layoutChanged, layoutPropertyChanged, layoutListChanged)
     // route here so bursts coalesce into one loadLayoutsAsync() on the
-    // 50 ms m_layoutLoadTimer. Reachable by SLOT() because it's a
-    // private slot.
+    // 50 ms m_layoutLoadTimer. Reachable by SLOT() because it is a slot at
+    // all: the string-based connect resolves through the meta-object, which
+    // carries private slots and public ones alike.
     void scheduleLayoutLoad();
     void onVirtualDesktopsChanged();
     void onActivitiesChanged();
