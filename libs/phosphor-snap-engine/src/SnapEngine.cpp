@@ -209,9 +209,12 @@ bool SnapEngine::isFloating(const QString& windowId) const
     }
     // Screenless float bookkeeping falls to the global holder, which is not in the
     // reverse map; check it explicitly so isFloating stays symmetric with setFloating.
-    // This fall-through IS load-bearing: a tracked window resolves to its own store
-    // above, which never sees a screenless float.
-    return m_globals && m_globals->isFloating(windowId);
+    // This fall-through IS load-bearing for a TRACKED window: it resolves to its own
+    // store above, which never sees a screenless float. For an untracked one the
+    // check above already read m_globals (stateForWindow's fallback), so this simply
+    // re-reads the same holder and answers false a second time. m_globals is
+    // constructed in the initializer list and never reassigned, so it needs no guard.
+    return m_globals->isFloating(windowId);
 }
 
 void SnapEngine::setFloating(const QString& windowId, bool floating)

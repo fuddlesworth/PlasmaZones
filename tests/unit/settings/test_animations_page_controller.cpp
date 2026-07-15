@@ -506,10 +506,12 @@ private Q_SLOTS:
         // not per-window tryBeginShaderForEvent legs).
         QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.switch")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.peek")));
-        // The "All Desktop Events" parent row is shader-pickable too (its
-        // picker binds to this), and a pack set there cascades to both legs —
-        // so it is supported for the same reason the popup/osd parents below
-        // are, not merely as an ancestor of a consumed leaf.
+        // The "All Desktop Events" parent row is the desktop family root, and
+        // an ancestor of the consumed switch and peek leaves. It is
+        // shader-pickable too (its picker binds to this), and a pack set there
+        // cascades to both legs — so it is supported for the same reason the
+        // popup/osd parents below are, not merely as an ancestor of a consumed
+        // leaf.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
 
         // Ancestors of consumed leaves — supported because the
@@ -533,8 +535,6 @@ private Q_SLOTS:
         // The intermediate cascade parents the parent-card UX relies on.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance")));
-        // The desktop family root, ancestor of the consumed switch and peek leaves.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
 
         // Paths the resolver never walks through — any assignment would
         // be runtime-dead and silently shadow what the user thought

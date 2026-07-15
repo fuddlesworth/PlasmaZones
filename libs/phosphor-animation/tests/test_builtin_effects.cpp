@@ -57,6 +57,10 @@ private Q_SLOTS:
         registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
 
         const auto effects = registry.availableEffects();
+        // Guard the loop: every assertion below lives inside it, so an empty
+        // registry would pass this test vacuously rather than reporting that
+        // discovery broke.
+        QVERIFY(!effects.isEmpty());
         for (const AnimationShaderEffect& e : effects) {
             QVERIFY2(!e.id.isEmpty(), "Effect has empty id");
             QVERIFY2(!e.name.isEmpty(),
