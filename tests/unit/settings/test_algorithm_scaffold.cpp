@@ -55,7 +55,6 @@ class TestAlgorithmScaffold : public QObject
 private Q_SLOTS:
     void spliceRewritesNameAndId();
     void spliceToleratesTrailingNewlineOnCopyright();
-    void spliceRejectsMultiLineCopyright();
     void rewriteKeepsHeaderAndOtherTables();
     void spliceInheritsTemplateLicense();
     void spliceDoesNotRepeatOwnCopyright();
@@ -66,12 +65,7 @@ private Q_SLOTS:
     void spliceInsertsMissingNameAndId();
     void rewriteKeepsSourceIndent();
     void rewriteIndentsInsertIntoEmptyMetadata();
-    void spliceRejectsMalformedTemplates();
-    void spliceRejectsSingleLineMetadata();
-    void spliceRejectsInlineFieldsOnOpeningLine();
-    void spliceRejectsMultiFieldNameLine();
     void rewriteAcceptsHandWrittenFieldPunctuation();
-    void spliceRejectsUnquotedNameValue();
     void spliceIgnoresBracesInsideStrings();
     void spliceHandlesLongBrackets();
     void spliceHandlesMultiLineLongBrackets();
@@ -112,13 +106,6 @@ void TestAlgorithmScaffold::spliceToleratesTrailingNewlineOnCopyright()
                                                QStringLiteral("my-copy"));
     QVERIFY(!bare.isEmpty());
     QCOMPARE(withNewline, bare);
-}
-
-void TestAlgorithmScaffold::spliceRejectsMultiLineCopyright()
-{
-    // A full header here would slip past the copy-of-a-copy dedupe and leave
-    // the copy with two license identifiers, so it is rejected outright.
-    QVERIFY(spliceTemplate(kTemplate, kHeader, QStringLiteral("My Copy"), QStringLiteral("my-copy")).isEmpty());
 }
 
 void TestAlgorithmScaffold::rewriteKeepsHeaderAndOtherTables()
@@ -298,48 +285,6 @@ void TestAlgorithmScaffold::rewriteIndentsInsertIntoEmptyMetadata()
                                     "  },\n")));
 }
 
-void TestAlgorithmScaffold::spliceRejectsMalformedTemplates()
-{
-    QVERIFY(
-        spliceTemplate(QStringLiteral("return {}"), kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
-    QVERIFY(spliceTemplate(QString(), kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
-    // Unterminated metadata table.
-    QVERIFY(spliceTemplate(QStringLiteral("metadata = {\n name = \"a\",\n"), kCopyright, QStringLiteral("X"),
-                           QStringLiteral("x"))
-                .isEmpty());
-    // Malformed table whose depth goes negative (more closers than openers).
-    QVERIFY(spliceTemplate(QStringLiteral("metadata = {\n    }},\n    name = \"a\",\n}\n"), kCopyright,
-                           QStringLiteral("X"), QStringLiteral("x"))
-                .isEmpty());
-}
-
-void TestAlgorithmScaffold::spliceRejectsSingleLineMetadata()
-{
-    // A table that opens and closes on one line has no per-field lines; the
-    // splice must reject it rather than append name/id after the closing
-    // brace (which would be corrupt Luau).
-    const QString oneLiner = QStringLiteral(
-        "return pluau.algorithm {\n"
-        "    metadata = { name = \"A\", id = \"a\" },\n"
-        "    tile = function(ctx) return {} end,\n"
-        "}\n");
-    QVERIFY(spliceTemplate(oneLiner, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
-}
-
-void TestAlgorithmScaffold::spliceRejectsInlineFieldsOnOpeningLine()
-{
-    // A multi-line table whose opening line carries inline fields would keep
-    // the original name/id strings; the splice must reject the shape.
-    const QString hybrid = QStringLiteral(
-        "return pluau.algorithm {\n"
-        "    metadata = { name = \"A\",\n"
-        "        id = \"a\",\n"
-        "    },\n"
-        "    tile = function(ctx) return {} end,\n"
-        "}\n");
-    QVERIFY(spliceTemplate(hybrid, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
-}
-
 // duplicateAlgorithm() runs this rewrite over scripts a user wrote by hand, not
 // only over the bundled templates. Luau accepts a single-quoted value, a `;`
 // field separator, and a trailing comment, so rejecting any of them would fail
@@ -365,56 +310,15 @@ void TestAlgorithmScaffold::rewriteAcceptsHandWrittenFieldPunctuation()
     // Neither original value survives anywhere.
     QVERIFY(!out.contains(QStringLiteral("My Layout")));
     QVERIFY(!out.contains(QStringLiteral("\"mine\"")));
-}
 
-void TestAlgorithmScaffold::spliceRejectsMultiFieldNameLine()
-{
-    // A depth-1 name/id line carrying a second field would lose that field
-    // if rewritten wholesale; the splice must reject the shape instead.
-    const QString multiField = QStringLiteral(
-        "return pluau.algorithm {\n"
-        "    metadata = {\n"
-        "        name = \"A\", description = \"D\",\n"
-        "    },\n"
-        "    tile = function(ctx) return {} end,\n"
-        "}\n");
-    QVERIFY(spliceTemplate(multiField, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
-
-    // Same shape on the id line — the symmetric reject branch.
-    const QString multiFieldId = QStringLiteral(
-        "return pluau.algorithm {\n"
-        "    metadata = {\n"
-        "        id = \"a\", description = \"D\",\n"
-        "    },\n"
-        "    tile = function(ctx) return {} end,\n"
-        "}\n");
-    QVERIFY(spliceTemplate(multiFieldId, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
-}
-
-void TestAlgorithmScaffold::spliceRejectsUnquotedNameValue()
-{
-    const QString unquoted = QStringLiteral(
-        "local n = \"N\"\n"
-        "return pluau.algorithm {\n"
-        "    metadata = {\n"
-        "        name = n,\n"
-        "        id = \"x\",\n"
-        "    },\n"
-        "    tile = function(ctx) return {} end,\n"
-        "}\n");
-    QVERIFY(spliceTemplate(unquoted, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
-
-    // Same shape on the id line — the symmetric reject branch.
-    const QString unquotedId = QStringLiteral(
-        "local n = \"N\"\n"
-        "return pluau.algorithm {\n"
-        "    metadata = {\n"
-        "        name = \"N\",\n"
-        "        id = n,\n"
-        "    },\n"
-        "    tile = function(ctx) return {} end,\n"
-        "}\n");
-    QVERIFY(spliceTemplate(unquotedId, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+    // The trailing-comment match excludes a `--[[` opener, and this is the only
+    // shape that proves it: a long comment closes mid-line and leaves `id` live
+    // code, so accepting the line would skip the second-field guard and insert a
+    // duplicate id for Luau's last-wins to resolve back to the template's.
+    QVERIFY(rewriteMetadataNameId(QStringLiteral("return pluau.algorithm {\n    metadata = {\n"
+                                                 "        name = \"A\", --[[ c ]] id = \"x\",\n    },\n}\n"),
+                                  QStringLiteral("Copy"), QStringLiteral("copy"))
+                .isEmpty());
 }
 
 namespace {

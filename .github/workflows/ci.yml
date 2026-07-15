@@ -420,8 +420,16 @@ jobs:
           # This gates the stub's syntax and its internal type consistency. It
           # cannot check the stub against the runtime it describes — that
           # agreement is reviewed by hand.
-          grep -v '^declare ' libs/phosphor-tiles/src/pluau/pluau.d.luau > /tmp/pluau-stub-check.luau
-          ./luau-cli/luau-analyze /tmp/pluau-stub-check.luau
+          # The stripped copy stays inside the tree it describes, so the
+          # analyzer resolves .luaurc the way it does for the real file. From
+          # /tmp it would silently pick up a different config than its source.
+          # An all-declare file would strip to nothing; grep exits 1 on no
+          # match, so `set -e` fails the step rather than analyzing an empty
+          # file and passing.
+          grep -v '^declare ' libs/phosphor-tiles/src/pluau/pluau.d.luau \
+            > libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
+          ./luau-cli/luau-analyze libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
+          rm -f libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Nix Flake CI (x86_64 + aarch64)

@@ -777,9 +777,9 @@ add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_c
 
 # Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
 # directly because they live in the plasmazones-settings executable rather than
-# plasmazones_core. Split in two by surface: the template splice / metadata
-# rewrite here, the blank scaffold next door. They share no fixture, and one
-# file for both exceeded the 800-line guideline.
+# plasmazones_core. Split by surface, on the 800-line guideline: the template
+# splice / metadata rewrite here, the shapes it refuses in _rejects, the blank
+# scaffold next door. They share no fixture beyond a copyright line.
 #
 # Both targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
 # ScriptedDefaultMaxWindows and DefaultSplitRatio so a generated algorithm
@@ -793,6 +793,13 @@ add_executable(test_algorithm_scaffold
 target_link_libraries(test_algorithm_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 target_compile_definitions(test_algorithm_scaffold PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_algorithm_scaffold COMMAND test_algorithm_scaffold)
+
+add_executable(test_algorithm_scaffold_rejects
+    settings/test_algorithm_scaffold_rejects.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_scaffold_rejects PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_algorithm_scaffold_rejects COMMAND test_algorithm_scaffold_rejects)
 
 add_executable(test_algorithm_blank_scaffold
     settings/test_algorithm_blank_scaffold.cpp
