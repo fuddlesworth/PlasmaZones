@@ -261,8 +261,10 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         // (when fewer cards than gridColumns are populated), Qt distributes the
         // slack across the populated columns. Cards 1..N-1 then drift further
         // right than the C++ math predicts, with cumulative error per card.
-        // Reading mapRectToItem on each cell is the only way to track this
-        // exactly.
+        // Reading the rendered geometry back is the only way to track this
+        // exactly, and it has to be the CLIPPED geometry: the ScrollView clips
+        // once the list overflows, and a card scrolled out of the viewport keeps
+        // a position that would otherwise still match the cursor.
         //
         // Keyed by each delegate's own `index` rather than by traversal
         // position: the grid's children are the Repeater plus its delegates, so
@@ -320,9 +322,9 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             if (cardIt == cards.constEnd()) {
                 continue;
             }
-            const QRectF& cellRect = cardIt->rect;
+            const QRectF& cardRect = cardIt->rect;
 
-            if (cellRect.contains(localX, localY)) {
+            if (cardRect.contains(localX, localY)) {
                 QVariantMap layoutMap = layouts[i].toMap();
                 QString layoutId = layoutMap[QStringLiteral("id")].toString();
 
@@ -350,8 +352,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 // edgeGap only at the preview's outer edges (zonePadding/2
                 // between neighbours), and drops both gaps entirely for
                 // overlapping layouts. Reading the delegates keeps this in step
-                // with QML by construction — the same reason the cell walk above
-                // reads mapRectToItem instead of predicting cell origins.
+                // with QML by construction — the same reason the card walk above
+                // reads back rendered geometry instead of predicting origins.
                 QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
 
                 // Keyed by each delegate's own `index`, for the same reason the
