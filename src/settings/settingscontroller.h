@@ -588,6 +588,9 @@ Q_SIGNALS:
     /// success toast, because a refused path, a file that vanished, and a file
     /// that is not settings at all are the same `false` and want different
     /// words. This signal carries those words and is the only failure channel.
+    /// The partial path returns `false` for the same reason: the toast surface
+    /// replaces whatever is in flight, so a `true` there would let the caller's
+    /// success toast overwrite the reason emitted a moment earlier.
     void settingsTransferFailed(const QString& reason);
     /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
     /// fails at the daemon — QML can surface the reason in a toast so the

@@ -25,6 +25,8 @@
 
 #include <QtTest>
 
+#include <utility>
+
 using namespace PlasmaZones::AlgorithmScaffold;
 
 namespace {
@@ -69,6 +71,8 @@ private Q_SLOTS:
     void ignoresMetadataTableInsideLongComment();
     void rejectsStringLeftOpenAtEndOfLine();
     void rejectsKeyAndValueOnDifferentLines();
+    void rejectsBracketedNameOrIdKey();
+    void acceptsBracketedKeyThatIsNotNameOrId();
 };
 
 void TestAlgorithmScaffoldRejects::rejectsMultiLineCopyright()
@@ -277,13 +281,20 @@ void TestAlgorithmScaffoldRejects::rejectsStringLeftOpenAtEndOfLine()
     QVERIFY(rewriteMetadataNameId(multiLineInterp, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
 
     // A backslash-newline continuation, and `\z`, which is the same idea spelled
-    // differently: both leave a short string open when the line ends.
-    for (const QString& continuation : {QStringLiteral("\\"), QStringLiteral("\\z")}) {
+    // differently: both leave a short string open when the line ends. Each
+    // carries its name into the failure message, since the two assertions are
+    // otherwise identical and a failure takes the rest of this test with it.
+    const std::pair<const char*, QString> continuations[] = {
+        {"backslash-newline", QStringLiteral("\\")},
+        {"backslash-z", QStringLiteral("\\z")},
+    };
+    for (const auto& [label, continuation] : continuations) {
         const QString openShortString = QStringLiteral(
                                             "return pluau.algorithm {\n    metadata = {\n"
                                             "        description = \"a }")
             + continuation + QStringLiteral("\nb\",\n        name = \"A\",\n        id = \"a\",\n    },\n}\n");
-        QVERIFY(rewriteMetadataNameId(openShortString, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+        QVERIFY2(rewriteMetadataNameId(openShortString, QStringLiteral("New"), QStringLiteral("newid")).isEmpty(),
+                 label);
     }
 
     // Ahead of the table counts too: the search would otherwise read the
@@ -336,6 +347,85 @@ void TestAlgorithmScaffoldRejects::rejectsKeyAndValueOnDifferentLines()
         "    },\n"
         "}\n");
     QVERIFY(rewriteMetadataNameId(trailingKey, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+}
+
+void TestAlgorithmScaffoldRejects::rejectsBracketedNameOrIdKey()
+{
+    // `["name"]` is the same Luau key as the bare one, and the anchored line
+    // patterns cannot rewrite it. Taken as "no name here", the insert lands a
+    // second pair and last-wins hands the copy its source's name.
+    const QString bracketName = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        [\"name\"] = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(bracketName, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+
+    const QString bracketId = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"A\",\n"
+        "        ['id'] = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(bracketId, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+
+    // A key this cannot read back as a plain literal could still spell `name`,
+    // so it is refused rather than assumed innocent. Concatenation first.
+    const QString computedKey = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        [\"na\" .. \"me\"] = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(computedKey, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+
+    // Then a variable key, whose value this cannot see at all.
+    const QString variableKey = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        [someKey] = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(variableKey, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+
+    // And an escaped quote inside the key, which the literal read stops at.
+    const QString escapedKey = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        [\"na\\\"me\"] = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(escapedKey, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+}
+
+void TestAlgorithmScaffoldRejects::acceptsBracketedKeyThatIsNotNameOrId()
+{
+    // A script is free to spell any other metadata key in bracketed form. That
+    // is none of this rewrite's business, and refusing it would fail the whole
+    // copy over a key it never needed to touch. `["namex"]` is included because
+    // it shares a prefix with `name` without being it.
+    const QString bracketedSibling = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"A\",\n"
+        "        id = \"a\",\n"
+        "        [\"description\"] = \"d\",\n"
+        "        ['namex'] = 1,\n"
+        "    },\n"
+        "}\n");
+    const QString out = rewriteMetadataNameId(bracketedSibling, QStringLiteral("New"), QStringLiteral("newid"));
+    QVERIFY(!out.isEmpty());
+    QVERIFY(out.contains(QStringLiteral("name = \"New\",")));
+    QVERIFY(out.contains(QStringLiteral("id = \"newid\",")));
+    // The bracketed siblings are carried through untouched.
+    QVERIFY(out.contains(QStringLiteral("[\"description\"] = \"d\",")));
+    QVERIFY(out.contains(QStringLiteral("['namex'] = 1,")));
 }
 
 QTEST_GUILESS_MAIN(TestAlgorithmScaffoldRejects)

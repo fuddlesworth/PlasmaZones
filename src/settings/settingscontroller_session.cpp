@@ -465,28 +465,13 @@ bool SettingsController::exportAllSettings(const QString& filePath)
         Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That export path is not allowed."));
         return false;
     }
-    // Flush current in-memory settings to disk so the exported file reflects
-    // the actual current state, not the last-saved snapshot. Settings::save is
-    // void-returning, so a flush failure cannot be detected here at all. That
-    // is a stronger problem than having nowhere to report one, and it does not
-    // go away now that settingsTransferFailed exists: an export can still
-    // carry the last-saved state while reporting success. The diagnostic log
-    // is what lets a maintainer correlate a stale export with the underlying
-    // flush failure in the journal.
-    qCInfo(PlasmaZones::lcCore) << "exportAllSettings: flushing in-memory config to disk before copy";
-    m_settings.save();
     const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
-    if (!QFile::exists(configPath)) {
-        qCWarning(PlasmaZones::lcCore) << "Config file not found:" << configPath;
-        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("There is no settings file to export yet."));
-        return false;
-    }
-    // Exporting onto the live config destroys it: the remove below deletes the
-    // destination, which on this path is also the source, so the copy then has
-    // nothing to read. The file picker can reach the config directory, and
-    // unlike the import side there is no backup and no restore here, so the
-    // config would be gone for good. Canonical paths, so a symlink or a `.`
-    // segment pointing at the same file is caught too.
+    // Exporting onto the live config is refused: the write below would put the
+    // current settings into the file the app is using, which is an implicit
+    // Save of whatever the user has pending, and it would leave that file
+    // disagreeing with the baseline per-page Discard reverts to. The file
+    // picker can reach the config directory. Canonical paths, so a symlink or a
+    // `.` segment pointing at the same file is caught too.
     const QFileInfo destInfo(safeFilePath);
     if (destInfo.exists() && destInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath()) {
         qCWarning(PlasmaZones::lcCore) << "exportAllSettings: destination is the live config file, refusing"
@@ -495,17 +480,23 @@ bool SettingsController::exportAllSettings(const QString& filePath)
             PhosphorI18n::tr("That is the settings file this app is using. Export to a different file."));
         return false;
     }
-    // Remove destination if it exists (QFile::copy won't overwrite)
-    if (QFile::exists(safeFilePath)) {
-        QFile::remove(safeFilePath);
-    }
-    bool ok = QFile::copy(configPath, safeFilePath);
-    if (!ok) {
+    // Serialize the current settings straight to the destination rather than
+    // copying the live config. The old form flushed with Settings::save()
+    // first, so that the export carried what the user could see rather than the
+    // last-saved snapshot — but save() commits to ~/.config and re-baselines,
+    // so pressing Export persisted edits the user had never chosen to save and
+    // left a later per-page Discard with nothing to revert to. exportTo writes
+    // the same values (the setters already keep the backend's in-memory root
+    // current) without touching the live file or the baseline, and it writes
+    // atomically, so a failed export leaves whatever was at the destination
+    // alone instead of unlinking it up front to make room.
+    if (!m_settings.exportTo(safeFilePath)) {
         qCWarning(PlasmaZones::lcCore) << "Failed to export settings to:" << safeFilePath;
         Q_EMIT settingsTransferFailed(
             PhosphorI18n::tr("Could not write the export. Check that the folder is writable."));
+        return false;
     }
-    return ok;
+    return true;
 }
 
 bool SettingsController::importAllSettings(const QString& filePath)
@@ -692,22 +683,30 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // hold in their in-memory snapshots.
         // Refused means an async discard still owns the snapshot map, so the
         // page is still holding pre-edit content for files the import just
-        // rewrote. Leave the session DIRTY in that case: marking it clean would
-        // strand those snapshots, and the next Discard would write them back over
-        // the config we imported.
+        // rewrote. Do not force the session clean in that case: the import did
+        // not fully land, so leave whatever dirty state the session already
+        // carried rather than declaring it settled. (This only withholds the
+        // clear; setNeedsSave(false) never marks anything dirty, and a later
+        // Discard on the animation pages is gated by hasPendingChanges(), not
+        // by m_dirtyPages membership.)
         const bool animationsReverted = !m_animationsPage || m_animationsPage->revertPending();
         if (!animationsReverted) {
             qCWarning(lcConfig) << "importConfig: animation snapshots are still staged after the revert (a discard is "
                                    "in flight, or a restore failed)";
             // The settings on disk are the imported ones, but the animation
-            // page still holds pre-import snapshots and the session stays
-            // dirty below so a later Discard cannot write them back over the
-            // import. That is a partial result the user has to know about:
-            // without this the import reports plain success while the page
-            // shows something else.
+            // page still holds pre-import snapshots. That is a partial result
+            // the user has to know about: without this the import reports plain
+            // success while the page shows something else.
             Q_EMIT settingsTransferFailed(
                 PhosphorI18n::tr("Your settings were imported, but the animation pages still show the old ones. "
                                  "Reopen the settings window to see the imported values."));
+            // Report not-fully-landed. The bool's only job is gating the General
+            // page's success toast (see the settingsTransferFailed doc), and the
+            // toast surface replaces whatever is in flight. Returning true here
+            // would let the caller overwrite the reason just emitted, inside the
+            // same JS statement, so the user would only ever read "Settings
+            // imported" on the one path that exists to say otherwise.
+            ok = false;
         }
         if (m_rulesPage) {
             m_rulesPage->revert();

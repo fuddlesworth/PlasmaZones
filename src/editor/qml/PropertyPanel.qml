@@ -28,6 +28,9 @@ Rectangle {
     required property var selectedZone
     required property int selectionCount
     required property bool hasMultipleSelection
+    // The predicate the panel's geometry and opacity animate toward. `visible`
+    // is derived from those animated values, so it cannot be the source here.
+    readonly property bool panelShown: propertyPanel.panelMode !== "hidden"
     // Panel mode: "hidden" (no selection), "single" (one zone), "multiple" (many zones)
     readonly property string panelMode: {
         if (selectionCount === 0)
@@ -76,15 +79,21 @@ Rectangle {
     }
 
     // Layout properties
-    Layout.preferredWidth: visible ? 280 : 0
-    Layout.maximumWidth: visible ? 280 : 0
+    Layout.preferredWidth: propertyPanel.panelShown ? 280 : 0
+    Layout.maximumWidth: propertyPanel.panelShown ? 280 : 0
     Layout.minimumWidth: 0
     Layout.fillHeight: true
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
     border.width: Math.round(Screen.devicePixelRatio)
     border.color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
-    visible: panelMode !== "hidden"
-    opacity: visible ? 1 : 0
+    // Drive opacity/width from panelMode and derive visibility from the
+    // animated values, so the outgoing legs are actually rendered. Binding
+    // `visible` to panelMode directly unrendered the panel in the same pass
+    // that started the fade, so panel.fadeOut and panel.slideOut animated
+    // something nobody could see. Same shape as the multi-select badge in
+    // EditorZone.qml.
+    opacity: propertyPanel.panelShown ? 1 : 0
+    visible: opacity > 0 || Layout.preferredWidth > 0
     z: 50
     onPanelModeChanged: {
         if (panelMode === "multiple") {
@@ -908,20 +917,21 @@ Rectangle {
 
     Behavior on opacity {
         PhosphorMotionAnimation {
-            // Direction is taken from the same `visible` predicate that drives
-            // `opacity` above. Reading the animated `opacity` instead would
-            // re-evaluate during the Behavior and flip the leg mid-animation.
-            profile: visible ? "panel.fadeIn" : "panel.fadeOut"
+            // Direction is taken from the same `panelShown` predicate that
+            // drives `opacity` above. Reading the animated `opacity`, or the
+            // `visible` now derived from it, would re-evaluate during the
+            // Behavior and flip the leg mid-animation.
+            profile: propertyPanel.panelShown ? "panel.fadeIn" : "panel.fadeOut"
             durationOverride: Kirigami.Units.longDuration
         }
     }
 
     Behavior on Layout.preferredWidth {
         PhosphorMotionAnimation {
-            // Direction is taken from `visible` (the same predicate driving
-            // `Layout.preferredWidth: visible ? 280 : 0`). slideIn when
-            // growing into view, slideOut when collapsing out.
-            profile: visible ? "panel.slideIn" : "panel.slideOut"
+            // Direction is taken from `panelShown` (the same predicate driving
+            // `Layout.preferredWidth` above). slideIn when growing into view,
+            // slideOut when collapsing out.
+            profile: propertyPanel.panelShown ? "panel.slideIn" : "panel.slideOut"
             durationOverride: Kirigami.Units.longDuration
         }
     }

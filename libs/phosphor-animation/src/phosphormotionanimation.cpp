@@ -134,8 +134,8 @@ void PhosphorMotionAnimation::applyResolvedEasing()
     // `durationOverride: Kirigami.Units.longDuration` onto a shared
     // profile JSON — the profile provides the curve shape while the
     // caller's theme-scaled value drives the timing (Plasma's system
-    // animation-speed preference still applies). Only the -1 default
-    // means "use the profile's duration".
+    // animation-speed preference still applies). Any negative value
+    // means "use the profile's duration"; -1 is the default.
     //
     // Zero is a real override, not "unset". Kirigami scales its duration
     // units by the user's AnimationDurationFactor, and at factor 0 the

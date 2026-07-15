@@ -314,8 +314,6 @@ SettingsFlickable {
                         description: i18n("Stereo shows left and right bars side by side. Mono collapses to one set of bars.")
 
                         WideComboBox {
-                            id: audioChannelModeCombo
-
                             Accessible.name: i18n("Channels")
                             textRole: "text"
                             valueRole: "value"
@@ -396,8 +394,6 @@ SettingsFlickable {
                         description: i18n("Leave on Automatic unless capture fails with the detected backend")
 
                         WideComboBox {
-                            id: audioInputMethodCombo
-
                             Accessible.name: i18n("Audio backend")
                             textRole: "text"
                             valueRole: "value"
@@ -431,17 +427,20 @@ SettingsFlickable {
                             id: audioSourceField
 
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 12
-                            text: appSettings.audioInputSource
                             Accessible.name: i18n("Audio source")
                             onEditingFinished: appSettings.audioInputSource = text
 
-                            Connections {
-                                function onAudioInputSourceChanged() {
-                                    if (!audioSourceField.activeFocus)
-                                        audioSourceField.text = appSettings.audioInputSource;
-                                }
-
-                                target: appSettings
+                            // Defer host-driven updates while the user is
+                            // typing. A plain `text:` binding re-fires on every
+                            // audioInputSourceChanged, focused or not, so it
+                            // overwrote the edit in progress before the focus
+                            // guard was ever consulted — the guard only started
+                            // working once an unfocused change had severed the
+                            // binding it was meant to hold back.
+                            Binding on text {
+                                value: appSettings.audioInputSource
+                                when: !audioSourceField.activeFocus
+                                restoreMode: Binding.RestoreNone
                             }
                         }
                     }

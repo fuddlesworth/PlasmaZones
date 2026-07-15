@@ -46,8 +46,14 @@ QString sanitizeMetadataString(QString value);
 ///
 /// Returns empty on an unrecognized shape: no metadata table, an opening line
 /// that does not end at the `{`, an unterminated table, a brace depth that goes
-/// negative, or a top-level name/id field that is not a whole line of that
-/// form. That last one covers a field sharing its line with another (in either
+/// negative, a bracketed `name` / `id` key (`["name"] = ...` is the same Luau
+/// key as the bare one, and cannot be rewritten in place), a bracketed key this
+/// cannot read back as a plain string literal and so cannot prove is not one
+/// (`["na" .. "me"]`, `[someVar]`), or a top-level name/id field
+/// that is not a whole line of that form. A bracketed key that IS provably
+/// something else (`["description"] = ...`) is left alone and does not refuse
+/// the file. That last one covers a field sharing
+/// its line with another (in either
 /// order), one trailing a long bracket's closer, one whose key and `=` fall on
 /// different lines, one whose value is a long-bracket string (`name = [[x]]`,
 /// which may span lines), and one whose value spans lines or is followed by a

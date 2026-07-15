@@ -70,6 +70,32 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
 
 ScriptedHelpers::ScriptMetadata parseMetadata(const QVariantMap& m)
 {
+    // Metadata is untrusted script input, and its numeric fields go straight to
+    // QVariant::toInt(), which truncates a double unchecked (0/0 yields 0, 1e18
+    // an arbitrary wrapped int). The callers then clamp that into range, so an
+    // unusable number lands as a plausible answer the script never gave:
+    // `masterZoneIndex = 0/0` comes out as 0, passes the clamp, and the
+    // exported accessor reports "zone 0 is the master". Keep the declared
+    // default instead, the same way parseCustomParam guards its bounds and
+    // resolveInt guards the override path.
+    const auto finiteNumber = [&m](const QString& key, double& out) -> bool {
+        const QVariant v = m.value(key);
+        if (!v.isValid() || !AutotileDefaults::isNumericMetaType(v.typeId())) {
+            return false;
+        }
+        const double d = v.toDouble();
+        if (!std::isfinite(d)) {
+            return false;
+        }
+        out = d;
+        return true;
+    };
+    const auto readInt = [&finiteNumber](const QString& key, int& field) {
+        double d = 0.0;
+        if (finiteNumber(key, d) && d >= std::numeric_limits<int>::min() && d <= std::numeric_limits<int>::max()) {
+            field = static_cast<int>(d);
+        }
+    };
     ScriptedHelpers::ScriptMetadata md;
     md.name = m.value(QStringLiteral("name")).toString();
     md.description = m.value(QStringLiteral("description")).toString();
@@ -85,18 +111,13 @@ ScriptedHelpers::ScriptMetadata parseMetadata(const QVariantMap& m)
     if (m.contains(QStringLiteral("supportsMinSizes"))) {
         md.supportsMinSizes = m.value(QStringLiteral("supportsMinSizes")).toBool();
     }
-    if (m.contains(QStringLiteral("defaultSplitRatio"))) {
-        md.defaultSplitRatio = m.value(QStringLiteral("defaultSplitRatio")).toDouble();
+    double ratio = 0.0;
+    if (finiteNumber(QStringLiteral("defaultSplitRatio"), ratio)) {
+        md.defaultSplitRatio = ratio;
     }
-    if (m.contains(QStringLiteral("defaultMaxWindows"))) {
-        md.defaultMaxWindows = m.value(QStringLiteral("defaultMaxWindows")).toInt();
-    }
-    if (m.contains(QStringLiteral("minimumWindows"))) {
-        md.minimumWindows = m.value(QStringLiteral("minimumWindows")).toInt();
-    }
-    if (m.contains(QStringLiteral("masterZoneIndex"))) {
-        md.masterZoneIndex = m.value(QStringLiteral("masterZoneIndex")).toInt();
-    }
+    readInt(QStringLiteral("defaultMaxWindows"), md.defaultMaxWindows);
+    readInt(QStringLiteral("minimumWindows"), md.minimumWindows);
+    readInt(QStringLiteral("masterZoneIndex"), md.masterZoneIndex);
     const QString znd = m.value(QStringLiteral("zoneNumberDisplay")).toString();
     if (!znd.isEmpty()) {
         md.zoneNumberDisplay = PhosphorLayout::zoneNumberDisplayFromString(znd);
@@ -384,12 +405,24 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         if (out.status != LuauEngine::CallStatus::Ok) {
             return fallback;
         }
-        // Same guard as resolveReal below, for the same reason. Luau numbers
-        // are doubles, so a script returning 0/0 or 1e18 marshals as a double
-        // and QVariant::toInt() quietly yields 0. The callers then clamp that
-        // into range, turning "the script did not return a number" into a
-        // plausible-looking answer it never gave (masterZoneIndex 0 reads as
-        // "zone 0 is the master"). Fall back instead.
+        // Reject a non-numeric return before coercing, not after. An override
+        // that returns nothing, nil, a string or a table marshals to a QVariant
+        // whose toDouble() is 0.0 — finite, in range, and indistinguishable
+        // from a real answer once coerced. That is exactly the case the range
+        // guard below cannot catch, and it turns "the script did not return a
+        // number" into a plausible-looking answer it never gave (masterZoneIndex
+        // 0 reads as "zone 0 is the master"). Same check the onWindowResized
+        // splitRatio path makes; a Luau number marshals to Double or LongLong.
+        if (!AutotileDefaults::isNumericMetaType(out.result.typeId())) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: override" << fn
+                                                 << "did not return a number, using fallback, script=" << m_scriptId;
+            return fallback;
+        }
+        // Same guard as resolveReal below, for the same reason. Luau numbers are
+        // doubles, so a script returning 0/0 or 1e18 marshals as a double and
+        // QVariant::toInt() truncates it unchecked (NaN yields 0; 1e18 yields an
+        // arbitrary wrapped int). The callers then clamp that into range, so
+        // fall back instead.
         const double v = out.result.toDouble();
         if (!std::isfinite(v) || v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: override" << fn << "returned" << v
@@ -404,7 +437,20 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         }
         const auto out = m_engine->callModule(m_module, fn, {}, ScriptWatchdogTimeoutMs);
         warnIfFailed(fn, out.status);
-        return out.status == LuauEngine::CallStatus::Ok ? out.result.toBool() : fallback;
+        if (out.status != LuauEngine::CallStatus::Ok) {
+            return fallback;
+        }
+        // Require an actual boolean rather than coercing. toBool() on an
+        // absent/nil return is false, which would not fall back to the metadata
+        // value but silently override it: a script declaring
+        // producesOverlappingZones = true in metadata and shipping an override
+        // that returns nothing would come out false.
+        if (out.result.typeId() != QMetaType::Bool) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: override" << fn
+                                                 << "did not return a boolean, using fallback, script=" << m_scriptId;
+            return fallback;
+        }
+        return out.result.toBool();
     };
     auto resolveReal = [this, &warnIfFailed](const QString& fn, qreal fallback) -> qreal {
         if (!m_engine->hasFunction(m_module, fn)) {
@@ -415,11 +461,24 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         if (out.status != LuauEngine::CallStatus::Ok) {
             return fallback;
         }
-        // A non-finite result (e.g. a script returning 0/0) must not reach the
-        // clamp below: std::clamp(NaN, lo, hi) returns NaN, which would poison
-        // the geometry. Fall back to the finite default instead.
+        // Same two-step as resolveInt: reject a non-numeric return before
+        // coercing (toDouble() on a nil/table result is a finite-looking 0.0),
+        // then reject a non-finite one. A non-finite result (e.g. a script
+        // returning 0/0) must not reach the clamp below: std::clamp(NaN, lo, hi)
+        // returns NaN, which would poison the geometry.
+        if (!AutotileDefaults::isNumericMetaType(out.result.typeId())) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: override" << fn
+                                                 << "did not return a number, using fallback, script=" << m_scriptId;
+            return fallback;
+        }
         const qreal v = out.result.toDouble();
-        return std::isfinite(v) ? v : fallback;
+        if (!std::isfinite(v)) {
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "LuauTileAlgorithm: override" << fn
+                << "returned a non-finite number, using fallback, script=" << m_scriptId;
+            return fallback;
+        }
+        return v;
     };
 
     // Script metadata is untrusted input, and this value is exported for

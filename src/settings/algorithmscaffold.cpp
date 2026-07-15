@@ -135,6 +135,13 @@ int findLongBracketClose(const QString& line, int level, int from)
 /// caller can ask "is there a field of THIS table here" without a string, a
 /// comment, a nested table's keys, or the enclosing table's code answering.
 ///
+/// One string is not elided: a depth-1 bracketed key's own literal (`["name"]`)
+/// is kept, quotes and all, because a caller cannot tell that key from
+/// `["description"]` once its text is gone, and the two want opposite answers.
+/// A bracketed key holding anything other than a plain literal (an escape, a
+/// concatenation, a variable) comes back looking unlike a literal, which is
+/// what lets the caller refuse it instead of guessing at its spelling.
+///
 /// @p openString, when non-null, is set if a short or interpolated string is
 /// still open at the end of the line. That string runs past where this scan can
 /// follow, so a caller reads it as "unrecognized shape" rather than resume
@@ -177,9 +184,20 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
     }
 
     QChar quote;
+    // Set while the scan sits inside a depth-1 bracketed key (`["name"] = ...`).
+    // That key's string is the one piece of text codeOnly keeps, because it is
+    // what separates `["name"]`, which this rewrite cannot patch in place, from
+    // `["description"]`, which is none of its business. Every other string stays
+    // elided. A key whose text this cannot read back as a plain literal (an
+    // escape, a concatenation, a variable) is left looking unlike a literal on
+    // purpose, so the caller refuses it rather than guessing at its spelling.
+    bool inBracketKey = false;
     for (; i < line.size(); ++i) {
         const QChar c = line[i];
         if (!quote.isNull()) {
+            if (codeOnly && inBracketKey && depth == 1 && !closed) {
+                codeOnly->append(c);
+            }
             if (c == QLatin1Char('\\')) {
                 ++i;
             } else if (c == quote) {
@@ -195,6 +213,9 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
         // that shape gets refused instead of miscounted.
         if (c == QLatin1Char('"') || c == QLatin1Char('\'') || c == QLatin1Char('`')) {
             quote = c;
+            if (codeOnly && inBracketKey && depth == 1 && !closed) {
+                codeOnly->append(c);
+            }
             continue;
         }
         if (c == QLatin1Char('-') && i + 1 < line.size() && line[i + 1] == QLatin1Char('-')) {
@@ -242,6 +263,11 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
                 codeOnly->append(c);
             }
         } else if (codeOnly && depth == 1 && !closed) {
+            if (c == QLatin1Char('[')) {
+                inBracketKey = true;
+            } else if (c == QLatin1Char(']')) {
+                inBracketKey = false;
+            }
             codeOnly->append(c);
         }
     }
@@ -427,9 +453,14 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     // Matched against the line's top-level code only, so neither a
     // `description = "name = x"` value nor a nested table's own `name` key can
     // trip it. A bracketed key (`["name"] = ...`) is the same Luau key as the
-    // bare one, and its string is elided from the match subject, so any
-    // bracketed key of this table is rejected rather than read: no bundled
-    // template uses one, and guessing is how the pair silently duplicates.
+    // bare one, and the anchored patterns above cannot rewrite it, so it is
+    // rejected: guessing is how the pair silently duplicates. Only a bracketed
+    // key that this can read back as a plain string literal and prove is
+    // neither name nor id is allowed through, because a script is free to spell
+    // `["description"]` and that is none of this rewrite's business. Anything
+    // else in the brackets (an escape, a concatenation, a variable, a computed
+    // key) reads as unproven and is refused, since `["na" .. "me"]` is a `name`
+    // field this cannot see.
     //
     // The key can also end the line, with its `=` on the next one. Luau is
     // happy with that, and the anchored patterns above cannot see it: the key
@@ -437,7 +468,11 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     // "no name/id here", and the insert lands a second pair above the real one.
     // So a bare key at field position rejects like any other shape this cannot
     // rewrite in place.
-    static const QRegularExpression anyNameOrIdFieldRe(QStringLiteral(R"((?:^|[,;])\s*(?:(?:name|id)\s*(?:=|$)|\[))"));
+    // The bracket arm matches a `[` only when what follows is NOT a provable
+    // non-name/id literal key, so `["description"]` passes and `["name"]`,
+    // `["id"]` and anything unreadable are refused.
+    static const QRegularExpression anyNameOrIdFieldRe(QStringLiteral(
+        R"((?:^|[,;])\s*(?:(?:name|id)\s*(?:=|$)|\[(?!\s*(?:"(?!name"|id")[^"\\]*"|'(?!name'|id')[^'\\]*')\s*\])))"));
 
     QStringList metaLines;
     int depth = 0;

@@ -19,9 +19,6 @@ import org.phosphor.animation
  * Uses zone IDs for stable selection and visual proxy during operations.
  */
 Item {
-    // Wait for C++ signal to update visuals
-    // Minimum zone size in pixels - acceptable as hardcoded
-    // Divider operation ended, sync from model
     // Context menu is now a shared instance at the EditorWindow level
     // to avoid QQmlData use-after-free when Repeater destroys delegates.
     // See EditorWindow.qml sharedContextMenu.
@@ -72,7 +69,7 @@ Item {
     readonly property bool hasValidDimensions: isFinite(visualWidth) && isFinite(visualHeight) && visualWidth > zoneSpacing && visualHeight > zoneSpacing && canvasWidth > 0 && canvasHeight > 0
     // Constants
     readonly property int handleSize: Kirigami.Units.gridUnit * 1.5
-    // Use theme spacing (12px)
+    // Minimum zone size in pixels - acceptable as hardcoded
     readonly property int minSize: 50
     // Track if mouse is over zone or any controls
     property bool mouseOverZone: hoverArea.containsMouse || anyButtonHovered || anyHandleHovered
@@ -640,9 +637,8 @@ Item {
         z: 100
         canvasWidth: root.canvasWidth
         canvasHeight: root.canvasHeight
-        handleSize: handleSize
-        minSize: minSize
-        zoneData: zoneData
+        minSize: root.minSize
+        zoneData: root.zoneData
         snapIndicator: root.snapIndicator
     }
 

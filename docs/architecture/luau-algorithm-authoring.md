@@ -369,7 +369,7 @@ For full `pluau.*` type information, register the shipped stubs
 (`/usr/share/plasmazones/pluau.d.luau`) as a definition file in luau-lsp, which
 is what gives an editor `pluau.*` completion and type checking. See luau-lsp's
 own documentation for the setting, which its editor integrations spell
-differently. The bundled `luau-analyze` takes no definitions flag, so it never
+differently. `luau-analyze` takes no definitions flag, so it never
 reads the stub: the `.luaurc` above is what keeps it from calling `pluau` an
 unknown global, and a command-line check therefore tells you the script parses, not that
 your `pluau` calls typecheck. The editor is where that happens.

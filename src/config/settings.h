@@ -1261,6 +1261,21 @@ public:
     void save() override;
     void reset() override;
 
+    /// Write the current settings to @p filePath as a standalone config file,
+    /// without touching the live config or the per-page Discard baseline.
+    ///
+    /// This is deliberately not `save()`-then-copy. `save()` commits to
+    /// ~/.config and re-baselines, so exporting would persist edits the user
+    /// never chose to save and leave a later Discard with nothing to revert
+    /// to. The values reaching the file are the same ones: Store-backed groups
+    /// already write through to the backend's in-memory root on every setter,
+    /// so a snapshot of it carries pending edits whether or not Save was
+    /// pressed.
+    ///
+    /// Returns false if the write fails, or if the backend is not JSON-backed
+    /// (exports are config.json documents).
+    bool exportTo(const QString& filePath);
+
     // ── Per-page reset / discard support (settings app) ─────────────────────
     // A config key addressed as (group, key). A page "owns" a list of these;
     // SettingsController holds the page→keys manifest and drives the two

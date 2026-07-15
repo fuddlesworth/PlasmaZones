@@ -421,10 +421,9 @@ jobs:
           # This gates the stub's syntax and its internal type consistency. It
           # cannot check the stub against the runtime it describes — that
           # agreement is reviewed by hand.
-          # The stripped copy sits next to the file it is a copy of, so that a
-          # .luaurc placed over phosphor-tiles or the repo root would govern
-          # this check exactly as it governs the real stub in an author's
-          # editor. No such config exists today (the repo's only .luaurc is
+          # The stripped copy sits next to the file it is a copy of, so any
+          # .luaurc that would govern the real stub in this tree governs the
+          # copy too. No such config exists today (the repo's only .luaurc is
           # data/algorithms/.luaurc, which is out of this path's lookup), so
           # right now this resolves the same default config /tmp would. The
           # trap clears the copy on the failing path too, where `set -e` would

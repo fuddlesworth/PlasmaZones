@@ -15,6 +15,7 @@
 #include "../core/utils.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorConfig/JsonBackend.h>
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
@@ -535,6 +536,27 @@ void Settings::save()
     // Disk now holds the flushed store — the just-saved values become the new
     // committed baseline for per-page Discard / dirty checks.
     captureBaseline();
+}
+
+bool Settings::exportTo(const QString& filePath)
+{
+    auto* json = dynamic_cast<PhosphorConfig::JsonBackend*>(m_configBackend);
+    if (!json) {
+        qCWarning(lcConfig) << "exportTo: backend is not JSON-backed, cannot export";
+        return false;
+    }
+
+    // Store-backed groups persist through their setters on every write, so the
+    // backend's in-memory root already carries whatever the user currently has,
+    // saved or not. The non-Store groups only reach it during save(), so write
+    // them in as well. These writes land in memory only.
+    saveAllPerScreenOverrides(m_configBackend);
+    saveVirtualScreenConfigs(m_configBackend);
+
+    // Deliberately no sync() and no captureBaseline(). Exporting must not
+    // commit pending edits to the live config, and must not move the baseline
+    // that per-page Discard reverts to.
+    return PhosphorConfig::JsonBackend::writeJsonAtomically(filePath, json->jsonRootSnapshot());
 }
 
 // ── Per-page reset / discard support ────────────────────────────────────────

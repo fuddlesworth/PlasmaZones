@@ -25,7 +25,7 @@ Kirigami.Dialog {
     // so stale imperative assignments from Connections are overwritten.
     onOpened: {
         if (!root.editorController)
-            return ;
+            return;
 
         zonePaddingOverrideCheck.checked = root.editorController.hasZonePaddingOverride;
         zonePaddingSpin.value = root.editorController.hasZonePaddingOverride ? root.editorController.zonePadding : root.editorController.globalZonePadding;
@@ -37,7 +37,9 @@ Kirigami.Dialog {
         perSideLeftSpin.value = root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft;
         perSideRightSpin.value = root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight;
         fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
-        aspectRatioCombo.currentIndex = root.editorController.aspectRatioClass;
+        // aspectRatioCombo is left alone on purpose: its `currentIndex` binding
+        // already reads editorController.aspectRatioClass, and assigning here
+        // would sever that binding for the rest of the dialog's life.
         overlayDisplayModeOverrideCheck.checked = root.editorController.hasOverlayDisplayModeOverride;
         overlayDisplayModeCombo.currentIndex = Math.max(0, Math.min(root.editorController.hasOverlayDisplayModeOverride ? root.editorController.overlayDisplayMode : root.editorController.globalOverlayDisplayMode, 1));
     }
@@ -62,7 +64,6 @@ Kirigami.Dialog {
         function onGlobalZonePaddingChanged() {
             if (!root.editorController.hasZonePaddingOverride)
                 zonePaddingSpin.value = root.editorController.globalZonePadding;
-
         }
 
         function onGlobalOuterGapChanged() {
@@ -85,15 +86,10 @@ Kirigami.Dialog {
         function onGlobalOverlayDisplayModeChanged() {
             if (!root.editorController.hasOverlayDisplayModeOverride)
                 overlayDisplayModeCombo.currentIndex = Math.max(0, Math.min(root.editorController.globalOverlayDisplayMode, 1));
-
         }
 
         function onUseFullScreenGeometryChanged() {
             fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
-        }
-
-        function onAspectRatioClassChanged() {
-            aspectRatioCombo.currentIndex = root.editorController.aspectRatioClass;
         }
 
         target: root.editorController
@@ -173,7 +169,6 @@ Kirigami.Dialog {
                     onValueModified: {
                         if (root.editorController && zonePaddingOverrideCheck.checked)
                             root.editorController.zonePadding = value;
-
                     }
                 }
 
@@ -212,7 +207,6 @@ Kirigami.Dialog {
                     onValueModified: {
                         if (root.editorController && outerGapOverrideCheck.checked)
                             root.editorController.outerGap = value;
-
                     }
                 }
 
@@ -221,7 +215,6 @@ Kirigami.Dialog {
                     opacity: outerGapOverrideCheck.checked ? 1 : 0.6
                     Layout.preferredWidth: implicitWidth
                 }
-
             }
 
             // Per-side edge gap override
@@ -249,7 +242,6 @@ Kirigami.Dialog {
 
                             if (root.editorController.outerGapRight < 0)
                                 root.editorController.outerGapRight = uniformGap;
-
                         }
                     }
                 }
@@ -277,7 +269,6 @@ Kirigami.Dialog {
                     onValueModified: {
                         if (root.editorController)
                             root.editorController.outerGapTop = value;
-
                     }
                 }
 
@@ -300,7 +291,6 @@ Kirigami.Dialog {
                     onValueModified: {
                         if (root.editorController)
                             root.editorController.outerGapBottom = value;
-
                     }
                 }
 
@@ -323,7 +313,6 @@ Kirigami.Dialog {
                     onValueModified: {
                         if (root.editorController)
                             root.editorController.outerGapLeft = value;
-
                     }
                 }
 
@@ -346,16 +335,13 @@ Kirigami.Dialog {
                     onValueModified: {
                         if (root.editorController)
                             root.editorController.outerGapRight = value;
-
                     }
                 }
 
                 Label {
                     text: i18nc("@label", "px")
                 }
-
             }
-
         }
 
         Kirigami.Separator {
@@ -418,15 +404,12 @@ Kirigami.Dialog {
                     enabled: overlayDisplayModeOverrideCheck.checked
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 9
                     Accessible.name: i18nc("@label", "Overlay display mode")
-                    onActivated: (index) => {
+                    onActivated: index => {
                         if (root.editorController && overlayDisplayModeOverrideCheck.checked)
                             root.editorController.overlayDisplayMode = index;
-
                     }
                 }
-
             }
-
         }
 
         Kirigami.Separator {
@@ -469,15 +452,12 @@ Kirigami.Dialog {
                     Layout.fillWidth: true
                     Accessible.name: i18nc("@label", "Aspect ratio class")
                     Accessible.description: i18nc("@info:accessibility", "Set which screen aspect ratio this layout is designed for")
-                    onActivated: (index) => {
+                    onActivated: index => {
                         if (root.editorController)
                             root.editorController.aspectRatioClass = index;
-
                     }
                 }
-
             }
-
         }
 
         Kirigami.Separator {
@@ -512,12 +492,9 @@ Kirigami.Dialog {
                 onToggled: {
                     if (root.editorController)
                         root.editorController.useFullScreenGeometry = checked;
-
                 }
             }
-
         }
-
     }
 
     footer: Item {
@@ -539,9 +516,6 @@ Kirigami.Dialog {
                 icon.name: "dialog-ok-apply"
                 onClicked: root.close()
             }
-
         }
-
     }
-
 }

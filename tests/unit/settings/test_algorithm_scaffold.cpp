@@ -7,6 +7,8 @@
 #include <QFile>
 #include <QtTest>
 
+#include <utility>
+
 using namespace PlasmaZones::AlgorithmScaffold;
 
 namespace {
@@ -74,6 +76,8 @@ private Q_SLOTS:
     void spliceHandlesMultiLineLongBrackets();
     void spliceHandlesLevelNLongBrackets();
     void spliceKeepsQuotesAndLongBracketsApart();
+    void spliceReadsBacktickBraceLiteralAsText_data();
+    void spliceReadsBacktickBraceLiteralAsText();
     void spliceReadsBacktickStringsAsText();
     void spliceHandlesTrailingNameOrIdField();
     void spliceOrdersSpdxCopyrightBeforeLicense();
@@ -214,9 +218,12 @@ void TestAlgorithmScaffold::splicePreservesCapabilityMetadata()
         spliceTemplate(kTemplate, kCopyright, QStringLiteral("My Theater"), QStringLiteral("my-theater"));
     // The regression this guards: the old splicer replaced the whole metadata
     // table with one rebuilt from four wizard bools, stripping the flags the
-    // template's code depends on. The three fields it was documented to drop
-    // (masterZoneIndex, defaultSplitRatio, supportsScriptState) are each pinned
-    // here by name.
+    // template's code depends on. The casualties the changelog cites (custom
+    // parameters, split ratio, window cap) are pinned by defaultSplitRatio and
+    // defaultMaxWindows below, and by spliceLeavesCustomParamNamesAlone for
+    // customParams. The other fields are pinned because this template declares
+    // them and the copy has to carry them through, not because each was called
+    // out separately.
     QVERIFY(out.contains(QStringLiteral("supportsSingleWindow = true")));
     QVERIFY(out.contains(QStringLiteral("retileOnFocus = true")));
     QVERIFY(out.contains(QStringLiteral("supportsScriptState = true")));
@@ -317,13 +324,21 @@ void TestAlgorithmScaffold::rewriteAcceptsHandWrittenFieldPunctuation()
         "}\n");
     // Whitespace after the separator is invisible to the author and must not
     // fail their whole copy. Tab included, since an editor may leave either.
-    for (const QString& trailing : {QStringLiteral("  "), QStringLiteral("\t")}) {
+    // Both forms are invisible and their assertions are textually identical, so
+    // each carries its name into the failure message: without it a report says
+    // only that one of them broke, and a failure takes the rest of this test
+    // with it.
+    const std::pair<const char*, QString> trailingForms[] = {
+        {"two spaces", QStringLiteral("  ")},
+        {"tab", QStringLiteral("\t")},
+    };
+    for (const auto& [label, trailing] : trailingForms) {
         const QString out =
             rewriteMetadataNameId(QStringLiteral("return pluau.algorithm {\n    metadata = {\n        name = \"A\",")
                                       + trailing + QStringLiteral("\n        id = \"a\",\n    },\n}\n"),
                                   QStringLiteral("Copy"), QStringLiteral("copy"));
-        QVERIFY(out.contains(QStringLiteral("name = \"Copy\",")));
-        QVERIFY(out.contains(QStringLiteral("id = \"copy\",")));
+        QVERIFY2(out.contains(QStringLiteral("name = \"Copy\",")), label);
+        QVERIFY2(out.contains(QStringLiteral("id = \"copy\",")), label);
     }
 
     // Both quote styles reach both fields: the id line's own single-quoted
@@ -353,6 +368,27 @@ void TestAlgorithmScaffold::rewriteAcceptsHandWrittenFieldPunctuation()
                                              "        name = \"A\", --[see docs]\n        id = \"a\",\n    },\n}\n"),
                               QStringLiteral("Copy"), QStringLiteral("copy"));
     QVERIFY(bracketComment.contains(QStringLiteral("name = \"Copy\", --[see docs]")));
+
+    // An escaped quote inside the value is the apostrophe case: a naive
+    // `"[^"]*"` value stops at the backslash and fails the match, which fails
+    // the whole copy over a name like Bob"s Grid. Both quote styles carry their
+    // own alternation, so both are pinned.
+    const QString escapedInName =
+        rewriteMetadataNameId(QStringLiteral("return pluau.algorithm {\n    metadata = {\n"
+                                             "        name = \"Bob\\\"s Grid\",\n        id = \"bobs\",\n    },\n}\n"),
+                              QStringLiteral("Copy"), QStringLiteral("copy"));
+    QVERIFY(!escapedInName.isEmpty());
+    QVERIFY(escapedInName.contains(QStringLiteral("name = \"Copy\",")));
+    QVERIFY(!escapedInName.contains(QStringLiteral("Bob")));
+
+    const QString escapedInSingleQuoted =
+        rewriteMetadataNameId(QStringLiteral("return pluau.algorithm {\n    metadata = {\n"
+                                             "        name = 'Bob\\'s Grid',\n        id = 'bobs',\n    },\n}\n"),
+                              QStringLiteral("Copy"), QStringLiteral("copy"));
+    QVERIFY(!escapedInSingleQuoted.isEmpty());
+    QVERIFY(escapedInSingleQuoted.contains(QStringLiteral("name = \"Copy\",")));
+    QVERIFY(escapedInSingleQuoted.contains(QStringLiteral("id = \"copy\",")));
+    QVERIFY(!escapedInSingleQuoted.contains(QStringLiteral("Bob")));
 }
 
 namespace {
@@ -486,25 +522,42 @@ void TestAlgorithmScaffold::spliceOrdersSpdxCopyrightBeforeLicense()
 // shape that mattered: read as code it closes the table early, so the rewrite
 // inserts a name/id pair while the real ones survive past the closer, and
 // Luau's last-wins hands the copy its source's id to collide with.
-void TestAlgorithmScaffold::spliceReadsBacktickStringsAsText()
+void TestAlgorithmScaffold::spliceReadsBacktickBraceLiteralAsText_data()
 {
+    QTest::addColumn<QString>("literal");
+
+    // One row per literal rather than one loop over all of them, for the reason
+    // spliceAllBundledAlgorithms_data gives: a failure aborts the remaining rows
+    // of its own test function, so a loop would stop at the first bad literal
+    // and report nothing about the others, and its assertions are textually
+    // identical so the failure would not name which one broke.
+    //
     // A literal `}`, and its mirror. Read as code either one walks the table's
     // depth a step it never took. Both directions, as the long-bracket tests do.
-    for (const QString& literal : {QStringLiteral("`a } b`"), QStringLiteral("`a { b`"),
-                                   // An escaped backtick does not end the
-                                   // literal, so the `}` past it is still text.
-                                   QStringLiteral("`a \\` } b`")}) {
-        const QString out = rewriteMetadataNameId(
-            QStringLiteral("return pluau.algorithm {\n    metadata = {\n        description = ") + literal
-                + QStringLiteral(",\n        name = \"A\",\n        id = \"a\",\n    },\n}\n"),
-            QStringLiteral("New"), QStringLiteral("newid"));
-        QCOMPARE(out.count(QStringLiteral("name = ")), 1);
-        QCOMPARE(out.count(QStringLiteral("id = ")), 1);
-        QVERIFY(out.contains(QStringLiteral("name = \"New\",")));
-        QVERIFY(out.contains(QStringLiteral("id = \"newid\",")));
-        QVERIFY(out.contains(QStringLiteral("description = ") + literal + QStringLiteral(",")));
-    }
+    QTest::newRow("close brace") << QStringLiteral("`a } b`");
+    QTest::newRow("open brace") << QStringLiteral("`a { b`");
+    // An escaped backtick does not end the literal, so the `}` past it is still
+    // text.
+    QTest::newRow("escaped backtick then close brace") << QStringLiteral("`a \\` } b`");
+}
 
+void TestAlgorithmScaffold::spliceReadsBacktickBraceLiteralAsText()
+{
+    QFETCH(QString, literal);
+
+    const QString out = rewriteMetadataNameId(
+        QStringLiteral("return pluau.algorithm {\n    metadata = {\n        description = ") + literal
+            + QStringLiteral(",\n        name = \"A\",\n        id = \"a\",\n    },\n}\n"),
+        QStringLiteral("New"), QStringLiteral("newid"));
+    QCOMPARE(out.count(QStringLiteral("name = ")), 1);
+    QCOMPARE(out.count(QStringLiteral("id = ")), 1);
+    QVERIFY(out.contains(QStringLiteral("name = \"New\",")));
+    QVERIFY(out.contains(QStringLiteral("id = \"newid\",")));
+    QVERIFY(out.contains(QStringLiteral("description = ") + literal + QStringLiteral(",")));
+}
+
+void TestAlgorithmScaffold::spliceReadsBacktickStringsAsText()
+{
     // A `--` inside the literal is text, not a comment. Read as a comment it
     // takes the rest of the line with it, including the trailing `name` that
     // makes this shape a reject, so the guard never fires and a second name is

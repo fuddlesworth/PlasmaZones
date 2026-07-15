@@ -13,11 +13,13 @@
 # code can render autotile previews without depending on the daemon engine.
 #
 # This library does NOT include the runtime engine that actually places windows
-# (that lives in the host application, pending a future phosphor-tile-engine
-# extraction). It also does NOT include daemon-side overflow handling, settings
-# bridge, or per-screen config resolution — those are host-application internals.
+# (that lives in phosphor-tile-engine). It also does NOT include daemon-side
+# overflow handling, settings bridge, or per-screen config resolution — those
+# are host-application internals.
 #
-# Self-contained: depends only on Qt6 + PhosphorLayoutApi.  Logging is
+# Depends on Qt6::Core plus PhosphorLayoutApi, PhosphorEngine, PhosphorScripting
+# and PhosphorFsLoader publicly, and PhosphorRegistry privately (see the link
+# set below, which PhosphorTilesConfig.cmake.in mirrors).  Logging is
 # library-local (`PhosphorTiles::lcTilesLib`).  Strings in
 # luautilealgorithm.cpp ship as untranslated English placeholders — the
 # application config layer overrides them via algorithm display name.

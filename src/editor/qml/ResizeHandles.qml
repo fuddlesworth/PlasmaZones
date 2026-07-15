@@ -18,7 +18,6 @@ Item {
     required property var root // Parent zone component
     required property real canvasWidth // Canvas width (may be 0 during initialization)
     required property real canvasHeight // Canvas height (may be 0 during initialization)
-    required property real handleSize
     required property real minSize
     required property var zoneData
     property var snapIndicator: null
@@ -161,8 +160,6 @@ Item {
             // nw, ne, se, sw
             readonly property bool isHorizontalEdge: modelData.id === "n" || modelData.id === "s"
             readonly property bool isVerticalEdge: modelData.id === "e" || modelData.id === "w"
-            // Ensure handle size has a fallback
-            readonly property real effectiveHandleSize: resizeHandles.handleSize > 0 ? resizeHandles.handleSize : 12
             // Corner handles: small circles (10px diameter)
             // Edge handles: thin pills (4px thick, 24px long)
             readonly property real cornerSize: 10

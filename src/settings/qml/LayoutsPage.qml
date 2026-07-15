@@ -382,7 +382,11 @@ SettingsFlickable {
 
                     return hints.length > 0 ? hints.join("\n") : i18n("Try adjusting your filters or search terms");
                 }
-                return root.viewMode === 1 ? i18n("Enable autotiling to use tiling algorithms") : i18n("Start the PlasmaZones daemon or create a new layout");
+                // The tiling view is only reachable while autotiling is on (the
+                // switch is gated on it, and turning it off forces viewMode back
+                // to 0), so an empty list here means the same thing it means for
+                // snapping: nothing has been loaded yet.
+                return root.viewMode === 1 ? i18n("Start the PlasmaZones daemon or add a tiling algorithm") : i18n("Start the PlasmaZones daemon or create a new layout");
             }
 
             helpfulAction: Kirigami.Action {

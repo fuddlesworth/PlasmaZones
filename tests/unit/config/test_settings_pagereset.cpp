@@ -16,6 +16,9 @@
  */
 
 #include <QTest>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 
 #include "../../../src/config/settings.h"
@@ -40,6 +43,24 @@ class TestSettingsPageReset : public QObject
         return {ConfigDefaults::snappingZonesBorderGroup(), ConfigDefaults::radiusKey()};
     }
 
+    /// Read one int straight out of a config document, bypassing Settings.
+    /// Group names are dot-paths ("Snapping.Zones.Border") that JsonBackend
+    /// stores as nested objects, so walk the segments. Returns -1 when absent,
+    /// which no key under test uses as a legitimate value.
+    static int readIntFromJson(const QString& filePath, const QString& group, const QString& key)
+    {
+        QFile f(filePath);
+        if (!f.open(QIODevice::ReadOnly)) {
+            return -1;
+        }
+        QJsonObject obj = QJsonDocument::fromJson(f.readAll()).object();
+        const QStringList segments = group.split(QLatin1Char('.'));
+        for (const QString& segment : segments) {
+            obj = obj.value(segment).toObject();
+        }
+        return obj.value(key).toInt(-1);
+    }
+
 private Q_SLOTS:
 
     // isKeyModified() reports the difference from the last committed baseline,
@@ -61,6 +82,43 @@ private Q_SLOTS:
         // Saving re-baselines: the edited value is now the committed value.
         s.save();
         QVERIFY(!s.isKeyModified(key.first, key.second));
+    }
+
+    // exportTo() writes what the user can currently see, without committing it.
+    // The old export flushed via save() first, which persisted pending edits to
+    // the live config and re-baselined, so a later Discard had nothing to
+    // revert to. All three properties are pinned here: the export carries the
+    // pending value, the live config keeps the committed one, and the baseline
+    // does not move.
+    void testExportTo_writesPendingValueWithoutCommitting()
+    {
+        IsolatedConfigGuard guard;
+        Settings s;
+        const auto key = widthKey();
+
+        const int def = s.borderWidth();
+        const int saved = (def == 3) ? 4 : 3;
+        const int pending = (saved == 7) ? 6 : 7;
+        s.setBorderWidth(saved);
+        s.save(); // baseline and live config = saved
+
+        s.setBorderWidth(pending); // an edit the user has NOT saved
+        QVERIFY(s.isKeyModified(key.first, key.second));
+
+        const QString dest = guard.configPath() + QStringLiteral("/exported.json");
+        QVERIFY(s.exportTo(dest));
+
+        // The baseline did not move, so the edit is still pending and a later
+        // Discard still has the committed value to revert to.
+        QVERIFY(s.isKeyModified(key.first, key.second));
+        s.discardKeys({key});
+        QCOMPARE(s.borderWidth(), saved);
+
+        // The live config on disk was not touched: it still holds `saved`.
+        QCOMPARE(readIntFromJson(ConfigDefaults::configFilePath(), key.first, key.second), saved);
+
+        // The export carries the value the user could see when they exported.
+        QCOMPARE(readIntFromJson(dest, key.first, key.second), pending);
     }
 
     // discardKeys() reverts the key to the committed baseline, fires the

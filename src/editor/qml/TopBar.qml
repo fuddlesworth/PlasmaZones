@@ -322,8 +322,6 @@ ToolBar {
         // LAYOUT SETTINGS BUTTON (Per-layout gap overrides)
         // ═══════════════════════════════════════════════════════════════
         ToolButton {
-            id: layoutSettingsButton
-
             icon.name: "configure"
             enabled: editorController !== null && editorController !== undefined
             onClicked: topBar.layoutSettingsDialog.open()
@@ -333,11 +331,12 @@ ToolBar {
             Accessible.description: i18nc("@info", "Configure per-layout gap overrides")
         }
 
-        // Visual separator (hide when layout settings is hidden to avoid orphan)
+        // Visual separator. The layout settings button above is always shown,
+        // so this needs no orphan guard of the kind the shader button's
+        // separator carries.
         Kirigami.Separator {
             Layout.fillHeight: true
             Layout.preferredWidth: 1
-            visible: layoutSettingsButton.visible
         }
 
         // ═══════════════════════════════════════════════════════════════

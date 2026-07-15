@@ -3462,12 +3462,15 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     //     it works in. Running the pass anyway would apply the very treatment
     //     the flag opts out of, and would silently overrule a shipped script.
     //     Four bundled algorithms declare it: tatami, floating-center, cluster
-    //     and theater. None of them declares producesOverlappingZones, which
-    //     defaults to false, so before this gate all four were min-size
-    //     corrected despite opting out.
+    //     and theater. All four resolve producesOverlappingZones to false
+    //     (three declare it so, theater omits it and takes the default), so
+    //     before this gate all four were min-size corrected despite opting out.
     //
-    // minSizes is populated iff respectMin (see above); windowCount > 0 is
-    // already guaranteed by the early return at the top of this function.
+    // minSizes is populated iff respectMin (see above). The early return at the
+    // top guards tiledCount, not windowCount, which is tiledCount capped by
+    // effectiveMaxWindows and so can still be 0. That costs nothing here: a
+    // zero windowCount yields empty zones, which pass the equality check above
+    // and leave this block a no-op.
     if (respectMin && algo->supportsMinSizes() && !algo->producesOverlappingZones()) {
         const int threshold = effectiveInnerGap(screenId) + PhosphorTiles::AutotileDefaults::GapEdgeThresholdPx;
         const QVector<QRect> preEnforceZones = zones;

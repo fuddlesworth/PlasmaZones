@@ -367,8 +367,8 @@ private Q_SLOTS:
     /// first on the static_assert, and THIS test breaks on the constant.
     void testBezierSplineCappedAtSafeSegmentCount()
     {
-        // Compile-time constant must be under the Qt boundary. Paired with
-        // the `static_assert` in phosphormotionanimation.cpp line ~101.
+        // Compile-time constant must be under the Qt boundary. Paired with the
+        // `static_assert(kSegments < 11, ...)` in phosphormotionanimation.cpp.
         static_assert(PhosphorMotionAnimation::kBezierSplineSegments < 11,
                       "kBezierSplineSegments exceeds Qt's setEasing heap-corruption boundary");
 

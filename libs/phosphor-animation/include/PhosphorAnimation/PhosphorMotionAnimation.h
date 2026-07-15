@@ -21,9 +21,12 @@
 // versions.
 //
 // Supported Qt range for this library:
-//   - Minimum:   Qt 6.5 (`QQuickPropertyAnimation` shape we rely on
-//                 has been stable since 6.5).
-//   - Tested:    Qt 6.9, 6.10, 6.11 (the segment cap at
+//   - Minimum:   Qt 6.10, matching the `find_package(Qt6 6.10 REQUIRED)`
+//                in libs/phosphor-animation/CMakeLists.txt. (The
+//                `QQuickPropertyAnimation` shape we rely on has been
+//                stable since 6.5, but the build does not configure
+//                below 6.10.)
+//   - Tested:    Qt 6.10, 6.11 (the segment cap at
 //                `kBezierSplineSegments` specifically guards 6.11;
 //                older versions don't heap-corrupt on the 11+
 //                segment boundary, but the cap is harmless there).
@@ -123,8 +126,8 @@ class PHOSPHORANIMATION_EXPORT PhosphorMotionAnimation : public QQuickPropertyAn
     /// Override the resolved profile's duration (milliseconds). When
     /// `>= 0`, this value is installed via `QQuickPropertyAnimation::
     /// setDuration` instead of the profile's own duration — the
-    /// profile's curve is still used. Only the `-1` default means "use
-    /// the profile's duration unchanged".
+    /// profile's curve is still used. Any negative value means "use the
+    /// profile's duration unchanged"; `-1` is the canonical unset default.
     ///
     /// Zero is a real override meaning "no animation", NOT "unset". A
     /// bound `Kirigami.Units.shortDuration` evaluates to exactly 0 once
