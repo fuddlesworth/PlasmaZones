@@ -494,9 +494,11 @@ void TestAlgorithmScaffold::spliceReadsBacktickStringsAsText()
     QVERIFY(rewriteMetadataNameId(dashesInside, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
 
     // An interpolation that opens and closes on this line goes with the literal,
-    // braces and all. This guards over-parsing rather than under: a scan that
-    // read into the interpolation would count the inner table's braces. A scan
-    // blind to backticks passes it too, since those braces balance either way.
+    // braces and all. What this pins is that such a line is still accepted and
+    // rewritten once: a scan that refused every literal carrying a brace would
+    // fail here. It does not pin the skip. Those braces balance, so reading
+    // them as code nets the same zero as skipping them, and a backtick-blind
+    // build passes this case too. The shapes that separate the two are above.
     const QString interpolated = rewriteMetadataNameId(
         QStringLiteral(
             "return pluau.algorithm {\n    metadata = {\n"

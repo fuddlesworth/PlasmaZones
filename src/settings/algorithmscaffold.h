@@ -69,10 +69,6 @@ QString sanitizeMetadataString(QString value);
 /// literal had closed. That covers a backslash-newline or `\z` continuation and
 /// a backtick literal whose interpolation spans lines.
 ///
-/// The one shape neither handled nor refused, because a single line cannot show
-/// it, is a backtick literal reached from inside its own interpolation
-/// (`` `{"`"}` ``). No bundled template's metadata uses one.
-///
 /// @p displayName must already be sanitizeMetadataString()'d and
 /// @p id must be a bare `[A-Za-z0-9_-]` basename — both are embedded in Luau
 /// string literals without further escaping.

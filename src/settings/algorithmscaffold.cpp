@@ -138,10 +138,7 @@ int findLongBracketClose(const QString& line, int level, int from)
 /// @p openString, when non-null, is set if a short or interpolated string is
 /// still open at the end of the line. That string runs past where this scan can
 /// follow, so a caller reads it as "unrecognized shape" rather than resume
-/// mid-literal. One shape this does NOT catch, because it is not detectable
-/// from one line: a backtick literal reached from inside its own interpolation
-/// (`` `{"`"}` ``), which ends the literal early here. No bundled template's
-/// metadata uses one.
+/// mid-literal.
 int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, QString* codeOnly = nullptr,
                bool* openString = nullptr)
 {

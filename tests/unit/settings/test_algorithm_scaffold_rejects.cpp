@@ -263,17 +263,15 @@ void TestAlgorithmScaffoldRejects::rejectsStringLeftOpenAtEndOfLine()
         "}\n");
     QVERIFY(rewriteMetadataNameId(multiLineInterp, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
 
-    // A backslash-newline continuation, and the `\z` form of the same idea.
-    const QString backslashNewline = QStringLiteral(
-        "return pluau.algorithm {\n"
-        "    metadata = {\n"
-        "        description = \"a }\\\n"
-        "b\",\n"
-        "        name = \"A\",\n"
-        "        id = \"a\",\n"
-        "    },\n"
-        "}\n");
-    QVERIFY(rewriteMetadataNameId(backslashNewline, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+    // A backslash-newline continuation, and `\z`, which is the same idea spelled
+    // differently: both leave a short string open when the line ends.
+    for (const QString& continuation : {QStringLiteral("\\"), QStringLiteral("\\z")}) {
+        const QString openShortString = QStringLiteral(
+                                            "return pluau.algorithm {\n    metadata = {\n"
+                                            "        description = \"a }")
+            + continuation + QStringLiteral("\nb\",\n        name = \"A\",\n        id = \"a\",\n    },\n}\n");
+        QVERIFY(rewriteMetadataNameId(openShortString, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+    }
 
     // Ahead of the table counts too: the search would otherwise read the
     // literal's own text looking for `metadata = {`.
