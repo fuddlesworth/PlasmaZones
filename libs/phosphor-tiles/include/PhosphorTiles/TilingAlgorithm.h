@@ -290,8 +290,14 @@ public:
      * @brief Whether this algorithm supports per-window minimum size constraints
      *
      * Most algorithms respect the minSizes parameter. Algorithms that ignore
-     * it (e.g., Floating Center, Tatami) return false so the settings UI can
-     * disable min-size controls for them.
+     * it (e.g., Floating Center, Tatami) return false to say so.
+     *
+     * Like masterZoneIndex above, this describes the algorithm for a caller
+     * that asks, and nothing in this tree reads it outside of tests. There is
+     * no settings control keyed on it, and the engine decides whether to run
+     * its min-size pass from producesOverlappingZones() rather than from this.
+     * It stays on the exported API for the same reason: a third-party
+     * algorithm can declare it and a third-party consumer can read it.
      *
      * @return true if the algorithm honors minSizes (default: true)
      */
