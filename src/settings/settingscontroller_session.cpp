@@ -4,8 +4,8 @@
 // Session-state methods for SettingsController:
 //   * Font enumeration helpers (Q_INVOKABLE getters consumed by QML).
 //   * The QUrl → local-path helper QML hands file-dialog results through.
-//   * Stage-assignment + quick-layout-slot setters, and the screen-state /
-//     staged-assignment queries the assignments page reads back.
+//   * Stage-assignment setters and quick-layout-slot accessors, plus the
+//     screen-state / staged-assignment queries the assignments page reads back.
 //   * Virtual-desktop + activity tracking (D-Bus signals from KWin /
 //     ActivityManager and the daemon's screen-layout broadcast).
 //   * Running-windows and physical-screen queries (used by the assignments

@@ -51,6 +51,10 @@ export type SplitNode = {
     splitHorizontal: boolean,
     windowId: string,
     isLeaf: boolean,
+    -- Both are absent past MAX_TREE_DEPTH, where the snapshot stops, even on a
+    -- node whose isLeaf is false. Walk on `node.first ~= nil` rather than on
+    -- `not node.isLeaf`, or a tree that deep indexes nil and the whole tile()
+    -- call errors out.
     first: SplitNode?,
     second: SplitNode?,
     leafCount: number?, -- present on the root only
@@ -96,9 +100,9 @@ export type Metadata = {
     supportsSingleWindow: boolean?, -- algorithm lays out the lone window itself (else the host fills the work area for a lone window)
     retileOnFocus: boolean?, -- reflow when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight that follows focus)
     -- Metadata seeds the value the matching override below resolves, so both
-    -- reach the same clamp. The two with a built-in default are the exception:
-    -- a value of zero or less is replaced by that default before any clamp
-    -- sees it, so it does not come back as the low bound.
+    -- reach the same clamp. The exceptions are the two whose built-in default
+    -- is not the low bound: a value of zero or less is replaced by that default
+    -- before any clamp sees it, so it does not come back as 1 or MIN_SPLIT.
     defaultSplitRatio: number?, -- omit, or <= 0, for 0.5; otherwise clamped to MIN_SPLIT..MAX_SPLIT
     defaultMaxWindows: number?, -- omit, or <= 0, for 6; otherwise clamped to 1..100
     minimumWindows: number?, -- clamped to 1..100

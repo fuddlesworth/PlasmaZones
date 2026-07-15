@@ -197,7 +197,7 @@ pluau.lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightH
 pluau.dwindleLayout(area, count, splitRatio, innerGap, minSizes)
 pluau.threeColumnLayout(area, count, gap, splitRatio, masterCount, minSizes)
 pluau.stripLayout(zones, startX, startY, panelW, panelH, count, gap, horizontal)  -- appends into `zones`, returns nothing
-pluau.applyTreeGeometry(node, rect, gap)   -- memory algorithms
+pluau.applyTreeGeometry(node, rect, gap, depth?)  -- memory algorithms; depth defaults to 0
 ```
 
 ### Guards & general utilities
