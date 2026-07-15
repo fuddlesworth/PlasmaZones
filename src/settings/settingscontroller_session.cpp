@@ -3,17 +3,21 @@
 
 // Session-state methods for SettingsController:
 //   * Font enumeration helpers (Q_INVOKABLE getters consumed by QML).
-//   * Stage-assignment + quick-layout-slot setters.
+//   * The QUrl → local-path helper QML hands file-dialog results through.
+//   * Stage-assignment + quick-layout-slot setters, and the screen-state /
+//     staged-assignment queries the assignments page reads back.
 //   * Virtual-desktop + activity tracking (D-Bus signals from KWin /
 //     ActivityManager and the daemon's screen-layout broadcast).
-//   * Running-windows query (used by the assignments page).
+//   * Running-windows and physical-screen queries (used by the assignments
+//     page).
 //   * Config import / export (whole-file JSON dump and restore).
-//   * Per-screen overrides for autotile / snapping / zone-selector.
 //   * Window-geometry persistence (QSettings entry under the
 //     organization config file, NOT the main JSON).
 //   * KZones import helpers.
-//   * Ordering helpers (effective / resolved / staged snapping +
-//     tiling order).
+//
+// Per-screen overrides live in settingscontroller_perscreen.cpp and the
+// ordering helpers in settingscontroller_ordering.cpp, both split out on the
+// same 800-line cap that made this file.
 //
 // Split out of settingscontroller.cpp to keep that file under the
 // 800-line cap (see CLAUDE.md). All methods here are members of

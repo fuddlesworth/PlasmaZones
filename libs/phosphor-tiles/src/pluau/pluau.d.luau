@@ -95,11 +95,12 @@ export type Metadata = {
     centerLayout: boolean?,
     supportsSingleWindow: boolean?, -- algorithm lays out the lone window itself (else the host fills the work area for a lone window)
     retileOnFocus: boolean?, -- reflow when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight that follows focus)
-    -- The same clamps the override functions below are annotated with apply
-    -- here: metadata seeds the value the override resolves, and both land in
-    -- the one clamp.
-    defaultSplitRatio: number?, -- clamped to MIN_SPLIT..MAX_SPLIT
-    defaultMaxWindows: number?, -- clamped to 1..100
+    -- Metadata seeds the value the matching override below resolves, so both
+    -- reach the same clamp. The two with a built-in default are the exception:
+    -- a value of zero or less is replaced by that default before any clamp
+    -- sees it, so it does not come back as the low bound.
+    defaultSplitRatio: number?, -- omit, or <= 0, for 0.5; otherwise clamped to MIN_SPLIT..MAX_SPLIT
+    defaultMaxWindows: number?, -- omit, or <= 0, for 6; otherwise clamped to 1..100
     minimumWindows: number?, -- clamped to 1..100
     masterZoneIndex: number?, -- 0-based index of the master zone, clamped to -1..255
     zoneNumberDisplay: string?,

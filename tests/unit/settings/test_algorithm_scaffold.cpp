@@ -300,6 +300,14 @@ void TestAlgorithmScaffold::rewriteAcceptsHandWrittenFieldPunctuation()
         "    },\n"
         "    tile = function(ctx) return {} end,\n"
         "}\n");
+    // Both quote styles reach both fields: the id line's own single-quoted
+    // form is the name line's mirror and has its own regex alternation.
+    const QString singleQuotedId =
+        rewriteMetadataNameId(QStringLiteral("return pluau.algorithm {\n    metadata = {\n"
+                                             "        name = \"A\",\n        id = 'a',\n    },\n}\n"),
+                              QStringLiteral("Copy"), QStringLiteral("copy"));
+    QVERIFY(singleQuotedId.contains(QStringLiteral("id = \"copy\",")));
+    QVERIFY(!singleQuotedId.contains(QStringLiteral("'a'")));
     const QString out = rewriteMetadataNameId(handWritten, QStringLiteral("Copy"), QStringLiteral("copy"));
     QVERIFY(!out.isEmpty());
     QVERIFY(out.contains(QStringLiteral("name = \"Copy\",")));

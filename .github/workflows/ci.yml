@@ -420,10 +420,13 @@ jobs:
           # This gates the stub's syntax and its internal type consistency. It
           # cannot check the stub against the runtime it describes — that
           # agreement is reviewed by hand.
-          # The stripped copy stays inside the tree it describes, so the
-          # analyzer resolves .luaurc the way it does for the real file. From
-          # /tmp it would silently pick up a different config than its source.
-          # The trap clears it on the failing path too, where `set -e` would
+          # The stripped copy sits next to the file it is a copy of, so that a
+          # .luaurc placed over phosphor-tiles or the repo root would govern
+          # this check exactly as it governs the real stub in an author's
+          # editor. No such config exists today (the repo's only .luaurc is
+          # data/algorithms/.luaurc, which is out of this path's lookup), so
+          # right now this resolves the same default config /tmp would. The
+          # trap clears the copy on the failing path too, where `set -e` would
           # otherwise leave it behind.
           #
           # An all-declare file would strip to nothing; grep exits 1 on no

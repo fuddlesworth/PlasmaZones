@@ -44,9 +44,16 @@ void TestAlgorithmBlankScaffold::blankScaffoldEmitsRequestedFlags()
     caps.singleWindow = true;
     caps.retileOnFocus = true;
     const QString out = buildBlankScaffold(kHeader, QStringLiteral("Mine"), QStringLiteral("mine"), caps);
-    // The header is passed through verbatim, so a generated algorithm carries
-    // its SPDX lines.
+    // The header's SPDX lines lead the generated algorithm. Its surrounding
+    // blank lines are normalized rather than required, so a caller that omits
+    // the trailing newline gets the same file as one that supplies it — the
+    // separator is the scaffold's to place.
     QVERIFY(out.startsWith(kHeader));
+    QString headerNoNewline = kHeader;
+    while (headerNoNewline.endsWith(QLatin1Char('\n'))) {
+        headerNoNewline.chop(1);
+    }
+    QCOMPARE(buildBlankScaffold(headerNoNewline, QStringLiteral("Mine"), QStringLiteral("mine"), caps), out);
     QVERIFY(out.contains(QStringLiteral("name = \"Mine\"")));
     QVERIFY(out.contains(QStringLiteral("id = \"mine\"")));
     QVERIFY(out.contains(QStringLiteral("supportsMasterCount = true")));

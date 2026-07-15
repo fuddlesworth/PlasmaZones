@@ -526,7 +526,8 @@ void SettingsController::openLayoutFile(const QString& layoutId)
     // Resolve the layout's real on-disk path via the registry. Bundled
     // layouts ship under human-readable filenames (fibonacci.json,
     // grid-3x2.json, ...), not UUID-named files, so reconstructing the
-    // filename from the id (as openLayoutFile's locate-by-UUID fallback does)
+    // filename from the id (as AlgorithmService::openLayoutFile's
+    // locate-by-UUID fallback does)
     // never finds them. Layout::sourcePath() is the authoritative path set
     // when the registry loaded the file, and is correct for both bundled and
     // user layouts.

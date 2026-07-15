@@ -810,9 +810,10 @@ SettingsController::SettingsController(QObject* parent)
     // layoutPropertyChanged / layoutListChanged) funnel into the 50 ms debounce
     // slot below, so a burst of them coalesces into a single
     // loadLayoutsAsync(). They are wired in
-    // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions, alongside the
-    // screen-layout, quick-slot, virtual-desktop and activity broadcasts, which
-    // reach their own slots rather than this timer.
+    // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions, which also
+    // wires every other daemon broadcast this class listens to. None of those
+    // reach this timer: they run their own slots, except quickLayoutSlotsChanged,
+    // which relays straight back out as a signal for QML.
     m_layoutLoadTimer.setSingleShot(true);
     m_layoutLoadTimer.setInterval(50);
     connect(&m_layoutLoadTimer, &QTimer::timeout, this, &SettingsController::loadLayoutsAsync);

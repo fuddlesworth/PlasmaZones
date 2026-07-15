@@ -796,7 +796,8 @@ private:
     // registries those consumers borrow. With the order below:
     //   1. The registry/loader borrowers declared after them run first:
     //      ~m_snappingShadersPage, ~m_tilingAlgorithmPage, ~m_algorithmService
-    //      (which disconnects its watchers — see algorithmservice.h).
+    //      (which disconnects its watchers — see ~AlgorithmService in
+    //      algorithmservice.cpp).
     //   2. ~m_scriptLoader (unregisters scripted algorithms while the
     //      registry is still alive — fixes a UAF the QObject-child-parent
     //      pattern had, where ~QObject ran after unique_ptr reset).

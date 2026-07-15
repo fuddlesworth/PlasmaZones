@@ -65,6 +65,12 @@ private Q_SLOTS:
 
 void TestAlgorithmScaffoldRejects::rejectsMultiLineCopyright()
 {
+    // Positive control first. Every case in this file asserts an empty return,
+    // and spliceTemplate returns empty for a bad header AND for any template
+    // shape the rewrite refuses — so if kTemplate ever drifted into a refused
+    // shape, the whole file would pass while gating nothing.
+    QVERIFY(!spliceTemplate(kTemplate, kCopyright, QStringLiteral("Control"), QStringLiteral("control")).isEmpty());
+
     // A full header here would slip past the copy-of-a-copy dedupe and leave
     // the copy with two license identifiers, so it is rejected outright.
     QVERIFY(spliceTemplate(kTemplate, kHeader, QStringLiteral("My Copy"), QStringLiteral("my-copy")).isEmpty());
