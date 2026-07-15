@@ -314,7 +314,8 @@ Return a table (or `nil` to do nothing). Two optional, independent outputs:
 - **Any other keys** — persisted as the new `ctx.state` table, but only when
   `metadata.supportsScriptState = true`. On the next `tile` run, `ctx.state`
   holds what you returned, sanitized: non-finite numbers are dropped, nesting
-  past 16 levels and entries past 4096 are trimmed away, and a bag over 64 KiB
+  past 16 levels are trimmed away, as is everything past 4096 keys counted
+  across the whole bag rather than per table, and a bag over 64 KiB
   of JSON is dropped entirely. Keep it small and flat. Read your prior values from
   `state.scriptState` inside the hook. See `data/algorithms/aligned-grid.luau`
   for a full example (per-column widths that survive retiles).
@@ -402,7 +403,7 @@ A parse or type error means the daemon will skip the algorithm, so a clean
   running.
 - A script over 1 MiB is **refused** before it loads, so it never reaches the
   list and a clean `luau-analyze` run will not tell you why. No hand-written
-  layout comes near this; a generated or vendored one might.
+  layout comes near this, but a generated or vendored one might.
 - Keep `tile` pure and fast: it runs on every relevant layout change. Return
   early for `windowCount <= 0`, and guard against tiny areas with
   `pluau.guardArea`.

@@ -42,9 +42,9 @@ return pluau.algorithm {
 )");
 
 // A template copy takes only the new owner's copyright line and inherits the
-// template's license. kHeader is the multi-line form the splice must refuse.
+// template's license. The header forms the splice refuses live next door, in
+// test_algorithm_scaffold_rejects.cpp.
 const QString kCopyright = QStringLiteral("-- SPDX-FileCopyrightText: 2026 <your name>");
-const QString kHeader = kCopyright + QStringLiteral("\n-- SPDX-License-Identifier: GPL-3.0-or-later\n");
 
 } // namespace
 
@@ -463,17 +463,40 @@ void TestAlgorithmScaffold::spliceOrdersSpdxCopyrightBeforeLicense()
 // Luau's last-wins hands the copy its source's id to collide with.
 void TestAlgorithmScaffold::spliceReadsBacktickStringsAsText()
 {
-    const QString withBrace = rewriteMetadataNameId(
-        QStringLiteral("return pluau.algorithm {\n    metadata = {\n"
-                       "        description = `a } b`,\n        name = \"A\",\n        id = \"a\",\n    },\n}\n"),
-        QStringLiteral("New"), QStringLiteral("newid"));
-    QCOMPARE(withBrace.count(QStringLiteral("name = ")), 1);
-    QCOMPARE(withBrace.count(QStringLiteral("id = ")), 1);
-    QVERIFY(withBrace.contains(QStringLiteral("id = \"newid\",")));
-    QVERIFY(withBrace.contains(QStringLiteral("description = `a } b`,")));
+    // A literal `}`, and its mirror. Read as code either one walks the table's
+    // depth a step it never took. Both directions, as the long-bracket tests do.
+    for (const QString& literal : {QStringLiteral("`a } b`"), QStringLiteral("`a { b`"),
+                                   // An escaped backtick does not end the
+                                   // literal, so the `}` past it is still text.
+                                   QStringLiteral("`a \\` } b`")}) {
+        const QString out = rewriteMetadataNameId(
+            QStringLiteral("return pluau.algorithm {\n    metadata = {\n        description = ") + literal
+                + QStringLiteral(",\n        name = \"A\",\n        id = \"a\",\n    },\n}\n"),
+            QStringLiteral("New"), QStringLiteral("newid"));
+        QCOMPARE(out.count(QStringLiteral("name = ")), 1);
+        QCOMPARE(out.count(QStringLiteral("id = ")), 1);
+        QVERIFY(out.contains(QStringLiteral("name = \"New\",")));
+        QVERIFY(out.contains(QStringLiteral("id = \"newid\",")));
+        QVERIFY(out.contains(QStringLiteral("description = ") + literal + QStringLiteral(",")));
+    }
 
-    // An interpolation's own braces balance inside the literal, so skipping it
-    // whole leaves the table's depth where it was.
+    // A `--` inside the literal is text, not a comment. Read as a comment it
+    // takes the rest of the line with it, including the trailing `name` that
+    // makes this shape a reject, so the guard never fires and a second name is
+    // inserted for Luau's last-wins to resolve back to the source's.
+    const QString dashesInside = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        description = `a -- b`, name = \"x\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(dashesInside, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+
+    // An interpolation that opens and closes on this line goes with the literal,
+    // braces and all. This guards over-parsing rather than under: a scan that
+    // read into the interpolation would count the inner table's braces. A scan
+    // blind to backticks passes it too, since those braces balance either way.
     const QString interpolated = rewriteMetadataNameId(
         QStringLiteral(
             "return pluau.algorithm {\n    metadata = {\n"

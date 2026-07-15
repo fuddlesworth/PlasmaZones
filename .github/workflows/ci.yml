@@ -407,11 +407,12 @@ jobs:
       - name: Analyze the pluau type stubs
         run: |
           set -euo pipefail
-          # pluau.d.luau cannot be checked either way it is normally used: as a
-          # source file its `declare` lines are a syntax error, and behind
-          # `--defs=` the analyzer silently ignores every error inside the defs
-          # file (both verified against this analyzer). So the stub shipped
-          # ungated, and a typo'd or dangling type in it reached editors intact.
+          # pluau.d.luau could not be checked the way it is normally used. As a
+          # source file its `declare` lines are a syntax error. And this
+          # analyzer has no defs flag at all — it takes an unknown `--` argument
+          # without a word and carries on, so a run "with" the stub reads it
+          # never. Either way the stub shipped ungated, and a typo'd or dangling
+          # type in it reached editors intact.
           #
           # The `declare` lines are the only part that is not valid source, and
           # they carry no type information of their own. Strip them and analyze
