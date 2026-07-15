@@ -398,8 +398,8 @@ void Daemon::setupAnimationProfiles()
     // the daemon's pre-scan signal wiring below — a loader's
     // initial-scan emit otherwise fires before the
     // publishActiveAnimationProfile listener is installed and is
-    // silently dropped. Triggered explicitly via
-    // `runInitialAnimationLoad` further down.
+    // silently dropped. Triggered explicitly by the three-phase load
+    // further down.
     auto loaderHandles =
         constructAnimationLoaders(m_curveRegistry, m_profileRegistry, kPlasmaZonesUserProfilesOwnerTag, nullptr);
     m_curveLoader = std::move(loaderHandles.curveLoader);

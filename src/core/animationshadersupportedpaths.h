@@ -13,13 +13,19 @@
 namespace PlasmaZones {
 
 /// Leaf event paths the daemon's overlay service AND the KWin effect
-/// actually resolve a shader effect for. Each appears as a
-/// @c resolveShaderEffect(tree, ...) call inside one of
+/// actually resolve a shader effect for, by one of three mechanisms:
+/// a @c resolveShaderEffect(tree, ...) call inside one of
 /// @c OverlayService::buildOsdConfig / @c buildLayoutPickerConfig /
-/// @c buildZoneSelectorConfig / @c buildSnapAssistConfig, OR as a
-/// @c tryBeginShaderForEvent(...) call in @c kwin-effect/plasmazoneseffect.cpp
-/// — when a future surface adds a shader leg, append its leg paths
-/// here in lockstep.
+/// @c buildZoneSelectorConfig / @c buildSnapAssistConfig; a
+/// @c tryBeginShaderForEvent(...) call under
+/// @c kwin-effect/plasmazoneseffect/ (window_lifecycle for the
+/// open/close/move/maximize/focus legs, daemon_apply for minimize); or a
+/// @c resolveShaderWithDefault(tree, ...) call, which drives both the
+/// screen-level desktop legs from
+/// @c kwin-effect/plasmazoneseffect/lifecycle.cpp and the snap geometry
+/// legs through @c applyWindowGeometry in
+/// @c kwin-effect/plasmazoneseffect/drag_snap.cpp. When a future
+/// surface adds a shader leg, append its leg paths here in lockstep.
 inline QStringList shaderConsumedLeafEventPaths()
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
@@ -35,8 +41,8 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::PopupSnapAssistShow,
         PP::PopupSnapAssistHide,
         //
-        // Window family — driven by the KWin OffscreenEffect at
-        // kwin-effect/plasmazoneseffect.cpp via tryBeginShaderForEvent
+        // Window family — driven by the KWin OffscreenEffect under
+        // kwin-effect/plasmazoneseffect/ via tryBeginShaderForEvent
         // on each window-lifecycle hook: windowAdded/windowClosed for
         // open/close, windowStartUserMovedResized for the held move,
         // and windowMaximizedStateChanged/minimizedChanged/
@@ -51,9 +57,10 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::WindowMove,
         PP::WindowFocus,
         // Snap-into-zone window animations driven by the kwin-effect's
-        // applyWindowGeometry / daemon_apply chokepoints. Each routes
-        // through tryBeginShaderForEvent so the user can pick a
-        // distinct shader per snap event.
+        // applyWindowGeometry chokepoint (drag_snap.cpp), which resolves
+        // through resolveShaderWithDefault rather than
+        // tryBeginShaderForEvent, applying the same rule-then-tree cascade
+        // so the user can pick a distinct shader per snap event.
         //
         // There are NO resize legs: `window.movement.resize` (the
         // interactive edge-drag) and the never-routed
@@ -73,6 +80,12 @@ inline QStringList shaderConsumedLeafEventPaths()
         // per-window tryBeginShaderForEvent leg. Its shaders are the two-texture
         // desktop class (appliesTo ["desktop"]).
         PP::DesktopSwitch,
+        // Show-desktop peek — same manager, resolved in the
+        // showingDesktopChanged handler (lifecycle.cpp). One node drives both
+        // legs: the hide leg blends the windows scene into the bare desktop,
+        // and the show-back leg replays that same blend with time reversed
+        // (its bare-desktop endpoint comes from the hide leg's cache).
+        PP::DesktopPeek,
     };
 }
 
@@ -112,15 +125,22 @@ inline QStringList shaderSupportedEventPaths()
     return out;
 }
 
-/// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged)
-/// and the daemon's optional verification path.
-inline bool eventPathSupportsShaderLeg(const QString& path)
+/// The supported-path set as a QSet, built once. Shared by the predicate and
+/// the pruner below so their membership source cannot drift.
+inline const QSet<QString>& supportedShaderPathSet()
 {
     static const QSet<QString> kSupported = []() {
         const QStringList list = shaderSupportedEventPaths();
         return QSet<QString>(list.cbegin(), list.cend());
     }();
-    return kSupported.contains(path);
+    return kSupported;
+}
+
+/// Convenience predicate used by the settings UI (Q_INVOKABLE-bridged)
+/// and the daemon's optional verification path.
+inline bool eventPathSupportsShaderLeg(const QString& path)
+{
+    return supportedShaderPathSet().contains(path);
 }
 
 /// Drop every per-path override from @p src whose path is NOT in
@@ -143,16 +163,13 @@ inline bool eventPathSupportsShaderLeg(const QString& path)
 inline PhosphorAnimationShaders::ShaderProfileTree
 pruneShaderProfileTreeToSupportedPaths(const PhosphorAnimationShaders::ShaderProfileTree& src)
 {
-    static const QSet<QString> kSupported = []() {
-        const QStringList list = shaderSupportedEventPaths();
-        return QSet<QString>(list.cbegin(), list.cend());
-    }();
+    const QSet<QString>& supported = supportedShaderPathSet();
 
     PhosphorAnimationShaders::ShaderProfileTree pruned;
     pruned.setBaseline(src.baseline());
     const QStringList overriddenPaths = src.overriddenPaths();
     for (const QString& path : overriddenPaths) {
-        if (kSupported.contains(path)) {
+        if (supported.contains(path)) {
             pruned.setOverride(path, src.directOverride(path));
         }
     }

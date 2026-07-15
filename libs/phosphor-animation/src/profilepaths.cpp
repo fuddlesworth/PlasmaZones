@@ -43,10 +43,13 @@ const QString WindowSnapIn = QStringLiteral("window.movement.snapIn");
 const QString WindowSnapOut = QStringLiteral("window.movement.snapOut");
 const QString WindowLayoutSwitch = QStringLiteral("window.movement.layoutSwitch");
 
-// desktop.* — full-screen virtual-desktop switch transitions (two-texture
-// from/to blend), driven by the kwin-effect's screen-level paint pass.
+// desktop.* — full-screen two-texture from/to blends driven by the
+// kwin-effect's screen-level paint pass: the virtual-desktop switch, and the
+// show-desktop peek (windows scene ↔ bare desktop; both peek legs resolve one
+// node, with the show-back leg running the same blend with time reversed).
 const QString Desktop = QStringLiteral("desktop");
 const QString DesktopSwitch = QStringLiteral("desktop.switch");
+const QString DesktopPeek = QStringLiteral("desktop.peek");
 
 // editor.* — Layout-editor-only zone manipulation. NOT runtime
 // window snapping (that's KWin's domain).
@@ -140,6 +143,7 @@ QStringList allBuiltInPaths()
         WindowLayoutSwitch,
         Desktop,
         DesktopSwitch,
+        DesktopPeek,
         Editor,
         EditorSnapIn,
         EditorSnapOut,
@@ -282,11 +286,13 @@ QString defaultShaderEffectIdForPath(const QString& path)
         || path == PopupSnapAssistHide) {
         return QStringLiteral("fade");
     }
-    // Virtual-desktop switch has NO built-in default: it is a full-screen,
-    // intrusive transition that also contends with KWin's own Slide effect, so
-    // it stays opt-in. A fresh config animates desktop switches only once the
-    // user picks a desktop pack (e.g. Desktop Fade) on the Virtual Desktops
-    // animation page.
+    // The desktop transitions (switch AND peek) have NO built-in default: both
+    // are full-screen, intrusive transitions that contend with KWin's own
+    // effects (Slide for the switch, windowaperture/eyeonscreen for the peek —
+    // the latter are even unloaded while a peek pack is assigned), so they
+    // stay opt-in. A fresh config animates them only once the user picks a
+    // desktop pack (e.g. Desktop Fade) on the Animations → Transitions →
+    // Desktop page.
     // Every other event defaults to no shader.
     return QString();
 }

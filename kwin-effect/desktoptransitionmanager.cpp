@@ -7,13 +7,9 @@
 #include "shadertransitionmanager.h"
 #include "plasmazoneseffect/shader_internal.h"
 
-#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorShaders/ShaderEntryPoint.h>
-#include <PhosphorShaders/ShaderIncludeResolver.h>
-#include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <effect/effecthandler.h>
 #include <core/output.h>
@@ -26,14 +22,20 @@
 #include <opengl/glvertexbuffer.h>
 
 #include <QColor>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QVector2D>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 
+// The drive part of DesktopTransitionManager: resolve a pack, start a
+// transition, blend a frame. The other three parts of the class live beside it —
+// captureDesktop / captureLiveScene / capturePeekWindowsScene and their shared
+// compositeWindowsInto tail (plus the texture allocation and format helpers
+// they share) in desktoptransitioncapture.cpp,
+// compiledShader (the pack-source → GLShader assembly) in
+// desktoptransitionshader.cpp, and the settle / reap / removal / release
+// handlers in desktoptransitionteardown.cpp.
 namespace PlasmaZones {
 
 namespace {
@@ -72,6 +74,48 @@ void drawDesktopBlendQuad(const KWin::RenderViewport& viewport)
     vbo->render(GL_TRIANGLE_STRIP);
 }
 
+// Resolve p_<name> parameter values into the customParams[] / customColors[]
+// slot pools, shared by begin() and beginPeek(). translateAnimationParams fills
+// the metadata defaults when the profile carries no override — WITHOUT this the
+// shaders run at customParams == 0 (slide has no direction, dissolve no speckle
+// scale, etc.) and appear broken. Color params land as normalised rgba, exactly
+// as the per-window transition path uploads them (see shader_transitions.cpp);
+// translateAnimationParams coerces every color to a valid QColor (default →
+// Qt::transparent), so the isValid guard is defence-in-depth against a caller
+// that bypasses the registry encoder.
+void translatePackParams(
+    const PhosphorAnimationShaders::AnimationShaderEffect& eff, const QVariantMap& params,
+    std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams>& customParams,
+    std::array<QVector4D, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors>& customColors)
+{
+    namespace ASC = PhosphorAnimationShaders::AnimationShaderContract;
+    const QVariantMap translated =
+        PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, params);
+    for (int slot = 0; slot < ASC::kMaxCustomParams; ++slot) {
+        auto pull = [&](char comp) -> float {
+            const auto it = translated.constFind(ASC::slotKey(slot, comp));
+            if (it == translated.constEnd()) {
+                return 0.0f;
+            }
+            bool ok = false;
+            const float v = it->toFloat(&ok);
+            return ok ? v : 0.0f;
+        };
+        customParams[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
+    }
+    for (int slot = 0; slot < ASC::kMaxCustomColors; ++slot) {
+        const auto it = translated.constFind(ASC::colorKey(slot));
+        if (it == translated.constEnd()) {
+            continue;
+        }
+        const QColor c = it->value<QColor>();
+        if (!c.isValid()) {
+            continue;
+        }
+        customColors[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
+    }
+}
+
 } // namespace
 
 DesktopTransitionManager::DesktopTransitionManager(PlasmaZonesEffect* effect)
@@ -86,6 +130,45 @@ DesktopTransitionManager::~DesktopTransitionManager()
     // guaranteed. reset() is the explicit-cleanup path while the compositor is live.
 }
 
+bool DesktopTransitionManager::prepareTransitionPrototype(const QString& effectId, const QVariantMap& params,
+                                                          const QString& eventPath, int durationMs,
+                                                          std::shared_ptr<const PhosphorAnimation::Curve> progressCurve,
+                                                          OutputTransition* proto)
+{
+    const PhosphorAnimationShaders::AnimationShaderEffect eff =
+        m_effect->m_shaderManager.shaderRegistry().effect(effectId);
+    if (!eff.isValid()) {
+        // The resolved shader id is not installed (e.g. the profile references an
+        // uninstalled pack). Do NOT claim the fullscreen effect or populate
+        // m_active — bail so KWin's native behaviour plays instead of a blank
+        // transition that the first paintOutput would only then abandon.
+        return false;
+    }
+    if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff, eventPath)) {
+        // The resolved shader is not a desktop-contract pack — a window/surface
+        // or universal shader inherited from a broader profile scope (the desktop
+        // settings page only offers appliesTo:["desktop"] packs, but a `window`
+        // or `global` scope override cascades here). It has no getFromColor /
+        // getToColor, so it would sample the unbound uFromDesktop / uToDesktop and
+        // render garbage. Refuse it and let KWin's native behaviour play. Routes
+        // through the same predicate the settings picker filters on, so the
+        // runtime and the picker share one opt-in desktop policy.
+        return false;
+    }
+    proto->effectId = effectId;
+    translatePackParams(eff, params, proto->customParams, proto->customColors);
+    proto->startTimeMs = ShaderInternal::shaderClockNowMs();
+    // Spring lifetime + envelope clamp, shared with the per-window shader path.
+    // No separate non-positive fallback: resolveTransitionLifetimeMs floors every
+    // result at Limits::MinAnimationDurationMs, so even a 0 arrives as a sane
+    // 50 ms rather than settling on its first paint. The live callers cannot pass
+    // one regardless — resolveEventMotionProfile clamps the cascade's duration
+    // into the envelope before lifecycle.cpp rounds it.
+    proto->durationMs = ShaderInternal::resolveTransitionLifetimeMs(durationMs, progressCurve.get());
+    proto->progressCurve = std::move(progressCurve); // shapes iTime in paintOutput; null → linear
+    return true;
+}
+
 void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
                                      const QString& effectId, const QVariantMap& params, int durationMs,
                                      std::shared_ptr<const PhosphorAnimation::Curve> progressCurve)
@@ -93,75 +176,12 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     if (!from || !to || from == to || effectId.isEmpty()) {
         return; // nothing to animate (no shader assigned, or a no-op switch)
     }
-    // Spring lifetime + envelope clamp, shared with the per-window shader path.
-    // No separate non-positive fallback: resolveTransitionLifetimeMs floors every
-    // result at Limits::MinAnimationDurationMs, so even a 0 arrives as a sane
-    // 50 ms rather than settling on its first paint. The live caller cannot pass
-    // one regardless — resolveEventMotionProfile clamps the cascade's duration
-    // into the envelope before lifecycle.cpp rounds it.
-    const int effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(durationMs, progressCurve.get());
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-
-    // Resolve p_<name> parameter values into customParams[] slots. Same for
-    // every output this begin() touches, so compute once. translateAnimationParams
-    // fills the metadata defaults when the profile carries no override — WITHOUT
-    // this the shaders run at customParams == 0 (slide has no direction, dissolve
-    // no speckle scale, etc.) and appear broken.
-    namespace ASC = PhosphorAnimationShaders::AnimationShaderContract;
-    std::array<QVector4D, ASC::kMaxCustomParams> customParams{};
-    std::array<QVector4D, ASC::kMaxCustomColors> customColors{};
-    const PhosphorAnimationShaders::AnimationShaderEffect eff =
-        m_effect->m_shaderManager.shaderRegistry().effect(effectId);
-    if (!eff.isValid()) {
-        // The resolved shader id is not installed (e.g. the profile references an
-        // uninstalled pack). Do NOT claim the fullscreen effect or populate
-        // m_active — bail so KWin's native desktop switch plays instead of a
-        // blank transition that the first paintOutput would only then abandon.
+    // Shared resolve prologue: pack validation + parameter pools + clamped
+    // lifetime + curve, identical for every output this begin() touches.
+    OutputTransition proto;
+    if (!prepareTransitionPrototype(effectId, params, PhosphorAnimation::ProfilePaths::DesktopSwitch, durationMs,
+                                    std::move(progressCurve), &proto)) {
         return;
-    }
-    if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff,
-                                                                  PhosphorAnimation::ProfilePaths::DesktopSwitch)) {
-        // The resolved shader is not a desktop-contract pack — a window/surface
-        // or universal shader inherited from a broader profile scope (the desktop
-        // settings page only offers appliesTo:["desktop"] packs, but a `window`
-        // or `global` scope override cascades here). It has no getFromColor /
-        // getToColor, so it would sample the unbound uFromDesktop / uToDesktop and
-        // render garbage. Refuse it and let KWin's native switch play. Routes
-        // through the same predicate the settings picker filters on, so the
-        // runtime and the picker share one opt-in desktop policy.
-        return;
-    }
-    {
-        const QVariantMap translated =
-            PhosphorAnimationShaders::AnimationShaderRegistry::translateAnimationParams(eff, params);
-        for (int slot = 0; slot < ASC::kMaxCustomParams; ++slot) {
-            auto pull = [&](char comp) -> float {
-                const auto it = translated.constFind(ASC::slotKey(slot, comp));
-                if (it == translated.constEnd()) {
-                    return 0.0f;
-                }
-                bool ok = false;
-                const float v = it->toFloat(&ok);
-                return ok ? v : 0.0f;
-            };
-            customParams[slot] = QVector4D(pull('x'), pull('y'), pull('z'), pull('w'));
-        }
-        // Color params resolve into the customColors pool as normalised rgba,
-        // exactly as the per-window transition path uploads them (see
-        // shader_transitions.cpp). translateAnimationParams coerces every color
-        // to a valid QColor (default → Qt::transparent), so the isValid guard is
-        // defence-in-depth against a caller that bypasses the registry encoder.
-        for (int slot = 0; slot < ASC::kMaxCustomColors; ++slot) {
-            const auto it = translated.constFind(ASC::colorKey(slot));
-            if (it == translated.constEnd()) {
-                continue;
-            }
-            const QColor c = it->value<QColor>();
-            if (!c.isValid()) {
-                continue;
-            }
-            customColors[slot] = QVector4D(c.redF(), c.greenF(), c.blueF(), c.alphaF());
-        }
     }
 
     // Actual switch direction for direction-aware packs (uploaded as
@@ -216,16 +236,19 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
         if (!screen) {
             continue;
         }
-        OutputTransition tr;
+        // A switch drops this output's bare-desktop cache unconditionally: the
+        // capture is of the OUTGOING desktop, so whether or not a peek leg is
+        // still live, the entry no longer matches what a later show leg would
+        // blend back to. Size/format validation cannot see that mismatch. Gating
+        // this on a live peek entry would keep a SETTLED hide leg's capture
+        // across the switch and blend the wrong desktop's content. Erasing when
+        // there is no live leg also releases an output-sized texture the next
+        // hide leg would otherwise overwrite. The entry is a shared_ptr, so a
+        // live leg holding the same texture keeps it alive for its own paint.
+        m_peekDesktopCache.erase(screen);
+        OutputTransition tr = proto;
         tr.from = from;
-        tr.effectId = effectId;
-        tr.customParams = customParams;
-        tr.customColors = customColors;
         tr.switchDelta = switchDelta;
-        tr.startTimeMs = nowMs;
-        tr.durationMs = effectiveDurationMs;
-        tr.progressCurve = progressCurve; // shapes iTime in paintOutput; null → linear
-        tr.captured = false; // capture is deferred to the first paintOutput (live GL context)
         m_active.insert_or_assign(screen, std::move(tr));
     }
 
@@ -244,102 +267,258 @@ void DesktopTransitionManager::begin(KWin::VirtualDesktop* from, KWin::VirtualDe
     // our release would then go on to clear THEIR claim — see
     // releaseFullScreenClaimIfIdle. Losing the claim is the benign outcome: we
     // simply do not suppress Slide this once.
-    if (!m_fullScreenClaimed && !KWin::effects->activeFullScreenEffect()) {
+    //
+    // Never take it across a live shown-desktop state or a live peek leg
+    // either: EffectsHandler::setActiveFullScreenEffect itself cancels show
+    // desktop on every null↔effect transition (the reason beginPeek takes no
+    // claim at all), and the eventual RELEASE fires it again. KWin core
+    // already cancels show desktop before desktopChanged is emitted
+    // (Workspace::updateWindowVisibilityOnDesktopChange), so this arm is
+    // defence in depth against signal-order changes, at the same benign cost.
+    const bool peekLive = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
+        return entry.second.kind != Kind::Switch;
+    });
+    if (!peekLive && !PlasmaZonesEffect::isShowingDesktop() && !m_fullScreenClaimed
+        && !KWin::effects->activeFullScreenEffect()) {
         KWin::effects->setActiveFullScreenEffect(m_effect);
         m_fullScreenClaimed = true;
     }
     KWin::effects->addRepaintFull();
 }
 
-// captureDesktop and captureLiveScene live in desktoptransitioncapture.cpp, along
-// with the texture allocation and format helpers they share.
-
-DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compiledShader(const QString& effectId)
+void DesktopTransitionManager::reapPeekTransitions()
 {
-    auto cached = m_shaderCache.find(effectId);
-    if (cached != m_shaderCache.end()) {
-        return &cached->second; // may hold a null shader sentinel (compile failed) — caller checks
-    }
-
-    // Insert a default (null-shader) entry up front so every early-return path
-    // caches a sentinel and never recompiles a broken pack every frame.
-    CompiledDesktopShader& compiled = m_shaderCache.emplace(effectId, CompiledDesktopShader{}).first->second;
-
-    ShaderTransitionManager& mgr = m_effect->m_shaderManager;
-    const PhosphorAnimationShaders::AnimationShaderEffect eff = mgr.shaderRegistry().effect(effectId);
-    if (!eff.isValid()) {
-        return &compiled; // sentinel: unknown id
-    }
-
-    QFile shaderFile(eff.fragmentShaderPath);
-    if (!shaderFile.open(QIODevice::ReadOnly)) {
-        return &compiled;
-    }
-    const QString rawSource = QString::fromUtf8(shaderFile.readAll());
-
-    QStringList animIncludePaths;
-    for (const QString& sp : mgr.shaderRegistry().searchPaths()) {
-        const QString sharedDir = sp + QStringLiteral("/shared");
-        if (QDir(sharedDir).exists()) {
-            animIncludePaths.append(sharedDir);
+    // See the header doc: every beginPeek bail-out reaps live peek legs
+    // (kind-guarded — a live switch is not ours to truncate), repaints so the
+    // real scene draws a frame nothing else schedules, and drops the
+    // bare-desktop cache (a broken hide/show pairing means the capture may no
+    // longer match the desktop's content, which size/format validation cannot
+    // see; the next show leg then settles instantly, KWin's default).
+    //
+    const bool hasPeekEntries = std::any_of(m_active.cbegin(), m_active.cend(), [](const auto& entry) {
+        return entry.second.kind != Kind::Switch;
+    });
+    if (hasPeekEntries || !m_peekDesktopCache.empty()) {
+        // Both the entry erases and the cache clear free GLTextures; callers run
+        // off the paint thread.
+        ensureGlContextCurrent();
+        for (auto it = m_active.begin(); it != m_active.end();) {
+            if (it->second.kind != Kind::Switch) {
+                // Same defensive posture as desktopRemoved's reap: both callers
+                // run inside KWin signal handlers where effects is live, but the
+                // guard keeps the two loops from expressing opposite assumptions.
+                if (KWin::effects) {
+                    KWin::effects->addRepaint(it->first->geometry());
+                }
+                it = m_active.erase(it);
+            } else {
+                ++it;
+            }
         }
+        m_peekDesktopCache.clear();
     }
 
-    // Reuse the exact per-window assembly: entry-point scaffold -> include
-    // expansion -> named-param preamble -> KWin default-block define.
-    const QString assembledSource = PhosphorShaders::assembleEntryPoint(
-        rawSource, PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryPrologue(),
-        PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryCandidates());
-    QString includeError;
-    const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
-    QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembledSource, currentDir,
-                                                                              animIncludePaths, &includeError);
-    if (expanded.isEmpty()) {
-        return &compiled;
+    // Release like every other erase site, and AFTER the erase for the same
+    // reason they all are: releaseFullScreenClaimIfIdle() early-returns while
+    // m_active is non-empty, so releasing before the loop could never clear the
+    // flag it exists to clear.
+    //
+    // A peek can never coexist with a claim KWin still reports as OURS
+    // (beginPeek bails while ANY claim is held), so this cannot strand a real
+    // claim — but m_fullScreenClaimed can outlive the claim itself: our switch
+    // claims, Overview overwrites it, Overview closes with
+    // setActiveFullScreenEffect(nullptr), and nothing re-validates our flag.
+    // beginPeek then sees a null claim and proceeds, so peeks CAN coexist with
+    // a stale flag, and reaping them without this call would leave it set until
+    // the next switch wasted its own claim on the !m_fullScreenClaimed guard.
+    releaseFullScreenClaimIfIdle();
+}
+
+void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, const QVariantMap& params,
+                                         int durationMs, std::shared_ptr<const PhosphorAnimation::Curve> progressCurve)
+{
+    if (effectId.isEmpty()) {
+        // No shader assigned — KWin's instant show-desktop proceeds.
+        reapPeekTransitions();
+        return;
     }
-    expanded = PhosphorShaders::spliceAfterVersion(
-        expanded, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
-    const QByteArray fragWithKwinDefine = ShaderInternal::injectKwinDefineAfterVersion(expanded);
+    // Bow out while ANY effect holds the fullscreen claim — Overview, Cube, or
+    // our own in-flight desktop switch. The peek never takes the claim itself
+    // (see the note above the repaint below), so for foreign holders this is
+    // the whole contention policy: their transition wins and KWin's instant
+    // hide/show proceeds under them. Our own switch claim is excluded too, not
+    // just foreign ones: proceeding would hand the claim's RELEASE (at the
+    // peek's settle, once m_active empties) the same setShowingDesktop(false)
+    // side effect the peek path exists to avoid, cancelling the shown state
+    // from under a completed hide leg.
+    if (KWin::effects->activeFullScreenEffect()) {
+        reapPeekTransitions();
+        return;
+    }
+    // Shared resolve prologue: pack validation + parameter pools + clamped
+    // lifetime + curve (see begin()).
+    OutputTransition proto;
+    if (!prepareTransitionPrototype(effectId, params, PhosphorAnimation::ProfilePaths::DesktopPeek, durationMs,
+                                    std::move(progressCurve), &proto)) {
+        // The pack was uninstalled or lost its desktop contract via hot-reload
+        // between the legs.
+        reapPeekTransitions();
+        return;
+    }
 
-    // Full-screen quad vertex stage. Positions arrive in the RenderViewport's
-    // device coordinate space and are projected by KWin's own matrix, which
-    // encodes RenderTarget::transform() (the output rotation/flip, combined with
-    // the buffer's FlipY) and the render offset. Emitting clip-space directly, as
-    // this used to, is only equivalent when the transform is exactly FlipY and the
-    // offset is zero — the default, unrotated configuration. On a rotated output
-    // the target framebuffer is panel-oriented while the captures are logical-
-    // oriented, so the blend painted the desktops unrotated and stretched.
-    static constexpr const char* kDesktopQuadVertexSource =
-        "#version 450\n"
-        "uniform mat4 modelViewProjectionMatrix;\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n"
-        "layout(location = 0) out vec2 vTexCoord;\n"
-        "void main() {\n"
-        "    vTexCoord = texCoord;\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n";
-    const QByteArray vertWithKwinDefine =
-        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kDesktopQuadVertexSource));
+    // insert_or_assign below may destroy a prior OutputTransition (a re-toggle
+    // inside the transition window), freeing its captured GLTextures. beginPeek
+    // runs from the showingDesktopChanged handler, off the paint thread, so make
+    // the compositor context current first.
+    ensureGlContextCurrent();
 
-    std::unique_ptr<KWin::GLShader> shader = KWin::ShaderManager::instance()->generateCustomShader(
-        KWin::ShaderTrait::MapTexture, vertWithKwinDefine, fragWithKwinDefine);
-    if (shader) {
-        compiled.iFromDesktopLoc = shader->uniformLocation("uFromDesktop");
-        compiled.iToDesktopLoc = shader->uniformLocation("uToDesktop");
-        compiled.iTimeLoc = shader->uniformLocation("iTime");
-        compiled.iResolutionLoc = shader->uniformLocation("iResolution");
-        compiled.iFrameLoc = shader->uniformLocation("iFrame");
-        compiled.iSwitchDeltaLoc = shader->uniformLocation("iSwitchDelta");
-        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
-            compiled.customParamsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomParamsElementNames[slot]);
+    bool insertedAny = false;
+    const QList<KWin::LogicalOutput*> screens = KWin::effects->screens();
+    for (KWin::LogicalOutput* screen : screens) {
+        if (!screen) {
+            continue;
         }
-        for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
-            compiled.customColorsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomColorsElementNames[slot]);
+        // The show leg blends FROM the bare desktop, which cannot be captured
+        // once the windows are visible again — it replays the hide leg's cached
+        // capture. No cache for this output (effect loaded mid-show-desktop, or
+        // the hide leg was abandoned before its capture) → skip; the restored
+        // windows appear instantly there, which is KWin's default behaviour.
+        if (!showing && m_peekDesktopCache.find(screen) == m_peekDesktopCache.end()) {
+            // Also drop any STALE hide-leg entry still mapped to this output
+            // (a re-toggle before that leg's first paint is exactly how the
+            // cache ends up unseeded). Left alive it would deferred-capture
+            // the RESTORED-windows scene as the "bare desktop" — poisoning the
+            // cache for the next show leg — and blend FROM≈TO for its whole
+            // duration. Kind-guarded: a live SWITCH transition mapped here
+            // (begun unclaimed under another effect that has since released)
+            // is not ours to truncate. The context is already current (above);
+            // repaint so the settled scene draws a frame nothing else
+            // schedules.
+            const auto staleIt = m_active.find(screen);
+            if (staleIt != m_active.end() && staleIt->second.kind == Kind::PeekHide) {
+                m_active.erase(staleIt);
+                KWin::effects->addRepaint(screen->geometry());
+            }
+            continue;
         }
-        compiled.shader = std::move(shader);
+        OutputTransition tr = proto;
+        tr.kind = showing ? Kind::PeekHide : Kind::PeekShow;
+        // tr.switchDelta stays zero: a peek has no pager direction, so
+        // direction-aware packs fall back to their configured params via
+        // switchDirection()'s fallback path.
+        //
+        // Re-toggling inside the transition window (peek, then un-peek before
+        // the hide leg settled) RESUMES from what is on screen instead of
+        // restarting. Without this, prepareTransitionPrototype's fresh start
+        // stamps every leg at its own t = 0, so reversing at 30% snaps the
+        // screen to the far endpoint and animates back from there — the
+        // opposite of the "played backwards" contract in the header. A
+        // displaced SWITCH is excluded: it blends different endpoints, so its
+        // progress means nothing here.
+        //
+        // How to resume depends on the curve, because easeProgress treats the
+        // two kinds completely differently.
+        const auto displaced = m_active.find(screen);
+        if (displaced != m_active.end() && displaced->second.kind != Kind::Switch
+            && displaced->second.kind != tr.kind) {
+            const OutputTransition& old = displaced->second;
+            // The split is on the NEW leg's curve, because that alone decides
+            // how paintOutput reads t back out: easeProgress returns
+            // state.value for a stateful curve and IGNORES the linear clock,
+            // and evaluates the clock for a stateless one. So a spring must be
+            // seeded and must NOT be back-dated (the back-date could not move
+            // it, and would only eat its settle lifetime via the expiry check),
+            // while a stateless curve must be back-dated and has no state to
+            // seed. What the DISPLACED leg was running only decides where the
+            // seed value comes from.
+            //
+            // durationMs is floored at Limits::MinAnimationDurationMs by
+            // resolveTransitionLifetimeMs, so the divisor below is positive.
+            const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+            const qreal displacedProgress =
+                qBound<qreal>(0.0, qreal(nowMs - old.startTimeMs) / qreal(old.durationMs), 1.0);
+            if (tr.progressCurve && tr.progressCurve->isStateful()) {
+                // Both legs read t off the same value: hide as t = value, show
+                // as t = 1 - value. So seeding value = 1 - <where the displaced
+                // leg was> lands the new leg's t exactly where the old one's
+                // was, in EITHER direction. lastPaintTimeMs starts at -1, so
+                // the first step takes dt 0 and the seed survives into the
+                // first frame intact. startTimeMs stays fresh: a spring's
+                // lifetime IS its settle time, not a fraction of one.
+                if (old.progressCurve && old.progressCurve->isStateful()) {
+                    // Spring displaced by spring: hand the integration state
+                    // over mirrored. Negating velocity preserves momentum
+                    // across the handover (t keeps travelling briefly, then
+                    // springs back) rather than restarting from rest.
+                    tr.progressCurveState.value = 1.0 - old.progressCurveState.value;
+                    tr.progressCurveState.velocity = -old.progressCurveState.velocity;
+                } else {
+                    // Spring displacing a STATELESS leg, which has no
+                    // integration state at all — easeProgress never wrote to
+                    // its CurveState, so reading old.progressCurveState would
+                    // hand back a default 0 and seed the far endpoint.
+                    //
+                    // Re-derive where that leg actually WAS instead: a
+                    // stateless curve's eased progress is a pure function of
+                    // its clock, so evaluating it at the displaced leg's own
+                    // progress reproduces the exact value it last painted.
+                    // Seeding off the RAW progress would be right only for a
+                    // linear pick and would leave an eased one to jump by its
+                    // own easing at the handover — the seam this whole block
+                    // exists to remove. Null curve is linear, so raw IS eased
+                    // there. Velocity starts at rest: a stateless leg carries
+                    // no momentum to hand over.
+                    const qreal oldEased = old.progressCurve
+                        ? ShaderInternal::clampProgressForCurve(old.progressCurve->evaluate(displacedProgress),
+                                                                old.progressCurve.get())
+                        : displacedProgress;
+                    tr.progressCurveState.value = 1.0 - oldEased;
+                    tr.progressCurveState.velocity = 0.0;
+                }
+            } else {
+                // Stateless: t is a pure function of the linear clock, so
+                // resuming IS a clock back-date. The displaced leg's raw
+                // progress p maps to the incoming leg's start at 1 - p, so the
+                // new leg retraces the ground the displaced one covered and
+                // settles in proportion to how far it actually got. Exact for a
+                // symmetric curve; an asymmetric one retraces off its own easing
+                // by the curve's own asymmetry, still continuous at the
+                // handover.
+                //
+                // When the DISPLACED leg was a spring, p is its wall-clock
+                // fraction rather than its integrated value, so the handover is
+                // a bounded jump rather than a seam. There is nothing better
+                // available — the two curves share no common progress term —
+                // and the jump is bounded by how far the two disagree, unlike
+                // the full-endpoint snap a fresh t = 0 would give.
+                tr.startTimeMs = nowMs - qint64((1.0 - displacedProgress) * qreal(tr.durationMs));
+            }
+        }
+        m_active.insert_or_assign(screen, std::move(tr));
+        insertedAny = true;
     }
-    return &compiled;
+
+    if (!insertedAny) {
+        // Every output took the no-cache branch, so the stale-hide-leg erases
+        // above may have emptied m_active without going through endOutput().
+        // Release for the same stale-flag reason reapPeekTransitions() does.
+        releaseFullScreenClaimIfIdle();
+        return;
+    }
+
+    // Deliberately NO setActiveFullScreenEffect claim on the peek path, unlike
+    // begin(). EffectsHandler::setActiveFullScreenEffect itself calls
+    // Workspace::setShowingDesktop(false) on every null↔non-null transition
+    // (kwin effecthandler.cpp, "if (activeChanged) ... setShowingDesktop(false)").
+    // Claiming here — inside the showingDesktopChanged(true) handler — would
+    // re-entrantly CANCEL the very show-desktop state the peek animates: KWin
+    // unhides every window before our first frame and the blend plays over
+    // still-visible windows. Releasing at settle would fire it a second time.
+    // This is also why windowaperture/eyeonscreen never pass fullScreen: true.
+    // Nothing is lost by not claiming: the show-desktop script effects ignore
+    // the claim anyway (syncShowDesktopEffectSuppression unloads them), and
+    // contention with Overview/Cube is handled by the bow-out check at the top.
+    KWin::effects->addRepaintFull();
 }
 
 bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
@@ -365,16 +544,56 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     const qint64 elapsed = nowMs - tr.startTimeMs;
     if (elapsed >= tr.durationMs) {
+        // A show leg whose FIRST paint arrives after expiry (an output asleep
+        // for the whole leg) never consumed its bare-desktop cache entry —
+        // drop it here or the texture is retained until the next hide leg.
+        if (tr.kind == Kind::PeekShow && !tr.captured) {
+            m_peekDesktopCache.erase(screen);
+        }
         endOutput(screen);
         return false;
     }
+    // Contention re-check, peek legs only. beginPeek bows out when another
+    // effect already holds the screen, but a claim taken AFTER the leg began
+    // never passed that gate, and returning true here suppresses the holder's
+    // paint entirely — PlasmaZonesEffect::paintScreen does not chain while we
+    // are painting the blend, and chaining is not an option (the live scene
+    // would overpaint the blend). The HIDE leg closes this gap by itself:
+    // setActiveFullScreenEffect cancels show desktop, which fires
+    // showingDesktopChanged(false) and reaps us through beginPeek's own bail.
+    // The SHOW leg has no such backstop — show desktop is already false, so
+    // that signal never comes — and without this the holder would stay
+    // invisible for the rest of the leg. Same policy beginPeek states for a
+    // foreign holder: their transition wins, and the peek's remaining frames
+    // are not worth suppressing it. A claim held by US (our own switch, which
+    // may still be live on another output) is not contention, and a SWITCH leg
+    // is excluded outright: it either owns the claim or was begun deliberately
+    // unclaimed under a holder that has since released.
+    if (tr.kind != Kind::Switch && KWin::effects) {
+        KWin::Effect* const holder = KWin::effects->activeFullScreenEffect();
+        if (holder && holder != m_effect) {
+            if (tr.kind == Kind::PeekShow && !tr.captured) {
+                m_peekDesktopCache.erase(screen);
+            }
+            endOutput(screen);
+            return false;
+        }
+    }
     // Ease the linear time progress through the per-event timing curve (resolved
-    // global → node → rule at begin time), so a `desktop.switch` node's curve
+    // global → desktop → leaf at begin time; both legs are windowless events,
+    // so the callers pass an empty WindowQuery and the rule layer is skipped),
+    // so a `desktop.switch` node's curve
     // (e.g. "Ease Out") shapes iTime — matching the per-window shader path. A
     // stateless curve evaluates the linear point; a stateful spring integrates
     // its CurveState toward target 1 by the inter-frame dt, mirroring
-    // AnimatedValue. Null curve → linear. Clamped to [0, 1] per the iTime
-    // contract. lastPaintTimeMs is advanced here, once per output paint tick.
+    // AnimatedValue. Null curve → linear. Only linearT is clamped to [0, 1]:
+    // easeProgress deliberately leaves an OVERSHOOTING curve unclamped,
+    // bounded to [MinCurveProgress, MaxCurveProgress] = [-1, 2] via
+    // boundCurveProgress, and the iTime contract makes packs clamp themselves.
+    // The show leg's 1 - easedT MIRRORS that range rather than widening it, so
+    // a spring's overshoot past 1 drives its t negative — the exact mirror of
+    // the hide leg overshooting past 1. lastPaintTimeMs is advanced here, once
+    // per output paint tick.
     // durationMs is guaranteed >= Limits::MinAnimationDurationMs by
     // resolveTransitionLifetimeMs in begin(), so the divisor is always positive.
     const qreal linearT = qBound<qreal>(0.0, qreal(elapsed) / qreal(tr.durationMs), 1.0);
@@ -384,7 +603,16 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     const qreal easedT = ShaderInternal::easeProgress(tr.progressCurve.get(), tr.progressCurveState, tr.lastPaintTimeMs,
                                                       nowMs, linearT, /*stepCurve=*/true);
     tr.lastPaintTimeMs = nowMs;
-    const float t = float(easedT);
+    // The peek SHOW leg is the hide leg played BACKWARDS: same endpoints (FROM
+    // = windows scene, TO = bare desktop), progress running 1 → 0. Reversing
+    // TIME rather than swapping the textures is what makes an ASYMMETRIC pack
+    // retrace its own motion — swap-with-forward-t is only equivalent to a
+    // reverse for a symmetric crossfade. Peek Recede's hide leg shrinks the
+    // windows away; under a swap its show leg would shrink the WALLPAPER away
+    // to reveal static windows, where a reverse correctly grows the windows
+    // back. Matches windowaperture's own return leg (redirect Backward) and
+    // the packs' documented "FROM is always the windows scene" contract.
+    const float t = float(tr.kind == Kind::PeekShow ? 1.0 - easedT : easedT);
 
     // Compile BEFORE capturing. Each capture allocates an output-sized texture and
     // renders the entire stacking order, so doing it first would burn two
@@ -396,17 +624,102 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
     if (!cs || !cs->shader) {
         // Compile failed — abandon the transition rather than paint a black
         // screen; the normal scene paints the settled desktop.
+        //
+        // Drop the cache entry like the other never-painted show-leg exits: we
+        // are ahead of the capture block, so a PeekShow here has not consumed
+        // it, and compiledShader caches the failure as a sentinel — the next
+        // hide leg abandons at this same line and never re-seeds, so the
+        // texture would stay pinned for the rest of the session.
+        if (tr.kind == Kind::PeekShow && !tr.captured) {
+            m_peekDesktopCache.erase(screen);
+        }
         endOutput(screen);
         return false;
     }
 
-    // Deferred capture (once). The OUTGOING desktop is no longer current, so its
-    // windows are reconstructed via drawWindow. The INCOMING desktop IS the live
-    // scene now, so it is captured via effects->paintScreen — drawWindow on the
-    // current desktop's already-visible windows renders black.
+    // Deferred capture (once), per kind.
     if (!tr.captured) {
-        tr.fromTex = captureDesktop(tr.from, screen, renderTarget, viewport);
-        tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
+        switch (tr.kind) {
+        case Kind::Switch:
+            // The OUTGOING desktop is no longer current, so its windows are
+            // reconstructed via the per-window composite. The INCOMING desktop
+            // IS the live scene now, so it is captured via effects->paintScreen
+            // — drawWindow on the current desktop's already-visible windows
+            // renders black.
+            tr.fromTex = captureDesktop(tr.from, screen, renderTarget, viewport);
+            tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
+            break;
+        case Kind::PeekHide:
+            // TO first: the live scene as-is, which with the windows hidden IS
+            // the bare desktop (wallpaper + docks). Shared into the per-output
+            // cache so the later show leg has a FROM endpoint it can no longer
+            // capture itself. FROM = the windows scene, reconstructed as that
+            // same bare desktop (blitted in as the base layer) + the hidden
+            // windows composited back on top — see capturePeekWindowsScene for
+            // why a live capture cannot include them this frame.
+            tr.toTex = captureLiveScene(mask, screen, renderTarget, viewport);
+            if (tr.toTex) {
+                tr.fromTex = capturePeekWindowsScene(tr.toTex.get(), mask, screen, renderTarget, viewport);
+                // Seed the cache only once BOTH captures succeed. A failed FROM
+                // composite abandons this leg below, and a cache entry seeded by
+                // a leg that never blended would hand the next show leg a bare
+                // desktop whose paired hide leg never painted — the cache's
+                // invariant is that a hide leg actually ran against it.
+                if (tr.fromTex) {
+                    m_peekDesktopCache[screen] = tr.toTex;
+                }
+            }
+            // A null toTex abandons the transition below — no point rendering
+            // the FROM composite (a full scene pass) just to throw it away.
+            break;
+        case Kind::PeekShow: {
+            // Endpoints are IDENTICAL to the hide leg — FROM = the windows
+            // scene (live: KWin unhid the windows before showingDesktopChanged
+            // fired, so a plain live capture has them), TO = the hide leg's
+            // cached bare desktop — because this leg reverses TIME rather than
+            // swapping textures (see the t computation above). The cache entry
+            // is single-consumption, taken out of the map here whatever
+            // happens next: a bare desktop is only valid for the show leg that
+            // immediately follows its hide leg (the next hide re-seeds it),
+            // and holding an output-sized GPU texture between peeks buys
+            // nothing. It must also still match this frame's capture geometry
+            // — an output scale/mode change or an HDR format flip between the
+            // legs makes it unusable, in which case the null toTex below
+            // abandons the transition and the restored windows appear
+            // instantly (KWin's default). Validation is deliberately size +
+            // internalFormat only; two staleness classes are accepted rather
+            // than chased. A colour-space change on the SAME format (an SDR
+            // brightness tweak mid-peek) blends a slightly stale-space desktop
+            // for one leg, which is not worth carrying a ColorDescription per
+            // entry. And the capture is AGE-blind: a peek held over a
+            // slideshow wallpaper or a clock widget replays that content as it
+            // was at the hide leg, so the show leg's first frame rewinds it
+            // and settles forward to live. Neither is fixable at reasonable
+            // cost — the bare desktop genuinely cannot be re-captured behind
+            // the restored windows.
+            std::shared_ptr<KWin::GLTexture> desktopTex;
+            const auto cachedIt = m_peekDesktopCache.find(screen);
+            if (cachedIt != m_peekDesktopCache.end()) {
+                desktopTex = std::move(cachedIt->second);
+                m_peekDesktopCache.erase(cachedIt);
+            }
+            if (desktopTex && desktopTex->size() != viewport.deviceSize()) {
+                desktopTex = nullptr;
+            }
+            if (desktopTex) {
+                const KWin::GLFramebuffer* const fb = renderTarget.framebuffer();
+                const KWin::GLTexture* const targetTex = fb ? fb->colorAttachment() : nullptr;
+                if (targetTex && targetTex->internalFormat() != desktopTex->internalFormat()) {
+                    desktopTex = nullptr;
+                }
+            }
+            tr.toTex = desktopTex;
+            tr.fromTex = desktopTex
+                ? std::shared_ptr<KWin::GLTexture>(captureLiveScene(mask, screen, renderTarget, viewport))
+                : nullptr;
+            break;
+        }
+        }
         tr.captured = true;
     }
     if (!tr.fromTex || !tr.toTex) {
@@ -514,154 +827,6 @@ bool DesktopTransitionManager::paintOutput(const KWin::RenderTarget& renderTarge
         KWin::GLFramebuffer::popFramebuffer();
     }
     return true;
-}
-
-void DesktopTransitionManager::endOutput(KWin::LogicalOutput* screen)
-{
-    m_active.erase(screen);
-    releaseFullScreenClaimIfIdle();
-}
-
-void DesktopTransitionManager::releaseFullScreenClaimIfIdle()
-{
-    if (!m_active.empty() || !m_fullScreenClaimed || !KWin::effects) {
-        return;
-    }
-    // Clear the claim only while KWin still reports it as OURS. Overview or Cube
-    // can take the screen while our transition is in flight; writing nullptr
-    // unconditionally would drop THEIR claim and unsuppress every effect that was
-    // bowing out to them. Dropping our own flag either way keeps us from later
-    // clearing a claim we no longer hold.
-    if (KWin::effects->activeFullScreenEffect() == m_effect) {
-        KWin::effects->setActiveFullScreenEffect(nullptr);
-    }
-    m_fullScreenClaimed = false;
-}
-
-void DesktopTransitionManager::ensureGlContextCurrent()
-{
-    if (KWin::effects) {
-        KWin::effects->makeOpenGLContextCurrent();
-    }
-}
-
-void DesktopTransitionManager::scheduleRepaints()
-{
-    if (!KWin::effects) {
-        return; // only reached from postPaintScreen (effects live), guard for parity
-    }
-    // Reap expired transitions by WALL CLOCK, not by being painted. paintOutput()
-    // is the only other settle path, and it runs only for an output that is
-    // actually painting — so an output that stops being painted mid-transition
-    // (DPMS-asleep but enabled, or one KWin has stopped rendering) would sit in
-    // m_active forever while a sibling kept painting, and the fullscreen claim
-    // would never release. postPaintScreen calls us on every frame regardless of
-    // which output painted, so expiry is handled here even for an unpainted one.
-    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
-    bool erasedAny = false;
-    for (auto it = m_active.begin(); it != m_active.end();) {
-        if (nowMs - it->second.startTimeMs >= it->second.durationMs) {
-            if (!erasedAny) {
-                // The captured GLTextures free on erase and want a live context.
-                ensureGlContextCurrent();
-                erasedAny = true;
-            }
-            // Repaint the output we are about to drop. The blend was the last
-            // thing painted on it, and the settled scene still has to be drawn —
-            // KWin only composites on damage, so without this the output keeps
-            // presenting the frozen final blend frame until something unrelated
-            // damages it. paintOutput's settle path does not need this because it
-            // returns false and paintScreen falls through to the real scene in the
-            // SAME frame; a reap has no such frame to fall through to.
-            KWin::effects->addRepaint(it->first->geometry());
-            it = m_active.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    if (erasedAny) {
-        releaseFullScreenClaimIfIdle();
-    }
-    // Keys are always non-null: begin() skips null outputs and outputRemoved()
-    // reaps a disconnected one, so a null screen can never be stored.
-    for (const auto& entry : m_active) {
-        KWin::effects->addRepaint(entry.first->geometry());
-    }
-}
-
-void DesktopTransitionManager::outputRemoved(KWin::LogicalOutput* screen)
-{
-    // A disconnected output must not linger as a key in m_active: paintOutput()
-    // and scheduleRepaints() deref the key (UAF), and the fullscreen-effect claim
-    // would never release once its output vanished mid-transition. endOutput()
-    // drops the entry and releases the claim when the last transition goes.
-    if (m_active.find(screen) == m_active.end()) {
-        return; // no live transition for this output
-    }
-    // screenRemoved fires off the paint thread; endOutput() erases the entry and
-    // frees its captured GLTextures, which want a current GL context (endOutput's
-    // other caller, paintOutput, is already on the paint thread with one current).
-    ensureGlContextCurrent();
-    endOutput(screen);
-}
-
-void DesktopTransitionManager::desktopRemoved(KWin::VirtualDesktop* desktop)
-{
-    // A desktop removed mid-switch leaves any OutputTransition still referencing
-    // it as `from` holding a dangling VirtualDesktop*: the deferred
-    // captureDesktop(tr.from, ...) only ever compares the pointer (isOnDesktop),
-    // never derefs it, so this is not a crash — but a freed pointer must not
-    // linger and be compared against a live desktop. Drop every transition whose
-    // outgoing desktop just vanished.
-    bool erasedAny = false;
-    for (auto it = m_active.begin(); it != m_active.end();) {
-        if (it->second.from == desktop) {
-            // Erasing frees the entry's captured GLTextures; desktopRemoved fires
-            // off the paint thread, so make the context current before the first
-            // free — only when there is actually something to free.
-            if (!erasedAny) {
-                ensureGlContextCurrent();
-                erasedAny = true;
-            }
-            // Repaint the output for the same reason the wall-clock reap does: the
-            // blend was the last thing drawn on it and the settled scene still
-            // needs a frame, which nothing else will schedule.
-            if (KWin::effects) {
-                KWin::effects->addRepaint(it->first->geometry());
-            }
-            it = m_active.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    if (erasedAny) {
-        releaseFullScreenClaimIfIdle();
-    }
-}
-
-void DesktopTransitionManager::invalidateShaderCache()
-{
-    // Fires from the AnimationShaderRegistry file watcher between frames, where the
-    // compositor GL context is NOT current. m_shaderCache owns GLShaders whose
-    // destruction issues glDelete* calls that want a current context — the same
-    // discipline reset() applies. Teardown (!effects) reclaims them regardless.
-    ensureGlContextCurrent();
-    m_shaderCache.clear();
-}
-
-void DesktopTransitionManager::reset()
-{
-    // Teardown path (compositor reset / plugin unload). Make the compositor
-    // context current so the captured GLTextures (m_active) and compiled
-    // GLShaders (m_shaderCache) free on a live context; when KWin::effects is
-    // already gone the driver is tearing GL down and reclaims them regardless.
-    // Clearing m_shaderCache HERE — not leaving it for ~DesktopTransitionManager,
-    // which deliberately can't make a context current — is what makes this the
-    // real "release GL resources" path the header documents.
-    ensureGlContextCurrent();
-    m_active.clear();
-    m_shaderCache.clear();
-    releaseFullScreenClaimIfIdle();
 }
 
 } // namespace PlasmaZones

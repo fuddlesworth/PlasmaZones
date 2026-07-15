@@ -154,8 +154,9 @@ public:
     // Per-window borders are rendered by routing the redirected window through
     // the offscreen border MapTexture shader (see the drawWindow override below +
     // decorations.cpp), NOT here. paintScreen is overridden solely for the
-    // full-screen virtual-desktop switch transition: while one is live,
-    // m_desktopTransition.paintOutput draws the two-desktop blend for that output
+    // full-screen desktop transitions (the virtual-desktop switch and the
+    // show-desktop peek, which share the same path): while one is live,
+    // m_desktopTransition.paintOutput draws the two-texture blend for that output
     // and we skip the normal scene; otherwise this chains straight through.
     void paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, int mask,
                      const KWin::Region& deviceRegion, KWin::LogicalOutput* screen) override;
@@ -326,10 +327,10 @@ private:
      *
      * Returns true when @p w is a structurally unmanageable window kind
      * (special/desktop/dock/fullscreen/skipSwitcher, or the transient/dialog/
-     * menu/popup/tooltip family). Single source of truth behind both
-     * shouldHandleWindow()'s structural clause and notifyWindowActivated()'s
-     * focus-tracking filter, so the two can never drift (discussion #461
-     * item 11).
+     * menu/popup/tooltip family). Single source of truth behind
+     * shouldHandleWindow()'s structural clause, notifyWindowActivated()'s
+     * focus-tracking filter and classifyWindowKind(), so they can never drift
+     * (discussion #461 item 11).
      *
      * @param w            window to classify; must be non-null.
      * @param rejectReason when non-null, set to a human-readable reason on a
@@ -439,11 +440,17 @@ private:
      * @brief Whether KWin is currently in the show-desktop / peek state.
      *
      * Workspace::activateWindow() cancels show-desktop the moment any hidden
-     * window is activated, so every AUTOMATIC activation path (focus-follows-
-     * mouse, retile reactivation, unfloat refocus) must bail while this is
-     * true or a peek collapses on the first cursor move. Deliberate user
-     * actions (daemon focus requests, D-Bus activate) stay ungated — ending
-     * the peek is the correct response to explicit intent, matching KWin.
+     * window is activated, so every activation path the EFFECT ITSELF drives
+     * must bail while this is true or a peek collapses on the first cursor move
+     * or engine relayout. Both origins are covered: effect-local paths that
+     * never touch the bus (focus-follows-mouse in snaphandler and
+     * autotilehandler) and daemon-relayed ones (retile reactivation, unfloat
+     * refocus, the snap engine's activate requests, the autotile engine's
+     * post-relayout focus flush, and the compositor bridge's activateWindow).
+     * For the relayed ones the effect cannot tell a user-initiated daemon
+     * request (a keyboard navigation shortcut) from an engine-initiated one —
+     * both arrive on the same D-Bus signals — so all of them are gated; only
+     * KWin-native activation (clicking a surface) ends a peek.
      */
     static bool isShowingDesktop();
 
@@ -771,12 +778,13 @@ private:
     // Resolve the fully-cascaded motion Profile (curve + duration) for
     // @p profilePath: global animator profile → category "All" → per-node
     // motion-tree overrides → per-window Rule override. This is the single SSOT
-    // for the per-event timing cascade, shared by all three per-event timing
+    // for the per-event timing cascade, shared by all four per-event timing
     // consumers — the animator-driven geometry path (applyWindowGeometry), the
-    // time-driven shader path (tryBeginShaderForEvent) and the desktop switch
-    // (the desktopChanged handler) — so each honours the same global → All →
+    // time-driven shader path (tryBeginShaderForEvent), the desktop switch (the
+    // desktopChanged handler) and the show-desktop peek (the
+    // showingDesktopChanged handler) — so each honours the same global → All →
     // node resolution. Pass a windowless @p query (hasWindow() false) + empty
-    // @p windowId for events with no per-window rule scope (desktop switch);
+    // @p windowId for events with no per-window rule scope (both desktop legs);
     // the Rule layer is then skipped and only the tree cascade applies.
     //
     // The returned DURATION is clamped into [Limits::MinAnimationDurationMs,
@@ -1397,6 +1405,23 @@ private:
     /// an unchanged set and restarts capture at most once per change).
     bool m_enableAudioVisualizer = false;
     PhosphorAudio::SpectrumOptions m_audioOptions;
+
+    /// KWin show-desktop script effects syncShowDesktopEffectSuppression
+    /// unloaded because a `desktop.peek` pack is assigned. Only names WE
+    /// unloaded are recorded, so clearing the pack (or unloading this effect)
+    /// loads back exactly what the user had — never an effect KWin left
+    /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop
+    /// Effects KCM WHILE the suppression holds it unloaded leaves its name
+    /// recorded (the KCM apply is a no-op on the already-unloaded effect), so
+    /// the eventual restore re-loads it for the rest of the session; the next
+    /// session honours kwinrc, which the suppression never writes. Querying
+    /// kwinrc from the effect to close this would add a config dependency the
+    /// plugin doesn't otherwise need.
+    QStringList m_suppressedShowDesktopEffects;
+    /// Set by the aboutToQuit latch (constructor): distinguishes a runtime
+    /// unload of this effect from compositor shutdown in the destructor's
+    /// suppressed-effect restore. See ~PlasmaZonesEffect.
+    bool m_compositorShuttingDown = false;
     /// Coalescing latch for scheduleEffectAudioSync: many decoration/settings
     /// callbacks can fire in one event-loop turn (a focus change removes then
     /// re-adds a decoration); collapsing them to one syncEffectAudioState keeps
@@ -1424,6 +1449,23 @@ private:
     /// async settings replies settle to ONE net decision at event-loop return and
     /// the compositor thread never blocks on cava stop()+respawn mid-refresh.
     void scheduleEffectAudioSync();
+
+    /// Unload KWin's show-desktop script effects (windowaperture / eyeonscreen)
+    /// while the peek would actually run — a `desktop.peek` pack is assigned,
+    /// installed, desktop-contract, AND animations are enabled — and load back
+    /// exactly the ones WE unloaded when any of that stops holding. Unloading
+    /// is the only suppression that works: they never consult
+    /// activeFullScreenEffect() (and the peek deliberately takes no fullscreen
+    /// claim anyway, see DesktopTransitionManager) — left loaded they would
+    /// animate invisibly under our blend AND leak their transforms into the
+    /// peek captures (the capture paths continue down the effect chain).
+    /// Idempotent; re-asserted from every path that can change the predicate
+    /// or the loaded-effects list: the shader-profile-tree load, the animation
+    /// registry commit (bringup + pack install/uninstall), the animationsEnabled
+    /// setting, and reconfigure() (a Desktop Effects KCM apply re-loads the
+    /// scripts from kwinrc). The destructor restores them on a runtime unload
+    /// but skips during compositor shutdown (m_compositorShuttingDown).
+    void syncShowDesktopEffectSuppression();
 
     /// True when any decorated window's resolved chain carries an audio-reactive
     /// pack (SurfaceShaderEffect::audio). Read from pack METADATA (no compile
@@ -1619,7 +1661,8 @@ private:
     // and transition lifecycle are managed by ShaderTransitionManager.
     ShaderTransitionManager m_shaderManager;
 
-    // Full-screen virtual-desktop switch transition. By-value + `this` ctor,
+    // Full-screen desktop transitions: the virtual-desktop switch and the
+    // show-desktop peek, which share the same path. By-value + `this` ctor,
     // same ownership shape as m_shaderManager; must be initialised AFTER it in
     // the ctor init list to match declaration order.
     DesktopTransitionManager m_desktopTransition;
@@ -1747,8 +1790,10 @@ private:
     // pass (no morph quad deform / re-capture).
     bool m_capturingSnapshot = false;
 
-    /// True while DesktopTransitionManager::captureDesktop drives paintWindow
-    /// DIRECTLY (outside KWin's chain walk). paintWindow's tail then terminates
+    /// True while DesktopTransitionManager::compositeWindowsInto drives
+    /// paintWindow DIRECTLY (outside KWin's chain walk). That is the shared tail
+    /// of BOTH desktop captures — captureDesktop (the switch legs) and
+    /// capturePeekWindowsScene (the peek's windows layer). paintWindow's tail then terminates
     /// with effects->drawWindow instead of continuing the paintWindow chain:
     /// the chain iterator sits at begin() in that context, so chaining would
     /// re-enter our own paintWindow (double fold, animator transform applied

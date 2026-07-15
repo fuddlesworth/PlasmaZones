@@ -3,23 +3,22 @@
 
 #pragma once
 
-#include <PhosphorAnimation/AnimationLimits.h> // Limits::{Min,Max,Default}AnimationDurationMs
 #include <PhosphorAnimation/AnimationShaderContract.h> // kMaxCustomParams
 #include <PhosphorAnimation/Curve.h> // per-event timing curve + CurveState
 
 #include <QHash> // std::hash<QString> specialization (used by the unordered_map key below)
+#include <QRectF>
 #include <QString>
 #include <QVariant> // QVariantMap
 #include <QVector4D>
 
 #include <array>
-#include <chrono>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 
 namespace KWin {
 class EffectWindow;
-class GLFramebuffer;
 class GLShader;
 class GLTexture;
 class LogicalOutput;
@@ -33,23 +32,40 @@ namespace PlasmaZones {
 
 class PlasmaZonesEffect;
 
-/// Full-screen virtual-desktop switch transition.
+/// Full-screen two-texture transitions: virtual-desktop switch + show-desktop peek.
 ///
 /// Unlike the per-window shader transitions (ShaderTransitionManager, which runs
-/// on the OffscreenEffect's redirected per-window quad), a desktop switch is a
-/// full-screen TWO-texture blend: it captures the OUTGOING desktop and the
-/// INCOMING desktop into per-output FBOs and cross-fades between them with a
-/// `desktop.switch` transition shader (data/animations/<id>, appliesTo
+/// on the OffscreenEffect's redirected per-window quad), these are full-screen
+/// TWO-texture blends: two per-output scene captures cross-faded with a
+/// desktop-class transition shader (data/animations/<id>, appliesTo
 /// ["desktop"], sampling uFromDesktop / uToDesktop via desktop_transition.glsl).
+/// A desktop SWITCH blends the OUTGOING desktop into the INCOMING one; a
+/// show-desktop PEEK blends the windows scene into the bare desktop, forwards
+/// on the hide leg and backwards on the show leg, driven by the same shader
+/// node (`desktop.peek`).
 ///
-/// The effect owns one instance. On `desktopChanged` the effect resolves the
-/// `desktop.switch` shader from the shader profile tree and calls begin(); if no
-/// shader is assigned begin() is a no-op and KWin's normal switch proceeds. When
-/// a transition is live begin() claims `setActiveFullScreenEffect(m_effect)` so
-/// KWin's built-in Slide bows out, forces a full-screen paint via the mask, and
-/// routes paintScreen through paintOutput() which draws the blend instead of the
-/// live scene until progress reaches 1. The claim is taken only when no other
-/// effect holds the screen, and released only while KWin still reports it as ours.
+/// The effect owns one instance. On `desktopChanged` / `showingDesktopChanged`
+/// the effect resolves the `desktop.switch` / `desktop.peek` shader from the
+/// shader profile tree and calls begin() / beginPeek(). With no shader assigned
+/// begin() returns immediately, while beginPeek() still reaps any live peek leg
+/// (see its empty-id contract below). Either way KWin's normal behaviour
+/// proceeds. When a transition does start the manager forces a full-screen paint
+/// via the mask and routes paintScreen through paintOutput(), which draws the
+/// blend instead of the live scene until progress reaches 1.
+///
+/// The fullscreen claim differs per kind. A desktop SWITCH claims
+/// `setActiveFullScreenEffect(m_effect)` so KWin's built-in Slide bows out —
+/// taken only when no other effect holds the screen, released only while KWin
+/// still reports it as ours. A PEEK never touches the claim:
+/// EffectsHandler::setActiveFullScreenEffect itself cancels show desktop on
+/// every null↔non-null transition, so claiming from the showingDesktopChanged
+/// handler would re-entrantly unhide every window (the "animation plays but
+/// windows don't hide" bug). beginPeek instead bows out if another effect
+/// already holds the screen. Suppressing KWin's show-desktop script effects
+/// doesn't need the claim either (windowaperture / eyeonscreen never consult
+/// it) — those are unloaded by syncShowDesktopEffectSuppression while a peek
+/// pack is assigned, which also keeps the peek captures free of their
+/// transforms.
 class DesktopTransitionManager
 {
 public:
@@ -73,6 +89,34 @@ public:
     void begin(KWin::VirtualDesktop* from, KWin::VirtualDesktop* to, KWin::LogicalOutput* output,
                const QString& effectId, const QVariantMap& params, int durationMs,
                std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
+
+    /// Start a show-desktop peek transition on every output. @p showing follows
+    /// EffectsHandler::showingDesktopChanged: true is the HIDE leg, false the
+    /// SHOW leg. Inputs mirror begin() and are resolved by the caller from the
+    /// `desktop.peek` node.
+    ///
+    /// Both legs share ONE endpoint pair — FROM = the windows scene, TO = the
+    /// bare desktop — and differ only in the direction time runs: the hide leg
+    /// drives progress 0 → 1, the show leg 1 → 0, so the show leg is literally
+    /// the hide leg played backwards and an asymmetric pack retraces its own
+    /// motion (see paintOutput's t computation for why swapping the textures
+    /// with forward progress would NOT be equivalent). The show leg takes its
+    /// TO from the bare-desktop texture the hide leg cached per output — that
+    /// scene cannot be re-captured once the windows are back (visible windows
+    /// render black through the per-window composite, see captureDesktop's
+    /// incoming-desktop note) — and captures its FROM live, since KWin unhides
+    /// the windows before the signal. Outputs with no usable cache entry are
+    /// skipped and settle instantly.
+    ///
+    /// An EMPTY @p effectId is NOT a no-op: it reaps any live peek leg and drops
+    /// the bare-desktop cache, then returns. Callers rely on this — the
+    /// showingDesktopChanged handler calls beginPeek unconditionally, with an
+    /// empty id when no pack is runnable, so that clearing the pack mid-peek
+    /// tears the leg down instead of stranding it. The same reap runs on every
+    /// other bail-out (a foreign fullscreen claim, a pack that failed to
+    /// prepare).
+    void beginPeek(bool showing, const QString& effectId, const QVariantMap& params, int durationMs,
+                   std::shared_ptr<const PhosphorAnimation::Curve> progressCurve = nullptr);
 
     /// True while any output has a live transition. Feeds PlasmaZonesEffect::isActive()
     /// so KWin keeps the effect in the paint chain.
@@ -139,11 +183,32 @@ public:
     void reset();
 
 private:
+    /// What a transition blends. Switch reconstructs the outgoing desktop and
+    /// captures the incoming live scene. Both peek legs share ONE endpoint
+    /// pair and differ only in the direction time runs: FROM = the windows
+    /// scene (reconstructed on the hide leg from the just-hidden windows held
+    /// renderable, captured live on the show leg — they are back by then), TO
+    /// = the bare desktop (captured live on the hide leg, replayed from the
+    /// per-output cache on the show leg — it cannot be re-captured once the
+    /// windows return).
+    enum class Kind {
+        Switch,
+        PeekHide,
+        PeekShow,
+    };
+
     struct OutputTransition
     {
+        Kind kind = Kind::Switch;
+        // Outgoing desktop for Kind::Switch (captureDesktop derefs it deferred,
+        // see desktopRemoved). Stays null for the peek kinds — they reference no
+        // desktop, so desktop removal never reaps them.
         KWin::VirtualDesktop* from = nullptr;
-        std::unique_ptr<KWin::GLTexture> fromTex;
-        std::unique_ptr<KWin::GLTexture> toTex;
+        // shared_ptr, not unique_ptr: the peek hide leg shares its bare-desktop
+        // capture with m_peekDesktopCache, which outlives the transition to feed
+        // the show leg. The switch kind still holds the only reference.
+        std::shared_ptr<KWin::GLTexture> fromTex;
+        std::shared_ptr<KWin::GLTexture> toTex;
         QString effectId;
         // Resolved p_<name> values packed into customParams[] slots (metadata
         // defaults merged with the profile's overrides). Same value for every
@@ -163,16 +228,18 @@ private:
         QVector4D switchDelta;
         qint64 startTimeMs = 0;
         int durationMs = 0;
-        // Per-event timing curve for `desktop.switch`, resolved through the
-        // cascade `global → desktop → desktop.switch` (an override on the bare
-        // `desktop` node would apply, though the UI exposes only the leaf, so it
-        // has no separate user-facing "All"). paintOutput eases the linear
+        // Per-event timing curve, resolved through the cascade
+        // `global → desktop → desktop.switch` or `→ desktop.peek` for whichever
+        // event began this leg. paintOutput eases the linear
         // `elapsed / durationMs` through it before uploading iTime, so the node's
-        // curve (e.g. "Ease Out") shapes the switch exactly as it shapes the
+        // curve (e.g. "Ease Out") shapes the transition exactly as it shapes the
         // per-window shader path. Null → linear iTime.
         std::shared_ptr<const PhosphorAnimation::Curve> progressCurve;
         // Integration state for a STATEFUL (spring) progressCurve; stepped toward
         // target 1 by the inter-frame dt in paintOutput. Unused for stateless.
+        // A peek leg displaced by its opposite re-seeds this mirrored
+        // (value = 1 - old, velocity negated) — see beginPeek, which is where the
+        // resume for a spring lives, since a spring reads nothing from the clock.
         PhosphorAnimation::CurveState progressCurveState;
         // Previous paintOutput tick time (shader-clock ms) for the spring dt.
         // -1 = no prior paint (first step gets dt 0).
@@ -183,6 +250,17 @@ private:
         int frameCount = 0;
         bool captured = false;
     };
+
+    /// An array of @p N uniform locations, every slot "unset" (-1).
+    template<std::size_t N>
+    static constexpr std::array<int, N> makeUnsetLocations()
+    {
+        std::array<int, N> locs{};
+        for (int& loc : locs) {
+            loc = -1;
+        }
+        return locs;
+    }
 
     /// Compiled desktop-transition shader + cached uniform locations. Keyed by
     /// effectId, mirroring ShaderTransitionManager's per-effect cache.
@@ -197,8 +275,15 @@ private:
         int iSwitchDeltaLoc = -1;
         // customParams[slot] / customColors[slot] uniform locations (-1 when the
         // shader omits the slot — the GLSL compiler prunes unreferenced ones).
-        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsLoc{};
-        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColorsLoc{};
+        // Filled with -1 rather than left value-initialised: `{}` would default
+        // every slot to 0, which is a VALID location, so an early-out between the
+        // cache emplace and the location loop would hand out slot 0 for every
+        // pruned uniform. The scalar members above default to -1 for the same
+        // reason; these have to agree with them.
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams> customParamsLoc =
+            makeUnsetLocations<PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams>();
+        std::array<int, PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors> customColorsLoc =
+            makeUnsetLocations<PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors>();
     };
 
     /// Render every window on @p desktop that intersects @p screen into a fresh
@@ -228,12 +313,64 @@ private:
                                                       const KWin::RenderTarget& outputTarget,
                                                       const KWin::RenderViewport& outputViewport);
 
+    /// The peek hide leg's FROM texture: the bare desktop with every
+    /// show-desktop-hidden window composited back on top through the direct
+    /// per-window path, the same way captureDesktop reconstructs the outgoing
+    /// desktop's non-scene windows (the windows are already out of this frame's
+    /// scene walk by the time showingDesktopChanged fires, so a live capture
+    /// cannot include them; visibility refs cannot do the job either — a ref
+    /// taken during paintOutput only affects the NEXT frame's scene walk).
+    ///
+    /// @p bareDesktop is the already-captured TO texture: it is blitted in as
+    /// the base layer when the hardware supports framebuffer blits, so the
+    /// bare-desktop scene is rendered once per peek, not twice. Pass null (or
+    /// run on a no-blit GPU) and the base layer re-renders via
+    /// effects->paintScreen instead — identical output, one extra scene pass.
+    std::unique_ptr<KWin::GLTexture> capturePeekWindowsScene(KWin::GLTexture* bareDesktop, int mask,
+                                                             KWin::LogicalOutput* screen,
+                                                             const KWin::RenderTarget& outputTarget,
+                                                             const KWin::RenderViewport& outputViewport);
+
+    /// Composite every stacking-order window that passes @p includeWindow into
+    /// the CURRENTLY PUSHED framebuffer, bottom-to-top, through the effect's
+    /// own per-window pipeline in direct-drive mode (m_directPaintCapture).
+    /// Shared tail of captureDesktop and capturePeekWindowsScene — both
+    /// reconstruct windows that are NOT in this frame's scene walk; windows the
+    /// live scene IS painting render black through this path, so filters must
+    /// exclude them.
+    void compositeWindowsInto(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                              const QRectF& logicalGeometry,
+                              const std::function<bool(KWin::EffectWindow*)>& includeWindow);
+
+    /// Shared resolve prologue of begin() and beginPeek(): validates the pack
+    /// (installed + desktop-contract via shaderEffectAppliesToEventPath against
+    /// @p eventPath) and fills @p proto's effectId, parameter pools, start time,
+    /// clamped duration and curve. Returns false when the transition must not
+    /// run (the caller bails and KWin's native behaviour proceeds).
+    bool prepareTransitionPrototype(const QString& effectId, const QVariantMap& params, const QString& eventPath,
+                                    int durationMs, std::shared_ptr<const PhosphorAnimation::Curve> progressCurve,
+                                    OutputTransition* proto);
+
     /// Compile (or fetch from cache) the desktop-transition shader for @p effectId.
-    /// Returns nullptr when the effect id is unknown or compilation failed.
+    /// NEVER null: returns the cache entry, whose `shader` is null when the id is
+    /// unknown or compilation failed. Callers must check `->shader`. Caching the
+    /// failure as a non-null sentinel is what keeps a broken pack from recompiling
+    /// every frame. Implemented in desktoptransitionshader.cpp (the assembly part).
     CompiledDesktopShader* compiledShader(const QString& effectId);
+
+    /// Drop every live PEEK transition (kind-guarded; switches keep running),
+    /// repainting each affected output. Called by every beginPeek bail-out so
+    /// a stranded hide leg never keeps blending against a reversed toggle.
+    void reapPeekTransitions();
 
     /// Free an output's transition and, when the last one goes, release the
     /// active-fullscreen-effect claim.
+    ///
+    /// This and the other teardown members (releaseFullScreenClaimIfIdle,
+    /// ensureGlContextCurrent, scheduleRepaints, outputRemoved, desktopRemoved,
+    /// invalidateShaderCache, reset — the last five are declared in the public
+    /// section above) are implemented in desktoptransitionteardown.cpp, the
+    /// class's teardown part.
     void endOutput(KWin::LogicalOutput* screen);
 
     /// Release the active-fullscreen-effect claim once no transition is left.
@@ -243,7 +380,21 @@ private:
     /// that Overview or Cube took while our transition was in flight, unsuppressing
     /// every effect that was bowing out to THEM. The claim in begin() is guarded
     /// symmetrically: it only takes the screen when nobody else holds it.
-    void releaseFullScreenClaimIfIdle();
+    ///
+    /// DEFERS while show-desktop is active, keeping both the claim and the flag.
+    /// setActiveFullScreenEffect cancels show desktop in EITHER direction, so a
+    /// switch that claimed before the user triggered show-desktop would, on
+    /// settling, hide the windows and then spontaneously bring them back. begin()'s
+    /// `!isShowingDesktop()` guard only covers TAKING the claim; this covers
+    /// dropping it. The deferred release is retried by the peek path: every
+    /// showingDesktopChanged runs beginPeek, whose every bail-out reaps and lands
+    /// back here, and by the showing=false edge KWin has already cleared its own
+    /// state, so the write is a no-op against it.
+    ///
+    /// @param force skip the show-desktop deferral. For teardown only (reset()),
+    /// where a claim pointing at a dying effect must not outlive it — the cancel
+    /// is moot when the compositor is dropping the effect anyway.
+    void releaseFullScreenClaimIfIdle(bool force = false);
 
     /// Make the compositor GL context current so GLTexture/GLShader frees issue
     /// their glDelete* against a live context. Every off-paint-thread mutator that
@@ -257,6 +408,24 @@ private:
     // QHash, which is copy-on-write and would instantiate a deleted copy ctor.
     std::unordered_map<KWin::LogicalOutput*, OutputTransition> m_active;
     std::unordered_map<QString, CompiledDesktopShader> m_shaderCache;
+    // Per-output bare-desktop capture seeded by the peek HIDE leg and consumed
+    // by the SHOW leg (which cannot re-capture it — the windows are visible
+    // again by the time showingDesktopChanged(false) fires). Refreshed on every
+    // hide leg; validated against the show leg's viewport size and target format
+    // before use. Seeded only once BOTH of the hide leg's captures succeed, so
+    // an entry always has a hide leg that actually blended behind it.
+    // Drop sites: with its output (outputRemoved), on reset(), on the three
+    // beginPeek bail-outs that reap (reapPeekTransitions — a broken hide/show
+    // pairing means the capture may no longer match the desktop's content; the
+    // fourth bail-out, !insertedAny, needs no drop because it fires only when
+    // every screen already missed the cache), on a desktop switch touching the
+    // output (begin() — the capture is of the outgoing desktop), on consumption
+    // by the show leg (paintOutput), and on every never-painted SHOW leg exit:
+    // the wall-clock reap (scheduleRepaints), its own first-paint settle, the
+    // foreign-claim bow-out, and the compile-failure abandon (all paintOutput).
+    // Hide legs are exempt from the expiry drops — their cache is the pending
+    // show-leg endpoint.
+    std::unordered_map<KWin::LogicalOutput*, std::shared_ptr<KWin::GLTexture>> m_peekDesktopCache;
     bool m_fullScreenClaimed = false;
 };
 

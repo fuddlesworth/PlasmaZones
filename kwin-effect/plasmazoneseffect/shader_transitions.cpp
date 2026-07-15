@@ -1504,10 +1504,24 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // grab refs we just acquired so the window doesn't strand in
         // closing/added state, then bail. The new shader/redirect is not
         // installed because we never reach setShader/redirect below.
-        if (transitionHadAddedGrab && window) {
+        // Roll back only what THIS install freshly acquired, and give the
+        // INHERITED-grab case (existing*HeldGrab) no release action at all.
+        // That asymmetry is deliberate: reaching here with a grab inherited
+        // means the supersession erase ran (it is unconditional above) and the
+        // insert STILL failed, which leaves two possibilities implying
+        // OPPOSITE rollbacks — the erased entry's grab is now unowned (must
+        // release), or a racing install already inherited it (releasing
+        // double-releases). With no safe action available, leaking on a path
+        // the unconditional erase makes unreachable is the right trade.
+        // insertTransition pins the duplicate-key invariant itself, asserting
+        // in debug and logging a release-build breadcrumb.
+        // No `&& window` on either arm: the early-return at the top of
+        // beginShaderTransition rejects a null window, and every path between
+        // here and there dereferences it unconditionally.
+        if (holdAddedGrab && !existingAddedHeldGrab) {
             window->setData(KWin::WindowAddedGrabRole, QVariant());
         }
-        if (transitionHadCloseGrab && window) {
+        if (holdCloseGrab && !existingHeldGrab) {
             window->setData(KWin::WindowClosedGrabRole, QVariant());
             QPointer<PlasmaZonesEffect> selfGuard(this);
             KWin::EffectWindow* heldWindow = window;
@@ -1544,11 +1558,14 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // captured the values that landed in the map.
         const bool releaseCloseGrab = transitionHadCloseGrab;
         const bool releaseAddedGrab = transitionHadAddedGrab;
-        if (releaseAddedGrab && window) {
+        // No `&& window` here either, for the reason given on the insert-failure
+        // rollback above: the early-return at the top of beginShaderTransition
+        // rejects a null window, and this point is strictly later in the flow.
+        if (releaseAddedGrab) {
             // Symmetric WindowAddedGrabRole rollback. No ref to release.
             window->setData(KWin::WindowAddedGrabRole, QVariant());
         }
-        if (releaseCloseGrab && window) {
+        if (releaseCloseGrab) {
             // Clear WindowClosedGrabRole synchronously while the
             // ref we hold guarantees `window` is still alive. The
             // role clear is a courtesy for other effects.
@@ -2096,6 +2113,10 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
                                     // animation pack; re-evaluate the cava run gate so the
                                     // provider is warm before the first transition needs it.
                                     scheduleEffectAudioSync();
+                                    // It can also assign or clear the `desktop.peek` pack;
+                                    // keep KWin's own show-desktop effects unloaded exactly
+                                    // while ours owns that animation.
+                                    syncShowDesktopEffectSuppression();
                                 },
                                 /*arraySink=*/{});
         });
