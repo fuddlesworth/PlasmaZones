@@ -121,11 +121,11 @@ int findLongBracketClose(const QString& line, int level, int from)
 /// entry, updating @p longBracketLevel for the next line.
 ///
 /// Braces are counted only where they are code. Text is skipped in all three
-/// forms Luau has: quoted strings (double or single, with backslash escapes),
-/// `--` line comments, and long brackets at any level (`[[`, `[=[`, ...), as
-/// long strings or, spelled `--[[`, long comments. A long bracket may open and
-/// close on one line, span lines, or repeat, and @p longBracketLevel carries an
-/// open one across the line boundary.
+/// forms Luau has: quoted strings (double, single, or backtick interpolated,
+/// with backslash escapes), `--` line comments, and long brackets at any level
+/// (`[[`, `[=[`, ...), as long strings or, spelled `--[[`, long comments. A
+/// long bracket may open and close on one line, span lines, or repeat, and
+/// @p longBracketLevel carries an open one across the line boundary.
 ///
 /// @p startDepth is the brace depth the line opens at, so the scan can speak in
 /// depths the caller shares rather than line-relative ones. When @p codeOnly is
@@ -135,8 +135,10 @@ int findLongBracketClose(const QString& line, int level, int from)
 /// caller can ask "is there a field of THIS table here" without a string, a
 /// comment, a nested table's keys, or the enclosing table's code answering.
 ///
-/// Not handled: short strings continued across lines (backslash-newline, `\z`).
-/// No bundled template's metadata uses one.
+/// Not handled: a short string continued across lines (backslash-newline,
+/// `\z`), and a backtick literal reached from inside one of its own
+/// interpolations (`` `{"`"}` ``), which ends the literal early here. No
+/// bundled template's metadata uses either.
 int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, QString* codeOnly = nullptr)
 {
     int depth = startDepth;
@@ -168,7 +170,12 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
             }
             continue;
         }
-        if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
+        // Luau has three string forms, and a backtick interpolated string is
+        // the one that looks least like text: `a } b` carries a literal `}`
+        // that would otherwise close the table early. Skipping the literal
+        // whole also skips its `{...}` interpolations, whose braces balance
+        // inside it and so contribute nothing to this table's depth.
+        if (c == QLatin1Char('"') || c == QLatin1Char('\'') || c == QLatin1Char('`')) {
             quote = c;
             continue;
         }

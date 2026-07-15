@@ -37,10 +37,12 @@ Kirigami.Dialog {
     readonly property color _subtleBg: _colors.subtleBg
     readonly property color _accentBorder: _colors.accentBorder
     // Clamped to [1.0, 3.6] to keep the preview usable on extreme aspect ratios (e.g. 32:9).
-    // Read through the content Item: `Screen` only attaches to an Item, and this
-    // root is a Popup, so reading it here would be 0 and silently pin the
-    // preview to the 16:9 fallback on every monitor. As a binding it also
-    // follows the window across screens instead of sampling once on open.
+    // Read through the content Item rather than this root. `Screen` on a Popup
+    // resolves against no window of its own, so it answers for the primary
+    // monitor: the preview took the primary display's ratio even when the
+    // dialog was open on another one. Through the Item it follows the window,
+    // and as a binding it keeps following it across screens rather than
+    // sampling once on open.
     readonly property real screenAspectRatio: WizardUtils.clampedScreenAspectRatio(dialogContent.Screen.width, dialogContent.Screen.height)
     readonly property var baseTemplates: [
         {
@@ -186,11 +188,16 @@ Kirigami.Dialog {
                             AlgorithmPreview {
                                 anchors.fill: parent
                                 visible: templateDelegate.modelData.id !== "blank"
-                                // There is no blank.luau to preview — the empty
-                                // id is AlgorithmPreview's "nothing to render"
-                                // contract, and skips a lookup plus its
-                                // empty-result retry.
-                                algorithmId: templateDelegate.modelData.id === "blank" ? "" : templateDelegate.modelData.id
+                                // The empty id is AlgorithmPreview's "nothing to
+                                // render" contract: no lookup, no empty-result
+                                // retry. Two things want it here. There is no
+                                // blank.luau to preview. And this dialog is
+                                // built with the Layouts page rather than on
+                                // demand, so without the `opened` gate all eight
+                                // template previews would run their Luau tile
+                                // pass on every page load, for a wizard the user
+                                // may never open.
+                                algorithmId: (root.opened && templateDelegate.modelData.id !== "blank") ? templateDelegate.modelData.id : ""
                                 windowCount: 4
                                 showLabel: false
                                 appSettings: root.controller

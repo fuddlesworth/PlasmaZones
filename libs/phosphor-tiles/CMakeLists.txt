@@ -182,8 +182,9 @@ endif()
 # Ship the pluau standard-library type definitions so users authoring custom
 # `.luau` algorithms get luau-lsp autocomplete and luau-analyze type-checking
 # (see docs/architecture/luau-algorithm-authoring.md). Installed OUTSIDE the
-# scanned algorithms subdirectory — the loader globs `*.luau`, and a `.d.luau`
-# sitting next to the algorithms would be mistaken for one.
+# scanned algorithms subdirectory: the loader globs `*.luau`, so a `.d.luau`
+# sitting next to the algorithms would be picked up by the scan and then
+# skipped with a warning, since `pluau.d` fails the basename check.
 install(FILES src/pluau/pluau.d.luau
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones)
 

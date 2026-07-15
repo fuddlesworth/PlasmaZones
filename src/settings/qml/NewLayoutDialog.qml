@@ -33,10 +33,12 @@ Kirigami.Dialog {
     readonly property color _accentBorder: _colors.accentBorder
     // Match the monitor's aspect ratio for the preview, clamped to [1.0, 3.6]
     // so an extreme ratio (e.g. 32:9) keeps the preview usable.
-    // Read through the content Item: `Screen` only attaches to an Item, and this
-    // root is a Popup, so reading it here would be 0 and silently pin the
-    // preview to the 16:9 fallback on every monitor. As a binding it also
-    // follows the window across screens instead of sampling once on open.
+    // Read through the content Item rather than this root. `Screen` on a Popup
+    // resolves against no window of its own, so it answers for the primary
+    // monitor: the preview took the primary display's ratio even when the
+    // dialog was open on another one. Through the Item it follows the window,
+    // and as a binding it keeps following it across screens rather than
+    // sampling once on open.
     readonly property real screenAspectRatio: WizardUtils.clampedScreenAspectRatio(dialogContent.Screen.width, dialogContent.Screen.height)
     // Template previews match TemplateService strategies exactly
     // (see src/editor/services/TemplateService.cpp and core/constants.h)

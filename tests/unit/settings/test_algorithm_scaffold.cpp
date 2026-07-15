@@ -71,6 +71,7 @@ private Q_SLOTS:
     void spliceHandlesMultiLineLongBrackets();
     void spliceHandlesLevelNLongBrackets();
     void spliceKeepsQuotesAndLongBracketsApart();
+    void spliceReadsBacktickStringsAsText();
     void spliceHandlesTrailingNameOrIdField();
     void spliceOrdersSpdxCopyrightBeforeLicense();
     void splicePreservesLeadingDocComment();
@@ -454,6 +455,41 @@ void TestAlgorithmScaffold::spliceOrdersSpdxCopyrightBeforeLicense()
         out.startsWith(QStringLiteral("-- SPDX-FileCopyrightText: 2026 <your name>\n"
                                       "-- SPDX-FileCopyrightText: 2026 upstream\n"
                                       "-- SPDX-License-Identifier: MIT\n")));
+}
+
+// Luau's third string form. A backtick literal carrying a bare `}` is the
+// shape that mattered: read as code it closes the table early, so the rewrite
+// inserts a name/id pair while the real ones survive past the closer, and
+// Luau's last-wins hands the copy its source's id to collide with.
+void TestAlgorithmScaffold::spliceReadsBacktickStringsAsText()
+{
+    const QString withBrace = rewriteMetadataNameId(
+        QStringLiteral("return pluau.algorithm {\n    metadata = {\n"
+                       "        description = `a } b`,\n        name = \"A\",\n        id = \"a\",\n    },\n}\n"),
+        QStringLiteral("New"), QStringLiteral("newid"));
+    QCOMPARE(withBrace.count(QStringLiteral("name = ")), 1);
+    QCOMPARE(withBrace.count(QStringLiteral("id = ")), 1);
+    QVERIFY(withBrace.contains(QStringLiteral("id = \"newid\",")));
+    QVERIFY(withBrace.contains(QStringLiteral("description = `a } b`,")));
+
+    // An interpolation's own braces balance inside the literal, so skipping it
+    // whole leaves the table's depth where it was.
+    const QString interpolated = rewriteMetadataNameId(
+        QStringLiteral(
+            "return pluau.algorithm {\n    metadata = {\n"
+            "        description = `x{ f({a=1}) }y`,\n        name = \"A\",\n        id = \"a\",\n    },\n}\n"),
+        QStringLiteral("New"), QStringLiteral("newid"));
+    QCOMPARE(interpolated.count(QStringLiteral("id = ")), 1);
+
+    // A `[[` inside a backtick literal ahead of the table is that literal's
+    // text: it must not latch the search into a long bracket and hide the
+    // table below it.
+    const QString beforeTable =
+        rewriteMetadataNameId(QStringLiteral("local s = `see [[ here`\nreturn pluau.algorithm {\n    metadata = {\n"
+                                             "        name = \"A\",\n        id = \"a\",\n    },\n}\n"),
+                              QStringLiteral("New"), QStringLiteral("newid"));
+    QVERIFY(beforeTable.contains(QStringLiteral("id = \"newid\",")));
+    QVERIFY(beforeTable.contains(QStringLiteral("local s = `see [[ here`")));
 }
 
 void TestAlgorithmScaffold::spliceKeepsQuotesAndLongBracketsApart()

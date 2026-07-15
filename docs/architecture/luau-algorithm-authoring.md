@@ -29,6 +29,10 @@ extension) is the fallback id; `metadata.id` overrides it. User algorithms
 override a bundled one with the same id. The daemon **hot-reloads** the
 directory — save the file and the algorithm list refreshes; no restart needed.
 The settings app's *Algorithms* page can also create, duplicate, and edit them.
+Duplicating personalizes the copy's `name` and `id` in place, which needs them
+written the way §2 writes them: `metadata = {` alone on its line, and one field
+per line. A copy of a script that packs the table differently is refused rather
+than guessed at, and the page says so.
 
 ---
 
@@ -360,9 +364,12 @@ autocomplete and `luau-analyze` know about the injected `pluau` global:
 }
 ```
 
-For full `pluau.*` type information, add the shipped stubs
-(`/usr/share/plasmazones/pluau.d.luau`) to your luau-lsp definitions. Keep them
-out of the algorithms directory itself, which the loader scans for `*.luau`.
+For full `pluau.*` type information, point your tooling at the shipped stubs:
+set luau-lsp's `luau-lsp.types.definitionFiles` to
+`/usr/share/plasmazones/pluau.d.luau`, or pass
+`--definitions=/usr/share/plasmazones/pluau.d.luau` to `luau-analyze`. Leave the
+file where it is installed rather than copying it into the algorithms directory,
+which the loader scans for `*.luau` and would log a skip warning for it.
 
 Type-check before relying on a layout (CI runs exactly this over the bundled
 set):
@@ -387,6 +394,9 @@ A parse or type error means the daemon will skip the algorithm, so a clean
   active). A runaway allocation surfaces as a catchable Luau out-of-memory error
   rather than exhausting the compositor — the script fails, the daemon keeps
   running.
+- A script over 1 MiB is **refused** before it loads, so it never reaches the
+  list and a clean `luau-analyze` run will not tell you why. No hand-written
+  layout comes near this; a generated or vendored one might.
 - Keep `tile` pure and fast: it runs on every relevant layout change. Return
   early for `windowCount <= 0`, and guard against tiny areas with
   `pluau.guardArea`.

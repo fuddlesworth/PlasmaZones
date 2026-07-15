@@ -60,12 +60,14 @@ QString sanitizeMetadataString(QString value);
 /// Only the table's own top-level fields are read, so a nested `customParams`
 /// entry keeps its own `name` key whether it is written inline or across lines.
 ///
-/// The brace-depth scan counts a brace only where it is code. Quoted strings,
-/// `--` line comments, and long brackets at any level (`[[`, `[=[`, ...,
-/// as long strings or, spelled `--[[`, long comments) are text, whether they
-/// close on their own line or span several. Short strings continued across
-/// lines (backslash-newline, `\z`) are the one shape not handled, and no
-/// bundled template's metadata uses one.
+/// The brace-depth scan counts a brace only where it is code. All three of
+/// Luau's string forms are text, including a backtick interpolated string and
+/// the braces of its interpolations, as are `--` line comments and long
+/// brackets at any level (`[[`, `[=[`, ..., as long strings or, spelled
+/// `--[[`, long comments), whether they close on their own line or span
+/// several. Two shapes are not handled, and no bundled template's metadata uses
+/// either: a short string continued across lines (backslash-newline, `\z`), and
+/// a backtick literal reached from inside one of its own interpolations.
 ///
 /// @p displayName must already be sanitizeMetadataString()'d and
 /// @p id must be a bare `[A-Za-z0-9_-]` basename — both are embedded in Luau
