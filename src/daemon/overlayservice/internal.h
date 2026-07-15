@@ -326,6 +326,24 @@ inline QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName
     return nullptr;
 }
 
+// Recursive QML item search collecting every match, for repeated delegates
+// where findQmlItemByName's first-hit contract is not enough.
+inline void collectQmlItemsByName(QQuickItem* item, const QString& objectName, QVector<QQuickItem*>& out)
+{
+    if (!item) {
+        return;
+    }
+
+    if (item->objectName() == objectName) {
+        out.append(item);
+    }
+
+    const auto children = item->childItems();
+    for (auto* child : children) {
+        collectQmlItemsByName(child, objectName, out);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window destroy helpers (per-screen state struct fields)
 // ═══════════════════════════════════════════════════════════════════════════════

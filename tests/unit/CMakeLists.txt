@@ -548,6 +548,25 @@ add_executable(test_zone_shader_item ui/test_zone_shader_item.cpp)
 target_link_libraries(test_zone_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
 add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
 
+# Pins the shared ZonePreview's per-zone vs whole-card highlight split. The
+# zone selector's hit-tested `selectedZoneIndex` is only observable if the
+# singled-out zone renders differently from its siblings, while the picker / OSD
+# consumers rely on card-level state lighting every zone. Both halves live in
+# one expression, so a regression in either is silent at runtime.
+add_executable(test_zone_preview_highlight ui/test_zone_preview_highlight.cpp)
+target_link_libraries(test_zone_preview_highlight PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
+add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)
+set_tests_properties(test_zone_preview_highlight PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Pins the C++/QML contract the zone selector's cursor hit test depends on:
+# zone delegates discoverable by objectName, exposing their model index, with
+# rendered geometry that tracks LayoutCard's aspect-ratio letterboxing. All of
+# it fails silently at runtime — the highlight just stops following the cursor.
+add_executable(test_zone_selector_hit_geometry ui/test_zone_selector_hit_geometry.cpp)
+target_link_libraries(test_zone_selector_hit_geometry PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
+add_test(NAME test_zone_selector_hit_geometry COMMAND test_zone_selector_hit_geometry)
+set_tests_properties(test_zone_selector_hit_geometry PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 add_executable(test_surface_shader_item ui/test_surface_shader_item.cpp)
 target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
 add_test(NAME test_surface_shader_item COMMAND test_surface_shader_item)
