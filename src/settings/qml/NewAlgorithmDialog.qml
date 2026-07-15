@@ -36,9 +36,12 @@ Kirigami.Dialog {
     readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
     readonly property color _subtleBg: _colors.subtleBg
     readonly property color _accentBorder: _colors.accentBorder
-    // Re-evaluated on open so it picks up the correct screen.
     // Clamped to [1.0, 3.6] to keep the preview usable on extreme aspect ratios (e.g. 32:9).
-    property real screenAspectRatio: 16 / 9
+    // Read through the content Item: `Screen` only attaches to an Item, and this
+    // root is a Popup, so reading it here would be 0 and silently pin the
+    // preview to the 16:9 fallback on every monitor. As a binding it also
+    // follows the window across screens instead of sampling once on open.
+    readonly property real screenAspectRatio: WizardUtils.clampedScreenAspectRatio(dialogContent.Screen.width, dialogContent.Screen.height)
     readonly property var baseTemplates: [
         {
             "name": i18n("Blank"),
@@ -122,11 +125,12 @@ Kirigami.Dialog {
         root.retileOnFocus = false;
         root.openInEditor = true;
         root._creating = false;
-        root.screenAspectRatio = WizardUtils.clampedScreenAspectRatio(Screen.width, Screen.height);
         wizardFooter.errorText = "";
     }
 
     ColumnLayout {
+        id: dialogContent
+
         spacing: Kirigami.Units.largeSpacing
 
         // ── Step indicator ─────────────────────────────────────────────
@@ -203,7 +207,7 @@ Kirigami.Dialog {
                                 Behavior on color {
                                     PhosphorMotionAnimation {
                                         profile: "widget.tint"
-                                        durationOverride: 200
+                                        durationOverride: Kirigami.Units.longDuration
                                     }
                                 }
                             }
@@ -225,8 +229,14 @@ Kirigami.Dialog {
 
                 // Landscape preview matching monitor aspect ratio
                 Rectangle {
-                    Layout.preferredWidth: Math.min(Kirigami.Units.gridUnit * 26, parent ? parent.width : Kirigami.Units.gridUnit * 26)
-                    Layout.preferredHeight: Layout.preferredWidth / root.screenAspectRatio
+                    // Let the column size this and cap it, rather than reading
+                    // parent.width upward: a layout child asking its parent how
+                    // wide it is asks the question the parent is still
+                    // answering. The height follows the width the layout
+                    // actually assigned.
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: Kirigami.Units.gridUnit * 26
+                    Layout.preferredHeight: width / root.screenAspectRatio
                     Layout.maximumHeight: Kirigami.Units.gridUnit * 12
                     Layout.alignment: Qt.AlignHCenter
                     radius: Kirigami.Units.smallSpacing * 2

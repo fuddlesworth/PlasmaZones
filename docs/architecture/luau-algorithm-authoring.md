@@ -111,7 +111,7 @@ to sensible defaults.
 | `retileOnFocus` | boolean | Re-runs `tile` when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight) |
 | `producesOverlappingZones` | boolean | Zones may overlap (e.g. stacked/deck layouts) |
 | `centerLayout` | boolean | Layout is centered rather than filling the screen |
-| `masterZoneIndex` | number | Index of the “master” zone (for highlighting); `-1` = none |
+| `masterZoneIndex` | number | Index of the “master” zone, `-1` = none. Describes the layout for a caller that asks; no built-in feature reads it (“focus master” goes to the first tiled window regardless) |
 | `zoneNumberDisplay` | string | `"all"`, `"last"`, `"firstAndLast"`, or `"none"` (omit to let the renderer decide) |
 | `customParams` | list | User-tunable parameters (§7) |
 

@@ -76,14 +76,14 @@ Item {
                 Behavior on xScale {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
-                        durationOverride: 200
+                        durationOverride: Kirigami.Units.longDuration
                     }
                 }
 
                 Behavior on yScale {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
-                        durationOverride: 200
+                        durationOverride: Kirigami.Units.longDuration
                     }
                 }
             },
@@ -93,7 +93,7 @@ Item {
                 Behavior on y {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
-                        durationOverride: 200
+                        durationOverride: Kirigami.Units.longDuration
                     }
                 }
             }
@@ -153,21 +153,21 @@ Item {
         Behavior on color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
-                durationOverride: 200
+                durationOverride: Kirigami.Units.longDuration
             }
         }
 
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
-                durationOverride: 200
+                durationOverride: Kirigami.Units.longDuration
             }
         }
 
         Behavior on border.width {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
-                durationOverride: 200
+                durationOverride: Kirigami.Units.longDuration
             }
         }
     }

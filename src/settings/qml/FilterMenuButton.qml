@@ -136,8 +136,12 @@ ToolButton {
                         Accessible.name: modelData.label
                         onToggled: root._setIncluded(modelData.key, checked)
 
+                        // Reads the filter set back onto the item, with the
+                        // restore policy stated rather than inherited (see
+                        // LayoutFilterBar.FilterMenuItem).
                         Binding on checked {
                             value: root.isIncluded(modelData.key)
+                            restoreMode: Binding.RestoreNone
                         }
                     }
                 }

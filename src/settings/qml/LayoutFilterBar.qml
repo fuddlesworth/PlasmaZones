@@ -477,8 +477,12 @@ RowLayout {
 
     // Checkable menu item that writes back to a named root filter property
     // and keeps the menu open on toggle (StayOpenMenuItem). Uses an explicit
-    // Binding so the checked state survives imperative toggles (checkable
-    // breaks declarative bindings on user click).
+    // onToggled drives the filter property and a binding reads it back, so a
+    // programmatic reset lands on the item. toggle() reaches `checked` through
+    // a C++ setter, which neither severs the binding nor re-emits toggled(), so
+    // there is no write-back loop. RestoreNone is stated rather than inherited:
+    // these bindings carry no `when` and so never deactivate, and a delegate
+    // being torn down has nothing worth restoring onto.
     component FilterMenuItem: StayOpenMenuItem {
         required property string filterProperty
 
@@ -492,6 +496,7 @@ RowLayout {
 
         Binding on checked {
             value: root[filterProperty]
+            restoreMode: Binding.RestoreNone
         }
     }
 

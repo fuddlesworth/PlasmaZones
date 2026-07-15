@@ -404,6 +404,25 @@ jobs:
             data/algorithms/*.luau \
             libs/phosphor-tiles/src/pluau/pluau.luau
 
+      - name: Analyze the pluau type stubs
+        run: |
+          set -euo pipefail
+          # pluau.d.luau cannot be checked either way it is normally used: as a
+          # source file its `declare` lines are a syntax error, and behind
+          # `--defs=` the analyzer silently ignores every error inside the defs
+          # file (both verified against this analyzer). So the stub shipped
+          # ungated, and a typo'd or dangling type in it reached editors intact.
+          #
+          # The `declare` lines are the only part that is not valid source, and
+          # they carry no type information of their own. Strip them and analyze
+          # the type definitions, which is the whole rest of the file.
+          #
+          # This gates the stub's syntax and its internal type consistency. It
+          # cannot check the stub against the runtime it describes — that
+          # agreement is reviewed by hand.
+          grep -v '^declare ' libs/phosphor-tiles/src/pluau/pluau.d.luau > /tmp/pluau-stub-check.luau
+          ./luau-cli/luau-analyze /tmp/pluau-stub-check.luau
+
   # ═══════════════════════════════════════════════════════════════════════════
   # Nix Flake CI (x86_64 + aarch64)
   # ═══════════════════════════════════════════════════════════════════════════
