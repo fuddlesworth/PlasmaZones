@@ -301,6 +301,17 @@ void TestAlgorithmScaffold::rewriteAcceptsHandWrittenFieldPunctuation()
         "    },\n"
         "    tile = function(ctx) return {} end,\n"
         "}\n");
+    // Whitespace after the separator is invisible to the author and must not
+    // fail their whole copy. Tab included, since an editor may leave either.
+    for (const QString& trailing : {QStringLiteral("  "), QStringLiteral("\t")}) {
+        const QString out =
+            rewriteMetadataNameId(QStringLiteral("return pluau.algorithm {\n    metadata = {\n        name = \"A\",")
+                                      + trailing + QStringLiteral("\n        id = \"a\",\n    },\n}\n"),
+                                  QStringLiteral("Copy"), QStringLiteral("copy"));
+        QVERIFY(out.contains(QStringLiteral("name = \"Copy\",")));
+        QVERIFY(out.contains(QStringLiteral("id = \"copy\",")));
+    }
+
     // Both quote styles reach both fields: the id line's own single-quoted
     // form is the name line's mirror and has its own regex alternation.
     const QString singleQuotedId =

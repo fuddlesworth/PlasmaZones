@@ -62,6 +62,7 @@ private Q_SLOTS:
     void rejectsFieldHiddenBehindLongComment();
     void ignoresMetadataTableInsideLongComment();
     void rejectsStringLeftOpenAtEndOfLine();
+    void rejectsKeyAndValueOnDifferentLines();
 };
 
 void TestAlgorithmScaffoldRejects::rejectsMultiLineCopyright()
@@ -243,10 +244,16 @@ void TestAlgorithmScaffoldRejects::ignoresMetadataTableInsideLongComment()
 void TestAlgorithmScaffoldRejects::rejectsStringLeftOpenAtEndOfLine()
 {
     // The scan reads one line at a time, so a string still open at the end of
-    // one runs past where it can follow. Reading on would take the literal's
-    // text as code: the shapes below each hide a brace that way, and a miscount
-    // closes the table early, which ends with a duplicate name/id pair and a
-    // copy that keeps its source's id.
+    // one runs past where it can follow, and reading on would take the
+    // literal's text as code.
+    //
+    // The first shape below is the one that demonstrably corrupts: its brace
+    // lands on a line the scan has already forgotten it is inside a string on,
+    // so the table closes early and the copy ends with a duplicate name/id
+    // pair. In the others the brace happens to sit on the line where the quote
+    // is still tracked, so they miscount nothing today. They are refused all
+    // the same, because what makes them safe is an accident of where the brace
+    // fell, not anything the scan knows.
 
     // A backtick literal whose interpolation spans lines. The sections cannot
     // cross a newline, but the expression between them is ordinary code and
@@ -285,6 +292,44 @@ void TestAlgorithmScaffoldRejects::rejectsStringLeftOpenAtEndOfLine()
         "    },\n"
         "}\n");
     QVERIFY(rewriteMetadataNameId(openBeforeTable, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+}
+
+void TestAlgorithmScaffoldRejects::rejectsKeyAndValueOnDifferentLines()
+{
+    // Luau does not care that the `=` is on the next line, and neither read of
+    // the line can see the field: the key line has no `=`, and the value line
+    // has no key. Taken as "no name/id here", the insert lands a second pair
+    // above the real one and last-wins hands the copy its source's id.
+    const QString splitName = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name\n"
+        "            = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(splitName, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+
+    // The id side, and the same key trailing a sibling field rather than
+    // leading its own line.
+    const QString splitId = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"A\",\n"
+        "        id\n"
+        "            = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(splitId, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+
+    const QString trailingKey = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"A\", id\n"
+        "            = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(trailingKey, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestAlgorithmScaffoldRejects)

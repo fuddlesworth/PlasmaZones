@@ -363,11 +363,12 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     // unrecognized shape and rejects the rewrite rather than corrupting it.
     //
     // The value may use either quote style, and the line may close with either
-    // of Luau's field separators and carry a trailing comment: the bundled
-    // templates all use the one canonical form, but duplicateAlgorithm runs
-    // this over scripts a user wrote by hand, and rejecting their punctuation
-    // fails the whole copy. Terminator and comment are captured so the rewrite
-    // puts them back.
+    // of Luau's field separators, carry a trailing comment, and end in
+    // whitespace: the bundled templates all use the one canonical form, but
+    // duplicateAlgorithm runs this over scripts a user wrote by hand, and
+    // rejecting their punctuation fails the whole copy over something they
+    // cannot see. Terminator and comment are captured so the rewrite puts them
+    // back.
     //
     // Only a long-bracket opener (`--[[`, `--[=[`, ...) is excluded, because
     // that comment can close mid-line and leave a second field live where this
@@ -377,9 +378,9 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     static const QRegularExpression nameFieldRe(QStringLiteral(R"(^\s*name\s*=)"));
     static const QRegularExpression idFieldRe(QStringLiteral(R"(^\s*id\s*=)"));
     static const QRegularExpression nameLineRe(
-        QStringLiteral(R"(^\s*name\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[=*\[).*)?)$)"));
+        QStringLiteral(R"(^\s*name\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[=*\[).*)?)\s*$)"));
     static const QRegularExpression idLineRe(
-        QStringLiteral(R"(^\s*id\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[=*\[).*)?)$)"));
+        QStringLiteral(R"(^\s*id\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[=*\[).*)?)\s*$)"));
     // A name/id key anywhere on the line, not just at its start. The two
     // anchored patterns above only see a field that leads its line, so without
     // this a trailing `a = 1, name = "x",` would be neither rewritten nor
@@ -392,7 +393,14 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     // bare one, and its string is elided from the match subject, so any
     // bracketed key of this table is rejected rather than read: no bundled
     // template uses one, and guessing is how the pair silently duplicates.
-    static const QRegularExpression anyNameOrIdFieldRe(QStringLiteral(R"((?:^|[,;])\s*(?:(?:name|id)\s*=|\[))"));
+    //
+    // The key can also end the line, with its `=` on the next one. Luau is
+    // happy with that, and the anchored patterns above cannot see it: the key
+    // line has no `=` and the value line has no key. Left unmatched it reads as
+    // "no name/id here", and the insert lands a second pair above the real one.
+    // So a bare key at field position rejects like any other shape this cannot
+    // rewrite in place.
+    static const QRegularExpression anyNameOrIdFieldRe(QStringLiteral(R"((?:^|[,;])\s*(?:(?:name|id)\s*(?:=|$)|\[))"));
 
     QStringList metaLines;
     int depth = 0;
