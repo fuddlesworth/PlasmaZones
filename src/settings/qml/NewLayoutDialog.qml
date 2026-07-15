@@ -25,12 +25,12 @@ Kirigami.Dialog {
     property int selectedAspectRatio: -1
     property bool openInEditor: true
     property string _previousAutoName: ""
+    // Set for the duration of a create, so the button and the Return key
+    // cannot both land a second createNewLayout call.
+    property bool _creating: false
     readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
     readonly property color _subtleBg: _colors.subtleBg
-    readonly property color _subtleBorder: _colors.subtleBorder
     readonly property color _accentBorder: _colors.accentBorder
-    readonly property color _badgeBg: _colors.badgeBg
-    readonly property color _badgeBorder: _colors.badgeBorder
     // Match the monitor's aspect ratio for the preview, clamped to [1.0, 3.6]
     // so an extreme ratio (e.g. 32:9) keeps the preview usable.
     // Read through the content Item: `Screen` only attaches to an Item, and this
@@ -248,6 +248,7 @@ Kirigami.Dialog {
         root.openInEditor = true;
         nameField.text = "";
         root._previousAutoName = "";
+        root._creating = false;
         wizardFooter.errorText = "";
     }
 
@@ -268,7 +269,6 @@ Kirigami.Dialog {
 
         // ── Page stack ─────────────────────────────────────────────────
         StackLayout {
-            id: pageStack
 
             Layout.fillWidth: true
             currentIndex: root.currentStep
@@ -297,7 +297,6 @@ Kirigami.Dialog {
                             id: templateDelegate
 
                             required property var modelData
-                            required property int index
 
                             templateName: templateDelegate.modelData.name
                             templateDesc: templateDelegate.modelData.desc
@@ -462,13 +461,25 @@ Kirigami.Dialog {
 
         currentStep: root.currentStep
         createText: i18n("Create Layout")
-        createEnabled: nameField.text.trim().length > 0
+        createEnabled: nameField.text.trim().length > 0 && !root._creating
         onBackClicked: root.currentStep = 0
         onNextClicked: root.currentStep = 1
         onCreateClicked: {
+            // close() runs an exit transition during which the footer stays
+            // live, so without this a second click would create a second
+            // layout. Return key auto-repeat reaches the same handler.
+            if (root._creating)
+                return;
+
+            root._creating = true;
             wizardFooter.errorText = "";
-            if (root.controller.createNewLayout(nameField.text.trim(), root.selectedType, root.selectedAspectRatio, root.openInEditor))
+            if (root.controller.createNewLayout(nameField.text.trim(), root.selectedType, root.selectedAspectRatio, root.openInEditor)) {
                 root.close();
+            } else {
+                // Creation failed and the dialog stays open showing why, so
+                // release the guard for the retry.
+                root._creating = false;
+            }
         }
         onCancelClicked: root.close()
     }
