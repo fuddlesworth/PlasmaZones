@@ -738,11 +738,11 @@ void NavigationController::adjustMasterCount(int delta)
             m_engine->updatePerScreenOverride(screenId, PerScreenKeys::MasterCount, resultCount);
         } else {
             // No override: keep the adjustment local to the active
-            // screen+desktop+activity's TilingState (set above, serialized with the
-            // session state). Mark it
-            // user-tuned so propagateGlobalMasterCount leaves it alone on a refresh,
-            // and deliberately do NOT write the global config / settings — a
-            // per-desktop master-count tweak is not a new global default.
+            // screen+desktop+activity's TilingState (set above, serialized with
+            // the session state). Mark it user-tuned so propagateGlobalMasterCount
+            // leaves it alone on a refresh, and deliberately do NOT write the
+            // global config / settings — a per-desktop master-count tweak is not
+            // a new global default.
             m_engine->noteMasterCountUserTuned(screenId);
         }
 

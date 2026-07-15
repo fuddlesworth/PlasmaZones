@@ -118,7 +118,7 @@ private Q_SLOTS:
         QCOMPARE(a.duration(), 200);
     }
 
-    void testDurationOverrideZeroMeansProfileDuration()
+    void testDurationOverrideZeroMeansNoAnimation()
     {
         PhosphorMotionAnimation a;
         Profile registered;
@@ -128,9 +128,13 @@ private Q_SLOTS:
         a.setDurationOverride(200);
         QCOMPARE(a.duration(), 200);
 
-        // Zero clears the override — fall back to profile's own duration.
+        // Zero is a real override meaning "no animation", not "unset". This is
+        // what a bound Kirigami.Units.shortDuration evaluates to once the user
+        // sets Plasma's animation speed to zero, so it has to reach the
+        // animation as 0. Falling back to the profile here would play the
+        // animation at its full 400 ms precisely when the user asked for none.
         a.setDurationOverride(0);
-        QCOMPARE(a.duration(), 400);
+        QCOMPARE(a.duration(), 0);
     }
 
     void testDurationOverrideNegativeTreatedAsUnset()
@@ -141,7 +145,21 @@ private Q_SLOTS:
         m_registry.registerProfile(QStringLiteral("p"), registered);
         a.setProfile(QStringLiteral("p"));
 
-        a.setDurationOverride(-50); // nonsensical — treat as "no override"
+        a.setDurationOverride(-50); // below the -1 sentinel — treat as "no override"
+        QCOMPARE(a.duration(), 400);
+    }
+
+    void testDurationOverrideDefaultsToUnset()
+    {
+        PhosphorMotionAnimation a;
+        Profile registered;
+        registered.duration = 400.0;
+        m_registry.registerProfile(QStringLiteral("p"), registered);
+
+        // The default must be the -1 sentinel, not 0: a 0 default would make
+        // every animation that never sets an override instant.
+        QCOMPARE(a.durationOverride(), -1);
+        a.setProfile(QStringLiteral("p"));
         QCOMPARE(a.duration(), 400);
     }
 

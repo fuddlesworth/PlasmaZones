@@ -155,19 +155,25 @@ export type Pluau = {
     join: (...{ Zone }) -> { Zone },
     algorithm: (def: Algorithm) -> Algorithm,
     -- geometry builtins (see pluau.luau for full signatures)
+    --
+    -- Every `area` below is Zone, not Rect: none of these calls a Rect method,
+    -- they only read x/y/width/height. Rect adds the split/columns/rows methods
+    -- on top of those four fields, so a Zone is NOT assignable to a Rect and
+    -- asking for one here would reject a plain {x,y,width,height} table under
+    -- --!strict. A module exporting `tile` directly receives exactly such a
+    -- table as ctx.area (see Context above), so demanding Rect would lock those
+    -- scripts out of their own helpers.
     fillArea: (area: Zone, count: number) -> { Zone },
     fillRegion: (x: number, y: number, w: number, h: number, count: number) -> { Zone },
-    equalColumnsLayout: (area: Rect, count: number, gap: number, minSizes: { MinSize }) -> { Zone },
-    masterStackLayout: (area: Rect, count: number, gap: number, splitRatio: number, masterCount: number,
+    equalColumnsLayout: (area: Zone, count: number, gap: number, minSizes: { MinSize }) -> { Zone },
+    masterStackLayout: (area: Zone, count: number, gap: number, splitRatio: number, masterCount: number,
         minSizes: { MinSize }, horizontal: boolean) -> { Zone },
-    deckLayout: (area: Rect, count: number, focusedFraction: number, horizontal: boolean) -> { Zone },
-    lShapeLayout: (area: Rect, count: number, gap: number, splitRatio: number, distribute: string,
+    deckLayout: (area: Zone, count: number, focusedFraction: number, horizontal: boolean) -> { Zone },
+    lShapeLayout: (area: Zone, count: number, gap: number, splitRatio: number, distribute: string,
         bottomWidth: any, rightHeight: any) -> { Zone },
-    dwindleLayout: (area: Rect, count: number, splitRatio: number, innerGap: number, minSizes: { MinSize }) -> { Zone },
-    threeColumnLayout: (area: Rect, count: number, gap: number, splitRatio: number, masterCount: number,
+    dwindleLayout: (area: Zone, count: number, splitRatio: number, innerGap: number, minSizes: { MinSize }) -> { Zone },
+    threeColumnLayout: (area: Zone, count: number, gap: number, splitRatio: number, masterCount: number,
         minSizes: { MinSize }) -> { Zone },
-    -- rect is Zone, not Rect: this recurses on plain {x,y,width,height} tables
-    -- it builds itself, and only ever reads those four fields.
     applyTreeGeometry: (node: SplitNode, rect: Zone, gap: number, depth: number?) -> { Zone },
     clampSplitRatio: (ratio: number) -> number,
     distributeWithGaps: (total: number, count: number, gap: number) -> { number },
@@ -188,7 +194,7 @@ export type Pluau = {
         -> { minW: { [number]: number }, minH: { [number]: number } },
     appendGracefulDegradation: (zones: { Zone }, remaining: Zone, leftover: number, innerGap: number) -> (),
     -- shared algorithm helpers
-    guardArea: (area: Rect, count: number) -> { Zone }?,
+    guardArea: (area: Zone, count: number) -> { Zone }?,
     clamp: (v: any, lo: number, hi: number) -> number?,
     center: (start: number, total: number, size: number) -> number,
     gridShape: (count: number) -> (number, number), -- returns cols, rows

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -59,7 +60,10 @@ Item {
             color: Kirigami.Theme.backgroundColor
             radius: Kirigami.Units.smallSpacing
             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
-            border.width: 1
+            // Chrome, so it is device-pixel-scaled like every other border in
+            // the wizard. The drawing dimensions below stay in logical units on
+            // purpose (see the note above them); this is not one of those.
+            border.width: Math.round(Screen.devicePixelRatio)
 
             Rectangle {
                 anchors.fill: parent
@@ -121,7 +125,7 @@ Item {
 
                                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3);
                             }
-                            border.width: isSelected ? 2 : 1
+                            border.width: isSelected ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
                             opacity: root.enabled ? 1 : 0.5
 
                             // Horizontal bar (top or bottom edge)

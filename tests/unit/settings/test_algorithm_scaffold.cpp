@@ -28,6 +28,7 @@ return pluau.algorithm {
         retileOnFocus = true,
         supportsScriptState = true,
         defaultMaxWindows = 6,
+        defaultSplitRatio = 0.55,
         masterZoneIndex = 0,
         customParams = {
             { name = "widthRatio", type = "number", default = 0.6, min = 0.2, max = 1.0,
@@ -67,6 +68,8 @@ private Q_SLOTS:
     void rewriteIndentsInsertIntoEmptyMetadata();
     void rewriteAcceptsHandWrittenFieldPunctuation();
     void spliceIgnoresBracesInsideStrings();
+    void rewriteStopsAtTableCloserSharingItsLine();
+    void rewriteUsesFirstMetadataTable();
     void spliceHandlesLongBrackets();
     void spliceHandlesMultiLineLongBrackets();
     void spliceHandlesLevelNLongBrackets();
@@ -76,6 +79,7 @@ private Q_SLOTS:
     void spliceOrdersSpdxCopyrightBeforeLicense();
     void splicePreservesLeadingDocComment();
     void spliceNormalizesCrlf();
+    void spliceAllBundledAlgorithms_data();
     void spliceAllBundledAlgorithms();
 };
 
@@ -111,8 +115,15 @@ void TestAlgorithmScaffold::spliceToleratesTrailingNewlineOnCopyright()
 
 void TestAlgorithmScaffold::rewriteKeepsHeaderAndOtherTables()
 {
-    // The duplicate path rewrites metadata in place: the header stays put, and
-    // a same-shaped table elsewhere in the file must not be mistaken for it.
+    // The duplicate path rewrites metadata in place, so everything ahead of the
+    // table is emitted verbatim: the header, and a table that carries name/id
+    // keys of its own.
+    //
+    // The decoy here is `local presets = {`, which the metadata search cannot
+    // match at all (it anchors on the literal `metadata` key), so this does not
+    // pin "the right table wins" however much its shape suggests it. That
+    // property belongs to a second REAL metadata table, and lives in
+    // rewriteUsesFirstMetadataTable.
     const QString withOtherTable = QStringLiteral(
         "-- SPDX-FileCopyrightText: 2026 someone\n"
         "-- SPDX-License-Identifier: MIT\n"
@@ -203,11 +214,14 @@ void TestAlgorithmScaffold::splicePreservesCapabilityMetadata()
         spliceTemplate(kTemplate, kCopyright, QStringLiteral("My Theater"), QStringLiteral("my-theater"));
     // The regression this guards: the old splicer replaced the whole metadata
     // table with one rebuilt from four wizard bools, stripping the flags the
-    // template's code depends on.
+    // template's code depends on. The three fields it was documented to drop
+    // (masterZoneIndex, defaultSplitRatio, supportsScriptState) are each pinned
+    // here by name.
     QVERIFY(out.contains(QStringLiteral("supportsSingleWindow = true")));
     QVERIFY(out.contains(QStringLiteral("retileOnFocus = true")));
     QVERIFY(out.contains(QStringLiteral("supportsScriptState = true")));
     QVERIFY(out.contains(QStringLiteral("defaultMaxWindows = 6")));
+    QVERIFY(out.contains(QStringLiteral("defaultSplitRatio = 0.55")));
     QVERIFY(out.contains(QStringLiteral("masterZoneIndex = 0")));
     QVERIFY(out.contains(QStringLiteral("description = \"Spotlight layout\"")));
     // Body untouched.
@@ -687,10 +701,81 @@ void TestAlgorithmScaffold::spliceIgnoresBracesInsideStrings()
     const QString out = spliceTemplate(braced, kCopyright, QStringLiteral("My Braced"), QStringLiteral("my-braced"));
     QVERIFY(out.contains(QStringLiteral("        name = \"My Braced\",")));
     QVERIFY(out.contains(QStringLiteral("        id = \"my-braced\",")));
+    // The old values must be GONE, not merely outnumbered. If a `}` inside one
+    // of the strings above desynced the depth scan, the walk would leave the
+    // real fields past its idea of the table's end and insert a second pair
+    // above them — every contains() check here would still pass while Luau's
+    // last-wins kept "Braced". Only the absence catches that.
+    QVERIFY(!out.contains(QStringLiteral("name = \"Braced\"")));
+    QVERIFY(!out.contains(QStringLiteral("id = \"braced\"")));
+    QCOMPARE(out.count(QStringLiteral("name = ")), 1);
+    QCOMPARE(out.count(QStringLiteral("id = ")), 1);
     QVERIFY(out.contains(QStringLiteral("description = \"a } weird { description\"")));
     QVERIFY(out.contains(QStringLiteral("summary = \"escaped \\\" and a } brace\"")));
     QVERIFY(out.contains(QStringLiteral("hint = 'single } quoted { too'")));
     QVERIFY(out.contains(QStringLiteral("tile = function(ctx) return {} end,")));
+}
+
+void TestAlgorithmScaffold::rewriteStopsAtTableCloserSharingItsLine()
+{
+    // The metadata table's closer shares its line with a sibling table's
+    // opener, so the line's NET brace delta is zero. A walk watching only the
+    // running depth never sees it reach 0 and carries on into `extra`, where it
+    // rewrites THAT table's name and sets sawName from it — so the real
+    // metadata ends up with no name field at all and an unrelated table is
+    // clobbered. Neither outcome rejects or warns, which is what makes it worth
+    // pinning: the corruption is silent.
+    const QString shared = QStringLiteral(
+        "local M = {\n"
+        "    metadata = {\n"
+        "        id = \"a\",\n"
+        "    }, extra = {\n"
+        "        name = \"UPSTREAM-DO-NOT-TOUCH\",\n"
+        "    },\n"
+        "}\n");
+    const QString out = rewriteMetadataNameId(shared, QStringLiteral("NEW"), QStringLiteral("newid"));
+    QVERIFY(!out.isEmpty());
+    // The sibling table is untouched.
+    QVERIFY(out.contains(QStringLiteral("name = \"UPSTREAM-DO-NOT-TOUCH\"")));
+    QVERIFY(!out.contains(QStringLiteral("name = \"NEW\",\n        name =")));
+    // metadata got both fields: id rewritten in place, name inserted.
+    QVERIFY(out.contains(QStringLiteral("id = \"newid\"")));
+    QVERIFY(out.contains(QStringLiteral("name = \"NEW\"")));
+    QCOMPARE(out.count(QStringLiteral("name = \"NEW\"")), 1);
+    QCOMPARE(out.count(QStringLiteral("id = \"newid\"")), 1);
+    // The inserted name belongs to metadata, not to extra: it lands above the
+    // closer that ends metadata, so it precedes the sibling's own name.
+    QVERIFY(out.indexOf(QStringLiteral("name = \"NEW\"")) < out.indexOf(QStringLiteral("}, extra = {")));
+}
+
+void TestAlgorithmScaffold::rewriteUsesFirstMetadataTable()
+{
+    // Two real `metadata = {` tables. The scan takes the first unconditionally,
+    // so pin that rather than leave first-wins to chance: a change that made it
+    // take the last would rewrite the wrong table and leave the live one alone.
+    const QString twice = QStringLiteral(
+        "local presets = {\n"
+        "    metadata = {\n"
+        "        name = \"Decoy\",\n"
+        "        id = \"decoy\",\n"
+        "    },\n"
+        "}\n"
+        "\n"
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"Real\",\n"
+        "        id = \"real\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    const QString out = rewriteMetadataNameId(twice, QStringLiteral("NEW"), QStringLiteral("newid"));
+    QVERIFY(!out.isEmpty());
+    QVERIFY(out.contains(QStringLiteral("name = \"NEW\"")));
+    QVERIFY(out.contains(QStringLiteral("id = \"newid\"")));
+    // The first table is the one rewritten; the second keeps its own values.
+    QVERIFY(!out.contains(QStringLiteral("name = \"Decoy\"")));
+    QVERIFY(out.contains(QStringLiteral("name = \"Real\"")));
+    QVERIFY(out.contains(QStringLiteral("id = \"real\"")));
 }
 
 void TestAlgorithmScaffold::splicePreservesLeadingDocComment()
@@ -731,44 +816,72 @@ void TestAlgorithmScaffold::spliceNormalizesCrlf()
     QVERIFY(out.contains(QStringLiteral("        name = \"My Theater\",")));
 }
 
+void TestAlgorithmScaffold::spliceAllBundledAlgorithms_data()
+{
+    QTest::addColumn<QString>("path");
+
+    // One row per bundled algorithm rather than one loop over all of them: a
+    // QVERIFY failure aborts the remaining rows of its own test function, so a
+    // single loop would stop at the first bad file and report nothing about the
+    // other 26. Row-per-file means every algorithm is checked and named on its
+    // own, however many of them fail.
+    const QDir dir(QStringLiteral(P_SOURCE_DIR "/data/algorithms"));
+    const QStringList files = dir.entryList({QStringLiteral("*.luau")}, QDir::Files);
+    QVERIFY(!files.isEmpty());
+    for (const QString& fileName : files) {
+        QTest::newRow(qPrintable(fileName)) << dir.filePath(fileName);
+    }
+}
+
 void TestAlgorithmScaffold::spliceAllBundledAlgorithms()
 {
     // Pin the load-bearing formatting assumption against the real bundled
     // set: every algorithm must splice cleanly, get the new name/id, and
     // keep every non-header, non-name/non-id line verbatim (doc comments,
     // capability flags, customParams, the whole body).
-    const QDir dir(QStringLiteral(P_SOURCE_DIR "/data/algorithms"));
-    const QStringList files = dir.entryList({QStringLiteral("*.luau")}, QDir::Files);
-    QVERIFY(!files.isEmpty());
+    QFETCH(QString, path);
 
     static const QRegularExpression topLevelNameOrId(QStringLiteral(R"(^\s*(name|id)\s*=)"));
-    for (const QString& fileName : files) {
-        QFile f(dir.filePath(fileName));
-        QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(fileName));
-        const QString content = QString::fromUtf8(f.readAll());
 
-        const QString out = spliceTemplate(content, kCopyright, QStringLiteral("My Copy"), QStringLiteral("my-copy"));
-        QVERIFY2(!out.isEmpty(), qPrintable(fileName));
-        QVERIFY2(out.contains(QStringLiteral("        name = \"My Copy\",")), qPrintable(fileName));
-        QVERIFY2(out.contains(QStringLiteral("        id = \"my-copy\",")), qPrintable(fileName));
-        // The new owner's line plus the bundled author's carried-over one.
-        QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 2);
-        QCOMPARE(out.count(QStringLiteral("SPDX-License-Identifier")), 1);
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString content = QString::fromUtf8(f.readAll());
 
-        // Every original line survives except the SPDX header and the
-        // top-level name/id lines. The anchored regex is a conservative
-        // filter: it exempts any line that starts with `name =` / `id =` at
-        // any depth (bundled customParams entries open with `{ name = ...`,
-        // which it does not match), so it can only under-check a nested
-        // own-line name, never fail on a preserved one.
-        const QStringList lines = content.split(QLatin1Char('\n'));
-        for (const QString& line : lines) {
-            const QString trimmed = line.trimmed();
-            if (trimmed.startsWith(QLatin1String("-- SPDX-")) || topLevelNameOrId.match(line).hasMatch()) {
-                continue;
-            }
-            QVERIFY2(out.contains(line), qPrintable(fileName + QStringLiteral(": lost line: ") + line));
+    const QString out = spliceTemplate(content, kCopyright, QStringLiteral("My Copy"), QStringLiteral("my-copy"));
+    QVERIFY(!out.isEmpty());
+    QVERIFY(out.contains(QStringLiteral("        name = \"My Copy\",")));
+    QVERIFY(out.contains(QStringLiteral("        id = \"my-copy\",")));
+    // The new owner's line plus the bundled author's carried-over one.
+    QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 2);
+    QCOMPARE(out.count(QStringLiteral("SPDX-License-Identifier")), 1);
+
+    // Every original line survives except the SPDX header and the
+    // top-level name/id lines. The anchored regex is a conservative
+    // filter: it exempts any line that starts with `name =` / `id =` at
+    // any depth (bundled customParams entries open with `{ name = ...`,
+    // which it does not match), so it can only under-check a nested
+    // own-line name, never fail on a preserved one.
+    //
+    // Blank lines are skipped rather than checked: `contains("")` is true of
+    // any string, so asserting on them proves nothing and only obscures what
+    // the loop does check.
+    //
+    // Compared as whole lines, not substrings. QString::count would count
+    // overlapping substrings, where a short line like `        },` also matches
+    // inside a more deeply indented one, so the counts would differ for reasons
+    // that have nothing to do with the splice. Matching list elements pins the
+    // real property: a preserved line must appear exactly as many times as it
+    // did, so one that survived but got duplicated fails here too.
+    const QStringList lines = content.split(QLatin1Char('\n'));
+    const QStringList outLines = out.split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty() || trimmed.startsWith(QLatin1String("-- SPDX-"))
+            || topLevelNameOrId.match(line).hasMatch()) {
+            continue;
         }
+        QVERIFY2(outLines.contains(line), qPrintable(QStringLiteral("lost line: ") + line));
+        QCOMPARE(outLines.count(line), lines.count(line));
     }
 }
 

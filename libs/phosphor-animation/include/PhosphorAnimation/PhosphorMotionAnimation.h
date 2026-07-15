@@ -121,10 +121,17 @@ class PHOSPHORANIMATION_EXPORT PhosphorMotionAnimation : public QQuickPropertyAn
     Q_PROPERTY(QVariant profile READ profile WRITE setProfile NOTIFY profileChanged)
 
     /// Override the resolved profile's duration (milliseconds). When
-    /// `> 0`, this value is installed via `QQuickPropertyAnimation::
+    /// `>= 0`, this value is installed via `QQuickPropertyAnimation::
     /// setDuration` instead of the profile's own duration — the
-    /// profile's curve is still used. Zero or negative means "use the
-    /// profile's duration unchanged".
+    /// profile's curve is still used. Only the `-1` default means "use
+    /// the profile's duration unchanged".
+    ///
+    /// Zero is a real override meaning "no animation", NOT "unset". A
+    /// bound `Kirigami.Units.shortDuration` evaluates to exactly 0 once
+    /// the user sets Plasma's animation speed to zero, and that has to
+    /// reach setDuration as 0: treating it as unset would fall back to
+    /// the profile and play the animation at full length precisely when
+    /// the user asked for none.
     ///
     /// The intended use is binding a theme-scaled value like
     /// `Kirigami.Units.longDuration` so a shared profile JSON
@@ -197,7 +204,7 @@ private:
     QVariant m_profile; ///< The QML-facing input: QString or PhosphorProfile.
     Profile m_resolvedProfile; ///< Effective value used by easing/duration.
     QString m_boundPath; ///< Non-empty when the input was a path string — drives live-rebind.
-    int m_durationOverride = 0; ///< When > 0, overrides the profile's duration.
+    int m_durationOverride = -1; ///< When >= 0, overrides the profile's duration. -1 means unset.
     QMetaObject::Connection m_registryChangedConnection;
     QMetaObject::Connection m_registryReloadedConnection;
 };

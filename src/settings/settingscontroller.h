@@ -581,11 +581,13 @@ Q_SIGNALS:
     void algorithmCreated(const QString& algorithmId);
     void algorithmOperationFailed(const QString& reason);
     void layoutOperationFailed(const QString& reason);
-    /// Emitted when exportAllSettings / importAllSettings gives up. Both also
-    /// return false, which is enough to sequence on but says nothing about why:
-    /// a refused path, a file that vanished, and a file that is not settings at
-    /// all are the same `false` and want different words. The General page
-    /// toasts this.
+    /// Emitted when exportAllSettings / importAllSettings gives up, and on the
+    /// partial-success path where the import landed but the animation pages
+    /// still hold pre-import snapshots. Both functions also return a bool, but
+    /// no caller sequences on it: the General page uses it only to gate a
+    /// success toast, because a refused path, a file that vanished, and a file
+    /// that is not settings at all are the same `false` and want different
+    /// words. This signal carries those words and is the only failure channel.
     void settingsTransferFailed(const QString& reason);
     /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
     /// fails at the daemon — QML can surface the reason in a toast so the

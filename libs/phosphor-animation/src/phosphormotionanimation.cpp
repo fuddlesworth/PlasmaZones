@@ -117,7 +117,7 @@ void PhosphorMotionAnimation::setDurationOverride(int ms)
     // every bound animation. Duration only feeds QQuickPropertyAnimation's
     // timing machinery, not the easing curve shape, so the direct
     // setDuration is both correct and cheaper.
-    const int durationMs = m_durationOverride > 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
+    const int durationMs = m_durationOverride >= 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
     QQuickPropertyAnimation::setDuration(durationMs);
     Q_EMIT durationOverrideChanged();
 }
@@ -129,15 +129,21 @@ const Profile& PhosphorMotionAnimation::resolvedProfile() const
 
 void PhosphorMotionAnimation::applyResolvedEasing()
 {
-    // Duration: override wins when > 0, otherwise the profile's
+    // Duration: override wins when >= 0, otherwise the profile's
     // effective duration. The override exists so QML authors can bind
     // `durationOverride: Kirigami.Units.longDuration` onto a shared
     // profile JSON — the profile provides the curve shape while the
     // caller's theme-scaled value drives the timing (Plasma's system
-    // animation-speed preference still applies). A zero / negative
-    // override means "use the profile's duration" — this is the
-    // default and the common case.
-    const int durationMs = m_durationOverride > 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
+    // animation-speed preference still applies). Only the -1 default
+    // means "use the profile's duration".
+    //
+    // Zero is a real override, not "unset". Kirigami scales its duration
+    // units by the user's AnimationDurationFactor, and at factor 0 the
+    // shortDuration family rounds to exactly 0. Reading that as "unset"
+    // would fall back to the profile's own duration, so switching
+    // animations off would play them at their FULL seeded length instead
+    // of instantly. Hence the -1 sentinel: 0 has to stay reachable.
+    const int durationMs = m_durationOverride >= 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
     QQuickPropertyAnimation::setDuration(durationMs);
 
     // If no curve is set, fall back to the library default (OutCubic).

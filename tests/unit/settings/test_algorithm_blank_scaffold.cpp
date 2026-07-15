@@ -9,6 +9,12 @@
 
 using namespace PlasmaZones::AlgorithmScaffold;
 
+// Which Capabilities field a data row drives. A member pointer rather than an
+// index into a parallel array: the row names the field it means, so the two
+// cannot drift apart and an added row cannot index out of range.
+using CapFlag = bool PlasmaZones::AlgorithmScaffold::Capabilities::*;
+Q_DECLARE_METATYPE(CapFlag)
+
 namespace {
 
 // The blank scaffold is our own code, so its copy takes both SPDX lines.
@@ -30,6 +36,7 @@ private Q_SLOTS:
     void blankScaffoldMapsEachFlagToItsOwnField_data();
     void blankScaffoldMapsEachFlagToItsOwnField();
     void blankScaffoldOmitsUnsetNewFlags();
+    void sanitizedNameCannotBreakOutOfTheLiteral();
     void sanitizeStripsBreakoutCharacters();
 };
 
@@ -63,8 +70,12 @@ void TestAlgorithmBlankScaffold::blankScaffoldEmitsRequestedFlags()
     QVERIFY(out.contains(QStringLiteral("supportsScriptState = true")));
     QVERIFY(out.contains(QStringLiteral("supportsSingleWindow = true")));
     QVERIFY(out.contains(QStringLiteral("retileOnFocus = true")));
-    // Script state brings the resize-hook stub along.
+    // Script state and split ratio each bring the resize-hook stub along, and
+    // with both set the stub documents both halves of its return contract: the
+    // reserved splitRatio control key, and the persistent bag.
     QVERIFY(out.contains(QStringLiteral("onWindowResized = function(state, resize)")));
+    QVERIFY(out.contains(QStringLiteral("Return { splitRatio = n }")));
+    QVERIFY(out.contains(QStringLiteral("persisted as ctx.state")));
     // Tile body guards tiny areas.
     QVERIFY(out.contains(QStringLiteral("pluau.guardArea(ctx.area, ctx.windowCount)")));
     // The unconditional metadata fields. Stripping these from a template was
@@ -85,25 +96,25 @@ void TestAlgorithmBlankScaffold::blankScaffoldEmitsRequestedFlags()
 
 void TestAlgorithmBlankScaffold::blankScaffoldMapsEachFlagToItsOwnField_data()
 {
-    QTest::addColumn<int>("index");
+    QTest::addColumn<CapFlag>("flag");
     QTest::addColumn<QString>("field");
 
     // One row per flag, each setting only that flag. Any two flags therefore
     // hold different values in at least one row, so swapping a pair of gates
     // fails here. A pair of mixed permutations does not have that property: two
     // flags on the same side of every permutation stay indistinguishable.
-    QTest::newRow("masterCount") << 0 << QStringLiteral("supportsMasterCount");
-    QTest::newRow("splitRatio") << 1 << QStringLiteral("supportsSplitRatio");
-    QTest::newRow("overlappingZones") << 2 << QStringLiteral("producesOverlappingZones");
-    QTest::newRow("memory") << 3 << QStringLiteral("supportsMemory");
-    QTest::newRow("scriptState") << 4 << QStringLiteral("supportsScriptState");
-    QTest::newRow("singleWindow") << 5 << QStringLiteral("supportsSingleWindow");
-    QTest::newRow("retileOnFocus") << 6 << QStringLiteral("retileOnFocus");
+    QTest::newRow("masterCount") << &Capabilities::masterCount << QStringLiteral("supportsMasterCount");
+    QTest::newRow("splitRatio") << &Capabilities::splitRatio << QStringLiteral("supportsSplitRatio");
+    QTest::newRow("overlappingZones") << &Capabilities::overlappingZones << QStringLiteral("producesOverlappingZones");
+    QTest::newRow("memory") << &Capabilities::memory << QStringLiteral("supportsMemory");
+    QTest::newRow("scriptState") << &Capabilities::scriptState << QStringLiteral("supportsScriptState");
+    QTest::newRow("singleWindow") << &Capabilities::singleWindow << QStringLiteral("supportsSingleWindow");
+    QTest::newRow("retileOnFocus") << &Capabilities::retileOnFocus << QStringLiteral("retileOnFocus");
 }
 
 void TestAlgorithmBlankScaffold::blankScaffoldMapsEachFlagToItsOwnField()
 {
-    QFETCH(int, index);
+    QFETCH(CapFlag, flag);
     QFETCH(QString, field);
 
     // The four always-written flags, then the three opt-in ones.
@@ -113,9 +124,7 @@ void TestAlgorithmBlankScaffold::blankScaffoldMapsEachFlagToItsOwnField()
                                QStringLiteral("retileOnFocus")};
 
     Capabilities caps;
-    bool* const flags[] = {&caps.masterCount, &caps.splitRatio,   &caps.overlappingZones, &caps.memory,
-                           &caps.scriptState, &caps.singleWindow, &caps.retileOnFocus};
-    *flags[index] = true;
+    caps.*flag = true;
     const QString out = buildBlankScaffold(kHeader, QStringLiteral("Mine"), QStringLiteral("mine"), caps);
 
     // The one set flag turns its own field true.
@@ -132,8 +141,13 @@ void TestAlgorithmBlankScaffold::blankScaffoldMapsEachFlagToItsOwnField()
             QVERIFY2(!out.contains(other), qPrintable(other));
         }
     }
-    // The resize-hook stub rides on script state alone.
-    QCOMPARE(out.contains(QStringLiteral("onWindowResized")), field == QLatin1String("supportsScriptState"));
+    // The resize-hook stub rides on script state OR split ratio. The engine
+    // applies a splitRatio returned from onWindowResized whether or not the
+    // algorithm persists state (only the bag write is gated on
+    // supportsScriptState), so a split-ratio author wants the hook too.
+    const bool wantsResizeHook =
+        field == QLatin1String("supportsScriptState") || field == QLatin1String("supportsSplitRatio");
+    QCOMPARE(out.contains(QStringLiteral("onWindowResized")), wantsResizeHook);
 }
 
 void TestAlgorithmBlankScaffold::blankScaffoldOmitsUnsetNewFlags()
@@ -146,6 +160,42 @@ void TestAlgorithmBlankScaffold::blankScaffoldOmitsUnsetNewFlags()
     QVERIFY(!out.contains(QStringLiteral("supportsSingleWindow")));
     QVERIFY(!out.contains(QStringLiteral("retileOnFocus")));
     QVERIFY(!out.contains(QStringLiteral("onWindowResized")));
+}
+
+void TestAlgorithmBlankScaffold::sanitizedNameCannotBreakOutOfTheLiteral()
+{
+    // The header's contract is that displayName arrives sanitized, because
+    // buildBlankScaffold embeds it in a Luau string literal with no further
+    // escaping. Pin the two halves together: a hostile name that has been
+    // through the sanitizer must not be able to close its own quote and inject
+    // a second field. Without this, the sanitizer and the embedding are each
+    // tested in isolation and the contract BETWEEN them is not.
+    const QString hostile = QStringLiteral("x\", supportsMemory = true, name = \"pwned");
+    const QString out =
+        buildBlankScaffold(kHeader, sanitizeMetadataString(hostile), QStringLiteral("mine"), Capabilities{});
+    // Every double quote in the value became an apostrophe, so the whole
+    // injection stays inert content of ONE name literal on ONE line. Asserting
+    // the exact line is the point: `supportsMemory = true` and a second
+    // `name =` DO both appear in the output as substrings of that literal, so
+    // an absence check would fail here while proving nothing. What matters is
+    // that they are inside the quotes rather than fields of their own.
+    QVERIFY(out.contains(QStringLiteral("        name = \"x', supportsMemory = true, name = 'pwned\",")));
+    // The real flag is untouched by the injected text above it.
+    QVERIFY(out.contains(QStringLiteral("supportsMemory = false")));
+    // The metadata table still has exactly one name field and one id field.
+    const QStringList outLines = out.split(QLatin1Char('\n'));
+    int nameFields = 0;
+    int idFields = 0;
+    for (const QString& line : outLines) {
+        if (line.startsWith(QStringLiteral("        name = "))) {
+            ++nameFields;
+        }
+        if (line.startsWith(QStringLiteral("        id = "))) {
+            ++idFields;
+        }
+    }
+    QCOMPARE(nameFields, 1);
+    QCOMPARE(idFields, 1);
 }
 
 void TestAlgorithmBlankScaffold::sanitizeStripsBreakoutCharacters()

@@ -1074,7 +1074,7 @@ end
 -- reconstructed self-referentially from the old size.
 local function masterStackResize(state, resize, horizontal)
     local count = state.windowCount
-    local masterCount = state.masterCount or 1
+    local masterCount = state.masterCount
     if count <= masterCount then return nil end -- no stack → no seam
     local oldRatio = state.splitRatio
     local old, new, edges, idx = resize.oldRect, resize.newRect, resize.edges, resize.index

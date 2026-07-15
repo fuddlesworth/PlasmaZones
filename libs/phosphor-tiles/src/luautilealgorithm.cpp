@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 using PhosphorScripting::LuauEngine;
 
@@ -380,7 +381,22 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         }
         const auto out = m_engine->callModule(m_module, fn, {}, ScriptWatchdogTimeoutMs);
         warnIfFailed(fn, out.status);
-        return out.status == LuauEngine::CallStatus::Ok ? out.result.toInt() : fallback;
+        if (out.status != LuauEngine::CallStatus::Ok) {
+            return fallback;
+        }
+        // Same guard as resolveReal below, for the same reason. Luau numbers
+        // are doubles, so a script returning 0/0 or 1e18 marshals as a double
+        // and QVariant::toInt() quietly yields 0. The callers then clamp that
+        // into range, turning "the script did not return a number" into a
+        // plausible-looking answer it never gave (masterZoneIndex 0 reads as
+        // "zone 0 is the master"). Fall back instead.
+        const double v = out.result.toDouble();
+        if (!std::isfinite(v) || v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max()) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: override" << fn << "returned" << v
+                                                 << "which is not a usable int, using fallback, script=" << m_scriptId;
+            return fallback;
+        }
+        return static_cast<int>(v);
     };
     auto resolveBool = [this, &warnIfFailed](const QString& fn, bool fallback) -> bool {
         if (!m_engine->hasFunction(m_module, fn)) {

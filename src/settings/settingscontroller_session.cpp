@@ -42,6 +42,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QFile>
+#include <QFileInfo>
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -465,16 +466,33 @@ bool SettingsController::exportAllSettings(const QString& filePath)
         return false;
     }
     // Flush current in-memory settings to disk so the exported file reflects
-    // the actual current state, not the last-saved snapshot. Settings::save
-    // is void-returning so we can't surface a failure as a return-false
-    // here; the diagnostic log lets a maintainer correlate a stale export
-    // with the underlying flush failure in the journal.
+    // the actual current state, not the last-saved snapshot. Settings::save is
+    // void-returning, so a flush failure cannot be detected here at all. That
+    // is a stronger problem than having nowhere to report one, and it does not
+    // go away now that settingsTransferFailed exists: an export can still
+    // carry the last-saved state while reporting success. The diagnostic log
+    // is what lets a maintainer correlate a stale export with the underlying
+    // flush failure in the journal.
     qCInfo(PlasmaZones::lcCore) << "exportAllSettings: flushing in-memory config to disk before copy";
     m_settings.save();
     const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
     if (!QFile::exists(configPath)) {
         qCWarning(PlasmaZones::lcCore) << "Config file not found:" << configPath;
         Q_EMIT settingsTransferFailed(PhosphorI18n::tr("There is no settings file to export yet."));
+        return false;
+    }
+    // Exporting onto the live config destroys it: the remove below deletes the
+    // destination, which on this path is also the source, so the copy then has
+    // nothing to read. The file picker can reach the config directory, and
+    // unlike the import side there is no backup and no restore here, so the
+    // config would be gone for good. Canonical paths, so a symlink or a `.`
+    // segment pointing at the same file is caught too.
+    const QFileInfo destInfo(safeFilePath);
+    if (destInfo.exists() && destInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath()) {
+        qCWarning(PlasmaZones::lcCore) << "exportAllSettings: destination is the live config file, refusing"
+                                       << safeFilePath;
+        Q_EMIT settingsTransferFailed(
+            PhosphorI18n::tr("That is the settings file this app is using. Export to a different file."));
         return false;
     }
     // Remove destination if it exists (QFile::copy won't overwrite)
@@ -514,6 +532,18 @@ bool SettingsController::importAllSettings(const QString& filePath)
     }
 
     const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
+
+    // Importing the live config onto itself is a no-op, but the copy below
+    // removes the destination first and would then find its source gone. The
+    // backup restores it, so nothing is lost, yet the user is told the import
+    // failed when there was simply nothing to do. Refuse it up front instead.
+    const QFileInfo importInfo(safeFilePath);
+    if (importInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath()) {
+        qCWarning(PlasmaZones::lcCore) << "importAllSettings: source is the live config file, refusing" << safeFilePath;
+        Q_EMIT settingsTransferFailed(
+            PhosphorI18n::tr("Those are the settings this app is already using. Pick a different file to import."));
+        return false;
+    }
 
     // Detect if the imported file is legacy INI format (not JSON).
     // If so, run the migration converter to produce a JSON file.
@@ -623,12 +653,21 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // rename where configPath doesn't exist; that's preferable to the
         // silent-failure semantics of the previous form.
         if (QFile::exists(backupPath)) {
+            // Both arms leave the user without their settings, which the
+            // failure reported above does not cover: it says the import
+            // failed, not that the restore behind it failed too and the only
+            // copy is now the backup. Name the file, since recovering it by
+            // hand is the one action left.
             if (QFile::exists(configPath) && !QFile::remove(configPath)) {
                 qCWarning(PlasmaZones::lcCore)
                     << "Failed to remove configPath before restore. Backup remains at:" << backupPath;
+                Q_EMIT settingsTransferFailed(
+                    PhosphorI18n::tr("Your settings could not be put back. A copy is saved at %1.").arg(backupPath));
             } else if (!QFile::rename(backupPath, configPath)) {
                 qCWarning(PlasmaZones::lcCore)
                     << "Failed to restore config from backup after failed import. Backup remains at:" << backupPath;
+                Q_EMIT settingsTransferFailed(
+                    PhosphorI18n::tr("Your settings could not be put back. A copy is saved at %1.").arg(backupPath));
             }
         }
     } else {
@@ -660,6 +699,15 @@ bool SettingsController::importAllSettings(const QString& filePath)
         if (!animationsReverted) {
             qCWarning(lcConfig) << "importConfig: animation snapshots are still staged after the revert (a discard is "
                                    "in flight, or a restore failed)";
+            // The settings on disk are the imported ones, but the animation
+            // page still holds pre-import snapshots and the session stays
+            // dirty below so a later Discard cannot write them back over the
+            // import. That is a partial result the user has to know about:
+            // without this the import reports plain success while the page
+            // shows something else.
+            Q_EMIT settingsTransferFailed(
+                PhosphorI18n::tr("Your settings were imported, but the animation pages still show the old ones. "
+                                 "Reopen the settings window to see the imported values."));
         }
         if (m_rulesPage) {
             m_rulesPage->revert();

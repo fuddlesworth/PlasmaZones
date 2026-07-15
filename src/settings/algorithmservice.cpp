@@ -65,7 +65,12 @@ bool isBareBaseName(const QString& name)
 /// new `id` from the same slug as the filename, so for them landing on a
 /// bundled basename would unregister that bundled algorithm outright: probing
 /// only the user directory would let "Grid" delete Grid from the catalog.
-/// Import is not in that set, since it keeps the file's own id.
+///
+/// Import keeps the file's own id, so its FIRST choice of basename is allowed
+/// to shadow a bundled one deliberately (findUniqueAlgorithmPath takes it when
+/// nothing is at that path). It only reaches this on the numbered-rollover
+/// path, where a user file already owns the name, and there an over-eager skip
+/// costs nothing but a `-N` slot.
 ///
 /// Every bundled algorithm's basename matches its id, which is what lets a
 /// filename probe answer an id question. Deliberate overrides still work, they
@@ -387,11 +392,10 @@ void AlgorithmService::watchForAlgorithmRegistration(const QString& expectedId)
                                                      if (registeredId != expectedId) {
                                                          return;
                                                      }
-                                                     auto it = m_algorithmWatchers.find(expectedId);
-                                                     if (it != m_algorithmWatchers.end()) {
-                                                         disconnect(it.value().connection);
-                                                         m_algorithmWatchers.erase(it);
-                                                     }
+                                                     // Unconditional, unlike the timeout below: this watcher is
+                                                     // the one that just fired, so there is no generation to
+                                                     // check against.
+                                                     cancelAlgorithmWatcher(expectedId);
                                                      Q_EMIT algorithmCreated(expectedId);
                                                  });
     m_algorithmWatchers.insert(expectedId, {conn, generation});

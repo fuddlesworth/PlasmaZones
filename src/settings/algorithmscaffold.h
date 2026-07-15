@@ -39,20 +39,26 @@ QString sanitizeMetadataString(QString value);
 /// are normalized to LF.
 ///
 /// A top-level name/id field is rewritten when it is the whole line. The value
-/// may use either quote style, and the line may close with either of Luau's
-/// field separators (`,` or `;`) and carry a trailing `--` comment; the
-/// separator and comment are preserved, and only the value changes.
+/// may use either quote style and may contain escaped quotes (`"Bob\"s Grid"`),
+/// and the line may close with either of Luau's field separators (`,` or `;`)
+/// and carry a trailing `--` comment; the separator and comment are preserved,
+/// and only the value changes.
 ///
 /// Returns empty on an unrecognized shape: no metadata table, an opening line
 /// that does not end at the `{`, an unterminated table, a brace depth that goes
 /// negative, or a top-level name/id field that is not a whole line of that
 /// form. That last one covers a field sharing its line with another (in either
 /// order), one trailing a long bracket's closer, one whose key and `=` fall on
-/// different lines, and one whose value spans lines or is followed by a
+/// different lines, one whose value is a long-bracket string (`name = [[x]]`,
+/// which may span lines), and one whose value spans lines or is followed by a
 /// long-bracket comment (`--[[`, `--[=[`, ...), which can close mid-line and
 /// leave a second field somewhere a line-anchored read will not look. None can
 /// be rewritten in place, and leaving one would let Luau's last-wins keep the
 /// template's value.
+///
+/// The table's closer ends the read, wherever on its line it falls: a line that
+/// closes it and opens a sibling (`}, extra = {`) stops here rather than
+/// carrying on into the sibling's fields.
 ///
 /// A `metadata = {` inside a long comment is that comment's text, not the
 /// table, and the search reads it as such rather than rewriting it and leaving
@@ -79,8 +85,10 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
 /// lines are normalized, so a trailing newline is optional), a metadata table
 /// from @p displayName / @p id / @p caps, and a minimal tile function. The
 /// three new capability flags (scriptState, singleWindow, retileOnFocus) are
-/// emitted only when set; scriptState additionally emits an onWindowResized
-/// stub showing the return contract. @p displayName must already be
+/// emitted only when set. Either scriptState or splitRatio additionally emits
+/// an onWindowResized stub documenting the half of the return contract that
+/// capability reaches: splitRatio for the reserved control key, scriptState
+/// for the persistent bag. @p displayName must already be
 /// sanitizeMetadataString()'d — it is embedded in a Luau string literal
 /// without further escaping.
 QString buildBlankScaffold(const QString& header, const QString& displayName, const QString& id,

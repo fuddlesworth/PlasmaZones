@@ -3451,14 +3451,24 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // Lightweight safety net: the algorithm handles min sizes directly, but
     // enforceMinSizes catches any residual deficits from rounding or
     // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable
-    // constraints). Skip for any algorithm where producesOverlappingZones()
-    // is true (Monocle, Cascade, Stair, Deck, Paper, Spread, horizontal-deck
-    // and any future opt-in): zones intentionally overlap and the implicit
-    // removeRectOverlaps inside enforceMinSizes would destroy the
-    // intended layout.
+    // constraints).
+    //
+    // Two opt-outs, and both are the algorithm's own declaration:
+    //   - producesOverlappingZones() (Monocle, Cascade, Stair, Deck, Paper,
+    //     Spread, horizontal-deck and any future opt-in): zones intentionally
+    //     overlap and the implicit removeRectOverlaps inside enforceMinSizes
+    //     would destroy the intended layout.
+    //   - !supportsMinSizes(): the algorithm says min sizes are not a concept
+    //     it works in. Running the pass anyway would apply the very treatment
+    //     the flag opts out of, and would silently overrule a shipped script.
+    //     Four bundled algorithms declare it: tatami, floating-center, cluster
+    //     and theater. None of them declares producesOverlappingZones, which
+    //     defaults to false, so before this gate all four were min-size
+    //     corrected despite opting out.
+    //
     // minSizes is populated iff respectMin (see above); windowCount > 0 is
     // already guaranteed by the early return at the top of this function.
-    if (respectMin && !algo->producesOverlappingZones()) {
+    if (respectMin && algo->supportsMinSizes() && !algo->producesOverlappingZones()) {
         const int threshold = effectiveInnerGap(screenId) + PhosphorTiles::AutotileDefaults::GapEdgeThresholdPx;
         const QVector<QRect> preEnforceZones = zones;
         PhosphorGeometry::enforceMinSizes(zones, minSizes, threshold, innerGap);

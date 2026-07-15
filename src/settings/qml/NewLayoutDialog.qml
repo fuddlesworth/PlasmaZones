@@ -18,7 +18,6 @@ import org.plasmazones.common as QFZCommon
 Kirigami.Dialog {
     id: root
 
-    required property var appSettings // Settings object (settingsBridge)
     required property var controller // SettingsController — CRUD + signals
     property int currentStep: 0
     property string selectedType: "custom"
@@ -416,17 +415,29 @@ Kirigami.Dialog {
                             opacity: 0.7
                         }
 
+                        // Index maps straight onto AspectRatioClass
+                        // (Any=0, Standard=1, Ultrawide=2, SuperUltrawide=3,
+                        // Portrait=4), the same way the editor's
+                        // LayoutSettingsDialog and Main.qml's filter do. The
+                        // value travels unmapped into setLayoutAspectRatioClass,
+                        // so a shift here would tag every layout with the
+                        // neighbouring class and put Portrait out of reach.
+                        //
+                        // selectedAspectRatio starts at -1 for "not chosen",
+                        // which createNewLayout reads as "skip the call" and
+                        // leaves the daemon's own Any default. Picking Any
+                        // explicitly writes 0, which lands in the same place.
                         SettingsButtonGroup {
-                            model: [i18n("Auto"), "16:9", "21:9", "32:9", i18n("Portrait")]
-                            currentIndex: root.selectedAspectRatio + 1
+                            model: [i18n("Any"), "16:9", "21:9", "32:9", i18n("Portrait")]
+                            currentIndex: Math.max(0, root.selectedAspectRatio)
                             onIndexChanged: index => {
-                                root.selectedAspectRatio = index - 1;
+                                root.selectedAspectRatio = index;
                             }
                         }
 
                         Label {
-                            visible: root.selectedAspectRatio === -1
-                            text: i18n("Auto-detected from your primary monitor")
+                            visible: root.selectedAspectRatio <= 0
+                            text: i18n("This layout is offered on every monitor")
                             font: Kirigami.Theme.smallFont
                             opacity: 0.4
                         }

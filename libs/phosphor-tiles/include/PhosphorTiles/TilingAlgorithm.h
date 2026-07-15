@@ -292,12 +292,16 @@ public:
      * Most algorithms respect the minSizes parameter. Algorithms that ignore
      * it (e.g., Floating Center, Tatami) return false to say so.
      *
-     * Like masterZoneIndex above, this describes the algorithm for a caller
-     * that asks, and nothing in this tree reads it outside of tests. There is
-     * no settings control keyed on it, and the engine decides whether to run
-     * its min-size pass from producesOverlappingZones() rather than from this.
-     * It stays on the exported API for the same reason: a third-party
-     * algorithm can declare it and a third-party consumer can read it.
+     * Returning false opts the algorithm out of the engine's min-size pass:
+     * AutotileEngine skips enforceMinSizes (and the removeRectOverlaps implied
+     * by it) for the algorithm's zones, alongside the separate
+     * producesOverlappingZones() opt-out. An algorithm that declares this is
+     * saying min sizes are not a concept it works in, so having the engine
+     * post-process its output into honouring them would contradict the
+     * declaration.
+     *
+     * There is no settings control keyed on it: it describes the algorithm
+     * rather than exposing a user choice.
      *
      * @return true if the algorithm honors minSizes (default: true)
      */

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "AutotileConstants.h"
 #include "TileScriptMetadata.h"
 #include "TilingAlgorithm.h"
 

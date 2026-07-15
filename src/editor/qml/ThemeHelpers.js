@@ -7,11 +7,10 @@
  * @brief Shared theme utility functions for editor QML components
  */
 
-// Standard easing for all editor transitions. Durations are NOT here: this is a
-// .pragma library, so it cannot reach Kirigami.Units, and a duration written as
-// a number would not follow the user's animation speed. The call sites read
-// Kirigami.Units directly instead.
-var animEasing = 3; // Easing.OutCubic (literal — .pragma library has no QML context)
+// Neither durations nor easings live here: this is a .pragma library, so it
+// cannot reach Kirigami.Units or Easing, and either one written as a bare
+// number would stop following the user's animation-speed preference. The call
+// sites read Kirigami.Units and Easing directly instead.
 
 // Standard corner radius multiplier (smallSpacing * this)
 var radiusMultiplier = 1.5;

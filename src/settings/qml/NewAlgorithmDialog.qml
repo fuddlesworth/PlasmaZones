@@ -373,114 +373,87 @@ Kirigami.Dialog {
                             rowSpacing: Kirigami.Units.smallSpacing
 
                             // Each box drives its flag through `onToggled` and
-                            // reads it back through a binding, so the onOpened
-                            // resets land on the control. There is no
-                            // write-back loop: a plain CheckBox flips `checked`
+                            // reads it back through a plain `checked:` binding,
+                            // so the onOpened resets land on the control. There
+                            // is no write-back loop: a CheckBox flips `checked`
                             // through toggle(), a C++ setter, which neither
-                            // severs the binding nor re-emits toggled(). That
-                            // makes `Binding on checked` equivalent to a plain
-                            // `checked:` binding here, which is NOT true of the
-                            // StayOpenMenuItems in LayoutFilterBar: those
-                            // assign `checked` from JS, and only `Binding on`
-                            // survives that. RestoreNone never comes up either
-                            // way, because these bindings carry no `when` and
-                            // so never deactivate.
+                            // severs the binding nor re-emits toggled().
+                            //
+                            // A `Binding on checked` would work here too, and
+                            // is what the StayOpenMenuItems in LayoutFilterBar
+                            // genuinely need, because those assign `checked`
+                            // from JS and a plain binding does not survive that.
+                            // Nothing assigns `checked` here, so the plain form
+                            // is the one to use, matching the same checkbox in
+                            // NewLayoutDialog.
                             CheckBox {
                                 text: i18n("Master count")
+                                checked: root.supportsMasterCount
                                 onToggled: root.supportsMasterCount = checked
                                 Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Configurable master/center windows")
-
-                                Binding on checked {
-                                    value: root.supportsMasterCount
-                                    restoreMode: Binding.RestoreNone
-                                }
                             }
 
                             CheckBox {
                                 text: i18n("Split ratio")
+                                checked: root.supportsSplitRatio
                                 onToggled: root.supportsSplitRatio = checked
                                 Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Adjustable master/stack ratio")
-
-                                Binding on checked {
-                                    value: root.supportsSplitRatio
-                                    restoreMode: Binding.RestoreNone
-                                }
                             }
 
                             CheckBox {
                                 text: i18n("Overlapping zones")
+                                checked: root.producesOverlappingZones
                                 onToggled: root.producesOverlappingZones = checked
                                 Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Zones can overlap each other")
-
-                                Binding on checked {
-                                    value: root.producesOverlappingZones
-                                    restoreMode: Binding.RestoreNone
-                                }
                             }
 
                             CheckBox {
                                 text: i18n("Persistent memory")
+                                checked: root.supportsMemory
                                 onToggled: root.supportsMemory = checked
                                 Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Remembers positions across changes")
-
-                                Binding on checked {
-                                    value: root.supportsMemory
-                                    restoreMode: Binding.RestoreNone
-                                }
                             }
 
                             CheckBox {
                                 text: i18n("Script state")
+                                checked: root.supportsScriptState
                                 onToggled: root.supportsScriptState = checked
                                 Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Keeps a persistent state table across retiles")
-
-                                Binding on checked {
-                                    value: root.supportsScriptState
-                                    restoreMode: Binding.RestoreNone
-                                }
                             }
 
                             CheckBox {
                                 text: i18n("Single window")
+                                checked: root.supportsSingleWindow
                                 onToggled: root.supportsSingleWindow = checked
                                 Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Lays out a lone window itself instead of filling the screen")
-
-                                Binding on checked {
-                                    value: root.supportsSingleWindow
-                                    restoreMode: Binding.RestoreNone
-                                }
                             }
 
                             CheckBox {
                                 text: i18n("Follows focus")
+                                checked: root.retileOnFocus
                                 onToggled: root.retileOnFocus = checked
                                 Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Reflows when focus moves between tiled windows")
-
-                                Binding on checked {
-                                    value: root.retileOnFocus
-                                    restoreMode: Binding.RestoreNone
-                                }
                             }
                         }
                     }
@@ -495,12 +468,8 @@ Kirigami.Dialog {
                         // No tooltip here either, so there is nothing to add as
                         // a description.
                         text: i18n("Open in text editor after creation")
+                        checked: root.openInEditor
                         onToggled: root.openInEditor = checked
-
-                        Binding on checked {
-                            value: root.openInEditor
-                            restoreMode: Binding.RestoreNone
-                        }
                     }
                 }
             }

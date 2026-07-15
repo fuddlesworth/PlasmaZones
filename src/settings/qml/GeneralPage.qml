@@ -61,10 +61,11 @@ SettingsFlickable {
                     ComboBox {
                         id: renderingBackendCombo
 
-                        function syncIndex() {
-                            currentIndex = Math.max(0, settingsController.generalPage.renderingBackendOptions.indexOf(appSettings.renderingBackend));
-                        }
-
+                        // currentIndex is a binding and stays one. appSettings
+                        // .renderingBackend has a NOTIFY, so the binding already
+                        // re-evaluates on every change; a Connections handler
+                        // assigning currentIndex would sever it on its first run
+                        // and then be the only thing keeping the combo in sync.
                         enabled: !settingsController.daemonRunning
                         Accessible.name: i18n("Rendering backend")
                         model: settingsController.generalPage.renderingBackendDisplayNames
@@ -72,14 +73,6 @@ SettingsFlickable {
                         onActivated: index => {
                             if (index >= 0 && index < settingsController.generalPage.renderingBackendOptions.length)
                                 appSettings.renderingBackend = settingsController.generalPage.renderingBackendOptions[index];
-                        }
-
-                        Connections {
-                            function onRenderingBackendChanged() {
-                                renderingBackendCombo.syncIndex();
-                            }
-
-                            target: appSettings
                         }
                     }
                 }
@@ -344,16 +337,10 @@ SettingsFlickable {
                                     "value": "mono-right"
                                 }
                             ]
+                            // A binding, not a JS assignment: see
+                            // renderingBackendCombo above.
                             currentIndex: Math.max(0, indexOfValue(appSettings.audioChannelMode))
                             onActivated: appSettings.audioChannelMode = currentValue
-
-                            Connections {
-                                function onAudioChannelModeChanged() {
-                                    audioChannelModeCombo.currentIndex = Math.max(0, audioChannelModeCombo.indexOfValue(appSettings.audioChannelMode));
-                                }
-
-                                target: appSettings
-                            }
                         }
                     }
 
@@ -428,16 +415,10 @@ SettingsFlickable {
                                     "value": "pulse"
                                 }
                             ]
+                            // A binding, not a JS assignment: see
+                            // renderingBackendCombo above.
                             currentIndex: Math.max(0, indexOfValue(appSettings.audioInputMethod))
                             onActivated: appSettings.audioInputMethod = currentValue
-
-                            Connections {
-                                function onAudioInputMethodChanged() {
-                                    audioInputMethodCombo.currentIndex = Math.max(0, audioInputMethodCombo.indexOfValue(appSettings.audioInputMethod));
-                                }
-
-                                target: appSettings
-                            }
                         }
                     }
 

@@ -561,7 +561,6 @@ SettingsFlickable {
     NewLayoutDialog {
         id: newLayoutDialog
 
-        appSettings: root.settingsBridge
         controller: settingsController
     }
 

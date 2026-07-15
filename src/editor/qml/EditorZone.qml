@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
-import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -477,7 +476,12 @@ Item {
         Rectangle {
             id: multiSelectBadge
 
-            visible: root.isPartOfMultiSelection
+            // opacity drives the fade and `visible` follows it, rather than
+            // `visible` binding the multi-selection state directly: an
+            // unbound opacity sits at 1.0 forever, so the Behavior below
+            // would never see a transition and the badge would pop.
+            opacity: root.isPartOfMultiSelection ? 1 : 0
+            visible: opacity > 0
             width: Kirigami.Units.gridUnit
             height: Kirigami.Units.gridUnit
             radius: width / 2

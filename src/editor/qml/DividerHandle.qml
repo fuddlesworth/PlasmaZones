@@ -3,7 +3,6 @@
 
 import QtQuick
 import QtQuick.Controls
-import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 

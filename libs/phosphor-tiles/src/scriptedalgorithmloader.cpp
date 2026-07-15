@@ -274,6 +274,15 @@ void ScriptedAlgorithmLoader::scanAndRegister(PhosphorFsLoader::LiveReload liveR
 QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesInScanOrder)
 {
     auto* registry = m_registry;
+    // The constructor's Q_ASSERT(m_registry) is compiled out of a release
+    // build, where this and loadFromDirectory both dereference the pointer
+    // unguarded and would crash on the first valid script rather than assert.
+    // The destructor already guards the same way, so match it: a null registry
+    // means there is nothing to scan into.
+    if (!registry) {
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithmLoader::performScan: no registry, skipping scan";
+        return {};
+    }
 
     // Track which script IDs we register in this scan
     QSet<QString> newScriptIds;

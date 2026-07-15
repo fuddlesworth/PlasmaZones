@@ -107,8 +107,8 @@ to sensible defaults.
 | `minimumWindows` | number | Smallest window count the layout supports (clamped to 1–100) |
 | `supportsMasterCount` | boolean | Exposes the “master count” control, so the user can adjust `ctx.masterCount` |
 | `supportsSplitRatio` | boolean | Exposes the split-ratio slider, so the user can adjust `ctx.splitRatio` |
-| `defaultSplitRatio` | number | Initial split ratio (0.1–0.9) |
-| `supportsMinSizes` | boolean | Honours per-window minimum sizes (default `true`). Describes the layout for a caller that asks, and no built-in feature reads it: whether the host runs its min-size pass follows `producesOverlappingZones` and the user's own setting, so declaring this `false` changes nothing today |
+| `defaultSplitRatio` | number | Initial split ratio. Omit it, or set it to 0 or less, to use the built-in default of 0.5, otherwise it is clamped to 0.1–0.9 |
+| `supportsMinSizes` | boolean | Honours per-window minimum sizes (default `true`). Set it `false` to opt out of the host's min-size pass, which it otherwise runs over your zones to fix up any residual deficits. The pass is skipped when you declare this `false`, when you declare `producesOverlappingZones`, or when the user turns the setting off |
 | `supportsMemory` | boolean | Uses the persistent split tree (§10) |
 | `supportsScriptState` | boolean | Persists an opaque `ctx.state` table across retiles (§9) |
 | `supportsSingleWindow` | boolean | Owns the lone-window case. Without it the host fills the work area when one window is tiled |

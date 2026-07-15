@@ -139,8 +139,14 @@ int findLongBracketClose(const QString& line, int level, int from)
 /// still open at the end of the line. That string runs past where this scan can
 /// follow, so a caller reads it as "unrecognized shape" rather than resume
 /// mid-literal.
+///
+/// @p tableClosed, when non-null, is set if the table closed on this line. The
+/// caller cannot infer that from the return value: a line that closes the table
+/// and opens another (`}, extra = {`) nets to zero, so a caller watching only
+/// the running depth walks straight on into the sibling and reads its fields as
+/// this table's own.
 int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, QString* codeOnly = nullptr,
-               bool* openString = nullptr)
+               bool* openString = nullptr, bool* tableClosed = nullptr)
 {
     int depth = startDepth;
     // Set once the metadata table closes on this line. Everything after its
@@ -149,12 +155,22 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
     bool closed = false;
     int i = 0;
 
+    // Every exit reports `closed`, including the ones that stop mid-line at an
+    // unclosed comment or long bracket: the table's closer can precede those on
+    // the same line, and a caller that missed it would resume in the sibling.
+    const auto finish = [&](int delta) {
+        if (tableClosed) {
+            *tableClosed = closed;
+        }
+        return delta;
+    };
+
     // A long bracket left open by an earlier line: everything up to its closer
     // is text.
     if (longBracketLevel != kNoLongBracket) {
         const int past = findLongBracketClose(line, longBracketLevel, 0);
         if (past < 0) {
-            return 0;
+            return finish(0);
         }
         longBracketLevel = kNoLongBracket;
         i = past;
@@ -187,12 +203,12 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
             int pastOpener = 0;
             const int level = matchLongBracketOpen(line, i + 2, pastOpener);
             if (level == kNoLongBracket) {
-                return depth - startDepth;
+                return finish(depth - startDepth);
             }
             const int past = findLongBracketClose(line, level, pastOpener);
             if (past < 0) {
                 longBracketLevel = level;
-                return depth - startDepth;
+                return finish(depth - startDepth);
             }
             i = past - 1;
             continue;
@@ -203,7 +219,7 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
             const int past = findLongBracketClose(line, level, pastOpener);
             if (past < 0) {
                 longBracketLevel = level;
-                return depth - startDepth;
+                return finish(depth - startDepth);
             }
             i = past - 1;
             continue;
@@ -239,7 +255,7 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
     if (openString && !quote.isNull()) {
         *openString = true;
     }
-    return depth - startDepth;
+    return finish(depth - startDepth);
 }
 
 } // anonymous namespace
@@ -302,13 +318,26 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
         + QStringLiteral("        if early then return early end\n")
         + QStringLiteral("        return pluau.fillArea(ctx.area, ctx.windowCount)\n") + QStringLiteral("    end,\n");
 
-    if (caps.scriptState) {
-        content += QStringLiteral("\n")
-            + QStringLiteral("    -- Called after an interactive resize. Return a table to persist as\n")
-            + QStringLiteral("    -- ctx.state for the next tile() run. Include a splitRatio key to have\n")
-            + QStringLiteral("    -- the engine apply a new master/split ratio. Return nil to do nothing.\n")
-            + QStringLiteral("    -- The table you return replaces the whole bag rather than merging\n")
-            + QStringLiteral("    -- into it, so return every key you want to keep.\n")
+    // Either capability wants this hook, and they are independent:
+    // LuauTileAlgorithm::onWindowResized applies a returned splitRatio whether
+    // or not the algorithm persists state, and only the bag write is gated on
+    // supportsScriptState. Bundled zen.luau is exactly that shape, a resize
+    // hook returning a ratio with no supportsScriptState declared. Gating the
+    // stub on scriptState alone left the split-ratio author, the one most
+    // likely to want a resize hook, without one and with no hint it exists.
+    if (caps.scriptState || caps.splitRatio) {
+        content += QStringLiteral("\n") + QStringLiteral("    -- Called after an interactive resize.\n");
+        if (caps.splitRatio) {
+            content += QStringLiteral("    -- Return { splitRatio = n } to have the engine apply a new\n")
+                + QStringLiteral("    -- master/split ratio. splitRatio is a reserved control key: the\n")
+                + QStringLiteral("    -- engine applies it and does not keep it.\n");
+        }
+        if (caps.scriptState) {
+            content += QStringLiteral("    -- Any other key you return is persisted as ctx.state for the next\n")
+                + QStringLiteral("    -- tile() run. The table you return replaces the whole bag rather\n")
+                + QStringLiteral("    -- than merging into it, so return every key you want to keep.\n");
+        }
+        content += QStringLiteral("    -- Return nil to do nothing.\n")
             + QStringLiteral("    onWindowResized = function(state, resize)\n") + QStringLiteral("        return nil\n")
             + QStringLiteral("    end,\n");
     }
@@ -375,12 +404,20 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     // line-anchored read would never look for one. A `--[` that opens no long
     // bracket is an ordinary line comment and runs to the end of the line, so
     // it is accepted like any other.
+    //
+    // The value may also contain an escaped quote (`name = "Bob\"s Grid"`).
+    // The rewrite discards the old value wholesale, so what it spells does not
+    // matter, but the pattern still has to recognise the line: a `[^"]*` value
+    // stops at the backslash-escaped quote and fails the match, which rejects
+    // the whole copy over an apostrophe. A long-bracket value (`name = [[x]]`)
+    // is still refused, and is listed as such on the header's contract: it can
+    // span lines, where this line-anchored read cannot follow it.
     static const QRegularExpression nameFieldRe(QStringLiteral(R"(^\s*name\s*=)"));
     static const QRegularExpression idFieldRe(QStringLiteral(R"(^\s*id\s*=)"));
-    static const QRegularExpression nameLineRe(
-        QStringLiteral(R"(^\s*name\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[=*\[).*)?)\s*$)"));
-    static const QRegularExpression idLineRe(
-        QStringLiteral(R"(^\s*id\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[=*\[).*)?)\s*$)"));
+    static const QRegularExpression nameLineRe(QStringLiteral(
+        R"(^\s*name\s*=\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*([,;]?)((?:\s*--(?!\[=*\[).*)?)\s*$)"));
+    static const QRegularExpression idLineRe(QStringLiteral(
+        R"(^\s*id\s*=\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*([,;]?)((?:\s*--(?!\[=*\[).*)?)\s*$)"));
     // A name/id key anywhere on the line, not just at its start. The two
     // anchored patterns above only see a field that leads its line, so without
     // this a trailing `a = 1, name = "x",` would be neither rewritten nor
@@ -421,7 +458,8 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
         const bool lineStartsInText = longBracketLevel != kNoLongBracket;
         QString codeOnly;
         bool openString = false;
-        depth += braceDelta(lines[i], longBracketLevel, depthAtLineStart, &codeOnly, &openString);
+        bool closedThisLine = false;
+        depth += braceDelta(lines[i], longBracketLevel, depthAtLineStart, &codeOnly, &openString, &closedThisLine);
         if (openString) {
             return QString();
         }
@@ -463,12 +501,25 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
         }
         metaLines += line;
 
+        // The table's own closer ends the walk, wherever on the line it falls.
+        // Watching the running depth instead would miss `}, extra = {`, which
+        // closes this table and opens a sibling for a net delta of zero: the
+        // walk would carry on into the sibling, rewrite ITS `name`, and set
+        // sawName from it, so the insert below is skipped and metadata ends up
+        // with no name at all. The line is emitted whole either way, so the
+        // enclosing table's code after the closer survives untouched.
+        //
+        // A line that closes the table AND overshoots (`}},`) is still refused
+        // by the depth test below, as it was before: the extra closer means
+        // more closers than openers, which this cannot rewrite in place and
+        // does not try to.
+        if (closedThisLine && depth >= 0) {
+            metaEnd = i;
+            break;
+        }
         if (depth <= 0) {
-            // A negative depth means more closers than openers — malformed
-            // input; leave metaEnd at -1 so the rewrite rejects it.
-            if (depth == 0) {
-                metaEnd = i;
-            }
+            // Depth fell out of the table: more closers than openers, i.e.
+            // malformed input. Leave metaEnd at -1 so the rewrite rejects it.
             break;
         }
     }

@@ -9,6 +9,12 @@
 // line, and they all assert the same thing — an unrecognized shape returns
 // empty rather than a corrupted script.
 //
+// Not every refusal lives here. spliceHandlesTrailingNameOrIdField, over in
+// test_algorithm_scaffold.cpp, keeps its own rejects next to its accepts on
+// purpose: it maps one shape family (a name/id field that does not lead its
+// line) and the boundary between what that family accepts and refuses is the
+// thing it pins, which splitting the two halves across files would hide.
+//
 // Every case here is a shape a rewrite COULD plausibly accept and mangle. The
 // value is in the refusal, so a test that stops failing is a test that found a
 // regression: Luau resolves a duplicate key last-wins, so a splice that inserts
