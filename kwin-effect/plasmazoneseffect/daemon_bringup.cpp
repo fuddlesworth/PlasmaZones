@@ -12,6 +12,7 @@
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/BridgeMarshalling.h>
@@ -596,18 +597,24 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the effect's drag-gate exclusion rule set is now derived from the
     // store-side Exclude rules pulled via Rules.rulesChanged →
     // loadRuleAnimationsFromDbus. No D-Bus settings fetch needed.
-    // isValid + clamp: a failed/invalid reply would otherwise toInt() to 0
-    // and silently disable the min-size gate the permissive member defaults
-    // exist to protect across the startup race (same hardening as the
-    // animation min-size loaders below).
+    // &ok gate + two-sided clamp: a failed reply OR an older daemon's
+    // valid-empty-string reply for an unknown key would otherwise toInt() to 0
+    // and silently disable the min-size gate the protective member defaults
+    // exist to keep active across the startup race, and an out-of-spec large
+    // reply would silently reject every window from eligibility (same
+    // hardening as the animation/decoration min-size loaders below).
     loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
-        if (v.isValid()) {
-            m_cachedMinWindowWidth = qMax(0, v.toInt());
+        bool ok = false;
+        const int i = v.toInt(&ok);
+        if (ok) {
+            m_cachedMinWindowWidth = qBound(0, i, 2000);
         }
     });
     loadSettingAsync(QStringLiteral("minimumWindowHeight"), [this](const QVariant& v) {
-        if (v.isValid()) {
-            m_cachedMinWindowHeight = qMax(0, v.toInt());
+        bool ok = false;
+        const int i = v.toInt(&ok);
+        if (ok) {
+            m_cachedMinWindowHeight = qBound(0, i, 2000);
         }
     });
     // System colours for window-border rules: the zone highlight / inactive
@@ -696,20 +703,41 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("windowBorderScope"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.borderScope != s) {
+        // Reject the empty string (an older daemon answers unknown keys with a
+        // valid empty reply): scopes carry a seeded non-empty default, and an
+        // empty scope silently contributes nothing to the appearance match.
+        if (!s.isEmpty() && m_windowAppearanceDefault.borderScope != s) {
             m_windowAppearanceDefault.borderScope = s;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderWidth"), [this](const QVariant& v) {
-        const int i = v.toInt();
+        // Clamp at the D-Bus boundary like every sibling int loader — the
+        // daemon is a separate process and must not be trusted with the range.
+        // DecorationDefaults is the SSOT the daemon's own schema clamps from.
+        // The &ok gate keeps an older daemon's valid-empty reply for an
+        // unknown key from coercing to 0 and clobbering the seeded default.
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        namespace DD = PhosphorCompositor::DecorationDefaults;
+        const int i = qBound(DD::BorderWidthMin, raw, DD::BorderWidthMax);
         if (m_windowAppearanceDefault.borderWidth != i) {
             m_windowAppearanceDefault.borderWidth = i;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderRadius"), [this](const QVariant& v) {
-        const int i = v.toInt();
+        // Same boundary clamp and &ok gate as windowBorderWidth above.
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        namespace DD = PhosphorCompositor::DecorationDefaults;
+        const int i = qBound(DD::BorderRadiusMin, raw, DD::BorderRadiusMax);
         if (m_windowAppearanceDefault.borderRadius != i) {
             m_windowAppearanceDefault.borderRadius = i;
             scheduleBorderSweep();
@@ -738,7 +766,8 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("windowTitleBarScope"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.titleBarScope != s) {
+        // Empty-reply guard — see windowBorderScope above.
+        if (!s.isEmpty() && m_windowAppearanceDefault.titleBarScope != s) {
             m_windowAppearanceDefault.titleBarScope = s;
             scheduleBorderSweep();
         }
@@ -754,7 +783,8 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("windowOpacityTintScope"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.opacityTintScope != s) {
+        // Empty-reply guard — see windowBorderScope above.
+        if (!s.isEmpty() && m_windowAppearanceDefault.opacityTintScope != s) {
             m_windowAppearanceDefault.opacityTintScope = s;
             scheduleBorderSweep();
         }
@@ -893,7 +923,23 @@ void PlasmaZonesEffect::loadCachedSettings()
         scheduleEffectAudioSync();
     });
     loadSettingAsync(QStringLiteral("animationsEnabled"), [this](const QVariant& v) {
+        // Type-guard before reading, for exactly the reason the decoration
+        // loaders above spell out: a reply that ARRIVES but is not a bool (an
+        // older daemon, a mid-restart half-answer, a getter's invalid-variant
+        // fallback) coerces through toBool() to false, and m_enabled defaults
+        // to TRUE (windowanimator.h) — so an unguarded read INVERTS the default
+        // and silently disables every animation. It would drag the suppression
+        // sync below with it too, reloading KWin's show-desktop effects as a
+        // side effect of a malformed reply.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_windowAnimator->setEnabled(v.toBool());
+        // The animations master toggle is part of the suppression predicate:
+        // with animations off the peek never runs, so KWin's own show-desktop
+        // effects must come back rather than leave the user with no
+        // show-desktop animation at all.
+        syncShowDesktopEffectSuppression();
     });
     loadSettingAsync(QStringLiteral("animationDuration"), [this](const QVariant& v) {
         // Clamp against the canonical settings-UI bounds. The earlier
@@ -928,29 +974,53 @@ void PlasmaZonesEffect::loadCachedSettings()
     // the animation cascade; rules whose match expression resolves for
     // the window override the filter at the resolver layer so a targeted
     // rule can re-enable animation for an otherwise-excluded app.
+    // Type-guard like the decoration bool loaders above. This member happens to
+    // init `false`, which is also what toBool() yields for a non-bool reply —
+    // but that agreement is a coincidence of the default's polarity that
+    // nothing records, and flipping the default later would silently turn a
+    // bad reply into the wrong filter. isValid() is NOT enough: a valid
+    // empty-string reply (an older daemon answering an unknown key) passes it
+    // and then reads as false.
     loadSettingAsync(QStringLiteral("animationExcludeTransientWindows"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_animationExcludeTransientWindows = v.toBool();
     });
-    // Default true (exclude). Guard on isValid() so a failed reply
-    // leaves the member at its `true` init rather than `toBool()`'s
-    // false-on-invalid — otherwise a missed fetch would animate
-    // notifications/OSDs until the next successful settings load.
+    // Default true (exclude). Type-guard, not isValid(): an error reply never
+    // reaches this callback at all (ClientHelpers gates on reply.isValid() and
+    // leaves our default in place), so what has to be defended against is a
+    // reply that ARRIVES and is not a bool — an older daemon's valid
+    // empty-string answer for an unknown key. That passes isValid() and
+    // toBool()s to false, INVERTING this default-true setting and animating
+    // notifications/OSDs until the next successful load.
     loadSettingAsync(QStringLiteral("animationExcludeNotificationsAndOsd"), [this](const QVariant& v) {
-        if (v.isValid()) {
-            m_animationExcludeNotificationsAndOsd = v.toBool();
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        m_animationExcludeNotificationsAndOsd = v.toBool();
+    });
+    // Clamp on the effect side as defence-in-depth — the daemon's schema
+    // validator already bounds these to [0, 2000], but the daemon is a separate
+    // process and this effect must not trust the wire. The &ok gate + two-sided
+    // clamp is the same hardening the snapping/decoration min-size loaders
+    // apply: a non-int variant (an older daemon's valid-empty reply for an
+    // unknown key) is rejected outright rather than coerced to 0, and a
+    // negative or absurd value from an out-of-spec callsite is clamped, so the
+    // min-size gate cannot be silently disabled.
+    loadSettingAsync(QStringLiteral("animationMinimumWindowWidth"), [this](const QVariant& v) {
+        bool ok = false;
+        const int i = v.toInt(&ok);
+        if (ok) {
+            m_animationMinWindowWidth = qBound(0, i, 2000);
         }
     });
-    // Clamp on the effect side as a defence-in-depth — the daemon's
-    // schema validator already bounds these to [0, 2000], but a
-    // malformed reply (`toInt()` returning 0 on a non-int variant or
-    // a negative value from an out-of-spec callsite) would otherwise
-    // silently disable / invert the min-size gate. Kept symmetric with
-    // `animationDuration`'s `qBound` clamp above.
-    loadSettingAsync(QStringLiteral("animationMinimumWindowWidth"), [this](const QVariant& v) {
-        m_animationMinWindowWidth = qBound(0, v.toInt(), 2000);
-    });
     loadSettingAsync(QStringLiteral("animationMinimumWindowHeight"), [this](const QVariant& v) {
-        m_animationMinWindowHeight = qBound(0, v.toInt(), 2000);
+        bool ok = false;
+        const int i = v.toInt(&ok);
+        if (ok) {
+            m_animationMinWindowHeight = qBound(0, i, 2000);
+        }
     });
 
     // Decoration window filtering — independent of the snapping/tiling and
@@ -960,12 +1030,14 @@ void PlasmaZonesEffect::loadCachedSettings()
     // adds/removes borders on open windows live (mirroring the appearance
     // loaders above) — unlike the animation filter, decorations are persistent
     // state and won't self-correct on the next window event.
-    // Default true (exclude transients). Guard on isValid() so a failed reply
-    // leaves the member at its `true` init rather than `toBool()`'s
-    // false-on-invalid — otherwise a missed fetch would start drawing borders
-    // onto dialogs/popups until the next successful settings load.
+    // Default true (exclude transients). Type-guard, not isValid(), for the
+    // reason spelled out on the decoration bool loaders above: an error reply
+    // never reaches this callback, so the hazard is a reply that ARRIVES and is
+    // not a bool (an older daemon's valid empty-string answer), which passes
+    // isValid() and toBool()s to false — inverting this default-true setting
+    // and drawing borders onto dialogs/popups until the next successful load.
     loadSettingAsync(QStringLiteral("decorationExcludeTransientWindows"), [this](const QVariant& v) {
-        if (!v.isValid()) {
+        if (v.typeId() != QMetaType::Bool) {
             return;
         }
         const bool b = v.toBool();
@@ -978,14 +1050,24 @@ void PlasmaZonesEffect::loadCachedSettings()
     // animation min-size fetches above — the daemon schema already bounds
     // these to [0, 2000].
     loadSettingAsync(QStringLiteral("decorationMinimumWindowWidth"), [this](const QVariant& v) {
-        const int i = qBound(0, v.toInt(), 2000);
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        const int i = qBound(0, raw, 2000);
         if (m_decorationMinWindowWidth != i) {
             m_decorationMinWindowWidth = i;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("decorationMinimumWindowHeight"), [this](const QVariant& v) {
-        const int i = qBound(0, v.toInt(), 2000);
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        const int i = qBound(0, raw, 2000);
         if (m_decorationMinWindowHeight != i) {
             m_decorationMinWindowHeight = i;
             scheduleBorderSweep();

@@ -630,10 +630,9 @@ private Q_SLOTS:
         QVERIFY(!m_wta->service()->placementStore().contains(w1));
         // Pre-float zone is restored so a subsequent float-toggle resnaps the
         // window back into its original zone (unfloatToZone reads preFloatZones).
-        // stateForWindow can return nullptr for an unregistered window; fail cleanly
-        // instead of dereferencing null.
+        // stateForWindow is never null — it falls back to the global holder for
+        // an untracked window — so this asserts the zone, not the pointer.
         PhosphorSnapEngine::SnapState* w2State = m_snapEngine->stateForWindow(w2);
-        QVERIFY(w2State);
         QCOMPARE(w2State->preFloatZones(w2), QStringList{m_zoneIds[0]});
     }
 

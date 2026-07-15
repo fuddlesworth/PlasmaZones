@@ -1,0 +1,44 @@
+{
+    "id": "peek-recede",
+    "name": "Peek Recede",
+    "description": "Shrinks the windows toward a chosen point and fades them out as they darken, so they recede into depth and reveal the desktop behind them.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Zoom",
+    "appliesTo": ["desktop"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "recede",
+            "name": "Recede Amount",
+            "type": "float",
+            "default": 0.25,
+            "min": 0.05,
+            "max": 0.95
+        },
+        {
+            "id": "centerX",
+            "name": "Center X",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "centerY",
+            "name": "Center Y",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "dim",
+            "name": "Dim Strength",
+            "type": "float",
+            "default": 0.4,
+            "min": 0.0,
+            "max": 1.0
+        }
+    ]
+}

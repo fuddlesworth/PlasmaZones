@@ -444,15 +444,24 @@ private Q_SLOTS:
 
     // ─── Shader-leg support gate ──────────────────────────────────────────
 
-    /// Pin the shader-leg-support predicate against the daemon-side list.
-    /// `supportsShaderLeg` is the predicate the QML shader-picker visibility
-    /// is bound to; if the surface set in
-    /// `src/core/animationshadersupportedpaths.h` drifts away from the
-    /// `resolveShaderEffect` call sites in
-    /// `src/daemon/overlayservice.cpp`, the QML would either expose
-    /// pickers that do nothing (drift in one direction) or hide pickers
-    /// for events that DO produce shader legs (drift in the other).
-    void supportsShaderLeg_matchesDaemonOverlayConsumers()
+    /// Pin the shader-leg-support predicate against the call sites that
+    /// actually consume a leg. `supportsShaderLeg` is the predicate the QML
+    /// shader-picker visibility is bound to; if the surface set in
+    /// `src/core/animationshadersupportedpaths.h` drifts away from those call
+    /// sites, the QML would either expose pickers that do nothing (drift in one
+    /// direction) or hide pickers for events that DO produce shader legs (drift
+    /// in the other). Per that header, consumption runs through three
+    /// mechanisms, not just the daemon's: `resolveShaderEffect` from
+    /// `OverlayService::buildOsdConfig` / `buildLayoutPickerConfig` /
+    /// `buildZoneSelectorConfig` / `buildSnapAssistConfig` (osd + popup
+    /// families), `tryBeginShaderForEvent` under
+    /// `kwin-effect/plasmazoneseffect/` (window_lifecycle for
+    /// open/close/move/maximize/focus, daemon_apply for minimize), and
+    /// `resolveShaderWithDefault`, driving both DesktopTransitionManager from
+    /// `kwin-effect/plasmazoneseffect/lifecycle.cpp` (the screen-level desktop
+    /// switch and peek legs) and the snap geometry legs through
+    /// `applyWindowGeometry` in `kwin-effect/plasmazoneseffect/drag_snap.cpp`.
+    void supportsShaderLeg_matchesConsumedLegCallSites()
     {
         AnimationsPageController c;
 
@@ -468,13 +477,14 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.show")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.hide")));
 
-        // Window family — consumed leaves driven by the KWin effect's
-        // tryBeginShaderForEvent at kwin-effect/plasmazoneseffect.cpp.
-        // Each maps to a window-lifecycle hook (windowAdded, windowClosed,
-        // windowStartUserMovedResized for the held move,
-        // windowMaximizedStateChanged, minimizedChanged, windowActivated)
-        // and runs the resolved shader on the OffscreenEffect's redirected
-        // texture quad.
+        // Window family — consumed leaves driven by the KWin effect under
+        // kwin-effect/plasmazoneseffect/. The lifecycle legs go through
+        // tryBeginShaderForEvent (window_lifecycle for windowAdded,
+        // windowClosed, windowStartUserMovedResized for the held move,
+        // windowMaximizedStateChanged and windowActivated; daemon_apply for
+        // minimizedChanged), while the snap geometry legs resolve through
+        // applyWindowGeometry in drag_snap.cpp. Both run the resolved shader
+        // on the OffscreenEffect's redirected texture quad.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.open")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.close")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));
@@ -490,13 +500,22 @@ private Q_SLOTS:
         // paths must prune, so they stay unsupported.
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.snapResize")));
-        // Desktop family — the two-texture switch is a consumed leaf too
-        // (the KWin effect's DesktopTransitionManager resolves it in the
-        // desktopChanged handler, not a per-window tryBeginShaderForEvent leg).
+        // Desktop family — the two-texture switch and the show-desktop peek
+        // are consumed leaves too (the KWin effect's DesktopTransitionManager
+        // resolves them in the desktopChanged / showingDesktopChanged handlers,
+        // not per-window tryBeginShaderForEvent legs).
         QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.switch")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.peek")));
+        // The "All Desktop Events" parent row is the desktop family root, and
+        // an ancestor of the consumed switch and peek leaves. It is
+        // shader-pickable too (its picker binds to this), and a pack set there
+        // cascades to both legs — so it is supported for the same reason the
+        // popup/osd parents below are, not merely as an ancestor of a consumed
+        // leaf.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
 
         // Ancestors of consumed leaves — supported because the
-        // daemon's resolver walks them on the way to the leaf, so a
+        // resolver walks them on the way to the leaf, so a
         // shader override here cascades to every descendant. Without
         // this, the user would have to set the same shader on every
         // popup leaf individually instead of once at the parent.
@@ -516,8 +535,6 @@ private Q_SLOTS:
         // The intermediate cascade parents the parent-card UX relies on.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance")));
-        // The desktop family root, ancestor of the consumed switch leaf.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
 
         // Paths the resolver never walks through — any assignment would
         // be runtime-dead and silently shadow what the user thought

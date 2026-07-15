@@ -28,7 +28,7 @@
  *    (including its virtual sub-screens) are reclaimed; the other monitor and the
  *    global holder survive.
  * 6. pruneRemovedDesktopDropsOnlyThatDesktop: a destroyed desktop's stores are
- *    reclaimed; other desktops and the desktop-0 global holder survive.
+ *    reclaimed; other desktops and the empty-screenId global holder survive.
  * 7. pruneRemovedActivityDropsOnlyThatActivity: removed activities' stores are
  *    reclaimed; the empty-activity global holder is never a target.
  */
@@ -162,8 +162,6 @@ private Q_SLOTS:
         }
         // The pre-float bookkeeping still names B regardless of screen availability.
         QCOMPARE(m_service->preFloatScreen(windowId), monitorB);
-
-        restoreFixtureWiring();
     }
 
     // =====================================================================
@@ -204,8 +202,6 @@ private Q_SLOTS:
             QVERIFY(m_service->isWindowSnapped(windowId));
             QVERIFY(!m_service->isWindowFloating(windowId));
         }
-
-        restoreFixtureWiring();
     }
 
     // =====================================================================
@@ -271,8 +267,6 @@ private Q_SLOTS:
         QCOMPARE(m_service->snappedWindows(), QStringList{winB});
         // winA's own store no longer counts it as snapped.
         QVERIFY(!stateA->isWindowSnapped(winA));
-
-        restoreFixtureWiring();
     }
 
     // =====================================================================
@@ -364,14 +358,19 @@ private Q_SLOTS:
         QCOMPARE(m_engine->stateForWindow(winAvs), m_engine->globalState());
         // The other monitor's store and the global holder survive.
         QCOMPARE(m_engine->stateForWindow(winB), storeB);
-        QCOMPARE(m_engine->globalState(), global); // the SAME holder survives, un-pruned
+        // The SAME holder survives IN THE STATES MAP, un-pruned. Comparing
+        // globalState() to its earlier copy is vacuous (the member is never
+        // reassigned, so it passes even if the prune removed the holder from the
+        // map); reading the map genuinely fails in that case.
+        QVERIFY(m_engine->allSnapStates().contains(global));
         QCOMPARE(m_engine->allSnapStates().size(), before - 2);
     }
 
     // =====================================================================
     // Test 6 (#724 follow-up): a destroyed virtual desktop's per-key stores are
     // reclaimed. pruneStatesForDesktop drops stores on that desktop only; other
-    // desktops and the desktop-0 global holder survive.
+    // desktops and the empty-screenId global holder survive (its key's desktop
+    // defaults to 1, but the empty screenId is what exempts it).
     // =====================================================================
     void pruneRemovedDesktopDropsOnlyThatDesktop()
     {
@@ -387,6 +386,7 @@ private Q_SLOTS:
         QVERIFY(m_engine->desktopsWithActiveState().contains(2));
         QVERIFY(m_engine->desktopsWithActiveState().contains(3));
         SnapState* store2 = m_engine->stateForWindow(win2);
+        SnapState* global = m_engine->globalState();
         const int before = m_engine->allSnapStates().size();
 
         m_engine->pruneStatesForDesktop(3);
@@ -395,6 +395,11 @@ private Q_SLOTS:
         QCOMPARE(m_engine->stateForWindow(win2), store2); // desktop-2 store survives
         QVERIFY(!m_engine->desktopsWithActiveState().contains(3));
         QVERIFY(m_engine->desktopsWithActiveState().contains(2));
+        // The holder survives IN THE STATES MAP, as tests 5 and 7 assert for their
+        // own prunes. Its key's desktop defaults to 1, so a prune of desktop 3 has
+        // no reason to touch it — but the empty screenId is what actually exempts
+        // it, and only reading the map proves the prune honoured that.
+        QVERIFY(m_engine->allSnapStates().contains(global));
         QCOMPARE(m_engine->allSnapStates().size(), before - 1);
     }
 
@@ -425,7 +430,9 @@ private Q_SLOTS:
 
         QCOMPARE(m_engine->stateForWindow(winB), m_engine->globalState()); // removed-activity store gone
         QCOMPARE(m_engine->stateForWindow(winA), storeKeep); // kept-activity store survives
-        QCOMPARE(m_engine->globalState(), global); // the SAME empty-activity holder survives, un-pruned
+        // The SAME empty-activity holder survives, un-pruned. Map-membership
+        // check, not a pointer self-compare — see test 5.
+        QVERIFY(m_engine->allSnapStates().contains(global));
         QCOMPARE(m_engine->allSnapStates().size(), before - 1);
     }
 
@@ -457,13 +464,6 @@ private:
             e->forgetWindow(id);
         };
         m_service->setSnapStateResolver(resolver);
-    }
-
-    /// Restore the fixture's single-store wiring so the shared teardown runs
-    /// against the same holder init() set up.
-    void restoreFixtureWiring()
-    {
-        m_service->setSnapState(m_engine->snapState());
     }
 
     std::unique_ptr<IsolatedConfigGuard> m_guard;

@@ -17,8 +17,10 @@ namespace PhosphorAnimation {
 /// Naming convention (apply to new paths):
 ///   show / hide                 — ephemeral surfaces (osd, popup, badge)
 ///   open / close                — persistent surfaces with a stateful open/closed
-///   <verb>In / <verb>Out        — directional motion (slideIn, snapIn, switchIn,
-///                                 fadeIn, layoutSwitchIn …)
+///   <verb>In / <verb>Out        — directional motion (slideIn, snapIn,
+///                                 fadeIn …); `switch`, `layoutSwitch` and
+///                                 `peek` are bidirectional-leg exceptions
+///                                 with no In/Out suffix
 ///   expand / collapse           — size reveal of inline content (accordion)
 ///   on / off                    — bistable controls (toggle)
 ///   <event>.<variant>           — speed/intensity variants (pulse.fast, tint.fast)
@@ -54,13 +56,17 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapOut;
 PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
 
-// desktop.* — full-screen virtual-desktop switch transitions driven by the
-// kwin-effect's screen-level paint pass. Unlike the per-window window.*
-// events, a desktop switch blends the OUTGOING desktop against the INCOMING
-// desktop (two full-screen textures), so it uses the desktop event class and
-// its own two-texture shader contract rather than the single-surface pipeline.
+// desktop.* — full-screen two-texture transitions driven by the kwin-effect's
+// screen-level paint pass. Unlike the per-window window.* events, these blend
+// two full-screen scene captures, so they use the desktop event class and its
+// own two-texture shader contract rather than the single-surface pipeline.
+// `switch` blends the OUTGOING desktop against the INCOMING desktop; `peek`
+// (show desktop) blends the windows scene against the bare desktop, and its
+// show-back leg reuses the same node, running the same blend with time
+// reversed so an asymmetric pack retraces its own motion.
 PHOSPHORANIMATION_EXPORT extern const QString Desktop;
 PHOSPHORANIMATION_EXPORT extern const QString DesktopSwitch;
+PHOSPHORANIMATION_EXPORT extern const QString DesktopPeek;
 
 // editor.* — Layout-editor-only zone manipulation animations
 // (fill-preview, drag-resize-preview). NOT triggered by runtime
@@ -112,10 +118,10 @@ PHOSPHORANIMATION_EXPORT extern const QString ShaderSwitch;
 
 // widget.* — per-archetype paths so library defaults preserve original motion.
 PHOSPHORANIMATION_EXPORT extern const QString Widget;
-PHOSPHORANIMATION_EXPORT extern const QString WidgetHover; ///< 150 ms OutCubic
+PHOSPHORANIMATION_EXPORT extern const QString WidgetHover; ///< 150 ms OutCubic (family seed)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPress; ///< 100 ms OutCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetDim; ///< 200 ms OutCubic
-PHOSPHORANIMATION_EXPORT extern const QString WidgetTint; ///< 300 ms Linear (family root)
+PHOSPHORANIMATION_EXPORT extern const QString WidgetTint; ///< 300 ms widget-out (family root)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetTintFast; ///< 120 ms (variant)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetToggleOn; ///< 250 ms OutBack (spring feel)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetToggleOff; ///< 250 ms OutBack
@@ -126,8 +132,8 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetAccordionExpand; ///< 250 ms
 PHOSPHORANIMATION_EXPORT extern const QString WidgetAccordionCollapse; ///< 180 ms InCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetFadeIn; ///< 200 ms OutCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetFadeOut; ///< 400 ms InCubic
-PHOSPHORANIMATION_EXPORT extern const QString WidgetReorder; ///< 200 ms OutCubic
-PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 200 ms OutCubic
+PHOSPHORANIMATION_EXPORT extern const QString WidgetReorder; ///< 150 ms OutCubic (family seed)
+PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 150 ms OutCubic (family seed)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulse; ///< 1000 ms sinusoidal (family root)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulseFast; ///< 500 ms
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulseSlow; ///< 1500 ms
@@ -163,13 +169,14 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassGeometry;
 /// popup show/hide — a single surface materialising or dissolving.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassAppearance;
 
-/// Desktop transitions: a full-screen virtual-desktop switch blending the
-/// outgoing desktop against the incoming one. A distinct TWO-texture contract
-/// (from/to full-screen samplers), incompatible with the single-surface
-/// geometry/appearance shaders — a shader must opt into it explicitly via
-/// `appliesTo: ["desktop"]`. A universal single-surface effect (empty
-/// `appliesTo`) does NOT apply to desktop paths, because its lone surface
-/// sampler would be unbound in the two-texture pass.
+/// Desktop transitions: full-screen blends of two scene captures — the
+/// virtual-desktop switch (outgoing desktop against incoming one) and the
+/// show-desktop peek (windows scene against bare desktop). A distinct
+/// TWO-texture contract (from/to full-screen samplers), incompatible with the
+/// single-surface geometry/appearance shaders — a shader must opt into it
+/// explicitly via `appliesTo: ["desktop"]`. A universal single-surface effect
+/// (empty `appliesTo`) does NOT apply to desktop paths, because its lone
+/// surface sampler would be unbound in the two-texture pass.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassDesktop;
 
 /// Interactive-drag transitions: the `window.movement.move` leaf only. A drag

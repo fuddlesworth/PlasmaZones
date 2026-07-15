@@ -53,6 +53,13 @@ void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& acti
 
 void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
 {
+    // Showing-desktop guard: this activation is daemon-relayed (snap engine
+    // navigation/commit) and Workspace::activateWindow on a hidden window
+    // synchronously cancels a peek — see isShowingDesktop's doc for the policy.
+    if (PlasmaZonesEffect::isShowingDesktop()) {
+        qCDebug(lcEffect) << "slotActivateWindowRequested: dropped during show desktop" << windowId;
+        return;
+    }
     KWin::EffectWindow* w = findWindowById(windowId);
     if (w) {
         KWin::effects->activateWindow(w);
@@ -620,8 +627,8 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
             const bool ourLiveLeg =
                 stampIt != m_minimizeShaderStamp.constEnd() && stampIt->generation == post->generation;
             if (freshInstall || ourLiveLeg) {
-                // Stamp with a FRESH clock sample, not the slot-entry
-                // nowMs: a cold-cache install compiles the pack on this
+                // Stamp with a FRESH clock sample, not one taken at slot
+                // entry: a cold-cache install compiles the pack on this
                 // thread (tens of ms for a heavy shader), and the paired
                 // spurious unminimize measures its gap from ITS slot
                 // entry — an entry-time stamp would inflate the measured

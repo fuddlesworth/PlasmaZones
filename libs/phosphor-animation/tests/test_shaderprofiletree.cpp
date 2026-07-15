@@ -66,6 +66,22 @@ private Q_SLOTS:
         QCOMPARE(*resolved.effectId, QStringLiteral("morph"));
     }
 
+    void testResolveDesktopCategoryOverrideInherited()
+    {
+        // The "All Desktop Events" row writes an override at the `desktop`
+        // family root and relies on it cascading to both leaves. That is the
+        // row's entire contract — it is a real cascade parent, not a bulk
+        // write to each leaf — so pin the walk-up here rather than only for
+        // the window family.
+        ShaderProfileTree tree;
+        ShaderProfile category;
+        category.effectId = QStringLiteral("desktop-fade");
+        tree.setOverride(PP::Desktop, category);
+
+        QCOMPARE(*tree.resolve(PP::DesktopPeek).effectId, QStringLiteral("desktop-fade"));
+        QCOMPARE(*tree.resolve(PP::DesktopSwitch).effectId, QStringLiteral("desktop-fade"));
+    }
+
     void testResolveLeafFillsFromCategoryThenBaseline()
     {
         ShaderProfileTree tree;
@@ -238,6 +254,12 @@ private Q_SLOTS:
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowMove).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowOpen).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowClose).isEmpty());
+        // The desktop transitions are OPT-IN by contract: both are intrusive
+        // full-screen blends that contend with KWin's own effects, so a
+        // regression adding a default here would silently auto-enable them on
+        // fresh configs.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopSwitch).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopPeek).isEmpty());
     }
 
     void testDefaultShaderForPathOverlayEvents()
@@ -421,6 +443,13 @@ private Q_SLOTS:
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowSnapIn));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowOpen));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(QString()));
+        // Both desktop leaves must stay NON-isolated. The predicate is a single
+        // hardcoded equality, so extending it to a desktop leaf would compile
+        // and pass everything else while silently killing the "All Desktop
+        // Events" cascade row, whose whole premise is that neither leaf
+        // resolves in isolation (AnimationsDesktopsPage.qml). Pin it here.
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::DesktopPeek));
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::DesktopSwitch));
     }
 };
 

@@ -203,14 +203,18 @@ QList<SnapState*> SnapEngine::allSnapStates() const
 
 bool SnapEngine::isFloating(const QString& windowId) const
 {
-    if (const SnapState* state = stateForWindow(windowId)) {
-        if (state->isFloating(windowId)) {
-            return true;
-        }
+    // stateForWindow never returns null (see setFloating), so no guard here.
+    if (stateForWindow(windowId)->isFloating(windowId)) {
+        return true;
     }
     // Screenless float bookkeeping falls to the global holder, which is not in the
     // reverse map; check it explicitly so isFloating stays symmetric with setFloating.
-    return m_globals && m_globals->isFloating(windowId);
+    // This fall-through IS load-bearing for a TRACKED window: it resolves to its own
+    // store above, which never sees a screenless float. For an untracked one the
+    // check above already read m_globals (stateForWindow's fallback), so this simply
+    // re-reads the same holder and answers false a second time. m_globals is
+    // constructed in the initializer list and never reassigned, so it needs no guard.
+    return m_globals->isFloating(windowId);
 }
 
 void SnapEngine::setFloating(const QString& windowId, bool floating)
@@ -235,10 +239,10 @@ QStringList SnapEngine::floatingWindows() const
 
 QString SnapEngine::zoneForWindow(const QString& windowId) const
 {
-    if (const SnapState* state = stateForWindow(windowId)) {
-        return state->zoneForWindow(windowId);
-    }
-    return {};
+    // stateForWindow never returns null (see setFloating); an untracked window
+    // reads an empty zone out of the global holder, which is what the old null
+    // branch returned anyway.
+    return stateForWindow(windowId)->zoneForWindow(windowId);
 }
 
 void SnapEngine::syncGlobalLastUsedForRemovedZones(const QStringList& removedZones)
@@ -372,6 +376,12 @@ void SnapEngine::markWindowReported(const QString& windowId)
 
 int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
+    // The return mixes two buckets: per-store state prunes from the base class
+    // and runtime effect-reported-flag erasures below, so a window present in
+    // both counts once per bucket. The caller sums it into a cleanup log line
+    // and gates its dirty-mark on > 0 — safe either way, since any positive
+    // value means something was erased — but no consumer may treat it as a
+    // distinct-window count.
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
     for (auto it = m_effectReportedWindows.begin(); it != m_effectReportedWindows.end();) {
         if (!aliveWindowIds.contains(*it)) {
@@ -402,6 +412,17 @@ void SnapEngine::setAutotileEngine(PhosphorEngine::IPlacementEngine* engine)
 
 void SnapEngine::setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver)
 {
+    // Drop the previous resolver's destroyed guard first: left connected, its
+    // eventual destruction would null the LIVE replacement below. Mirrors
+    // setAutotileEngine. NOTE: this severs EVERY destroyed-guard this engine
+    // holds on that sender, which is safe only while each guarded role
+    // (autotile engine / adjacency resolver / nav-state provider) lives on a
+    // distinct QObject — true for all production implementors today. A future
+    // combined adaptor implementing two roles must split this per-role.
+    if (m_zoneAdjacencyResolverObj) {
+        disconnect(m_zoneAdjacencyResolverObj, &QObject::destroyed, this, nullptr);
+    }
+    m_zoneAdjacencyResolverObj = dynamic_cast<QObject*>(resolver);
     m_zoneAdjacencyResolver = resolver;
     // Push the resolver into the target resolver if it exists yet.
     // The target resolver constructs lazily on first navigation call;
@@ -414,7 +435,7 @@ void SnapEngine::setZoneAdjacencyResolver(IZoneAdjacencyResolver* resolver)
     // underlying QObject is destroyed before SnapEngine. The interface is
     // not a QObject, but every production implementor (ZoneDetectionAdaptor)
     // is — dynamic_cast recovers the QObject identity for the connection.
-    if (auto* qobj = dynamic_cast<QObject*>(resolver)) {
+    if (auto* qobj = m_zoneAdjacencyResolverObj.data()) {
         connect(qobj, &QObject::destroyed, this, [this]() {
             m_zoneAdjacencyResolver = nullptr;
             if (m_targetResolver) {
@@ -477,10 +498,15 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& ac
 
 void SnapEngine::setNavigationStateProvider(INavigationStateProvider* provider)
 {
+    // Same stale-destroyed-guard discipline as setZoneAdjacencyResolver.
+    if (m_navStateObj) {
+        disconnect(m_navStateObj, &QObject::destroyed, this, nullptr);
+    }
+    m_navStateObj = dynamic_cast<QObject*>(provider);
     m_navState = provider;
     // Guard against out-of-order destruction: null the raw pointer if the
     // underlying QObject is destroyed before SnapEngine.
-    if (auto* qobj = dynamic_cast<QObject*>(provider)) {
+    if (auto* qobj = m_navStateObj.data()) {
         connect(qobj, &QObject::destroyed, this, [this]() {
             m_navState = nullptr;
         });

@@ -5,7 +5,6 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QTest>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
@@ -403,6 +402,7 @@ private Q_SLOTS:
         // The desktop class is opt-in: a universal single-surface effect must NOT
         // bleed onto a desktop path (its lone surface sampler would be unbound).
         QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::DesktopPeek));
         QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::Desktop));
         // The move class is opt-in for the same structural reason: a universal
         // pack cannot drive the held interactive drag.
@@ -418,6 +418,7 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowSnapIn));
         // A single-surface (non-desktop) effect never runs on a desktop path.
         QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::DesktopPeek));
 
         // Desktop two-texture effect: accepted ONLY on desktop paths, refused on
         // every single-surface (window / OSD) leg.
@@ -426,6 +427,8 @@ private Q_SLOTS:
         desktop.fragmentShaderPath = QStringLiteral("effect.frag");
         desktop.appliesTo = QStringList{QStringLiteral("desktop")};
         QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::DesktopSwitch));
+        // The show-desktop peek leaf accepts the same desktop-contract packs.
+        QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::DesktopPeek));
         QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::Desktop));
         QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::WindowOpen));
         QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::WindowMove));
@@ -454,6 +457,7 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowSnapIn));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowOpen));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::DesktopPeek));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::Window));
         QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::Global));
         // Geometry-only and appearance-only effects are refused on the move
@@ -472,8 +476,9 @@ private Q_SLOTS:
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::WindowOpen));
         // A hybrid that does NOT declare "desktop" is still refused on the
         // desktop paths — the geometry/move branches must not leak onto the
-        // two-texture switch, whose samplers a single-surface pack never binds.
+        // two-texture legs, whose samplers a single-surface pack never binds.
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopPeek));
         QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::Desktop));
     }
 };

@@ -129,7 +129,15 @@ public:
     /// degrades to the historical "no SnapState wired" no-op behaviour.
     struct SnapStateResolver
     {
-        /// Owning state for a window (reverse-map lookup); nullptr when untracked.
+        /// Owning state for a window (reverse-map lookup). Non-null by
+        /// construction in every wiring, by one of two mechanisms: the
+        /// forwarding resolvers because SnapEngine::stateForWindow falls back
+        /// to the global holder rather than returning null, and setSnapState's
+        /// convenience resolver because it rejects a null state outright and
+        /// captures a non-null one. Two genuine null cases remain, and callers
+        /// must still guard: an UNSET resolver (see snapForWindow), and the
+        /// production resolver's QPointer arm once the engine is destroyed
+        /// while this service still holds the resolver (a real teardown order).
         std::function<PhosphorSnapEngine::SnapState*(const QString& windowId)> forWindow;
         /// Owning state for a window placed/acting on a screen: resolves the state
         /// (creating it on first placement) AND records the reverse-map entry.
@@ -140,9 +148,18 @@ public:
         /// store a screen-scoped write (last-used-zone) targets. An empty screenId
         /// resolves to the global holder.
         std::function<PhosphorSnapEngine::SnapState*(const QString& screenId)> forScreen;
-        /// The global-scalar holder (never null once wired).
+        /// The global-scalar holder. Non-null by construction in every wiring
+        /// (SnapEngine::globalState() returns the ctor-constructed holder); the
+        /// same two null cases as @ref forWindow apply — an unset resolver, and
+        /// the production resolver's QPointer arm after engine destruction.
         std::function<PhosphorSnapEngine::SnapState*()> globals;
         /// Every store, including the global holder, for aggregate iteration.
+        /// CONTRACT: the returned list never contains a null element. An unset
+        /// resolver yields an empty list rather than a list of nulls, and both
+        /// wirings filter (SnapEngine::allSnapStates() skips nulls; the
+        /// single-store convenience wiring rejects a null state outright). Every
+        /// caller dereferences the elements unguarded, so a resolver that
+        /// breaks this crashes them all.
         std::function<QList<PhosphorSnapEngine::SnapState*>()> allStates;
         /// Drop a window's reverse-map entry (window closed / fully removed).
         std::function<void(const QString& windowId)> forgetWindow;
@@ -1062,7 +1079,13 @@ private:
     auto preFloatLookup(const QString& windowId, Func&& getter) const
         -> decltype(getter(std::declval<PhosphorSnapEngine::SnapState*>(), windowId));
 
-    /// Clear m_lastUsedZoneId if it doesn't exist in the layout for targetScreen.
+    /// Clear the last-used zone on EVERY snap store that points at
+    /// @p targetScreen but whose zone no longer exists in that screen's layout
+    /// (last-used is per-key, so this sweeps all of them, not one member).
+    /// Marks DirtyLastUsedZone itself when it clears any, so a caller that
+    /// schedules no save of its own still persists the clear. A screen whose
+    /// layout does not resolve is left alone: without a layout nothing can
+    /// prove the zone is stale.
     void validateLastUsedZone(const QString& targetScreen);
 
     /// Find the nearest virtual screen by index proximity.
@@ -1152,10 +1175,25 @@ private:
     /// representative that lives on the global holder.
     bool clearGlobalLastUsedIfRemoved(const QStringList& removedZones,
                                       const PhosphorSnapEngine::SnapState* owningStore);
+
+    /// Unassign every window in @p windowsToRemove and drop its auxiliary
+    /// per-window state (free geometry, pre-float zone, sticky flag), then
+    /// emit windowZoneChanged for each window that actually held a zone, so
+    /// zone-state consumers hear about the prune exactly as they do for the
+    /// interactive unassign path. The emit is per-window and comes AFTER that
+    /// window's clears, because AutotileEngine handles it synchronously and
+    /// relayouts. Shared by the two VS-migration prune loops
+    /// (migrateScreenAssignmentsToVirtual / ...FromVirtual). Marks
+    /// DirtyLastUsedZone when any last-used cleared; returns true when given a
+    /// non-empty list (the callers only build it from zone-assigned windows,
+    /// so non-empty means state changed and a save is due).
+    bool pruneMigratedWindows(const QStringList& windowsToRemove);
     PhosphorSnapEngine::SnapState* snapGlobals() const
     {
         return m_snapResolver.globals ? m_snapResolver.globals() : nullptr;
     }
+    /// Every store, for aggregate iteration. Elements are never null (see the
+    /// resolver's `allStates` contract), so callers deref them directly.
     QList<PhosphorSnapEngine::SnapState*> snapAllStates() const
     {
         return m_snapResolver.allStates ? m_snapResolver.allStates() : QList<PhosphorSnapEngine::SnapState*>{};

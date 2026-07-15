@@ -33,19 +33,25 @@ private Q_SLOTS:
         QCOMPARE(PP::parentPath(PP::WindowMove), PP::WindowMovement);
         QCOMPARE(PP::parentPath(PP::WindowMovement), PP::Window);
         QCOMPARE(PP::parentPath(PP::Window), PP::Global);
-        // Desktop-switch transition family walks up desktop.switch → desktop → global.
+        // Desktop transition family walks up desktop.switch / desktop.peek →
+        // desktop → global.
         QCOMPARE(PP::parentPath(PP::DesktopSwitch), PP::Desktop);
+        QCOMPARE(PP::parentPath(PP::DesktopPeek), PP::Desktop);
         QCOMPARE(PP::parentPath(PP::Desktop), PP::Global);
         QCOMPARE(PP::parentPath(PP::Global), QString());
         QCOMPARE(PP::parentPath(QString()), QString());
     }
 
-    // The desktop-switch classifier underpins the whole opt-in policy: a
-    // desktop.switch path must classify as EventClassDesktop so the two-texture
-    // packs surface only there, and desktop's parent 'global' must NOT.
+    // The desktop-family classifier underpins the whole opt-in policy: the
+    // desktop.switch and desktop.peek paths must classify as EventClassDesktop
+    // so the two-texture packs surface only there, and desktop's parent
+    // 'global' must NOT.
     void testEventClassForDesktopPaths()
     {
         QCOMPARE(PP::eventClassForPath(PP::DesktopSwitch), PP::EventClassDesktop);
+        // The show-desktop peek leaf shares the desktop class so the same
+        // two-texture packs drive it.
+        QCOMPARE(PP::eventClassForPath(PP::DesktopPeek), PP::EventClassDesktop);
         QCOMPARE(PP::eventClassForPath(PP::Desktop), PP::EventClassDesktop);
         // A geometry/appearance path never classifies as desktop.
         QVERIFY(PP::eventClassForPath(PP::WindowOpen) != PP::EventClassDesktop);
@@ -99,9 +105,10 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::WidgetZoneHighlightPop));
         QVERIFY(paths.contains(PP::WidgetZoneHighlightBorder));
         QVERIFY(paths.contains(PP::WidgetZoneOverlayFlash));
-        // Desktop-switch transition family (full-screen two-texture blend).
+        // Desktop transition family (full-screen two-texture blends).
         QVERIFY(paths.contains(PP::Desktop));
         QVERIFY(paths.contains(PP::DesktopSwitch));
+        QVERIFY(paths.contains(PP::DesktopPeek));
         // No regression: legacy zone.* strings must not reappear.
         for (const QString& path : paths) {
             QVERIFY2(!path.startsWith(QLatin1String("zone.")) && path != QLatin1String("zone"),
@@ -255,6 +262,67 @@ private Q_SLOTS:
         QCOMPARE(*composed.duration, 500.0);
         QVERIFY(composed.curve != nullptr);
         QVERIFY(std::dynamic_pointer_cast<const Spring>(composed.curve) != nullptr);
+    }
+
+    // The "All Desktop Events" node is a REAL cascade parent for MOTION, not
+    // just for the shader pick: a `desktop` curve/duration override must reach
+    // BOTH screen-level leaves. The kwin-effect composes each leg's timing
+    // through this exact call (overlayChainOnto onto the animator's global
+    // profile) in the desktopChanged / showingDesktopChanged handlers.
+    //
+    // Honest scope: overlayChain walks parents by a generic dot-split with no
+    // desktop-specific branch, so this cannot fail while testParentPath and
+    // testOverlayChainOntoAppliesMovementAllToLeaf both pass. It is a cheap pin
+    // on the pair the settings page presents as governed by one parent, not an
+    // independent regression net.
+    void testOverlayChainOntoAppliesDesktopAllToBothLeaves()
+    {
+        ProfileTree tree;
+
+        // Baseline deliberately differs from the caller's base, to prove the
+        // tree's own baseline stays out of it (the effect owns global).
+        Profile treeBaseline;
+        treeBaseline.duration = 150.0;
+        tree.setBaseline(treeBaseline);
+
+        Profile desktopAll;
+        desktopAll.duration = 500.0;
+        desktopAll.curve = std::make_shared<Spring>(Spring::snappy());
+        tree.setOverride(PP::Desktop, desktopAll);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+        animatorGlobal.curve = std::make_shared<Easing>();
+
+        for (const QString& leaf : {PP::DesktopSwitch, PP::DesktopPeek}) {
+            const Profile composed = tree.overlayChainOnto(leaf, animatorGlobal);
+            QVERIFY2(composed.duration.has_value(), qPrintable(leaf));
+            QCOMPARE(*composed.duration, 500.0);
+            QVERIFY2(std::dynamic_pointer_cast<const Spring>(composed.curve) != nullptr, qPrintable(leaf));
+        }
+    }
+
+    // A leaf override beats the desktop "All" parent on the leaf that sets it,
+    // and leaves its sibling on the parent's value. This is what makes the two
+    // legs independently tunable under one parent — the peek can run its own
+    // duration without retiming the switch.
+    void testOverlayChainOntoDesktopLeafBeatsAllForThatLeafOnly()
+    {
+        ProfileTree tree;
+
+        Profile desktopAll;
+        desktopAll.duration = 500.0;
+        tree.setOverride(PP::Desktop, desktopAll);
+
+        Profile peekLeaf;
+        peekLeaf.duration = 80.0;
+        tree.setOverride(PP::DesktopPeek, peekLeaf);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+
+        QCOMPARE(*tree.overlayChainOnto(PP::DesktopPeek, animatorGlobal).duration, 80.0); // leaf
+        QCOMPARE(*tree.overlayChainOnto(PP::DesktopSwitch, animatorGlobal).duration, 500.0); // parent "All"
     }
 
     // Leaf override wins over the "All" parent; a field the leaf leaves unset
