@@ -16,11 +16,11 @@
 //   * KZones import helpers.
 //
 // Per-screen overrides live in settingscontroller_perscreen.cpp and the
-// ordering helpers in settingscontroller_ordering.cpp, both split out on the
-// same 800-line cap that made this file.
+// ordering helpers in settingscontroller_ordering.cpp, both split out for
+// the same 1000-line target that made this file.
 //
-// Split out of settingscontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). All methods here are members of
+// Split out of settingscontroller.cpp to hold that file under the
+// project's 1000-line target (see CLAUDE.md). All methods here are members of
 // PlasmaZones::SettingsController and use its private state — same
 // class, separate translation unit, no API change.
 

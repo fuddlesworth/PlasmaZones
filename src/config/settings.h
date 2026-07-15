@@ -1253,9 +1253,6 @@ public:
     int fillOnDropModifier() const override;
     void setFillOnDropModifier(int mod) override;
 
-    // Old inline accessors replaced above — kept anchors below so the second
-    // half of the replaced region can be collapsed in one edit pass.
-
     // Persistence
     void load() override;
     void save() override;

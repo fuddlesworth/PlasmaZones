@@ -49,8 +49,6 @@ Item {
     signal selected(int index)
     signal activated(string layoutId)
     signal deleteRequested(var layout)
-    signal exportRequested(string layoutId)
-    signal setAsDefaultRequested(var layout)
     signal contextMenuRequested(var layout)
 
     width: cellWidth

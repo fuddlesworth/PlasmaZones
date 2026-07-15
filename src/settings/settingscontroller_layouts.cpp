@@ -3,8 +3,8 @@
 
 // Layout + algorithm CRUD methods for SettingsController.
 //
-// Split out of settingscontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). All methods here are members of
+// Split out of settingscontroller.cpp to hold that file under the
+// project's 1000-line target (see CLAUDE.md). All methods here are members of
 // PlasmaZones::SettingsController and use its private state — they
 // live in a separate translation unit but compile into the same
 // `plasmazones-settings` executable. No API changes.

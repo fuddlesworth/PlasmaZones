@@ -11,14 +11,6 @@ import org.phosphor.animation
 
 /// Main editor window for zone layout editing
 Window {
-    // ═══════════════════════════════════════════════════════════════════
-    // DIALOGS
-    // ═══════════════════════════════════════════════════════════════════
-    // ═══════════════════════════════════════════════════════════════════
-    // CONNECTIONS
-    // ═══════════════════════════════════════════════════════════════════
-    // Helper function to find zone by ID
-
     id: editorWindow
 
     // Context properties (set in main.cpp)
@@ -847,24 +839,6 @@ Window {
             if (editorWindow._editorController) {
                 var newZoneId = editorWindow._editorController.selectedZoneId || "";
                 editorWindow.selectedZoneId = newZoneId;
-            }
-        }
-
-        function onZoneColorChanged(zoneId) {
-            // When zone color changes, force selectedZone re-evaluation
-            if (zoneId === editorWindow.selectedZoneId && editorWindow._editorController) {
-                // Force selectedZone property to re-evaluate by accessing zones
-                var _ = editorWindow._editorController.zones;
-                editorWindow.selectedZoneId = editorWindow.selectedZoneId; // Trigger property update
-            }
-        }
-
-        function onZonesChanged() {
-            // When zones list changes, force selectedZone re-evaluation
-            if (editorWindow.selectedZoneId && editorWindow._editorController) {
-                // Force selectedZone property to re-evaluate
-                var _ = editorWindow._editorController.zones;
-                editorWindow.selectedZoneId = editorWindow.selectedZoneId; // Trigger property update
             }
         }
 

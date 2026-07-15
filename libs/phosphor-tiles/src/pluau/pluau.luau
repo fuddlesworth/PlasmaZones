@@ -906,7 +906,7 @@ local function threeColumnLayout(area, count, gap, splitRatio, masterCount, minS
 
     local minCenterWidth = extractRegionMaxMin(minSizes, 0, masterCount, "w")
     local sideMinW
-    if #minSizes > 0 then
+    if minSizes and #minSizes > 0 then
         sideMinW = interleaveMinWidths(minSizes, stackIsLeft, stackCount, masterCount)
     else
         sideMinW = { minLeftWidth = 0, minRightWidth = 0 }
@@ -917,7 +917,7 @@ local function threeColumnLayout(area, count, gap, splitRatio, masterCount, minS
 
     local masterMinH = extractMinHeights(minSizes, masterCount)
     local sideMinH
-    if #minSizes > 0 then
+    if minSizes and #minSizes > 0 then
         sideMinH = interleaveMinHeights(minSizes, stackIsLeft, stackCount, leftCount, rightCount, masterCount)
     else
         sideMinH = { leftMinH = {}, rightMinH = {} }

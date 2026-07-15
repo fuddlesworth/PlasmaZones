@@ -871,7 +871,10 @@ void EditorController::saveLayout()
             // Error signal already emitted by service
             return;
         }
-        m_layoutId = newLayoutId;
+        if (m_layoutId != newLayoutId) {
+            m_layoutId = newLayoutId;
+            Q_EMIT layoutIdChanged();
+        }
         m_isNewLayout = false;
     } else {
         bool success = m_layoutService->updateLayout(jsonStr);

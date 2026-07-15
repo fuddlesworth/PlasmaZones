@@ -2866,14 +2866,16 @@ bool AutotileEngine::applyTreeResizeReflow(PhosphorTiles::TilingState* state, co
     const QStringList tiled = state->tiledWindows();
     const QVector<QRect> zones = state->calculatedZones();
     // The reflow reads split extents from the rendered zones, so they must be in
-    // lockstep with the tiled-window list. The divergence is transient: while a
-    // capped layout (recalculateLayout sizes calculatedZones to
-    // min(tiledCount, maxWindows)) is being applied, applyTiling has not yet
-    // floated the over-cap windows out of tiledWindows(), so the lists briefly
-    // differ in length. In steady state they match again under both overflow
-    // modes (Float floats over-cap windows out of tiledWindows(); Unlimited
-    // never caps). Bail rather than read a stale/short vector — resizing during
-    // that transient is a no-op, which is fine.
+    // lockstep with the tiled-window list. The divergence is usually transient:
+    // while a capped layout (recalculateLayout sizes calculatedZones to
+    // min(tiledCount, maxWindows, MaxZones)) is being applied, applyTiling has
+    // not yet floated the over-cap windows out of tiledWindows(), so the lists
+    // briefly differ in length. Float mode reconverges once applyTiling floats
+    // the over-cap windows. Unlimited mode still caps zones at MaxZones (the
+    // recalculateLayout clamp), so with >MaxZones tiled windows the divergence
+    // recurs on every retile until applyTiling floats the excess. Bail rather
+    // than read a stale/short vector — resizing during the divergence is a
+    // no-op, which is fine.
     if (zones.isEmpty() || zones.size() != tiled.size()) {
         return false;
     }
@@ -4221,8 +4223,16 @@ void AutotileEngine::retileScreen(const QString& screenId)
     // signal handlers from seeing partially-modified state).
     QStringList unfloated;
     if (!m_overflow.isEmpty()) {
+        // Clamp the recovery ceiling at MaxZones, mirroring recalculateLayout's
+        // windowCount cap: under Unlimited overflow effectiveMaxWindows returns
+        // a huge sentinel, but the layout never places more than MaxZones
+        // zones. Recovery must not admit windows the layout can never place,
+        // or applyTiling re-floats them and the next retile unfloats them
+        // again — a stable float/unfloat signal churn.
+        const int recoveryMaxWindows =
+            std::min(effectiveMaxWindows(screenId), PhosphorTiles::AutotileDefaults::MaxZones);
         unfloated = m_overflow.recoverIfRoom(
-            screenId, state->tiledWindowCount(), effectiveMaxWindows(screenId),
+            screenId, state->tiledWindowCount(), recoveryMaxWindows,
             [state](const QString& wid) {
                 return state->isFloating(wid);
             },

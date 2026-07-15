@@ -25,8 +25,9 @@ set(plasmazones_settings_SRCS
     registryshaderpreviewbackend.h
     settingscontroller.h
     settingscontroller.cpp
-    # SettingsController is large enough to violate the 800-line cap
-    # if kept as a single TU. The sub-domain methods live in sibling
+    # SettingsController is large enough to blow past the project's
+    # 1000-line target (1150 hard ceiling) if kept as a single TU.
+    # The sub-domain methods live in sibling
     # .cpp files compiled into the same target — same class, multiple
     # translation units, no API change. Order matches reading order:
     # construction → lifecycle → page registry → per-domain CRUD.

@@ -263,6 +263,23 @@ Item {
         geometrySync.ensureDimensionsInitialized();
     }
 
+    // QVariantMap property changes don't automatically trigger QML bindings,
+    // so copy the current zoneData appearance values into zoneRect's tracker
+    // properties to force re-evaluation.
+    function refreshTrackers() {
+        if (!zoneData)
+            return;
+
+        zoneRect._highlightColorTracker = zoneData.highlightColor;
+        zoneRect._inactiveColorTracker = zoneData.inactiveColor;
+        zoneRect._borderColorTracker = zoneData.borderColor;
+        zoneRect._activeOpacityTracker = zoneData.activeOpacity;
+        zoneRect._inactiveOpacityTracker = zoneData.inactiveOpacity;
+        zoneRect._borderWidthTracker = zoneData.borderWidth;
+        zoneRect._borderRadiusTracker = zoneData.borderRadius;
+        zoneRect._useCustomColorsTracker = zoneData.useCustomColors;
+    }
+
     // Public functions delegated to fillAnimator
     function startFillAnimation(targetX, targetY, targetWidth, targetHeight) {
         fillAnimator.startFillAnimation(targetX, targetY, targetWidth, targetHeight);
@@ -307,16 +324,7 @@ Item {
             return;
 
         // Update color trackers when zoneData changes
-        if (zoneData) {
-            zoneRect._highlightColorTracker = zoneData.highlightColor;
-            zoneRect._inactiveColorTracker = zoneData.inactiveColor;
-            zoneRect._borderColorTracker = zoneData.borderColor;
-            zoneRect._activeOpacityTracker = zoneData.activeOpacity;
-            zoneRect._inactiveOpacityTracker = zoneData.inactiveOpacity;
-            zoneRect._borderWidthTracker = zoneData.borderWidth;
-            zoneRect._borderRadiusTracker = zoneData.borderRadius;
-            zoneRect._useCustomColorsTracker = zoneData.useCustomColors;
-        }
+        refreshTrackers();
         // Only sync if canvas dimensions are valid and dimensions need initialization
         if (canvasWidth > 0 && canvasHeight > 0 && isFinite(canvasWidth) && isFinite(canvasHeight)) {
             if (visualWidth === 0 || visualHeight === 0 || !hasValidDimensions)
@@ -550,57 +558,35 @@ Item {
     // However, QVariantMap property changes don't automatically trigger QML bindings,
     // so we need to force re-evaluation by updating tracker properties
     Connections {
-        // Expected when zone is destroyed between signal and callLater
-        // Expected when zone is destroyed between signal and callLater
-
         // Avoid use-after-free when zone is removed from Repeater (e.g. deleteZone) but
         // Qt.callLater callbacks from prior zoneColorChanged/zonesChanged still run.
+        // The try/catch swallows access errors expected when the zone is destroyed
+        // between the signal and the callLater.
+        function refreshTrackersLater() {
+            var rootRef = root;
+            Qt.callLater(function () {
+                try {
+                    // Guard: zone removed from scene (Repeater update) - avoid accessing destroyed objects
+                    if (!rootRef || !rootRef.parent)
+                        return;
+
+                    rootRef.refreshTrackers();
+                } catch (e) {}
+            });
+        }
+
         function onZoneColorChanged(zoneId) {
             if (zoneId !== root.zoneId || !root.zoneData)
                 return;
 
-            var rootRef = root;
-            var zoneRectRef = zoneRect;
-            Qt.callLater(function () {
-                try {
-                    // Guard: zone removed from scene (Repeater update) - avoid accessing destroyed objects
-                    if (!rootRef || !rootRef.parent || !rootRef.zoneData || !zoneRectRef)
-                        return;
-
-                    zoneRectRef._highlightColorTracker = rootRef.zoneData.highlightColor;
-                    zoneRectRef._inactiveColorTracker = rootRef.zoneData.inactiveColor;
-                    zoneRectRef._borderColorTracker = rootRef.zoneData.borderColor;
-                    zoneRectRef._activeOpacityTracker = rootRef.zoneData.activeOpacity;
-                    zoneRectRef._inactiveOpacityTracker = rootRef.zoneData.inactiveOpacity;
-                    zoneRectRef._borderWidthTracker = rootRef.zoneData.borderWidth;
-                    zoneRectRef._borderRadiusTracker = rootRef.zoneData.borderRadius;
-                    zoneRectRef._useCustomColorsTracker = rootRef.zoneData.useCustomColors;
-                } catch (e) {}
-            });
+            refreshTrackersLater();
         }
 
         function onZonesChanged() {
             if (!root.zoneData)
                 return;
 
-            var rootRef = root;
-            var zoneRectRef = zoneRect;
-            Qt.callLater(function () {
-                try {
-                    // Guard: zone removed from scene (Repeater update) - avoid accessing destroyed objects
-                    if (!rootRef || !rootRef.parent || !rootRef.zoneData || !zoneRectRef)
-                        return;
-
-                    zoneRectRef._highlightColorTracker = rootRef.zoneData.highlightColor;
-                    zoneRectRef._inactiveColorTracker = rootRef.zoneData.inactiveColor;
-                    zoneRectRef._borderColorTracker = rootRef.zoneData.borderColor;
-                    zoneRectRef._activeOpacityTracker = rootRef.zoneData.activeOpacity;
-                    zoneRectRef._inactiveOpacityTracker = rootRef.zoneData.inactiveOpacity;
-                    zoneRectRef._borderWidthTracker = rootRef.zoneData.borderWidth;
-                    zoneRectRef._borderRadiusTracker = rootRef.zoneData.borderRadius;
-                    zoneRectRef._useCustomColorsTracker = rootRef.zoneData.useCustomColors;
-                } catch (e) {}
-            });
+            refreshTrackersLater();
         }
 
         target: root.controller

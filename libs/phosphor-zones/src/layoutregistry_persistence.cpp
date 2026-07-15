@@ -262,11 +262,19 @@ void LayoutRegistry::saveLayout(PhosphorZones::Layout* layout)
     // daemon restarts.
     const QJsonObject full = layout->toJson();
     m_layoutSettings.setSettingsFor(layout->id().toString(), LayoutSettingsStore::extractSettings(full));
-    if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
-        qCWarning(lcZonesLib) << "Failed to persist layout settings sidecar for" << layout->id().toString();
+    // Invariant: never strip settings out of the layout file unless the
+    // sidecar copy actually landed. On sidecar failure, write the FULL
+    // object inline for this cycle so the settings survive somewhere on
+    // disk; a full-format layout file remains loadable (the load path's
+    // mergeSettings preserves keys the file already carries, see
+    // loadLayoutsFromDirectory), and a later successful save re-splits it.
+    const bool sidecarSaved = m_layoutSettings.saveToFile(layoutSettingsFilePath());
+    if (!sidecarSaved) {
+        qCWarning(lcZonesLib) << "Failed to persist layout settings sidecar for" << layout->id().toString()
+                              << "- keeping settings inline in the layout file";
     }
 
-    QJsonDocument doc(LayoutSettingsStore::stripSettings(full));
+    QJsonDocument doc(sidecarSaved ? LayoutSettingsStore::stripSettings(full) : full);
     const QByteArray data = doc.toJson(QJsonDocument::Indented);
 
     if (file.write(data) != data.size()) {

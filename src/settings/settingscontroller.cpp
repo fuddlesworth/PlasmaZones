@@ -893,7 +893,7 @@ SettingsController::SettingsController(QObject* parent)
 }
 
 // Out-of-line page getters (kept here rather than inline in the header to hold
-// settingscontroller.h under the 800-line cap).
+// settingscontroller.h under the project's 1000-line target).
 SnappingZonesController* SettingsController::snappingZonesPage() const
 {
     return m_snappingZonesPage;

@@ -149,10 +149,10 @@ public:
     /// to rewrite via @c writeJsonAtomically during schema upgrades).
     QString filePath() const;
 
-    /// Clear the dirty flag without writing. Used by tests, async I/O
-    /// that commits snapshots off-thread, migration (@c applyMigration),
-    /// and callers that snapshot/restore the root and need to put the
-    /// flag back the way they found it (see @c isDirty()).
+    /// Clear the dirty flag without writing. Used by migration
+    /// (@c applyMigration) and by callers that snapshot/restore the root
+    /// and need to put the flag back the way they found it (see
+    /// @c isDirty()), such as @c Settings::exportTo.
     void clearDirty();
 
     /// Whether the in-memory document carries changes that have not been

@@ -441,13 +441,6 @@ public:
     ContextTilingParams resolveContextTilingParams(const QString& screenId, int virtualDesktop,
                                                    const QString& activity) const;
 
-    /// Stamp the screen-orientation token onto @p query from
-    /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
-    /// returns nullopt). Called at every windowless-context query build site so a
-    /// @c Field::ScreenOrientation predicate can match regardless of which
-    /// context slot (assignment / gap / lock / overlay) is being resolved.
-    /// Orientation is geometry-derived and layout-independent, so this is safe to
-    /// call from the assignment cascade (no recursion, unlike an active-layout read).
     /// The screen-orientation token from @ref m_screenOrientationProvider ("portrait"
     /// / "landscape"), or an empty string when the provider is unset or returns
     /// nullopt. Shared by @ref stampScreenOrientation (the query value) and the
@@ -462,6 +455,13 @@ public:
         return QString();
     }
 
+    /// Stamp the screen-orientation token onto @p query from
+    /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
+    /// returns nullopt). Called at every windowless-context query build site so a
+    /// @c Field::ScreenOrientation predicate can match regardless of which
+    /// context slot (assignment / gap / lock / overlay) is being resolved.
+    /// Orientation is geometry-derived and layout-independent, so this is safe to
+    /// call from the assignment cascade (no recursion, unlike an active-layout read).
     void stampScreenOrientation(PhosphorRules::WindowQuery& query, const QString& screenId) const
     {
         query.screenOrientation = screenOrientationToken(screenId);

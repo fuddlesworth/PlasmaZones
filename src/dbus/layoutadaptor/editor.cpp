@@ -24,6 +24,13 @@
 
 namespace PlasmaZones {
 
+namespace {
+// D-Bus boundary counterpart of the editor's client-side name cap
+// (TopBar.qml TextField maximumLength). Callers can bypass the UI,
+// so layout and zone names are clamped again here.
+constexpr int MAX_NAME_LENGTH = 40;
+} // namespace
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Editor Launch Helper
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -168,8 +175,8 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         layout->endBatchModify();
     });
 
-    // Update basic properties
-    layout->setName(obj[::PhosphorZones::ZoneJsonKeys::Name].toString());
+    // Update basic properties (name clamped at the D-Bus boundary)
+    layout->setName(obj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MAX_NAME_LENGTH));
 
     // Update per-layout gap overrides (-1 = use global setting)
     if (obj.contains(::PhosphorZones::ZoneJsonKeys::ZonePadding)) {
@@ -240,7 +247,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         QJsonObject zoneObj = zoneVal.toObject();
         auto* zone = new PhosphorZones::Zone(layout);
 
-        zone->setName(zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString());
+        zone->setName(zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MAX_NAME_LENGTH));
         zone->setZoneNumber(zoneObj[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt());
 
         QJsonObject relGeo = zoneObj[::PhosphorZones::ZoneJsonKeys::RelativeGeometry].toObject();
@@ -311,7 +318,27 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
         return QString();
     }
 
-    auto* layout = PhosphorZones::Layout::fromJson(*objOpt, m_layoutManager);
+    // Clamp layout and zone names before handing the JSON to fromJson
+    // (same D-Bus boundary rule as updateLayout).
+    QJsonObject obj = *objOpt;
+    if (obj.contains(::PhosphorZones::ZoneJsonKeys::Name)) {
+        obj[::PhosphorZones::ZoneJsonKeys::Name] =
+            obj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MAX_NAME_LENGTH);
+    }
+    QJsonArray zones = obj[::PhosphorZones::ZoneJsonKeys::Zones].toArray();
+    for (auto zoneRef : zones) {
+        QJsonObject zoneObj = zoneRef.toObject();
+        if (zoneObj.contains(::PhosphorZones::ZoneJsonKeys::Name)) {
+            zoneObj[::PhosphorZones::ZoneJsonKeys::Name] =
+                zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString().left(MAX_NAME_LENGTH);
+            zoneRef = zoneObj;
+        }
+    }
+    if (obj.contains(::PhosphorZones::ZoneJsonKeys::Zones)) {
+        obj[::PhosphorZones::ZoneJsonKeys::Zones] = zones;
+    }
+
+    auto* layout = PhosphorZones::Layout::fromJson(obj, m_layoutManager);
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout from JSON";
         return QString();

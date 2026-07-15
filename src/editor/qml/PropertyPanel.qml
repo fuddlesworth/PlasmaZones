@@ -81,6 +81,21 @@ Rectangle {
         fixedHeightSpin.value = zone.fixedHeight !== undefined ? zone.fixedHeight : 50;
     }
 
+    // Same imperative-sync idiom for the name field and number spinbox: their
+    // bindings die on the first imperative write (selection change), so an
+    // undo/redo of a rename/renumber with the same zone still selected must be
+    // re-applied here. Focus guards keep an in-progress edit untouched.
+    function syncNameAndNumber() {
+        const zone = selectedZone;
+        if (!zone)
+            return;
+
+        if (!zoneNameField.activeFocus)
+            zoneNameField.text = zone.name || "";
+        if (!zoneNumberSpinBox.activeFocus)
+            zoneNumberSpinBox.value = zone.zoneNumber || 1;
+    }
+
     // Layout properties
     Layout.preferredWidth: propertyPanel.panelShown ? 280 : 0
     // The animated preferredWidth is the clamp. Binding maximumWidth to the
@@ -531,16 +546,17 @@ Rectangle {
                     }
                 }
 
-                // Sync geometry controls when zone data changes (undo/redo, external
-                // updates). Includes the mode checkbox: its `checked` binding dies on
-                // the first manual toggle, so an undone/redone mode toggle must be
-                // reflected imperatively. Not gated on fixedGeometryCheck.checked for
-                // the same reason.
+                // Sync geometry, name, and number controls when zone data changes
+                // (undo/redo, external updates). Includes the mode checkbox: its
+                // `checked` binding dies on the first manual toggle, so an undone/
+                // redone mode toggle must be reflected imperatively. Not gated on
+                // fixedGeometryCheck.checked for the same reason.
                 Connections {
                     function onZonesChanged() {
                         // Qt.callLater avoids binding loops, and the stable function
-                        // reference lets it coalesce bursts of zonesChanged into one sync.
+                        // references let it coalesce bursts of zonesChanged into one sync.
                         Qt.callLater(propertyPanel.syncGeometryControls);
+                        Qt.callLater(propertyPanel.syncNameAndNumber);
                     }
 
                     target: editorController
@@ -813,11 +829,16 @@ Rectangle {
                         // or imperative sync, after which a selection change
                         // would keep showing the previous zone's values and any
                         // edit would stamp those stale values onto the new zone.
+                        // If the lookup comes back empty the zone is gone or
+                        // not yet published; syncing anyway would fall back to
+                        // the panel's stale selectedZone and stamp the previous
+                        // zone's values, so do nothing at all.
                         const zone = editorController.getZoneById(id);
-                        if (zone && zone.id) {
-                            zoneNameField.text = zone.name || "";
-                            zoneNumberSpinBox.value = zone.zoneNumber || 1;
-                        }
+                        if (!(zone && zone.id))
+                            return;
+
+                        zoneNameField.text = zone.name || "";
+                        zoneNumberSpinBox.value = zone.zoneNumber || 1;
                         propertyPanel.syncGeometryControls(zone);
                         zoneNameField.updateTimer.stop();
                         zoneNameField.validationError = "";

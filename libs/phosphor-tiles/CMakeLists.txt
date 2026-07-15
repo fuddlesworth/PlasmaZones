@@ -52,6 +52,22 @@ if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
+# phosphor-engine — IPlacementEngine contracts + PlacementEngineBase that
+# AutotileLayoutSource and TilingState build on. PUBLIC link dep, but it
+# CANNOT use the if(NOT TARGET) find_package fallback the other deps use:
+# in-tree the engine subdirectory is added after this one, so the target
+# does not exist yet at this point and the fallback would wrongly pull an
+# installed copy. CMake resolves link-target names at generate time, so the
+# in-tree link works without it; standalone consumers get the dependency
+# through PhosphorTilesConfig.cmake.in's find_dependency instead.
+
+# phosphor-scripting — the embedded Luau host that LuauTileAlgorithm and
+# ScriptedAlgorithmLoader evaluate scripts through. PUBLIC link dep, so a
+# standalone configure must resolve it here too.
+if(NOT TARGET PhosphorScripting::PhosphorScripting)
+    find_package(PhosphorScripting 0.1.0 REQUIRED)
+endif()
+
 # phosphor-fsloader — shared filesystem-loader scaffolding (used by
 # ScriptedAlgorithmLoader's WatchedDirectorySet + LuauScanStrategy).
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
