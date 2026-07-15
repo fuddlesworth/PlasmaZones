@@ -314,7 +314,7 @@ Return a table (or `nil` to do nothing). Two optional, independent outputs:
 - **Any other keys** — persisted as the new `ctx.state` table, but only when
   `metadata.supportsScriptState = true`. On the next `tile` run, `ctx.state`
   holds what you returned, sanitized: non-finite numbers are dropped, nesting
-  past 16 levels are trimmed away, as is everything past 4096 keys counted
+  past 16 levels is trimmed away, as is everything past 4096 keys counted
   across the whole bag rather than per table, and a bag over 64 KiB
   of JSON is dropped entirely. Keep it small and flat. Read your prior values from
   `state.scriptState` inside the hook. See `data/algorithms/aligned-grid.luau`
@@ -385,8 +385,12 @@ set):
 luau-analyze ~/.local/share/plasmazones/algorithms/my-columns.luau
 ```
 
-A parse or type error means the daemon will skip the algorithm, so a clean
-`luau-analyze` run is the quickest way to know a script will load.
+A parse error means the daemon will skip the algorithm, so this is the quickest
+way to catch one. It is not a guarantee that a script loads or behaves: Luau
+erases type annotations when it compiles and the engine does not typecheck, so a
+type error is a lint for you rather than something the daemon refuses. Nor does
+a clean run see a `pluau` call that does not exist (§11) or a file over the size
+cap (§12).
 
 ---
 

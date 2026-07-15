@@ -459,11 +459,12 @@ RowLayout {
     // programmatic reset lands on the item.
     //
     // `Binding on checked` rather than a plain `checked:` binding, and the
-    // difference is load-bearing here. StayOpenMenuItem cannot use toggle(),
-    // which would dismiss the menu, so it flips `checked` with a JS assignment
-    // and re-emits toggled() by hand. A JS write severs a plain binding for
-    // good; `Binding on` is a value source and survives it. Without it, Reset
-    // Filters would stop reaching any item the user had clicked.
+    // difference is load-bearing here. What StayOpenMenuItem has to avoid is
+    // AbstractButton's activation path, which emits triggered() and dismisses
+    // the menu; the way it does that is to flip `checked` with a JS assignment
+    // and re-emit toggled() by hand. A JS write severs a plain binding for
+    // good, and `Binding on` is a value source that survives it. Without it,
+    // Reset Filters would stop reaching any item the user had clicked.
     //
     // RestoreNone is stated rather than inherited: these bindings carry no
     // `when` and so never deactivate, and a delegate being torn down has
