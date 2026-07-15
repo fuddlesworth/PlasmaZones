@@ -48,9 +48,14 @@ QString sanitizeMetadataString(QString value);
 /// negative, or a top-level name/id field that is not a whole line of that
 /// form. That last one covers a field sharing its line with another (in either
 /// order), one trailing a long bracket's closer, and one whose value spans
-/// lines or is followed by a long-bracket comment (`--[[`), whose end this scan
-/// will not guess at. None can be rewritten in place, and leaving one would let
+/// lines or is followed by a long-bracket comment (`--[[`, `--[=[`, ...), which
+/// can close mid-line and leave a second field somewhere a line-anchored read
+/// will not look. None can be rewritten in place, and leaving one would let
 /// Luau's last-wins keep the template's value.
+///
+/// A `metadata = {` inside a long comment is that comment's text, not the
+/// table, and the search reads it as such rather than rewriting it and leaving
+/// the real table below.
 ///
 /// Only the table's own top-level fields are read, so a nested `customParams`
 /// entry keeps its own `name` key whether it is written inline or across lines.
@@ -67,8 +72,8 @@ QString sanitizeMetadataString(QString value);
 /// string literals without further escaping.
 QString rewriteMetadataNameId(const QString& content, const QString& displayName, const QString& id);
 
-/// Build a complete blank-scaffold module: SPDX @p header (which must end
-/// with a newline), a metadata table
+/// Build a complete blank-scaffold module: SPDX @p header (surrounding blank
+/// lines are normalized, so a trailing newline is optional), a metadata table
 /// from @p displayName / @p id / @p caps, and a minimal tile function. The
 /// three new capability flags (scriptState, singleWindow, retileOnFocus) are
 /// emitted only when set; scriptState additionally emits an onWindowResized

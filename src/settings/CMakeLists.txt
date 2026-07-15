@@ -157,10 +157,11 @@ set(plasmazones_settings_SRCS
     # validation entry points. Split out so rulecontroller.cpp stays
     # under the 800-line cap; same class, separate TU, no API change.
     rulecontroller_views.cpp
-    # RuleController label-lookup setters (screen/activity/layout/
-    # snapping-layout/tiling-algorithm) plus the wiring-completion gate.
-    # Five tiny pass-throughs into RuleModel; split out so
-    # rulecontroller.cpp stays under the project's 800-line cap.
+    # RuleController label-lookup setters (screen / activity / zone /
+    # virtual-desktop / snapping-layout / tiling-algorithm / shader-effect /
+    # overlay-shader / decoration-pack) plus the QML curve-label resolver.
+    # Thin pass-throughs into RuleModel; split out so rulecontroller.cpp
+    # stays under the project's 800-line cap.
     rulecontroller_lookups.cpp
     # RuleController per-page dirty split + managed-baseline reset/discard,
     # split out so rulecontroller.cpp stays under the project's 800-line cap.

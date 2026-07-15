@@ -805,13 +805,14 @@ SettingsController::SettingsController(QObject* parent)
     });
     m_screenHelper.refreshScreens();
 
-    // PhosphorZones::Layout load timer (debounce). The corresponding D-Bus
+    // PhosphorZones::Layout load timer (debounce). The five layout-mutation
     // subscriptions (layoutCreated / layoutDeleted / layoutChanged /
-    // layoutPropertyChanged / layoutListChanged / screenLayoutChanged /
-    // quickLayoutSlotsChanged + virtual-desktop / activity broadcasts)
-    // are wired in settingscontroller_dbuswire.cpp::wireDaemonSubscriptions
-    // and all funnel into the 50 ms debounce slot below so signal bursts
-    // coalesce into a single loadLayoutsAsync().
+    // layoutPropertyChanged / layoutListChanged) funnel into the 50 ms debounce
+    // slot below, so a burst of them coalesces into a single
+    // loadLayoutsAsync(). They are wired in
+    // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions, alongside the
+    // screen-layout, quick-slot, virtual-desktop and activity broadcasts, which
+    // reach their own slots rather than this timer.
     m_layoutLoadTimer.setSingleShot(true);
     m_layoutLoadTimer.setInterval(50);
     connect(&m_layoutLoadTimer, &QTimer::timeout, this, &SettingsController::loadLayoutsAsync);

@@ -26,10 +26,6 @@ using namespace AutotileDefaults;
 
 namespace {
 
-/// The prefix every scripted algorithm's id carries, both where the id is built
-/// and where name() strips it back off for the display fallback.
-constexpr QLatin1String kScriptIdPrefix{"script:"};
-
 ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
 {
     ScriptedHelpers::CustomParamDef d;
@@ -296,7 +292,7 @@ bool LuauTileAlgorithm::loadScript(const QString& filePath)
     // a supported operation). m_module is -1 and the engine pointers are null on
     // entry by construction.
     m_filePath = filePath;
-    m_scriptId = kScriptIdPrefix + QFileInfo(filePath).completeBaseName();
+    m_scriptId = ScriptIdPrefix + QFileInfo(filePath).completeBaseName();
     m_valid = false;
     m_metadata = ScriptedHelpers::ScriptMetadata{};
 
@@ -439,8 +435,8 @@ QString LuauTileAlgorithm::name() const
         return m_metadata.name;
     }
     QString fallback = m_scriptId;
-    if (fallback.startsWith(kScriptIdPrefix)) {
-        fallback = fallback.mid(kScriptIdPrefix.size());
+    if (fallback.startsWith(ScriptIdPrefix)) {
+        fallback = fallback.mid(ScriptIdPrefix.size());
     }
     if (!fallback.isEmpty()) {
         fallback[0] = fallback[0].toUpper();

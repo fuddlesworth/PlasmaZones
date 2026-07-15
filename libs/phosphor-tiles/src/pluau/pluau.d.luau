@@ -98,7 +98,7 @@ export type Metadata = {
     -- The same clamps the override functions below are annotated with apply
     -- here: metadata seeds the value the override resolves, and both land in
     -- the one clamp.
-    defaultSplitRatio: number?, -- clamped to 0.1..0.9
+    defaultSplitRatio: number?, -- clamped to MIN_SPLIT..MAX_SPLIT
     defaultMaxWindows: number?, -- clamped to 1..100
     minimumWindows: number?, -- clamped to 1..100
     masterZoneIndex: number?, -- 0-based index of the master zone, clamped to -1..255
@@ -129,7 +129,7 @@ export type Algorithm = {
     -- declared. Each is called once when the script loads and the result is
     -- cached for the algorithm's lifetime, so it cannot vary per retile. The
     -- bundled algorithms all use plain metadata fields.
-    masterZoneIndex: (() -> number)?,
+    masterZoneIndex: (() -> number)?, -- clamped to -1..255
     supportsMasterCount: (() -> boolean)?,
     supportsSplitRatio: (() -> boolean)?,
     producesOverlappingZones: (() -> boolean)?,

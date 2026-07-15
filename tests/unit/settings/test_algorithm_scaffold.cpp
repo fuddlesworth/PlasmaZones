@@ -311,14 +311,14 @@ void TestAlgorithmScaffold::rewriteAcceptsHandWrittenFieldPunctuation()
     QVERIFY(!out.contains(QStringLiteral("My Layout")));
     QVERIFY(!out.contains(QStringLiteral("\"mine\"")));
 
-    // The trailing-comment match excludes a `--[[` opener, and this is the only
-    // shape that proves it: a long comment closes mid-line and leaves `id` live
-    // code, so accepting the line would skip the second-field guard and insert a
-    // duplicate id for Luau's last-wins to resolve back to the template's.
-    QVERIFY(rewriteMetadataNameId(QStringLiteral("return pluau.algorithm {\n    metadata = {\n"
-                                                 "        name = \"A\", --[[ c ]] id = \"x\",\n    },\n}\n"),
-                                  QStringLiteral("Copy"), QStringLiteral("copy"))
-                .isEmpty());
+    // Only a real long-bracket opener is excluded from the trailing comment.
+    // `--[` that opens no long bracket runs to the end of the line like any
+    // other comment, so the field is still a whole line and still rewritable.
+    const QString bracketComment =
+        rewriteMetadataNameId(QStringLiteral("return pluau.algorithm {\n    metadata = {\n"
+                                             "        name = \"A\", --[see docs]\n        id = \"a\",\n    },\n}\n"),
+                              QStringLiteral("Copy"), QStringLiteral("copy"));
+    QVERIFY(bracketComment.contains(QStringLiteral("name = \"Copy\", --[see docs]")));
 }
 
 namespace {

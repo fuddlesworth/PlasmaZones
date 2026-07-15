@@ -91,6 +91,11 @@ constexpr int MaxMetadataWindows = 100;
 /// user an algorithm that never appears. Shared so the settings app's import
 /// can reject it up front instead.
 constexpr qint64 MaxScriptSizeBytes = 1024 * 1024;
+/// Prefix of the id a scripted algorithm gets when its metadata declares none:
+/// this plus the file's base name. Shared because the loader builds that id for
+/// the registry while LuauTileAlgorithm builds its own and strips this back off
+/// for the display-name fallback, and the two must agree on the spelling.
+constexpr QLatin1String ScriptIdPrefix{"script:"};
 constexpr int MinInsertPosition = 0;
 constexpr int MaxInsertPosition = 2;
 // Bounds for AutotileOverflowBehavior (Float=0 .. Unlimited=1), defined below.

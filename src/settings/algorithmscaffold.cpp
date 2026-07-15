@@ -272,7 +272,10 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
     }
     m += QStringLiteral("    },");
 
-    QString content = header + QStringLiteral("\nlocal pluau = pluau\n\nreturn pluau.algorithm {\n") + m
+    // Normalize rather than require a trailing newline: the separator is this
+    // function's to get right, and a caller that omits one should not silently
+    // produce a scaffold whose header runs into its first line of code.
+    QString content = header.trimmed() + QStringLiteral("\n\nlocal pluau = pluau\n\nreturn pluau.algorithm {\n") + m
         + QStringLiteral("\n\n") + QStringLiteral("    tile = function(ctx)\n")
         + QStringLiteral("        if ctx.windowCount <= 0 then return {} end\n")
         + QStringLiteral("        -- Fall back to a plain fill when the work area is too small to split.\n")
@@ -303,9 +306,18 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
 
     static const QRegularExpression metaRe(QStringLiteral(R"(^\s*metadata\s*=\s*\{)"));
     static const QRegularExpression metaOpenLineRe(QStringLiteral(R"(^\s*metadata\s*=\s*\{\s*$)"));
+    // Find the table, carrying long-bracket state so a `metadata = {` written
+    // inside a `--[[ ]]` doc block is read as the text it is. Taking it would be
+    // the quiet kind of wrong: the commented-out table rewrites clean, both saw
+    // flags come back true, and the real table below keeps the source's id for
+    // Luau's last-wins to hand back. The `--` forms need no such care, since
+    // this pattern only matches `metadata` leading its line.
     int metaStart = -1;
+    int scanLongBracket = kNoLongBracket;
     for (int i = 0; i < lines.size(); ++i) {
-        if (metaRe.match(lines[i]).hasMatch()) {
+        const bool lineStartsInText = scanLongBracket != kNoLongBracket;
+        braceDelta(lines[i], scanLongBracket);
+        if (!lineStartsInText && metaRe.match(lines[i]).hasMatch()) {
             metaStart = i;
             break;
         }
@@ -332,14 +344,19 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     // templates all use the one canonical form, but duplicateAlgorithm runs
     // this over scripts a user wrote by hand, and rejecting their punctuation
     // fails the whole copy. Terminator and comment are captured so the rewrite
-    // puts them back. A long-bracket comment (`--[[`) can run past this line,
-    // so it stays unmatched and rejects rather than guessing where it ends.
+    // puts them back.
+    //
+    // Only a long-bracket opener (`--[[`, `--[=[`, ...) is excluded, because
+    // that comment can close mid-line and leave a second field live where this
+    // line-anchored read would never look for one. A `--[` that opens no long
+    // bracket is an ordinary line comment and runs to the end of the line, so
+    // it is accepted like any other.
     static const QRegularExpression nameFieldRe(QStringLiteral(R"(^\s*name\s*=)"));
     static const QRegularExpression idFieldRe(QStringLiteral(R"(^\s*id\s*=)"));
     static const QRegularExpression nameLineRe(
-        QStringLiteral(R"(^\s*name\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[).*)?)$)"));
+        QStringLiteral(R"(^\s*name\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[=*\[).*)?)$)"));
     static const QRegularExpression idLineRe(
-        QStringLiteral(R"(^\s*id\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[).*)?)$)"));
+        QStringLiteral(R"(^\s*id\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[=*\[).*)?)$)"));
     // A name/id key anywhere on the line, not just at its start. The two
     // anchored patterns above only see a field that leads its line, so without
     // this a trailing `a = 1, name = "x",` would be neither rewritten nor

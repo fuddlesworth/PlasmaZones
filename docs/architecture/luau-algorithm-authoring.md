@@ -111,7 +111,7 @@ to sensible defaults.
 | `retileOnFocus` | boolean | Re-runs `tile` when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight) |
 | `producesOverlappingZones` | boolean | Zones may overlap (e.g. stacked/deck layouts) |
 | `centerLayout` | boolean | Layout is centered rather than filling the screen |
-| `masterZoneIndex` | number | Index of the “master” zone, `-1` = none. Describes the layout for a caller that asks, and no built-in feature reads it (“focus master” goes to the first tiled window regardless) |
+| `masterZoneIndex` | number | Index of the “master” zone, `-1` = none (clamped to -1–255). Describes the layout for a caller that asks, and no built-in feature reads it (“focus master” goes to the first tiled window regardless) |
 | `zoneNumberDisplay` | string | `"all"`, `"last"`, `"firstAndLast"`, or `"none"` (omit to let the renderer decide) |
 | `customParams` | list | User-tunable parameters (§7) |
 
@@ -200,7 +200,7 @@ pluau.applyTreeGeometry(node, rect, gap)   -- memory algorithms
 
 ```
 pluau.guardArea(area, count)      -- early-return fill for tiny work areas
-pluau.clamp(v, lo, hi)            -- returns nil for anything that is not a real number, NaN included (pair with `or default`)
+pluau.clamp(v, lo, hi)            -- returns nil for a non-number or NaN (pair with `or default`); ±inf clamps to the bound
 pluau.center(start, total, size)
 pluau.gridShape(count)            -- cols, rows for a near-square grid
 pluau.rect(x, y, w, h)
@@ -279,8 +279,8 @@ state (the `HookState` type in the stubs):
 | `countAfterRemoval` | number? | `onWindowRemoved` only: count minus the departing window |
 
 The snapshot is built fresh per call and mutating it has no effect. Both hooks
-return nothing, so they are notifications: use them to observe the tiled set,
-not to change it. Memory algorithms (§10) do not need them, because the host
+return nothing, so they are notifications. Use them to observe the tiled set
+rather than to change it. Memory algorithms (§10) do not need them, because the host
 maintains the split tree itself. Script-state algorithms persist through the
 `onWindowResized` return value instead.
 
@@ -360,9 +360,9 @@ autocomplete and `luau-analyze` know about the injected `pluau` global:
 }
 ```
 
-For full `pluau.*` type information, point your editor at the shipped stubs
-(`/usr/share/plasmazones/pluau.d.luau`) — e.g. copy them next to your scripts, or
-add them to your luau-lsp definitions.
+For full `pluau.*` type information, add the shipped stubs
+(`/usr/share/plasmazones/pluau.d.luau`) to your luau-lsp definitions. Keep them
+out of the algorithms directory itself, which the loader scans for `*.luau`.
 
 Type-check before relying on a layout (CI runs exactly this over the bundled
 set):

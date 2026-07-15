@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/LuauTileAlgorithm.h>
 #include "tileslogging.h"
@@ -458,8 +459,10 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             continue;
         }
 
-        // Use id metadata if present, otherwise default to "script:filename"
-        const QString scriptId = algo->id().isEmpty() ? (QStringLiteral("script:") + baseName) : algo->id();
+        // Use id metadata if present, otherwise default to "script:filename".
+        // LuauTileAlgorithm builds the same id for itself, so the prefix is
+        // shared rather than spelled twice.
+        const QString scriptId = algo->id().isEmpty() ? (AutotileDefaults::ScriptIdPrefix + baseName) : algo->id();
 
         // registerAlgorithm() handles replacement internally (removes old,
         // takes ownership of new) — no need to unregister first.

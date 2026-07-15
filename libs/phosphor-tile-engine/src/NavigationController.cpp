@@ -665,12 +665,13 @@ void NavigationController::increaseMasterRatio(qreal delta)
             // (applyPerScreenConfig reads the stored override).
             m_engine->updatePerScreenOverride(screenId, PerScreenKeys::SplitRatio, resultRatio);
         } else {
-            // No override: keep the adjustment local to the active screen+desktop's
-            // TilingState (set above, serialized with the session state). Mark it
-            // user-tuned so propagateGlobalSplitRatio leaves it alone on a settings
-            // refresh, and deliberately do NOT write the global config / settings —
-            // a per-desktop ratio tweak is not a new global default and must not
-            // bleed to sibling screens or other desktops.
+            // No override: keep the adjustment local to the active
+            // screen+desktop+activity's TilingState (set above, serialized with the
+            // session state). Mark it user-tuned so propagateGlobalSplitRatio leaves
+            // it alone on a settings refresh, and deliberately do NOT write the
+            // global config / settings — a per-desktop ratio tweak is not a new
+            // global default and must not bleed to sibling screens, other desktops,
+            // or other activities.
             m_engine->noteSplitRatioUserTuned(screenId);
         }
 
@@ -736,8 +737,9 @@ void NavigationController::adjustMasterCount(int delta)
             // settings reloads (applyPerScreenConfig reads the stored override).
             m_engine->updatePerScreenOverride(screenId, PerScreenKeys::MasterCount, resultCount);
         } else {
-            // No override: keep the adjustment local to the active screen+desktop's
-            // TilingState (set above, serialized with the session state). Mark it
+            // No override: keep the adjustment local to the active
+            // screen+desktop+activity's TilingState (set above, serialized with the
+            // session state). Mark it
             // user-tuned so propagateGlobalMasterCount leaves it alone on a refresh,
             // and deliberately do NOT write the global config / settings — a
             // per-desktop master-count tweak is not a new global default.

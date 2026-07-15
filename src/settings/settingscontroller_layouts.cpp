@@ -55,7 +55,8 @@ void SettingsController::loadLayoutsAsync()
     // new inode the watcher may not bind to in time). Belt-and-suspenders:
     // every D-Bus layout signal that triggers loadLayoutsAsync (layoutCreated
     // / layoutDeleted / layoutChanged / layoutPropertyChanged /
-    // layoutListChanged — see the connect block in the ctor) ALSO forces
+    // layoutListChanged — see
+    // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions) ALSO forces
     // an explicit reload here, so the local-source preview path stays
     // strictly in sync with the daemon's view regardless of which file-
     // event path fires first.
@@ -64,8 +65,9 @@ void SettingsController::loadLayoutsAsync()
     }
 
     // Step 1: instant paint from the in-process composite source is handled
-    // by the ctor-wired PhosphorZones::LayoutRegistry::layoutsChanged lambda (see ~line 180
-    // — it calls recalcLocalLayouts() + swaps m_layouts from localLayoutPreviews()
+    // by the PhosphorZones::LayoutRegistry::layoutsChanged lambda wired in
+    // settingscontroller.cpp's ctor
+    // (it calls recalcLocalLayouts() + swaps m_layouts from localLayoutPreviews()
     // and emits layoutsChanged). loadLayouts() above triggers that signal
     // synchronously when the disk contents actually changed, so the instant-paint
     // path runs without a duplicate recalc/emit here.
@@ -467,9 +469,12 @@ void SettingsController::setLayoutAspectRatio(const QString& layoutId, int aspec
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // The algorithm bodies live in AlgorithmService. The SettingsController::*
-// methods below are Q_INVOKABLE forwarders so QML's entry points stay stable:
-// most are one line, and the ones taking a path sanitize it first (that guard
-// belongs on the controller, which is where QML hands the path in).
+// methods below are Q_INVOKABLE forwarders so QML's entry points stay stable.
+// Most are one line. The three exceptions: the ones taking a path sanitize it
+// first (that guard belongs on the controller, which is where QML hands the
+// path in); openLayoutFile resolves the layout's real on-disk path through the
+// local registry before falling back to the service; and algorithmIdFromLayoutId
+// has no service body at all, being a pure LayoutId helper.
 
 QVariantList SettingsController::availableAlgorithms() const
 {

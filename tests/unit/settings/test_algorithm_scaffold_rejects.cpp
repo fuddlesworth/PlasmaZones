@@ -60,6 +60,7 @@ private Q_SLOTS:
     void rejectsMultiFieldNameLine();
     void rejectsUnquotedNameValue();
     void rejectsFieldHiddenBehindLongComment();
+    void ignoresMetadataTableInsideLongComment();
 };
 
 void TestAlgorithmScaffoldRejects::rejectsMultiLineCopyright()
@@ -198,6 +199,38 @@ void TestAlgorithmScaffoldRejects::rejectsFieldHiddenBehindLongComment()
         "    tile = function(ctx) return {} end,\n"
         "}\n");
     QVERIFY(rewriteMetadataNameId(hiddenId, QStringLiteral("Copy"), QStringLiteral("copy")).isEmpty());
+}
+
+void TestAlgorithmScaffoldRejects::ignoresMetadataTableInsideLongComment()
+{
+    // A doc block showing the metadata shape is text, not the table. Taking it
+    // is the quiet failure the whole reject surface exists to avoid: the
+    // commented-out table rewrites cleanly, both fields read as seen, and the
+    // real table below keeps the source's id for Luau's last-wins to hand back,
+    // so the copy collides with what it was copied from.
+    const QString docBlock = QStringLiteral(
+        "--[[ An example:\n"
+        "    metadata = {\n"
+        "        name = \"Example\",\n"
+        "        id = \"example\",\n"
+        "    },\n"
+        "]]\n"
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"Real\",\n"
+        "        id = \"real\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    const QString out = rewriteMetadataNameId(docBlock, QStringLiteral("Copy"), QStringLiteral("copy"));
+    QVERIFY(!out.isEmpty());
+    // The real table was rewritten, exactly once.
+    QVERIFY(out.contains(QStringLiteral("        name = \"Copy\",")));
+    QVERIFY(out.contains(QStringLiteral("        id = \"copy\",")));
+    QVERIFY(!out.contains(QStringLiteral("id = \"real\"")));
+    // The doc block is untouched, so its own name/id still read as they did.
+    QVERIFY(out.contains(QStringLiteral("        name = \"Example\",")));
+    QVERIFY(out.contains(QStringLiteral("        id = \"example\",")));
 }
 
 QTEST_GUILESS_MAIN(TestAlgorithmScaffoldRejects)
