@@ -389,8 +389,8 @@ A parse error means the daemon will skip the algorithm, so this is the quickest
 way to catch one. It is not a guarantee that a script loads or behaves: Luau
 erases type annotations when it compiles and the engine does not typecheck, so a
 type error is a lint for you rather than something the daemon refuses. Nor does
-a clean run see a `pluau` call that does not exist (§11) or a file over the size
-cap (§12).
+a clean run see a `pluau` call that does not exist, for the reason above, or a
+file over the size cap (§12).
 
 ---
 
