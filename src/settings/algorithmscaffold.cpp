@@ -135,11 +135,15 @@ int findLongBracketClose(const QString& line, int level, int from)
 /// caller can ask "is there a field of THIS table here" without a string, a
 /// comment, a nested table's keys, or the enclosing table's code answering.
 ///
-/// Not handled: a short string continued across lines (backslash-newline,
-/// `\z`), and a backtick literal reached from inside one of its own
-/// interpolations (`` `{"`"}` ``), which ends the literal early here. No
-/// bundled template's metadata uses either.
-int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, QString* codeOnly = nullptr)
+/// @p openString, when non-null, is set if a short or interpolated string is
+/// still open at the end of the line. That string runs past where this scan can
+/// follow, so a caller reads it as "unrecognized shape" rather than resume
+/// mid-literal. One shape this does NOT catch, because it is not detectable
+/// from one line: a backtick literal reached from inside its own interpolation
+/// (`` `{"`"}` ``), which ends the literal early here. No bundled template's
+/// metadata uses one.
+int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, QString* codeOnly = nullptr,
+               bool* openString = nullptr)
 {
     int depth = startDepth;
     // Set once the metadata table closes on this line. Everything after its
@@ -172,9 +176,10 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
         }
         // Luau has three string forms, and a backtick interpolated string is
         // the one that looks least like text: `a } b` carries a literal `}`
-        // that would otherwise close the table early. Skipping the literal
-        // whole also skips its `{...}` interpolations, whose braces balance
-        // inside it and so contribute nothing to this table's depth.
+        // that would otherwise close the table early. An interpolation that
+        // opens and closes on this line is skipped with it, braces and all. One
+        // that spans lines cannot be, and the openString report below is how
+        // that shape gets refused instead of miscounted.
         if (c == QLatin1Char('"') || c == QLatin1Char('\'') || c == QLatin1Char('`')) {
             quote = c;
             continue;
@@ -226,6 +231,16 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
         } else if (codeOnly && depth == 1 && !closed) {
             codeOnly->append(c);
         }
+    }
+    // A short or interpolated string still open here runs past this line, and
+    // this scan reads one line at a time. Report it so the caller can refuse
+    // the file rather than resume in the middle of a string literal reading
+    // text as code. Three shapes land here and they are one shape physically:
+    // a backslash-newline continuation, a `\z` continuation, and a backtick
+    // literal whose interpolation spans lines (the string sections cannot, but
+    // the expression between them is lexed as ordinary code and may).
+    if (openString && !quote.isNull()) {
+        *openString = true;
     }
     return depth - startDepth;
 }
@@ -323,7 +338,11 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     int scanLongBracket = kNoLongBracket;
     for (int i = 0; i < lines.size(); ++i) {
         const bool lineStartsInText = scanLongBracket != kNoLongBracket;
-        braceDelta(lines[i], scanLongBracket);
+        bool openString = false;
+        braceDelta(lines[i], scanLongBracket, 0, nullptr, &openString);
+        if (openString) {
+            return QString();
+        }
         if (!lineStartsInText && metaRe.match(lines[i]).hasMatch()) {
             metaStart = i;
             break;
@@ -396,7 +415,11 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
         // a `name = "..."` in it is content rather than a field to rewrite.
         const bool lineStartsInText = longBracketLevel != kNoLongBracket;
         QString codeOnly;
-        depth += braceDelta(lines[i], longBracketLevel, depthAtLineStart, &codeOnly);
+        bool openString = false;
+        depth += braceDelta(lines[i], longBracketLevel, depthAtLineStart, &codeOnly, &openString);
+        if (openString) {
+            return QString();
+        }
 
         QString line = lines[i];
         bool rewrote = false;

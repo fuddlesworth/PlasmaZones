@@ -61,6 +61,7 @@ private Q_SLOTS:
     void rejectsUnquotedNameValue();
     void rejectsFieldHiddenBehindLongComment();
     void ignoresMetadataTableInsideLongComment();
+    void rejectsStringLeftOpenAtEndOfLine();
 };
 
 void TestAlgorithmScaffoldRejects::rejectsMultiLineCopyright()
@@ -237,6 +238,55 @@ void TestAlgorithmScaffoldRejects::ignoresMetadataTableInsideLongComment()
     // The doc block is untouched, so its own name/id still read as they did.
     QVERIFY(out.contains(QStringLiteral("        name = \"Example\",")));
     QVERIFY(out.contains(QStringLiteral("        id = \"example\",")));
+}
+
+void TestAlgorithmScaffoldRejects::rejectsStringLeftOpenAtEndOfLine()
+{
+    // The scan reads one line at a time, so a string still open at the end of
+    // one runs past where it can follow. Reading on would take the literal's
+    // text as code: the shapes below each hide a brace that way, and a miscount
+    // closes the table early, which ends with a duplicate name/id pair and a
+    // copy that keeps its source's id.
+
+    // A backtick literal whose interpolation spans lines. The sections cannot
+    // cross a newline, but the expression between them is ordinary code and
+    // may, so the `{` opening it is the last thing on its line.
+    const QString multiLineInterp = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        description = `x{\n"
+        "            f(1)\n"
+        "        }y`,\n"
+        "        name = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(multiLineInterp, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+
+    // A backslash-newline continuation, and the `\z` form of the same idea.
+    const QString backslashNewline = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        description = \"a }\\\n"
+        "b\",\n"
+        "        name = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(backslashNewline, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
+
+    // Ahead of the table counts too: the search would otherwise read the
+    // literal's own text looking for `metadata = {`.
+    const QString openBeforeTable = QStringLiteral(
+        "local doc = \"unterminated }\\\n"
+        "still the string\"\n"
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"A\",\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "}\n");
+    QVERIFY(rewriteMetadataNameId(openBeforeTable, QStringLiteral("New"), QStringLiteral("newid")).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestAlgorithmScaffoldRejects)

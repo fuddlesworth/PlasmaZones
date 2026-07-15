@@ -61,13 +61,17 @@ QString sanitizeMetadataString(QString value);
 /// entry keeps its own `name` key whether it is written inline or across lines.
 ///
 /// The brace-depth scan counts a brace only where it is code. All three of
-/// Luau's string forms are text, including a backtick interpolated string and
-/// the braces of its interpolations, as are `--` line comments and long
-/// brackets at any level (`[[`, `[=[`, ..., as long strings or, spelled
-/// `--[[`, long comments), whether they close on their own line or span
-/// several. Two shapes are not handled, and no bundled template's metadata uses
-/// either: a short string continued across lines (backslash-newline, `\z`), and
-/// a backtick literal reached from inside one of its own interpolations.
+/// Luau's string forms are text, as are `--` line comments and long brackets at
+/// any level (`[[`, `[=[`, ..., as long strings or, spelled `--[[`, long
+/// comments). Comments and long brackets may span lines. A short or
+/// interpolated string may not: one still open at the end of a line runs past
+/// where this reads, so the file is refused rather than read on as if the
+/// literal had closed. That covers a backslash-newline or `\z` continuation and
+/// a backtick literal whose interpolation spans lines.
+///
+/// The one shape neither handled nor refused, because a single line cannot show
+/// it, is a backtick literal reached from inside its own interpolation
+/// (`` `{"`"}` ``). No bundled template's metadata uses one.
 ///
 /// @p displayName must already be sanitizeMetadataString()'d and
 /// @p id must be a bare `[A-Za-z0-9_-]` basename — both are embedded in Luau
