@@ -456,10 +456,23 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
                     // Spring displacing a STATELESS leg, which has no
                     // integration state at all — easeProgress never wrote to
                     // its CurveState, so reading old.progressCurveState would
-                    // hand back a default 0 and seed the far endpoint. Its raw
-                    // clock progress is the only record of where it got to, so
-                    // resume off that and start the spring from rest.
-                    tr.progressCurveState.value = 1.0 - displacedProgress;
+                    // hand back a default 0 and seed the far endpoint.
+                    //
+                    // Re-derive where that leg actually WAS instead: a
+                    // stateless curve's eased progress is a pure function of
+                    // its clock, so evaluating it at the displaced leg's own
+                    // progress reproduces the exact value it last painted.
+                    // Seeding off the RAW progress would be right only for a
+                    // linear pick and would leave an eased one to jump by its
+                    // own easing at the handover — the seam this whole block
+                    // exists to remove. Null curve is linear, so raw IS eased
+                    // there. Velocity starts at rest: a stateless leg carries
+                    // no momentum to hand over.
+                    const qreal oldEased = old.progressCurve
+                        ? ShaderInternal::clampProgressForCurve(old.progressCurve->evaluate(displacedProgress),
+                                                                old.progressCurve.get())
+                        : displacedProgress;
+                    tr.progressCurveState.value = 1.0 - oldEased;
                     tr.progressCurveState.velocity = 0.0;
                 }
             } else {
