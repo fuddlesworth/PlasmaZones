@@ -781,7 +781,7 @@ add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_c
 # splice / metadata rewrite here, the shapes it refuses in _rejects, the blank
 # scaffold next door. They share no fixture beyond a copyright line.
 #
-# Both targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
+# All three targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
 # ScriptedDefaultMaxWindows and DefaultSplitRatio so a generated algorithm
 # matches the engine's own fallbacks - header-only constants, no .so coupling
 # beyond the include path. Linking PhosphorTiles rather than hand-listing paths
