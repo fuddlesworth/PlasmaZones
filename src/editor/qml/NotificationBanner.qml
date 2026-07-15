@@ -110,7 +110,7 @@ Rectangle {
             properties: "opacity"
             to: 1
             profile: "popup"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
 
         PhosphorMotionAnimation {
@@ -118,7 +118,7 @@ Rectangle {
             properties: "y"
             to: 0
             profile: "popup"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
     }
 
@@ -130,7 +130,7 @@ Rectangle {
             properties: "opacity"
             to: 0
             profile: "widget.fadeOut"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
 
         PhosphorMotionAnimation {
@@ -138,7 +138,7 @@ Rectangle {
             properties: "y"
             to: Kirigami.Units.smallSpacing
             profile: "widget.fadeOut"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
     }
 

@@ -912,7 +912,7 @@ Rectangle {
             // `opacity` above. Reading the animated `opacity` instead would
             // re-evaluate during the Behavior and flip the leg mid-animation.
             profile: visible ? "panel.fadeIn" : "panel.fadeOut"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
     }
 
@@ -922,7 +922,7 @@ Rectangle {
             // `Layout.preferredWidth: visible ? 280 : 0`). slideIn when
             // growing into view, slideOut when collapsing out.
             profile: visible ? "panel.slideIn" : "panel.slideOut"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
     }
 }

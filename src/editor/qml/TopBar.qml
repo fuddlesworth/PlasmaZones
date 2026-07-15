@@ -86,7 +86,7 @@ ToolBar {
                         Behavior on color {
                             PhosphorMotionAnimation {
                                 profile: "popup"
-                                durationOverride: Theme.animDuration
+                                durationOverride: Kirigami.Units.longDuration
                             }
                         }
                     }
@@ -100,14 +100,14 @@ ToolBar {
                         Behavior on color {
                             PhosphorMotionAnimation {
                                 profile: "popup"
-                                durationOverride: Theme.animDuration
+                                durationOverride: Kirigami.Units.longDuration
                             }
                         }
 
                         Behavior on border.color {
                             PhosphorMotionAnimation {
                                 profile: "popup"
-                                durationOverride: Theme.animDuration
+                                durationOverride: Kirigami.Units.longDuration
                             }
                         }
                     }
@@ -204,14 +204,14 @@ ToolBar {
                     Behavior on color {
                         PhosphorMotionAnimation {
                             profile: "popup"
-                            durationOverride: Theme.animDuration
+                            durationOverride: Kirigami.Units.longDuration
                         }
                     }
 
                     Behavior on border.color {
                         PhosphorMotionAnimation {
                             profile: "popup"
-                            durationOverride: Theme.animDuration
+                            durationOverride: Kirigami.Units.longDuration
                         }
                     }
                 }

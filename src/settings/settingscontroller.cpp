@@ -90,9 +90,10 @@ namespace {
 
 // Materialise + register the XDG search dirs for a settings-side shader-pack
 // registry (animation / surface): system dirs reversed to lowest-priority-first
-// (the loaders apply first-registration-wins, yielding user > sys-high > ... >
-// sys-low once the user dir is appended last), user dir created up-front so
-// the watcher attaches a direct watch instead of a parent-watch proxy.
+// (the loaders reverse-iterate this list and take the first hit, so the LAST
+// dir registered wins, yielding user > sys-high > ... > sys-low once the user
+// dir is appended last), user dir created up-front so the watcher attaches a
+// direct watch instead of a parent-watch proxy.
 // @p subdir is the ConfigDefaults::user*Subdir() constant (leading '/'):
 // stripped for locateAll's relative-path arg, kept for the writable-base join.
 template<typename Registry>
@@ -438,8 +439,11 @@ SettingsController::SettingsController(QObject* parent)
 
     // General page sub-controller — owns rendering-backend picker data and
     // animation bounds. Its startup backend snapshot is captured at ctor
-    // time, so this must run AFTER m_settings is fully initialised (which
-    // is guaranteed since m_settings is the first member declared).
+    // time, so this must run AFTER m_settings is fully initialised (which is
+    // guaranteed by it being a value member: the member-init list runs to
+    // completion before any of this ctor body does. Declaration position has
+    // nothing to do with it — m_localRuleStore is the first member, and says
+    // so itself).
     m_generalPage = new GeneralPageController(m_settings, this);
 
     // Animation shader registry — settings-side mirror of the daemon's.
@@ -530,8 +534,8 @@ SettingsController::SettingsController(QObject* parent)
     // beginResetModel/endResetModel fires modelReset SYNCHRONOUSLY *before* the
     // controller re-baselines its saved snapshot (captureSavedSnapshot runs on
     // the next line). Reconciling on modelReset would therefore compare the
-    // fresh model against the STALE snapshot and spuriously mark both rule-backed
-    // pages dirty on every startup / daemon rulesChanged broadcast. That
+    // fresh model against the STALE snapshot and spuriously mark the Rules page
+    // dirty on every startup / daemon rulesChanged broadcast. That
     // repopulation is instead handled by the rulesLoaded / revertFinished
     // connections below, which fire AFTER the re-baseline.
     const auto reattributeRuleDirty = [this]() {
@@ -740,10 +744,9 @@ SettingsController::SettingsController(QObject* parent)
     // m_localLayoutManager's catalogue.
     //
     // The page controller is a `unique_ptr<>` declared after
-    // `m_localLayoutManager` (see header). Constructed without a QObject
-    // parent so member-destructor reverse-order tears it down BEFORE the
-    // borrowed layout registry — a QObject-child parent would defer
-    // destruction to ~QObject, dangling the layout-registry pointer.
+    // `m_localLayoutManager` (see header), so member-destructor reverse-order
+    // tears it down BEFORE the borrowed layout registry. It does take a QObject
+    // parent as well; see its construction below for what that is for.
     m_overlayShaderRegistry = new PlasmaZones::ShaderRegistry(this);
 
     // Shared live-preview feed (T3.1): backed by the local overlay registry +

@@ -518,7 +518,7 @@ Item {
 
             PhosphorMotionAnimation {
                 profile: "widget.dim"
-                durationOverride: Theme.animDuration
+                durationOverride: Kirigami.Units.longDuration
             }
         }
 
@@ -527,7 +527,7 @@ Item {
 
             PhosphorMotionAnimation {
                 profile: "widget.dim"
-                durationOverride: Theme.animDuration
+                durationOverride: Kirigami.Units.longDuration
             }
         }
     }

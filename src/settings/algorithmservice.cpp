@@ -252,12 +252,16 @@ void AlgorithmService::openAlgorithmsFolder()
 
 bool AlgorithmService::importAlgorithm(const QString& filePath)
 {
-    if (filePath.isEmpty())
-        return false;
-
+    // Every failure below reports through algorithmOperationFailed, which is
+    // the channel the pages toast from. The bool is for a caller that wants to
+    // sequence on success, not a second report: toasting on both gave the user
+    // two messages for one failure, the specific one and a generic one.
     const QFileInfo source(filePath);
-    if (!source.exists() || !source.isFile())
+    if (filePath.isEmpty() || !source.exists() || !source.isFile()) {
+        Q_EMIT algorithmOperationFailed(
+            PhosphorI18n::tr("Could not read the algorithm file. Check that it still exists and is readable."));
         return false;
+    }
 
     // The loader only registers `<basename>.luau` files whose basename matches
     // [A-Za-z0-9_-]+; importing anything else would copy a file the loader

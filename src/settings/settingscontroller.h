@@ -175,11 +175,12 @@ public:
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();
-    /// Parent name → set of leaf child page names. Covers top-level sidebar
-    /// parents (snapping / tiling / animations) AND mid-level virtual parents
-    /// (animations-transitions / animations-motion / animations-library) whose
-    /// children don't share their name prefix. Drives dirty-state propagation in
-    /// `isPageDirty`.
+    /// Parent name → set of leaf child page names. Covers the top-level sidebar
+    /// categories AND the mid-level virtual parents nested beneath them (among
+    /// them snapping / tiling under placement, and the animations-* parents
+    /// whose children don't share their name prefix). See the definition for
+    /// the full classification rather than trusting a list here to stay
+    /// current. Drives dirty-state propagation in `isPageDirty`.
     static const QHash<QString, QSet<QString>>& pageGroupChildren();
 
     bool needsSave() const
@@ -191,8 +192,11 @@ public:
     /// like "snapping" / "tiling") currently has unsaved changes. For pages in
     /// the per-page config manifest (@ref pageOwnedConfigKeys) the answer is
     /// value-based — any owned key differing from the committed baseline —
-    /// which stays correct across a per-page Discard/Reset. Non-manifest pages
-    /// fall back to the m_dirtyPages membership set.
+    /// which stays correct across a per-page Discard/Reset. The ordering,
+    /// shortcuts, virtual-screens, animation and decoration pages are
+    /// value-based too, each against its own staged state rather than the
+    /// manifest. Only a page in none of those groups falls back to the
+    /// m_dirtyPages membership set.
     Q_INVOKABLE bool isPageDirty(const QString& page) const;
 
     // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
@@ -577,6 +581,12 @@ Q_SIGNALS:
     void algorithmCreated(const QString& algorithmId);
     void algorithmOperationFailed(const QString& reason);
     void layoutOperationFailed(const QString& reason);
+    /// Emitted when exportAllSettings / importAllSettings gives up. Both also
+    /// return false, which is enough to sequence on but says nothing about why:
+    /// a refused path, a file that vanished, and a file that is not settings at
+    /// all are the same `false` and want different words. The General page
+    /// toasts this.
+    void settingsTransferFailed(const QString& reason);
     /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
     /// fails at the daemon — QML can surface the reason in a toast so the
     /// user knows the change wasn't saved.

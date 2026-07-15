@@ -63,21 +63,21 @@ AbstractButton {
         Behavior on border.width {
             PhosphorMotionAnimation {
                 profile: "widget.press"
-                durationOverride: Theme.animDuration
+                durationOverride: Kirigami.Units.longDuration
             }
         }
 
         Behavior on color {
             PhosphorMotionAnimation {
                 profile: "widget.press"
-                durationOverride: Theme.animDuration
+                durationOverride: Kirigami.Units.longDuration
             }
         }
 
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.press"
-                durationOverride: Theme.animDuration
+                durationOverride: Kirigami.Units.longDuration
             }
         }
     }

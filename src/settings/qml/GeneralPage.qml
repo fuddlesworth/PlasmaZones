@@ -616,7 +616,12 @@ SettingsFlickable {
         nameFilters: [i18n("PlasmaZones Config (*.json)"), i18n("All files (*)")]
         defaultSuffix: "json"
         fileMode: FileDialog.SaveFile
-        onAccepted: settingsController.exportAllSettings(settingsController.urlToLocalFile(selectedFile))
+        // Success only. A failure toasts through settingsTransferFailed with
+        // the reason, which the bool cannot carry.
+        onAccepted: {
+            if (settingsController.exportAllSettings(settingsController.urlToLocalFile(selectedFile)) && typeof window !== "undefined" && window && window.showToast)
+                window.showToast(i18n("Settings exported"));
+        }
     }
 
     FileDialog {
@@ -625,6 +630,21 @@ SettingsFlickable {
         title: i18n("Import Settings")
         nameFilters: [i18n("PlasmaZones Config (*.json *.conf *.ini *.rc)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
-        onAccepted: settingsController.importAllSettings(settingsController.urlToLocalFile(selectedFile))
+        onAccepted: {
+            if (settingsController.importAllSettings(settingsController.urlToLocalFile(selectedFile)) && typeof window !== "undefined" && window && window.showToast)
+                window.showToast(i18n("Settings imported"));
+        }
+    }
+
+    // Both transfers report their failures here rather than through the bool:
+    // a refused path, a file that vanished, and a file that is not settings at
+    // all are the same `false` and want different words.
+    Connections {
+        function onSettingsTransferFailed(reason) {
+            if (typeof window !== "undefined" && window && window.showToast)
+                window.showToast(reason);
+        }
+
+        target: settingsController
     }
 }

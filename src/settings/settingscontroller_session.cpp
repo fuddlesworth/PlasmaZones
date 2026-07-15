@@ -448,7 +448,11 @@ void SettingsController::onRunningWindowsAvailable(const QString& json)
 
 bool SettingsController::exportAllSettings(const QString& filePath)
 {
+    // Reachable from QML: urlToLocalFile yields an empty string for a URL that
+    // is not a local file, so a remote destination lands here rather than being
+    // a programmer error.
     if (filePath.isEmpty()) {
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Settings can only be exported to a local file."));
         return false;
     }
     // Defence-in-depth: same sanitiser the per-layout import/export uses.
@@ -457,6 +461,7 @@ bool SettingsController::exportAllSettings(const QString& filePath)
     const QString safeFilePath = sanitizeIOPath(filePath);
     if (safeFilePath.isEmpty()) {
         qCWarning(lcCore) << "exportAllSettings: refusing unsafe path" << filePath;
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That export path is not allowed."));
         return false;
     }
     // Flush current in-memory settings to disk so the exported file reflects
@@ -469,6 +474,7 @@ bool SettingsController::exportAllSettings(const QString& filePath)
     const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
     if (!QFile::exists(configPath)) {
         qCWarning(PlasmaZones::lcCore) << "Config file not found:" << configPath;
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("There is no settings file to export yet."));
         return false;
     }
     // Remove destination if it exists (QFile::copy won't overwrite)
@@ -478,18 +484,32 @@ bool SettingsController::exportAllSettings(const QString& filePath)
     bool ok = QFile::copy(configPath, safeFilePath);
     if (!ok) {
         qCWarning(PlasmaZones::lcCore) << "Failed to export settings to:" << safeFilePath;
+        Q_EMIT settingsTransferFailed(
+            PhosphorI18n::tr("Could not write the export. Check that the folder is writable."));
     }
     return ok;
 }
 
 bool SettingsController::importAllSettings(const QString& filePath)
 {
+    // Same as the export side: an empty path here is a URL that is not a local
+    // file, which a user can pick.
     if (filePath.isEmpty()) {
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Settings can only be imported from a local file."));
         return false;
     }
+    // Split rather than combined: a refused path and a file that is not there
+    // are the same `false` to a caller but different words to a user, and the
+    // log wants them apart too.
     const QString safeFilePath = sanitizeIOPath(filePath);
-    if (safeFilePath.isEmpty() || !QFile::exists(safeFilePath)) {
-        qCWarning(lcCore) << "importAllSettings: refusing unsafe or missing path" << filePath;
+    if (safeFilePath.isEmpty()) {
+        qCWarning(lcCore) << "importAllSettings: refusing unsafe path" << filePath;
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That file path is not allowed."));
+        return false;
+    }
+    if (!QFile::exists(safeFilePath)) {
+        qCWarning(lcCore) << "importAllSettings: file not found" << filePath;
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That settings file is no longer there."));
         return false;
     }
 
@@ -514,14 +534,17 @@ bool SettingsController::importAllSettings(const QString& filePath)
             };
             if (head.size() >= 4 && byte(0) == 0x00 && byte(1) == 0x00 && byte(2) == 0xFE && byte(3) == 0xFF) {
                 qCWarning(PlasmaZones::lcCore) << "Import file has UTF-32 BE BOM, refusing:" << filePath;
+                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
                 return false;
             }
             if (head.size() >= 4 && byte(0) == 0xFF && byte(1) == 0xFE && byte(2) == 0x00 && byte(3) == 0x00) {
                 qCWarning(PlasmaZones::lcCore) << "Import file has UTF-32 LE BOM, refusing:" << filePath;
+                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
                 return false;
             }
             if (head.size() >= 2 && ((byte(0) == 0xFE && byte(1) == 0xFF) || (byte(0) == 0xFF && byte(1) == 0xFE))) {
                 qCWarning(PlasmaZones::lcCore) << "Import file has UTF-16 BOM, refusing:" << filePath;
+                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
                 return false;
             }
             head = head.trimmed();
@@ -540,6 +563,8 @@ bool SettingsController::importAllSettings(const QString& filePath)
     }
     if (QFile::exists(configPath) && !QFile::copy(configPath, backupPath)) {
         qCWarning(PlasmaZones::lcCore) << "Failed to backup config to:" << backupPath;
+        Q_EMIT settingsTransferFailed(
+            PhosphorI18n::tr("Could not back up your current settings, so nothing was imported."));
         return false;
     }
 
@@ -552,12 +577,14 @@ bool SettingsController::importAllSettings(const QString& filePath)
         ok = PlasmaZones::ConfigMigration::migrateIniToJson(safeFilePath, configPath);
         if (!ok) {
             qCWarning(PlasmaZones::lcCore) << "Failed to convert legacy INI file:" << safeFilePath;
+            Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not read that older settings file."));
         }
     } else {
         // Validate JSON before overwriting current config
         QFile importFile(safeFilePath);
         if (!importFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
             qCWarning(PlasmaZones::lcCore) << "Failed to open import file:" << safeFilePath;
+            Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not read that settings file."));
             ok = false;
         } else {
             QJsonParseError parseErr;
@@ -565,6 +592,7 @@ bool SettingsController::importAllSettings(const QString& filePath)
             if (parseErr.error != QJsonParseError::NoError || !importDoc.isObject()) {
                 qCWarning(PlasmaZones::lcCore)
                     << "Invalid JSON in import file:" << safeFilePath << parseErr.errorString();
+                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
                 ok = false;
             } else {
                 // Valid JSON — copy to config path
@@ -574,6 +602,9 @@ bool SettingsController::importAllSettings(const QString& filePath)
                 ok = QFile::copy(safeFilePath, configPath);
                 if (!ok) {
                     qCWarning(PlasmaZones::lcCore) << "Failed to import settings from:" << safeFilePath;
+                    // Says what failed, not what the restore below will do:
+                    // that runs after this and can fail too.
+                    Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not replace your settings with that file."));
                 }
             }
         }
