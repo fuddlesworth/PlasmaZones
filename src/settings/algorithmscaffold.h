@@ -47,11 +47,12 @@ QString sanitizeMetadataString(QString value);
 /// that does not end at the `{`, an unterminated table, a brace depth that goes
 /// negative, or a top-level name/id field that is not a whole line of that
 /// form. That last one covers a field sharing its line with another (in either
-/// order), one trailing a long bracket's closer, and one whose value spans
-/// lines or is followed by a long-bracket comment (`--[[`, `--[=[`, ...), which
-/// can close mid-line and leave a second field somewhere a line-anchored read
-/// will not look. None can be rewritten in place, and leaving one would let
-/// Luau's last-wins keep the template's value.
+/// order), one trailing a long bracket's closer, one whose key and `=` fall on
+/// different lines, and one whose value spans lines or is followed by a
+/// long-bracket comment (`--[[`, `--[=[`, ...), which can close mid-line and
+/// leave a second field somewhere a line-anchored read will not look. None can
+/// be rewritten in place, and leaving one would let Luau's last-wins keep the
+/// template's value.
 ///
 /// A `metadata = {` inside a long comment is that comment's text, not the
 /// table, and the search reads it as such rather than rewriting it and leaving
