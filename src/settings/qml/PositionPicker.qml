@@ -182,14 +182,14 @@ Item {
                             Behavior on color {
                                 PhosphorMotionAnimation {
                                     profile: "widget.hover"
-                                    durationOverride: 100
+                                    durationOverride: Kirigami.Units.shortDuration
                                 }
                             }
 
                             Behavior on border.color {
                                 PhosphorMotionAnimation {
                                     profile: "widget.hover"
-                                    durationOverride: 100
+                                    durationOverride: Kirigami.Units.shortDuration
                                 }
                             }
                         }

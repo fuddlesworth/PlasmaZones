@@ -173,7 +173,7 @@ Item {
                 from: 0
                 to: 1
                 profile: "widget.fadeIn"
-                durationOverride: 180
+                durationOverride: Kirigami.Units.shortDuration * 1.8
             }
 
             onLoaded: {

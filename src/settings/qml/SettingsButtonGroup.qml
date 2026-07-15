@@ -74,7 +74,7 @@ Row {
                 Behavior on opacity {
                     PhosphorMotionAnimation {
                         profile: "widget.press"
-                        durationOverride: 150
+                        durationOverride: Kirigami.Units.shortDuration * 1.5
                     }
                 }
             }
@@ -96,14 +96,14 @@ Row {
             Behavior on color {
                 PhosphorMotionAnimation {
                     profile: "widget.press"
-                    durationOverride: 150
+                    durationOverride: Kirigami.Units.shortDuration * 1.5
                 }
             }
 
             Behavior on border.color {
                 PhosphorMotionAnimation {
                     profile: "widget.press"
-                    durationOverride: 150
+                    durationOverride: Kirigami.Units.shortDuration * 1.5
                 }
             }
         }

@@ -187,7 +187,7 @@ QQC2.ItemDelegate {
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
-                    durationOverride: 120
+                    durationOverride: Kirigami.Units.shortDuration * 1.2
                 }
             }
         }
@@ -211,7 +211,7 @@ QQC2.ItemDelegate {
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
-                    durationOverride: 120
+                    durationOverride: Kirigami.Units.shortDuration * 1.2
                 }
             }
         }
@@ -275,7 +275,7 @@ QQC2.ItemDelegate {
             Behavior on rotation {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
-                    durationOverride: 150
+                    durationOverride: Kirigami.Units.shortDuration * 1.5
                 }
             }
         }
