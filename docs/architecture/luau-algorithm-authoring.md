@@ -99,7 +99,7 @@ to sensible defaults.
 | `name` | string | Display name in the settings UI |
 | `id` | string | Stable identifier (defaults to the file name) |
 | `description` | string | One-line description |
-| `defaultMaxWindows` | number | Default window cap shown in the UI (omit or 0 to use the built-in default of 6; otherwise clamped to 1–100) |
+| `defaultMaxWindows` | number | Default window cap shown in the UI (omit it, or set it to 0 or less, to use the built-in default of 6, otherwise clamped to 1–100) |
 | `minimumWindows` | number | Smallest window count the layout supports (clamped to 1–100) |
 | `supportsMasterCount` | boolean | Exposes the “master count” control, so the user can adjust `ctx.masterCount` |
 | `supportsSplitRatio` | boolean | Exposes the split-ratio slider, so the user can adjust `ctx.splitRatio` |
@@ -107,11 +107,11 @@ to sensible defaults.
 | `supportsMinSizes` | boolean | Honours per-window minimum sizes (default `true`) |
 | `supportsMemory` | boolean | Uses the persistent split tree (§10) |
 | `supportsScriptState` | boolean | Persists an opaque `ctx.state` table across retiles (§9) |
-| `supportsSingleWindow` | boolean | Owns the lone-window case; without it the host fills the work area when one window is tiled |
+| `supportsSingleWindow` | boolean | Owns the lone-window case. Without it the host fills the work area when one window is tiled |
 | `retileOnFocus` | boolean | Re-runs `tile` when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight) |
 | `producesOverlappingZones` | boolean | Zones may overlap (e.g. stacked/deck layouts) |
 | `centerLayout` | boolean | Layout is centered rather than filling the screen |
-| `masterZoneIndex` | number | Index of the “master” zone, `-1` = none. Describes the layout for a caller that asks; no built-in feature reads it (“focus master” goes to the first tiled window regardless) |
+| `masterZoneIndex` | number | Index of the “master” zone, `-1` = none. Describes the layout for a caller that asks, and no built-in feature reads it (“focus master” goes to the first tiled window regardless) |
 | `zoneNumberDisplay` | string | `"all"`, `"last"`, `"firstAndLast"`, or `"none"` (omit to let the renderer decide) |
 | `customParams` | list | User-tunable parameters (§7) |
 
@@ -289,7 +289,7 @@ maintains the split tree itself. Script-state algorithms persist through the
 ## 9. Interactive resize & script state
 
 Implement `onWindowResized(state, resize)` to react when the user drags a
-tiled window's edge. `state` is the same snapshot as §8; `resize` describes
+tiled window's edge. `state` is the same snapshot as §8, and `resize` describes
 the drag:
 
 ```lua

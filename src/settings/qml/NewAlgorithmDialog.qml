@@ -234,10 +234,17 @@ Kirigami.Dialog {
                     // wide it is asks the question the parent is still
                     // answering. The height follows the width the layout
                     // actually assigned.
+                    //
+                    // The 12-grid-unit height ceiling is folded into the width
+                    // cap rather than set as its own Layout.maximumHeight. A
+                    // standalone height cap overrides preferredHeight and
+                    // reshapes the box to whatever ratio the two caps form,
+                    // which discarded the monitor ratio on every display
+                    // narrower than 26:12. Capping width by the ratio holds the
+                    // same ceiling while keeping the box on-ratio.
                     Layout.fillWidth: true
-                    Layout.maximumWidth: Kirigami.Units.gridUnit * 26
+                    Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 26, Kirigami.Units.gridUnit * 12 * root.screenAspectRatio)
                     Layout.preferredHeight: width / root.screenAspectRatio
-                    Layout.maximumHeight: Kirigami.Units.gridUnit * 12
                     Layout.alignment: Qt.AlignHCenter
                     radius: Kirigami.Units.smallSpacing * 2
                     color: root._subtleBg

@@ -5,7 +5,6 @@
 
 #include "editorpagecontroller.h"
 #include "generalpagecontroller.h"
-#include "kzonesimporter.h"
 #include "registryshaderpreviewbackend.h"
 #include "snappingzonescontroller.h"
 #include "../shaderpreview/shaderpreviewcontroller.h"

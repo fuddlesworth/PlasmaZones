@@ -179,9 +179,9 @@ QQC2.ItemDelegate {
             Layout.fillWidth: rowItem.compact
             Layout.alignment: rowItem.compact ? Qt.AlignHCenter : Qt.AlignLeft
             // Legacy opacity model: active rows go to 1.0, everything
-            // else sits at 0.7. The 120-ms `widget.hover` transition
-            // matches the label below so the row's accent changes
-            // feel synchronous.
+            // else sits at 0.7. The `widget.hover` transition matches
+            // the label below so the row's accent changes feel
+            // synchronous.
             opacity: rowItem.isCurrent ? 1 : 0.7
 
             Behavior on opacity {

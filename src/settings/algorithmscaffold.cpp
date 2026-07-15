@@ -57,9 +57,20 @@ QStringList templateSpdxLines(const QStringList& lines, int spdxHeaderEnd)
 /// indent instead, so a copy keeps the formatting its author chose.
 constexpr QLatin1String kScaffoldFieldIndent{"        "};
 
+/// A `key = "value"` field line closed by @p terminator and trailing @p comment.
+/// The rewrite path passes the source line's own terminator and comment back so
+/// a copy keeps the punctuation and the note its author wrote; only the value
+/// changes. @p value reaches here through sanitizeMetadataString, which strips
+/// the quote and backslash characters that could otherwise escape the literal.
+QString quotedField(const QString& indent, const QString& key, const QString& value, const QString& terminator,
+                    const QString& comment)
+{
+    return indent + key + QStringLiteral(" = \"") + value + QLatin1Char('"') + terminator + comment;
+}
+
 QString quotedField(const QString& indent, const QString& key, const QString& value)
 {
-    return indent + key + QStringLiteral(" = \"") + value + QStringLiteral("\",");
+    return quotedField(indent, key, value, QStringLiteral(","), QString());
 }
 
 /// The run of whitespace @p line opens with.
@@ -165,7 +176,7 @@ int braceDelta(const QString& line, int& longBracketLevel, int startDepth = 0, Q
             // `--[[` opens a long comment, which can close and let code resume.
             // A plain `--` runs to end of line.
             int pastOpener = 0;
-            const int level = i + 2 < line.size() ? matchLongBracketOpen(line, i + 2, pastOpener) : kNoLongBracket;
+            const int level = matchLongBracketOpen(line, i + 2, pastOpener);
             if (level == kNoLongBracket) {
                 return depth - startDepth;
             }
@@ -315,10 +326,20 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
     // line is rewritten only when it is a whole single-field line; anything
     // else (a second field on the same line, an unquoted value) is an
     // unrecognized shape and rejects the rewrite rather than corrupting it.
+    //
+    // The value may use either quote style, and the line may close with either
+    // of Luau's field separators and carry a trailing comment: the bundled
+    // templates all use the one canonical form, but duplicateAlgorithm runs
+    // this over scripts a user wrote by hand, and rejecting their punctuation
+    // fails the whole copy. Terminator and comment are captured so the rewrite
+    // puts them back. A long-bracket comment (`--[[`) can run past this line,
+    // so it stays unmatched and rejects rather than guessing where it ends.
     static const QRegularExpression nameFieldRe(QStringLiteral(R"(^\s*name\s*=)"));
     static const QRegularExpression idFieldRe(QStringLiteral(R"(^\s*id\s*=)"));
-    static const QRegularExpression nameLineRe(QStringLiteral(R"(^\s*name\s*=\s*"[^"]*"\s*,?\s*$)"));
-    static const QRegularExpression idLineRe(QStringLiteral(R"(^\s*id\s*=\s*"[^"]*"\s*,?\s*$)"));
+    static const QRegularExpression nameLineRe(
+        QStringLiteral(R"(^\s*name\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[).*)?)$)"));
+    static const QRegularExpression idLineRe(
+        QStringLiteral(R"(^\s*id\s*=\s*(?:"[^"]*"|'[^']*')\s*([,;]?)((?:\s*--(?!\[).*)?)$)"));
     // A name/id key anywhere on the line, not just at its start. The two
     // anchored patterns above only see a field that leads its line, so without
     // this a trailing `a = 1, name = "x",` would be neither rewritten nor
@@ -362,17 +383,20 @@ QString rewriteMetadataNameId(const QString& content, const QString& displayName
                 fieldIndent = leadingWhitespace(line);
             }
             if (nameFieldRe.match(line).hasMatch()) {
-                if (!nameLineRe.match(line).hasMatch()) {
+                const QRegularExpressionMatch m = nameLineRe.match(line);
+                if (!m.hasMatch()) {
                     return QString();
                 }
-                line = quotedField(leadingWhitespace(line), QStringLiteral("name"), displayName);
+                line = quotedField(leadingWhitespace(line), QStringLiteral("name"), displayName, m.captured(1),
+                                   m.captured(2));
                 sawName = true;
                 rewrote = true;
             } else if (idFieldRe.match(line).hasMatch()) {
-                if (!idLineRe.match(line).hasMatch()) {
+                const QRegularExpressionMatch m = idLineRe.match(line);
+                if (!m.hasMatch()) {
                     return QString();
                 }
-                line = quotedField(leadingWhitespace(line), QStringLiteral("id"), id);
+                line = quotedField(leadingWhitespace(line), QStringLiteral("id"), id, m.captured(1), m.captured(2));
                 sawId = true;
                 rewrote = true;
             }
@@ -433,8 +457,12 @@ QString spliceTemplate(const QString& templateContent, const QString& newCopyrig
 {
     const QString ownCopyright = newCopyrightLine.trimmed();
     // One line only: a multi-line header here would slip past the dedupe below
-    // and leave the copy with two license identifiers.
-    if (ownCopyright.contains(QLatin1Char('\n'))) {
+    // and leave the copy with two license identifiers. It must also be the
+    // copyright line it claims to be — the dedupe compares it against the
+    // template's own SPDX lines, and anything else silently yields a copy whose
+    // first line is not a copyright at all.
+    if (ownCopyright.contains(QLatin1Char('\n'))
+        || !ownCopyright.startsWith(QLatin1String("-- SPDX-FileCopyrightText:"))) {
         return QString();
     }
 

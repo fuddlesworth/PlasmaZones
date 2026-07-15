@@ -282,13 +282,11 @@ RowLayout {
         FilterMenuItem {
             text: i18n("Built-in")
             filterProperty: "showBuiltInLayouts"
-            checked: root.showBuiltInLayouts
         }
 
         FilterMenuItem {
             text: i18n("User Layouts")
             filterProperty: "showUserLayouts"
-            checked: root.showUserLayouts
         }
 
         MenuSeparator {}
@@ -296,31 +294,26 @@ RowLayout {
         FilterMenuItem {
             text: i18n("All Monitors")
             filterProperty: "showAspectAny"
-            checked: root.showAspectAny
         }
 
         FilterMenuItem {
             text: i18n("Standard (16:9)")
             filterProperty: "showAspectStandard"
-            checked: root.showAspectStandard
         }
 
         FilterMenuItem {
             text: i18n("Ultrawide (21:9)")
             filterProperty: "showAspectUltrawide"
-            checked: root.showAspectUltrawide
         }
 
         FilterMenuItem {
             text: i18n("Super-Ultrawide (32:9)")
             filterProperty: "showAspectSuperUltrawide"
-            checked: root.showAspectSuperUltrawide
         }
 
         FilterMenuItem {
             text: i18n("Portrait (9:16)")
             filterProperty: "showAspectPortrait"
-            checked: root.showAspectPortrait
         }
 
         MenuSeparator {}
@@ -328,13 +321,11 @@ RowLayout {
         FilterMenuItem {
             text: i18n("Auto")
             filterProperty: "showAutoLayouts"
-            checked: root.showAutoLayouts
         }
 
         FilterMenuItem {
             text: i18n("Manual")
             filterProperty: "showManualLayouts"
-            checked: root.showManualLayouts
         }
 
         MenuSeparator {}
@@ -342,7 +333,6 @@ RowLayout {
         FilterMenuItem {
             text: i18n("Show Hidden Layouts")
             filterProperty: "showHidden"
-            checked: root.showHidden
         }
 
         MenuSeparator {}
@@ -359,13 +349,11 @@ RowLayout {
         FilterMenuItem {
             text: i18n("Built-in")
             filterProperty: "showBuiltInAlgorithms"
-            checked: root.showBuiltInAlgorithms
         }
 
         FilterMenuItem {
             text: i18n("User Scripts")
             filterProperty: "showUserAlgorithms"
-            checked: root.showUserAlgorithms
         }
 
         MenuSeparator {}
@@ -373,55 +361,46 @@ RowLayout {
         FilterMenuItem {
             text: i18n("Master Count")
             filterProperty: "showMasterCount"
-            checked: root.showMasterCount
         }
 
         FilterMenuItem {
             text: i18n("Split Ratio")
             filterProperty: "showSplitRatio"
-            checked: root.showSplitRatio
         }
 
         FilterMenuItem {
             text: i18n("Overlapping Zones")
             filterProperty: "showOverlapping"
-            checked: root.showOverlapping
         }
 
         FilterMenuItem {
             text: i18n("Persistent (Memory)")
             filterProperty: "showPersistent"
-            checked: root.showPersistent
         }
 
         FilterMenuItem {
             text: i18n("Custom Parameters")
             filterProperty: "showCustomParams"
-            checked: root.showCustomParams
         }
 
         FilterMenuItem {
             text: i18n("Reflows")
             filterProperty: "showReflowsOnResize"
-            checked: root.showReflowsOnResize
         }
 
         FilterMenuItem {
             text: i18n("Script State")
             filterProperty: "showScriptState"
-            checked: root.showScriptState
         }
 
         FilterMenuItem {
             text: i18n("Single Window")
             filterProperty: "showSingleWindow"
-            checked: root.showSingleWindow
         }
 
         FilterMenuItem {
             text: i18n("Follows Focus")
             filterProperty: "showReflowsOnFocus"
-            checked: root.showReflowsOnFocus
         }
 
         MenuSeparator {}
@@ -429,7 +408,6 @@ RowLayout {
         FilterMenuItem {
             text: i18n("Show Hidden Algorithms")
             filterProperty: "showHidden"
-            checked: root.showHidden
         }
 
         MenuSeparator {}
@@ -476,7 +454,7 @@ RowLayout {
     }
 
     // Checkable menu item that writes back to a named root filter property
-    // and keeps the menu open on toggle (StayOpenMenuItem). Uses an explicit
+    // and keeps the menu open on toggle (StayOpenMenuItem). An explicit
     // onToggled drives the filter property and a binding reads it back, so a
     // programmatic reset lands on the item. toggle() reaches `checked` through
     // a C++ setter, which neither severs the binding nor re-emits toggled(), so

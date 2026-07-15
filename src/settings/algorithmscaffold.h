@@ -38,13 +38,19 @@ QString sanitizeMetadataString(QString value);
 /// comments, other metadata fields, code — exactly as it was. Line endings
 /// are normalized to LF.
 ///
+/// A top-level name/id field is rewritten when it is the whole line. The value
+/// may use either quote style, and the line may close with either of Luau's
+/// field separators (`,` or `;`) and carry a trailing `--` comment; the
+/// separator and comment are preserved, and only the value changes.
+///
 /// Returns empty on an unrecognized shape: no metadata table, an opening line
-/// that does not end at the `{`, an unterminated table, a brace depth that
-/// goes negative, or a top-level name/id field that is not a whole
-/// `field = "value",` line. That last one covers a field sharing its line with
-/// another (in either order, and separated by `,` or `;`) and one trailing a
-/// long bracket's closer, since neither can be rewritten in place and leaving
-/// either would let Luau's last-wins keep the template's value.
+/// that does not end at the `{`, an unterminated table, a brace depth that goes
+/// negative, or a top-level name/id field that is not a whole line of that
+/// form. That last one covers a field sharing its line with another (in either
+/// order), one trailing a long bracket's closer, and one whose value spans
+/// lines or is followed by a long-bracket comment (`--[[`), whose end this scan
+/// will not guess at. None can be rewritten in place, and leaving one would let
+/// Luau's last-wins keep the template's value.
 ///
 /// Only the table's own top-level fields are read, so a nested `customParams`
 /// entry keeps its own `name` key whether it is written inline or across lines.
@@ -86,7 +92,8 @@ QString buildBlankScaffold(const QString& header, const QString& displayName, co
 /// someone else's code. Other leading comments, e.g. a template's doc block,
 /// carry over verbatim.
 ///
-/// Returns empty when @p newCopyrightLine is multi-line, and on every shape
+/// Returns empty when @p newCopyrightLine is multi-line or is not a
+/// `-- SPDX-FileCopyrightText:` line, and on every shape
 /// rewriteMetadataNameId() rejects.
 QString spliceTemplate(const QString& templateContent, const QString& newCopyrightLine, const QString& displayName,
                        const QString& id);

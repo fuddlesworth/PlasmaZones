@@ -122,10 +122,10 @@ ToolButton {
                 role: "type"
 
                 // Checkable filter item that keeps the menu open on toggle
-                // (StayOpenMenuItem). `checked` is held by a Binding so it
-                // survives the imperative toggle (checkable otherwise breaks the
-                // declarative binding on user click — same idiom as
-                // LayoutFilterBar.FilterMenuItem).
+                // (StayOpenMenuItem). `checked` is driven by a Binding that
+                // reads the filter set back, so a programmatic change to it
+                // lands on the item. Same idiom as
+                // LayoutFilterBar.FilterMenuItem.
                 DelegateChoice {
                     roleValue: "item"
 

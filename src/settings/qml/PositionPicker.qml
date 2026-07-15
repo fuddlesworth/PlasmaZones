@@ -36,10 +36,10 @@ Item {
 
     // The miniature uses Kirigami.Units for all structural sizing/spacing/margins.
     // The few small integer literals that remain below (indicator-bar thickness,
-    // 1-2px insets, corner radii, the hover duration override) are intentional
-    // fixed drawing dimensions of this custom-painted preview — they are visual
-    // detail of the diagram itself, not layout spacing, and are deliberately not
-    // theme-scaled so the bars/insets keep their proportions at every gridUnit.
+    // 1-2px insets, corner radii) are intentional fixed drawing dimensions of
+    // this custom-painted preview — they are visual detail of the diagram
+    // itself, not layout spacing, and are deliberately not theme-scaled so the
+    // bars/insets keep their proportions at every gridUnit.
     ColumnLayout {
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
@@ -175,7 +175,7 @@ Item {
                                     root.positionSelected(cell.index);
                                 }
                                 ToolTip.visible: containsMouse && root.enabled
-                                ToolTip.delay: 500
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: root.positionLabels[cell.index]
                             }
 

@@ -153,12 +153,12 @@ public:
      * For algorithms with a master/stack concept, this returns the index of the
      * primary window zone.
      *
-     * This describes the algorithm for a caller that asks; nothing in this tree
-     * reads it. In particular the engine's focusMaster() focuses the first tiled
-     * window directly rather than consulting this, so overriding it does not
-     * change any built-in behaviour. It stays on the exported API because a
-     * third-party algorithm can declare it and a third-party consumer can read
-     * it, which is what this library is LGPL for.
+     * This describes the algorithm for a caller that asks, and nothing in this
+     * tree reads it outside of tests. In particular the engine's focusMaster()
+     * focuses the first tiled window directly rather than consulting this, so
+     * overriding it does not change any built-in behaviour. It stays on the
+     * exported API because a third-party algorithm can declare it and a
+     * third-party consumer can read it, which is what this library is LGPL for.
      *
      * @return Master zone index (0-based), or -1 if no master concept
      */

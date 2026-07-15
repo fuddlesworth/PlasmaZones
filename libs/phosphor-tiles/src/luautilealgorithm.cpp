@@ -26,6 +26,10 @@ using namespace AutotileDefaults;
 
 namespace {
 
+/// The prefix every scripted algorithm's id carries, both where the id is built
+/// and where name() strips it back off for the display fallback.
+constexpr QLatin1String kScriptIdPrefix{"script:"};
+
 ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
 {
     ScriptedHelpers::CustomParamDef d;
@@ -292,7 +296,7 @@ bool LuauTileAlgorithm::loadScript(const QString& filePath)
     // a supported operation). m_module is -1 and the engine pointers are null on
     // entry by construction.
     m_filePath = filePath;
-    m_scriptId = QStringLiteral("script:") + QFileInfo(filePath).completeBaseName();
+    m_scriptId = kScriptIdPrefix + QFileInfo(filePath).completeBaseName();
     m_valid = false;
     m_metadata = ScriptedHelpers::ScriptMetadata{};
 
@@ -406,7 +410,12 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         return std::isfinite(v) ? v : fallback;
     };
 
-    m_cachedMasterZoneIndex = resolveInt(QStringLiteral("masterZoneIndex"), m_cachedMasterZoneIndex);
+    // Script metadata is untrusted input, and this value is exported for
+    // third-party consumers to read, so hold it to the range its contract
+    // promises: a 0-based zone index, or -1 for no master concept. Whether it
+    // indexes a zone the script actually produced is not knowable here.
+    m_cachedMasterZoneIndex =
+        std::clamp(resolveInt(QStringLiteral("masterZoneIndex"), m_cachedMasterZoneIndex), -1, MaxZones - 1);
     m_cachedSupportsMasterCount = resolveBool(QStringLiteral("supportsMasterCount"), m_cachedSupportsMasterCount);
     m_cachedSupportsSplitRatio = resolveBool(QStringLiteral("supportsSplitRatio"), m_cachedSupportsSplitRatio);
     m_cachedProducesOverlappingZones =
@@ -430,8 +439,8 @@ QString LuauTileAlgorithm::name() const
         return m_metadata.name;
     }
     QString fallback = m_scriptId;
-    if (fallback.startsWith(QLatin1String("script:"))) {
-        fallback = fallback.mid(QStringLiteral("script:").size());
+    if (fallback.startsWith(kScriptIdPrefix)) {
+        fallback = fallback.mid(kScriptIdPrefix.size());
     }
     if (!fallback.isEmpty()) {
         fallback[0] = fallback[0].toUpper();
@@ -832,6 +841,15 @@ void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& r
             const QJsonObject sanitized = TilingState::sanitizeScriptState(QJsonObject::fromVariantMap(result));
             state->setScriptState(sanitized);
         }
+    } else if (out.result.isValid()) {
+        // Returning nothing is the documented no-op and marshals to an invalid
+        // QVariant, so it stays silent. Any other type meant to control
+        // something and controls nothing: the block above is skipped whole, and
+        // with no layout change to give it away the hook looks like it never
+        // ran. `return state.splitRatio` instead of `return { splitRatio = … }`
+        // is the easy way to land here.
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "LuauTileAlgorithm: onWindowResized() returned a non-table, ignoring it, script=" << m_scriptId;
     }
 }
 

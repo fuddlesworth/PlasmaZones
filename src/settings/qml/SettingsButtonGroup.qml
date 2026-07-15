@@ -14,11 +14,17 @@ import org.phosphor.animation
  * A row of options where one is selected at a time, with a sliding
  * accent background indicator. Matches the SettingsSwitch aesthetic.
  *
+ * The caller owns currentIndex. A click only emits indexChanged, so bind
+ * currentIndex to the state the handler writes and the selection follows.
+ * Assigning it a plain value instead leaves the group inert, and writing to
+ * it from here would sever the caller's binding on the first click, which
+ * strands every later state change the caller pushes back.
+ *
  * Usage:
  *   SettingsButtonGroup {
  *       model: [i18n("Snapping"), i18n("Tiling")]
- *       currentIndex: 0
- *       onIndexChanged: (index) => { ... }
+ *       currentIndex: view.mode
+ *       onIndexChanged: (index) => { view.mode = index; }
  *   }
  */
 Row {
@@ -86,10 +92,8 @@ Row {
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
                 onClicked: {
-                    if (root.currentIndex !== optionDelegate.index) {
-                        root.currentIndex = optionDelegate.index;
+                    if (root.currentIndex !== optionDelegate.index)
                         root.indexChanged(optionDelegate.index);
-                    }
                 }
             }
 

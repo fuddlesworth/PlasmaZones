@@ -95,10 +95,13 @@ export type Metadata = {
     centerLayout: boolean?,
     supportsSingleWindow: boolean?, -- algorithm lays out the lone window itself (else the host fills the work area for a lone window)
     retileOnFocus: boolean?, -- reflow when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight that follows focus)
-    defaultSplitRatio: number?,
-    defaultMaxWindows: number?,
-    minimumWindows: number?,
-    masterZoneIndex: number?, -- 0-based index of the master zone
+    -- The same clamps the override functions below are annotated with apply
+    -- here: metadata seeds the value the override resolves, and both land in
+    -- the one clamp.
+    defaultSplitRatio: number?, -- clamped to 0.1..0.9
+    defaultMaxWindows: number?, -- clamped to 1..100
+    minimumWindows: number?, -- clamped to 1..100
+    masterZoneIndex: number?, -- 0-based index of the master zone, clamped to -1..255
     zoneNumberDisplay: string?,
     customParams: { any }?,
 }
@@ -158,7 +161,9 @@ export type Pluau = {
     dwindleLayout: (area: Rect, count: number, splitRatio: number, innerGap: number, minSizes: { MinSize }) -> { Zone },
     threeColumnLayout: (area: Rect, count: number, gap: number, splitRatio: number, masterCount: number,
         minSizes: { MinSize }) -> { Zone },
-    applyTreeGeometry: (node: SplitNode, rect: Rect, gap: number, depth: number?) -> { Zone },
+    -- rect is Zone, not Rect: this recurses on plain {x,y,width,height} tables
+    -- it builds itself, and only ever reads those four fields.
+    applyTreeGeometry: (node: SplitNode, rect: Zone, gap: number, depth: number?) -> { Zone },
     clampSplitRatio: (ratio: number) -> number,
     distributeWithGaps: (total: number, count: number, gap: number) -> { number },
     distributeWithMinSizes: (total: number, count: number, gap: number, minDims: { number }) -> { number },

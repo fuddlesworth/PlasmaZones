@@ -914,7 +914,7 @@ private:
     // Manual layouts sort first; within each category alphabetical by
     // displayName (case-insensitive).
     static void sortMergedLayoutList(QVariantList& list);
-    // Defence-in-depth path sanitizer shared by importLayout/exportLayout and
+    // Defence-in-depth path sanitiser shared by importLayout/exportLayout and
     // importAlgorithm/exportAlgorithm (layouts TU) and
     // importAllSettings/exportAllSettings/importFromKZonesFile (session TU).
     // See the implementation comment for the rejection rules.

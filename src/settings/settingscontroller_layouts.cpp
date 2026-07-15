@@ -466,8 +466,10 @@ void SettingsController::setLayoutAspectRatio(const QString& layoutId, int aspec
 // Algorithm helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// All bodies moved to AlgorithmService; SettingsController::* methods below
-// are 1-line Q_INVOKABLE forwarders so QML's entry points stay stable.
+// The algorithm bodies live in AlgorithmService. The SettingsController::*
+// methods below are Q_INVOKABLE forwarders so QML's entry points stay stable:
+// most are one line, and the ones taking a path sanitize it first (that guard
+// belongs on the controller, which is where QML hands the path in).
 
 QVariantList SettingsController::availableAlgorithms() const
 {

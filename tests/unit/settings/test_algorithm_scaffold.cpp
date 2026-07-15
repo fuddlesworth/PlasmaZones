@@ -70,6 +70,7 @@ private Q_SLOTS:
     void spliceRejectsSingleLineMetadata();
     void spliceRejectsInlineFieldsOnOpeningLine();
     void spliceRejectsMultiFieldNameLine();
+    void rewriteAcceptsHandWrittenFieldPunctuation();
     void spliceRejectsUnquotedNameValue();
     void spliceIgnoresBracesInsideStrings();
     void spliceHandlesLongBrackets();
@@ -337,6 +338,33 @@ void TestAlgorithmScaffold::spliceRejectsInlineFieldsOnOpeningLine()
         "    tile = function(ctx) return {} end,\n"
         "}\n");
     QVERIFY(spliceTemplate(hybrid, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+}
+
+// duplicateAlgorithm() runs this rewrite over scripts a user wrote by hand, not
+// only over the bundled templates. Luau accepts a single-quoted value, a `;`
+// field separator, and a trailing comment, so rejecting any of them would fail
+// the whole copy over punctuation.
+void TestAlgorithmScaffold::rewriteAcceptsHandWrittenFieldPunctuation()
+{
+    const QString handWritten = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = 'My Layout',\n"
+        "        id = \"mine\"; -- kept stable across renames\n"
+        "        description = 'Mine',\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    const QString out = rewriteMetadataNameId(handWritten, QStringLiteral("Copy"), QStringLiteral("copy"));
+    QVERIFY(!out.isEmpty());
+    QVERIFY(out.contains(QStringLiteral("name = \"Copy\",")));
+    // The id line's own `;` and its comment survive: only the value changes.
+    QVERIFY(out.contains(QStringLiteral("id = \"copy\"; -- kept stable across renames")));
+    // The rewrite is confined to name/id — a single-quoted sibling is untouched.
+    QVERIFY(out.contains(QStringLiteral("description = 'Mine',")));
+    // Neither original value survives anywhere.
+    QVERIFY(!out.contains(QStringLiteral("My Layout")));
+    QVERIFY(!out.contains(QStringLiteral("\"mine\"")));
 }
 
 void TestAlgorithmScaffold::spliceRejectsMultiFieldNameLine()

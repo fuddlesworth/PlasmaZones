@@ -2841,8 +2841,8 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
         if (ev.left || ev.right || ev.top || ev.bottom) {
             // The hook may apply a new split ratio to the state (ratio-based
             // algorithms reflow this way). If it did, mark the state user-tuned so
-            // the change stays local to this screen+desktop and survives a settings
-            // refresh — exactly like an interactive master-ratio keystroke.
+            // the change stays local to this screen+desktop+activity and survives a
+            // settings refresh — exactly like an interactive master-ratio keystroke.
             const qreal ratioBefore = state->splitRatio();
             algo->onWindowResized(state, ev);
             if (!qFuzzyCompare(1.0 + state->splitRatio(), 1.0 + ratioBefore)) {
