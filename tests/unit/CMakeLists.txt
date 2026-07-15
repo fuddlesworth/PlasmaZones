@@ -782,7 +782,8 @@ add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_c
 
 # Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
 # directly because they live in the plasmazones-settings executable rather than
-# plasmazones_core. Split by surface, on the 800-line guideline: the template
+# plasmazones_core. Split by surface, per the project file-size rule (target
+# under 1000 lines, hard ceiling 1150): the template
 # splice / metadata rewrite here, the shapes it refuses in _rejects, the blank
 # scaffold next door. They share no fixture beyond a copyright line.
 #

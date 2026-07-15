@@ -23,6 +23,7 @@
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
+#include "../../../src/config/perscreenresolver.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
@@ -89,36 +90,62 @@ private Q_SLOTS:
     // the live config and re-baselined, so a later Discard had nothing to
     // revert to. All three properties are pinned here: the export carries the
     // pending value, the live config keeps the committed one, and the baseline
-    // does not move.
+    // does not move. A fourth property covers the non-Store staging path:
+    // exportTo stages per-screen overrides into the live backend root to
+    // serialize them, and must restore the root afterwards — otherwise the
+    // staged groups leak to disk through the backend's flush-on-destruction.
     void testExportTo_writesPendingValueWithoutCommitting()
     {
         IsolatedConfigGuard guard;
-        Settings s;
         const auto key = widthKey();
-
-        const int def = s.borderWidth();
-        const int saved = (def == 3) ? 4 : 3;
-        const int pending = (saved == 7) ? 6 : 7;
-        s.setBorderWidth(saved);
-        s.save(); // baseline and live config = saved
-
-        s.setBorderWidth(pending); // an edit the user has NOT saved
-        QVERIFY(s.isKeyModified(key.first, key.second));
-
         const QString dest = guard.configPath() + QStringLiteral("/exported.json");
-        QVERIFY(s.exportTo(dest));
+        const QString screenName = QStringLiteral("test-screen");
+        // Settings writes the group as "ZoneSelector:<screen>", but on disk the
+        // PerScreenPathResolver nests it at PerScreen/ZoneSelector/<screen>.
+        // readIntFromJson bypasses Settings, so it must walk the resolved path.
+        const QString perScreenGroup = PerScreenPathResolver::perScreenKey() + QLatin1Char('.')
+            + PerScreenPathResolver::prefixToCategory(QStringLiteral("ZoneSelector")) + QLatin1Char('.') + screenName;
+        const QString perScreenKey = QLatin1String(ZoneSelectorConfigKey::MaxRows);
+        int saved = 0;
 
-        // The baseline did not move, so the edit is still pending and a later
-        // Discard still has the committed value to revert to.
-        QVERIFY(s.isKeyModified(key.first, key.second));
-        s.discardKeys({key});
-        QCOMPARE(s.borderWidth(), saved);
+        {
+            Settings s;
+            const int def = s.borderWidth();
+            saved = (def == 3) ? 4 : 3;
+            // `saved` is always 3 or 4, so 7 differs from both `saved` and the
+            // default; the export/live-config/baseline assertions below can only
+            // distinguish the three values if all three are distinct.
+            const int pending = 7;
+            s.setBorderWidth(saved);
+            s.save(); // baseline and live config = saved
 
-        // The live config on disk was not touched: it still holds `saved`.
-        QCOMPARE(readIntFromJson(ConfigDefaults::configFilePath(), key.first, key.second), saved);
+            s.setBorderWidth(pending); // an edit the user has NOT saved
+            // A staged per-screen override: it only reaches the backend root
+            // through the save/export helpers, never through the setter.
+            s.setPerScreenZoneSelectorSetting(screenName, perScreenKey, 2);
+            QVERIFY(s.isKeyModified(key.first, key.second));
 
-        // The export carries the value the user could see when they exported.
-        QCOMPARE(readIntFromJson(dest, key.first, key.second), pending);
+            QVERIFY(s.exportTo(dest));
+
+            // The baseline did not move, so the edit is still pending and a later
+            // Discard still has the committed value to revert to.
+            QVERIFY(s.isKeyModified(key.first, key.second));
+            s.discardKeys({key});
+            QCOMPARE(s.borderWidth(), saved);
+
+            // The live config on disk was not touched: it still holds `saved`.
+            QCOMPARE(readIntFromJson(ConfigDefaults::configFilePath(), key.first, key.second), saved);
+
+            // The export carries the value the user could see when they
+            // exported, including the staged per-screen override.
+            QCOMPARE(readIntFromJson(dest, key.first, key.second), pending);
+            QCOMPARE(readIntFromJson(dest, perScreenGroup, perScreenKey), 2);
+        }
+
+        // Settings destruction flushes any dirty backend state to disk. The
+        // export restored the live root, so the per-screen group it staged
+        // must not have leaked into the live config.
+        QCOMPARE(readIntFromJson(ConfigDefaults::configFilePath(), perScreenGroup, perScreenKey), -1);
     }
 
     // discardKeys() reverts the key to the committed baseline, fires the

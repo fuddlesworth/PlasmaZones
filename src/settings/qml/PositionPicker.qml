@@ -60,9 +60,14 @@ Item {
             color: Kirigami.Theme.backgroundColor
             radius: Kirigami.Units.smallSpacing
             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
-            // Chrome, so it is device-pixel-scaled like every other border in
-            // the wizard. The drawing dimensions below stay in logical units on
-            // purpose (see the note above them); this is not one of those.
+            // Chrome, so it follows the repo-wide
+            // Math.round(Screen.devicePixelRatio) border convention. Note that
+            // border.width is in device-independent pixels (already DPR-scaled
+            // at render), so this grows the border on high-DPR screens rather
+            // than pinning it to one device pixel; the value is kept for
+            // consistency with every other chrome border. The drawing
+            // dimensions below stay in logical units on purpose (see the note
+            // above them); this is not one of those.
             border.width: Math.round(Screen.devicePixelRatio)
 
             Rectangle {
@@ -97,6 +102,14 @@ Item {
                             Accessible.role: Accessible.RadioButton
                             Accessible.name: root.positionLabels[cell.index]
                             Accessible.checked: cell.isSelected
+                            Accessible.focusable: true
+                            // Keyboard path matching WizardTemplateCard: each
+                            // cell is a Tab stop, Return/Enter/Space activates,
+                            // and focus shows through the highlight border.
+                            activeFocusOnTab: root.enabled
+                            Keys.onReturnPressed: root.positionSelected(cell.index)
+                            Keys.onEnterPressed: root.positionSelected(cell.index)
+                            Keys.onSpacePressed: root.positionSelected(cell.index)
                             // Zone selector indicator bars, drawn per edge this
                             // cell sits on: a corner is on two, a side on one.
                             property bool isTopRow: cell.index <= 2
@@ -117,6 +130,9 @@ Item {
                                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
                             }
                             border.color: {
+                                if (cell.activeFocus)
+                                    return Kirigami.Theme.highlightColor;
+
                                 if (isSelected)
                                     return Kirigami.Theme.highlightColor;
 
@@ -125,7 +141,7 @@ Item {
 
                                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3);
                             }
-                            border.width: isSelected ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
+                            border.width: (cell.activeFocus || cell.isSelected) ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
                             opacity: root.enabled ? 1 : 0.5
 
                             // Horizontal bar (top or bottom edge)

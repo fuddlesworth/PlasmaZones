@@ -33,9 +33,6 @@ Kirigami.Dialog {
     // Set for the duration of a create, so the button and the Return key
     // cannot both land a second createNewAlgorithm call.
     property bool _creating: false
-    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
-    readonly property color _subtleBg: _colors.subtleBg
-    readonly property color _accentBorder: _colors.accentBorder
     // Clamped to [1.0, 3.6] to keep the preview usable on extreme aspect ratios (e.g. 32:9).
     // Read through the content Item rather than this root. `Screen` on a Popup
     // resolves against no window of its own, so it answers for the primary
@@ -235,35 +232,19 @@ Kirigami.Dialog {
                 spacing: Kirigami.Units.largeSpacing
 
                 // Landscape preview matching monitor aspect ratio
-                Rectangle {
-                    // Let the column size this and cap it, rather than reading
-                    // parent.width upward: a layout child asking its parent how
-                    // wide it is asks the question the parent is still
-                    // answering. The height follows the width the layout
-                    // actually assigned.
-                    //
-                    // The 12-grid-unit height ceiling is folded into the width
-                    // cap rather than set as its own Layout.maximumHeight. A
-                    // standalone height cap overrides preferredHeight and
-                    // reshapes the box to whatever ratio the two caps form,
-                    // which discarded the monitor ratio on every display
-                    // narrower than 26:12. Capping width by the ratio holds the
-                    // same ceiling while keeping the box on-ratio.
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 26, Kirigami.Units.gridUnit * 12 * root.screenAspectRatio)
-                    Layout.preferredHeight: width / root.screenAspectRatio
-                    Layout.alignment: Qt.AlignHCenter
-                    radius: Kirigami.Units.smallSpacing * 2
-                    color: root._subtleBg
-                    border.width: Math.round(Screen.devicePixelRatio)
-                    border.color: root._accentBorder
+                WizardPreviewFrame {
+                    aspectRatio: root.screenAspectRatio
 
                     AlgorithmPreview {
                         anchors.fill: parent
                         anchors.margins: Kirigami.Units.largeSpacing
                         anchors.bottomMargin: Kirigami.Units.largeSpacing * 2
                         visible: root.baseTemplate !== "blank"
-                        algorithmId: root.baseTemplate === "blank" ? "" : root.baseTemplate
+                        // The same `opened` gate as the step-1 previews above:
+                        // without it a closed dialog keeps a live algorithmId
+                        // and re-runs its Luau tile pass on every
+                        // availableAlgorithmsChanged.
+                        algorithmId: (root.opened && root.baseTemplate !== "blank") ? root.baseTemplate : ""
                         appSettings: root.controller
                         windowCount: 6
                         showLabel: false

@@ -59,11 +59,25 @@ Row {
 
                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04);
             }
-            border.width: Math.round(Screen.devicePixelRatio)
-            border.color: isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+            border.width: optionDelegate.activeFocus ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
+            border.color: optionDelegate.activeFocus ? Kirigami.Theme.highlightColor : isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
             Accessible.role: Accessible.RadioButton
             Accessible.name: optionDelegate.modelData
             Accessible.checked: optionDelegate.isActive
+            Accessible.focusable: true
+            // Keyboard path matching WizardTemplateCard: each option is a Tab
+            // stop, Return/Enter/Space selects, and focus shows through the
+            // highlight border. Activation reuses the click path's same-index
+            // guard so a re-select of the current option stays a no-op.
+            activeFocusOnTab: true
+            Keys.onReturnPressed: optionDelegate.activate()
+            Keys.onEnterPressed: optionDelegate.activate()
+            Keys.onSpacePressed: optionDelegate.activate()
+
+            function activate() {
+                if (root.currentIndex !== optionDelegate.index)
+                    root.indexChanged(optionDelegate.index);
+            }
 
             TextMetrics {
                 id: optionMetrics
@@ -91,10 +105,7 @@ Row {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
-                onClicked: {
-                    if (root.currentIndex !== optionDelegate.index)
-                        root.indexChanged(optionDelegate.index);
-                }
+                onClicked: optionDelegate.activate()
             }
 
             Behavior on color {

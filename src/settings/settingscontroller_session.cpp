@@ -41,6 +41,7 @@
 
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QFontDatabase>
@@ -471,9 +472,15 @@ bool SettingsController::exportAllSettings(const QString& filePath)
     // Save of whatever the user has pending, and it would leave that file
     // disagreeing with the baseline per-page Discard reverts to. The file
     // picker can reach the config directory. Canonical paths, so a symlink or a
-    // `.` segment pointing at the same file is caught too.
+    // `.` segment pointing at the same file is caught too. canonicalFilePath()
+    // is empty for a file that does not exist yet, which on a fresh profile is
+    // exactly the live config path; compare cleaned lexical paths in that case
+    // so the export cannot write the in-memory settings onto it.
     const QFileInfo destInfo(safeFilePath);
-    if (destInfo.exists() && destInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath()) {
+    const bool destIsLiveConfig = destInfo.exists()
+        ? destInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath()
+        : QDir::cleanPath(safeFilePath) == QDir::cleanPath(configPath);
+    if (destIsLiveConfig) {
         qCWarning(PlasmaZones::lcCore) << "exportAllSettings: destination is the live config file, refusing"
                                        << safeFilePath;
         Q_EMIT settingsTransferFailed(
@@ -572,6 +579,22 @@ bool SettingsController::importAllSettings(const QString& filePath)
             // Skip UTF-8 BOM (EF BB BF) if present — trimmed() only strips ASCII whitespace.
             if (head.size() >= 3 && byte(0) == 0xEF && byte(1) == 0xBB && byte(2) == 0xBF) {
                 head = head.mid(3).trimmed();
+            }
+            // A leading '[' is ambiguous: a legacy INI file starts with its
+            // first "[Group]" header, but so does a JSON array. The array is
+            // valid JSON yet never a settings file (the config root is always
+            // an object), and feeding it to the INI migrator would produce a
+            // misleading "older settings file" error. Disambiguate by parsing
+            // the whole file: valid JSON here means it is not INI, so refuse
+            // it with the accurate message; a parse failure means a real INI
+            // section header and the migration path proceeds as before.
+            if (!head.isEmpty() && head.at(0) == '[') {
+                if (!QJsonDocument::fromJson(f.readAll()).isNull()) {
+                    qCWarning(PlasmaZones::lcCore)
+                        << "Import file is a JSON array, not a settings object, refusing:" << filePath;
+                    Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
+                    return false;
+                }
             }
             isLegacyIni = !head.isEmpty() && head.at(0) != '{';
         }

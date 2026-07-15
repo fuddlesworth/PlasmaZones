@@ -588,16 +588,27 @@ SettingsFlickable {
 
         function onAlgorithmOperationFailed(reason) {
             // Only show toast when the wizard dialog is closed — if the dialog
-            // is open, it shows the error inline via its own Connections block
-            if (!newAlgorithmDialog.opened && typeof window !== "undefined" && window && window.showToast)
-                window.showToast(reason);
+            // is open, it shows the error inline via its own Connections block.
+            // The routing decision is deferred: create can emit this
+            // synchronously for a created-but-degraded result and still return
+            // true, and the wizard only close()s after that return. Checking
+            // `opened` at emit time would see the dialog still open and swallow
+            // the toast even though the dialog is about to close and take its
+            // inline error with it. A plain validation failure keeps the dialog
+            // open, so the deferred check still routes it inline.
+            Qt.callLater(function () {
+                if (!newAlgorithmDialog.opened && typeof window !== "undefined" && window && window.showToast)
+                    window.showToast(reason);
+            });
         }
 
         function onLayoutOperationFailed(reason) {
-            // Only show toast when the wizard dialog is closed — if the dialog
-            // is open, it shows the error inline via its own Connections block
-            if (!newLayoutDialog.opened && typeof window !== "undefined" && window && window.showToast)
-                window.showToast(reason);
+            // Deferred for the same emit-before-close ordering as
+            // onAlgorithmOperationFailed above.
+            Qt.callLater(function () {
+                if (!newLayoutDialog.opened && typeof window !== "undefined" && window && window.showToast)
+                    window.showToast(reason);
+            });
         }
 
         target: settingsController

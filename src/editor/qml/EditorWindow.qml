@@ -82,7 +82,7 @@ Window {
     // Move the editor window to the screen matching editorController.targetScreen
     function moveToTargetScreen() {
         if (!editorWindow._editorController)
-            return ;
+            return;
 
         // Use C++ method which applies the Wayland setGeometry() workaround
         // (QML Window.screen assignment is a no-op on Wayland for xdg-shell surfaces)
@@ -101,14 +101,13 @@ Window {
     // Handle zone click with modifier keys for multi-selection
     function handleZoneClick(zoneId, modifiers) {
         if (!editorWindow._editorController || !zoneId)
-            return ;
+            return;
 
         if (modifiers & Qt.ControlModifier) {
             // Ctrl+click: toggle zone in/out of selection
             editorWindow._editorController.toggleSelection(zoneId);
             if (editorWindow._editorController.isSelected(zoneId))
                 editorWindow.selectionAnchorId = zoneId;
-
         } else if ((modifiers & Qt.ShiftModifier) && editorWindow.selectionAnchorId !== "") {
             // Shift+click: range selection from anchor to clicked zone
             editorWindow._editorController.selectRange(editorWindow.selectionAnchorId, zoneId);
@@ -143,7 +142,6 @@ Window {
             var item = _zonesRepeater.itemAt(i);
             if (item && item.zoneId === zoneId)
                 return item;
-
         }
         return null;
     }
@@ -189,24 +187,22 @@ Window {
             // If no layout loaded and not in preview mode, create new
             if (editorWindow._editorController.layoutId === "" && !editorWindow.previewMode)
                 editorWindow._editorController.createNewLayout();
-
         }
         // Set screen and show via C++ Q_INVOKABLE — QML Window.screen assignment
         // doesn't reliably call QWindow::setScreen() on Wayland (type mismatch)
         editorWindow._editorController.showFullScreenOnTargetScreen(editorWindow);
         // Request focus on drawingArea for keyboard navigation
         // Use a timer to ensure focus is set after window is fully shown
-        Qt.callLater(function() {
+        Qt.callLater(function () {
             drawingArea.forceActiveFocus();
         });
     }
     // Ensure drawingArea has focus when window becomes visible
     onVisibleChanged: {
         if (visible)
-            Qt.callLater(function() {
-            drawingArea.forceActiveFocus();
-        });
-
+            Qt.callLater(function () {
+                drawingArea.forceActiveFocus();
+            });
     }
 
     // Semi-transparent background — replaces the old Window.color alpha=0.7.
@@ -245,57 +241,47 @@ Window {
             let id = zoneId;
             if (editorWindow._editorController && id)
                 Qt.callLater(editorWindow._editorController.splitZone, id, true);
-
         }
         onSplitVerticalRequested: {
             let id = zoneId;
             if (editorWindow._editorController && id)
                 Qt.callLater(editorWindow._editorController.splitZone, id, false);
-
         }
         onDuplicateRequested: {
             let id = zoneId;
             if (editorWindow._editorController && id)
                 Qt.callLater(editorWindow._editorController.duplicateZone, id);
-
         }
         onDeleteRequested: {
             let id = zoneId;
             if (editorWindow._editorController && id)
                 Qt.callLater(editorWindow._editorController.deleteZone, id);
-
         }
         onDeleteWithFillRequested: {
             let id = zoneId;
             if (editorWindow._editorController && id)
                 Qt.callLater(zoneOps.deleteWithFillAnimation, id, editorWindow._editorController, editorWindow._zonesRepeater, drawingArea.width, drawingArea.height);
-
         }
         onFillRequested: {
             let id = zoneId;
             if (editorWindow._editorController && id)
                 Qt.callLater(editorWindow._editorController.expandToFillSpace, id);
-
         }
         onBringToFrontRequested: {
             if (editorWindow._editorController && zoneId)
                 editorWindow._editorController.bringToFront(zoneId);
-
         }
         onBringForwardRequested: {
             if (editorWindow._editorController && zoneId)
                 editorWindow._editorController.bringForward(zoneId);
-
         }
         onSendBackwardRequested: {
             if (editorWindow._editorController && zoneId)
                 editorWindow._editorController.sendBackward(zoneId);
-
         }
         onSendToBackRequested: {
             if (editorWindow._editorController && zoneId)
                 editorWindow._editorController.sendToBack(zoneId);
-
         }
     }
 
@@ -359,9 +345,7 @@ Window {
                 // would desync the paired surfaces.
                 profile: "widget.fadeIn"
             }
-
         }
-
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -413,7 +397,7 @@ Window {
                 Keys.priority: Keys.AfterItem
                 // Allow standard Tab navigation first
                 Keys.enabled: true
-                Keys.onPressed: function(event) {
+                Keys.onPressed: function (event) {
                     keyboardNav.handleKeyPress(event);
                 }
                 Component.onCompleted: _insetsReady = true
@@ -458,73 +442,60 @@ Window {
                         snapIndicator: snapIndicator // Pass snapIndicator for visual feedback
                         // Z-order: base of 60 (above DividerManager z:50) + zOrder from model
                         z: 60 + (modelData.zOrder !== undefined ? modelData.zOrder : 0)
-                        onClicked: function(event) {
+                        onClicked: function (event) {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow.handleZoneClick(modelData.id, event.modifiers);
-
                         }
-                        onGeometryChanged: function(x, y, w, h, skipSnapping) {
+                        onGeometryChanged: function (x, y, w, h, skipSnapping) {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.updateZoneGeometry(modelData.id, x, y, w, h, skipSnapping);
-
                         }
                         onDeleteRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.deleteZone(modelData.id);
-
                         }
                         onDuplicateRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.duplicateZone(modelData.id);
-
                         }
                         onSplitHorizontalRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.splitZone(modelData.id, true);
-
                         }
                         onSplitVerticalRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.splitZone(modelData.id, false);
-
                         }
                         onExpandToFillRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.expandToFillSpace(modelData.id);
-
                         }
-                        onExpandToFillWithCoords: function(mouseX, mouseY) {
+                        onExpandToFillWithCoords: function (mouseX, mouseY) {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.expandToFillSpace(modelData.id, mouseX, mouseY);
-
                         }
                         onDeleteWithFillRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 zoneOps.deleteWithFillAnimation(modelData.id, editorWindow._editorController, editorWindow._zonesRepeater, drawingArea.width, drawingArea.height);
-
                         }
                         onBringToFrontRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.bringToFront(modelData.id);
-
                         }
                         onSendToBackRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.sendToBack(modelData.id);
-
                         }
                         onBringForwardRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.bringForward(modelData.id);
-
                         }
                         onSendBackwardRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.sendBackward(modelData.id);
-
                         }
                         // Track zone operations for snap/dimension indicators
-                        onOperationStarted: function(zoneId, x, y, width, height) {
+                        onOperationStarted: function (zoneId, x, y, width, height) {
                             activeZoneOperation.active = true;
                             activeZoneOperation.zoneId = zoneId;
                             activeZoneOperation.x = x;
@@ -532,22 +503,20 @@ Window {
                             activeZoneOperation.width = width;
                             activeZoneOperation.height = height;
                         }
-                        onOperationUpdated: function(zoneId, x, y, width, height) {
+                        onOperationUpdated: function (zoneId, x, y, width, height) {
                             activeZoneOperation.x = x;
                             activeZoneOperation.y = y;
                             activeZoneOperation.width = width;
                             activeZoneOperation.height = height;
                         }
-                        onOperationEnded: function(zoneId) {
+                        onOperationEnded: function (zoneId) {
                             activeZoneOperation.active = false;
                             activeZoneOperation.zoneId = "";
                             // Clear snap lines when operation ends
                             if (snapIndicator)
                                 snapIndicator.clearSnapLines();
-
                         }
                     }
-
                 }
 
                 // Dividers between zones - allow resizing multiple zones at once
@@ -622,7 +591,6 @@ Window {
                         // family root for the generic 150 ms ease-out shape.
                         profile: "widget"
                     }
-
                 }
 
                 Behavior on anchors.topMargin {
@@ -631,7 +599,6 @@ Window {
                     PhosphorMotionAnimation {
                         profile: "widget"
                     }
-
                 }
 
                 Behavior on anchors.rightMargin {
@@ -640,7 +607,6 @@ Window {
                     PhosphorMotionAnimation {
                         profile: "widget"
                     }
-
                 }
 
                 Behavior on anchors.bottomMargin {
@@ -649,11 +615,8 @@ Window {
                     PhosphorMotionAnimation {
                         profile: "widget"
                     }
-
                 }
-
             }
-
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -669,7 +632,6 @@ Window {
             selectionCount: editorWindow.selectionCount
             hasMultipleSelection: editorWindow.hasMultipleSelection
         }
-
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -728,7 +690,6 @@ Window {
                 text: i18n("Exit Fullscreen (F11)")
                 anchors.verticalCenter: parent.verticalCenter
             }
-
         }
 
         MouseArea {
@@ -748,9 +709,7 @@ Window {
                 // the pill and the top bar exchange visibility cleanly.
                 profile: "widget.fadeIn"
             }
-
         }
-
     }
 
     Kirigami.PromptDialog {
@@ -827,7 +786,6 @@ Window {
             editorController: editorWindow._editorController
             editorWindow: editorWindow
         }
-
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -862,8 +820,11 @@ Window {
         // Note: Shortcut sequence change handlers moved to EditorShortcuts.qml
 
         function onLayoutSaved() {
-            // Show success notification (for both save and export)
             notifications.showSuccess(i18nc("@info", "Layout saved successfully"));
+        }
+
+        function onLayoutExported() {
+            notifications.showSuccess(i18nc("@info", "Layout exported"));
         }
 
         function onLayoutLoadFailed(error) {
@@ -916,5 +877,4 @@ Window {
         target: editorWindow._editorController
         enabled: editorWindow._editorController !== null
     }
-
 }

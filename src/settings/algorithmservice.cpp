@@ -75,23 +75,34 @@ bool isBareBaseName(const QString& name)
 /// Every bundled algorithm's basename matches its id, which is what lets a
 /// filename probe answer an id question. Deliberate overrides still work, they
 /// just go through hand-placing or editing a file rather than through create.
-bool algorithmBaseNameTaken(const QString& baseName)
+///
+/// The filename probe alone is not enough, though: an imported file keeps
+/// whatever `id` its metadata carries, which need not match its basename. Such
+/// an id occupies a registry slot without any matching file on the search
+/// path, so a candidate must also be absent from @p registry — otherwise the
+/// new file's id would collide, the loader would keep the first registration,
+/// and the new file would never appear in the catalog.
+bool algorithmBaseNameTaken(const QString& baseName, const PhosphorTiles::AlgorithmRegistry* registry)
 {
+    if (registry && registry->algorithm(baseName))
+        return true;
     return !QStandardPaths::locate(QStandardPaths::GenericDataLocation,
                                    ScriptedAlgorithmSubdir + QLatin1Char('/') + baseName + QStringLiteral(".luau"))
                 .isEmpty();
 }
 
 /// Resolve a free "<baseName>.luau" (or "<baseName>-N.luau") under @p dir whose
-/// basename is claimed nowhere on the search path. Returns an empty string when
-/// every candidate is taken.
-QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
+/// basename is claimed nowhere on the search path and, when @p registry is
+/// given, is not already a registered algorithm id. Returns an empty string
+/// when every candidate is taken.
+QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName,
+                                const PhosphorTiles::AlgorithmRegistry* registry)
 {
-    if (!algorithmBaseNameTaken(baseName))
+    if (!algorithmBaseNameTaken(baseName, registry))
         return dir + baseName + QStringLiteral(".luau");
     for (int i = 1; i <= 999; ++i) {
         const QString candidate = baseName + QStringLiteral("-") + QString::number(i);
-        if (!algorithmBaseNameTaken(candidate))
+        if (!algorithmBaseNameTaken(candidate, registry))
             return dir + candidate + QStringLiteral(".luau");
     }
     return QString();
@@ -283,8 +294,10 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     }
     // Same reason as the two checks above: the engine refuses to load a script
     // this large, so copying it in would leave the user a success toast for an
-    // algorithm that never appears. Checked on the source's size, so an
-    // oversized file is never read into memory either.
+    // algorithm that never appears. This pre-open check rejects an oversized
+    // file before anything is read; the file can still change between here and
+    // the open below, so the size is re-checked on the open handle before
+    // readAll().
     static_assert(PhosphorTiles::AutotileDefaults::MaxScriptSizeBytes == 1024 * 1024,
                   "the import failure message below states the cap in words");
     if (source.size() > PhosphorTiles::AutotileDefaults::MaxScriptSizeBytes) {
@@ -313,9 +326,11 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     // duplicate/create). Filename collisions only. An import keeps the file's
     // own metadata id, so unlike create/duplicate a rename here cannot decide
     // which algorithm the loader registers, and a bundled-name collision is
-    // deliberately not rolled over.
+    // deliberately not rolled over. The registry probe is skipped for the same
+    // reason: the file's own metadata id decides registration, so a rename
+    // here can neither cause nor avoid an id collision.
     if (destInfo.exists()) {
-        destPath = findUniqueAlgorithmPath(destDir, source.completeBaseName());
+        destPath = findUniqueAlgorithmPath(destDir, source.completeBaseName(), nullptr);
         if (destPath.isEmpty()) {
             Q_EMIT algorithmOperationFailed(
                 PhosphorI18n::tr("Too many algorithms share this name. Remove some and try again."));
@@ -333,6 +348,13 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     if (!in.open(QIODevice::ReadOnly)) {
         Q_EMIT algorithmOperationFailed(
             PhosphorI18n::tr("Could not read the algorithm file. Check that it still exists and is readable."));
+        return false;
+    }
+    // Re-check the cap on the open handle: the pre-open check raced against
+    // the filesystem, and readAll() would read whatever is there now.
+    if (in.size() > PhosphorTiles::AutotileDefaults::MaxScriptSizeBytes) {
+        Q_EMIT algorithmOperationFailed(
+            PhosphorI18n::tr("That algorithm file is too large to load. Algorithms are limited to 1 MB."));
         return false;
     }
     const QByteArray contents = in.readAll();
@@ -545,7 +567,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     // validates basenames but takes metadata ids verbatim, so an id is not
     // guaranteed to be a safe path component.
     const QString baseName = QFileInfo(sourcePath).completeBaseName() + QStringLiteral("-copy");
-    const QString destPath = findUniqueAlgorithmPath(destDir, baseName);
+    const QString destPath = findUniqueAlgorithmPath(destDir, baseName, m_registry);
     if (destPath.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "Could not find unique filename for duplicate:" << baseName;
         Q_EMIT algorithmOperationFailed(
@@ -680,7 +702,7 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
         dir.mkpath(QStringLiteral("."));
     }
 
-    const QString destPath = findUniqueAlgorithmPath(destDir, filename);
+    const QString destPath = findUniqueAlgorithmPath(destDir, filename, m_registry);
     if (destPath.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "Could not find unique filename for algorithm:" << filename
                                        << "— the bare name and all 999 numbered slots are taken";

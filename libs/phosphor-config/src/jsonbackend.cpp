@@ -960,6 +960,11 @@ void JsonBackend::clearDirty()
     d->dirty = false;
 }
 
+bool JsonBackend::isDirty() const
+{
+    return d->dirty;
+}
+
 void JsonBackend::replaceRoot(QJsonObject root)
 {
     Q_ASSERT_X(d->activeGroupCount == 0, "PhosphorConfig::JsonBackend::replaceRoot",

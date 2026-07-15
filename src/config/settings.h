@@ -1272,6 +1272,13 @@ public:
     /// so a snapshot of it carries pending edits whether or not Save was
     /// pressed.
     ///
+    /// The per-screen override and virtual-screen helpers can only stage into
+    /// the live root, so exportTo snapshots the root (and the backend's dirty
+    /// flag) before staging and restores both after taking the export
+    /// snapshot. That snapshot/restore is what keeps the export side-effect
+    /// free: without it the staged groups would sit in the live root and be
+    /// committed by a later sync() or the backend's flush-on-destruction.
+    ///
     /// Returns false if the write fails, or if the backend is not JSON-backed
     /// (exports are config.json documents).
     bool exportTo(const QString& filePath);

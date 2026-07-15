@@ -802,6 +802,7 @@ Q_SIGNALS:
     void zoneRemoved(const QString& zoneId);
 
     void layoutSaved();
+    void layoutExported();
     void layoutLoadFailed(const QString& error);
     void layoutSaveFailed(const QString& error);
     void shaderPresetLoadFailed(const QString& error);

@@ -3466,11 +3466,15 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     //     (three declare it so, theater omits it and takes the default), so
     //     before this gate all four were min-size corrected despite opting out.
     //
-    // minSizes is populated iff respectMin (see above). The early return at the
-    // top guards tiledCount, not windowCount, which is tiledCount capped by
-    // effectiveMaxWindows and so can still be 0. That costs nothing here: a
-    // zero windowCount yields empty zones, which pass the equality check above
-    // and leave this block a no-op.
+    // minSizes is populated iff respectMin (see above). windowCount is
+    // tiledCount (>= 1 past the early return at the top) capped by
+    // effectiveMaxWindows, and every source feeding that cap is clamped to
+    // MinMaxWindows or above (the settings-schema validator on the global
+    // setting, perAlgoFromVariantMap on per-algorithm entries,
+    // AutotileConfig::fromJson, and the algorithms' defaultMaxWindows), so a
+    // zero windowCount is not reachable here. It is a pure backstop anyway:
+    // a zero windowCount yields empty zones, which pass the equality check
+    // above and leave this block a no-op.
     if (respectMin && algo->supportsMinSizes() && !algo->producesOverlappingZones()) {
         const int threshold = effectiveInnerGap(screenId) + PhosphorTiles::AutotileDefaults::GapEdgeThresholdPx;
         const QVector<QRect> preEnforceZones = zones;

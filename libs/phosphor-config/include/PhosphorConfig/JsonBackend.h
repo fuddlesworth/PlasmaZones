@@ -153,6 +153,12 @@ public:
     /// that commits snapshots off-thread.
     void clearDirty();
 
+    /// Whether the in-memory document carries changes that have not been
+    /// committed to disk. Pairs with @c clearDirty() for callers that
+    /// snapshot/restore the root (see @c jsonRootSnapshot / @c replaceRoot)
+    /// and need to put the flag back the way they found it.
+    bool isDirty() const;
+
     /// Replace the in-memory document with @p root. Marks the backend
     /// dirty — callers who paired this with a successful
     /// @c writeJsonAtomically may call @c clearDirty() immediately after

@@ -80,7 +80,11 @@ Rectangle {
 
     // Layout properties
     Layout.preferredWidth: propertyPanel.panelShown ? 280 : 0
-    Layout.maximumWidth: propertyPanel.panelShown ? 280 : 0
+    // The animated preferredWidth is the clamp. Binding maximumWidth to the
+    // panelShown predicate directly snapped it to 0 in the same pass that
+    // started the slide, so the layout collapsed the cell instantly and
+    // panel.slideOut animated a zero-width item nobody could see.
+    Layout.maximumWidth: propertyPanel.Layout.preferredWidth
     Layout.minimumWidth: 0
     Layout.fillHeight: true
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
@@ -791,6 +795,14 @@ Rectangle {
                 // Handle validation errors and selection changes
                 Connections {
                     function onSelectedZoneIdChanged() {
+                        // Guard here rather than in `enabled`: gating enabled on
+                        // selectedZoneId races this very signal (the binding
+                        // update and the handler invocation ride the same
+                        // notification), so the ""-to-id transition could be
+                        // skipped entirely.
+                        if (selectedZoneId === "")
+                            return;
+
                         // Re-sync every editable control imperatively: their
                         // declarative bindings die on the first user edit (QQC2)
                         // or imperative sync, after which a selection change
@@ -822,7 +834,7 @@ Rectangle {
                     }
 
                     target: editorController
-                    enabled: editorController !== null && selectedZoneId !== ""
+                    enabled: editorController !== null
                 }
             }
         }

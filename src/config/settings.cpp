@@ -548,15 +548,31 @@ bool Settings::exportTo(const QString& filePath)
 
     // Store-backed groups persist through their setters on every write, so the
     // backend's in-memory root already carries whatever the user currently has,
-    // saved or not. The non-Store groups only reach it during save(), so write
-    // them in as well. These writes land in memory only.
+    // saved or not. The non-Store groups (per-screen overrides, virtual screen
+    // configs) only reach it during save(), so write them in as well. The
+    // helpers can only stage into the LIVE root, and anything left there would
+    // be committed by a later sync() or the backend's flush-on-destruction.
+    // So: snapshot the root and dirty flag first, stage, take the export
+    // snapshot, then restore both — the staged groups reach the export
+    // document only, never the live config.
+    const QJsonObject liveRoot = json->jsonRootSnapshot();
+    const bool wasDirty = json->isDirty();
+
     saveAllPerScreenOverrides(m_configBackend);
     saveVirtualScreenConfigs(m_configBackend);
+    const QJsonObject exportRoot = json->jsonRootSnapshot();
+
+    json->replaceRoot(liveRoot);
+    if (!wasDirty) {
+        // replaceRoot marks dirty as a precaution; the root we put back is
+        // exactly the one that matched disk, so restore the clean state.
+        json->clearDirty();
+    }
 
     // Deliberately no sync() and no captureBaseline(). Exporting must not
     // commit pending edits to the live config, and must not move the baseline
     // that per-page Discard reverts to.
-    return PhosphorConfig::JsonBackend::writeJsonAtomically(filePath, json->jsonRootSnapshot());
+    return PhosphorConfig::JsonBackend::writeJsonAtomically(filePath, exportRoot);
 }
 
 // ── Per-page reset / discard support ────────────────────────────────────────

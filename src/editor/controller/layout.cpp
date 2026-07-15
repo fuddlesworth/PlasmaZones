@@ -950,7 +950,7 @@ void EditorController::importLayout(const QString& filePath)
  * @param filePath Path where the JSON file should be saved
  *
  * Calls the D-Bus exportLayout method to save the current layout to a file.
- * Emits layoutSaveFailed if the export fails.
+ * Emits layoutExported on success and layoutSaveFailed if the export fails.
  */
 void EditorController::exportLayout(const QString& filePath)
 {
@@ -984,7 +984,7 @@ void EditorController::exportLayout(const QString& filePath)
         return;
     }
 
-    Q_EMIT layoutSaved();
+    Q_EMIT layoutExported();
 }
 
 } // namespace PlasmaZones

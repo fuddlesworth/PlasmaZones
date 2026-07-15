@@ -61,20 +61,15 @@ QString LayoutAdaptor::importLayout(const QString& filePath)
         return QString();
     }
 
-    // Ask the registry whether the import landed rather than inferring it from
-    // the layout count: a count that did not grow cannot say why, and the
-    // caller needs the difference between "not a layout file" and "it worked".
-    if (!m_layoutManager->importLayout(filePath)) {
+    // The registry hands back the imported layout itself, so the new ID comes
+    // straight from it. Deriving it from layouts().last() encoded an
+    // append-order assumption nothing in the registry enforces.
+    PhosphorZones::Layout* newLayout = m_layoutManager->importLayout(filePath);
+    if (!newLayout) {
         qCWarning(lcDbusLayout) << "Failed to import layout from" << filePath;
         return QString();
     }
 
-    const auto layouts = m_layoutManager->layouts();
-    if (layouts.isEmpty()) {
-        qCWarning(lcDbusLayout) << "importLayout reported success but the registry is empty:" << filePath;
-        return QString();
-    }
-    PhosphorZones::Layout* newLayout = layouts.last();
     qCInfo(lcDbusLayout) << "Imported layout from" << filePath << "with ID" << newLayout->id();
     const QString newId = newLayout->id().toString();
     Q_EMIT layoutCreated(newId);

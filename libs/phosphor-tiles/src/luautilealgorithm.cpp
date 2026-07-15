@@ -27,6 +27,25 @@ using namespace AutotileDefaults;
 
 namespace {
 
+// Numeric-metatype plus finiteness gate for untrusted script metadata values.
+// A non-numeric Luau value (table, bool) marshals to a QVariant whose
+// toDouble() is a finite 0.0, so an isValid()+isfinite check alone would let
+// it silently overwrite a declared default. Shared by parseCustomParam
+// (min/max bounds) and parseMetadata (reals and window counts).
+bool finiteNumber(const QVariantMap& m, const QString& key, double& out)
+{
+    const QVariant v = m.value(key);
+    if (!v.isValid() || !AutotileDefaults::isNumericMetaType(v.typeId())) {
+        return false;
+    }
+    const double d = v.toDouble();
+    if (!std::isfinite(d)) {
+        return false;
+    }
+    out = d;
+    return true;
+}
+
 ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
 {
     ScriptedHelpers::CustomParamDef d;
@@ -34,18 +53,19 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     d.type = m.value(QStringLiteral("type")).toString();
     d.defaultValue = m.value(QStringLiteral("default"));
     d.description = m.value(QStringLiteral("description")).toString();
-    // A non-finite bound (a script writing 0/0 or math.huge) must not reach the
-    // normalisation below: every NaN comparison is false, so the swap silently
-    // does nothing and the NaN survives into minValue/maxValue, which
-    // toVariantMap() hands to the settings slider as its range. Keep the
-    // default bound instead, as resolveReal() does for the metadata reals.
-    const QVariant minV = m.value(QStringLiteral("min"));
-    const QVariant maxV = m.value(QStringLiteral("max"));
-    if (minV.isValid() && std::isfinite(minV.toDouble())) {
-        d.minValue = minV.toDouble();
+    // A non-numeric or non-finite bound (a script writing min = {} or 0/0 or
+    // math.huge) must not reach the normalisation below: a table/bool marshals
+    // to a finite 0.0 that would replace the default bound, and every NaN
+    // comparison is false, so the swap silently does nothing and the NaN
+    // survives into minValue/maxValue, which toVariantMap() hands to the
+    // settings slider as its range. Keep the default bound instead, as
+    // resolveReal() does for the metadata reals.
+    double bound = 0.0;
+    if (finiteNumber(m, QStringLiteral("min"), bound)) {
+        d.minValue = bound;
     }
-    if (maxV.isValid() && std::isfinite(maxV.toDouble())) {
-        d.maxValue = maxV.toDouble();
+    if (finiteNumber(m, QStringLiteral("max"), bound)) {
+        d.maxValue = bound;
     }
     // Guarantee a non-inverted range for the settings UI even when a script
     // supplies only one bound (the other keeps its default): an inverted
@@ -76,23 +96,12 @@ ScriptedHelpers::ScriptMetadata parseMetadata(const QVariantMap& m)
     // unusable number lands as a plausible answer the script never gave:
     // `masterZoneIndex = 0/0` comes out as 0, passes the clamp, and the
     // exported accessor reports "zone 0 is the master". Keep the declared
-    // default instead, the same way parseCustomParam guards its bounds and
-    // resolveInt guards the override path.
-    const auto finiteNumber = [&m](const QString& key, double& out) -> bool {
-        const QVariant v = m.value(key);
-        if (!v.isValid() || !AutotileDefaults::isNumericMetaType(v.typeId())) {
-            return false;
-        }
-        const double d = v.toDouble();
-        if (!std::isfinite(d)) {
-            return false;
-        }
-        out = d;
-        return true;
-    };
-    const auto readInt = [&finiteNumber](const QString& key, int& field) {
+    // default instead (via the shared finiteNumber gate above), the same way
+    // parseCustomParam guards its bounds and resolveInt guards the override
+    // path.
+    const auto readInt = [&m](const QString& key, int& field) {
         double d = 0.0;
-        if (finiteNumber(key, d) && d >= std::numeric_limits<int>::min() && d <= std::numeric_limits<int>::max()) {
+        if (finiteNumber(m, key, d) && d >= std::numeric_limits<int>::min() && d <= std::numeric_limits<int>::max()) {
             field = static_cast<int>(d);
         }
     };
@@ -112,7 +121,7 @@ ScriptedHelpers::ScriptMetadata parseMetadata(const QVariantMap& m)
         md.supportsMinSizes = m.value(QStringLiteral("supportsMinSizes")).toBool();
     }
     double ratio = 0.0;
-    if (finiteNumber(QStringLiteral("defaultSplitRatio"), ratio)) {
+    if (finiteNumber(m, QStringLiteral("defaultSplitRatio"), ratio)) {
         md.defaultSplitRatio = ratio;
     }
     readInt(QStringLiteral("defaultMaxWindows"), md.defaultMaxWindows);

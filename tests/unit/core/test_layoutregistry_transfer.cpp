@@ -15,7 +15,6 @@
 #include <QTest>
 #include <QDir>
 #include <QFile>
-#include <QScopedPointer>
 #include <memory>
 
 #include <PhosphorZones/Layout.h>
@@ -77,7 +76,7 @@ private Q_SLOTS:
         QVERIFY(registry->exportLayout(layout, dest));
         QVERIFY(QFile::exists(dest));
 
-        QVERIFY(registry->importLayout(dest));
+        QVERIFY(registry->importLayout(dest) != nullptr);
     }
 
     // Export answers false rather than reporting a success the caller then
@@ -119,39 +118,41 @@ private Q_SLOTS:
         QVERIFY(written.contains("Replacement"));
     }
 
-    // Every rejection the registry can name reports false. Each of these was a
-    // bare `return` that the adaptor could only see as "the count did not grow".
+    // Every rejection the registry can name answers nullptr. Each of these was
+    // a bare `return` that the adaptor could only see as "the count did not
+    // grow". One row per scenario, so an early failure cannot hide the rest.
+    void importReportsFailureForEveryRejection_data()
+    {
+        QTest::addColumn<QString>("fileName");
+        QTest::addColumn<bool>("createFile");
+        QTest::addColumn<QByteArray>("content");
+
+        QTest::newRow("empty path") << QString() << false << QByteArray();
+        QTest::newRow("missing file") << QStringLiteral("does-not-exist.json") << false << QByteArray();
+        QTest::newRow("empty file") << QStringLiteral("empty.json") << true << QByteArray();
+        QTest::newRow("non-JSON") << QStringLiteral("not.json") << true << QByteArrayLiteral("this is not json at all");
+        // Valid JSON that is not a layout: parses, then fails schema validation.
+        QTest::newRow("non-layout JSON") << QStringLiteral("notlayout.json") << true
+                                         << QByteArrayLiteral("{\"unrelated\":1}");
+    }
+
     void importReportsFailureForEveryRejection()
     {
+        QFETCH(QString, fileName);
+        QFETCH(bool, createFile);
+        QFETCH(QByteArray, content);
+
         QObject owner;
         auto* registry = createRegistry(&owner);
 
-        QVERIFY(!registry->importLayout(QString()));
-        QVERIFY(!registry->importLayout(tempPath(QStringLiteral("does-not-exist.json"))));
-
-        const QString empty = tempPath(QStringLiteral("empty.json"));
-        {
-            QFile f(empty);
+        const QString path = fileName.isEmpty() ? QString() : tempPath(fileName);
+        if (createFile) {
+            QFile f(path);
             QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(content);
         }
-        QVERIFY(!registry->importLayout(empty));
 
-        const QString notJson = tempPath(QStringLiteral("not.json"));
-        {
-            QFile f(notJson);
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write("this is not json at all");
-        }
-        QVERIFY(!registry->importLayout(notJson));
-
-        // Valid JSON that is not a layout: parses, then fails schema validation.
-        const QString notLayout = tempPath(QStringLiteral("notlayout.json"));
-        {
-            QFile f(notLayout);
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write("{\"unrelated\":1}");
-        }
-        QVERIFY(!registry->importLayout(notLayout));
+        QVERIFY(registry->importLayout(path) == nullptr);
     }
 };
 

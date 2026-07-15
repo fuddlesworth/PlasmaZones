@@ -166,19 +166,21 @@ public:
 
     /// Load a layout from @p filePath and add it to the registry.
     ///
-    /// Returns false when the file is missing, unreadable, empty, not JSON,
-    /// fails schema validation, or does not parse into a layout. The reason is
-    /// logged. Both of these report through the return value rather than a
-    /// signal because their D-Bus callers answer a user who is waiting on the
-    /// result of a file picker, and every one of these branches used to be a
-    /// silent early return.
-    Q_INVOKABLE bool importLayout(const QString& filePath);
+    /// Returns the imported layout, so callers can name what was imported
+    /// without guessing at registry order. Returns nullptr when the file is
+    /// missing, unreadable, empty, not JSON, fails schema validation, or does
+    /// not parse into a layout. The reason is logged. Failures report through
+    /// the return value rather than a signal because the D-Bus caller answers
+    /// a user who is waiting on the result of a file picker, and every one of
+    /// these branches used to be a silent early return.
+    Q_INVOKABLE Layout* importLayout(const QString& filePath);
 
     /// Write @p layout to @p filePath as a standalone layout document.
     ///
     /// Returns false when the destination cannot be opened, written or
-    /// committed. The write is atomic, so a failure leaves whatever was already
-    /// at the destination untouched.
+    /// committed. Failures report through the return value for the same
+    /// file-picker reason as importLayout(). The write is atomic, so a failure
+    /// leaves whatever was already at the destination untouched.
     Q_INVOKABLE bool exportLayout(Layout* layout, const QString& filePath);
 
     // ─── Assignment persistence (via config backend) ──────────────────────

@@ -27,9 +27,6 @@ Kirigami.Dialog {
     // Set for the duration of a create, so the button and the Return key
     // cannot both land a second createNewLayout call.
     property bool _creating: false
-    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
-    readonly property color _subtleBg: _colors.subtleBg
-    readonly property color _accentBorder: _colors.accentBorder
     // Match the monitor's aspect ratio for the preview, clamped to [1.0, 3.6]
     // so an extreme ratio (e.g. 32:9) keeps the preview usable.
     // Read through the content Item rather than this root. `Screen` on a Popup
@@ -331,28 +328,8 @@ Kirigami.Dialog {
                 spacing: Kirigami.Units.largeSpacing
 
                 // Landscape preview matching monitor aspect ratio
-                Rectangle {
-                    // Let the column size this and cap it, rather than reading
-                    // parent.width upward: a layout child asking its parent how
-                    // wide it is asks the question the parent is still
-                    // answering. The height follows the width the layout
-                    // actually assigned.
-                    //
-                    // The 12-grid-unit height ceiling is folded into the width
-                    // cap rather than set as its own Layout.maximumHeight. A
-                    // standalone height cap overrides preferredHeight and
-                    // reshapes the box to whatever ratio the two caps form,
-                    // which discarded the monitor ratio on every display
-                    // narrower than 26:12. Capping width by the ratio holds the
-                    // same ceiling while keeping the box on-ratio.
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 26, Kirigami.Units.gridUnit * 12 * root.screenAspectRatio)
-                    Layout.preferredHeight: width / root.screenAspectRatio
-                    Layout.alignment: Qt.AlignHCenter
-                    radius: Kirigami.Units.smallSpacing * 2
-                    color: root._subtleBg
-                    border.width: Math.round(Screen.devicePixelRatio)
-                    border.color: root._accentBorder
+                WizardPreviewFrame {
+                    aspectRatio: root.screenAspectRatio
 
                     QFZCommon.ZonePreview {
                         anchors.fill: parent
@@ -425,8 +402,12 @@ Kirigami.Dialog {
                         //
                         // selectedAspectRatio starts at -1 for "not chosen",
                         // which createNewLayout reads as "skip the call" and
-                        // leaves the daemon's own Any default. Picking Any
-                        // explicitly writes 0, which lands in the same place.
+                        // leaves the daemon's own Any default. Clicking Any
+                        // never actually writes 0: the group already displays
+                        // index 0 (the Math.max below clamps -1 to 0), so its
+                        // same-index click guard swallows the click and
+                        // selectedAspectRatio stays -1. The daemon default is
+                        // Any, so the net behavior is the same either way.
                         SettingsButtonGroup {
                             model: [i18n("Any"), "16:9", "21:9", "32:9", i18n("Portrait")]
                             currentIndex: Math.max(0, root.selectedAspectRatio)

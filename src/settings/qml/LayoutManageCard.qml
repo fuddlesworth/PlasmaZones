@@ -97,6 +97,14 @@ SettingsCard {
                 Menu {
                     id: importMenu
 
+                    // hasKZonesConfig() is a non-reactive Q_INVOKABLE, so a
+                    // plain `enabled:` binding samples it once at creation.
+                    // Refresh the cached value each time the menu opens,
+                    // mirroring LayoutFilterBar's _refreshHasPriorityOrder.
+                    property bool _hasKZonesConfig: false
+
+                    onAboutToShow: importMenu._hasKZonesConfig = settingsController.hasKZonesConfig()
+
                     MenuItem {
                         text: i18n("Import Layout File…")
                         icon.name: "document-open"
@@ -108,7 +116,7 @@ SettingsCard {
                     MenuItem {
                         text: i18n("Import from KZones")
                         icon.name: "document-import"
-                        enabled: settingsController.hasKZonesConfig()
+                        enabled: importMenu._hasKZonesConfig
                         onTriggered: root.requestImportFromKZones()
                     }
 

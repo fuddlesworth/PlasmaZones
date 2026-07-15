@@ -37,9 +37,11 @@ Kirigami.Dialog {
         perSideLeftSpin.value = root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft;
         perSideRightSpin.value = root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight;
         fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
-        // aspectRatioCombo is left alone on purpose: its `currentIndex` binding
-        // already reads editorController.aspectRatioClass, and assigning here
-        // would sever that binding for the rest of the dialog's life.
+        // aspectRatioCombo's declarative `currentIndex` binding dies the first
+        // time the user activates the combo (QQC2), so this imperative re-sync
+        // is load-bearing: without it the persistent dialog shows a stale class
+        // on reopen after a layout switch. Same pattern as overlayDisplayModeCombo.
+        aspectRatioCombo.currentIndex = Math.max(0, Math.min(root.editorController.aspectRatioClass, aspectRatioCombo.count - 1));
         overlayDisplayModeOverrideCheck.checked = root.editorController.hasOverlayDisplayModeOverride;
         overlayDisplayModeCombo.currentIndex = Math.max(0, Math.min(root.editorController.hasOverlayDisplayModeOverride ? root.editorController.overlayDisplayMode : root.editorController.globalOverlayDisplayMode, 1));
     }
@@ -86,6 +88,12 @@ Kirigami.Dialog {
         function onGlobalOverlayDisplayModeChanged() {
             if (!root.editorController.hasOverlayDisplayModeOverride)
                 overlayDisplayModeCombo.currentIndex = Math.max(0, Math.min(root.editorController.globalOverlayDisplayMode, 1));
+        }
+
+        function onAspectRatioClassChanged() {
+            // The combo's declarative binding is severed on first user
+            // activation (QQC2), so layout switches/loads must re-sync it here.
+            aspectRatioCombo.currentIndex = Math.max(0, Math.min(root.editorController.aspectRatioClass, aspectRatioCombo.count - 1));
         }
 
         function onUseFullScreenGeometryChanged() {

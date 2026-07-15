@@ -438,6 +438,7 @@ qt_add_qml_module(plasmazones-settings
         qml/WizardTemplateCard.qml
         qml/WizardPreviewBadge.qml
         qml/WizardConfigCard.qml
+        qml/WizardPreviewFrame.qml
         qml/WizardUtils.js
     NO_PLUGIN
 )

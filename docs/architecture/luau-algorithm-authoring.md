@@ -307,11 +307,11 @@ resize = {
 
 Return a table (or `nil` to do nothing). Two optional, independent outputs:
 
-- **`splitRatio`** — a new master/split ratio the engine applies (clamped).
+- **`splitRatio`**: a new master/split ratio the engine applies (clamped).
   This is how ratio-based layouts reflow on resize, and the change stays local
   to the current screen, desktop, and activity. `pluau.masterStackResize(state,
   resize, horizontal)` implements the standard master/stack case.
-- **Any other keys** — persisted as the new `ctx.state` table, but only when
+- **Any other keys**: persisted as the new `ctx.state` table, but only when
   `metadata.supportsScriptState = true`. On the next `tile` run, `ctx.state`
   holds what you returned, sanitized: non-finite numbers are dropped, nesting
   past 16 levels is trimmed away, as is everything past 4096 keys counted
