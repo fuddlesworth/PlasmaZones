@@ -556,7 +556,6 @@ add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
 add_executable(test_zone_preview_highlight ui/test_zone_preview_highlight.cpp)
 target_link_libraries(test_zone_preview_highlight PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
 add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)
-set_tests_properties(test_zone_preview_highlight PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # Pins the C++/QML contract the zone selector's cursor hit test depends on:
 # zone delegates discoverable by objectName, exposing their model index, with
@@ -565,7 +564,6 @@ set_tests_properties(test_zone_preview_highlight PROPERTIES ENVIRONMENT "QT_QPA_
 add_executable(test_zone_selector_hit_geometry ui/test_zone_selector_hit_geometry.cpp)
 target_link_libraries(test_zone_selector_hit_geometry PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
 add_test(NAME test_zone_selector_hit_geometry COMMAND test_zone_selector_hit_geometry)
-set_tests_properties(test_zone_selector_hit_geometry PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 add_executable(test_surface_shader_item ui/test_surface_shader_item.cpp)
 target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)

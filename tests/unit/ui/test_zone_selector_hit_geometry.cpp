@@ -3,6 +3,7 @@
 
 #include <QGuiApplication>
 #include <QHash>
+#include <QList>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -11,6 +12,8 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QVector>
+#include <algorithm>
+#include <utility>
 
 #include <QtPlugin>
 
@@ -40,6 +43,12 @@ private:
     // The zone selector's card metrics (ZoneSelectorContent / zoneselectorlayout.h).
     static constexpr qreal kPreviewWidth = 180;
     static constexpr qreal kPreviewHeight = 101;
+    /// Card chrome around the preview, mirroring ZoneSelectorContent's cell:
+    /// width = indicatorWidth + cardSidePadding * 2, height = indicatorHeight +
+    /// labelSpace + cardPadding.
+    static constexpr qreal kCardSidePadding = 18;
+    static constexpr qreal kCardLabelSpace = 28;
+    static constexpr qreal kCardPadding = 18;
 
     /// The objectName selector.cpp searches for. Hardcoded rather than shared
     /// with the C++ side on purpose: this test's job is to fail if either end
@@ -83,7 +92,7 @@ private:
     /// Build a LayoutCard for a layout tagged `aspectRatioClass`, force a layout
     /// pass, and return each zone's rendered rect keyed by its model index —
     /// exactly what updateSelectorPosition reads.
-    QHash<int, QRectF> renderedZoneRects(const QString& aspectRatioClass, QQuickItem** cardOut = nullptr)
+    QHash<int, QRectF> renderedZoneRects(const QString& aspectRatioClass)
     {
         QQmlComponent component(&m_engine);
         component.setData(
@@ -113,16 +122,8 @@ private:
             qWarning() << "create failed:" << component.errorString();
             return rects;
         }
-        card->setWidth(kPreviewWidth + 36);
-        card->setHeight(kPreviewHeight + 46);
-        // Anchored/centred children only resolve once the item has been
-        // polished; without this every rect maps back to the origin.
-        card->polish();
-        QQuickItem* item = card;
-        while (item) {
-            item->polish();
-            item = item->parentItem();
-        }
+        card->setWidth(kPreviewWidth + kCardSidePadding * 2);
+        card->setHeight(kPreviewHeight + kCardLabelSpace + kCardPadding);
 
         QVector<QQuickItem*> zoneItems;
         collectByName(card, zoneObjectName(), zoneItems);
@@ -135,15 +136,59 @@ private:
             rects.insert(index, zoneItem->mapRectToItem(card, QRectF(0, 0, zoneItem->width(), zoneItem->height())));
         }
 
-        if (cardOut) {
-            *cardOut = card;
-        } else {
-            delete card;
-        }
+        delete card;
         return rects;
     }
 
 private Q_SLOTS:
+    /// updateSelectorPosition identifies each layout card by reading `index` off
+    /// the GridLayout's children, and relies on the Repeater itself dropping out
+    /// because it carries no such property. If reading `index` off a delegate
+    /// ever stops working, the selector finds zero cards and nothing highlights
+    /// at all, so the mechanism is pinned here on a mirror of
+    /// ZoneSelectorContent's card delegate.
+    void testCardDelegatesExposeModelIndexAndRepeaterDoesNot()
+    {
+        QQmlComponent component(&m_engine);
+        component.setData(
+            "import QtQuick\n"
+            "import QtQuick.Layouts\n"
+            "GridLayout {\n"
+            "    columns: 2\n"
+            "    Repeater {\n"
+            "        model: 3\n"
+            "        delegate: Item {\n"
+            "            required property int index\n"
+            "            implicitWidth: 40\n"
+            "            implicitHeight: 20\n"
+            "        }\n"
+            "    }\n"
+            "}\n",
+            QUrl(QStringLiteral("qrc:/test_card_index.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+        auto* grid = qobject_cast<QQuickItem*>(component.create());
+        QVERIFY(grid);
+
+        QList<int> indices;
+        int childrenWithoutIndex = 0;
+        const auto kids = grid->childItems();
+        for (QQuickItem* kid : kids) {
+            bool ok = false;
+            const int index = kid->property("index").toInt(&ok);
+            if (ok) {
+                indices.append(index);
+            } else {
+                ++childrenWithoutIndex;
+            }
+        }
+        std::sort(indices.begin(), indices.end());
+
+        QCOMPARE(indices, QList<int>({0, 1, 2}));
+        QVERIFY2(childrenWithoutIndex >= 1, "expected the Repeater itself to expose no model index");
+        delete grid;
+    }
+
     /// The delegates must be findable by objectName and expose their model
     /// index. Without both, selector.cpp's traversal silently finds nothing and
     /// no zone ever highlights.

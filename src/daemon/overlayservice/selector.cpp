@@ -18,17 +18,33 @@
 #include "../../core/zoneselectorlayout.h"
 #include "../config/configdefaults.h"
 #include <QCursor>
+#include <QHash>
 #include <QScreen>
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
 #include <QVector>
+#include <algorithm>
+#include <utility>
 
 #include <PhosphorLayer/Surface.h>
 #include "phosphor_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
+
+namespace {
+
+/// A layout card the QML layout pass has positioned, as read back from the
+/// scene graph. `rect` is in the zone-selector slot's coordinates, matching the
+/// cursor coordinates updateSelectorPosition hit-tests with.
+struct LaidOutCard
+{
+    QQuickItem* item = nullptr;
+    QRectF rect;
+};
+
+} // namespace
 
 void OverlayService::showZoneSelector(const QString& targetScreenId)
 {
@@ -238,21 +254,26 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             return;
         }
 
-        // Per-cell actual positions, populated from the GridLayout's child
-        // items in declaration order. Computing positions from
-        // (cellWidth + indicatorSpacing) is wrong: when the GridLayout's
-        // explicit width (= scrollContentWidth, sized for `gridColumns`
-        // columns) exceeds the natural content width (when fewer cards than
-        // gridColumns are populated), Qt distributes the slack across the
-        // populated columns. Cards 1..N-1 then drift further right than the
-        // C++ math predicts, with cumulative error per card. Reading
-        // mapRectToItem on each cell is the only way to track this exactly.
-        QVector<QRectF> cellRectsInWindow;
-        cellRectsInWindow.reserve(layouts.size());
-        // Kept index-aligned with cellRectsInWindow: the per-zone hit test below
-        // descends into the matched cell to read its zone delegates.
-        QVector<QQuickItem*> cellItems;
-        cellItems.reserve(layouts.size());
+        // Where QML actually rendered each card, keyed by the delegate's model
+        // index. Computing positions from (cellWidth + indicatorSpacing) is
+        // wrong: when the GridLayout's explicit width (= scrollContentWidth,
+        // sized for `gridColumns` columns) exceeds the natural content width
+        // (when fewer cards than gridColumns are populated), Qt distributes the
+        // slack across the populated columns. Cards 1..N-1 then drift further
+        // right than the C++ math predicts, with cumulative error per card.
+        // Reading mapRectToItem on each cell is the only way to track this
+        // exactly.
+        //
+        // Keyed by each delegate's own `index` rather than by traversal
+        // position: the grid's children are the Repeater plus its delegates, so
+        // a positional walk has to guess which children are cards, and any
+        // delegate the layout pass has not sized yet would shift every
+        // subsequent card onto the wrong entry in `layouts` — selecting a zone
+        // from one layout while recording another layout's id. Reading `index`
+        // removes the guess. The Repeater itself carries no `index` and drops
+        // out for free.
+        QHash<int, LaidOutCard> cards;
+        cards.reserve(layouts.size());
 
         // Walk the slot subtree (the shell's contentItem hosts multiple
         // sibling slot Items; rooting traversal at the zone-selector slot
@@ -264,22 +285,26 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 if (!cell) {
                     continue;
                 }
-                if (cell->width() <= 0 || cell->height() <= 0) {
+                bool indexOk = false;
+                const int cardIndex = cell->property("index").toInt(&indexOk);
+                if (!indexOk || cardIndex < 0 || cardIndex >= layouts.size()) {
                     continue;
                 }
-                cellRectsInWindow.append(cell->mapRectToItem(contentRoot, QRectF(0, 0, cell->width(), cell->height())));
-                cellItems.append(cell);
-                if (cellRectsInWindow.size() >= layouts.size()) {
-                    break;
-                }
+                cards.insert(
+                    cardIndex,
+                    LaidOutCard{cell, cell->mapRectToItem(contentRoot, QRectF(0, 0, cell->width(), cell->height()))});
             }
         }
 
         if (farMoved && lcOverlay().isDebugEnabled()) {
-            qCDebug(lcOverlay) << "selector cards:" << cellRectsInWindow.size() << "laid out of" << layouts.size();
-            const int dumped = std::min<int>(cellRectsInWindow.size(), 8);
-            for (int k = 0; k < dumped; ++k) {
-                qCDebug(lcOverlay) << "  cell[" << k << "]" << cellRectsInWindow.at(k);
+            qCDebug(lcOverlay) << "selector cards:" << cards.size() << "laid out of" << layouts.size();
+            for (int k = 0; k < std::min<int>(layouts.size(), 8); ++k) {
+                const auto dumpIt = cards.constFind(k);
+                if (dumpIt == cards.constEnd()) {
+                    qCDebug(lcOverlay) << "  card[" << k << "] not laid out";
+                } else {
+                    qCDebug(lcOverlay) << "  card[" << k << "]" << dumpIt->rect;
+                }
             }
         }
 
@@ -291,17 +316,13 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             // cardTopMargin are constants pinned to Kirigami.Units.gridUnit,
             // which tracks the user's font metrics and is not always the 18 they
             // hardcode, and the GridLayout redistributes slack across populated
-            // columns (see the cell walk above). Before the first layout pass
+            // columns (see the card walk above). Before the first layout pass
             // nothing is painted, so there is correctly nothing to select.
-            if (i >= cellRectsInWindow.size()) {
-                break;
+            const auto cardIt = cards.constFind(i);
+            if (cardIt == cards.constEnd()) {
+                continue;
             }
-            const QRectF& cellRect = cellRectsInWindow.at(i);
-
-            if (farMoved && lcOverlay().isDebugEnabled()) {
-                qCDebug(lcOverlay) << "  card[" << i << "]"
-                                   << "cellRect=" << cellRect << "containsCursor=" << cellRect.contains(localX, localY);
-            }
+            const QRectF& cellRect = cardIt->rect;
 
             if (cellRect.contains(localX, localY)) {
                 QVariantMap layoutMap = layouts[i].toMap();
@@ -335,23 +356,23 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 // reads mapRectToItem instead of predicting cell origins.
                 QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
 
-                // Keyed by the delegate's model index rather than traversal
-                // order: childItems() is z-sorted, and the hover scale in
-                // ZonePreview restacks the delegate under the cursor.
+                // Keyed by each delegate's own `index`, for the same reason the
+                // card walk above is: collectQmlItemsByName descends the whole
+                // card subtree, so the order it returns is an artifact of that
+                // traversal rather than model order.
                 QHash<int, QRectF> zoneRectsInWindow;
-                if (i < cellItems.size()) {
-                    QVector<QQuickItem*> zoneItems;
-                    collectQmlItemsByName(cellItems.at(i), QStringLiteral("zonePreviewZone"), zoneItems);
-                    for (QQuickItem* zoneItem : std::as_const(zoneItems)) {
-                        bool indexOk = false;
-                        const int zoneIndex = zoneItem->property("index").toInt(&indexOk);
-                        if (!indexOk || zoneIndex < 0) {
-                            continue;
-                        }
-                        zoneRectsInWindow.insert(
-                            zoneIndex,
-                            zoneItem->mapRectToItem(contentRoot, QRectF(0, 0, zoneItem->width(), zoneItem->height())));
+                zoneRectsInWindow.reserve(zones.size());
+                QVector<QQuickItem*> zoneItems;
+                collectQmlItemsByName(cardIt->item, QStringLiteral("zonePreviewZone"), zoneItems);
+                for (QQuickItem* zoneItem : std::as_const(zoneItems)) {
+                    bool zoneIndexOk = false;
+                    const int zoneIndex = zoneItem->property("index").toInt(&zoneIndexOk);
+                    if (!zoneIndexOk || zoneIndex < 0) {
+                        continue;
                     }
+                    zoneRectsInWindow.insert(
+                        zoneIndex,
+                        zoneItem->mapRectToItem(contentRoot, QRectF(0, 0, zoneItem->width(), zoneItem->height())));
                 }
 
                 for (int z = 0; z < zones.size(); ++z) {
