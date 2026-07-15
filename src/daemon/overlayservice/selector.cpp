@@ -312,10 +312,10 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         // inside it are hit-tested precisely further down.
         for (int i = 0; i < layouts.size(); ++i) {
             // Only cards QML has actually laid out can be hit. Deriving a card
-            // box from layout math instead drifted twice over: cardSidePadding /
-            // cardTopMargin are constants pinned to Kirigami.Units.gridUnit,
-            // which tracks the user's font metrics and is not always the 18 they
-            // hardcode, and the GridLayout redistributes slack across populated
+            // box from layout math instead drifted twice over: LayoutCard offsets
+            // the preview from the card's top by Kirigami.Units.gridUnit, which
+            // tracks the user's font metrics rather than the 18 the C++ side used
+            // to hardcode, and the GridLayout redistributes slack across populated
             // columns (see the card walk above). Before the first layout pass
             // nothing is painted, so there is correctly nothing to select.
             const auto cardIt = cards.constFind(i);
@@ -360,8 +360,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 // card walk above is: collectQmlItemsByName descends the whole
                 // card subtree, so the order it returns is an artifact of that
                 // traversal rather than model order.
-                QHash<int, QRectF> zoneRectsInWindow;
-                zoneRectsInWindow.reserve(zones.size());
+                QHash<int, QRectF> zoneRectsInSlot;
+                zoneRectsInSlot.reserve(zones.size());
                 QVector<QQuickItem*> zoneItems;
                 collectQmlItemsByName(cardIt->item, QStringLiteral("zonePreviewZone"), zoneItems);
                 for (QQuickItem* zoneItem : std::as_const(zoneItems)) {
@@ -370,14 +370,14 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     if (!zoneIndexOk || zoneIndex < 0) {
                         continue;
                     }
-                    zoneRectsInWindow.insert(zoneIndex, mapVisibleRectToItem(zoneItem, contentRoot));
+                    zoneRectsInSlot.insert(zoneIndex, mapVisibleRectToItem(zoneItem, contentRoot));
                 }
 
                 for (int z = 0; z < zones.size(); ++z) {
                     // No delegate for this index means nothing is painted there
                     // yet (first frame not laid out). Nothing to highlight.
-                    const auto zoneRectIt = zoneRectsInWindow.constFind(z);
-                    if (zoneRectIt == zoneRectsInWindow.constEnd()) {
+                    const auto zoneRectIt = zoneRectsInSlot.constFind(z);
+                    if (zoneRectIt == zoneRectsInSlot.constEnd()) {
                         continue;
                     }
                     if (!zoneRectIt->contains(localX, localY)) {

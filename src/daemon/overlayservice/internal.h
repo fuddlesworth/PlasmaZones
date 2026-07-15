@@ -28,10 +28,10 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Shared helpers used by multiple overlayservice TUs
-// Pure helpers (writeQmlProperty, patchZonesWithHighlight, parseZonesJson,
-// ensureShaderTimerStarted, getAnchorsForPosition) are in overlay_helpers.h
-// so tests can include them without pulling in ConfigDefaults/ShaderRegistry.
+// Shared helpers used by multiple overlayservice TUs.
+// The pure helpers live in overlay_helpers.h so tests can include them without
+// pulling in ConfigDefaults/ShaderRegistry; they are listed at the bottom of
+// this file, where the one enumeration is kept.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Extracted label font/color settings from IZoneVisualizationSettings with fallback defaults.
@@ -339,8 +339,8 @@ inline void writeColorSettings(QObject* window, const IZoneVisualizationSettings
                      ov && ov->inactiveOpacity ? *ov->inactiveOpacity : settings->inactiveOpacity());
 }
 
-// patchZonesWithHighlight, parseZonesJson, ensureShaderTimerStarted, getAnchorsForPosition,
-// findQmlItemByName, collectQmlItemsByName, mapVisibleRectToItem
+// writeQmlProperty, patchZonesWithHighlight, parseZonesJson, ensureShaderTimerStarted,
+// getAnchorsForPosition, findQmlItemByName, collectQmlItemsByName, mapVisibleRectToItem
 // are defined in overlay_helpers.h (included above)
 
 } // namespace PlasmaZones

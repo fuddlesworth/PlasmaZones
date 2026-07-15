@@ -59,7 +59,7 @@ private:
     /// labelSpace + cardPadding.
     static constexpr qreal kCardSidePadding = 18;
     static constexpr qreal kCardLabelSpace = 28;
-    static constexpr qreal kCardPadding = 18;
+    static constexpr qreal kCardPadding = 26;
 
     /// The objectName selector.cpp searches for. Hardcoded rather than shared
     /// with the C++ side on purpose: this test's job is to fail if either end

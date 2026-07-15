@@ -30,7 +30,10 @@ struct ZoneSelectorLayout
     int labelHeight = 20;
     int labelSpace = 28;
     int cardPadding = 26; // Extra vertical space for card chrome (showCardBackground: true)
-    int cardTopMargin = 18; // Preview top offset within card (matches Kirigami.Units.gridUnit)
+    // No preview-top-offset field: LayoutCard anchors the preview at
+    // Kirigami.Units.gridUnit, which scales with the user's font metrics, so no
+    // C++ constant can state it. Nothing outside QML needs it — cards are
+    // hit-tested against their rendered geometry (selector.cpp).
     int cardSidePadding = 18; // Extra horizontal space for card chrome (matches paddingSide)
     int paddingSide = 18;
     int cellWidth = 0; // Full card cell width (indicatorWidth + cardSidePadding * 2)
