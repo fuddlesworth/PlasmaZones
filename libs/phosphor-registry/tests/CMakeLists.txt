@@ -117,8 +117,8 @@ phosphorregistry_add_test(test_phosphor_registry_manifest)
 phosphorregistry_add_test(test_phosphor_registry_pluginloader)
 # test_phosphor_registry_pluginloader_lifecycle holds the rescan-
 # reentry + destructor-pin slots, split out of the primary
-# pluginloader test TU to keep both files under the project's 800-line
-# cap. Both share tests/test_pluginloader_helpers.h for the
+# pluginloader test TU to keep both files under the project's 1000-line
+# guideline. Both share tests/test_pluginloader_helpers.h for the
 # WarningCapture + plugin-fixture install scaffolding.
 phosphorregistry_add_test(test_phosphor_registry_pluginloader_lifecycle)
 

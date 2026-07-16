@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Lifecycle implementation extracted from pipewireconnection.cpp to
-// keep that TU under the 800-line cap. Everything here is either:
+// keep that TU under the 1000-line guideline. Everything here is either:
 //
 //   - the loop-thread entry point (LoopThread::run),
 //   - the connect / disconnect state machine called on the loop thread

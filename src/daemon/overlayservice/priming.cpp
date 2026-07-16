@@ -5,7 +5,7 @@
 // fire-once frameSwapped-driven hide for newly-created surfaces so the
 // Vulkan swapchain + QML scene-graph have walked at least one frame
 // before the user-triggered show path takes over. Extracted here to
-// keep overlayservice.cpp under the project's <800-line cap.
+// keep overlayservice.cpp under the project's 1000-line guideline.
 
 #include "internal.h"
 #include "../overlayservice.h"

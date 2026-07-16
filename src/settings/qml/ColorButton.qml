@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
@@ -40,7 +39,7 @@ Rectangle {
         id: checkerboard
 
         anchors.fill: parent
-        anchors.margins: Math.round(Screen.devicePixelRatio)
+        anchors.margins: 1
         visible: root.color.a < 1
         // Repaint when visibility changes (color alpha changed)
         onVisibleChanged: {
@@ -64,8 +63,8 @@ Rectangle {
 
     Rectangle {
         anchors.fill: parent
-        anchors.margins: Math.round(Screen.devicePixelRatio)
-        radius: Math.max(0, parent.radius - Math.round(Screen.devicePixelRatio))
+        anchors.margins: 1
+        radius: Math.max(0, parent.radius - 1)
         color: root.color
     }
 }

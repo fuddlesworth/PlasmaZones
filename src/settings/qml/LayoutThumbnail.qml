@@ -28,8 +28,8 @@ Rectangle {
     property bool fontStrikeout: false
     readonly property real previewOpacity: 0.2 // Increased for better background contrast
     readonly property real borderOpacity: 0.9 // Increased for better border visibility
-    readonly property int normalBorderWidth: Math.round(Screen.devicePixelRatio)
-    readonly property int selectedBorderWidth: Math.round(Screen.devicePixelRatio * 2.5) // Thicker when selected
+    readonly property int normalBorderWidth: 1
+    readonly property int selectedBorderWidth: 3 // Thicker when selected
     // Override: set to a positive value to force the aspect ratio for the target screen
     // (e.g., a virtual screen that is portrait even though the primary display is landscape).
     property real screenAspectRatio: 0

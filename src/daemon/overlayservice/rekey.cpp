@@ -3,7 +3,7 @@
 
 // Overlay-key migration + screen geometry-watch + screen-state invariant
 // check. Extracted from overlay.cpp to keep that TU under the project's
-// <800-line cap. The three functions form a small cohesive cluster:
+// 1000-line guideline. The three functions form a small cohesive cluster:
 // rekeyOverlayState invokes installOverlayGeometryWatcher post-move, and
 // the debug-only validateScreenStateInvariant verifies the cross-side
 // pointer alignment that rekey is the primary risk-source for.

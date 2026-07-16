@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -86,7 +85,7 @@ RowLayout {
 
                 visible: stepIndicator.index < root.stepLabels.length - 1
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 3
-                Layout.preferredHeight: Math.round(Screen.devicePixelRatio * 2)
+                Layout.preferredHeight: 2
                 radius: height / 2
                 color: completed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
 

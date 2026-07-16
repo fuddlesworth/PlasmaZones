@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -59,7 +58,7 @@ Row {
 
                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04);
             }
-            border.width: optionDelegate.activeFocus ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
+            border.width: optionDelegate.activeFocus ? 2 : 1
             border.color: optionDelegate.activeFocus ? Kirigami.Theme.highlightColor : isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
             Accessible.role: Accessible.RadioButton
             Accessible.name: optionDelegate.modelData

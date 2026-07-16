@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Decoration TEARDOWN, split out of decorations.cpp to keep that file under the
-// 800-line limit. Every path that takes a decoration away lives here: the single
+// 1000-line guideline. Every path that takes a decoration away lives here: the single
 // per-window remove, the two GL release halves it delegates to (both guarded
 // against tearing down state a live shader transition is still sampling), and the
 // bulk clear used on genuine teardown (daemon lost, effect unloaded).

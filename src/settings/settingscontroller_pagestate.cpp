@@ -9,8 +9,8 @@
 //   * begin/endExternalEdit — stack envelope so sidebar/global widgets mark
 //     the correct page dirty
 //
-// Split out of settingscontroller.cpp to keep that file under the 800-line
-// cap. Same class, separate TU, no API change.
+// Split out of settingscontroller.cpp to keep that file under the 1000-line
+// guideline. Same class, separate TU, no API change.
 
 #include "settingscontroller.h"
 

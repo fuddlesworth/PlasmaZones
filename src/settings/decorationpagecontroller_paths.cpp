@@ -4,7 +4,7 @@
 // DecorationPageController surface-taxonomy helper — the parentChain reader
 // that walks a decoration surface path to its ancestors for the inheritance
 // breadcrumb. Split out so decorationpagecontroller.cpp stays under the
-// project's 800-line cap. Same class, separate TU, no API change. (Card
+// project's 1000-line guideline. Same class, separate TU, no API change. (Card
 // labels live as i18n() strings in the QML page models, mirroring the
 // animation sub-pages — there is no C++ label accessor.)
 

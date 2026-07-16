@@ -3,7 +3,7 @@
 
 // Lifecycle / rescan re-entry tests for PluginLoader. Split out of
 // test_phosphor_registry_pluginloader.cpp so the primary TU stays
-// under the project's 800-line cap. Shares the plugin-fixture install
+// under the project's 1000-line guideline. Shares the plugin-fixture install
 // helpers and the WarningCapture instrumentation via
 // test_pluginloader_helpers.h — drift between the two binaries on
 // scaffolding behaviour is structurally impossible.

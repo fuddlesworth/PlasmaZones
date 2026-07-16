@@ -13,7 +13,7 @@
 // settingscontroller_lifecycle.cpp.
 //
 // Split out of settingscontroller_session.cpp to keep that file
-// under the 800-line cap. Same class, separate TU, no API change.
+// under the 1000-line guideline. Same class, separate TU, no API change.
 
 #include "settingscontroller.h"
 

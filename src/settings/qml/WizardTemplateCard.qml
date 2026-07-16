@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
@@ -64,7 +63,7 @@ Item {
         anchors.fill: parent
         radius: Kirigami.Units.smallSpacing * 2
         color: root.selected ? root._highlightBg : root.isHovered ? root._hoverBg : root._defaultBg
-        border.width: root.activeFocus ? Math.round(Screen.devicePixelRatio * 2) : root.selected ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
+        border.width: root.activeFocus ? 2 : root.selected ? 2 : 1
         border.color: root.activeFocus ? Kirigami.Theme.highlightColor : root.selected ? root._selectedBorder : root.isHovered ? root._hoverBorder : root._defaultBorder
         transform: [
             Scale {

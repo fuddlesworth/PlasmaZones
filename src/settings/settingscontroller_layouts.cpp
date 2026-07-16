@@ -209,7 +209,7 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
         sanitizedName = PhosphorI18n::tr("New Layout");
     // Clamp client-side to the daemon's cap so the pending-select name matches
     // what the daemon actually stores (it silently truncates at this length).
-    sanitizedName = sanitizedName.left(MaxLayoutNameLength);
+    sanitizedName = clampName(sanitizedName);
 
     const QString layoutType = type.isEmpty() ? QStringLiteral("custom") : type;
 
@@ -427,23 +427,35 @@ void SettingsController::exportLayout(const QString& layoutId, const QString& fi
     }
     // A replying call, not sendOneWay. The write happens in the daemon, so a
     // one-way send has nowhere to put "the folder is not writable" and the file
-    // picker just closed on a user who is owed an answer. Mirrors importLayout
-    // below, which has always waited for its reply.
-    const QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                      QStringLiteral("exportLayout"), {layoutId, safe});
-    if (reply.type() == QDBusMessage::ErrorMessage) {
-        qCWarning(lcCore) << "exportLayout failed:" << reply.errorMessage();
-        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Failed to export layout: %1").arg(reply.errorMessage()));
-        return;
-    }
-    // The daemon answers false for a destination it could not open, write or
-    // commit. That is a ReplyMessage, not an ErrorMessage, so it needs its own
-    // branch or it reads as success.
-    if (reply.arguments().isEmpty() || !reply.arguments().first().toBool()) {
-        qCWarning(lcCore) << "exportLayout: daemon could not write" << safe;
-        Q_EMIT layoutOperationFailed(
-            PhosphorI18n::tr("Could not write the export. Check that the folder is writable."));
-    }
+    // picker just closed on a user who is owed an answer. Sent async through a
+    // QDBusPendingCallWatcher (same idiom as loadLayoutsAsync above) so the UI
+    // thread never stalls on the round-trip; the watcher lambda evaluates the
+    // reply and surfaces the same failure toasts a blocking call would.
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                   QStringLiteral("exportLayout"), {layoutId, safe}),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, safe](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        // Evaluate the raw QDBusMessage rather than a typed QDBusPendingReply<bool>
+        // so the branch structure matches the daemon's actual reply shapes:
+        // transport/daemon errors arrive as an ErrorMessage; a rejection the
+        // daemon can name arrives as a ReplyMessage carrying false.
+        const QDBusMessage reply = w->reply();
+        if (reply.type() == QDBusMessage::ErrorMessage) {
+            qCWarning(lcCore) << "exportLayout failed:" << reply.errorMessage();
+            Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Failed to export layout: %1").arg(reply.errorMessage()));
+            return;
+        }
+        // The daemon answers false for a destination it could not open, write or
+        // commit. That is a ReplyMessage, not an ErrorMessage, so it needs its own
+        // branch or it reads as success.
+        if (reply.arguments().isEmpty() || !reply.arguments().first().toBool()) {
+            qCWarning(lcCore) << "exportLayout: daemon could not write" << safe;
+            Q_EMIT layoutOperationFailed(
+                PhosphorI18n::tr("Could not write the export. Check that the folder is writable."));
+        }
+    });
 }
 
 void SettingsController::setLayoutHidden(const QString& layoutId, bool hidden)

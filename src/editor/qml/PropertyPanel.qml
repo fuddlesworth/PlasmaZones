@@ -110,7 +110,7 @@ Rectangle {
     Layout.minimumWidth: 0
     Layout.fillHeight: true
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
-    border.width: Math.round(Screen.devicePixelRatio)
+    border.width: 1
     border.color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
     // Drive opacity/width from panelMode and derive visibility from the
     // animated values, so the outgoing legs are actually rendered. Binding
@@ -411,7 +411,7 @@ Rectangle {
                         color: zoneNameField.hasError ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.15) : zoneNameField.palette.base
                         radius: Kirigami.Units.smallSpacing
                         border.color: zoneNameField.hasError ? Kirigami.Theme.negativeTextColor : zoneNameField.palette.shadow
-                        border.width: zoneNameField.hasError ? Math.max(2, Math.round(Screen.devicePixelRatio * 2)) : Math.max(1, Math.round(Screen.devicePixelRatio))
+                        border.width: zoneNameField.hasError ? 2 : 1
 
                         Behavior on border.color {
                             PhosphorMotionAnimation {
@@ -778,7 +778,7 @@ Rectangle {
                         background: Rectangle {
                             color: Kirigami.Theme.backgroundColor
                             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                            border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+                            border.width: 1
                             radius: Kirigami.Units.smallSpacing
                         }
                     }

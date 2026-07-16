@@ -13,7 +13,7 @@
 //     shaderEffectUsages).
 //
 // Split out of animationspagecontroller.cpp to keep that file under
-// the 800-line cap (see CLAUDE.md). All methods are members of
+// the 1000-line guideline (see CLAUDE.md). All methods are members of
 // PlasmaZones::AnimationsPageController and use its private state —
 // same class, separate translation unit, no API change.
 

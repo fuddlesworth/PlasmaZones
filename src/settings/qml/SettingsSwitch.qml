@@ -3,7 +3,6 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -42,7 +41,7 @@ Item {
         radius: height / 2
         color: "transparent"
         visible: root.activeFocus
-        border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+        border.width: 1
         border.color: Kirigami.Theme.highlightColor
     }
 
@@ -66,7 +65,7 @@ Item {
             radius: height / 2
             color: Kirigami.Theme.highlightedTextColor
             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-            border.width: Math.max(1, Math.round(Screen.devicePixelRatio)) * 0.5
+            border.width: 0.5
             y: pad
             x: root.checked ? parent.width - width - pad : pad
 

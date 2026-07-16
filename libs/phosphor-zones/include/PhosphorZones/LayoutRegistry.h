@@ -145,6 +145,15 @@ public:
     Q_INVOKABLE void removeLayoutById(const QUuid& id) override;
     Q_INVOKABLE Layout* duplicateLayout(Layout* source) override;
 
+    /// The literal suffix @ref duplicateLayout appends to the source layout's
+    /// name. Public so callers that post-process a duplicate's name (e.g. a
+    /// boundary clamp that must trim the base while keeping the suffix
+    /// intact) reference the same string instead of duplicating the literal.
+    static QString duplicateNameSuffix()
+    {
+        return QStringLiteral(" (Copy)");
+    }
+
     Layout* activeLayout() const override
     {
         return m_activeLayout;

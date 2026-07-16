@@ -9,7 +9,7 @@
 //   * validationIssuesForJson/matchIsContextOnly — editor validation hooks
 //
 // Split out of rulecontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). All methods are members of
+// 1000-line guideline (see CLAUDE.md). All methods are members of
 // PlasmaZones::RuleController and operate on its private model
 // state — same class, separate translation unit, no API change.
 

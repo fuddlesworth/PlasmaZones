@@ -6,7 +6,7 @@
  * @brief Overlay show/hide/toggle + idle-state lifecycle.
  *
  * Split from overlayservice.cpp to keep each translation unit under the
- * project's <800-line guideline. Owns:
+ * project's 1000-line guideline. Owns:
  *   - show / showAtPosition - entry points to make the zone overlay visible,
  *     resolving the cursor's screen and consulting per-VS disabled state
  *   - hide / toggle - symmetric counterparts; hide() destroys overlay

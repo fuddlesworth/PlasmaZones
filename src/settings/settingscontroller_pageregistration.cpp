@@ -12,7 +12,7 @@
 // settingscontroller_pagetopology.cpp.
 //
 // Split out of settingscontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). All methods here are members of
+// 1000-line guideline (see CLAUDE.md). All methods here are members of
 // PlasmaZones::SettingsController — same class, separate translation
 // unit, no API change.
 

@@ -5,7 +5,7 @@
 // per-window merge of the config-backed appearance defaults (border,
 // opacity+tint, title bar — each gated by its own scope token) with the
 // per-slot rule overrides resolveWindowAppearance produced. Split out of
-// decorations.cpp to keep that TU under the 800-line limit, mirroring the
+// decorations.cpp to keep that TU under the 1000-line guideline, mirroring the
 // surface_backdrop.cpp split; updateWindowDecoration remains the sole
 // consumer path.
 

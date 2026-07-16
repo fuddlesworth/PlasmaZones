@@ -5,7 +5,7 @@
 
 // Inline helpers for the DecorationPageController translation units
 // (currently decorationpagecontroller.cpp; the class is split across several
-// TUs to stay under the 800-line cap). They convert surface-pack effect /
+// TUs to stay under the 1000-line guideline). They convert surface-pack effect /
 // parameter values to QVariantMap for QML and build the sparse / resolved
 // DecorationProfile -> QVariantMap projections. Inline definitions here let
 // any consuming TU get its own copy without relying on unity-build TU merging

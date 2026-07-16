@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // RuleController label-lookup setters. Split out so
-// rulecontroller.cpp stays under the project's 800-line cap. The
+// rulecontroller.cpp stays under the project's 1000-line guideline. The
 // setters here are tiny pass-throughs that forward the resolver into
 // RuleModel; they form a coherent sub-surface. Same class, separate
 // TU, no API change.

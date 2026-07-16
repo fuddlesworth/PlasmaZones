@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -60,15 +59,15 @@ Item {
             color: Kirigami.Theme.backgroundColor
             radius: Kirigami.Units.smallSpacing
             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
-            // Chrome, so it follows the repo-wide
-            // Math.round(Screen.devicePixelRatio) border convention. Note that
-            // border.width is in device-independent pixels (already DPR-scaled
-            // at render), so this grows the border on high-DPR screens rather
-            // than pinning it to one device pixel; the value is kept for
-            // consistency with every other chrome border. The drawing
-            // dimensions below stay in logical units on purpose (see the note
-            // above them); this is not one of those.
-            border.width: Math.round(Screen.devicePixelRatio)
+            // Chrome border. border.width is in device-independent pixels;
+            // the renderer scales it by the device pixel ratio itself, so a
+            // plain integer gives a consistent hairline at every scale
+            // factor (multiplying by devicePixelRatio here would
+            // double-scale into a thicker, not crisper, border). This is
+            // the repo-wide chrome-border convention. The drawing
+            // dimensions below stay in logical units on purpose (see the
+            // note above them).
+            border.width: 1
 
             Rectangle {
                 anchors.fill: parent
@@ -141,7 +140,7 @@ Item {
 
                                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3);
                             }
-                            border.width: ((cell.activeFocus && root.enabled) || cell.isSelected) ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
+                            border.width: ((cell.activeFocus && root.enabled) || cell.isSelected) ? 2 : 1
                             opacity: root.enabled ? 1 : 0.5
 
                             // Horizontal bar (top or bottom edge)

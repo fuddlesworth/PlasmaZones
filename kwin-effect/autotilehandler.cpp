@@ -806,6 +806,6 @@ void AutotileHandler::onDaemonReady()
 // WindowTrackingAdaptor::toggleWindowFloat (which emits applyGeometryRequested).
 
 // connectSignals() / loadSettings() live in autotilehandler/wiring.cpp
-// (split for the 800-line limit).
+// (split for the 1000-line guideline).
 
 } // namespace PlasmaZones

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
@@ -482,7 +481,7 @@ ToolBar {
         Rectangle {
             anchors.top: parent.top
             width: parent.width
-            height: Math.round(Screen.devicePixelRatio)
+            height: 1
             color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
     }

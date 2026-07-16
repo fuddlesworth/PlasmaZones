@@ -274,7 +274,7 @@ endif()
 # ---------------------------------------------------------------------------
 # Translations (Qt Linguist). Extracted to cmake/PhosphorTranslations.cmake
 # (included in this scope) to keep this file's growth in check — it has
-# since crept past the 800-line cap again; the next self-contained block
+# since crept past the 1000-line guideline again; the next self-contained block
 # to outgrow its section should be extracted the same way. See that file
 # for the update-ts / lrelease detail.
 # ---------------------------------------------------------------------------

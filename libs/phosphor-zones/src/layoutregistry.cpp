@@ -509,7 +509,7 @@ PhosphorZones::Layout* LayoutRegistry::duplicateLayout(PhosphorZones::Layout* so
     }
 
     auto newLayout = new PhosphorZones::Layout(*source);
-    newLayout->setName(source->name() + QStringLiteral(" (Copy)"));
+    newLayout->setName(source->name() + duplicateNameSuffix());
     // Note: Copy constructor already leaves sourcePath empty, making it a user layout
 
     // Reset visibility restrictions so duplicated layout starts fresh

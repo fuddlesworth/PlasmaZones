@@ -36,13 +36,16 @@ export type ResizeEvent = {
 -- Snapshot of the engine's tiling state, passed as the first argument to the
 -- lifecycle hooks (onWindowAdded / onWindowRemoved / onWindowResized). Built
 -- fresh per call; mutating it has no effect — persist via the onWindowResized
--- return value instead.
+-- return value instead. `windows` is capped at 256 entries with the focused
+-- window always included: when the focused window's tiled index is past the
+-- cap it takes the last entry, and `focusedIndex` is its 0-based index INTO
+-- `windows` (so windows[focusedIndex + 1] is always the focused window).
 export type HookState = {
     windowCount: number,
     masterCount: number,
     splitRatio: number,
     windows: { WindowInfo },
-    focusedIndex: number, -- 0-based tiled index of the focused window (-1 if none)
+    focusedIndex: number, -- 0-based index of the focused window in `windows` (-1 if none)
     scriptState: { [string]: any }?, -- prior persistent bag; only with supportsScriptState set and a non-empty bag
     countAfterRemoval: number?, -- onWindowRemoved only: windowCount minus the departing window
 }

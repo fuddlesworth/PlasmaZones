@@ -371,7 +371,7 @@ Kirigami.Dialog {
                             // severs the binding nor re-emits toggled().
                             //
                             // A `Binding on checked` would work here too, and
-                            // is what the StayOpenMenuItems in LayoutFilterBar
+                            // is what the StayOpenMenuItems in FilterMenuButton
                             // genuinely need, because those assign `checked`
                             // from JS and a plain binding does not survive that.
                             // Nothing assigns `checked` here, so the plain form

@@ -921,7 +921,7 @@ private:
 
     /// Wire daemon D-Bus broadcast subscriptions. Failed connects are
     /// appended to @p failedSubscriptions for one batched ctor warning.
-    /// Defined in settingscontroller_dbuswire.cpp (800-line cap).
+    /// Defined in settingscontroller_dbuswire.cpp (1000-line guideline).
     void wireDaemonSubscriptions(QStringList& failedSubscriptions);
 
     // File-scope sort helper exposed as a private static member so both

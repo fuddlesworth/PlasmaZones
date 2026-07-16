@@ -790,12 +790,30 @@ QVariantMap LuauTileAlgorithm::buildStateMap(const TilingState* state, bool incl
     st[QStringLiteral("splitRatio")] = std::clamp(state->splitRatio(), MinSplitRatio, MaxSplitRatio);
 
     int focusedIndex = -1;
-    // Uncapped on purpose. buildWindowInfos only reports focusedIndex for a
-    // window it actually visits, so truncating here would report -1 for a
-    // focused window past the cap. The list is already bounded by
-    // tiledWindows(), and windowCount / countAfterRemoval below are uncapped
-    // too, so the snapshot stays self-consistent.
-    const QVector<WindowInfo> infos = buildWindowInfos(state, state->tiledWindowCount(), appIdResolver(), focusedIndex);
+    // Capped at MaxZones like every other marshalled window list (buildContext
+    // caps ctx.windows the same way), with a focused-window carve-out:
+    // buildWindowInfos only reports focusedIndex for a window it actually
+    // visits, so a plain truncation would report -1 for a focused window past
+    // the cap. When that happens the focused window replaces the last entry
+    // and focusedIndex points at that in-list slot, so a hook always sees the
+    // focused window and windows[focusedIndex] stays coherent with the list it
+    // was handed. windowCount / countAfterRemoval below stay uncapped so the
+    // counts reflect reality.
+    const auto resolver = appIdResolver();
+    const int cap = std::min(state->tiledWindowCount(), AutotileDefaults::MaxZones);
+    QVector<WindowInfo> infos = buildWindowInfos(state, cap, resolver, focusedIndex);
+    if (focusedIndex < 0 && !infos.isEmpty()) {
+        const QStringList tiled = state->tiledWindows();
+        const qsizetype actual = tiled.indexOf(state->focusedWindow());
+        if (actual >= cap) {
+            WindowInfo focusedInfo;
+            focusedInfo.appId = resolver ? resolver(tiled.at(actual)) : QString();
+            focusedInfo.focused = true;
+            focusedInfo.windowId = tiled.at(actual);
+            infos.last() = focusedInfo;
+            focusedIndex = static_cast<int>(infos.size()) - 1;
+        }
+    }
     QVariantList windows;
     for (const WindowInfo& info : infos) {
         QVariantMap w;

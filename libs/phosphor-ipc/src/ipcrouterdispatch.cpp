@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Subscribe / unsubscribe / broadcast paths split out of ipcrouter.cpp
-// to keep both translation units under the 800-line guideline. All
+// to keep both translation units under the 1000-line guideline. All
 // three methods are members of IpcRouter and reach into the same
 // private state (m_subscriptionsBySocket); the split is purely
 // organisational. Meta-helpers and the per-socket cap constants

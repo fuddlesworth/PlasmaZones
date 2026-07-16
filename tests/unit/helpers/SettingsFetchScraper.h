@@ -9,7 +9,7 @@
  *        their own sources on disk.
  *
  * Split out of test_settings_registry_contract.cpp, which owns the assertions, to keep that
- * file under the project's 800-line cap.
+ * file under the project's 1000-line guideline.
  *
  * The contract this exists to enforce, and why it is worth this much machinery, is written
  * out in full above keysFetchedByEffect below. The short version: SettingsAdaptor resolves

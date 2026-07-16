@@ -3,7 +3,6 @@
 
 import QtCore
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -95,13 +94,15 @@ RowLayout {
     // Each entry: [rootPropertyName, persistedStatePropertyName].
     // NOTE: adding a filter requires updating ALL of: property declaration,
     // _defaultValues, the relevant _snapping/_tilingStateMap, persistedState,
-    // hasActiveFilters, the menu item, and the JS filter logic (see the same
+    // hasActiveFilters, the filter button's group entry, and the JS filter
+    // logic (see the same
     // note above _defaultValues below — keep both lists in sync).
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
     readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"], ["showScriptState", "tilingShowScriptState"], ["showSingleWindow", "tilingShowSingleWindow"], ["showReflowsOnFocus", "tilingShowReflowsOnFocus"]]
     // Default values for all resettable filter properties (not group/sort).
     // Adding a filter requires updating: property declaration, _defaultValues,
-    // the relevant state map, persistedState, hasActiveFilters, menu item, and JS logic.
+    // the relevant state map, persistedState, hasActiveFilters, the filter
+    // button's group entry, and the JS logic.
     readonly property var _defaultValues: {
         "showHidden": true,
         "showAspectAny": true,
@@ -145,9 +146,37 @@ RowLayout {
     // page's filter button (the button moved to the search row).
     function popupFilterMenu() {
         if (viewMode === 0)
-            snappingFilterMenu.popup();
+            snappingFilterButton.popup();
         else
-            tilingFilterMenu.popup();
+            tilingFilterButton.popup();
+    }
+
+    // Keys the given filter button should show as unchecked: every bool
+    // filter property (the group entries' keys ARE the property names) that
+    // is currently false. Evaluated as a `Binding on excluded` value, so the
+    // per-property reads make it re-evaluate whenever any filter bool
+    // changes (reset, loadState, or a toggle echoing back).
+    function _excludedKeys(groups) {
+        var ex = [];
+        for (var g = 0; g < groups.length; ++g) {
+            for (var i = 0; i < groups[g].length; ++i) {
+                var key = groups[g][i].key;
+                if (!root[key])
+                    ex.push(key);
+            }
+        }
+        return ex;
+    }
+
+    // A checkbox in one of the filter menus was toggled: write it onto the
+    // named bool property (which flows to persistedState via
+    // filterSettingsChanged → saveState, exactly as before).
+    function _applyFilterToggle(key, included) {
+        if (_resetting)
+            return;
+
+        root[key] = included;
+        filterSettingsChanged();
     }
 
     // Resets filter and search state to defaults.
@@ -274,145 +303,142 @@ RowLayout {
         }
     }
 
-    Menu {
-        id: snappingFilterMenu
+    // ── Filter menus ────────────────────────────────────────────────────────
+    // Both checkbox filter menus are FilterMenuButton instances hosted
+    // invisibly: this bar keeps ownership of the bool filter properties and
+    // their QtCore.Settings persistence, and the page's own toolbar button
+    // opens the menu via popupFilterMenu(), so the ToolButton chrome is
+    // unused. Group entries use the bool property names as keys; `excluded`
+    // is derived from those properties through a `Binding on` value source
+    // (the button reassigns `excluded` internally on toggle, a JS write that
+    // would sever a plain binding), and user edits come back via
+    // filterToggled / resetTriggered.
+    FilterMenuButton {
+        id: snappingFilterButton
 
-        title: i18n("Filter Layouts")
+        visible: false
+        menuTitle: i18n("Filter Layouts")
+        externalFilterActive: root.filterText.length > 0
+        groups: [[
+                {
+                    "key": "showBuiltInLayouts",
+                    "label": i18n("Built-in")
+                },
+                {
+                    "key": "showUserLayouts",
+                    "label": i18n("User Layouts")
+                }
+            ], [
+                {
+                    "key": "showAspectAny",
+                    "label": i18n("All Monitors")
+                },
+                {
+                    "key": "showAspectStandard",
+                    "label": i18n("Standard (16:9)")
+                },
+                {
+                    "key": "showAspectUltrawide",
+                    "label": i18n("Ultrawide (21:9)")
+                },
+                {
+                    "key": "showAspectSuperUltrawide",
+                    "label": i18n("Super-Ultrawide (32:9)")
+                },
+                {
+                    "key": "showAspectPortrait",
+                    "label": i18n("Portrait (9:16)")
+                }
+            ], [
+                {
+                    "key": "showAutoLayouts",
+                    "label": i18n("Auto")
+                },
+                {
+                    "key": "showManualLayouts",
+                    "label": i18n("Manual")
+                }
+            ], [
+                {
+                    "key": "showHidden",
+                    "label": i18n("Show Hidden Layouts")
+                }
+            ]]
+        onFilterToggled: (key, included) => root._applyFilterToggle(key, included)
+        onResetTriggered: root.resetFilters()
 
-        FilterMenuItem {
-            text: i18n("Built-in")
-            filterProperty: "showBuiltInLayouts"
+        Binding on excluded {
+            value: root._excludedKeys(snappingFilterButton.groups)
+            restoreMode: Binding.RestoreNone
         }
-
-        FilterMenuItem {
-            text: i18n("User Layouts")
-            filterProperty: "showUserLayouts"
-        }
-
-        MenuSeparator {}
-
-        FilterMenuItem {
-            text: i18n("All Monitors")
-            filterProperty: "showAspectAny"
-        }
-
-        FilterMenuItem {
-            text: i18n("Standard (16:9)")
-            filterProperty: "showAspectStandard"
-        }
-
-        FilterMenuItem {
-            text: i18n("Ultrawide (21:9)")
-            filterProperty: "showAspectUltrawide"
-        }
-
-        FilterMenuItem {
-            text: i18n("Super-Ultrawide (32:9)")
-            filterProperty: "showAspectSuperUltrawide"
-        }
-
-        FilterMenuItem {
-            text: i18n("Portrait (9:16)")
-            filterProperty: "showAspectPortrait"
-        }
-
-        MenuSeparator {}
-
-        FilterMenuItem {
-            text: i18n("Auto")
-            filterProperty: "showAutoLayouts"
-        }
-
-        FilterMenuItem {
-            text: i18n("Manual")
-            filterProperty: "showManualLayouts"
-        }
-
-        MenuSeparator {}
-
-        FilterMenuItem {
-            text: i18n("Show Hidden Layouts")
-            filterProperty: "showHidden"
-        }
-
-        MenuSeparator {}
-
-        ResetMenuItem {}
     }
 
     // ── Tiling Filter Menu ──────────────────────────────────────────────────
-    Menu {
-        id: tilingFilterMenu
+    FilterMenuButton {
+        id: tilingFilterButton
 
-        title: i18n("Filter Algorithms")
+        visible: false
+        menuTitle: i18n("Filter Algorithms")
+        externalFilterActive: root.filterText.length > 0
+        groups: [[
+                {
+                    "key": "showBuiltInAlgorithms",
+                    "label": i18n("Built-in")
+                },
+                {
+                    "key": "showUserAlgorithms",
+                    "label": i18n("User Scripts")
+                }
+            ], [
+                {
+                    "key": "showMasterCount",
+                    "label": i18n("Master Count")
+                },
+                {
+                    "key": "showSplitRatio",
+                    "label": i18n("Split Ratio")
+                },
+                {
+                    "key": "showOverlapping",
+                    "label": i18n("Overlapping Zones")
+                },
+                {
+                    "key": "showPersistent",
+                    "label": i18n("Persistent (Memory)")
+                },
+                {
+                    "key": "showCustomParams",
+                    "label": i18n("Custom Parameters")
+                },
+                {
+                    "key": "showReflowsOnResize",
+                    "label": i18n("Reflows")
+                },
+                {
+                    "key": "showScriptState",
+                    "label": i18n("Script State")
+                },
+                {
+                    "key": "showSingleWindow",
+                    "label": i18n("Single Window")
+                },
+                {
+                    "key": "showReflowsOnFocus",
+                    "label": i18n("Follows Focus")
+                }
+            ], [
+                {
+                    "key": "showHidden",
+                    "label": i18n("Show Hidden Algorithms")
+                }
+            ]]
+        onFilterToggled: (key, included) => root._applyFilterToggle(key, included)
+        onResetTriggered: root.resetFilters()
 
-        FilterMenuItem {
-            text: i18n("Built-in")
-            filterProperty: "showBuiltInAlgorithms"
+        Binding on excluded {
+            value: root._excludedKeys(tilingFilterButton.groups)
+            restoreMode: Binding.RestoreNone
         }
-
-        FilterMenuItem {
-            text: i18n("User Scripts")
-            filterProperty: "showUserAlgorithms"
-        }
-
-        MenuSeparator {}
-
-        FilterMenuItem {
-            text: i18n("Master Count")
-            filterProperty: "showMasterCount"
-        }
-
-        FilterMenuItem {
-            text: i18n("Split Ratio")
-            filterProperty: "showSplitRatio"
-        }
-
-        FilterMenuItem {
-            text: i18n("Overlapping Zones")
-            filterProperty: "showOverlapping"
-        }
-
-        FilterMenuItem {
-            text: i18n("Persistent (Memory)")
-            filterProperty: "showPersistent"
-        }
-
-        FilterMenuItem {
-            text: i18n("Custom Parameters")
-            filterProperty: "showCustomParams"
-        }
-
-        FilterMenuItem {
-            text: i18n("Reflows")
-            filterProperty: "showReflowsOnResize"
-        }
-
-        FilterMenuItem {
-            text: i18n("Script State")
-            filterProperty: "showScriptState"
-        }
-
-        FilterMenuItem {
-            text: i18n("Single Window")
-            filterProperty: "showSingleWindow"
-        }
-
-        FilterMenuItem {
-            text: i18n("Follows Focus")
-            filterProperty: "showReflowsOnFocus"
-        }
-
-        MenuSeparator {}
-
-        FilterMenuItem {
-            text: i18n("Show Hidden Algorithms")
-            filterProperty: "showHidden"
-        }
-
-        MenuSeparator {}
-
-        ResetMenuItem {}
     }
 
     // ── Persisted UI state (per view mode) ───────────────────────────────
@@ -451,46 +477,5 @@ RowLayout {
         property bool tilingShowReflowsOnFocus: true
 
         category: "LayoutsPageFilterBar"
-    }
-
-    // Checkable menu item that writes back to a named root filter property
-    // and keeps the menu open on toggle (StayOpenMenuItem). An explicit
-    // onToggled drives the filter property and a binding reads it back, so a
-    // programmatic reset lands on the item.
-    //
-    // `Binding on checked` rather than a plain `checked:` binding, and the
-    // difference is load-bearing here. What StayOpenMenuItem has to avoid is
-    // AbstractButton's activation path, which emits triggered() and dismisses
-    // the menu; the way it does that is to flip `checked` with a JS assignment
-    // and re-emit toggled() by hand. A JS write severs a plain binding for
-    // good, and `Binding on` is a value source that survives it. Without it,
-    // Reset Filters would stop reaching any item the user had clicked.
-    //
-    // RestoreNone is stated rather than inherited: these bindings carry no
-    // `when` and so never deactivate, and a delegate being torn down has
-    // nothing worth restoring onto.
-    component FilterMenuItem: StayOpenMenuItem {
-        required property string filterProperty
-
-        onToggled: {
-            if (root._resetting)
-                return;
-
-            root[filterProperty] = checked;
-            root.filterSettingsChanged();
-        }
-
-        Binding on checked {
-            value: root[filterProperty]
-            restoreMode: Binding.RestoreNone
-        }
-    }
-
-    // Shared "Reset Filters" action used by both filter menus
-    component ResetMenuItem: MenuItem {
-        text: i18n("Reset Filters")
-        icon.name: "edit-reset"
-        enabled: root.hasActiveFilters
-        onTriggered: root.resetFilters()
     }
 }

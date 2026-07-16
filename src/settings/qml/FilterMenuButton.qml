@@ -13,7 +13,8 @@ import org.kde.kirigami as Kirigami
  * Data-driven via `groups`: an array of groups, each an array of
  * `{ key, label, count? }` entries. Each group is rendered as a run of
  * checkable items, with a separator between groups and a separator + Reset
- * action at the bottom — matching LayoutFilterBar's grouped filter menu.
+ * action at the bottom. Used directly by the Rules page and shader browser,
+ * and hosted invisibly by LayoutFilterBar for the Layouts page menus.
  *
  * `excluded` holds the keys the user has unchecked (empty = everything shown),
  * so options default to checked and a newly-appearing option shows up checked
@@ -40,12 +41,28 @@ ToolButton {
     property var groups: []
     /// Keys the user has unchecked. Empty = everything shown. The consumer
     /// reads this (or isIncluded/isExcluded) to drive its own filtering.
+    /// A host that owns its filter state elsewhere can instead drive this
+    /// through a `Binding on excluded` value source (a plain binding would be
+    /// severed by the internal reassignment on toggle) and listen to
+    /// filterToggled to write its own state back.
     property var excluded: []
     /// Title shown above the menu items.
     property string menuTitle: i18nc("@title:menu", "Filter")
+    /// Extra active-state contribution from the host (e.g. a search field
+    /// that reset() is expected to clear via resetTriggered). ORed into
+    /// hasActiveFilters so the badge and the Reset action reflect it.
+    property bool externalFilterActive: false
 
-    /// True while any option is unchecked — drives the button's active state.
-    readonly property bool hasActiveFilters: excluded.length > 0
+    /// True while any option is unchecked (or the host reports an external
+    /// filter) — drives the button's active state and the Reset action.
+    readonly property bool hasActiveFilters: excluded.length > 0 || externalFilterActive
+
+    /// A checkbox was toggled by the user. `excluded` has already been
+    /// updated; hosts that own their filter state elsewhere write it here.
+    signal filterToggled(var key, bool included)
+    /// The Reset action ran. `excluded` has already been cleared; hosts
+    /// reset any external state (search text, persisted bools) here.
+    signal resetTriggered
 
     // Flattened render model: checkbox rows ({type:"item"}), group separators
     // and a trailing separator ({type:"separator"}), then the reset action
@@ -89,6 +106,12 @@ ToolButton {
     }
     function reset() {
         excluded = [];
+        resetTriggered();
+    }
+    /// Open the filter menu without going through the button (for hosts that
+    /// keep their own toolbar button and embed this one invisibly).
+    function popup() {
+        filterMenu.popup();
     }
     // Reassign a fresh array (mutating in place would not notify bindings).
     function _setIncluded(key, included) {
@@ -99,6 +122,7 @@ ToolButton {
         else if (!included && idx < 0)
             next.push(key);
         excluded = next;
+        filterToggled(key, included);
     }
 
     // Prune stale keys when the option set changes: an excluded key whose
@@ -125,7 +149,7 @@ ToolButton {
     icon.name: "view-filter"
     // Active state is binding-driven, not a user toggle — checkable omitted.
     checked: root.hasActiveFilters
-    onClicked: filterMenu.popup()
+    onClicked: popup()
     Accessible.name: root.hasActiveFilters ? i18nc("@action:button", "Filter (active)") : i18nc("@action:button", "Filter")
     ToolTip.visible: hovered
     ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -145,10 +169,17 @@ ToolButton {
                 // Checkable filter item that keeps the menu open on toggle
                 // (StayOpenMenuItem). `checked` is driven by a `Binding on`
                 // that reads the filter set back, so a programmatic change to
-                // it lands on the item. It has to be `Binding on` and not a
-                // plain binding, because StayOpenMenuItem flips `checked` with
-                // a JS assignment, which severs a plain one. Same idiom, and
-                // same reason, as LayoutFilterBar.FilterMenuItem.
+                // it (Reset, a host-driven `excluded`) lands on the item.
+                //
+                // `Binding on checked` rather than a plain `checked:` binding,
+                // and the difference is load-bearing. What StayOpenMenuItem
+                // has to avoid is AbstractButton's activation path, which
+                // emits triggered() and dismisses the menu; the way it does
+                // that is to flip `checked` with a JS assignment and re-emit
+                // toggled() by hand. A JS write severs a plain binding for
+                // good, and `Binding on` is a value source that survives it.
+                // Without it, Reset Filters would stop reaching any item the
+                // user had clicked.
                 DelegateChoice {
                     roleValue: "item"
 
@@ -159,9 +190,11 @@ ToolButton {
                         Accessible.name: modelData.label
                         onToggled: root._setIncluded(modelData.key, checked)
 
-                        // Reads the filter set back onto the item, with the
-                        // restore policy stated rather than inherited (see
-                        // LayoutFilterBar.FilterMenuItem).
+                        // Reads the filter set back onto the item. RestoreNone
+                        // is stated rather than inherited: this binding
+                        // carries no `when` and so never deactivates, and a
+                        // delegate being torn down has nothing worth
+                        // restoring onto.
                         Binding on checked {
                             value: root.isIncluded(modelData.key)
                             restoreMode: Binding.RestoreNone

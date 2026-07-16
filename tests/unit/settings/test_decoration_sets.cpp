@@ -7,7 +7,7 @@
  *        DecorationPageController::setsBridge().
  *
  * Split from test_decorationpagecontroller.cpp to keep each test file under
- * the project's 800-line guideline — the same split, for the same reason, as
+ * the project's 1000-line guideline — the same split, for the same reason, as
  * the motion side's test_animations_motion_sets.cpp.
  *
  * A decoration set is every per-surface override, captured

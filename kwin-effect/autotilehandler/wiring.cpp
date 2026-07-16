@@ -3,7 +3,7 @@
 //
 // D-Bus signal wiring and initial-settings load for AutotileHandler.
 // Part of AutotileHandler — split from autotilehandler.cpp for the
-// 800-line limit (signals.cpp holds the slot bodies; this file holds the
+// 1000-line guideline (signals.cpp holds the slot bodies; this file holds the
 // connect/load bring-up that onDaemonReady drives).
 
 #include "../autotilehandler.h"

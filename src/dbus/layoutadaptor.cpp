@@ -550,7 +550,7 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
     }
 
     // D-Bus boundary clamp: callers can bypass the editor UI's name cap.
-    layout->setName(name.left(MaxLayoutNameLength));
+    layout->setName(clampName(name));
 
     // Auto-detect aspect ratio class from the primary screen (virtual-screen-aware)
     QScreen* screen = Utils::primaryScreen();
@@ -614,14 +614,16 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
         return QString();
     }
 
-    // The registry appends " (Copy)" without regard to length (it has no name
-    // limit of its own), so re-apply the boundary clamp here like every other
-    // name-producing adaptor entry point. Trim the BASE, not the result: a
-    // tail clamp on a long name would cut the suffix off and leave the copy
-    // visually identical to its source.
+    // The registry appends its duplicate suffix without regard to length (it
+    // has no name limit of its own), so re-apply the boundary clamp here like
+    // every other name-producing adaptor entry point. Trim the BASE, not the
+    // result: a tail clamp on a long name would cut the suffix off and leave
+    // the copy visually identical to its source. clampName's surrogate
+    // back-off keeps the reduced-budget cut from splitting a pair.
     if (duplicate->name().size() > MaxLayoutNameLength) {
-        const QString suffix = QStringLiteral(" (Copy)");
-        duplicate->setName(duplicate->name().chopped(suffix.size()).left(MaxLayoutNameLength - suffix.size()) + suffix);
+        const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
+        duplicate->setName(clampName(duplicate->name().chopped(suffix.size()), MaxLayoutNameLength - suffix.size())
+                           + suffix);
     }
 
     qCInfo(lcDbusLayout) << "Duplicated layout" << id << "to" << duplicate->id();

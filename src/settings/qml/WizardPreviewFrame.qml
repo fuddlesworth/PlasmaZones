@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
 import org.kde.kirigami as Kirigami
@@ -40,7 +39,9 @@ Rectangle {
     Layout.alignment: Qt.AlignHCenter
     radius: Kirigami.Units.smallSpacing * 2
     color: _colors.subtleBg
-    // Repo-wide chrome-border convention (see the note in PositionPicker).
-    border.width: Math.round(Screen.devicePixelRatio)
+    // Repo-wide chrome-border convention: border.width is device-independent
+    // and the renderer scales it, so a plain 1 stays a consistent hairline
+    // (see the note in PositionPicker).
+    border.width: 1
     border.color: _colors.accentBorder
 }

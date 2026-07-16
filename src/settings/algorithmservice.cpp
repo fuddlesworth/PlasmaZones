@@ -30,6 +30,7 @@
 #include <QRect>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStringLiteral>
 #include <QTimer>
@@ -56,8 +57,28 @@ bool isBareBaseName(const QString& name)
     return bareBaseName.match(name).hasMatch();
 }
 
-/// True when @p baseName.luau already exists anywhere on the data search path,
-/// user directory or any system directory.
+/// All `*.luau` basenames that currently exist under the algorithms subdir of
+/// any XDG data directory, user and system alike. Enumerated once per
+/// findUniqueAlgorithmPath call so a heavily collided name costs a single
+/// directory sweep, rather than one QStandardPaths::locate (which stats every
+/// data dir) per candidate across up to 1000 candidates.
+QSet<QString> existingAlgorithmBaseNames()
+{
+    QSet<QString> names;
+    const QStringList dirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, ScriptedAlgorithmSubdir,
+                                                       QStandardPaths::LocateDirectory);
+    for (const QString& dirPath : dirs) {
+        const QStringList entries = QDir(dirPath).entryList({QStringLiteral("*.luau")}, QDir::Files);
+        for (const QString& entry : entries) {
+            names.insert(QFileInfo(entry).completeBaseName());
+        }
+    }
+    return names;
+}
+
+/// True when @p baseName.luau already exists anywhere on the data search path
+/// (@p existing, prefetched by existingAlgorithmBaseNames), user directory or
+/// any system directory.
 ///
 /// The loader registers each script under the `id` in its metadata, scans the
 /// user directory first, and keeps the first registration
@@ -82,27 +103,28 @@ bool isBareBaseName(const QString& name)
 /// path, so a candidate must also be absent from @p registry — otherwise the
 /// new file's id would collide, the loader would keep the first registration,
 /// and the new file would never appear in the catalog.
-bool algorithmBaseNameTaken(const QString& baseName, const PhosphorTiles::AlgorithmRegistry* registry)
+bool algorithmBaseNameTaken(const QString& baseName, const QSet<QString>& existing,
+                            const PhosphorTiles::AlgorithmRegistry* registry)
 {
     if (registry && registry->algorithm(baseName))
         return true;
-    return !QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                   ScriptedAlgorithmSubdir + QLatin1Char('/') + baseName + QStringLiteral(".luau"))
-                .isEmpty();
+    return existing.contains(baseName);
 }
 
 /// Resolve a free "<baseName>.luau" (or "<baseName>-N.luau") under @p dir whose
 /// basename is claimed nowhere on the search path and, when @p registry is
-/// given, is not already a registered algorithm id. Returns an empty string
-/// when every candidate is taken.
+/// given, is not already a registered algorithm id. The search path is swept
+/// once up front (existingAlgorithmBaseNames) and every candidate is tested
+/// against that set. Returns an empty string when every candidate is taken.
 QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName,
                                 const PhosphorTiles::AlgorithmRegistry* registry)
 {
-    if (!algorithmBaseNameTaken(baseName, registry))
+    const QSet<QString> existing = existingAlgorithmBaseNames();
+    if (!algorithmBaseNameTaken(baseName, existing, registry))
         return dir + baseName + QStringLiteral(".luau");
     for (int i = 1; i <= 999; ++i) {
         const QString candidate = baseName + QStringLiteral("-") + QString::number(i);
-        if (!algorithmBaseNameTaken(candidate, registry))
+        if (!algorithmBaseNameTaken(candidate, existing, registry))
             return dir + candidate + QStringLiteral(".luau");
     }
     return QString();

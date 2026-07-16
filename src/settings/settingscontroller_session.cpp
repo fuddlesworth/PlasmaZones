@@ -812,7 +812,7 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
 // ═══════════════════════════════════════════════════════════════════════════════
 // Per-screen autotile / snapping / zone-selector overrides live in
 // settingscontroller_perscreen.cpp — split out to keep this TU under the
-// 800-line cap.
+// 1000-line guideline.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QVariantMap SettingsController::loadWindowGeometry() const

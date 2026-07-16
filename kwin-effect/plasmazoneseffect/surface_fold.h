@@ -5,7 +5,7 @@
 
 // Helpers for the decoration composite fold (surfacelayers.cpp): GL target
 // allocation, and the predicate that decides whether a pack's fold can be cached
-// across frames. Split out to keep that TU under the 800-line limit.
+// across frames. Split out to keep that TU under the 1000-line guideline.
 //
 // `inline`, not an anonymous namespace: the fold is compiled under a unity build, and
 // a file-local definition that drifted into a second TU in the same chunk would

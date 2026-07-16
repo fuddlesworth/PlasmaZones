@@ -13,7 +13,7 @@
 # Included from the top-level CMakeLists.txt via include(), so it runs in
 # that scope (every variable set here stays visible to the caller, exactly
 # as if the block were still inline). Extracted to keep CMakeLists.txt under
-# the project's 800-line cap, the same reason PhosphorCPack.cmake exists.
+# the project's 1000-line guideline, the same reason PhosphorCPack.cmake exists.
 find_package(Qt6LinguistTools QUIET)
 
 # Source files for lupdate string extraction (daemon + autotile + editor)

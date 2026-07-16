@@ -4,7 +4,7 @@
 // Decoration ANIMATION GATING and the queries that drive it.
 //
 // Split out of surfacelayers.cpp, which owns the composite fold itself, to keep
-// that TU under the 800-line limit (the same reason surface_backdrop.cpp and
+// that TU under the 1000-line guideline (the same reason surface_backdrop.cpp and
 // surface_audio.cpp were split out of it).
 //
 // What lives here decides WHETHER a decorated window's chain is driven to repaint

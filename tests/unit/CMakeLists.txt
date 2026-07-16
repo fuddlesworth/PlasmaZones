@@ -276,12 +276,12 @@ p_add_test(test_settings_core config/test_settings_core.cpp)
 # Companion test executable: animation Profile JSON-blob storage,
 # per-field signal discrimination, aggregate-setter merge semantics.
 # Split from test_settings_core to keep each test file under the
-# project's <800-line guideline.
+# project's 1000-line guideline.
 p_add_test(test_settings_animation_profile config/test_settings_animation_profile.cpp)
 
 # Companion test executable: ShaderProfileTree persistence + prune,
 # autoAssignAllLayouts master toggle. Split from test_settings_core to
-# keep each test file under the project's <800-line guideline.
+# keep each test file under the project's 1000-line guideline.
 p_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 
 # Companion test executable: DecorationProfileTree persistence + JSON facade
@@ -293,7 +293,7 @@ p_add_test(test_settings_decoration_tree config/test_settings_decoration_tree.cp
 # Companion test executable: per-page Discard/Reset primitives — committed
 # baseline capture, isKeyModified, discardKeys (revert-to-baseline) and
 # resetKeys (revert-to-default) with NOTIFY re-emission. Split from
-# test_settings_core to keep each test file under the <800-line guideline.
+# test_settings_core to keep each test file under the 1000-line guideline.
 p_add_test(test_settings_pagereset config/test_settings_pagereset.cpp)
 
 p_add_test(test_settings_validation config/test_settings_validation.cpp)
@@ -859,7 +859,7 @@ target_link_libraries(test_animations_page_controller
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
 
 # Companion test executable: motion-set + pending-changes coverage. Split from test_animations_page_controller to keep each test
-# file under the project's <800-line guideline.
+# file under the project's 1000-line guideline.
 add_executable(test_animations_motion_sets
     settings/test_animations_motion_sets.cpp
     ${_animations_ctrl_SRCS}
@@ -877,7 +877,7 @@ add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
 
 # Companion test executable: the user-preset library (AnimationPresetLibrary).
 # Split from test_animations_motion_sets to keep each test file under the
-# project's <800-line guideline, and because presets and sets are separate
+# project's 1000-line guideline, and because presets and sets are separate
 # sub-services of the controller.
 add_executable(test_animations_presets
     settings/test_animations_presets.cpp
@@ -896,7 +896,7 @@ add_test(NAME test_animations_presets COMMAND test_animations_presets)
 
 # Companion test executable: shader-override end-to-end coverage. Split
 # from test_animations_page_controller to keep each test file under the
-# project's <800-line guideline.
+# project's 1000-line guideline.
 add_executable(test_animations_shader_overrides
     settings/test_animations_shader_overrides.cpp
     ${_animations_ctrl_SRCS}
@@ -962,7 +962,7 @@ add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontrolle
 # ShaderSetStore (save / list / apply / remove / update / export / import,
 # the active-flag containment semantics, and the format-version gate). Split
 # from test_decorationpagecontroller to keep each test file under the
-# project's <800-line guideline — same split as the motion side's
+# project's 1000-line guideline — same split as the motion side's
 # test_animations_motion_sets.
 add_executable(test_decoration_sets
     settings/test_decoration_sets.cpp
@@ -980,7 +980,7 @@ target_link_libraries(test_decoration_sets
 add_test(NAME test_decoration_sets COMMAND test_decoration_sets)
 
 # The refusal half of the decoration-set suite. Split from the round-trip half so
-# each file stays under the 800-line cap; both share the sandbox guard and the
+# each file stays under the 1000-line guideline; both share the sandbox guard and the
 # payload builders in helpers/DecorationSetHelpers.h.
 add_executable(test_decoration_sets_validation
     settings/test_decoration_sets_validation.cpp
@@ -1024,11 +1024,11 @@ add_executable(test_rule_controller
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller.cpp
     # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
     # author surfaces, validation) — split out of rulecontroller.cpp
-    # to keep that TU under the 800-line cap; the controller's class
+    # to keep that TU under the 1000-line guideline; the controller's class
     # definition spans both TUs.
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_views.cpp
     # Label-lookup setters + wiring-completion gate — split out so
-    # rulecontroller.cpp stays under the 800-line cap; the
+    # rulecontroller.cpp stays under the 1000-line guideline; the
     # controller's class definition spans both TUs.
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_lookups.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_baseline.cpp
@@ -1079,7 +1079,7 @@ add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
 set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# compositor-common/ - Shared Library Types Tests (split for <800-line limit)
+# compositor-common/ - Shared Library Types Tests (split for 1000-line guideline)
 #   test_wire_types: D-Bus wire type signature/roundtrip tests
 #   test_floating_cache: FloatingCache + ZoneCache + TriggerParser tests
 #   test_autotile_state: AutotileStateHelpers + WindowId tests

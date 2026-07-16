@@ -541,7 +541,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 // warmUpNotifications / destroyPassiveShell / unwirePassiveShellSlots are
 // extracted to overlayservice/shellhost_bridge.cpp - they're the daemon's
 // bridge to PhosphorOverlay::ShellHost, not OSD-specific. Keeps this TU
-// under the project's <800-line guideline.
+// under the project's 1000-line guideline.
 
 void OverlayService::onOsdDismissRequested()
 {

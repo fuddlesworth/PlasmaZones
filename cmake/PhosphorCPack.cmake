@@ -7,7 +7,7 @@
 # can also bootstrap a tarball locally without the workflow.
 #
 # Extracted from the top-level CMakeLists.txt to keep that file under
-# the 800-line cap. Include after feature_summary() at the very end of
+# the 1000-line guideline. Include after feature_summary() at the very end of
 # the root configure.
 set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")

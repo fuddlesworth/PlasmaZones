@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
@@ -46,7 +45,7 @@ Rectangle {
     opacity: 0
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
     border.color: accentColor
-    border.width: Math.round(Screen.devicePixelRatio * Theme.focusBorderWidth)
+    border.width: Theme.focusBorderWidth
     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
     z: 200
     Accessible.name: accessibleRoleName

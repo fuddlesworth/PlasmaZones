@@ -11,7 +11,7 @@
 //   * validPageNames()       — the set of navigable leaf page ids.
 //
 // Split out of settingscontroller_pageregistration.cpp to keep that file under
-// the 800-line cap (see CLAUDE.md). All methods here are members of
+// the 1000-line guideline (see CLAUDE.md). All methods here are members of
 // PlasmaZones::SettingsController — same class, separate translation unit, no
 // API change.
 

@@ -6,7 +6,7 @@
  * @brief Decoration-set REFUSAL paths.
  *
  * Split from test_decoration_sets.cpp to keep each file under the project's
- * 800-line cap. That file covers the round-trip (save, list, apply, merge,
+ * 1000-line guideline. That file covers the round-trip (save, list, apply, merge,
  * update, export/import); this one covers everything the store and the
  * decoration validator refuse, and the reason each refusal reports.
  *

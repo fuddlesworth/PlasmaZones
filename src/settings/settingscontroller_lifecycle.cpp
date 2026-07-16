@@ -16,7 +16,7 @@
 //     two ISettings change-tracking hooks that flow into setNeedsSave.
 //
 // Split out of settingscontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). Same class, separate TU, no API
+// 1000-line guideline (see CLAUDE.md). Same class, separate TU, no API
 // change.
 
 #include "settingscontroller.h"

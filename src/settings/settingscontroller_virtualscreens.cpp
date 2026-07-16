@@ -3,7 +3,7 @@
 
 // Virtual-screen lifecycle methods for SettingsController. Extracted
 // from settingscontroller_session.cpp to keep that TU under the
-// 800-line cap (CLAUDE.md). All methods here are members of
+// 1000-line guideline (CLAUDE.md). All methods here are members of
 // PlasmaZones::SettingsController — same class, separate translation
 // unit, no API change.
 //

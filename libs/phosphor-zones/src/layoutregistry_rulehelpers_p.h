@@ -8,7 +8,7 @@
 // classify and decode Rule / MatchExpression shapes, build the
 // windowless context query, and read an AssignmentEntry straight off a
 // rule's action list. Split out of layoutregistry_assignments.cpp so that
-// translation unit stays under the project's 800-line ceiling, and so any
+// translation unit stays under the project's 1000-line guideline, and so any
 // sibling .cpp in phosphor-zones can share the one classifier set rather
 // than duplicating it.
 //

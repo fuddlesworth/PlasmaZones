@@ -116,7 +116,7 @@ set(phosphorcontrol_SRCS
     src/pageregistry.cpp
     src/applicationcontroller.cpp
     # Async state-machine half of ApplicationController — split out so
-    # applicationcontroller.cpp stays under the 800-line cap (CLAUDE.md).
+    # applicationcontroller.cpp stays under the 1000-line guideline (CLAUDE.md).
     # Same class, separate TU, no API change.
     src/applicationcontroller_async.cpp
     src/localizedcontext.cpp

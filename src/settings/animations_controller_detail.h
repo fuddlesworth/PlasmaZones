@@ -5,7 +5,7 @@
 
 // Shared helpers between animationspagecontroller.cpp and
 // animationspagecontroller_shaders.cpp. The two TUs split the same class
-// across files to stay under the 800-line cap; both need to convert
+// across files to stay under the 1000-line guideline; both need to convert
 // shader-effect / parameter / shader-profile values to QVariantMap for
 // QML consumption. Inline definitions here ensure both TUs get their own
 // copy without relying on unity-build TU merging for cross-TU linkage.

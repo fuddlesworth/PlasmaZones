@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -146,7 +145,7 @@ Item {
 
             return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03);
         }
-        border.width: root.activeFocus ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
+        border.width: root.activeFocus ? 2 : 1
         border.color: {
             // Keyboard-focus indicator (tab stop on the root Item); takes
             // precedence over the selection/hover tints so the focused card

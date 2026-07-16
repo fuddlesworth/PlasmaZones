@@ -92,9 +92,41 @@ inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"}
  * Client-side cap in the editor UI (TopBar.qml / PropertyPanel.qml
  * @c maximumLength) and the matching D-Bus boundary clamp in the layout
  * adaptor. Callers can bypass the UI, so every adaptor entry point that
- * accepts a name re-applies it with QString::left().
+ * accepts a name re-applies it via @ref clampName.
  */
 inline constexpr int MaxLayoutNameLength = 40;
+
+/**
+ * @brief Clamp a user-visible name to @p maxLength UTF-16 code units without
+ * splitting a surrogate pair.
+ *
+ * QString::left() counts UTF-16 code units, so a bare
+ * @c left(MaxLayoutNameLength) can cut between the two halves of a surrogate
+ * pair (any character outside the BMP, e.g. an emoji), storing a lone high
+ * surrogate that serializes as U+FFFD. When the last kept unit is a high
+ * surrogate the cut backs off one more unit so the whole character is
+ * dropped, and any trailing whitespace the cut exposes is trimmed (leading
+ * whitespace is the callers' sanitizers' concern, not the clamp's).
+ * Names already within the limit are returned unchanged.
+ *
+ * @p maxLength defaults to @ref MaxLayoutNameLength; the duplicate-layout
+ * boundary clamp passes a reduced budget so the " (Copy)" suffix it
+ * re-appends still fits.
+ */
+inline QString clampName(const QString& name, int maxLength = MaxLayoutNameLength)
+{
+    if (name.size() <= maxLength) {
+        return name;
+    }
+    QString clamped = name.left(maxLength);
+    if (!clamped.isEmpty() && clamped.back().isHighSurrogate()) {
+        clamped.chop(1);
+    }
+    while (!clamped.isEmpty() && clamped.back().isSpace()) {
+        clamped.chop(1);
+    }
+    return clamped;
+}
 
 /**
  * @brief Editor-specific constants

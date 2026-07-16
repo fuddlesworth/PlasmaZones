@@ -3,8 +3,8 @@
 
 // Screen-management methods on OverlayService: setup / remove /
 // hot-plug add / remove / physical-screen teardown. Extracted from
-// overlayservice.cpp to keep that TU under the project's <800-line
-// cap and to keep the screen-lifecycle code grouped with itself.
+// overlayservice.cpp to keep that TU under the project's 1000-line
+// guideline and to keep the screen-lifecycle code grouped with itself.
 
 #include "internal.h"
 #include "../overlayservice.h"

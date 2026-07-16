@@ -15,7 +15,7 @@
 //     restart.
 //
 // The previous monolithic block in `settingscontroller.cpp` pushed that
-// TU past the project's 800-line cap (CLAUDE.md). Extracting the D-Bus
+// TU past the project's 1000-line guideline (CLAUDE.md). Extracting the D-Bus
 // wire-up is the natural seam: the helper lambda + subscriptions are
 // cohesive, only call into D-Bus session-bus APIs and the controller's
 // own slot table, and don't touch the page-controller construction

@@ -3,7 +3,7 @@
 
 // RAII envelope around SettingsController::beginExternalEdit /
 // endExternalEdit. Extracted from settingscontroller.h so that
-// header stays under the project's 800-line cap (CLAUDE.md). Only
+// header stays under the project's 1000-line guideline (CLAUDE.md). Only
 // `settingscontroller.h` re-includes this header so consumers that
 // already `#include "settingscontroller.h"` pick the scope up
 // transitively without any call-site change.

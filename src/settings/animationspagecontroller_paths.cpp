@@ -4,7 +4,7 @@
 // AnimationsPageController path-discovery helpers — small Q_INVOKABLE
 // readers (`sectionForPath`, `eventLabel`, `parentChain`)
 // that translate event-profile paths into UI taxonomy. Split out so
-// animationspagecontroller.cpp stays under the project's 800-line cap.
+// animationspagecontroller.cpp stays under the project's 1000-line guideline.
 // Same class, separate TU, no API change.
 
 #include "animationspagecontroller.h"

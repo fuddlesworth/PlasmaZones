@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
@@ -94,7 +93,7 @@ ToolBar {
                     background: Rectangle {
                         radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
                         color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.06) : "transparent")
-                        border.width: Math.round(Screen.devicePixelRatio)
+                        border.width: 1
                         border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
 
                         Behavior on color {
@@ -187,7 +186,7 @@ ToolBar {
                 background: Rectangle {
                     color: Theme.withAlpha(Kirigami.Theme.textColor, layoutNameField.activeFocus ? 0.08 : 0.04)
                     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
-                    border.width: Math.round(Screen.devicePixelRatio)
+                    border.width: 1
                     border.color: layoutNameField.activeFocus ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
 
                     // Character counter overlay (right-aligned inside field)
@@ -464,7 +463,7 @@ ToolBar {
         Rectangle {
             anchors.bottom: parent.bottom
             width: parent.width
-            height: Math.round(Screen.devicePixelRatio)
+            height: 1
             color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
     }

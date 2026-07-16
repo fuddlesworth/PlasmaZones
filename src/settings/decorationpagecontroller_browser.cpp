@@ -4,7 +4,7 @@
 // DecorationPageController shader-browser bridge — the ShaderBrowserPage
 // contract (install / open-directory / usages) over the surface-pack
 // registry and the decoration profile tree. Split out so
-// decorationpagecontroller.cpp stays under the project's 800-line cap.
+// decorationpagecontroller.cpp stays under the project's 1000-line guideline.
 // Mirrors animationspagecontroller_shaders.cpp; the security-sensitive
 // install path is the shared ShaderPackInstaller.
 

@@ -22,7 +22,7 @@
 #include <epoxy/gl.h>
 
 // Backdrop capture for the surface decoration fold. Split out of
-// surfacelayers.cpp to keep that TU under the 800-line limit, mirroring the
+// surfacelayers.cpp to keep that TU under the 1000-line guideline, mirroring the
 // earlier surface_audio.cpp split.
 namespace PlasmaZones {
 

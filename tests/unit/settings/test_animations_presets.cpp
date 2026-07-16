@@ -6,7 +6,7 @@
  * @brief AnimationsPageController user-preset library tests.
  *
  * Split from test_animations_motion_sets.cpp to keep each test file under the
- * project's 800-line cap, and because presets and sets are separate
+ * project's 1000-line guideline, and because presets and sets are separate
  * sub-services (AnimationPresetLibrary vs ShaderSetStore). Pinned behaviour:
  *   - User preset CRUD (addUserPreset, userPresets, removeUserPreset), with
  *     slugified filenames

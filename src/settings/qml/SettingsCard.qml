@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import "SearchAnchorHelpers.js" as SearchAnchors
 import org.phosphor.animation
@@ -212,7 +211,7 @@ Item {
         radius: Kirigami.Units.smallSpacing * 1.5
         // Slightly elevated from page background
         color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
-        border.width: Math.round(Screen.devicePixelRatio)
+        border.width: 1
         border.color: {
             if (!root.enabled)
                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04);
@@ -286,7 +285,7 @@ Item {
                 color: "transparent"
                 radius: cardBg.radius
                 visible: headerArea.activeFocus
-                border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+                border.width: 1
                 border.color: Kirigami.Theme.highlightColor
             }
 
@@ -477,11 +476,11 @@ Item {
         }
     }
 
-    // Subtle lift on hover. HiDPI: scale by devicePixelRatio so the
-    // 1px lift stays one physical pixel on high-DPI displays instead
-    // of collapsing to a sub-pixel offset.
+    // Subtle lift on hover: 1 device-independent px. The renderer scales
+    // it to physical pixels itself, so it never collapses to a sub-pixel
+    // offset on high-DPI displays.
     transform: Translate {
-        y: hoverHandler.hovered && root.enabled ? -Math.round(Screen.devicePixelRatio) : 0
+        y: hoverHandler.hovered && root.enabled ? -1 : 0
 
         Behavior on y {
             PhosphorMotionAnimation {

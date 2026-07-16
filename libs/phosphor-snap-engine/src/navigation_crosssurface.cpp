@@ -5,7 +5,7 @@
  * @file navigation_crosssurface.cpp
  * @brief SnapEngine cross-surface resolution helpers.
  *
- * Split out of navigation_actions.cpp to keep that TU under the 800-line limit.
+ * Split out of navigation_actions.cpp to keep that TU under the 1000-line guideline.
  * These are SnapEngine members invoked by the in-surface navigation entry points
  * in navigation_actions.cpp when a directional operation reaches a layout
  * boundary and must resolve a landing on a neighbouring virtual desktop or

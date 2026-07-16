@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -307,17 +306,13 @@ ColumnLayout {
             /// closer to the intended affordance than another low-alpha
             /// attempt — they should read as tree lines, not whispers.
             readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
-            /// One-physical-pixel hairline (`Math.max(1, ...)` so even when
-            /// devicePixelRatio rounds to zero we still draw something).
-            /// Matches the rest of the chrome's hairline conventions —
-            /// borders, separators, hover strokes. The earlier
-            /// `Math.max(2, Math.round(... * 1.5))` shape was tuned against
-            /// the broken `Kirigami.Units.devicePixelRatio` (which evaluated
-            /// to NaN and fell through to the floor of 2); once the
-            /// underlying ratio started returning the real value the
-            /// `* 1.5` made the connectors noticeably thicker than the
-            /// original visual baseline.
-            readonly property int _guideThickness: Math.max(1, Math.round(Screen.devicePixelRatio))
+            /// Hairline: 1 device-independent px, matching the rest of the
+            /// chrome's hairline conventions — borders, separators, hover
+            /// strokes. Widths here are DPR-scaled at render time, so a
+            /// plain 1 already stays crisp on high-DPR screens; the earlier
+            /// devicePixelRatio-based shapes double-scaled into thicker,
+            /// not crisper, connectors.
+            readonly property int _guideThickness: 1
 
             // Size delegate to the tree's available width so the
             // rightmost spacer pushes content into a clean column.
@@ -509,7 +504,7 @@ ColumnLayout {
                     // staying soft enough that the white label keeps
                     // its high-contrast read.
                     color: Qt.rgba(_tint.r, _tint.g, _tint.b, 0.4)
-                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+                    border.width: 1
                     border.color: Qt.rgba(_tint.r, _tint.g, _tint.b, 0.9)
 
                     Label {
@@ -599,7 +594,7 @@ ColumnLayout {
                         implicitHeight: valueLabel.implicitHeight + Kirigami.Units.smallSpacing
                         radius: Kirigami.Units.smallSpacing
                         color: Kirigami.Theme.alternateBackgroundColor
-                        border.width: Math.round(Screen.devicePixelRatio)
+                        border.width: 1
                         border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
 
                         Label {

@@ -14,7 +14,7 @@
 //     timeout tuning.
 //
 // Split out of applicationcontroller.cpp so that TU stays under the
-// project's 800-line cap (CLAUDE.md). All methods here are members of
+// project's 1000-line guideline (CLAUDE.md). All methods here are members of
 // PhosphorControl::ApplicationController and only touch private
 // members declared in the public header — same class, separate TU,
 // no API change.
