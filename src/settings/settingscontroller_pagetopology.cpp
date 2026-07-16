@@ -10,10 +10,9 @@
 //     Reset / Discard).
 //   * validPageNames()       — the set of navigable leaf page ids.
 //
-// Split out of settingscontroller_pageregistration.cpp to keep that file under
-// the 1000-line guideline (see CLAUDE.md). All methods here are members of
-// PlasmaZones::SettingsController — same class, separate translation unit, no
-// API change.
+// All methods here are members of PlasmaZones::SettingsController. Same class
+// as the sibling settingscontroller_pageregistration.cpp, separate translation
+// unit, no API change.
 
 #include "settingscontroller.h"
 

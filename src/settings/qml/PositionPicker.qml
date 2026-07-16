@@ -129,7 +129,7 @@ Item {
                                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
                             }
                             border.color: {
-                                if (cell.activeFocus && root.enabled)
+                                if (cell.activeFocus)
                                     return Kirigami.Theme.highlightColor;
 
                                 if (isSelected)
@@ -140,7 +140,7 @@ Item {
 
                                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3);
                             }
-                            border.width: ((cell.activeFocus && root.enabled) || cell.isSelected) ? 2 : 1
+                            border.width: (cell.activeFocus || cell.isSelected) ? 2 : 1
                             opacity: root.enabled ? 1 : 0.5
 
                             // Horizontal bar (top or bottom edge)

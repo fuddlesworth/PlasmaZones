@@ -24,7 +24,11 @@ Rectangle {
     required property real spacing
     required property Item drawingArea
     required property Repeater zonesRepeater
-    // Floor the grab thickness: with zone padding 0, spacing is 0 and the divider would be ungrabbable
+    // Floor the drawn thickness: with zone padding 0 the gap is 0, and a
+    // zero-thickness handle would leave the grip and centre line with nothing to
+    // draw into, so the divider would be invisible even though it is grabbable.
+    // What makes it grabbable at a zero gap is DividerManager raising the whole
+    // subtree over the zones, not this floor.
     readonly property real handleThickness: Math.max(spacing, Kirigami.Units.smallSpacing)
     // Derived properties from dividerInfo
     property bool isVertical: dividerInfo ? dividerInfo.isVertical : false
@@ -82,8 +86,10 @@ Rectangle {
     border.color: (dividerMouseArea.containsMouse || isDragging) ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
     border.width: isDragging ? 2 : (dividerMouseArea.containsMouse ? 1 : 0)
     radius: isVertical ? (width / 2) : (height / 2)
-    // Dividers stay below zones (z:60) and well below resize handles (z:200+ within zones)
-    // Only raise slightly when dragging to provide visual feedback
+    // Orders this handle against the OTHER handles only: every divider shares
+    // DividerManager's stacking context, so this cannot lift one over a zone.
+    // Where the dividers sit relative to the zones is DividerManager's z.
+    // Raise the dragged handle so it draws over any divider it crosses.
     z: isDragging ? 45 : 40
     // Sync dragPosition to dividerPosition when not dragging (e.g. after undo/redo or
     // any external zone change). Without this, undo/redo leaves dragPosition stale so

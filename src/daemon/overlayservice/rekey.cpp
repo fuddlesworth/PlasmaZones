@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Overlay-key migration + screen geometry-watch + screen-state invariant
-// check. Extracted from overlay.cpp to keep that TU under the project's
-// 1000-line guideline. The three functions form a small cohesive cluster:
-// rekeyOverlayState invokes installOverlayGeometryWatcher post-move, and
-// the debug-only validateScreenStateInvariant verifies the cross-side
-// pointer alignment that rekey is the primary risk-source for.
+// check. The three functions form a small cohesive cluster: rekeyOverlayState
+// invokes installOverlayGeometryWatcher post-move, and the debug-only
+// validateScreenStateInvariant verifies the cross-side pointer alignment that
+// rekey is the primary risk-source for.
 
 #include "internal.h"
 #include "../overlayservice.h"

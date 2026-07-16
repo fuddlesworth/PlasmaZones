@@ -95,15 +95,16 @@ LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* pa
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(manager)
 {
-    Q_ASSERT(manager);
     if (!m_layoutManager) {
-        // Release builds drop the assert above; a null manager is a fatal
-        // misconfiguration but skipping the connect() calls degrades the
-        // crash to a non-functional D-Bus surface that returns empty data.
-        qCCritical(lcDbusLayout)
-            << "LayoutAdaptor constructed with null PhosphorZones::LayoutRegistry — D-Bus surface will be inert";
-        initCoalesceTimer();
-        return;
+        // Every bus-reachable slot dereferences m_layoutManager unguarded, so
+        // there is no inert degradation available here — only a null-deref on
+        // the first D-Bus call, far from the composition root that caused it.
+        // The construction-time pattern in windowtrackingadaptor/enginewiring.cpp
+        // uses qFatal for the same class of misconfiguration; mirror it so debug
+        // AND release both halt loudly at the point of the mistake.
+        qFatal(
+            "LayoutAdaptor: constructed with a null PhosphorZones::LayoutRegistry — "
+            "every D-Bus slot would dereference it");
     }
     connectLayoutManagerSignals();
     initCoalesceTimer();
@@ -116,12 +117,10 @@ LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, PhosphorWor
     , m_virtualDesktopManager(vdm)
     , m_screenManager(screenManager)
 {
-    Q_ASSERT(manager);
     if (!m_layoutManager) {
-        qCCritical(lcDbusLayout)
-            << "LayoutAdaptor constructed with null PhosphorZones::LayoutRegistry — D-Bus surface will be inert";
-        initCoalesceTimer();
-        return;
+        qFatal(
+            "LayoutAdaptor: constructed with a null PhosphorZones::LayoutRegistry — "
+            "every D-Bus slot would dereference it");
     }
     connectLayoutManagerSignals();
     connectVirtualDesktopSignals();
@@ -620,10 +619,17 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
     // result: a tail clamp on a long name would cut the suffix off and leave
     // the copy visually identical to its source. clampName's surrogate
     // back-off keeps the reduced-budget cut from splitting a pair.
+    // The suffix is a library-side detail, so do not assume it survived onto the
+    // name — chopping blind would eat real characters if the registry ever stops
+    // appending it. Only trim the base when the suffix is actually there.
     if (duplicate->name().size() > MaxLayoutNameLength) {
         const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
-        duplicate->setName(clampName(duplicate->name().chopped(suffix.size()), MaxLayoutNameLength - suffix.size())
-                           + suffix);
+        if (duplicate->name().endsWith(suffix)) {
+            duplicate->setName(clampName(duplicate->name().chopped(suffix.size()), MaxLayoutNameLength - suffix.size())
+                               + suffix);
+        } else {
+            duplicate->setName(clampName(duplicate->name()));
+        }
     }
 
     qCInfo(lcDbusLayout) << "Duplicated layout" << id << "to" << duplicate->id();

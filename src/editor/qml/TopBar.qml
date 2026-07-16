@@ -169,6 +169,16 @@ ToolBar {
                 readonly property int maxLength: 40
                 readonly property int currentLength: text ? text.length : 0
                 readonly property bool showCounter: currentLength > maxLength * 0.8
+                // The name as the controller last handed it over, latched before
+                // maximumLength can truncate it in the field. A legacy name longer
+                // than maxLength loads truncated, so the field's text differs from
+                // the controller's from the very first frame.
+                property string committedName: ""
+                // Qt emits editingFinished on focus-out as well as on Return, and
+                // on a truncated legacy name a bare text comparison would then
+                // commit the truncation as a rename the user never asked for, undo
+                // entry and all. Only a real keystroke arms the commit.
+                property bool userEdited: false
 
                 maximumLength: maxLength
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 12
@@ -178,8 +188,16 @@ ToolBar {
                 Accessible.description: i18nc("@info", "Enter name for the layout")
                 // Add right padding when counter is visible to prevent text overlap
                 rightPadding: (showCounter || activeFocus) ? Kirigami.Units.gridUnit * 3 : 0
+                // textEdited fires only on user input, never on a programmatic write.
+                onTextEdited: {
+                    layoutNameField.userEdited = true;
+                }
                 onEditingFinished: {
-                    if (editorController && text !== editorController.layoutName)
+                    if (!layoutNameField.userEdited)
+                        return;
+
+                    layoutNameField.userEdited = false;
+                    if (editorController && text !== layoutNameField.committedName)
                         editorController.layoutName = text;
                 }
 
@@ -222,8 +240,15 @@ ToolBar {
             // Explicitly connect to layoutNameChanged signal for reliable updates
             Connections {
                 function onLayoutNameChanged() {
-                    if (!layoutNameField.activeFocus && editorController)
-                        layoutNameField.text = editorController.layoutName || "";
+                    if (!layoutNameField.activeFocus && editorController) {
+                        // Latch the controller's value, not the field's: assigning
+                        // it truncates anything past maximumLength.
+                        layoutNameField.committedName = editorController.layoutName || "";
+                        layoutNameField.text = layoutNameField.committedName;
+                        // This sync replaces the field's content, so any edit that
+                        // had not been committed yet is gone.
+                        layoutNameField.userEdited = false;
+                    }
                 }
 
                 target: editorController

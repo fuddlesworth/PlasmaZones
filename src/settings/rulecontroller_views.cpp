@@ -8,10 +8,9 @@
 //   * matchFields/operatorsForField/actionTypes/defaultPayloadFor — author surfaces
 //   * validationIssuesForJson/matchIsContextOnly — editor validation hooks
 //
-// Split out of rulecontroller.cpp to keep that file under the
-// 1000-line guideline (see CLAUDE.md). All methods are members of
-// PlasmaZones::RuleController and operate on its private model
-// state — same class, separate translation unit, no API change.
+// All methods are members of PlasmaZones::RuleController and operate on its
+// private model state. Same class as rulecontroller.cpp, separate translation
+// unit, no API change.
 
 #include "rulecontroller.h"
 #include "ruleauthoring.h"

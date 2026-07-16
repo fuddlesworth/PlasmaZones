@@ -62,12 +62,22 @@ QString LayoutAdaptor::importLayout(const QString& filePath)
         return QString();
     }
 
+    // The path comes off the bus, which any session process can reach, and the
+    // registry opens it verbatim. Sanitise here: this is the only chokepoint all
+    // callers share (the settings app sanitises too, but the editor client and
+    // direct bus calls do not).
+    const QString safePath = Utils::sanitizeIOPath(filePath);
+    if (safePath.isEmpty()) {
+        qCWarning(lcDbusLayout) << "import layout: refusing unsafe path" << filePath;
+        return QString();
+    }
+
     // The registry hands back the imported layout itself, so the new ID comes
     // straight from it. Deriving it from layouts().last() encoded an
     // append-order assumption nothing in the registry enforces.
-    PhosphorZones::Layout* newLayout = m_layoutManager->importLayout(filePath);
+    PhosphorZones::Layout* newLayout = m_layoutManager->importLayout(safePath);
     if (!newLayout) {
-        qCWarning(lcDbusLayout) << "Failed to import layout from" << filePath;
+        qCWarning(lcDbusLayout) << "Failed to import layout from" << safePath;
         return QString();
     }
 
@@ -80,7 +90,7 @@ QString LayoutAdaptor::importLayout(const QString& filePath)
         zone->setName(clampName(zone->name()));
     }
 
-    qCInfo(lcDbusLayout) << "Imported layout from" << filePath << "with ID" << newLayout->id();
+    qCInfo(lcDbusLayout) << "Imported layout from" << safePath << "with ID" << newLayout->id();
     const QString newId = newLayout->id().toString();
     Q_EMIT layoutCreated(newId);
     return newId;
@@ -92,6 +102,14 @@ bool LayoutAdaptor::exportLayout(const QString& layoutId, const QString& filePat
         return false;
     }
 
+    // Export WRITES the caller's path, so an unsanitised value off the bus
+    // clobbers whatever it names. Same chokepoint reasoning as importLayout.
+    const QString safePath = Utils::sanitizeIOPath(filePath);
+    if (safePath.isEmpty()) {
+        qCWarning(lcDbusLayout) << "export layout: refusing unsafe path" << filePath;
+        return false;
+    }
+
     auto* layout = getValidatedLayout(layoutId, QStringLiteral("export layout"));
     if (!layout) {
         return false;
@@ -100,11 +118,11 @@ bool LayoutAdaptor::exportLayout(const QString& layoutId, const QString& filePat
     // Report what the write actually did. The previous form logged success
     // unconditionally, so the journal said "Exported layout" for an export that
     // never reached the disk.
-    if (!m_layoutManager->exportLayout(layout, filePath)) {
-        qCWarning(lcDbusLayout) << "Failed to export layout" << layoutId << "to" << filePath;
+    if (!m_layoutManager->exportLayout(layout, safePath)) {
+        qCWarning(lcDbusLayout) << "Failed to export layout" << layoutId << "to" << safePath;
         return false;
     }
-    qCInfo(lcDbusLayout) << "Exported layout" << layoutId << "to" << filePath;
+    qCInfo(lcDbusLayout) << "Exported layout" << layoutId << "to" << safePath;
     return true;
 }
 
@@ -216,21 +234,10 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Update full screen geometry mode
     layout->setUseFullScreenGeometry(obj[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false));
 
-    // Update aspect ratio classification. Accept both serialized forms, the
-    // same way the editor's loader does: getLayout/Layout::toJson emit the
-    // canonical string ("ultrawide"), while editor save round-trips carry the
-    // int, so an int-only read would reset a get→modify→update cycle to Any.
-    if (obj.contains(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)) {
-        const QJsonValue arVal = obj[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey];
-        if (arVal.isString()) {
-            layout->setAspectRatioClassInt(
-                static_cast<int>(PhosphorLayout::ScreenClassification::fromString(arVal.toString())));
-        } else {
-            layout->setAspectRatioClassInt(arVal.toInt(0));
-        }
-    } else {
-        layout->setAspectRatioClassInt(0);
-    }
+    // Update aspect ratio classification. fromJsonValue accepts both serialized
+    // forms and maps a missing key to Any, which is the reset this branch wants.
+    layout->setAspectRatioClassInt(static_cast<int>(
+        PhosphorLayout::ScreenClassification::fromJsonValue(obj[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey])));
 
     // Update shader settings
     layout->setShaderId(obj[::PhosphorZones::ZoneJsonKeys::ShaderId].toString());

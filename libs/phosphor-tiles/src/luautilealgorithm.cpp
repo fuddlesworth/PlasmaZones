@@ -46,6 +46,50 @@ bool finiteNumber(const QVariantMap& m, const QString& key, double& out)
     return true;
 }
 
+// Marshal a window list for a script, capped at MaxZones. Shared by buildContext
+// (ctx.windows) and buildStateMap (state.windows) so both paths hand a script the
+// same contract.
+//
+// The cap is a plain truncation of the tiled order, so a slot's position in the
+// list IS that window's tiled index. That keeps one index space across every
+// number a script sees: ctx.focusedIndex, state.focusedIndex, ResizeEvent.index
+// and the windowIndex argument of onWindowAdded/onWindowRemoved are all real
+// tiled indices, and stay directly comparable with each other.
+//
+// The focused window is the one exception. When its tiled index is past the cap
+// it is APPENDED after the truncated run rather than replacing an entry, so a
+// focus-driven hook still sees it without any truthful slot being overwritten
+// (the list is then cap + 1 long). @p focusedListIndex reports where it landed,
+// which is the only index into the list itself; @p focusedIndex stays the real
+// tiled index either way.
+QVariantList marshalWindowList(const QVector<WindowInfo>& infos, int focusedIndex, int& focusedListIndex)
+{
+    focusedListIndex = -1;
+    const int total = static_cast<int>(infos.size());
+    const int cap = std::min(total, MaxZones);
+
+    QVariantList windows;
+    windows.reserve(cap);
+    const auto appendInfo = [&windows](const WindowInfo& info) {
+        QVariantMap w;
+        w[QStringLiteral("appId")] = info.appId;
+        w[QStringLiteral("focused")] = info.focused;
+        w[QStringLiteral("windowId")] = info.windowId;
+        windows.append(w);
+    };
+    for (int i = 0; i < cap; ++i) {
+        appendInfo(infos[i]);
+    }
+
+    if (focusedIndex >= 0 && focusedIndex < cap) {
+        focusedListIndex = focusedIndex;
+    } else if (focusedIndex >= cap && focusedIndex < total) {
+        appendInfo(infos[focusedIndex]);
+        focusedListIndex = static_cast<int>(windows.size()) - 1;
+    }
+    return windows;
+}
+
 ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
 {
     ScriptedHelpers::CustomParamDef d;
@@ -655,17 +699,13 @@ QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QR
     }
 
     if (!params.windowInfos.isEmpty()) {
-        QVariantList windows;
-        const int wcap = std::min<int>(static_cast<int>(params.windowInfos.size()), MaxZones);
-        for (int i = 0; i < wcap; ++i) {
-            QVariantMap w;
-            w[QStringLiteral("appId")] = params.windowInfos[i].appId;
-            w[QStringLiteral("focused")] = params.windowInfos[i].focused;
-            w[QStringLiteral("windowId")] = params.windowInfos[i].windowId;
-            windows.append(w);
-        }
-        ctx[QStringLiteral("windows")] = windows;
+        int focusedListIndex = -1;
+        ctx[QStringLiteral("windows")] = marshalWindowList(params.windowInfos, params.focusedIndex, focusedListIndex);
+        // Only meaningful next to the list it indexes, so it rides along with it.
+        ctx[QStringLiteral("focusedListIndex")] = focusedListIndex;
     }
+    // The real tiled index, uncapped: comparable with the indices tile() itself
+    // reasons in (0 .. count - 1). Use focusedListIndex to index ctx.windows.
     ctx[QStringLiteral("focusedIndex")] = params.focusedIndex;
 
     // Last applied zones (advisory) — lets scripts read neighbour positions.
@@ -789,41 +829,20 @@ QVariantMap LuauTileAlgorithm::buildStateMap(const TilingState* state, bool incl
     st[QStringLiteral("masterCount")] = state->masterCount();
     st[QStringLiteral("splitRatio")] = std::clamp(state->splitRatio(), MinSplitRatio, MaxSplitRatio);
 
+    // Visit the whole tiled list rather than a capped prefix, so focusedIndex
+    // comes back as the REAL tiled index — the same space ResizeEvent.index and
+    // the windowIndex argument of onWindowAdded/onWindowRemoved are already in,
+    // which is what makes a hook's `resize.index == state.focusedIndex` test
+    // mean what it reads like. marshalWindowList applies the MaxZones cap to the
+    // marshalled list and reports the focused window's slot within it.
+    // windowCount / countAfterRemoval below stay uncapped so the counts reflect
+    // reality.
     int focusedIndex = -1;
-    // Capped at MaxZones like every other marshalled window list (buildContext
-    // caps ctx.windows the same way), with a focused-window carve-out:
-    // buildWindowInfos only reports focusedIndex for a window it actually
-    // visits, so a plain truncation would report -1 for a focused window past
-    // the cap. When that happens the focused window replaces the last entry
-    // and focusedIndex points at that in-list slot, so a hook always sees the
-    // focused window and windows[focusedIndex] stays coherent with the list it
-    // was handed. windowCount / countAfterRemoval below stay uncapped so the
-    // counts reflect reality.
-    const auto resolver = appIdResolver();
-    const int cap = std::min(state->tiledWindowCount(), AutotileDefaults::MaxZones);
-    QVector<WindowInfo> infos = buildWindowInfos(state, cap, resolver, focusedIndex);
-    if (focusedIndex < 0 && !infos.isEmpty()) {
-        const QStringList tiled = state->tiledWindows();
-        const qsizetype actual = tiled.indexOf(state->focusedWindow());
-        if (actual >= cap) {
-            WindowInfo focusedInfo;
-            focusedInfo.appId = resolver ? resolver(tiled.at(actual)) : QString();
-            focusedInfo.focused = true;
-            focusedInfo.windowId = tiled.at(actual);
-            infos.last() = focusedInfo;
-            focusedIndex = static_cast<int>(infos.size()) - 1;
-        }
-    }
-    QVariantList windows;
-    for (const WindowInfo& info : infos) {
-        QVariantMap w;
-        w[QStringLiteral("appId")] = info.appId;
-        w[QStringLiteral("focused")] = info.focused;
-        w[QStringLiteral("windowId")] = info.windowId;
-        windows.append(w);
-    }
-    st[QStringLiteral("windows")] = windows;
+    const QVector<WindowInfo> infos = buildWindowInfos(state, state->tiledWindowCount(), appIdResolver(), focusedIndex);
+    int focusedListIndex = -1;
+    st[QStringLiteral("windows")] = marshalWindowList(infos, focusedIndex, focusedListIndex);
     st[QStringLiteral("focusedIndex")] = focusedIndex;
+    st[QStringLiteral("focusedListIndex")] = focusedListIndex;
 
     // Persistent bag, so a hook can read its own prior state (e.g. column widths)
     // before computing the update it returns. Gated on the same opt-in as

@@ -16,13 +16,11 @@
 //   * KZones import helpers.
 //
 // Per-screen overrides live in settingscontroller_perscreen.cpp and the
-// ordering helpers in settingscontroller_ordering.cpp, both split out for
-// the same 1000-line target that made this file.
+// ordering helpers in settingscontroller_ordering.cpp.
 //
-// Split out of settingscontroller.cpp to hold that file under the
-// project's 1000-line target (see CLAUDE.md). All methods here are members of
-// PlasmaZones::SettingsController and use its private state — same
-// class, separate translation unit, no API change.
+// All methods here are members of PlasmaZones::SettingsController and use its
+// private state. Same class as settingscontroller.cpp, separate translation
+// unit, no API change.
 
 #include "settingscontroller.h"
 
@@ -30,6 +28,7 @@
 #include "../config/configmigration.h"
 #include "../core/logging.h"
 #include "../core/settings_interfaces.h"
+#include "../core/utils.h"
 #include "../phosphor_i18n.h"
 #include "dbusutils.h"
 #include "kzonesimporter.h"
@@ -460,7 +459,7 @@ bool SettingsController::exportAllSettings(const QString& filePath)
     // Defence-in-depth: same sanitiser the per-layout import/export uses.
     // A QML or D-Bus caller passing a path with `..` traversal segments,
     // an embedded NUL, or a leading `~` is treated as a programmer error.
-    const QString safeFilePath = sanitizeIOPath(filePath);
+    const QString safeFilePath = Utils::sanitizeIOPath(filePath);
     if (safeFilePath.isEmpty()) {
         qCWarning(lcCore) << "exportAllSettings: refusing unsafe path" << filePath;
         Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That export path is not allowed."));
@@ -528,7 +527,7 @@ bool SettingsController::importAllSettings(const QString& filePath)
     // Split rather than combined: a refused path and a file that is not there
     // are the same `false` to a caller but different words to a user, and the
     // log wants them apart too.
-    const QString safeFilePath = sanitizeIOPath(filePath);
+    const QString safeFilePath = Utils::sanitizeIOPath(filePath);
     if (safeFilePath.isEmpty()) {
         qCWarning(lcCore) << "importAllSettings: refusing unsafe path" << filePath;
         Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That file path is not allowed."));
@@ -811,8 +810,7 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Per-screen autotile / snapping / zone-selector overrides live in
-// settingscontroller_perscreen.cpp — split out to keep this TU under the
-// 1000-line guideline.
+// settingscontroller_perscreen.cpp.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QVariantMap SettingsController::loadWindowGeometry() const
@@ -881,7 +879,7 @@ int SettingsController::importFromKZonesFile(const QString& filePath)
 {
     // Defence-in-depth: same sanitiser, and same QFileDialog entry point, as
     // the layout and algorithm imports.
-    const QString safe = sanitizeIOPath(filePath);
+    const QString safe = Utils::sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "importFromKZonesFile: refusing unsafe path" << filePath;
         Q_EMIT kzonesImportFinished(0, PhosphorI18n::tr("That file path is not allowed."));

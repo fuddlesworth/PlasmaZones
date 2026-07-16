@@ -42,6 +42,11 @@ Window {
         return editorWindow._editorController.hasOuterGapOverride ? editorWindow._editorController.outerGap : editorWindow._editorController.globalOuterGap;
     }
     property var _zonesRepeater: null
+    // Base of the zone stacking range inside drawingArea. Each zone sits at
+    // zoneBaseZ + its zOrder, and zOrder is the zone's index in the model, so
+    // the top zone is zoneBaseZ + zone count - 1. DividerManager needs that top
+    // to decide when it can win a hit test against the zones.
+    readonly property int zoneBaseZ: 60
     // Helper to get selected zone data - reactive to both selectedZoneId AND zones changes
     // Uses C++ Q_INVOKABLE method for O(1) lookup instead of O(n) JavaScript loop
     property var selectedZone: {
@@ -433,8 +438,8 @@ Window {
                         zoneSpacing: editorWindow.zoneSpacing // Pass spacing for gaps between zones
                         edgeGap: editorWindow.edgeGap // Pass gap for screen edges
                         snapIndicator: snapIndicator // Pass snapIndicator for visual feedback
-                        // Z-order: base of 60 (above DividerManager z:50) + zOrder from model
-                        z: 60 + (modelData.zOrder !== undefined ? modelData.zOrder : 0)
+                        // Z-order: zoneBaseZ (above DividerManager) + zOrder from model
+                        z: editorWindow.zoneBaseZ + (modelData.zOrder !== undefined ? modelData.zOrder : 0)
                         onClicked: function (event) {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow.handleZoneClick(modelData.id, event.modifiers);
@@ -521,6 +526,7 @@ Window {
                     drawingArea: drawingArea
                     zonesRepeater: zonesRepeater
                     previewMode: editorWindow.previewMode
+                    zonesTopZ: editorWindow.zoneBaseZ + Math.max(0, zonesRepeater.count - 1)
                 }
 
                 // Snap line visualization
@@ -618,7 +624,7 @@ Window {
         PropertyPanel {
             id: propertiesPanel
 
-            visible: !editorWindow.fullscreenMode && !editorWindow.previewMode
+            chromeVisible: !editorWindow.fullscreenMode && !editorWindow.previewMode
             editorController: editorWindow._editorController
             selectedZoneId: editorWindow.selectedZoneId
             selectedZone: editorWindow.selectedZone

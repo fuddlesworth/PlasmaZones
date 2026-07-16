@@ -7,9 +7,8 @@
 // exercises the loader, and tears down.
 //
 // Lifecycle / rescan-reentry / destructor-pin slots live in the
-// sibling TU test_phosphor_registry_pluginloader_lifecycle.cpp to
-// keep both files under the project's 1000-line guideline. Both TUs share
-// the WarningCapture instrumentation + plugin-fixture install
+// sibling TU test_phosphor_registry_pluginloader_lifecycle.cpp. Both
+// TUs share the WarningCapture instrumentation + plugin-fixture install
 // helpers via test_pluginloader_helpers.h.
 
 #include "test_pluginloader_helpers.h"

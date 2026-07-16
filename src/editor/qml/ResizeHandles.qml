@@ -19,7 +19,6 @@ Item {
     required property real canvasWidth // Canvas width (may be 0 during initialization)
     required property real canvasHeight // Canvas height (may be 0 during initialization)
     required property real minSize
-    required property var zoneData
     property var snapIndicator: null
     // Get actual canvas dimensions dynamically with fallback to root
     readonly property real actualCanvasWidth: {
@@ -44,8 +43,6 @@ Item {
 
         return 0;
     }
-    // Track if canvas has valid dimensions for handle visibility
-    readonly property bool canvasReady: actualCanvasWidth > 0 && actualCanvasHeight > 0
 
     anchors.fill: parent
 
@@ -115,46 +112,9 @@ Item {
 
             required property var modelData
             required property int index
-            // Use root's visual dimensions instead of parent dimensions
-            // Root is EditorZone, which has visualWidth/visualHeight (actual zone size)
-            // Parent is ResizeHandles Item with anchors.fill: parent (EditorZone)
-            // But parent width/height has spacing subtracted, so use root.visualWidth/Height instead
+            // Root is the EditorZone. Guards the selection/hover reads below,
+            // which decide whether the handle fades in.
             readonly property bool hasValidRoot: resizeHandles.root !== null && resizeHandles.root !== undefined
-            // Get zone dimensions - use visualWidth/Height if available, otherwise calculate from zoneData
-            readonly property real zoneW: {
-                if (!hasValidRoot)
-                    return 0;
-
-                if (isFinite(resizeHandles.root.visualWidth) && resizeHandles.root.visualWidth > 0)
-                    return resizeHandles.root.visualWidth;
-
-                // Fallback: calculate from zoneData if visualWidth not set yet
-                if (resizeHandles.zoneData && resizeHandles.canvasWidth > 0) {
-                    var w = resizeHandles.zoneData.width || (resizeHandles.zoneData.relativeGeometry && resizeHandles.zoneData.relativeGeometry.width) || 0.25;
-                    return w * resizeHandles.canvasWidth;
-                }
-                return 0;
-            }
-            readonly property real zoneH: {
-                if (!hasValidRoot)
-                    return 0;
-
-                if (isFinite(resizeHandles.root.visualHeight) && resizeHandles.root.visualHeight > 0)
-                    return resizeHandles.root.visualHeight;
-
-                // Fallback: calculate from zoneData if visualHeight not set yet
-                if (resizeHandles.zoneData && resizeHandles.canvasHeight > 0) {
-                    var h = resizeHandles.zoneData.height || (resizeHandles.zoneData.relativeGeometry && resizeHandles.zoneData.relativeGeometry.height) || 0.25;
-                    return h * resizeHandles.canvasHeight;
-                }
-                return 0;
-            }
-            // Check if zone has reasonable size for showing handles
-            readonly property bool hasValidZoneSize: zoneW > 20 && zoneH > 20
-            // But parent (EditorZone) has spacing-adjusted dimensions, so use that for bounds
-            readonly property bool hasValidParent: resizeHandles.parent !== null && resizeHandles.parent !== undefined
-            readonly property real parentW: hasValidParent ? resizeHandles.parent.width : 0
-            readonly property real parentH: hasValidParent ? resizeHandles.parent.height : 0
             // Handle type detection
             readonly property bool isCornerHandle: modelData.id.length === 2
             // nw, ne, se, sw

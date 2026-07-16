@@ -10,10 +10,8 @@
 // perScreenOverridesChanged() (UI refresh). Emitting from these wrappers
 // would mark the page dirty even for no-op or rejected writes.
 //
-// Split out of settingscontroller_session.cpp to keep that file under the
-// 1000-line guideline (see CLAUDE.md). All methods here are members of
-// PlasmaZones::SettingsController and use its private state — same class,
-// separate translation unit, no API change.
+// All methods here are members of PlasmaZones::SettingsController and use its
+// private state. Same class, separate translation unit, no API change.
 
 #include "settingscontroller.h"
 

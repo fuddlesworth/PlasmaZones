@@ -624,7 +624,6 @@ Item {
         canvasWidth: root.canvasWidth
         canvasHeight: root.canvasHeight
         minSize: root.minSize
-        zoneData: root.zoneData
         snapIndicator: root.snapIndicator
     }
 

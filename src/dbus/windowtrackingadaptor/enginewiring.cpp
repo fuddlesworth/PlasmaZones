@@ -4,9 +4,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // WindowTrackingAdaptor — engine cross-wiring
 //
-// Split out of windowtrackingadaptor.cpp to keep that translation unit under the
-// 1000-line guideline. Holds setEngines(), which wires cross-engine references, the
-// disabled-context restore predicates, and the shared OSD navigation path.
+// Holds setEngines(), which wires cross-engine references, the disabled-context
+// restore predicates, and the shared OSD navigation path.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "../windowtrackingadaptor.h"

@@ -20,8 +20,9 @@ var radiusMultiplier = 1.5;
 var panelAlpha = 0.95;   // PropertyPanel, NotificationBanner — more opaque, content-heavy
 var toolbarAlpha = 0.90; // TopBar, ControlBar — lighter, chrome-level
 
-// Focus ring border width (device-pixel-aware)
-var focusBorderWidth = 2; // Use Math.round(devicePixelRatio * focusBorderWidth) at call site
+// Focus ring border width in device-independent pixels. The renderer scales it
+// for the screen's device pixel ratio, so call sites use it as-is.
+var focusBorderWidth = 2;
 
 function withAlpha(baseColor, alpha) {
     return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha);

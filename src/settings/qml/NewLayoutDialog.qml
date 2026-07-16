@@ -411,12 +411,15 @@ Kirigami.Dialog {
                         //
                         // selectedAspectRatio starts at -1 for "not chosen",
                         // which createNewLayout reads as "skip the call" and
-                        // leaves the daemon's own Any default. Clicking Any
-                        // never actually writes 0: the group already displays
-                        // index 0 (the Math.max below clamps -1 to 0), so its
-                        // same-index click guard swallows the click and
-                        // selectedAspectRatio stays -1. The daemon default is
-                        // Any, so the net behavior is the same either way.
+                        // leaves the daemon's own Any default. From that
+                        // initial state, clicking Any is swallowed rather than
+                        // writing 0: the group already displays index 0 (the
+                        // Math.max below clamps -1 to 0), so its same-index
+                        // click guard eats the click and selectedAspectRatio
+                        // stays -1. Once another class has been picked the
+                        // index no longer matches, so clicking Any does write
+                        // 0. The daemon default is Any, so the net behavior is
+                        // the same either way.
                         SettingsButtonGroup {
                             model: [i18n("Any"), "16:9", "21:9", "32:9", i18n("Portrait")]
                             currentIndex: Math.max(0, root.selectedAspectRatio)

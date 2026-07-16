@@ -335,9 +335,10 @@ SettingsFlickable {
                 icon.name: "view-filter"
                 checked: filterBar.hasActiveFilters
                 onClicked: filterBar.popupFilterMenu()
-                Accessible.name: filterBar.hasActiveFilters ? i18n("Filter (active)") : i18n("Filter")
+                Accessible.name: filterBar.hasActiveFilters ? i18nc("@action:button", "Filter (active)") : i18nc("@action:button", "Filter")
                 ToolTip.visible: hovered
-                ToolTip.text: filterBar.hasActiveFilters ? i18n("Filters active. Click to change") : i18n("Filter")
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+                ToolTip.text: filterBar.hasActiveFilters ? i18nc("@info:tooltip", "Filters active. Click to change") : i18nc("@info:tooltip", "Filter")
             }
 
             Button {

@@ -25,35 +25,27 @@ set(plasmazones_settings_SRCS
     registryshaderpreviewbackend.h
     settingscontroller.h
     settingscontroller.cpp
-    # SettingsController is large enough to blow past the project's
-    # 1000-line target (1150 hard ceiling) if kept as a single TU.
-    # The sub-domain methods live in sibling
-    # .cpp files compiled into the same target — same class, multiple
-    # translation units, no API change. Order matches reading order:
-    # construction → lifecycle → page registry → per-domain CRUD.
+    # SettingsController's sub-domain methods live in sibling .cpp files
+    # compiled into the same target — same class, multiple translation units,
+    # no API change. Order matches reading order: construction → lifecycle →
+    # page registry → per-domain CRUD.
     settingscontroller_lifecycle.cpp
     settingscontroller_pageregistration.cpp
     settingscontroller_pagetopology.cpp
     settingscontroller_layouts.cpp
     settingscontroller_session.cpp
-    # Per-screen autotile/snapping/zone-selector override wrappers — split
-    # out so settingscontroller_session.cpp stays under the 1000-line guideline.
+    # Per-screen autotile/snapping/zone-selector override wrappers.
     settingscontroller_perscreen.cpp
     settingscontroller_ordering.cpp
     # Virtual-screen lifecycle methods (getVirtualScreenConfig +
-    # apply/remove/stage variants). Split out of _session.cpp to
-    # keep that TU under the 1000-line guideline (CLAUDE.md).
+    # apply/remove/stage variants).
     settingscontroller_virtualscreens.cpp
     # D-Bus subscription wiring (wireDaemonSubscriptions + reloadLocal
-    # RuleStore) — extracted from settingscontroller.cpp so the central
-    # TU stays under the 1000-line guideline (CLAUDE.md).
+    # RuleStore).
     settingscontroller_dbuswire.cpp
-    # Active-page navigation + per-page dirty tracking + external-edit
-    # envelope — extracted from settingscontroller.cpp so the central TU
-    # stays under the 1000-line guideline (CLAUDE.md).
+    # Active-page navigation + per-page dirty tracking + external-edit envelope.
     settingscontroller_pagestate.cpp
-    # RAII begin/endExternalEdit wrapper — extracted from
-    # settingscontroller.h so the header stays under the 1000-line guideline.
+    # RAII begin/endExternalEdit wrapper, extracted from settingscontroller.h.
     externaleditscope.h
     externaleditscope.cpp
     # Per-page sub-controllers — hang off SettingsController as child QObjects,
@@ -65,18 +57,14 @@ set(plasmazones_settings_SRCS
     # definitions make cross-TU linkage independent of unity-build merging.
     animations_controller_detail.h
     # AnimationsPageController shader-leg methods compile into the same
-    # target — same class, separate TU, no API change. Keeps the main
-    # cpp under the 1000-line guideline (CLAUDE.md).
+    # target — same class, separate TU, no API change.
     animationspagecontroller_shaders.cpp
     # AnimationsPageController override-CRUD methods (userProfilesDir,
     # hasOverride / rawProfile / resolvedProfile / setOverride /
-    # clearOverride). Same split rationale as _shaders.cpp — the main
-    # TU grew past 1000 lines after the F#2c async-revert addition.
+    # clearOverride).
     animationspagecontroller_overrides.cpp
-    # AnimationsPageController path-discovery helpers
-    # (sectionForPath / eventLabel / parentChain). Same
-    # split rationale — small per-Q_INVOKABLE methods extracted so the
-    # main TU stays under the 1000-line guideline.
+    # AnimationsPageController path-discovery helpers, small per-Q_INVOKABLE
+    # methods (sectionForPath / eventLabel / parentChain).
     animationspagecontroller_paths.cpp
     # Shared validate+copy primitive for installing shader packs.
     # Consumed by AnimationsPageController + SnappingShadersPageController.
@@ -84,8 +72,7 @@ set(plasmazones_settings_SRCS
     shaderpackinstaller.h
     shaderpackinstaller.cpp
     # Preset library — a sub-service hosted by AnimationsPageController as a
-    # child QObject. Split out to keep animationspagecontroller.cpp under the
-    # project's 1000-line guideline.
+    # child QObject.
     animationpresetlibrary.h
     animationpresetlibrary.cpp
     # Shared set store (motion sets + decoration sets) and the motion-set
@@ -121,8 +108,8 @@ set(plasmazones_settings_SRCS
     # mutations write straight to the Settings decorationProfileTree.
     decorationpagecontroller.h
     decorationpagecontroller.cpp
-    # Surface-taxonomy helper (parentChain) split into a sibling TU to keep
-    # the main controller TU under the 1000-line guideline. Same class, separate TU.
+    # Surface-taxonomy helper (parentChain) in a sibling TU. Same class,
+    # separate TU.
     decorationpagecontroller_paths.cpp
     decorationpagecontroller_browser.cpp
     decorationpagecontroller_sets.cpp
@@ -155,23 +142,19 @@ set(plasmazones_settings_SRCS
     # Read-only / projection methods of RuleController — sections,
     # rulesSnapshot, monitorOverview, ruleScreenIds, author surfaces
     # (matchFields/operatorsForField/actionTypes/defaultPayloadFor),
-    # validation entry points. Split out so rulecontroller.cpp stays
-    # under the 1000-line guideline; same class, separate TU, no API change.
+    # validation entry points. Same class, separate TU, no API change.
     rulecontroller_views.cpp
     # RuleController label-lookup setters (screen / activity / zone /
     # virtual-desktop / snapping-layout / tiling-algorithm / shader-effect /
     # overlay-shader / decoration-pack) plus the QML curve-label resolver.
-    # Thin pass-throughs into RuleModel; split out so rulecontroller.cpp
-    # stays under the project's 1000-line guideline.
+    # Thin pass-throughs into RuleModel.
     rulecontroller_lookups.cpp
-    # RuleController per-page dirty split + managed-baseline reset/discard,
-    # split out so rulecontroller.cpp stays under the project's 1000-line guideline.
+    # RuleController per-page dirty split + managed-baseline reset/discard.
     rulecontroller_baseline.cpp
-    # RuleController authoring metadata + templates — pure read-only
-    # helpers split out so rulecontroller.cpp stays under the project's
-    # 1000-line guideline. The controller's Q_INVOKABLE entry points (matchFields,
-    # operatorsForField, actionTypes, newEmptyRule, ruleTemplates,
-    # newRuleFromTemplate) delegate here.
+    # RuleController authoring metadata + templates — pure read-only helpers.
+    # The controller's Q_INVOKABLE entry points (matchFields, operatorsForField,
+    # actionTypes, newEmptyRule, ruleTemplates, newRuleFromTemplate) delegate
+    # here.
     ruleauthoring.h
     ruleauthoring.cpp
     ruletemplates.h

@@ -102,13 +102,9 @@ QQuickItem* OverlayService::PerScreenOverlayState::mainOverlaySlot() const
 }
 
 // Per-role SurfaceAnimator config builders + setupSurfaceAnimator +
-// applyShaderProfilesToAnimator are extracted to
-// overlayservice/animation_config.cpp to keep this translation unit
-// under the project's 1000-line guideline.
+// applyShaderProfilesToAnimator live in overlayservice/animation_config.cpp.
 
-// primeSurfaceRenderPipeline + cancelSurfacePrime are extracted to
-// overlayservice/priming.cpp to keep this translation unit under the
-// project's 1000-line guideline.
+// primeSurfaceRenderPipeline + cancelSurfacePrime live in overlayservice/priming.cpp.
 
 OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                                PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent)
@@ -690,8 +686,7 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 
 // Screen-management methods (setupForScreen / removeScreen /
 // assertWindowOnScreen / handleScreenAdded / destroyAllWindowsForPhysicalScreen
-// / handleScreenRemoved) are extracted to overlayservice/screens.cpp to keep
-// this translation unit under the project's 1000-line guideline.
+// / handleScreenRemoved) live in overlayservice/screens.cpp.
 
 OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude(const QString& screenId) const
 {

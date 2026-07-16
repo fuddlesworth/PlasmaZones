@@ -89,10 +89,14 @@ inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"}
 /**
  * @brief Maximum length for user-visible layout and zone names.
  *
- * Client-side cap in the editor UI (TopBar.qml / PropertyPanel.qml
- * @c maximumLength) and the matching D-Bus boundary clamp in the layout
- * adaptor. Callers can bypass the UI, so every adaptor entry point that
- * accepts a name re-applies it via @ref clampName.
+ * Client-side cap in the QML text fields that author a name (editor
+ * TopBar.qml and PropertyPanel.qml, settings NewLayoutDialog.qml, all via
+ * @c maximumLength). The UI cap is advisory only: callers can bypass it
+ * entirely over D-Bus, and @c QQuickTextInput::maximumLength truncates by
+ * UTF-16 code units so even the UI can produce a name that needs repair.
+ * Every name-producing entry point therefore re-applies the cap via
+ * @ref clampName — the layout adaptor's D-Bus boundary and the settings-side
+ * layout controller (@c settingscontroller_layouts.cpp).
  */
 inline constexpr int MaxLayoutNameLength = 40;
 
@@ -103,26 +107,40 @@ inline constexpr int MaxLayoutNameLength = 40;
  * QString::left() counts UTF-16 code units, so a bare
  * @c left(MaxLayoutNameLength) can cut between the two halves of a surrogate
  * pair (any character outside the BMP, e.g. an emoji), storing a lone high
- * surrogate that serializes as U+FFFD. When the last kept unit is a high
- * surrogate the cut backs off one more unit so the whole character is
- * dropped, and any trailing whitespace the cut exposes is trimmed (leading
- * whitespace is the callers' sanitizers' concern, not the clamp's).
- * Names already within the limit are returned unchanged.
+ * surrogate that serializes as U+FFFD.
+ *
+ * The repair runs on ANY input, not only on a name this clamp itself cut:
+ * @c QQuickTextInput::maximumLength truncates by UTF-16 code units too, so
+ * the editor can hand the D-Bus boundary a name of exactly @p maxLength units
+ * that already ends in a lone high surrogate. A size-only fast path would
+ * return that name untouched and it would serialize as U+FFFD — precisely the
+ * failure this clamp exists to prevent. A trailing high surrogate is always
+ * lone (a well-formed pair ends in a LOW surrogate), so dropping it is always
+ * correct. Trailing whitespace goes with it, whether the cut exposed it or the
+ * name arrived that way: a stored name ending in a space is never what a user
+ * meant, and the D-Bus boundary has no other trim. Leading whitespace is the
+ * callers' sanitizers' concern, not the clamp's. Names that are within the
+ * limit and already end well-formed are returned unchanged, without a copy.
  *
  * @p maxLength defaults to @ref MaxLayoutNameLength; the duplicate-layout
  * boundary clamp passes a reduced budget so the " (Copy)" suffix it
- * re-appends still fits.
+ * re-appends still fits. A non-positive budget leaves no room for any name and
+ * yields an empty string — QString::left() compares its argument as size_t, so
+ * a negative length would wrap and return the whole string unclamped.
  */
 inline QString clampName(const QString& name, int maxLength = MaxLayoutNameLength)
 {
-    if (name.size() <= maxLength) {
+    if (maxLength <= 0) {
+        return QString();
+    }
+    const auto needsRepair = [](QChar c) {
+        return c.isHighSurrogate() || c.isSpace();
+    };
+    if (name.size() <= maxLength && (name.isEmpty() || !needsRepair(name.back()))) {
         return name;
     }
-    QString clamped = name.left(maxLength);
-    if (!clamped.isEmpty() && clamped.back().isHighSurrogate()) {
-        clamped.chop(1);
-    }
-    while (!clamped.isEmpty() && clamped.back().isSpace()) {
+    QString clamped = name.size() > maxLength ? name.left(maxLength) : name;
+    while (!clamped.isEmpty() && needsRepair(clamped.back())) {
         clamped.chop(1);
     }
     return clamped;

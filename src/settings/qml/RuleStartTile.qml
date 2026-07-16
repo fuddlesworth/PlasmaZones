@@ -43,6 +43,8 @@ Rectangle {
     border.width: 1
     border.color: tileMouse.containsMouse || tile.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
     Keys.onReturnPressed: tile.activated()
+    // Numpad Enter alias, matching the sibling card components.
+    Keys.onEnterPressed: tile.activated()
     Keys.onSpacePressed: tile.activated()
 
     MouseArea {

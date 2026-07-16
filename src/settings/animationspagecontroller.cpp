@@ -628,8 +628,7 @@ void AnimationsPageController::asyncRevertPending()
 
 // ─── Path discovery ────────────────────────────────────────────────────
 // `sectionForPath`, `eventLabel`, `parentChain` live in
-// `animationspagecontroller_paths.cpp` so this TU stays under the
-// project's 1000-line guideline. Same class, separate TU, no API change.
+// `animationspagecontroller_paths.cpp`. Same class, separate TU, no API change.
 
 QVariantList AnimationsPageController::eventSections() const
 {

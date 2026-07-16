@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Per-page dirty split + global managed reset for RuleController.
-// Split out of rulecontroller.cpp to keep that TU under the project's 1000-line
-// guideline (see CLAUDE.md); the controller's class definition spans both TUs.
+// The controller's class definition spans this TU and rulecontroller.cpp.
 //
 // Covers: the value-based user-rule dirty check (userRulesDirty against the last
 // daemon-synced snapshot) and the fire-and-forget global daemon reset

@@ -18,8 +18,7 @@ import "ThemeHelpers.js" as ThemeHelpers
  * section-header text below, whereas an icon box centres the glyph and pushes it
  * off the grid. It also mirrors under RTL (‹ → ›) for free. The bottom rule is
  * NOT drawn here — the hosting Sidebar places a Kirigami.Separator below this
- * row so it shares the section dividers' inset. Extracted from Sidebar.qml to
- * keep that file under the 1000-line guideline (CLAUDE.md).
+ * row so it shares the section dividers' inset.
  */
 QQC2.ItemDelegate {
     id: backButton

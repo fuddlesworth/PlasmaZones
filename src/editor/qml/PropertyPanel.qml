@@ -28,9 +28,14 @@ Rectangle {
     required property var selectedZone
     required property int selectionCount
     required property bool hasMultipleSelection
+    // Whether the editor is showing its chrome at all. Fullscreen and preview
+    // both hide the panel outright, and folding that into `panelShown` (rather
+    // than assigning `visible` from the instantiation site) keeps the panel the
+    // single owner of its own visibility.
+    required property bool chromeVisible
     // The predicate the panel's geometry and opacity animate toward. `visible`
     // is derived from those animated values, so it cannot be the source here.
-    readonly property bool panelShown: propertyPanel.panelMode !== "hidden"
+    readonly property bool panelShown: propertyPanel.chromeVisible && propertyPanel.panelMode !== "hidden"
     // Panel mode: "hidden" (no selection), "single" (one zone), "multiple" (many zones)
     readonly property string panelMode: {
         if (selectionCount === 0)
@@ -868,9 +873,13 @@ Rectangle {
                             Qt.callLater(function () {
                                 // Only reset to the committed name while the field
                                 // is not being edited; mid-retype input stays put
-                                // (same guard as syncNameAndNumber).
-                                if (selectedZone && !zoneNameField.activeFocus)
+                                // (same guard as syncNameAndNumber). Reverting the
+                                // text also clears the error, which described the
+                                // rejected text and no longer matches the field.
+                                if (selectedZone && !zoneNameField.activeFocus) {
                                     zoneNameField.text = selectedZone.name || "";
+                                    zoneNameField.validationError = "";
+                                }
                             });
                         }
                     }

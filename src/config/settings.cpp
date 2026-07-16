@@ -1635,9 +1635,8 @@ namespace {
 
 // Disable-axis enum mirrors the persisted (axis, mode) family layout. Distinct
 // from `ContextRuleBridge::ContextAxis` only because the bridge enum also
-// carries `CatchAll` and `Combined` — the disable list classifies a tuple as
-// Activity-axis whether or not it also pins a desktop (mirroring the historic
-// per-activity disable family), so we project the bridge axis through here.
+// carries `CatchAll` and `Combined`, neither of which is a managed disable
+// family — see `axisOf` for why `Combined` is excluded.
 enum class DisableAxis {
     Monitor,
     Desktop,
@@ -1645,9 +1644,31 @@ enum class DisableAxis {
 };
 
 // Classify a context rule's pinned-dimension shape into a disable axis.
-// Returns nullopt for a catch-all or a shape that pins no screen — those are
-// not valid disable rules. Delegates to the bridge so the cascade-axis
-// formula lives in one place.
+// Returns nullopt for a shape no disable axis can represent — those are not
+// managed disable entries. Delegates to the bridge so the cascade-axis formula
+// lives in one place.
+//
+// STRICT, like the assignment side's `matchIsExactContextActivityStrict`: a
+// Combined (screen+desktop+activity) tuple is NOT the Activity axis. The three
+// disable-list keys are `screenId`, `screenId/desktop` and `screenId/activity`
+// — none of them can carry all three dimensions, so projecting a Combined rule
+// onto the Activity axis loses information both ways:
+//   - disableEntriesFor() would serialize it as `screenId/activity`, dropping
+//     the desktop pin, and the rebuild loop below would recreate it from that
+//     entry with desktop=0 — silently widening a rule that gated ONE desktop
+//     into one that gates ALL desktops (under a different disableRuleIdFor
+//     UUID, so it is a different rule, not an edit).
+//   - a Combined rule and a plain Activity rule for the same (screen,
+//     activity) produce the SAME entry string, so canonical()'s de-duplication
+//     would collapse the pair and the rebuild would emit only one — losing the
+//     other outright.
+// Excluded here instead, a Combined disable rule is invisible to the disable
+// lists (it cannot be keyed by them) and the rebuild's kept-walk preserves it
+// untouched, exactly as it already does for a rule that pins a non-dimension
+// context field. Nothing in-tree authors one — the v3→v4 migration emits
+// desktop-only and activity-only disables — so this is only reachable for a
+// rule hand-built in the rule editor, which is precisely the rule the disable
+// lists must not rewrite.
 std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, const QString& activity)
 {
     namespace CRB = PhosphorRules::ContextRuleBridge;
@@ -1657,11 +1678,8 @@ std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, c
     case CRB::ContextAxis::Desktop:
         return DisableAxis::Desktop;
     case CRB::ContextAxis::Activity:
-    case CRB::ContextAxis::Combined:
-        // A combined (screen+desktop+activity) tuple is treated as
-        // Activity-axis for disable-list purposes — mirrors the legacy
-        // classifier which only checked the activity dimension.
         return DisableAxis::Activity;
+    case CRB::ContextAxis::Combined:
     case CRB::ContextAxis::CatchAll:
         return std::nullopt;
     }
@@ -1737,7 +1755,11 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         const auto resolveScreen = [](const QString& screen) {
             if (PhosphorScreens::ScreenIdentity::isConnectorName(screen)) {
                 const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screen);
-                if (resolved != screen) {
+                // Guard `isEmpty()` as well as the identity case, mirroring the
+                // canonical resolver (`ScreenIdentity::variantsFor`): an
+                // unresolvable name must fall through to the name itself, never
+                // canonicalize an entry down to an empty screen segment.
+                if (!resolved.isEmpty() && resolved != screen) {
                     return resolved;
                 }
             }

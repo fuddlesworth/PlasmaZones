@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// RULE-CACHE INVALIDATION, split out of daemon_apply.cpp to keep that TU under the
-// 1000-line guideline.
+// RULE-CACHE INVALIDATION, split out of daemon_apply.cpp.
 //
 // A rule verdict is cached per (window, rule-set revision), so anything that changes
 // what a rule would MATCH — a window's placement, its zone, the rule set itself — has

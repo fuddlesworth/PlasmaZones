@@ -225,23 +225,11 @@ void Layout::initFromJson(const QJsonObject& json)
     // Full screen geometry mode
     m_useFullScreenGeometry = json[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false);
 
-    // Aspect ratio classification. Two serialized forms are live: toJson (and
-    // hand-written layout files) carry the canonical string ("ultrawide"),
-    // while the editor's save path serializes the int enum value. Accept both,
-    // mirroring LayoutAdaptor::updateLayout's twin handling; the int is clamped
-    // to the enum range the same way Layout::setAspectRatioClassInt does.
-    {
-        const QJsonValue arVal = json[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey];
-        if (arVal.isDouble()) {
-            int cls = arVal.toInt(0);
-            if (cls < 0 || cls > static_cast<int>(::PhosphorLayout::AspectRatioClass::Portrait)) {
-                cls = static_cast<int>(::PhosphorLayout::AspectRatioClass::Any);
-            }
-            m_aspectRatioClass = static_cast<::PhosphorLayout::AspectRatioClass>(cls);
-        } else {
-            m_aspectRatioClass = ::PhosphorLayout::ScreenClassification::fromString(arVal.toString());
-        }
-    }
+    // Aspect ratio classification. Two serialized forms are live and
+    // fromJsonValue accepts both, clamping an out-of-range int to Any the same
+    // way Layout::setAspectRatioClassInt does.
+    m_aspectRatioClass =
+        ::PhosphorLayout::ScreenClassification::fromJsonValue(json[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey]);
     m_minAspectRatio = json[::PhosphorZones::ZoneJsonKeys::MinAspectRatio].toDouble(0.0);
     m_maxAspectRatio = json[::PhosphorZones::ZoneJsonKeys::MaxAspectRatio].toDouble(0.0);
     // NaN comparisons always return false, so a non-finite bound silently

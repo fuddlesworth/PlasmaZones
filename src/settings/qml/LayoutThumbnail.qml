@@ -59,11 +59,11 @@ Rectangle {
             return refAR > 0 ? refAR : fallbackAspectRatio;
         }
     }
-    // Calculate dimensions based on the layout's aspect ratio.
-    // Portrait layouts use a base width (narrower) instead of base height.
-    readonly property bool isPortraitLayout: layoutAspectRatio < 1
+    // Calculate dimensions based on the layout's aspect ratio. Height is the
+    // fixed side for every class, so a portrait ratio (< 1) simply yields a
+    // narrower width, which the min/max clamp below keeps usable.
     property real baseHeight: Kirigami.Units.gridUnit * 9
-    readonly property real calculatedWidth: isPortraitLayout ? baseHeight * layoutAspectRatio : baseHeight * layoutAspectRatio
+    readonly property real calculatedWidth: baseHeight * layoutAspectRatio
     property real minThumbnailWidth: Kirigami.Units.gridUnit * 5 // Narrower min for portrait
     property real maxThumbnailWidth: Kirigami.Units.gridUnit * 26 // Wider max for super-ultrawide
 

@@ -93,7 +93,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="importLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Import a layout from a JSON file. Returns the imported layout UUID. Names longer than 40 characters are shortened to fit."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Import a layout from a JSON file. Returns the imported layout UUID. Layout and zone names longer than 40 characters are shortened to fit."/>
             <arg name="filePath" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Absolute path to the JSON file."/>
             </arg>
@@ -141,7 +141,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="updateLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Replace an existing layout with the supplied full layout JSON (editor save path). The layout's UUID is taken from the JSON. Names longer than 40 characters are shortened to fit."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Replace an existing layout with the supplied full layout JSON (editor save path). The layout's UUID is taken from the JSON. Layout and zone names longer than 40 characters are shortened to fit."/>
             <arg name="layoutJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
             </arg>
@@ -150,7 +150,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="createLayoutFromJson">
-            <annotation name="org.gtk.GDBus.DocString" value="Create a new layout from the supplied full layout JSON (editor new-layout save, KZones import). Names longer than 40 characters are shortened to fit."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Create a new layout from the supplied full layout JSON (editor new-layout save, KZones import). Layout and zone names longer than 40 characters are shortened to fit."/>
             <arg name="layoutJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
             </arg>

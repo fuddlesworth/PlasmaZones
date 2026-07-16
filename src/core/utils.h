@@ -151,6 +151,59 @@ inline std::optional<QUuid> parseUuid(const QString& uuidString)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Path Sanitisation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Sanitise a filesystem path arriving from an untrusted boundary
+ *
+ * This is the PRIMARY defence for any path that crosses a process boundary and
+ * is then opened or written: the D-Bus import/export methods take a caller-
+ * supplied path, and the bus is reachable by any session process, not only by
+ * our own clients. The settings app applies it again on its side as genuine
+ * defence-in-depth, and the editor client has no sanitiser of its own — the
+ * server-side call is what actually protects the user's files.
+ *
+ * Rejection rules:
+ *   * Empty, or containing NUL (POSIX path corruption / D-Bus marshalling break).
+ *   * Beginning with `~` (untilde resolution is the caller's responsibility).
+ *   * Relative-traversal segments AFTER cleanPath, so `/home/x/../../etc/passwd`
+ *     doesn't survive normalisation, AND leading-`..` shapes (`../foo`, plain
+ *     `..`) that cleanPath preserves verbatim.
+ *   * Non-absolute paths, which would otherwise resolve against the callee's cwd.
+ *
+ * @return The lexically cleaned absolute path, or an empty string on rejection.
+ *         The caller logs. Symlinks are NOT resolved, so a caller needing a
+ *         containment check must canonicalize the result itself (see
+ *         AlgorithmService::deleteAlgorithm).
+ */
+inline QString sanitizeIOPath(const QString& raw)
+{
+    if (raw.isEmpty() || raw.contains(QLatin1Char('\0'))) {
+        return {};
+    }
+    if (raw.startsWith(QLatin1Char('~'))) {
+        return {};
+    }
+    const QString clean = QDir::cleanPath(raw);
+    // cleanPath resolves `..`; reject if the cleaned form still contains `..`
+    // as a segment (which means the path started outside any resolvable
+    // filesystem root, e.g. relative `../../etc/passwd`).
+    if (clean.contains(QStringLiteral("/../")) || clean.endsWith(QStringLiteral("/.."))) {
+        return {};
+    }
+    // cleanPath doesn't strip leading-`..` shapes (`..`, `../foo`, `../../bar`)
+    // — they're still relative-traversal escape attempts after canonicalisation.
+    if (clean == QStringLiteral("..") || clean.startsWith(QStringLiteral("../"))) {
+        return {};
+    }
+    if (!clean.startsWith(QLatin1Char('/'))) {
+        return {};
+    }
+    return clean;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // JSON Parsing Utilities
 // ═══════════════════════════════════════════════════════════════════════════════
 

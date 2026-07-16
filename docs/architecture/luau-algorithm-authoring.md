@@ -135,9 +135,10 @@ fields:
 | `innerGap` / `gap` | number | Pixels between adjacent zones |
 | `masterCount` | number | Master windows (always set; user-adjustable only with `supportsMasterCount`) |
 | `splitRatio` | number | Master/stack split 0.1–0.9 (always set; user-adjustable only with `supportsSplitRatio`) |
-| `minSizes` | `{ {w, h} }` | Per-window minimum sizes, 1-indexed |
+| `minSizes` | `{ {w, h} }` | Per-window minimum sizes, 1-indexed; capped at 256 entries |
 | `focusedIndex` | number | 0-based tiled index of the focused window (`-1` if none) |
-| `windows` | `{ {appId, focused, windowId} }?` | Per-window info, when available |
+| `focusedListIndex` | number? | 0-based index of the focused window in `windows` (`-1` if none); rides along with `windows` |
+| `windows` | `{ {appId, focused, windowId} }?` | Per-window info, when available; first 256 tiled windows, plus the focused one if it is past the cap |
 | `screen` | `{id, portrait, aspectRatio}?` | Output info |
 | `tree` | `SplitNode?` | Persistent split tree (memory algorithms only) |
 | `custom` | `{[string]: any}?` | Your `customParams` values, keyed by name |
@@ -279,8 +280,9 @@ state (the `HookState` type in the stubs):
 | `windowCount` | number | Currently tiled windows |
 | `masterCount` | number | Master windows |
 | `splitRatio` | number | Current split ratio (clamped 0.1–0.9) |
-| `windows` | `{ {appId, focused, windowId} }` | Per-window info |
-| `focusedIndex` | number | 0-based; `-1` if none |
+| `windows` | `{ {appId, focused, windowId} }` | Per-window info; first 256 tiled windows, plus the focused one if it is past the cap |
+| `focusedIndex` | number | 0-based tiled index of the focused window (`-1` if none). Same index space as `resize.index` and the `index` hook argument, so those compare directly against it |
+| `focusedListIndex` | number | 0-based index of the focused window in `windows` (`-1` if none). Index the list with this, never with `focusedIndex` |
 | `scriptState` | table? | Prior persistent state (§9); present only when `supportsScriptState` is set and the bag is non-empty |
 | `countAfterRemoval` | number? | `onWindowRemoved` only: count minus the departing window |
 

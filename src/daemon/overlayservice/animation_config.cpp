@@ -5,8 +5,7 @@
  * @file animation_config.cpp
  * @brief Per-role SurfaceAnimator config builders + animator wireup.
  *
- * Split from overlayservice.cpp to keep each translation unit under the
- * project's 1000-line guideline. Owns:
+ * Owns:
  *   - resolveShaderEffect / resolveShaderParameters (tree → config field
  *     adapters)
  *   - build*Config factories (one per overlay role: Osd, LayoutPicker,

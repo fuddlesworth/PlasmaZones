@@ -26,9 +26,8 @@
 // CavaSpectrumProvider and feeds the spectrum to audio-reactive decoration
 // packs (surface_audio.glsl) and animation packs (the animation family's
 // audio.glsl module, bound from paint_pipeline's transition draw). Split out
-// of surfacelayers.cpp to keep that TU under the 1000-line guideline; the fold
-// itself (which binds the uploaded texture) still lives there. See the member
-// docs in plasmazoneseffect.h.
+// of surfacelayers.cpp, where the fold itself (which binds the uploaded
+// texture) still lives. See the member docs in plasmazoneseffect.h.
 
 namespace PlasmaZones {
 

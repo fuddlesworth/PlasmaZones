@@ -6,9 +6,8 @@
 # tarballs for filename-control reasons; this exists so a release engineer
 # can also bootstrap a tarball locally without the workflow.
 #
-# Extracted from the top-level CMakeLists.txt to keep that file under
-# the 1000-line guideline. Include after feature_summary() at the very end of
-# the root configure.
+# Extracted from the top-level CMakeLists.txt. Include after feature_summary()
+# at the very end of the root configure.
 set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_VENDOR "fuddlesworth")

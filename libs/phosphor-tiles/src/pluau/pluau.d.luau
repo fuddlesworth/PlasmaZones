@@ -36,16 +36,26 @@ export type ResizeEvent = {
 -- Snapshot of the engine's tiling state, passed as the first argument to the
 -- lifecycle hooks (onWindowAdded / onWindowRemoved / onWindowResized). Built
 -- fresh per call; mutating it has no effect — persist via the onWindowResized
--- return value instead. `windows` is capped at 256 entries with the focused
--- window always included: when the focused window's tiled index is past the
--- cap it takes the last entry, and `focusedIndex` is its 0-based index INTO
--- `windows` (so windows[focusedIndex + 1] is always the focused window).
+-- return value instead.
+--
+-- `windows` is the tiled list truncated to the first 256 entries, so a slot's
+-- position is that window's tiled index. The focused window is the exception:
+-- when its tiled index is past the cap it is appended after the truncated run
+-- (making the list 257 long) so a focus-driven hook can still see it.
+--
+-- The two focused fields are in DIFFERENT index spaces, and past 256 windows
+-- they differ. `focusedIndex` is the real tiled index, the same space as
+-- ResizeEvent.index and the `index` argument of onWindowAdded/onWindowRemoved,
+-- so compare those against it. `focusedListIndex` is the slot in `windows`, so
+-- index the list with windows[focusedListIndex + 1] and never with
+-- focusedIndex, which can run past the list.
 export type HookState = {
-    windowCount: number,
+    windowCount: number, -- real tiled count, uncapped (may exceed #windows)
     masterCount: number,
     splitRatio: number,
-    windows: { WindowInfo },
-    focusedIndex: number, -- 0-based index of the focused window in `windows` (-1 if none)
+    windows: { WindowInfo }, -- first 256 tiled windows, plus the focused one if it is past the cap
+    focusedIndex: number, -- 0-based TILED index of the focused window (-1 if none)
+    focusedListIndex: number, -- 0-based index of the focused window in `windows` (-1 if none)
     scriptState: { [string]: any }?, -- prior persistent bag; only with supportsScriptState set and a non-empty bag
     countAfterRemoval: number?, -- onWindowRemoved only: windowCount minus the departing window
 }
@@ -71,21 +81,36 @@ export type SplitNode = {
 -- declared through `pluau.algorithm{}`, which re-wraps it on the way in. The
 -- host marshals a plain {x,y,width,height} table, so a module exporting `tile`
 -- directly gets that instead. Every bundled algorithm uses the wrapper.
+--
+-- Three of the lists are capped at 256 entries: `windows`, `minSizes` and
+-- `currentGeometries`. Each is a plain truncation of the tiled order, so a
+-- slot's position is that window's tiled index, but `count`/`windowCount` are
+-- uncapped and can exceed all three. Guard the lookup (`i < #minSizes`) rather
+-- than assuming a slot exists for every window you lay out. `windows` alone has
+-- an exception: the focused window is appended after the truncated run when its
+-- tiled index is past the cap, so it is always present (see focusedListIndex).
+--
+-- `focusedIndex` and `focusedListIndex` are in DIFFERENT index spaces, and past
+-- 256 windows they differ. `focusedIndex` is the real tiled index, comparable
+-- with the 0 .. count - 1 indices tile() lays out. `focusedListIndex` is the
+-- slot in `windows`, so index the list with windows[focusedListIndex + 1] and
+-- never with focusedIndex, which can run past the list.
 export type Context = {
-    count: number,
+    count: number, -- real tiled count, uncapped (may exceed #windows / #minSizes / #currentGeometries)
     windowCount: number,
     gap: number,
     innerGap: number,
     area: Rect,
     masterCount: number,
     splitRatio: number,
-    minSizes: { MinSize },
-    windows: { WindowInfo }?,
-    focusedIndex: number, -- 0-based tiled index of the focused window (-1 if none)
+    minSizes: { MinSize }, -- capped at 256 entries
+    windows: { WindowInfo }?, -- first 256 tiled windows, plus the focused one if it is past the cap
+    focusedIndex: number, -- 0-based TILED index of the focused window (-1 if none)
+    focusedListIndex: number?, -- 0-based index of the focused window in `windows`; absent with `windows`, -1 if none
     screen: ScreenInfo?,
     tree: SplitNode?, -- present for memory-aware algorithms
     custom: { [string]: any }?,
-    currentGeometries: { Zone }?, -- last applied zones (advisory; post-enforcement)
+    currentGeometries: { Zone }?, -- last applied zones, capped at 256 (advisory; post-enforcement)
     state: { [string]: any }?, -- persistent script-state bag (see supportsScriptState)
 }
 

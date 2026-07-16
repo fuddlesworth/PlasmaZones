@@ -1,11 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Virtual-screen lifecycle methods for SettingsController. Extracted
-// from settingscontroller_session.cpp to keep that TU under the
-// 1000-line guideline (CLAUDE.md). All methods here are members of
-// PlasmaZones::SettingsController — same class, separate translation
-// unit, no API change.
+// Virtual-screen lifecycle methods for SettingsController. All methods here
+// are members of PlasmaZones::SettingsController. Same class, separate
+// translation unit, no API change.
 //
 // Group covers:
 //   * getVirtualScreenConfig / applyVirtualScreenConfig

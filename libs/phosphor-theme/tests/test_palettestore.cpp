@@ -11,8 +11,7 @@
 // loadFromFile + watcher-arming slots live in
 // test_palettestore_files.cpp. Hot-reload + the white-box
 // resetToDefaults_releasesDirectoryWatch slot live in
-// test_palettestore_hotreload.cpp. The split keeps every TU under the
-// project's 1000-line guideline and lets the three files share the
+// test_palettestore_hotreload.cpp. All three files share the
 // QTemporaryDir + QFile fixture-write scaffolding via
 // test_palettestore_helpers.h.
 

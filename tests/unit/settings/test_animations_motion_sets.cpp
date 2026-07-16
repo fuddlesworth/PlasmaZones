@@ -5,9 +5,9 @@
  * @file test_animations_motion_sets.cpp
  * @brief AnimationsPageController motion-set and pending-changes tests.
  *
- * Split from test_animations_page_controller.cpp, and the user-preset half
- * split again into test_animations_presets.cpp, to keep each test file under
- * the project's 1000-line guideline.
+ * The controller's path-discovery and override CRUD are covered by
+ * test_animations_page_controller.cpp, and the user-preset library by
+ * test_animations_presets.cpp.
  *
  * Motion sets go through the shared ShaderSetStore reached from
  * `AnimationsPageController::setsBridge()`. The domain half (which paths are

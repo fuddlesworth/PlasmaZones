@@ -4,8 +4,8 @@
 // Bulk / batch layout-assignment operations — the multi-context "apply all"
 // setters (per-screen, per-desktop, per-activity, combined), their shared
 // driver, the round-trip projection accessors, and clearAutotileAssignments.
-// Split from layoutregistry_assignments.cpp to keep each TU under the 1000-line
-// guideline; the single-context resolution + mutation + query members stay there.
+// The single-context resolution + mutation + query members live in
+// layoutregistry_assignments.cpp.
 
 #include <PhosphorZones/LayoutRegistry.h>
 

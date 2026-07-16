@@ -36,10 +36,16 @@ Rectangle {
     implicitHeight: Kirigami.Units.gridUnit * 3
     radius: Kirigami.Units.smallSpacing
     color: Kirigami.Theme.backgroundColor
-    border.color: hoverArea.containsMouse ? Kirigami.Theme.highlightColor : (Kirigami.Theme.separatorColor !== undefined ? Kirigami.Theme.separatorColor : Kirigami.Theme.disabledTextColor)
-    border.width: 1
+    border.color: (hoverArea.containsMouse || root.activeFocus) ? Kirigami.Theme.highlightColor : (Kirigami.Theme.separatorColor !== undefined ? Kirigami.Theme.separatorColor : Kirigami.Theme.disabledTextColor)
+    border.width: root.activeFocus ? 2 : 1
     Accessible.name: i18n("Curve preview")
     Accessible.role: Accessible.Button
+    // Keyboard and focus support, matching ColorButton.
+    activeFocusOnTab: true
+    Keys.onReturnPressed: root.clicked()
+    // Numpad Enter alias, matching the sibling card components.
+    Keys.onEnterPressed: root.clicked()
+    Keys.onSpacePressed: root.clicked()
     // Repaint when inputs change or when component is ready (theme available)
     Component.onCompleted: canvas.repaintCurve()
     onCurveChanged: canvas.repaintCurve()

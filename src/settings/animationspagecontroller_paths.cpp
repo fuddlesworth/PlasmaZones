@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// AnimationsPageController path-discovery helpers — small Q_INVOKABLE
-// readers (`sectionForPath`, `eventLabel`, `parentChain`)
-// that translate event-profile paths into UI taxonomy. Split out so
-// animationspagecontroller.cpp stays under the project's 1000-line guideline.
-// Same class, separate TU, no API change.
+// AnimationsPageController path-discovery helpers — small Q_INVOKABLE readers
+// (`sectionForPath`, `eventLabel`, `parentChain`) that translate event-profile
+// paths into UI taxonomy. Same class as animationspagecontroller.cpp, separate
+// TU, no API change.
 
 #include "animationspagecontroller.h"
 #include "animations_controller_detail.h"

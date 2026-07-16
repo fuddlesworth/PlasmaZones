@@ -125,7 +125,8 @@ ColumnLayout {
                         // mark the primary monitor to match the editor's picker.
                         var label = screens[i].displayLabel || String(value);
                         if (screens[i].isPrimary)
-                            label += " · " + i18n("Primary");
+                            return i18nc("@label monitor caption", "%1 · %2", label, i18n("Primary"));
+
                         return label;
                     }
                 }

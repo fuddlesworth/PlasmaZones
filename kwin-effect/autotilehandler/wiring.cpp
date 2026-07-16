@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // D-Bus signal wiring and initial-settings load for AutotileHandler.
-// Part of AutotileHandler — split from autotilehandler.cpp for the
-// 1000-line guideline (signals.cpp holds the slot bodies; this file holds the
-// connect/load bring-up that onDaemonReady drives).
+// Part of AutotileHandler, in its own translation unit: this file holds the
+// connect/load bring-up that onDaemonReady drives, while signals.cpp holds the
+// slot bodies.
 
 #include "../autotilehandler.h"
 #include "../plasmazoneseffect.h"

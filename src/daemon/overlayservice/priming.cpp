@@ -4,8 +4,7 @@
 // Surface render-pipeline prime / cancel-prime helpers. Wires a
 // fire-once frameSwapped-driven hide for newly-created surfaces so the
 // Vulkan swapchain + QML scene-graph have walked at least one frame
-// before the user-triggered show path takes over. Extracted here to
-// keep overlayservice.cpp under the project's 1000-line guideline.
+// before the user-triggered show path takes over.
 
 #include "internal.h"
 #include "../overlayservice.h"

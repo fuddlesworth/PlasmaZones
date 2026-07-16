@@ -306,9 +306,8 @@ SettingsController::SettingsController(QObject* parent)
     m_scriptLoader->scanAndRegister();
 
     // All D-Bus broadcast subscriptions (settings reload, layout
-    // mutations, virtual desktop / activity changes, rules mirror)
-    // are wired in settingscontroller_dbuswire.cpp so this TU stays under
-    // the project's 1000-line guideline. Any subscription that returns false at
+    // mutations, virtual desktop / activity changes, rules mirror) are wired in
+    // settingscontroller_dbuswire.cpp. Any subscription that returns false at
     // construction is appended to @c failedSubscriptions so the post-ctor
     // summary below can surface them in one batched warning.
     QStringList failedSubscriptions;
@@ -892,8 +891,6 @@ SettingsController::SettingsController(QObject* parent)
     m_updateChecker.checkForUpdates();
 }
 
-// Out-of-line page getters (kept here rather than inline in the header to hold
-// settingscontroller.h under the project's 1000-line target).
 SnappingZonesController* SettingsController::snappingZonesPage() const
 {
     return m_snappingZonesPage;
@@ -920,7 +917,6 @@ TilingAlgorithmController* SettingsController::tilingAlgorithmPage() const
 }
 
 // setActivePage / dirty-tracking / external-edit methods live in
-// settingscontroller_pagestate.cpp (split to keep this file under the
-// 1000-line guideline).
+// settingscontroller_pagestate.cpp.
 
 } // namespace PlasmaZones

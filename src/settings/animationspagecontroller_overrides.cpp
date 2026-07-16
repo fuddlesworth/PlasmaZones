@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Override-CRUD methods for AnimationsPageController. Extracted from
-// animationspagecontroller.cpp to keep that file under the 1000-line
-// guideline (CLAUDE.md). All methods here are members of the same class
-// — separate translation unit, no API change.
+// Override-CRUD methods for AnimationsPageController. All methods here are
+// members of the same class as animationspagecontroller.cpp — separate
+// translation unit, no API change.
 //
 // Group covers:
 //   * Path derivation (userProfilesDir / profileFilePath / userMotionSetsDir)

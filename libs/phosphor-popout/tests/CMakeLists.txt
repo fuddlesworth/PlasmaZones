@@ -3,10 +3,9 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
-# PopoutController's test coverage is split across three test binaries
-# by concern. Splitting keeps each test file under the 1000-line guideline
-# (the prior monolithic file ran to 1030 lines) and lets a future
-# contributor add tests in one slice without re-reading the others.
+# PopoutController's test coverage is split across three test binaries by
+# concern, so a future contributor can add tests in one slice without
+# re-reading the others.
 #   _arbitration : open/close/toggle/closeAll arbitration paths
 #   _dismiss     : dismissed-callback routing, re-entrancy guard, destructor
 #   _signals     : signal-ordering invariants, slot-state consistency, DefaultScope

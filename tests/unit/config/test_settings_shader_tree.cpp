@@ -5,8 +5,7 @@
  * @file test_settings_shader_tree.cpp
  * @brief Settings — ShaderProfileTree persistence + auto-assign master toggle.
  *
- * Split from test_settings_core.cpp to keep each test file under the
- * project's 1000-line guideline. Pinned behaviour:
+ * Pinned behaviour:
  *   - setShaderProfileTree round-trips through the JSON blob (regression:
  *     missing schema key dropped the override silently)
  *   - purgeStaleKeys preserves keys the schema declares even when written

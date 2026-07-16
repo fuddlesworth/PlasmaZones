@@ -290,6 +290,8 @@ ColumnLayout {
                     Accessible.checked: !root.isPerScreen
                     Keys.onSpacePressed: root.screenPicked("")
                     Keys.onReturnPressed: root.screenPicked("")
+                    // Numpad Enter alias, matching the sibling card components.
+                    Keys.onEnterPressed: root.screenPicked("")
                     onClicked: root.screenPicked("")
                 }
 
@@ -406,6 +408,8 @@ ColumnLayout {
                             Accessible.checked: tile.isSelected
                             Keys.onSpacePressed: root.screenPicked(tile.screenName)
                             Keys.onReturnPressed: root.screenPicked(tile.screenName)
+                            // Numpad Enter alias, matching the sibling card components.
+                            Keys.onEnterPressed: root.screenPicked(tile.screenName)
                             onClicked: root.screenPicked(tile.screenName)
                         }
 

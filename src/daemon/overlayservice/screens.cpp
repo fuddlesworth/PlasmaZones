@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Screen-management methods on OverlayService: setup / remove /
-// hot-plug add / remove / physical-screen teardown. Extracted from
-// overlayservice.cpp to keep that TU under the project's 1000-line
-// guideline and to keep the screen-lifecycle code grouped with itself.
+// Screen-management methods on OverlayService: setup / remove / hot-plug add /
+// remove / physical-screen teardown. Extracted from overlayservice.cpp to keep
+// the screen-lifecycle code grouped with itself.
 
 #include "internal.h"
 #include "../overlayservice.h"

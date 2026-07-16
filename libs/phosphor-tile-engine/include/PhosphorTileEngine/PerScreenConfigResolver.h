@@ -87,6 +87,12 @@ public:
 
     /**
      * @brief Remove all overrides for a screen (used during screen removal)
+     *
+     * Unlike clearPerScreenConfig() this restores nothing on the TilingState and
+     * schedules no retile — the caller is tearing the screen down. It does still
+     * wipe per-algorithm state bags when dropping an Algorithm override changes
+     * the screen's effective algorithm, because the caller's teardown may leave
+     * other (desktop, activity) states of the screen alive.
      */
     void removeOverridesForScreen(const QString& screenId);
 

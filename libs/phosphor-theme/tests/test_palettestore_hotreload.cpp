@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Hot-reload slots for PaletteStore + the white-box
-// resetToDefaults_releasesDirectoryWatch slot. Split out of
-// test_palettestore.cpp so each TU stays under the project's 1000-line
-// guideline. Shares the QTemporaryDir + QFile fixture-write scaffolding with
-// the primary + files TUs via test_palettestore_helpers.h.
+// resetToDefaults_releasesDirectoryWatch slot. Shares the QTemporaryDir
+// + QFile fixture-write scaffolding with the primary + files TUs via
+// test_palettestore_helpers.h.
 //
 // All slots here exercise the QFileSystemWatcher + debounce-timer
 // machinery armed by loadFromFile: in-place edits, atomic renames,

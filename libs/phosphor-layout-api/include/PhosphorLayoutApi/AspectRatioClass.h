@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QJsonValue>
 #include <QString>
 
 #include <cmath>
@@ -98,6 +99,33 @@ inline AspectRatioClass fromString(const QString& str)
     }
     if (str == QLatin1String("portrait")) {
         return AspectRatioClass::Portrait;
+    }
+    return AspectRatioClass::Any;
+}
+
+/**
+ * @brief Read a classification from either serialized JSON form.
+ *
+ * Both forms are on the wire: Layout::toJson emits the canonical string
+ * ("ultrawide"), while editor save round-trips carry the raw int, so a
+ * reader that accepts only one form resets the other to Any on a
+ * get→modify→update cycle.
+ *
+ * Anything else — a missing key (Undefined), null, a wrong-typed value, an
+ * unknown string, or an int outside the enum range — reads as Any, so callers
+ * need no @c contains() pre-check.
+ */
+inline AspectRatioClass fromJsonValue(const QJsonValue& value)
+{
+    if (value.isString()) {
+        return fromString(value.toString());
+    }
+    if (value.isDouble()) {
+        const int cls = value.toInt(static_cast<int>(AspectRatioClass::Any));
+        if (cls < 0 || cls > static_cast<int>(AspectRatioClass::Portrait)) {
+            return AspectRatioClass::Any;
+        }
+        return static_cast<AspectRatioClass>(cls);
     }
     return AspectRatioClass::Any;
 }

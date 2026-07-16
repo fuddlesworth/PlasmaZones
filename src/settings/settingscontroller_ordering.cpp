@@ -12,8 +12,7 @@
 // and is committed to Settings via the save() path in
 // settingscontroller_lifecycle.cpp.
 //
-// Split out of settingscontroller_session.cpp to keep that file
-// under the 1000-line guideline. Same class, separate TU, no API change.
+// Same class as settingscontroller_session.cpp, separate TU, no API change.
 
 #include "settingscontroller.h"
 

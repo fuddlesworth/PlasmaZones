@@ -144,6 +144,8 @@ Item {
             Accessible.name: i18nc("@action", "Scope: %1", chip.label)
             Keys.onSpacePressed: popup.visible ? popup.close() : popup.open()
             Keys.onReturnPressed: popup.visible ? popup.close() : popup.open()
+            // Numpad Enter alias, matching the sibling card components.
+            Keys.onEnterPressed: popup.visible ? popup.close() : popup.open()
             onClicked: popup.visible ? popup.close() : popup.open()
         }
 

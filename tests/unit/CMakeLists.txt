@@ -275,13 +275,10 @@ p_add_test(test_settings_core config/test_settings_core.cpp)
 
 # Companion test executable: animation Profile JSON-blob storage,
 # per-field signal discrimination, aggregate-setter merge semantics.
-# Split from test_settings_core to keep each test file under the
-# project's 1000-line guideline.
 p_add_test(test_settings_animation_profile config/test_settings_animation_profile.cpp)
 
 # Companion test executable: ShaderProfileTree persistence + prune,
-# autoAssignAllLayouts master toggle. Split from test_settings_core to
-# keep each test file under the project's 1000-line guideline.
+# autoAssignAllLayouts master toggle.
 p_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 
 # Companion test executable: DecorationProfileTree persistence + JSON facade
@@ -292,8 +289,7 @@ p_add_test(test_settings_decoration_tree config/test_settings_decoration_tree.cp
 
 # Companion test executable: per-page Discard/Reset primitives — committed
 # baseline capture, isKeyModified, discardKeys (revert-to-baseline) and
-# resetKeys (revert-to-default) with NOTIFY re-emission. Split from
-# test_settings_core to keep each test file under the 1000-line guideline.
+# resetKeys (revert-to-default) with NOTIFY re-emission.
 p_add_test(test_settings_pagereset config/test_settings_pagereset.cpp)
 
 p_add_test(test_settings_validation config/test_settings_validation.cpp)
@@ -799,10 +795,9 @@ add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_c
 
 # Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
 # directly because they live in the plasmazones-settings executable rather than
-# plasmazones_core. Split by surface, per the project file-size rule (target
-# under 1000 lines, hard ceiling 1150): the template
-# splice / metadata rewrite here, the shapes it refuses in _rejects, the blank
-# scaffold next door. They share no fixture beyond a copyright line.
+# plasmazones_core. Split by surface: the template splice / metadata rewrite
+# here, the shapes it refuses in _rejects, the blank scaffold next door. They
+# share no fixture beyond a copyright line.
 #
 # All three targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
 # ScriptedDefaultMaxWindows and DefaultSplitRatio so a generated algorithm
@@ -830,6 +825,18 @@ add_executable(test_algorithm_blank_scaffold
 )
 target_link_libraries(test_algorithm_blank_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 add_test(NAME test_algorithm_blank_scaffold COMMAND test_algorithm_blank_scaffold)
+
+# clampName is header-only in src/core/constants.h, so there is no source to
+# compile in beyond the test itself. plasmazones_core carries the include chain
+# that header pulls (PhosphorEngine, PhosphorLayoutApi, PhosphorZones), and
+# PhosphorZones is named directly for LayoutRegistry::duplicateNameSuffix(),
+# which the reduced-budget case reads rather than re-spelling.
+add_executable(test_layoutadaptor_nameclamp
+    settings/test_layoutadaptor_nameclamp.cpp
+)
+target_link_libraries(test_layoutadaptor_nameclamp PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorZones::PhosphorZones)
+add_test(NAME test_layoutadaptor_nameclamp COMMAND test_layoutadaptor_nameclamp)
 
 add_executable(test_window_appearance_controller
     settings/test_window_appearance_controller.cpp
@@ -875,8 +882,7 @@ target_link_libraries(test_animations_page_controller
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
 
-# Companion test executable: motion-set + pending-changes coverage. Split from test_animations_page_controller to keep each test
-# file under the project's 1000-line guideline.
+# Companion test executable: motion-set + pending-changes coverage.
 add_executable(test_animations_motion_sets
     settings/test_animations_motion_sets.cpp
     ${_animations_ctrl_SRCS}
@@ -893,8 +899,7 @@ target_link_libraries(test_animations_motion_sets
 add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
 
 # Companion test executable: the user-preset library (AnimationPresetLibrary).
-# Split from test_animations_motion_sets to keep each test file under the
-# project's 1000-line guideline, and because presets and sets are separate
+# Split from test_animations_motion_sets because presets and sets are separate
 # sub-services of the controller.
 add_executable(test_animations_presets
     settings/test_animations_presets.cpp
@@ -911,9 +916,7 @@ target_link_libraries(test_animations_presets
 )
 add_test(NAME test_animations_presets COMMAND test_animations_presets)
 
-# Companion test executable: shader-override end-to-end coverage. Split
-# from test_animations_page_controller to keep each test file under the
-# project's 1000-line guideline.
+# Companion test executable: shader-override end-to-end coverage.
 add_executable(test_animations_shader_overrides
     settings/test_animations_shader_overrides.cpp
     ${_animations_ctrl_SRCS}
@@ -977,10 +980,8 @@ add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontrolle
 
 # Companion test executable: decoration-set CRUD over the shared
 # ShaderSetStore (save / list / apply / remove / update / export / import,
-# the active-flag containment semantics, and the format-version gate). Split
-# from test_decorationpagecontroller to keep each test file under the
-# project's 1000-line guideline — same split as the motion side's
-# test_animations_motion_sets.
+# the active-flag containment semantics, and the format-version gate). Mirrors
+# the motion side's test_animations_motion_sets.
 add_executable(test_decoration_sets
     settings/test_decoration_sets.cpp
     ${_decoration_ctrl_SRCS}
@@ -996,9 +997,9 @@ target_link_libraries(test_decoration_sets
 )
 add_test(NAME test_decoration_sets COMMAND test_decoration_sets)
 
-# The refusal half of the decoration-set suite. Split from the round-trip half so
-# each file stays under the 1000-line guideline; both share the sandbox guard and the
-# payload builders in helpers/DecorationSetHelpers.h.
+# The refusal half of the decoration-set suite. It shares the sandbox guard and
+# the payload builders in helpers/DecorationSetHelpers.h with the round-trip
+# half.
 add_executable(test_decoration_sets_validation
     settings/test_decoration_sets_validation.cpp
     ${_decoration_ctrl_SRCS}
@@ -1040,13 +1041,11 @@ add_executable(test_rule_controller
     ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller.cpp
     # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
-    # author surfaces, validation) — split out of rulecontroller.cpp
-    # to keep that TU under the 1000-line guideline; the controller's class
-    # definition spans both TUs.
+    # author surfaces, validation). The controller's class definition spans
+    # this TU and rulecontroller.cpp.
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_views.cpp
-    # Label-lookup setters + wiring-completion gate — split out so
-    # rulecontroller.cpp stays under the 1000-line guideline; the
-    # controller's class definition spans both TUs.
+    # Label-lookup setters + wiring-completion gate. The controller's class
+    # definition spans this TU and rulecontroller.cpp.
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_lookups.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_baseline.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
@@ -1096,7 +1095,7 @@ add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
 set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# compositor-common/ - Shared Library Types Tests (split for 1000-line guideline)
+# compositor-common/ - Shared Library Types Tests
 #   test_wire_types: D-Bus wire type signature/roundtrip tests
 #   test_floating_cache: FloatingCache + ZoneCache + TriggerParser tests
 #   test_autotile_state: AutotileStateHelpers + WindowId tests

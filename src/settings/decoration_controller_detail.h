@@ -3,13 +3,12 @@
 
 #pragma once
 
-// Inline helpers for the DecorationPageController translation units
-// (currently decorationpagecontroller.cpp; the class is split across several
-// TUs to stay under the 1000-line guideline). They convert surface-pack effect /
-// parameter values to QVariantMap for QML and build the sparse / resolved
-// DecorationProfile -> QVariantMap projections. Inline definitions here let
-// any consuming TU get its own copy without relying on unity-build TU merging
-// for cross-TU linkage.
+// Inline helpers for the DecorationPageController translation units (currently
+// decorationpagecontroller.cpp; the class is split across several TUs). They
+// convert surface-pack effect / parameter values to QVariantMap for QML and
+// build the sparse / resolved DecorationProfile -> QVariantMap projections.
+// Inline definitions here let any consuming TU get its own copy without relying
+// on unity-build TU merging for cross-TU linkage.
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>

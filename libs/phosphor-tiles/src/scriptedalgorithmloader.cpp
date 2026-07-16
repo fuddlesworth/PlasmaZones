@@ -451,29 +451,29 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             qCWarning(PhosphorTiles::lcTilesLib) << "Skipping script with invalid filename:" << fullPath;
             continue;
         }
-        // Create with nullptr parent so the registry takes full ownership
+        // Create with nullptr parent, held by unique_ptr so every refusal below
+        // can just `continue` and stay leak-free by construction. Ownership is
+        // released to the registry on the one success path, which takes it over
         // via the deferred-delete shared_ptr inside its TileAlgorithmEntry
-        // (deleteLater() while Qt is alive) in registerAlgorithm(). If the algo
-        // is invalid, we delete it explicitly below. Pass the watchdog as
-        // shared_ptr so the algorithm keeps it alive across deferred-delete
-        // teardown (the algorithm dtor can run after the loader is gone — see
-        // LuauTileAlgorithm.h for the contract).
+        // (deleteLater() while Qt is alive) in registerAlgorithm(). Pass the
+        // watchdog as shared_ptr so the algorithm keeps it alive across
+        // deferred-delete teardown (the algorithm dtor can run after the loader
+        // is gone — see LuauTileAlgorithm.h for the contract).
         // Trusted bundled scripts share one sandboxed VM (prelude + baseline
         // paid once); untrusted user scripts each get their own isolated,
         // per-engine-capped VM. If the shared VM can't be built, bundled
         // scripts fall back to their own VMs (correct, just less memory-frugal).
-        LuauTileAlgorithm* algo = nullptr;
+        std::unique_ptr<LuauTileAlgorithm> algo;
         if (!isUserDir) {
             if (const std::shared_ptr<PhosphorScripting::LuauEngine> shared = ensureSharedEngine()) {
-                algo = new LuauTileAlgorithm(fullPath, shared, m_watchdog, nullptr);
+                algo = std::make_unique<LuauTileAlgorithm>(fullPath, shared, m_watchdog, nullptr);
             }
         }
         if (!algo) {
-            algo = new LuauTileAlgorithm(fullPath, m_watchdog, nullptr);
+            algo = std::make_unique<LuauTileAlgorithm>(fullPath, m_watchdog, nullptr);
         }
         if (!algo->isValid()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
-            delete algo;
             m_refusedFilePaths.insert(fullPath);
             continue;
         }
@@ -514,7 +514,6 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
                     << "Duplicate algorithm '" << scriptId << "' — kept '" << existingPath << "', skipped '" << fullPath
                     << "' (first registration wins)";
             }
-            delete algo;
             m_refusedFilePaths.insert(fullPath);
             continue;
         }
@@ -532,12 +531,11 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             qCWarning(PhosphorTiles::lcTilesLib).nospace()
                 << "Script '" << fullPath << "' declares id '" << scriptId
                 << "' which collides with a built-in algorithm — skipped (scripts cannot replace built-ins)";
-            delete algo;
             m_refusedFilePaths.insert(fullPath);
             continue;
         }
 
-        registry->registerAlgorithm(scriptId, algo);
+        registry->registerAlgorithm(scriptId, algo.release());
         m_scriptIdToPath[scriptId] = fullPath;
 
         qCInfo(PhosphorTiles::lcTilesLib)

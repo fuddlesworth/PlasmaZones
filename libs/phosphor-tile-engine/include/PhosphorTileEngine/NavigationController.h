@@ -205,9 +205,11 @@ private:
     /**
      * @brief Helper to apply an operation to all screen states
      *
-     * The callback receives each state's screen id so callers can skip
-     * screens carrying a per-screen config override (mirroring
-     * propagateGlobalSplitRatio / propagateGlobalMasterCount).
+     * The callback receives each state's screen id so callers can skip screens
+     * carrying a per-screen override of the KEY they write — setGlobalSplitRatio
+     * skips a SplitRatio override, setGlobalMasterCount a MasterCount one
+     * (mirroring propagateGlobalSplitRatio / propagateGlobalMasterCount). Any
+     * other per-screen override on the screen is irrelevant and does not skip it.
      */
     void applyToAllStates(const std::function<void(const QString& screenId, PhosphorTiles::TilingState*)>& operation);
 

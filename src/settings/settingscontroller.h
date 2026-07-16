@@ -921,7 +921,7 @@ private:
 
     /// Wire daemon D-Bus broadcast subscriptions. Failed connects are
     /// appended to @p failedSubscriptions for one batched ctor warning.
-    /// Defined in settingscontroller_dbuswire.cpp (1000-line guideline).
+    /// Defined in settingscontroller_dbuswire.cpp.
     void wireDaemonSubscriptions(QStringList& failedSubscriptions);
 
     // File-scope sort helper exposed as a private static member so both
@@ -931,11 +931,6 @@ private:
     // Manual layouts sort first; within each category alphabetical by
     // displayName (case-insensitive).
     static void sortMergedLayoutList(QVariantList& list);
-    // Defence-in-depth path sanitiser shared by importLayout/exportLayout and
-    // importAlgorithm/exportAlgorithm (layouts TU) and
-    // importAllSettings/exportAllSettings/importFromKZonesFile (session TU).
-    // See the implementation comment for the rejection rules.
-    static QString sanitizeIOPath(const QString& raw);
 };
 
 } // namespace PlasmaZones

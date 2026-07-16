@@ -3,11 +3,10 @@
 
 // Layout + algorithm CRUD methods for SettingsController.
 //
-// Split out of settingscontroller.cpp to hold that file under the
-// project's 1000-line target (see CLAUDE.md). All methods here are members of
-// PlasmaZones::SettingsController and use its private state — they
-// live in a separate translation unit but compile into the same
-// `plasmazones-settings` executable. No API changes.
+// All methods here are members of PlasmaZones::SettingsController and use its
+// private state. They live in a separate translation unit from
+// settingscontroller.cpp but compile into the same `plasmazones-settings`
+// executable. No API changes.
 
 #include "settingscontroller.h"
 
@@ -332,62 +331,9 @@ void SettingsController::openLayoutsFolder()
     QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
 
-// Path validation for import/export dialogs. Promoted out of an
-// anonymous namespace and into a static member so the cross-TU
-// `settingscontroller_session.cpp` (import/export-all-settings and the
-// KZones file import) can reuse the same defence-in-depth path sanitiser.
-//
-// User-driven calls come from QFileDialog (already canonical), but the
-// methods are Q_INVOKABLE so a compromised page resource — or a future
-// `--page` CLI flag — could pass arbitrary strings. Defence-in-depth:
-//   * Reject paths containing NUL (POSIX path corruption / D-Bus
-//     marshalling break).
-//   * Reject paths beginning with `~` (untilde resolution is QML's
-//     responsibility, not ours).
-//   * Reject relative-traversal segments AFTER cleanPath so
-//     `/home/x/../../etc/passwd` doesn't survive normalisation, AND
-//     also reject leading-`..` shapes (`../foo`, plain `..`) that
-//     cleanPath preserves verbatim — those are filesystem-root-escape
-//     attempts that the QFileDialog path never produces.
-// Returns the lexically cleaned absolute path, or empty on rejection. Caller
-// logs. Symlinks are NOT resolved, so a caller needing a containment check
-// must canonicalize the result itself (see AlgorithmService::deleteAlgorithm).
-QString SettingsController::sanitizeIOPath(const QString& raw)
-{
-    if (raw.isEmpty() || raw.contains(QLatin1Char('\0'))) {
-        return {};
-    }
-    if (raw.startsWith(QLatin1Char('~'))) {
-        return {};
-    }
-    const QString clean = QDir::cleanPath(raw);
-    // cleanPath resolves `..`; reject if the cleaned form still contains
-    // `..` as a segment (which means the path started outside any
-    // resolvable filesystem root, e.g. relative `../../etc/passwd`).
-    if (clean.contains(QStringLiteral("/../")) || clean.endsWith(QStringLiteral("/.."))) {
-        return {};
-    }
-    // cleanPath doesn't strip leading-`..` shapes (`..`, `../foo`,
-    // `../../bar`) — they're still relative-traversal escape attempts
-    // even after canonicalisation.
-    if (clean == QStringLiteral("..") || clean.startsWith(QStringLiteral("../"))) {
-        return {};
-    }
-    // Require absolute paths. The Q_INVOKABLE entry points are reached
-    // from QFileDialog (which always yields an absolute URL) and from
-    // the test suite; relative paths shouldn't surface here. A
-    // compromised QML page or a future `--page` CLI flag passing a
-    // bare `report.json` would otherwise resolve relative to the
-    // settings-app cwd and read/write outside the user's intent.
-    if (!clean.startsWith(QLatin1Char('/'))) {
-        return {};
-    }
-    return clean;
-}
-
 void SettingsController::importLayout(const QString& filePath)
 {
-    const QString safe = sanitizeIOPath(filePath);
+    const QString safe = Utils::sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "importLayout: refusing unsafe path" << filePath;
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That file path is not allowed."));
@@ -419,7 +365,7 @@ void SettingsController::exportLayout(const QString& layoutId, const QString& fi
 {
     if (layoutId.isEmpty())
         return;
-    const QString safe = sanitizeIOPath(filePath);
+    const QString safe = Utils::sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "exportLayout: refusing unsafe path" << filePath;
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That export path is not allowed."));
@@ -536,7 +482,7 @@ void SettingsController::openAlgorithmsFolder()
 
 bool SettingsController::importAlgorithm(const QString& filePath)
 {
-    const QString safe = sanitizeIOPath(filePath);
+    const QString safe = Utils::sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "importAlgorithm: refusing unsafe path" << filePath;
         Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("That file path is not allowed."));
@@ -594,7 +540,7 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
 
 bool SettingsController::exportAlgorithm(const QString& algorithmId, const QString& destPath)
 {
-    const QString safe = sanitizeIOPath(destPath);
+    const QString safe = Utils::sanitizeIOPath(destPath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "exportAlgorithm: refusing unsafe path" << destPath;
         Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("That export path is not allowed."));

@@ -11,8 +11,6 @@
  *   - resetKeys()   — set listed keys to their schema default
  *   - NOTIFY re-emission so QML bindings refresh, and no-op when unchanged
  *   - key isolation: touching one key never disturbs a sibling
- *
- * Split from test_settings_core.cpp to stay under the 1000-line guideline.
  */
 
 #include <QTest>

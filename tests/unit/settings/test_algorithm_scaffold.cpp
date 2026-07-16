@@ -63,6 +63,7 @@ private Q_SLOTS:
     void spliceDoesNotRepeatOwnCopyright();
     void spliceCarriesEveryUpstreamCopyright();
     void spliceHandlesTemplateWithoutCopyright();
+    void spliceNeverInventsALicense();
     void splicePreservesCapabilityMetadata();
     void spliceLeavesCustomParamNamesAlone();
     void spliceInsertsMissingNameAndId();
@@ -210,6 +211,33 @@ void TestAlgorithmScaffold::spliceHandlesTemplateWithoutCopyright()
         out.startsWith(QStringLiteral("-- SPDX-FileCopyrightText: 2026 <your name>\n"
                                       "-- SPDX-License-Identifier: GPL-3.0-or-later\n"
                                       "\n")));
+}
+
+void TestAlgorithmScaffold::spliceNeverInventsALicense()
+{
+    // The licensing-critical direction, and the one the rest of this file
+    // cannot catch. spliceInheritsTemplateLicense pins that a template's
+    // license is carried rather than restamped, but every template it uses has
+    // one. A template with NO license line must yield a copy with none: this
+    // function has no license of its own to fall back on, and stamping the
+    // caller's onto someone else's unlicensed code would be a claim nobody
+    // made. A regression that did exactly that would pass every other test
+    // here, because they all count SPDX-License-Identifier as 1 and would keep
+    // seeing 1.
+    QString noLicense = kTemplate;
+    noLicense.replace(QStringLiteral("-- SPDX-License-Identifier: GPL-3.0-or-later\n"), QString());
+    const QString out = spliceTemplate(noLicense, kCopyright, QStringLiteral("My Copy"), QStringLiteral("my-copy"));
+    QVERIFY(!out.isEmpty());
+    QCOMPARE(out.count(QStringLiteral("SPDX-License-Identifier")), 0);
+    // The copy is still a copy: both copyrights lead it, and the body it took
+    // is there.
+    QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 2);
+    QVERIFY(
+        out.startsWith(QStringLiteral("-- SPDX-FileCopyrightText: 2026 <your name>\n"
+                                      "-- SPDX-FileCopyrightText: 2026 fuddlesworth\n"
+                                      "\n")));
+    QVERIFY(out.contains(QStringLiteral("        name = \"My Copy\",")));
+    QVERIFY(out.contains(QStringLiteral("        id = \"my-copy\",")));
 }
 
 void TestAlgorithmScaffold::splicePreservesCapabilityMetadata()
@@ -410,13 +438,24 @@ QString moduleWithMetadataBody(const QString& metadataBody)
 // Assert the metadata name/id were rewritten exactly once. A duplicate pair is
 // the silent-corruption shape: Luau is last-wins, so a copy would keep the
 // source's id and collide with it.
-void verifyRewrittenOnce(const QString& out)
+//
+// Every call site asserts the same four things about a different shape, so
+// each carries its @p label into the failure message. Without it a report
+// names only this helper's line and says nothing about which shape broke, and
+// a failure takes the rest of that test's remaining shapes with it.
+void verifyRewrittenOnce(const QString& out, const char* label)
 {
-    QVERIFY(!out.isEmpty());
-    QCOMPARE(out.count(QStringLiteral("name = ")), 1);
-    QCOMPARE(out.count(QStringLiteral("id = ")), 1);
-    QVERIFY(out.contains(QStringLiteral("        name = \"B\",")));
-    QVERIFY(out.contains(QStringLiteral("        id = \"b\",")));
+    QVERIFY2(!out.isEmpty(), label);
+    QVERIFY2(out.count(QStringLiteral("name = ")) == 1,
+             qPrintable(QStringLiteral("%1: expected one name field, got %2")
+                            .arg(QLatin1String(label))
+                            .arg(out.count(QStringLiteral("name = ")))));
+    QVERIFY2(out.count(QStringLiteral("id = ")) == 1,
+             qPrintable(QStringLiteral("%1: expected one id field, got %2")
+                            .arg(QLatin1String(label))
+                            .arg(out.count(QStringLiteral("id = ")))));
+    QVERIFY2(out.contains(QStringLiteral("        name = \"B\",")), label);
+    QVERIFY2(out.contains(QStringLiteral("        id = \"b\",")), label);
 }
 
 } // namespace
@@ -427,23 +466,23 @@ void TestAlgorithmScaffold::spliceHandlesLongBrackets()
     // direction: counted as code it closes the table early.
     const QString closingBrace = moduleWithMetadataBody(QStringLiteral("        description = [[a } brace]],\n"));
     QString out = spliceTemplate(closingBrace, kCopyright, QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "closing brace in a long string");
     QVERIFY(out.contains(QStringLiteral("        description = [[a } brace]],")));
 
     // An opening brace is the mirror case.
     out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        description = [[a { brace]],\n")), kCopyright,
                          QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "opening brace in a long string");
 
     // A long comment on one line, and a closed long bracket followed by a
     // second one that opens later on the SAME line.
     out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        --[[ note } here ]]\n")), kCopyright,
                          QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "single-line long comment");
 
     out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        description = [[x]] .. [[} y]],\n")),
                          kCopyright, QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "two long brackets on one line");
 }
 
 void TestAlgorithmScaffold::spliceHandlesMultiLineLongBrackets()
@@ -453,13 +492,13 @@ void TestAlgorithmScaffold::spliceHandlesMultiLineLongBrackets()
     QString out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        --[[ note\n"
                                                                        "        } still inside the comment ]]\n")),
                                  kCopyright, QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "multi-line long comment");
 
     // The same hazard as a long string value.
     out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        description = [[opens here\n"
                                                                "        } and runs on ]],\n")),
                          kCopyright, QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "multi-line long string");
 
     // A name/id line INSIDE a long string is that string's text, so it must be
     // left alone rather than rewritten.
@@ -480,16 +519,16 @@ void TestAlgorithmScaffold::spliceHandlesLevelNLongBrackets()
     QString out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        --[==[ note\n"
                                                                        "        } still inside ]==]\n")),
                                  kCopyright, QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "level-2 multi-line long comment");
 
     out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        description = [=[a } brace]=],\n")), kCopyright,
                          QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "level-1 long string");
 
     // A level-0 closer inside a level-1 bracket does not end it.
     out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        description = [=[ has ]] inside } ]=],\n")),
                          kCopyright, QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "level-0 closer inside a level-1 bracket");
 }
 
 void TestAlgorithmScaffold::spliceOrdersSpdxCopyrightBeforeLicense()
@@ -602,13 +641,13 @@ void TestAlgorithmScaffold::spliceKeepsQuotesAndLongBracketsApart()
     // bracket that never closes and swallow the rest of the table.
     QString out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        description = \"see [[ docs\",\n")),
                                  kCopyright, QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "long-bracket opener inside a quoted string");
 
     // The mirror: a lone quote inside a long bracket is that bracket's text,
     // and must not open a string.
     out = spliceTemplate(moduleWithMetadataBody(QStringLiteral("        description = [[it's a } thing]],\n")),
                          kCopyright, QStringLiteral("B"), QStringLiteral("b"));
-    verifyRewrittenOnce(out);
+    verifyRewrittenOnce(out, "quote inside a long bracket");
 }
 
 void TestAlgorithmScaffold::spliceHandlesTrailingNameOrIdField()
@@ -908,34 +947,42 @@ void TestAlgorithmScaffold::spliceAllBundledAlgorithms()
     QCOMPARE(out.count(QStringLiteral("SPDX-FileCopyrightText")), 2);
     QCOMPARE(out.count(QStringLiteral("SPDX-License-Identifier")), 1);
 
-    // Every original line survives except the SPDX header and the
-    // top-level name/id lines. The anchored regex is a conservative
-    // filter: it exempts any line that starts with `name =` / `id =` at
-    // any depth (bundled customParams entries open with `{ name = ...`,
-    // which it does not match), so it can only under-check a nested
-    // own-line name, never fail on a preserved one.
+    // Every original line survives, in its original order, except the SPDX
+    // header and the top-level name/id lines. The anchored regex is a
+    // conservative filter: it exempts any line that starts with `name =` /
+    // `id =` at any depth (bundled customParams entries open with
+    // `{ name = ...`, which it does not match), so it can only under-check a
+    // nested own-line name, never fail on a preserved one.
     //
-    // Blank lines are skipped rather than checked: `contains("")` is true of
-    // any string, so asserting on them proves nothing and only obscures what
-    // the loop does check.
+    // Blank lines are dropped rather than checked: the splice normalizes the
+    // blank lines around the header it rebuilds, so their positions are its
+    // business rather than a property of the body it must not touch.
     //
-    // Compared as whole lines, not substrings. QString::count would count
-    // overlapping substrings, where a short line like `        },` also matches
-    // inside a more deeply indented one, so the counts would differ for reasons
-    // that have nothing to do with the splice. Matching list elements pins the
-    // real property: a preserved line must appear exactly as many times as it
-    // did, so one that survived but got duplicated fails here too.
-    const QStringList lines = content.split(QLatin1Char('\n'));
-    const QStringList outLines = out.split(QLatin1Char('\n'));
-    for (const QString& line : lines) {
-        const QString trimmed = line.trimmed();
-        if (trimmed.isEmpty() || trimmed.startsWith(QLatin1String("-- SPDX-"))
-            || topLevelNameOrId.match(line).hasMatch()) {
-            continue;
+    // The two filtered sequences are compared element by element, not as
+    // multisets. Counting each line's occurrences would pin loss, mangling and
+    // duplication, but a splice that INSERTED a line the template never had, or
+    // that reordered two it kept, would satisfy every count and pass. Comparing
+    // the sequences is what makes "verbatim" above true as written: same lines,
+    // same number of them, same order.
+    //
+    // Compared as whole lines, not substrings. A substring search would match a
+    // short line like `        },` inside a more deeply indented one, so it
+    // would differ for reasons that have nothing to do with the splice.
+    // No capture: topLevelNameOrId has static storage duration, so it is
+    // reachable without one (and could not be captured if it tried).
+    const auto bodyLines = [](const QString& text) {
+        QStringList kept;
+        for (const QString& line : text.split(QLatin1Char('\n'))) {
+            const QString trimmed = line.trimmed();
+            if (trimmed.isEmpty() || trimmed.startsWith(QLatin1String("-- SPDX-"))
+                || topLevelNameOrId.match(line).hasMatch()) {
+                continue;
+            }
+            kept += line;
         }
-        QVERIFY2(outLines.contains(line), qPrintable(QStringLiteral("lost line: ") + line));
-        QCOMPARE(outLines.count(line), lines.count(line));
-    }
+        return kept;
+    };
+    QCOMPARE(bodyLines(out), bodyLines(content));
 }
 
 QTEST_GUILESS_MAIN(TestAlgorithmScaffold)

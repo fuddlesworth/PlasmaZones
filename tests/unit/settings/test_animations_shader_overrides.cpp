@@ -5,8 +5,7 @@
  * @file test_animations_shader_overrides.cpp
  * @brief AnimationsPageController shader-override tests.
  *
- * Split from test_animations_page_controller.cpp to keep each test file
- * under the project's 1000-line guideline. Pinned behaviour:
+ * Pinned behaviour:
  *   - setShaderOverride round-trip through Settings/ShaderProfileTree
  *   - setShaderOverride emits pendingChangesChanged on every mutation
  *     (set, clear, repeated picks, empty-effect-clear shorthand)

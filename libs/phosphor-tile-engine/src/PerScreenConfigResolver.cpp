@@ -45,68 +45,85 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     // can resolve per-screen values and skip screens with overrides.
     m_perScreenOverrides[screenId] = overrides;
 
-    PhosphorTiles::TilingState* state = m_engine->tilingStateForScreen(screenId);
-    if (!state) {
-        return;
-    }
+    // The PhosphorTiles::TilingState-level writes below act on the CURRENT
+    // context's state and are skipped when there is none. The wipe and the retile
+    // schedule that follow are NOT gated on it: the wipe walks every
+    // (desktop, activity) state of the screen itself, and tilingStateForScreen
+    // returns nullptr for an UNKNOWN screen even when other contexts' states for
+    // that screen exist and survive. Returning early here would record the new
+    // effective algorithm while those states kept the old algorithm's split tree
+    // and script state forever — the next applyPerScreenConfig sees `previous`
+    // already carrying the new id and reads the effective algorithm as unchanged.
+    if (PhosphorTiles::TilingState* state = m_engine->tilingStateForScreen(screenId)) {
+        // Apply PhosphorTiles::TilingState-level overrides (splitRatio, masterCount).
+        // These are STATEFUL: an unset key normally means "leave the state alone" so a
+        // user's live drag-adjusted split / master count survives an unrelated
+        // updateAutotileScreens pass. But if the key was PRESENT in the previous map
+        // and is now gone (a SetSplitRatio / SetMasterCount rule was removed while the
+        // map stayed non-empty), the state would keep the stale rule value — so revert
+        // it to the global config baseline, matching clearPerScreenConfig.
+        auto it = overrides.constFind(QString(PerScreenKeys::SplitRatio));
+        if (it != overrides.constEnd()) {
+            state->setSplitRatio(qBound(PhosphorTiles::AutotileDefaults::MinSplitRatio, it->toDouble(),
+                                        PhosphorTiles::AutotileDefaults::MaxSplitRatio));
+        } else if (previous.contains(QString(PerScreenKeys::SplitRatio))) {
+            // Removed (was an override, now gone) → revert to the config baseline. NOT
+            // gated on the Algorithm key: concrete-algorithm screens ALWAYS carry the
+            // injected Algorithm key, so an Algorithm-presence guard would leave the stale
+            // removed-rule ratio on exactly those screens. Branch 3 below runs AFTER this,
+            // so on a GENUINE algorithm change it overwrites this baseline with the new
+            // algo's default (the correct end state); on an unchanged / absent algorithm
+            // this baseline stands. A never-was-an-override live value is untouched (the
+            // previous.contains guard). The state now holds the global baseline, so the
+            // tuned flag that protected the old value from propagateGlobalSplitRatio
+            // goes with it — same key as the write, matching the Algorithm arm below.
+            state->setSplitRatio(m_engine->config()->splitRatio);
+            m_engine->m_userTunedSplitRatio.remove(m_engine->currentKeyForScreen(screenId));
+        }
 
-    // Apply PhosphorTiles::TilingState-level overrides (splitRatio, masterCount).
-    // These are STATEFUL: an unset key normally means "leave the state alone" so a
-    // user's live drag-adjusted split / master count survives an unrelated
-    // updateAutotileScreens pass. But if the key was PRESENT in the previous map
-    // and is now gone (a SetSplitRatio / SetMasterCount rule was removed while the
-    // map stayed non-empty), the state would keep the stale rule value — so revert
-    // it to the global config baseline, matching clearPerScreenConfig.
-    auto it = overrides.constFind(QString(PerScreenKeys::SplitRatio));
-    if (it != overrides.constEnd()) {
-        state->setSplitRatio(qBound(PhosphorTiles::AutotileDefaults::MinSplitRatio, it->toDouble(),
-                                    PhosphorTiles::AutotileDefaults::MaxSplitRatio));
-    } else if (previous.contains(QString(PerScreenKeys::SplitRatio))) {
-        // Removed (was an override, now gone) → revert to the config baseline. NOT
-        // gated on the Algorithm key: concrete-algorithm screens ALWAYS carry the
-        // injected Algorithm key, so an Algorithm-presence guard would leave the stale
-        // removed-rule ratio on exactly those screens. Branch 3 below runs AFTER this,
-        // so on a GENUINE algorithm change it overwrites this baseline with the new
-        // algo's default (the correct end state); on an unchanged / absent algorithm
-        // this baseline stands. A never-was-an-override live value is untouched (the
-        // previous.contains guard).
-        state->setSplitRatio(m_engine->config()->splitRatio);
-    }
+        it = overrides.constFind(QString(PerScreenKeys::MasterCount));
+        if (it != overrides.constEnd()) {
+            state->setMasterCount(qBound(PhosphorTiles::AutotileDefaults::MinMasterCount, it->toInt(),
+                                         PhosphorTiles::AutotileDefaults::MaxMasterCount));
+        } else if (previous.contains(QString(PerScreenKeys::MasterCount))) {
+            // Removed → revert to the global config baseline (no per-algorithm default).
+            // Drop the tuned flag with the value it protected, current key only —
+            // same rule as the SplitRatio arm above.
+            state->setMasterCount(m_engine->config()->masterCount);
+            m_engine->m_userTunedMasterCount.remove(m_engine->currentKeyForScreen(screenId));
+        }
 
-    it = overrides.constFind(QString(PerScreenKeys::MasterCount));
-    if (it != overrides.constEnd()) {
-        state->setMasterCount(qBound(PhosphorTiles::AutotileDefaults::MinMasterCount, it->toInt(),
-                                     PhosphorTiles::AutotileDefaults::MaxMasterCount));
-    } else if (previous.contains(QString(PerScreenKeys::MasterCount))) {
-        // Removed → revert to the global config baseline (no per-algorithm default).
-        state->setMasterCount(m_engine->config()->masterCount);
-    }
-
-    // If the per-screen algorithm ACTUALLY CHANGED and split ratio wasn't
-    // explicitly overridden, reset it to the new algorithm's default — matching
-    // setAlgorithm(), which early-returns when the id is unchanged. The daemon
-    // always injects the Algorithm key for concrete-algorithm autotile screens, so
-    // gating on mere key PRESENCE would reset the split ratio on every unrelated
-    // override change (e.g. a SetMaxWindows rule edit, now that a rule edit rebuilds
-    // the overrides map and re-applies), silently discarding a user's live
-    // drag-tuned ratio. Comparing against the previous EFFECTIVE algorithm (the
-    // previous map's entry, falling back to the global id exactly like the wipe
-    // helper below) fires the reset only on a genuine switch: an override added
-    // with the same id the screen already followed globally is not a change.
-    // Dropping the tuning on a real change is correct (setAlgorithm clears user
-    // tunings on a real change too), so the tuned-ratio flags for this screen
-    // are erased alongside the value they described.
-    it = overrides.constFind(QString(PerScreenKeys::Algorithm));
-    if (it != overrides.constEnd()) {
-        const QString algoId = it->toString();
-        const QString previousAlgo =
-            previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString();
-        if (algoId != previousAlgo && !overrides.contains(QString(PerScreenKeys::SplitRatio))) {
-            if (auto* newAlgo = m_engine->algorithmRegistry()->algorithm(algoId)) {
-                state->setSplitRatio(newAlgo->defaultSplitRatio());
-                m_engine->m_userTunedSplitRatio.removeIf([&screenId](const auto& key) {
-                    return key.screenId == screenId;
-                });
+        // If the per-screen algorithm ACTUALLY CHANGED and split ratio wasn't
+        // explicitly overridden, reset it to the new algorithm's default — matching
+        // setAlgorithm(), which early-returns when the id is unchanged. The daemon
+        // always injects the Algorithm key for concrete-algorithm autotile screens, so
+        // gating on mere key PRESENCE would reset the split ratio on every unrelated
+        // override change (e.g. a SetMaxWindows rule edit, now that a rule edit rebuilds
+        // the overrides map and re-applies), silently discarding a user's live
+        // drag-tuned ratio. Comparing against the previous EFFECTIVE algorithm (the
+        // previous map's entry, falling back to the global id exactly like the wipe
+        // helper below) fires the reset only on a genuine switch: an override added
+        // with the same id the screen already followed globally is not a change.
+        // Dropping the tuning on a real change is correct (setAlgorithm clears user
+        // tunings on a real change too), so the tuned-ratio flag is erased alongside
+        // the value it described — for the CURRENT key only, the one state actually
+        // reset here. Dropping every (desktop, activity) key of the screen would
+        // strand the other contexts' tuned VALUES without the flag that protects
+        // them, and the next propagateGlobalSplitRatio would overwrite them with the
+        // GLOBAL algorithm's ratio once their desktop becomes current — wrong for a
+        // screen pinned to a per-screen algorithm. (setAlgorithm's all-contexts drop
+        // is coherent because m_config->splitRatio is by then the incoming
+        // algorithm's restored value; here it is not.)
+        it = overrides.constFind(QString(PerScreenKeys::Algorithm));
+        if (it != overrides.constEnd()) {
+            const QString algoId = it->toString();
+            const QString previousAlgo =
+                previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString();
+            if (algoId != previousAlgo && !overrides.contains(QString(PerScreenKeys::SplitRatio))) {
+                if (auto* newAlgo = m_engine->algorithmRegistry()->algorithm(algoId)) {
+                    state->setSplitRatio(newAlgo->defaultSplitRatio());
+                    m_engine->m_userTunedSplitRatio.remove(m_engine->currentKeyForScreen(screenId));
+                }
             }
         }
     }
@@ -119,6 +136,28 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     // deliberately skips overridden screens, and in the applyEntry transaction
     // it runs while the stale override is still stored, so this is the only
     // place that sees the removal.
+    //
+    // Both fallbacks read m_algorithmId LIVE, and that is correct under either
+    // order the two halves of a global-switch transaction can run in:
+    //
+    //  * overrides first (applyEntry: assignLayoutById → layoutAssigned →
+    //    updateAutotileScreens → here, and only then setAlgorithm at
+    //    UnifiedLayoutController::applyEntry) — m_algorithmId is still the OLD
+    //    global, which is exactly what a screen with no Algorithm key in
+    //    `previous` was following, so an override pinning that same id reads as
+    //    "no change" and nothing is wiped or reset.
+    //  * setAlgorithm first (Daemon::handleSnappingToAutotile, applySettings)
+    //    — m_algorithmId is the NEW global, and that is equally truthful: a
+    //    screen reaching the fallback has no Algorithm override, so
+    //    setAlgorithm's own clear loop did not skip it. It already wiped that
+    //    screen's bags and re-seeded its ratio to the new global algorithm's
+    //    value, so the new global IS the algorithm the screen's state currently
+    //    describes.
+    //
+    // The fallback is only ever consulted when `previous` carries no Algorithm
+    // key, which is precisely the case setAlgorithm keeps up to date — so do
+    // NOT replace it with a pre-switch snapshot threaded in from the caller:
+    // that would report a change the screen's state had already been moved past.
     wipeStateBagsOnEffectiveAlgorithmChange(
         screenId, previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString(),
         overrides.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString());
@@ -156,8 +195,14 @@ void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenId)
     // Restore global defaults on PhosphorTiles::TilingState
     PhosphorTiles::TilingState* state = m_engine->tilingStateForScreen(screenId);
     if (state) {
+        // The state now holds the global baseline, so the tuned flag that
+        // protected the old value from propagateGlobalSplitRatio goes with it —
+        // current key only, matching the one state written here (same rule as
+        // applyPerScreenConfig's revert and Algorithm arms).
         state->setSplitRatio(m_engine->config()->splitRatio);
+        m_engine->m_userTunedSplitRatio.remove(m_engine->currentKeyForScreen(screenId));
         state->setMasterCount(m_engine->config()->masterCount);
+        m_engine->m_userTunedMasterCount.remove(m_engine->currentKeyForScreen(screenId));
     }
 
     // Removing an Algorithm override lands the screen back on the global
@@ -200,7 +245,27 @@ void PerScreenConfigResolver::updatePerScreenOverride(const QString& screenId, c
 
 void PerScreenConfigResolver::removeOverridesForScreen(const QString& screenId)
 {
-    m_perScreenOverrides.remove(screenId);
+    // take(), not remove(): dropping an Algorithm override moves the screen's
+    // effective algorithm back to the global one, so the same wipe the other two
+    // drop paths run is owed here. Both callers tear down only SOME of the
+    // screen's states — the autotile toggle-off path prunes the current
+    // (desktop, activity) context only and leaves the others live — and those
+    // survivors' split trees and script state were built under the OVERRIDDEN
+    // algorithm. Without the wipe they cross algorithms and nothing later
+    // notices: a re-enable that lands the screen on a bare-autotile map with no
+    // Algorithm key computes old == new == global and wipes nothing.
+    //
+    // Safe from inside the callers' PerScreenStates::removeStatesIf() callbacks:
+    // the wipe only reads states() (a const ref, no detach) and mutates the
+    // TilingState objects, never the hash the caller is iterating. The
+    // orphaned-virtual-screen caller removes every context of the id anyway, so
+    // there the wipe is a harmless no-op on states about to be destroyed. The
+    // helper itself no-ops when the two ids match, so a screen whose override
+    // named the global algorithm keeps its bags.
+    const QVariantMap previous = m_perScreenOverrides.take(screenId);
+    wipeStateBagsOnEffectiveAlgorithmChange(
+        screenId, previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString(),
+        m_engine->m_algorithmId);
 }
 
 void PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange(const QString& screenId,
@@ -276,8 +341,9 @@ std::optional<int> PerScreenConfigResolver::contextGap(const QString& screenId, 
 std::optional<::PhosphorLayout::EdgeGaps> PerScreenConfigResolver::contextOuterGaps(const QString& screenId) const
 {
     // Resolve the per-context (window-rule) outer-gap override as ONE atomic
-    // layer, mirroring the snapping pipeline (GeometryUtils::
-    // resolveOuterGapsFromMap): per-side values are honoured only when the rule
+    // layer, mirroring the snapping pipeline (the daemon's
+    // GeometryUtils::resolveOuterGapsFromMap in src/core/geometryutils.cpp, not
+    // anything in PhosphorEngine): per-side values are honoured only when the rule
     // set UsePerSideOuterGap, and if the layer yields any outer gap it wins
     // wholesale — no per-key blending with the static per-screen layer below.
     if (!m_contextGapProvider) {

@@ -15,9 +15,7 @@
 //   * onSettingsPropertyChanged / onExternalSettingsChanged — the
 //     two ISettings change-tracking hooks that flow into setNeedsSave.
 //
-// Split out of settingscontroller.cpp to keep that file under the
-// 1000-line guideline (see CLAUDE.md). Same class, separate TU, no API
-// change.
+// Same class as settingscontroller.cpp, separate TU, no API change.
 
 #include "settingscontroller.h"
 

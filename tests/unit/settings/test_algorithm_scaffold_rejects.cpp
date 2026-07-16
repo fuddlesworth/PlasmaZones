@@ -3,12 +3,9 @@
 
 // The shapes rewriteMetadataNameId() / spliceTemplate() refuse.
 //
-// Split out of test_algorithm_scaffold.cpp on the same rule that put the blank
-// scaffold in its own file: one file for every surface passed the file-size
-// rule (target under 1000 lines, hard ceiling 1150). These share no fixture
-// with the rewrite tests beyond the copyright
-// line, and they all assert the same thing — an unrecognized shape returns
-// empty rather than a corrupted script.
+// These share no fixture with the rewrite tests in test_algorithm_scaffold.cpp
+// beyond the copyright line, and they all assert the same thing. An
+// unrecognized shape returns empty rather than a corrupted script.
 //
 // Not every refusal lives here. spliceHandlesTrailingNameOrIdField, over in
 // test_algorithm_scaffold.cpp, keeps its own rejects next to its accepts on
@@ -68,6 +65,7 @@ private Q_SLOTS:
     void rejectsInlineFieldsOnOpeningLine();
     void rejectsMultiFieldNameLine();
     void rejectsUnquotedNameValue();
+    void rejectsLongBracketNameValue();
     void rejectsFieldHiddenBehindLongComment();
     void ignoresMetadataTableInsideLongComment();
     void rejectsStringLeftOpenAtEndOfLine();
@@ -190,6 +188,60 @@ void TestAlgorithmScaffoldRejects::rejectsUnquotedNameValue()
         "    tile = function(ctx) return {} end,\n"
         "}\n");
     QVERIFY(spliceTemplate(unquotedId, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+}
+
+void TestAlgorithmScaffoldRejects::rejectsLongBracketNameValue()
+{
+    // `name = [[x]]` is a perfectly good Luau field, and on one line it even
+    // looks rewritable. It is refused anyway, because the value may span lines
+    // and the line-anchored read cannot follow it there. Accepting the
+    // one-line spelling would mean reading the family by where its closer
+    // happened to fall rather than by anything the read knows, so the whole
+    // shape goes.
+    const QString oneLine = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = [[x]],\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(oneLine, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+
+    // The multi-line spelling, which is the reason the one-line one cannot be
+    // taken on trust.
+    const QString spansLines = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = [[opens here\n"
+        "        and runs on]],\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(spansLines, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+
+    // Level-N brackets are the same family, so `[==[` is refused like `[[`.
+    const QString levelN = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = [==[x]==],\n"
+        "        id = \"a\",\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(levelN, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
+
+    // Same shape on the id line — the symmetric reject branch.
+    const QString longBracketId = QStringLiteral(
+        "return pluau.algorithm {\n"
+        "    metadata = {\n"
+        "        name = \"N\",\n"
+        "        id = [[x]],\n"
+        "    },\n"
+        "    tile = function(ctx) return {} end,\n"
+        "}\n");
+    QVERIFY(spliceTemplate(longBracketId, kCopyright, QStringLiteral("X"), QStringLiteral("x")).isEmpty());
 }
 
 void TestAlgorithmScaffoldRejects::rejectsFieldHiddenBehindLongComment()

@@ -14,12 +14,11 @@
 //     assignment cascade sees daemon-driven rule edits without a process
 //     restart.
 //
-// The previous monolithic block in `settingscontroller.cpp` pushed that
-// TU past the project's 1000-line guideline (CLAUDE.md). Extracting the D-Bus
-// wire-up is the natural seam: the helper lambda + subscriptions are
-// cohesive, only call into D-Bus session-bus APIs and the controller's
-// own slot table, and don't touch the page-controller construction
-// graph. Same class, separate translation unit, no API change.
+// The D-Bus wire-up is a natural seam away from `settingscontroller.cpp`. The
+// helper lambda and subscriptions are cohesive, only call into D-Bus
+// session-bus APIs and the controller's own slot table, and don't touch the
+// page-controller construction graph. Same class, separate translation unit,
+// no API change.
 
 #include "settingscontroller.h"
 

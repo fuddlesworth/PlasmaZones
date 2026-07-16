@@ -265,8 +265,7 @@ void ApplicationController::discardAll()
 // NOTE: applyAllAsync / discardAllAsync / completeApplyIfDone /
 // completeDiscardIfDone / forceResetAsyncState / asyncBatchTimeoutMs
 // (READ/WRITE) live in applicationcontroller_async.cpp — same class,
-// separate TU, split out to keep this file under the 1000-line guideline
-// (CLAUDE.md).
+// separate TU.
 
 void ApplicationController::resetCurrentPage()
 {

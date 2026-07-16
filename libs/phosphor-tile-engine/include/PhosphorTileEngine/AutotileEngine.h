@@ -825,7 +825,6 @@ public:
     // AutotileEngine pointer from internal callers.
     void swapInDirection(const QString& direction, const QString& action);
     void rotateWindows(bool clockwise, const QString& screenId);
-    void moveToPosition(const QString& windowId, int position, const QString& screenId);
 
     /**
      * @brief Set the floating state of a specific window
@@ -961,7 +960,7 @@ public:
      *
      * @return true if the window is tiled on the screen and preview was started.
      */
-    bool beginDragInsertPreview(const QString& windowId, const QString& screenId) override;
+    bool beginDragInsertPreview(const QString& rawWindowId, const QString& screenId) override;
 
     /**
      * @brief Update the target insert index for the active drag preview.

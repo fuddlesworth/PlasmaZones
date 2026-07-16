@@ -150,17 +150,17 @@ Rectangle {
                     var n = tile._ruleCount;
                     var countLabel = i18np("%n rule", "%n rules", n);
                     if (!tile._assigned)
-                        return i18n("Not assigned") + " · " + countLabel;
+                        return i18nc("@label monitor caption", "%1 · %2", i18n("Not assigned"), countLabel);
 
                     // `tilingEnabled` means "the screen's window-management
                     // engine is NOT disabled" for whatever engine it runs
                     // (snapping / autotile / scrolling), so the label stays
                     // engine-agnostic rather than saying "Tiling off".
                     if (!tile.tileData.tilingEnabled)
-                        return i18n("Engine off") + " · " + countLabel;
+                        return i18nc("@label monitor caption", "%1 · %2", i18n("Engine off"), countLabel);
 
                     if (tile.tileData.layoutName && tile.tileData.layoutName.length > 0)
-                        return tile.tileData.layoutName + " · " + countLabel;
+                        return i18nc("@label monitor caption", "%1 · %2", tile.tileData.layoutName, countLabel);
 
                     return countLabel;
                 }
@@ -177,6 +177,8 @@ Rectangle {
         activeFocusOnTab: true
         Keys.onSpacePressed: tile.clicked()
         Keys.onReturnPressed: tile.clicked()
+        // Numpad Enter alias, matching the sibling card components.
+        Keys.onEnterPressed: tile.clicked()
         onClicked: tile.clicked()
     }
 

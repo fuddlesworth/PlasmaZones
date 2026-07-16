@@ -627,18 +627,10 @@ void EditorController::loadLayout(const QString& layoutId)
         : -1;
     m_useFullScreenGeometry =
         layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry)].toBool(false);
-    if (layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey))) {
-        QJsonValue arVal = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)];
-        if (arVal.isString()) {
-            // Canonical format from PhosphorZones::Layout::toJson() — string like "ultrawide"
-            m_aspectRatioClass = static_cast<int>(PhosphorLayout::ScreenClassification::fromString(arVal.toString()));
-        } else {
-            // Int format (from editor save round-trip before daemon persists)
-            m_aspectRatioClass = arVal.toInt(0);
-        }
-    } else {
-        m_aspectRatioClass = 0;
-    }
+    // fromJsonValue accepts the canonical string from Layout::toJson and the int
+    // from an editor save round-trip, and maps a missing key to Any.
+    m_aspectRatioClass = static_cast<int>(PhosphorLayout::ScreenClassification::fromJsonValue(
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)]));
     int oldOverlayDisplayMode = m_overlayDisplayMode;
     m_overlayDisplayMode = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode))
         ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)].toInt(-1)

@@ -12,7 +12,7 @@
  * 4. LabelFontWeight default (regression guard)
  * 5. Activation setting load + default fallback
  *
- * Companion test files (split for the 1000-line guideline):
+ * Companion test files:
  *   - test_settings_animation_profile.cpp — Profile JSON-blob storage,
  *     per-field signals, aggregate-setter merge semantics
  *   - test_settings_shader_tree.cpp       — ShaderProfileTree persistence,

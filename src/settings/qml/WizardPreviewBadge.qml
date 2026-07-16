@@ -13,8 +13,6 @@ import org.kde.kirigami as Kirigami
  * centered label over a translucent strip at the bottom of the frame.
  */
 Label {
-    id: root
-
     anchors.bottom: parent.bottom
     anchors.left: parent.left
     anchors.right: parent.right

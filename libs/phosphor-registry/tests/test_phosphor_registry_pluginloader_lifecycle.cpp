@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Lifecycle / rescan re-entry tests for PluginLoader. Split out of
-// test_phosphor_registry_pluginloader.cpp so the primary TU stays
-// under the project's 1000-line guideline. Shares the plugin-fixture install
-// helpers and the WarningCapture instrumentation via
+// Lifecycle / rescan re-entry tests for PluginLoader. Shares the
+// plugin-fixture install helpers and the WarningCapture instrumentation
+// with test_phosphor_registry_pluginloader.cpp via
 // test_pluginloader_helpers.h — drift between the two binaries on
 // scaffolding behaviour is structurally impossible.
 

@@ -21,9 +21,8 @@
 
 #include <epoxy/gl.h>
 
-// Backdrop capture for the surface decoration fold. Split out of
-// surfacelayers.cpp to keep that TU under the 1000-line guideline, mirroring the
-// earlier surface_audio.cpp split.
+// Backdrop capture for the surface decoration fold, split out of
+// surfacelayers.cpp (which owns the fold itself).
 namespace PlasmaZones {
 
 // Blit the scene behind @p w into its backdrop texture (see the header).

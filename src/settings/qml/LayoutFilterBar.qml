@@ -46,16 +46,11 @@ RowLayout {
     property bool showScriptState: true
     property bool showSingleWindow: true
     property bool showReflowsOnFocus: true
-    // Whether any non-default filter is active (drives badge visibility)
-    readonly property bool hasActiveFilters: {
-        if (filterText.length > 0)
-            return true;
-
-        if (root.viewMode === 0)
-            return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || !showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
-        else
-            return !showBuiltInAlgorithms || !showUserAlgorithms || !showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams || !showReflowsOnResize || !showScriptState || !showSingleWindow || !showReflowsOnFocus;
-    }
+    // Whether any non-default filter is active (drives badge visibility).
+    // Derived from the active mode's filter button rather than a hand-written
+    // list: its `excluded` already tracks every bool filter that is off, via
+    // _excludedKeys over the button's own group entries.
+    readonly property bool hasActiveFilters: filterText.length > 0 || (viewMode === 0 ? snappingFilterButton : tilingFilterButton).excluded.length > 0
     // ── Group-by index constants (must match model order below) ───────────
     // Snapping
     readonly property int groupAspectRatio: 0
@@ -94,15 +89,15 @@ RowLayout {
     // Each entry: [rootPropertyName, persistedStatePropertyName].
     // NOTE: adding a filter requires updating ALL of: property declaration,
     // _defaultValues, the relevant _snapping/_tilingStateMap, persistedState,
-    // hasActiveFilters, the filter button's group entry, and the JS filter
-    // logic (see the same
+    // the filter button's group entry, and the JS filter logic (see the same
     // note above _defaultValues below — keep both lists in sync).
+    // hasActiveFilters needs no update: it derives from the button's excluded.
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
     readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"], ["showScriptState", "tilingShowScriptState"], ["showSingleWindow", "tilingShowSingleWindow"], ["showReflowsOnFocus", "tilingShowReflowsOnFocus"]]
     // Default values for all resettable filter properties (not group/sort).
     // Adding a filter requires updating: property declaration, _defaultValues,
-    // the relevant state map, persistedState, hasActiveFilters, the filter
-    // button's group entry, and the JS logic.
+    // the relevant state map, persistedState, the filter button's group entry,
+    // and the JS logic.
     readonly property var _defaultValues: {
         "showHidden": true,
         "showAspectAny": true,

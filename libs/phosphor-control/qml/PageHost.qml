@@ -36,27 +36,31 @@ Item {
      *  content inset and the breadcrumb row. */
     property real contentMargins: Kirigami.Units.largeSpacing
 
+    // Bumped by onPageRegistered so currentEntry re-evaluates on late
+    // registration (pageData() itself is a non-notifying invokable).
+    // Internal cache-invalidation state, not part of this component's
+    // public surface — hence the `_` prefix, matching `_everCurrent` below.
+    property int _registryRevision: 0
+
     // `pageData()` returns an empty QVariantMap when the id is unknown
     // (mid-startup before registration, or a stale id restored from disk).
     // An empty map marshals to a non-null JS object, so check for a valid
     // `id` field to fall through to the placeholder rather than rendering
     // an empty viewport.
     readonly property var currentEntry: {
-        // Depend on registryRevision: pageData() is a non-notifying
+        // Depend on _registryRevision: pageData() is a non-notifying
         // invokable, so without this a page that registers AFTER becoming
         // current would leave the placeholder up until the next navigation.
         // onPageRegistered below bumps the revision to force re-evaluation.
-        root.registryRevision;
+        // `void (…)` marks the read as a deliberate dependency registration
+        // rather than a stray statement a cleanup would delete.
+        void (root._registryRevision);
         if (root.controller.currentPageId === "")
             return null;
 
         const data = root.controller.registry.pageData(root.controller.currentPageId);
         return (data && data.id) ? data : null;
     }
-
-    // Bumped by onPageRegistered so currentEntry re-evaluates on late
-    // registration (pageData() itself is a non-notifying invokable).
-    property int registryRevision: 0
 
     // ── Instance cache ───────────────────────────────────────────────
     // Ordered model of page ids that have a live (built, cached) Loader.
@@ -145,10 +149,10 @@ Item {
             Component.onCompleted: if (pageLoader.isCurrent)
                 pageLoader._everCurrent = true
             source: {
-                // Depend on registryRevision (same idiom as currentEntry):
+                // Depend on _registryRevision (same idiom as currentEntry):
                 // pageData() is non-notifying, so a re-registration that
                 // changes a page's qmlSource must force re-evaluation here.
-                root.registryRevision;
+                void (root._registryRevision);
                 const data = root.controller.registry.pageData(pageLoader.pageId);
                 return (data && data.id) ? data.qmlSource : "";
             }
@@ -246,7 +250,7 @@ Item {
             // revision currentEntry depends on, and cache the page if it is
             // the current one (the earlier cachePage call on navigation
             // found no registration and bailed).
-            root.registryRevision++;
+            root._registryRevision++;
             if (id === root.controller.currentPageId)
                 root.cachePage(id);
             const pageController = root.controller.registry.controller(id);

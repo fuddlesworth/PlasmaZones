@@ -120,6 +120,13 @@ Row {
                     durationOverride: Kirigami.Units.shortDuration * 1.5
                 }
             }
+
+            Behavior on border.width {
+                PhosphorMotionAnimation {
+                    profile: "widget.press"
+                    durationOverride: Kirigami.Units.shortDuration * 1.5
+                }
+            }
         }
     }
 }

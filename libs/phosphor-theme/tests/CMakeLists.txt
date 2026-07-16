@@ -19,8 +19,7 @@ endfunction()
 phosphortheme_add_test(test_palettestore)
 # test_palettestore_files holds the loadFromFile slots; test_palettestore_hotreload
 # holds the hot-reload slots + the white-box resetToDefaults_releasesDirectoryWatch
-# slot. Split out of test_palettestore.cpp to keep every TU under the project's
-# 1000-line guideline. All three share tests/test_palettestore_helpers.h for the
+# slot. All three share tests/test_palettestore_helpers.h for the
 # QTemporaryDir + QFile fixture-write scaffolding.
 phosphortheme_add_test(test_palettestore_files)
 phosphortheme_add_test(test_palettestore_hotreload)

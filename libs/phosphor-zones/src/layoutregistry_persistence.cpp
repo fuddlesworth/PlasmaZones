@@ -212,13 +212,20 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
                     // emits a single layoutsChanged at the end.
                     // Continuity: same UUID, so redirect any live active/previous
                     // pointers to the replacing layout before the deferred delete.
-                    if (m_activeLayout == existing) {
+                    // Reseating m_activeLayout silently is not enough: subscribers
+                    // cache the pointer, and `existing` is deleteLater'd a tick
+                    // later, so they must be told to re-read it.
+                    const bool activeReseated = (m_activeLayout == existing);
+                    if (activeReseated) {
                         m_activeLayout = layout;
                     }
                     if (m_previousLayout == existing) {
                         m_previousLayout = layout;
                     }
                     existing->deleteLater();
+                    if (activeReseated) {
+                        Q_EMIT activeLayoutChanged(m_activeLayout);
+                    }
                     qCInfo(lcZonesLib) << "User layout overrides system layout name=" << layout->name()
                                        << "from=" << filePath;
                 } else {
@@ -280,29 +287,26 @@ void LayoutRegistry::saveLayout(PhosphorZones::Layout* layout)
     // daemon restarts.
     const QJsonObject full = layout->toJson();
     m_layoutSettings.setSettingsFor(layout->id().toString(), LayoutSettingsStore::extractSettings(full));
-    // Invariant: never strip settings out of the layout file unless the
-    // sidecar copy actually landed. On sidecar failure, write the FULL
-    // object inline for this cycle so the settings survive somewhere on
-    // disk; a full-format layout file remains loadable (the load path's
-    // mergeSettings preserves keys the file already carries, see
-    // loadLayoutsFromDirectory), and a later successful save re-splits it.
+    // Invariant: the sidecar and the layout file are ONE unit. A save either
+    // lands both or neither — the two are never written out of step.
     //
-    // Write ORDER (sidecar first, layout file second) is safe: if the
-    // layout-file commit below fails after the sidecar landed, the old layout
-    // file survives untouched (atomic QSaveFile), leaving a fresher sidecar
-    // against an older file. That is harmless because mergeSettings gives the
-    // SIDECAR precedence on key conflict at load (QJsonObject::insert
-    // overwrites the file's inline value, and sidecar zone appearance likewise
-    // replaces inline appearance), so stale inline settings in an old
-    // full-format file cannot shadow the fresh sidecar. The order also lets us
-    // know sidecarSaved before choosing stripped-vs-full content above.
-    const bool sidecarSaved = m_layoutSettings.saveToFile(layoutSettingsFilePath());
-    if (!sidecarSaved) {
+    // The sidecar goes first so its failure can abort the layout file while
+    // QSaveFile still holds the write uncommitted. Writing the settings inline
+    // as a fallback does NOT work: mergeSettings gives the SIDECAR precedence on
+    // key conflict at load (QJsonObject::insert overwrites the file's inline
+    // value), so a stale sidecar would shadow the fresh inline value and the
+    // newer setting would sit on disk unreachable. Bailing instead leaves the
+    // last-good consistent pair from the previous save, and the layout stays
+    // dirty (clearDirty only runs on the success path below) so saveLayouts and
+    // the layoutModified connection retry it.
+    if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
         qCWarning(lcZonesLib) << "Failed to persist layout settings sidecar for" << layout->id().toString()
-                              << "- keeping settings inline in the layout file";
+                              << "- abandoning this save; layout stays dirty for retry";
+        file.cancelWriting();
+        return;
     }
 
-    QJsonDocument doc(sidecarSaved ? LayoutSettingsStore::stripSettings(full) : full);
+    QJsonDocument doc(LayoutSettingsStore::stripSettings(full));
     const QByteArray data = doc.toJson(QJsonDocument::Indented);
 
     if (file.write(data) != data.size()) {

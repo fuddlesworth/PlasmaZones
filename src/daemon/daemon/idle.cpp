@@ -1,9 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// SESSION IDLE, split out of daemon.cpp (which is far over the 1000-line guideline and
-// which this feature was making worse) into the daemon's existing per-concern
-// partition directory.
+// SESSION IDLE, one of the daemon's per-concern partitions.
 //
 // Why the DAEMON owns this at all: ext-idle-notify-v1 is a Wayland CLIENT protocol.
 // The KWin effect lives inside the compositor and cannot consume it. So the daemon

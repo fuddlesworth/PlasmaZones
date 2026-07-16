@@ -6,9 +6,8 @@
  * @brief Decoration-set CRUD: the ShaderSetStore behind
  *        DecorationPageController::setsBridge().
  *
- * Split from test_decorationpagecontroller.cpp to keep each test file under
- * the project's 1000-line guideline — the same split, for the same reason, as
- * the motion side's test_animations_motion_sets.cpp.
+ * The controller itself is covered by test_decorationpagecontroller.cpp. This
+ * file mirrors the motion side's test_animations_motion_sets.cpp.
  *
  * A decoration set is every per-surface override, captured
  * as one JSON file under `<GenericDataLocation>/plasmazones/decorationsets`.

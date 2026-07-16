@@ -115,9 +115,8 @@ set(phosphorcontrol_SRCS
     src/pagecontroller.cpp
     src/pageregistry.cpp
     src/applicationcontroller.cpp
-    # Async state-machine half of ApplicationController — split out so
-    # applicationcontroller.cpp stays under the 1000-line guideline (CLAUDE.md).
-    # Same class, separate TU, no API change.
+    # Async state-machine half of ApplicationController. Same class,
+    # separate TU, no API change.
     src/applicationcontroller_async.cpp
     src/localizedcontext.cpp
     src/dbusbridge.cpp
@@ -314,8 +313,9 @@ target_link_libraries(PhosphorControlQml
     PUBLIC
         PhosphorControl::PhosphorControl
         # The chrome QML files import org.phosphor.animation for the
-        # spring-physics motion profiles (panel.fadeIn/Out,
-        # widget.accordionExpand/Collapse, widget.tint, widget.pulse).
+        # motion profiles they bind (panel.fadeIn/Out, panel.slideIn/Out,
+        # widget.accordionExpand/Collapse, widget.fadeIn, widget.hover,
+        # widget.tint, widget.tint.fast).
         # Linking the QML plugin here pulls phosphor-animation into
         # the consumer's QML import path automatically.
         PhosphorAnimation::PhosphorAnimationQml

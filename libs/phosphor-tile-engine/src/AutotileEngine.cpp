@@ -466,28 +466,6 @@ void AutotileEngine::rotateWindows(bool clockwise, const QString& /*screenId*/)
     rotateWindowOrder(clockwise);
 }
 
-void AutotileEngine::moveToPosition(const QString& windowId, int position, const QString& /*screenId*/)
-{
-    if (windowId.isEmpty()) {
-        // Fall back to focused window when no windowId is provided
-        moveFocusedToPosition(position);
-        return;
-    }
-
-    QString resolvedScreenId;
-    PhosphorTiles::TilingState* state = stateForWindow(windowId, &resolvedScreenId);
-    if (!state) {
-        qCWarning(PhosphorTileEngine::lcTileEngine)
-            << "moveToPosition: window" << windowId << "not found in any tiling state";
-        return;
-    }
-
-    // position is 1-based (from snap-to-zone-N shortcuts), convert to 0-based
-    const int targetIndex = qBound(0, position - 1, qMax(0, state->tiledWindowCount() - 1));
-    const bool moved = state->moveToTiledPosition(windowId, targetIndex);
-    retileAfterOperation(resolvedScreenId, moved);
-}
-
 void AutotileEngine::setCurrentDesktop(int desktop)
 {
     // The daemon pushes the initial desktop in start() BEFORE the first
@@ -3602,8 +3580,16 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
 // Drag-insert preview
 // ═══════════════════════════════════════════════════════════════════════════
 
-bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QString& screenId)
+bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QString& screenId)
 {
+    // Neither D-Bus caller canonicalizes, and every m_states lookup below keys on
+    // the canonical id. canonicalizeForLookup, NOT canonicalizeWindowId: a drag
+    // preview is a transient view of an existing window, not a registration
+    // point, so it must not mint a canonical entry in m_canonicalByInstance for
+    // an id the engine has never tracked — an unknown window falls through as its
+    // raw self and the hadPriorState lookup below simply misses, exactly as it
+    // does today.
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     if (windowId.isEmpty() || screenId.isEmpty() || !isAutotileScreen(screenId)) {
         return false;
     }

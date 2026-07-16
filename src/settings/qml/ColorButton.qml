@@ -26,6 +26,8 @@ Rectangle {
     // Keyboard and focus support
     activeFocusOnTab: true
     Keys.onReturnPressed: root.clicked()
+    // Numpad Enter alias, matching the sibling card components.
+    Keys.onEnterPressed: root.clicked()
     Keys.onSpacePressed: root.clicked()
 
     MouseArea {

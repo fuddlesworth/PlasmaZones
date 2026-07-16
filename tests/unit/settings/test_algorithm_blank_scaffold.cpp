@@ -25,9 +25,8 @@ const QString kHeader = QStringLiteral(
 } // namespace
 
 // buildBlankScaffold() and sanitizeMetadataString(). The template-splice half of
-// AlgorithmScaffold lives in test_algorithm_scaffold.cpp; the two surfaces share
-// no fixture, and together they exceed the file-size rule (target under 1000
-// lines, hard ceiling 1150).
+// AlgorithmScaffold lives in test_algorithm_scaffold.cpp. The two surfaces share
+// no fixture.
 class TestAlgorithmBlankScaffold : public QObject
 {
     Q_OBJECT
