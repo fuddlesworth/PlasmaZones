@@ -254,6 +254,10 @@ Kirigami.Dialog {
 
                     ColumnLayout {
                         anchors.centerIn: parent
+                        // Center within the content region above the name bar,
+                        // not the full frame, so the hint clears the bar even
+                        // at the 3.6 aspect clamp where the frame is shortest.
+                        anchors.verticalCenterOffset: -(Kirigami.Units.gridUnit * 1.5 + Kirigami.Units.smallSpacing) / 2
                         visible: root.baseTemplate === "blank"
                         spacing: Kirigami.Units.smallSpacing
 

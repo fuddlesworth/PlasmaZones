@@ -254,15 +254,35 @@ private Q_SLOTS:
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->setSplitRatio(0.75);
 
-        // Override with a new algorithm but NO explicit SplitRatio override.
-        // The algorithm override should reset the split ratio to the new algo's default.
+        // Override with an algorithm DIFFERENT from the global default ("bsp")
+        // and NO explicit SplitRatio override. A genuine effective switch
+        // resets the split ratio to the new algorithm's default.
+        QVariantMap overrides;
+        overrides[QStringLiteral("Algorithm")] = QLatin1String("master-stack");
+        engine.applyPerScreenConfig(screen, overrides);
+
+        auto* msAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
+        QVERIFY(msAlgo);
+        QVERIFY(qFuzzyCompare(state->splitRatio(), msAlgo->defaultSplitRatio()));
+    }
+
+    void testPerScreen_applyOverrides_sameAlgorithmAsGlobalKeepsTunedRatio()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        state->setSplitRatio(0.75);
+
+        // Pinning an Algorithm override that matches the algorithm the screen
+        // already follows globally ("bsp") is not an effective change, so the
+        // user's live-tuned split ratio must survive.
         QVariantMap overrides;
         overrides[QStringLiteral("Algorithm")] = QLatin1String("bsp");
         engine.applyPerScreenConfig(screen, overrides);
 
-        auto* bspAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("bsp"));
-        QVERIFY(bspAlgo);
-        QVERIFY(qFuzzyCompare(state->splitRatio(), bspAlgo->defaultSplitRatio()));
+        QVERIFY(qFuzzyCompare(state->splitRatio(), 0.75));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

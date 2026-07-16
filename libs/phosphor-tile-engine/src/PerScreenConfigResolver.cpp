@@ -89,16 +89,24 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     // gating on mere key PRESENCE would reset the split ratio on every unrelated
     // override change (e.g. a SetMaxWindows rule edit, now that a rule edit rebuilds
     // the overrides map and re-applies), silently discarding a user's live
-    // drag-tuned ratio. Comparing against the previous override map's algorithm
-    // fires the reset only on a genuine switch, where dropping the tuning is correct
-    // (setAlgorithm clears user tunings on a real change too).
+    // drag-tuned ratio. Comparing against the previous EFFECTIVE algorithm (the
+    // previous map's entry, falling back to the global id exactly like the wipe
+    // helper below) fires the reset only on a genuine switch: an override added
+    // with the same id the screen already followed globally is not a change.
+    // Dropping the tuning on a real change is correct (setAlgorithm clears user
+    // tunings on a real change too), so the tuned-ratio flags for this screen
+    // are erased alongside the value they described.
     it = overrides.constFind(QString(PerScreenKeys::Algorithm));
     if (it != overrides.constEnd()) {
         const QString algoId = it->toString();
-        const QString previousAlgo = previous.value(QString(PerScreenKeys::Algorithm)).toString();
+        const QString previousAlgo =
+            previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString();
         if (algoId != previousAlgo && !overrides.contains(QString(PerScreenKeys::SplitRatio))) {
             if (auto* newAlgo = m_engine->algorithmRegistry()->algorithm(algoId)) {
                 state->setSplitRatio(newAlgo->defaultSplitRatio());
+                m_engine->m_userTunedSplitRatio.removeIf([&screenId](const auto& key) {
+                    return key.screenId == screenId;
+                });
             }
         }
     }

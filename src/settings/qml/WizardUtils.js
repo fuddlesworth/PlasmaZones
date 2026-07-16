@@ -25,7 +25,9 @@ function clampedScreenAspectRatio(screenWidth, screenHeight) {
  *
  * @param {color} textColor      - Kirigami.Theme.textColor
  * @param {color} highlightColor - Kirigami.Theme.highlightColor
- * @returns {Object} palette with subtleBg, subtleBorder, accentBorder
+ * @returns {Object} palette with the frame colors (subtleBg, subtleBorder,
+ *          accentBorder) and the WizardTemplateCard state colors (highlightBg,
+ *          hoverBg, defaultBg, selectedBorder, hoverBorder, defaultBorder)
  */
 function wizardColors(textColor, highlightColor) {
     return {
