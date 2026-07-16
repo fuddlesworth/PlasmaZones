@@ -199,7 +199,7 @@ Window {
             // multi-select previews and single-select dialogs open on.
             var highlightColor = Theme.withAlpha(Kirigami.Theme.highlightColor, Theme.zoneHighlightAlpha);
             var inactiveColor = Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneInactiveAlpha);
-            var borderColor = Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneBorderAlpha);
+            var borderColor = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
             // Convert QML colors to ARGB hex strings
             var highlightHex = "#" + Math.round(highlightColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
             var inactiveHex = "#" + Math.round(inactiveColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
@@ -501,10 +501,6 @@ Window {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.splitZone(modelData.id, false);
                         }
-                        onExpandToFillRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.expandToFillSpace(modelData.id);
-                        }
                         onExpandToFillWithCoords: function (mouseX, mouseY) {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.expandToFillSpace(modelData.id, mouseX, mouseY);
@@ -704,7 +700,7 @@ Window {
         // Tracks hover through a binding: assigning the colour from onEntered/
         // onExited would sever this, and the pill would stop following the theme.
         color: exitButtonMouse.containsMouse ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.3) : Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
-        border.color: Theme.withAlpha(Kirigami.Theme.textColor, 0.2)
+        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
         border.width: 1
         z: 200
         // Fade in/out animation

@@ -168,7 +168,7 @@ SettingsFlickable {
                                         return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15);
 
                                     if (delegateHover.hovered)
-                                        return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.06);
+                                        return Qt.alpha(Kirigami.Theme.hoverColor, 0.1);
 
                                     return "transparent";
                                 }
@@ -256,8 +256,8 @@ SettingsFlickable {
                                         Layout.preferredWidth: Kirigami.Units.gridUnit * 6
                                         Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                                         radius: Kirigami.Units.smallSpacing / 2
-                                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                                        border.color: delegateHover.hovered ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+                                        color: Kirigami.Theme.alternateBackgroundColor
+                                        border.color: delegateHover.hovered ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                                         border.width: delegateHover.hovered ? 2 : 1
 
                                         QFZCommon.ZonePreview {

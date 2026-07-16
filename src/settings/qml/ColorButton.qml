@@ -17,7 +17,7 @@ Rectangle {
     width: buttonSize
     height: buttonSize
     radius: Kirigami.Units.smallSpacing
-    border.color: activeFocus ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
+    border.color: activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     border.width: activeFocus ? 2 : 1
     // Accessibility
     Accessible.name: i18n("Color picker")

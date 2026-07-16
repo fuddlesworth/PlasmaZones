@@ -42,11 +42,11 @@ Rectangle {
         case "standard":
             return Kirigami.Theme.textColor;
         case "ultrawide":
-            return Kirigami.Theme.positiveTextColor;
+            return Kirigami.Theme.textColor;
         case "super-ultrawide":
-            return Kirigami.Theme.neutralTextColor;
+            return Kirigami.Theme.textColor;
         case "portrait":
-            return Kirigami.Theme.activeTextColor;
+            return Kirigami.Theme.textColor;
         default:
             return Kirigami.Theme.textColor;
         }
@@ -69,5 +69,4 @@ Rectangle {
         color: root.badgeColor
         opacity: root.textOpacity
     }
-
 }

@@ -159,8 +159,10 @@ ComboBox {
         }
 
         background: Rectangle {
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             color: Kirigami.Theme.backgroundColor
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: 1
             radius: Kirigami.Units.smallSpacing
         }

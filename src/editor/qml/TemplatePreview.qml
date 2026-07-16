@@ -30,13 +30,13 @@ Canvas {
     implicitHeight: previewHeight
     onPaint: {
         if (width <= 0 || height <= 0 || !isFinite(width) || !isFinite(height))
-            return ;
+            return;
 
         var ctx = getContext("2d");
         ctx.clearRect(0, 0, width, height);
         // Colors using theme
         var zoneColor = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6);
-        var borderColor = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.8);
+        var borderColor = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         ctx.fillStyle = zoneColor;
         ctx.strokeStyle = borderColor;
         ctx.lineWidth = 1;

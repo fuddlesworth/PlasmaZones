@@ -6,7 +6,6 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
-import "ThemeHelpers.js" as ThemeHelpers
 
 /**
  * Single row in the Sidebar's ListView delegate.
@@ -116,10 +115,12 @@ QQC2.ItemDelegate {
         property bool _behaviorReady: false
 
         Component.onCompleted: _behaviorReady = true
-        // Active row: highlightColor background at ACTIVE_TINT_ALPHA (see
-        // ThemeHelpers). Hover: textColor at HOVER_TINT_ALPHA for a subtle
-        // "interactive" cue. Both transitions run through `widget.tint.fast`
-        // so they feel snappy without flicker.
+        // Active row: an opaque background/highlight mix (scheme-correct
+        // selection surface, no alpha fabrication). Hover: the scheme's
+        // DecorationHover role mixed the same way for a subtle
+        // "interactive" cue — kept in visual parity with
+        // SidebarBackButton. Both transitions run through
+        // `widget.tint.fast` so they feel snappy without flicker.
         color: {
             // Dividers paint nothing — the Separator child below
             // provides their only visual.
@@ -127,10 +128,10 @@ QQC2.ItemDelegate {
                 return Qt.rgba(0, 0, 0, 0);
 
             if (rowItem.isCurrent)
-                return ThemeHelpers.activeTint(Kirigami.Theme.highlightColor);
+                return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.highlightColor, 0.18);
 
             if (rowItem.hovered)
-                return ThemeHelpers.hoverTint(Kirigami.Theme.textColor);
+                return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.hoverColor, 0.15);
 
             return Qt.rgba(0, 0, 0, 0);
         }

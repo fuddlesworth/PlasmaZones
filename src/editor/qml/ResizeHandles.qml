@@ -145,7 +145,7 @@ Item {
             radius: isCornerHandle ? cornerSize / 2 : edgeThickness / 2
             // Clean white fill with subtle border
             color: handleMouse.containsMouse || handleMouse.pressed ? Kirigami.Theme.highlightColor : Kirigami.Theme.backgroundColor
-            border.color: handleMouse.containsMouse || handleMouse.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
+            border.color: handleMouse.containsMouse || handleMouse.pressed ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: constants.handleBorderWidth
             // Handles are always present for mouse detection, only visible when hovered/selected
             visible: parent.width > 0 && parent.height > 0
@@ -164,7 +164,7 @@ Item {
                 radius: parent.radius + 1
                 color: "transparent"
                 // Use theme text color for contrast (works in both light and dark themes)
-                border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+                border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 border.width: constants.shadowBorderWidth
                 visible: parent.visible
             }

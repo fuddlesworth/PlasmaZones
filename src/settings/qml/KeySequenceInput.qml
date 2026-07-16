@@ -33,9 +33,9 @@ QQC2.TextField {
         // Parse key sequence string and extract modifiers and keys
         if (!seq || seq.length === 0)
             return {
-            "modifiers": 0,
-            "key": 0
-        };
+                "modifiers": 0,
+                "key": 0
+            };
 
         // Basic parsing - would need more sophisticated implementation
         return {
@@ -51,22 +51,22 @@ QQC2.TextField {
     // Keys.BeforeItem lets us handle keys before the TextField does.
     Keys.priority: Keys.BeforeItem
     // Capture keys - this must come BEFORE default TextField handling
-    Keys.onPressed: (event) => {
+    Keys.onPressed: event => {
         if (!capturing)
-            return ;
+            return;
 
         // Accept right away so the TextField doesn't process it.
         event.accepted = true;
         // Handle Escape to cancel
         if (event.key === Qt.Key_Escape) {
             capturing = false;
-            return ;
+            return;
         }
         var modifiers = event.modifiers;
         var key = event.key;
         // Ignore modifier-only key presses (wait for actual key)
         if (key === Qt.Key_Shift || key === Qt.Key_Control || key === Qt.Key_Alt || key === Qt.Key_AltGr || key === Qt.Key_Meta)
-            return ;
+            return;
 
         // Build key sequence string with modifiers
         var parts = [];
@@ -220,7 +220,7 @@ QQC2.TextField {
                 } else {
                     // Unknown key, cancel capturing
                     capturing = false;
-                    return ;
+                    return;
                 }
             }
         }
@@ -236,7 +236,6 @@ QQC2.TextField {
     onActiveFocusChanged: {
         if (!activeFocus && capturing)
             capturing = false;
-
     }
     // Visual feedback
     color: capturing ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
@@ -244,7 +243,6 @@ QQC2.TextField {
     onKeySequenceChanged: {
         if (!capturing && text !== (capturing ? i18n("Press keys...") : (keySequence || "")))
             text = capturing ? i18n("Press keys...") : (keySequence || "");
-
     }
 
     // Handle click to start capturing
@@ -253,11 +251,11 @@ QQC2.TextField {
         acceptedButtons: Qt.LeftButton
         cursorShape: Qt.PointingHandCursor
         z: 10
-        onClicked: (mouse) => {
+        onClicked: mouse => {
             if (clearButton.visible && mouse.x >= root.width - clearButton.width - Kirigami.Units.smallSpacing * 2) {
                 root.keySequence = root.defaultKeySequence;
                 root.keySequenceModified(root.defaultKeySequence);
-                return ;
+                return;
             }
             if (!root.capturing) {
                 root.capturing = true;
@@ -289,9 +287,8 @@ QQC2.TextField {
     background: Rectangle {
         // Note: Kirigami.Theme.disabledBackgroundColor doesn't exist, use semi-transparent backgroundColor instead
         color: root.capturing ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : (parent.enabled ? Kirigami.Theme.backgroundColor : Qt.alpha(Kirigami.Theme.backgroundColor, 0.5))
-        border.color: root.capturing ? Kirigami.Theme.highlightColor : (parent.activeFocus ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor)
+        border.color: root.capturing ? Kirigami.Theme.highlightColor : (parent.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast))
         border.width: 1
         radius: Kirigami.Units.smallSpacing
     }
-
 }

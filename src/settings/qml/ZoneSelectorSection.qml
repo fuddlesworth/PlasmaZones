@@ -357,8 +357,8 @@ ColumnLayout {
                                         width: (parent.width - 2) / 3
                                         height: parent.height
                                         radius: 2
-                                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
-                                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.7)
+                                        color: Kirigami.Theme.alternateBackgroundColor
+                                        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                                         border.width: 1
 
                                         Label {

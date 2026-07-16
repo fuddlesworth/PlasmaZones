@@ -42,7 +42,7 @@ Item {
         color: "transparent"
         visible: root.activeFocus
         border.width: 1
-        border.color: Kirigami.Theme.highlightColor
+        border.color: Kirigami.Theme.focusColor
     }
 
     // Track
@@ -54,7 +54,7 @@ Item {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         radius: height / 2
-        color: root.checked ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+        color: root.checked ? Kirigami.Theme.highlightColor : Kirigami.Theme.alternateBackgroundColor
 
         // Knob
         Rectangle {
@@ -64,7 +64,7 @@ Item {
             height: width
             radius: height / 2
             color: Kirigami.Theme.highlightedTextColor
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: 0.5
             y: pad
             x: root.checked ? parent.width - width - pad : pad

@@ -55,7 +55,7 @@ RowLayout {
         width: colorPickerRow.buttonSize
         height: colorPickerRow.buttonSize
         radius: Kirigami.Units.smallSpacing
-        border.color: Kirigami.Theme.disabledTextColor
+        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
         border.width: 1
         color: Qt.rgba(colorPickerRow.baseColor.r, colorPickerRow.baseColor.g, colorPickerRow.baseColor.b, colorPickerRow.baseColor.a * colorPickerRow.opacityMultiplier)
         Accessible.name: colorPickerRow.accessibleName

@@ -463,8 +463,8 @@ Item {
         // Combine color's alpha channel with opacity slider: final alpha = color.a * opacity
         // This allows both color picker alpha AND opacity slider to affect the result
         // Uses separate active/inactive opacity values
-        color: useCustom ? (isSelected ? Qt.rgba(customHighlightColor.r, customHighlightColor.g, customHighlightColor.b, customHighlightColor.a * customActiveOpacity) : Qt.rgba(customInactiveColor.r, customInactiveColor.g, customInactiveColor.b, customInactiveColor.a * customInactiveOpacity)) : (isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15))
-        border.color: useCustom ? customBorderColor : (isSelected ? Kirigami.Theme.highlightColor : (hoverArea.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)))
+        color: useCustom ? (isSelected ? Qt.rgba(customHighlightColor.r, customHighlightColor.g, customHighlightColor.b, customHighlightColor.a * customActiveOpacity) : Qt.rgba(customInactiveColor.r, customInactiveColor.g, customInactiveColor.b, customInactiveColor.a * customInactiveOpacity)) : (isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.alpha(Kirigami.Theme.backgroundColor, 0.4))
+        border.color: useCustom ? customBorderColor : (isSelected ? Kirigami.Theme.highlightColor : (hoverArea.containsMouse ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)))
         border.width: useCustom ? customBorderWidth : (isSelected ? 3 : 2)
         radius: useCustom ? customBorderRadius : (Kirigami.Units.smallSpacing * 1.5)
         // Accessibility: Screen reader announcements

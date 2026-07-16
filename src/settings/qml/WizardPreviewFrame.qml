@@ -18,7 +18,7 @@ Rectangle {
     // The clamped monitor aspect ratio the frame keeps. See the wizard
     // dialogs' screenAspectRatio for how it is sampled and clamped.
     required property real aspectRatio
-    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
+    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.alternateBackgroundColor, Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast), Kirigami.Theme.highlightColor, Kirigami.Theme.hoverColor)
 
     // Let the column size this and cap it, rather than reading
     // parent.width upward: a layout child asking its parent how

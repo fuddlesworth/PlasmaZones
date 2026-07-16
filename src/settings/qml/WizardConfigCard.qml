@@ -15,7 +15,7 @@ Rectangle {
     id: root
 
     default property alias content: innerColumn.data
-    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
+    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.alternateBackgroundColor, Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast), Kirigami.Theme.highlightColor, Kirigami.Theme.hoverColor)
 
     Layout.fillWidth: true
     implicitHeight: innerColumn.implicitHeight + Kirigami.Units.largeSpacing * 2

@@ -23,6 +23,10 @@ import org.phosphor.animation
 Rectangle {
     id: propertyPanel
 
+    // Panel body resolves against the View color set
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
+
     required property var editorController
     required property string selectedZoneId
     required property var selectedZone
@@ -51,7 +55,7 @@ Rectangle {
     // single-select dialogs open on them when a zone has no colour of its own.
     readonly property color themeHighlightDefault: Theme.withAlpha(Kirigami.Theme.highlightColor, Theme.zoneHighlightAlpha)
     readonly property color themeInactiveDefault: Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneInactiveAlpha)
-    readonly property color themeBorderDefault: Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneBorderAlpha)
+    readonly property color themeBorderDefault: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     // Multi-select color preview properties (stored at panel level to avoid context issues)
     property color multiHighlightColor: propertyPanel.themeHighlightDefault
     property color multiInactiveColor: propertyPanel.themeInactiveDefault
@@ -123,7 +127,7 @@ Rectangle {
     Layout.fillHeight: true
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
     border.width: 1
-    border.color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
+    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     // Drive opacity/width from panelMode and derive visibility from the
     // animated values, so the outgoing legs are actually rendered. Binding
     // `visible` to panelMode directly unrendered the panel in the same pass
@@ -804,7 +808,7 @@ Rectangle {
 
                         background: Rectangle {
                             color: Kirigami.Theme.backgroundColor
-                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                             border.width: 1
                             radius: Kirigami.Units.smallSpacing
                         }

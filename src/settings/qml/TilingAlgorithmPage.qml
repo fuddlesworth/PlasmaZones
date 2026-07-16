@@ -193,7 +193,7 @@ SettingsFlickable {
                         Rectangle {
                             anchors.fill: parent
                             color: Kirigami.Theme.backgroundColor
-                            border.color: Kirigami.Theme.disabledTextColor
+                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                             border.width: 1
                             radius: Kirigami.Units.smallSpacing
 

@@ -31,12 +31,12 @@ Rectangle {
     /// would silently bind to whatever `appSettings` resolved to at
     /// each consumer's scope.
     required property var appSettings
-    // Theme-tinted text-color shades used multiple times below — extract
-    // once to a readonly property so a future theme tweak only touches
-    // one place (E32 follow-up).
-    readonly property color overlayBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
-    readonly property color subtleBorder: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-    readonly property color keyChipBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+    // Shades used multiple times below — extract once to a readonly
+    // property so a future theme tweak only touches one place (E32
+    // follow-up). The scrim is plain black so it darkens on every theme.
+    readonly property color overlayBg: Qt.rgba(0, 0, 0, 0.5)
+    readonly property color subtleBorder: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+    readonly property color keyChipBg: Kirigami.Theme.alternateBackgroundColor
 
     /// Hoisted shortcuts model — the previous shape declared the array
     /// inline as the Repeater's `model:` binding, so every binding
@@ -99,6 +99,8 @@ Rectangle {
         width: Math.min(parent.width * 0.6, Kirigami.Units.gridUnit * 30)
         height: shortcutContent.implicitHeight + Kirigami.Units.largeSpacing * 3
         radius: Kirigami.Units.smallSpacing * 2
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.inherit: false
         color: Kirigami.Theme.backgroundColor
         border.width: 1
         border.color: root.subtleBorder

@@ -7,7 +7,6 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.phosphor.control
-import "ThemeHelpers.js" as ThemeHelpers
 
 /**
  * Persistent dirty indicator + slide-in unsaved-changes action bar.
@@ -66,7 +65,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         height: 1
-        color: root.controller.dirty ? Kirigami.Theme.highlightColor : ThemeHelpers.withAlpha(Kirigami.Theme.textColor, ThemeHelpers.SUBTLE_BACKGROUND_ALPHA)
+        color: root.controller.dirty ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
         Behavior on color {
             PhosphorMotionAnimation {
@@ -97,18 +96,17 @@ ColumnLayout {
             width: parent.width
             implicitHeight: barRow.implicitHeight + Kirigami.Units.smallSpacing * 3
             anchors.bottom: parent.bottom
-            color: ThemeHelpers.activeTint(Kirigami.Theme.neutralTextColor)
+            color: Kirigami.Theme.neutralBackgroundColor
 
             // Top accent line for the bar itself, separate from the
-            // persistent line above. Always neutralTextColor so the
-            // bar reads as a distinct surface. Routes through
-            // ThemeHelpers.withAlpha for symmetry with the persistent
-            // line just above (also 0.4 alpha).
+            // persistent line above. An opaque mix of the bar surface
+            // and neutralTextColor so the bar reads as a distinct
+            // caution surface on every scheme.
             Rectangle {
                 anchors.top: parent.top
                 width: parent.width
                 height: 1
-                color: ThemeHelpers.withAlpha(Kirigami.Theme.neutralTextColor, 0.4)
+                color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.neutralBackgroundColor, Kirigami.Theme.neutralTextColor, 0.4)
             }
 
             RowLayout {

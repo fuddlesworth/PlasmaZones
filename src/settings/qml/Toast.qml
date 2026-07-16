@@ -23,9 +23,9 @@ Rectangle {
 
     /// Last message passed to show(). Read-only externally — write via show().
     property string message: ""
-    // Toast surface tint — extracted to a single readonly so future
-    // theme tweaks live in one place (E32 follow-up).
-    readonly property color toastBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.85)
+    // Toast surface — the Tooltip color set is the theme's own inverted
+    // surface, replacing the earlier hand-inverted textColor fill.
+    readonly property color toastBg: Kirigami.Theme.backgroundColor
 
     /// Display `msg` immediately, replacing any in-flight toast.
     function show(msg: string) {
@@ -45,6 +45,8 @@ Rectangle {
         toastAnimation.restart();
     }
 
+    Kirigami.Theme.colorSet: Kirigami.Theme.Tooltip
+    Kirigami.Theme.inherit: false
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.bottom: parent.bottom
     anchors.bottomMargin: Kirigami.Units.largeSpacing * 4
@@ -68,7 +70,7 @@ Rectangle {
 
         anchors.centerIn: parent
         text: root.message
-        color: Kirigami.Theme.backgroundColor
+        color: Kirigami.Theme.textColor
         font.weight: Font.Medium
     }
 

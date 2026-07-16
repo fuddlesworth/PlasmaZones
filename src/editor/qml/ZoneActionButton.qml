@@ -46,17 +46,17 @@ AbstractButton {
             if (actionButton.useNegativeColor && actionButton.hovered)
                 return Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
 
-            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.15);
+            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.hoverColor, 0.4) : Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.5);
         }
         border.width: actionButton.activeFocus ? Theme.focusBorderWidth : 1
         border.color: {
             if (actionButton.activeFocus)
-                return Theme.withAlpha(Kirigami.Theme.highlightColor, 0.8);
+                return Kirigami.Theme.focusColor;
 
             if (actionButton.useNegativeColor && actionButton.hovered)
                 return Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
 
-            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08);
+            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         }
 
         Behavior on border.width {

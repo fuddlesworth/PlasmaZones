@@ -55,42 +55,55 @@ Item {
     // 0x08000000 Qt::AltModifier
     readonly property int metaFlag: (1 << 28)
     // 0x10000000 Qt::MetaModifier
-    readonly property var modifierChips: [{
-        "bit": shiftFlag,
-        "label": i18n("Shift")
-    }, {
-        "bit": ctrlFlag,
-        "label": i18n("Ctrl")
-    }, {
-        "bit": altFlag,
-        "label": i18n("Alt")
-    }, {
-        "bit": metaFlag,
-        "label": i18n("Meta")
-    }]
+    readonly property var modifierChips: [
+        {
+            "bit": shiftFlag,
+            "label": i18n("Shift")
+        },
+        {
+            "bit": ctrlFlag,
+            "label": i18n("Ctrl")
+        },
+        {
+            "bit": altFlag,
+            "label": i18n("Alt")
+        },
+        {
+            "bit": metaFlag,
+            "label": i18n("Meta")
+        }
+    ]
     // Qt::MouseButton bits; UI labels "Extra 3/4/5" match common naming (kcfg uses Extra1/2/3 for 32/64/128)
-    readonly property var mouseButtonList: [{
-        "bit": 2,
-        "label": i18n("Right")
-    }, {
-        "bit": 4,
-        "label": i18n("Middle")
-    }, {
-        "bit": 8,
-        "label": i18n("Back")
-    }, {
-        "bit": 16,
-        "label": i18n("Forward")
-    }, {
-        "bit": 32,
-        "label": i18n("Extra 3")
-    }, {
-        "bit": 64,
-        "label": i18n("Extra 4")
-    }, {
-        "bit": 128,
-        "label": i18n("Extra 5")
-    }]
+    readonly property var mouseButtonList: [
+        {
+            "bit": 2,
+            "label": i18n("Right")
+        },
+        {
+            "bit": 4,
+            "label": i18n("Middle")
+        },
+        {
+            "bit": 8,
+            "label": i18n("Back")
+        },
+        {
+            "bit": 16,
+            "label": i18n("Forward")
+        },
+        {
+            "bit": 32,
+            "label": i18n("Extra 3")
+        },
+        {
+            "bit": 64,
+            "label": i18n("Extra 4")
+        },
+        {
+            "bit": 128,
+            "label": i18n("Extra 5")
+        }
+    ]
 
     signal valueModified(int modifierValue)
     signal mouseButtonsModified(int mouseButtonValue)
@@ -99,14 +112,16 @@ Item {
     function displayText() {
         var parts = [];
         if (acceptMode !== acceptModeMouseOnly) {
-            for (var i = 0; i < modifierChips.length; i++) if ((modifierValue & modifierChips[i].bit) !== 0) {
-                parts.push(modifierChips[i].label);
-            }
+            for (var i = 0; i < modifierChips.length; i++)
+                if ((modifierValue & modifierChips[i].bit) !== 0) {
+                    parts.push(modifierChips[i].label);
+                }
         }
         if (acceptMode !== acceptModeMetaOnly) {
-            for (var j = 0; j < mouseButtonList.length; j++) if ((mouseButtonValue & mouseButtonList[j].bit) !== 0) {
-                parts.push(mouseButtonList[j].label);
-            }
+            for (var j = 0; j < mouseButtonList.length; j++)
+                if ((mouseButtonValue & mouseButtonList[j].bit) !== 0) {
+                    parts.push(mouseButtonList[j].label);
+                }
         }
         if (parts.length === 0)
             return "";
@@ -118,14 +133,16 @@ Item {
     function triggerDisplayText(modifier, mouseButton) {
         var parts = [];
         if (acceptMode !== acceptModeMouseOnly) {
-            for (var i = 0; i < modifierChips.length; i++) if ((modifier & modifierChips[i].bit) !== 0) {
-                parts.push(modifierChips[i].label);
-            }
+            for (var i = 0; i < modifierChips.length; i++)
+                if ((modifier & modifierChips[i].bit) !== 0) {
+                    parts.push(modifierChips[i].label);
+                }
         }
         if (acceptMode !== acceptModeMetaOnly) {
-            for (var j = 0; j < mouseButtonList.length; j++) if ((mouseButton & mouseButtonList[j].bit) !== 0) {
-                parts.push(mouseButtonList[j].label);
-            }
+            for (var j = 0; j < mouseButtonList.length; j++)
+                if ((mouseButton & mouseButtonList[j].bit) !== 0) {
+                    parts.push(mouseButtonList[j].label);
+                }
         }
         if (parts.length === 0)
             return i18n("(none)");
@@ -150,7 +167,6 @@ Item {
         for (var i = 0; i < a.length; i++) {
             if ((a[i].modifier || 0) !== (b[i].modifier || 0) || (a[i].mouseButton || 0) !== (b[i].mouseButton || 0))
                 return false;
-
         }
         return true;
     }
@@ -158,21 +174,21 @@ Item {
     //* Apply a captured trigger: replace at editingTriggerIndex, or append if -1
     function applyTriggerCapture(modifier, mouseButton) {
         var newTriggers = [];
-        for (var i = 0; i < triggers.length; i++) newTriggers.push(triggers[i])
+        for (var i = 0; i < triggers.length; i++)
+            newTriggers.push(triggers[i]);
         if (editingTriggerIndex >= 0 && editingTriggerIndex < newTriggers.length)
             newTriggers[editingTriggerIndex] = {
-            "modifier": modifier,
-            "mouseButton": mouseButton
-        };
+                "modifier": modifier,
+                "mouseButton": mouseButton
+            };
         else
             newTriggers.push({
-            "modifier": modifier,
-            "mouseButton": mouseButton
-        });
+                "modifier": modifier,
+                "mouseButton": mouseButton
+            });
         // Deduplicate: remove any other entry that matches the new value
         var deduped = [];
-        var seen = {
-        };
+        var seen = {};
         for (var j = 0; j < newTriggers.length; j++) {
             var key = (newTriggers[j].modifier || 0) + ":" + (newTriggers[j].mouseButton || 0);
             if (!seen[key]) {
@@ -197,7 +213,7 @@ Item {
         visible: root.allowMultiple
         anchors.fill: parent
         color: Kirigami.Theme.backgroundColor
-        border.color: Kirigami.Theme.disabledTextColor
+        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
         border.width: 1
         radius: Kirigami.Units.smallSpacing
         implicitWidth: multiLayout.implicitWidth + Kirigami.Units.smallSpacing * 2
@@ -238,9 +254,8 @@ Item {
 
                             text: root.triggerDisplayText(modelData.modifier || 0, modelData.mouseButton || 0)
                             elide: Text.ElideRight
-                            color: hoverHandler.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                            color: hoverHandler.hovered ? Kirigami.Theme.hoverColor : Kirigami.Theme.textColor
                         }
-
                     }
 
                     QQC2.ToolButton {
@@ -254,16 +269,13 @@ Item {
                             for (var i = 0; i < root.triggers.length; i++) {
                                 if (i !== index)
                                     newTriggers.push(root.triggers[i]);
-
                             }
                             root.triggersModified(newTriggers);
                         }
                         QQC2.ToolTip.visible: hovered && root.tooltipEnabled
                         QQC2.ToolTip.text: root.triggers.length <= 1 ? i18n("At least one trigger is required") : i18n("Remove this trigger")
                     }
-
                 }
-
             }
 
             // Add and Reset row
@@ -293,20 +305,18 @@ Item {
                     visible: !triggersEqual(root.triggers, root.defaultTriggers)
                     onClicked: {
                         var copy = [];
-                        for (var i = 0; i < root.defaultTriggers.length; i++) copy.push({
-                            "modifier": root.defaultTriggers[i].modifier || 0,
-                            "mouseButton": root.defaultTriggers[i].mouseButton || 0
-                        })
+                        for (var i = 0; i < root.defaultTriggers.length; i++)
+                            copy.push({
+                                "modifier": root.defaultTriggers[i].modifier || 0,
+                                "mouseButton": root.defaultTriggers[i].mouseButton || 0
+                            });
                         root.triggersModified(copy);
                     }
                     QQC2.ToolTip.visible: hovered && root.tooltipEnabled
                     QQC2.ToolTip.text: i18n("Reset to defaults")
                 }
-
             }
-
         }
-
     }
 
     // InputCapture for multi-mode (adds or replaces depending on editingTriggerIndex)
@@ -316,18 +326,18 @@ Item {
         visible: false
         acceptMode: root.acceptMode
         tooltipEnabled: root.tooltipEnabled
-        onModifierCaptured: (mask) => {
+        onModifierCaptured: mask => {
             if (!root.allowMultiple)
-                return ;
+                return;
 
             root.applyTriggerCapture(mask, 0);
         }
-        onMouseCaptured: (bit) => {
+        onMouseCaptured: bit => {
             if (!root.allowMultiple)
-                return ;
+                return;
 
             if (root.acceptMode === root.acceptModeMetaOnly)
-                return ;
+                return;
 
             root.applyTriggerCapture(0, bit);
         }
@@ -361,10 +371,10 @@ Item {
             acceptedButtons: Qt.LeftButton
             cursorShape: Qt.PointingHandCursor
             z: 10
-            onClicked: (mouse) => {
+            onClicked: mouse => {
                 if (clearBtn.visible && mouse.x >= field.width - clearBtn.width - Kirigami.Units.smallSpacing * 2) {
                     root.clearAll();
-                    return ;
+                    return;
                 }
                 inputCapture.startCapture();
             }
@@ -391,11 +401,10 @@ Item {
 
         background: Rectangle {
             color: inputCapture.capturing ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : (field.enabled ? Kirigami.Theme.backgroundColor : Qt.alpha(Kirigami.Theme.backgroundColor, 0.5))
-            border.color: inputCapture.capturing ? Kirigami.Theme.highlightColor : (field.activeFocus ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor)
+            border.color: inputCapture.capturing ? Kirigami.Theme.highlightColor : (field.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast))
             border.width: 1
             radius: Kirigami.Units.smallSpacing
         }
-
     }
 
     InputCapture {
@@ -404,15 +413,15 @@ Item {
         visible: false
         acceptMode: root.acceptMode
         tooltipEnabled: root.tooltipEnabled
-        onModifierCaptured: (mask) => {
+        onModifierCaptured: mask => {
             root.modifierValue = mask;
             root.mouseButtonValue = 0;
             root.valueModified(mask);
             root.mouseButtonsModified(0);
         }
-        onMouseCaptured: (bit) => {
+        onMouseCaptured: bit => {
             if (root.acceptMode === root.acceptModeMetaOnly)
-                return ;
+                return;
 
             root.modifierValue = 0;
             root.mouseButtonValue = bit;
@@ -420,5 +429,4 @@ Item {
             root.mouseButtonsModified(bit);
         }
     }
-
 }

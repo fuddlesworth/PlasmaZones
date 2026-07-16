@@ -792,6 +792,9 @@ Kirigami.Dialog {
                     return -1;
                 }
 
+                // Preview well resolves against the View color set
+                Kirigami.Theme.colorSet: Kirigami.Theme.View
+                Kirigami.Theme.inherit: false
                 anchors.fill: parent
                 anchors.margins: Kirigami.Units.largeSpacing
                 color: Kirigami.Theme.backgroundColor

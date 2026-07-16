@@ -17,6 +17,10 @@ import org.phosphor.animation
 ToolBar {
     id: topBar
 
+    // Toolbar chrome resolves against the Header color set
+    Kirigami.Theme.colorSet: Kirigami.Theme.Header
+    Kirigami.Theme.inherit: false
+
     required property var editorController
     required property var availableScreens
     required property var confirmCloseDialog
@@ -92,9 +96,9 @@ ToolBar {
 
                     background: Rectangle {
                         radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
-                        color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.06) : "transparent")
+                        color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Qt.alpha(Kirigami.Theme.hoverColor, 0.2) : "transparent")
                         border.width: 1
-                        border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
+                        border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast) : "transparent")
 
                         Behavior on color {
                             PhosphorMotionAnimation {
@@ -208,10 +212,10 @@ ToolBar {
                 }
 
                 background: Rectangle {
-                    color: Theme.withAlpha(Kirigami.Theme.textColor, layoutNameField.activeFocus ? 0.08 : 0.04)
+                    color: Kirigami.Theme.alternateBackgroundColor
                     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
                     border.width: 1
-                    border.color: layoutNameField.activeFocus ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
+                    border.color: layoutNameField.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                     // Character counter overlay (right-aligned inside field)
                     Label {
@@ -501,7 +505,7 @@ ToolBar {
             anchors.bottom: parent.bottom
             width: parent.width
             height: 1
-            color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
+            color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
         }
     }
 }

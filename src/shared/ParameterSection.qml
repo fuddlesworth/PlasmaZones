@@ -192,7 +192,7 @@ ColumnLayout {
                 // to physical pixels itself; multiplying by devicePixelRatio
                 // here would double-scale into a thicker, not crisper, line.
                 height: 1
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 visible: root.expanded
                 opacity: 0.5
             }

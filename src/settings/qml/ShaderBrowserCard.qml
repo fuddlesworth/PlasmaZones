@@ -87,20 +87,22 @@ ItemDelegate {
     }
 
     background: Rectangle {
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.inherit: false
         radius: Kirigami.Units.smallSpacing
         // Match the SettingsCard standard: keep the fill subtle and signal
-        // hover through an accent-tinted border, rather than flooding the
-        // whole card with hoverColor.
-        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, root.hovered ? 0.06 : 0.04)
+        // hover through the hover border, with only a faint hover tint on
+        // the fill itself.
+        color: root.hovered ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.1)) : Kirigami.Theme.alternateBackgroundColor
         border.width: 1
         border.color: {
             if (root.activeFocus)
                 return Kirigami.Theme.focusColor;
 
             if (root.hovered)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
+                return Kirigami.Theme.hoverColor;
 
-            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12);
+            return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         }
 
         Behavior on border.color {
@@ -129,9 +131,9 @@ ItemDelegate {
                 Layout.preferredHeight: width * 9 / 16
                 visible: _hasPreview
                 radius: Kirigami.Units.smallSpacing
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                color: Kirigami.Theme.alternateBackgroundColor
                 border.width: 1
-                border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+                border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 clip: true
 
                 Image {
@@ -177,7 +179,7 @@ ItemDelegate {
                     visible: root.effect && root.effect.isUserEffect
                     text: i18nc("@info shader source badge", "User")
                     font: Kirigami.Theme.smallFont
-                    color: Kirigami.Theme.positiveTextColor
+                    color: Kirigami.Theme.highlightColor
                 }
             }
 

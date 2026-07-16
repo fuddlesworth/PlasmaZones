@@ -34,7 +34,7 @@ Rectangle {
     signal rowDividerMoved(int rowIndex, real newFraction)
 
     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
-    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     border.width: 1
     radius: Kirigami.Units.smallSpacing
 
@@ -140,7 +140,7 @@ Rectangle {
                 width: colDragArea.containsMouse || colDragArea.pressed ? 3 : 1
                 height: parent.height - 4
                 radius: 1
-                color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
+                color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                 Behavior on width {
                     PhosphorMotionAnimation {
@@ -163,9 +163,9 @@ Rectangle {
                 width: Math.round(Kirigami.Units.gridUnit * 0.75)
                 height: Math.round(Kirigami.Units.gridUnit * 1.5)
                 radius: 4
-                color: colDragArea.containsMouse || colDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                color: colDragArea.containsMouse || colDragArea.pressed ? Qt.alpha(Kirigami.Theme.hoverColor, 0.3) : Kirigami.Theme.alternateBackgroundColor
                 border.width: 1
-                border.color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                border.color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 visible: previewRoot.height > Math.round(Kirigami.Units.gridUnit * 2.5)
 
                 // Grip dots (vertical)
@@ -249,7 +249,7 @@ Rectangle {
                 width: parent.width - 4
                 height: rowDragArea.containsMouse || rowDragArea.pressed ? 3 : 1
                 radius: 1
-                color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
+                color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                 Behavior on height {
                     PhosphorMotionAnimation {
@@ -272,9 +272,9 @@ Rectangle {
                 width: Math.round(Kirigami.Units.gridUnit * 1.5)
                 height: Math.round(Kirigami.Units.gridUnit * 0.75)
                 radius: 4
-                color: rowDragArea.containsMouse || rowDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                color: rowDragArea.containsMouse || rowDragArea.pressed ? Qt.alpha(Kirigami.Theme.hoverColor, 0.3) : Kirigami.Theme.alternateBackgroundColor
                 border.width: 1
-                border.color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                border.color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 visible: previewRoot.width > Math.round(Kirigami.Units.gridUnit * 2.5)
 
                 // Grip dots (horizontal)

@@ -272,7 +272,7 @@ Kirigami.Dialog {
                             visible: root.effect && root.effect.isUserEffect
                             text: i18nc("@info shader source badge", "User")
                             font: Kirigami.Theme.smallFont
-                            color: Kirigami.Theme.positiveTextColor
+                            color: Kirigami.Theme.highlightColor
                         }
 
                         Item {
@@ -450,7 +450,7 @@ Kirigami.Dialog {
                             Layout.fillWidth: true
                             implicitHeight: rowContent.implicitHeight + Kirigami.Units.smallSpacing
                             radius: Kirigami.Units.smallSpacing / 2
-                            color: index % 2 === 0 ? "transparent" : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
+                            color: index % 2 === 0 ? "transparent" : Kirigami.Theme.alternateBackgroundColor
 
                             RowLayout {
                                 id: rowContent
@@ -521,7 +521,7 @@ Kirigami.Dialog {
                     // contaminate the previewed colors.
                     color: "black"
                     border.width: 1
-                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+                    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                     clip: true
 
                     // Zones the preview renders over — shared by the renderer,

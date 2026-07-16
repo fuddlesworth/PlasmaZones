@@ -683,9 +683,9 @@ SettingsFlickable {
                             // border, not a full-opacity fill.
                             background: Rectangle {
                                 radius: Kirigami.Units.smallSpacing * 1.5
-                                color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (presetCard.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03))
+                                color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (presetCard.hovered ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.1)) : Kirigami.Theme.alternateBackgroundColor)
                                 border.width: 1
-                                border.color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : (presetCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08))
+                                border.color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : (presetCard.hovered ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast))
                             }
 
                             contentItem: Item {
@@ -709,9 +709,9 @@ SettingsFlickable {
                                         Layout.preferredWidth: Kirigami.Units.gridUnit * 3 * 16 / 9
                                         Layout.alignment: Qt.AlignVCenter
                                         radius: Kirigami.Units.smallSpacing
-                                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                                        color: Kirigami.Theme.alternateBackgroundColor
                                         border.width: presetCard.active ? 3 : 1
-                                        border.color: presetCard.active ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+                                        border.color: presetCard.active ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                                         QFZCommon.ZonePreview {
                                             anchors.fill: parent

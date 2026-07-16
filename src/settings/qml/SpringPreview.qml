@@ -124,7 +124,7 @@ Item {
                     // Resolve colors fresh each paint so theme context is always current
                     var accentStr = Kirigami.Theme.highlightColor.toString();
                     var accentDimStr = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2).toString();
-                    var gridStr = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08).toString();
+                    var gridStr = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast).toString();
                     var w = width;
                     var h = height;
                     var pad = root.canvasPad;
@@ -155,8 +155,7 @@ Item {
                     // Reference lines at y=0 and y=1 (dashed)
                     var targetPy = yToPixel(1, pad, gh, yOffset, yRange);
                     var zeroPy = yToPixel(0, pad, gh, yOffset, yRange);
-                    var pc = Kirigami.Theme.positiveTextColor;
-                    ctx.strokeStyle = Qt.rgba(pc.r, pc.g, pc.b, 0.6).toString();
+                    ctx.strokeStyle = Qt.alpha(Kirigami.Theme.highlightColor, 0.6).toString();
                     ctx.lineWidth = 1;
                     ctx.setLineDash([6, 4]);
                     ctx.beginPath();
@@ -227,7 +226,7 @@ Item {
                         ctx.setLineDash([]);
                     }
                     // Axis labels
-                    ctx.fillStyle = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4).toString();
+                    ctx.fillStyle = Kirigami.Theme.disabledTextColor.toString();
                     ctx.font = Kirigami.Theme.smallFont.pointSize + "pt sans-serif";
                     ctx.textAlign = "right";
                     ctx.fillText("1", pad - 4, targetPy + 4);

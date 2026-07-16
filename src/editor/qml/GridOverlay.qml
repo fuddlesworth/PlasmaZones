@@ -22,11 +22,11 @@ Canvas {
     onPaint: {
         // Validate dimensions before drawing
         if (width <= 0 || height <= 0 || !isFinite(width) || !isFinite(height))
-            return ;
+            return;
 
         var ctx = getContext("2d");
         ctx.clearRect(0, 0, width, height);
-        ctx.strokeStyle = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3);
+        ctx.strokeStyle = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         ctx.lineWidth = 1;
         var intervalX = editorController ? editorController.snapIntervalX : 0.1;
         var intervalY = editorController ? editorController.snapIntervalY : 0.1;
@@ -41,7 +41,7 @@ Canvas {
         var stepY = height * intervalY;
         // Validate step sizes
         if (stepX <= 0 || !isFinite(stepX) || stepY <= 0 || !isFinite(stepY))
-            return ;
+            return;
 
         ctx.beginPath();
         // Draw vertical lines - edge to edge (from 0 to width)
@@ -93,5 +93,4 @@ Canvas {
         target: gridOverlay.editorController
         enabled: gridOverlay.editorController !== null
     }
-
 }

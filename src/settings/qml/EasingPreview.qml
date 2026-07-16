@@ -363,7 +363,7 @@ Item {
                     ctx.clearRect(0, 0, w, h);
                     // Resolve colors fresh each paint so theme context is always current
                     var accentStr = Kirigami.Theme.highlightColor.toString();
-                    var gridStr = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08).toString();
+                    var gridStr = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast).toString();
                     var yZero = root.yToCanvas(0, gh);
                     var yOne = root.yToCanvas(1, gh);
                     // Horizontal grid lines at 0.25 increments
@@ -385,9 +385,8 @@ Item {
                         ctx.lineTo(px, pad + gh);
                         ctx.stroke();
                     }
-                    // Reference lines at y=0 and y=1 (themed positive color, dashed)
-                    var pc = Kirigami.Theme.positiveTextColor;
-                    ctx.strokeStyle = Qt.rgba(pc.r, pc.g, pc.b, 0.6).toString();
+                    // Reference lines at y=0 and y=1 (dashed)
+                    ctx.strokeStyle = Qt.alpha(Kirigami.Theme.textColor, 0.5).toString();
                     ctx.lineWidth = 1;
                     ctx.setLineDash([6, 4]);
                     ctx.beginPath();
@@ -471,7 +470,7 @@ Item {
                         ctx.fill();
                     }
                     // Axis labels
-                    ctx.fillStyle = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4).toString();
+                    ctx.fillStyle = Kirigami.Theme.disabledTextColor.toString();
                     ctx.font = Kirigami.Theme.smallFont.pointSize + "pt sans-serif";
                     ctx.textAlign = "right";
                     ctx.fillText("1", pad - 4, yOne + 4);
@@ -479,7 +478,7 @@ Item {
                 }
             }
 
-            // onPaint samples highlight, text, background and positive-text
+            // onPaint samples highlight, text, separator and disabled-text
             // colours. Every PlatformTheme colour shares the one `colorsChanged`
             // notify signal, so this one handler covers all of them.
             Connections {

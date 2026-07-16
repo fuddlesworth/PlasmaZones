@@ -340,7 +340,7 @@ Item {
                 // to physical pixels itself; multiplying by devicePixelRatio
                 // here would double-scale into a thicker, not crisper, line.
                 border.width: colorSwatch.activeFocus ? 2 : 1
-                border.color: colorSwatch.activeFocus ? Kirigami.Theme.focusColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+                border.color: colorSwatch.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                 MouseArea {
                     anchors.fill: parent

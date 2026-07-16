@@ -18,6 +18,10 @@ import org.phosphor.animation
 ToolBar {
     id: controlBar
 
+    // Toolbar chrome resolves against the Header color set
+    Kirigami.Theme.colorSet: Kirigami.Theme.Header
+    Kirigami.Theme.inherit: false
+
     required property var editorController
     required property var confirmCloseDialog
     required property var editorWindow
@@ -385,14 +389,14 @@ ToolBar {
                 source: "document-save"
                 width: Kirigami.Units.iconSizes.smallMedium
                 height: Kirigami.Units.iconSizes.smallMedium
-                color: Kirigami.Theme.negativeTextColor
+                color: Kirigami.Theme.neutralTextColor
             }
 
             Label {
                 id: unsavedIndicator
 
                 text: i18nc("@info", "Unsaved changes")
-                color: Kirigami.Theme.negativeTextColor
+                color: Kirigami.Theme.neutralTextColor
                 font.weight: Font.DemiBold
                 Accessible.name: text
                 Accessible.role: Accessible.AlertMessage
@@ -475,7 +479,7 @@ ToolBar {
             anchors.top: parent.top
             width: parent.width
             height: 1
-            color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
+            color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
         }
     }
 }

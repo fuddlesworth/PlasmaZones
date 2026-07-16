@@ -251,9 +251,11 @@ ColumnLayout {
                 Layout.fillHeight: true
                 Layout.preferredHeight: root._mapHeight + Kirigami.Units.largeSpacing
                 radius: Kirigami.Units.smallSpacing
-                color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : allMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
+                Kirigami.Theme.colorSet: Kirigami.Theme.View
+                Kirigami.Theme.inherit: false
+                color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : allMouse.containsMouse ? Kirigami.Theme.alternateBackgroundColor : "transparent"
                 border.width: 1
-                border.color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : allMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                border.color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : allMouse.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 ColumnLayout {
                     id: allContent
 
@@ -339,9 +341,11 @@ ColumnLayout {
                         width: rect.w
                         height: rect.h
                         radius: Kirigami.Units.smallSpacing
-                        color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
+                        Kirigami.Theme.colorSet: Kirigami.Theme.View
+                        Kirigami.Theme.inherit: false
+                        color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18) : tileMouse.containsMouse ? Kirigami.Theme.alternateBackgroundColor : Kirigami.Theme.backgroundColor
                         border.width: isSelected ? 2 : 1
-                        border.color: isSelected ? Kirigami.Theme.highlightColor : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                        border.color: isSelected ? Kirigami.Theme.highlightColor : tileMouse.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                         // Connector-first label (DP-2); vendor + resolution in tooltip.
                         Label {
@@ -368,7 +372,7 @@ ColumnLayout {
                             width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing
                             height: primaryLabel.implicitHeight + Kirigami.Units.smallSpacing / 2
                             radius: height / 2
-                            color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.18)
+                            color: Qt.alpha(Kirigami.Theme.highlightColor, 0.18)
 
                             Label {
                                 id: primaryLabel
@@ -376,7 +380,7 @@ ColumnLayout {
                                 anchors.centerIn: parent
                                 text: i18nc("@label primary monitor badge", "Primary")
                                 font: Kirigami.Theme.smallFont
-                                color: Kirigami.Theme.positiveTextColor
+                                color: Kirigami.Theme.textColor
                             }
                         }
 

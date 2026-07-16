@@ -265,7 +265,6 @@ set(phosphorcontrol_qml_FILES
 # `.qml`/`.mjs` for QML_FILES and `.js` for RESOURCES.
 set(phosphorcontrol_qml_RESOURCES
     qml/LoaderHelpers.js
-    qml/ThemeHelpers.js
 )
 
 qt_add_qml_module(PhosphorControlQml

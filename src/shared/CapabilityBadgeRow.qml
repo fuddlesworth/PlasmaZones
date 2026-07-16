@@ -56,7 +56,7 @@ Row {
     CapabilityBadge {
         visible: root.layoutData.supportsMemory === true
         source: "document-save-symbolic"
-        color: Kirigami.Theme.positiveTextColor
+        color: Kirigami.Theme.textColor
         Accessible.name: i18n("Persistent algorithm")
         tooltipText: i18n("Remembers split positions across window changes")
     }
@@ -77,7 +77,7 @@ Row {
     CapabilityBadge {
         visible: root.layoutData.supportsScriptState === true
         source: "code-context-symbolic"
-        color: Kirigami.Theme.neutralTextColor
+        color: Kirigami.Theme.textColor
         Accessible.name: i18n("Persistent script state")
         tooltipText: i18n("Remembers script-managed layout state across window changes")
     }
@@ -87,7 +87,7 @@ Row {
     CapabilityBadge {
         visible: root.layoutData.supportsSingleWindow === true
         source: "view-restore-symbolic"
-        color: Kirigami.Theme.activeTextColor
+        color: Kirigami.Theme.textColor
         Accessible.name: i18n("Single-window layout")
         tooltipText: i18n("Lays out a single window itself instead of filling the screen")
     }
@@ -98,7 +98,7 @@ Row {
     CapabilityBadge {
         visible: root.layoutData.reflowsOnFocus === true
         source: "find-location-symbolic"
-        color: Kirigami.Theme.linkColor
+        color: Kirigami.Theme.textColor
         Accessible.name: i18n("Follows focus")
         tooltipText: i18n("Rearranges to follow the focused window")
     }

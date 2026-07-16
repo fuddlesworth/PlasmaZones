@@ -173,7 +173,6 @@ ScrollView {
                     action: i18n("Previous zone")
                     shortcut: "Ctrl+Shift+Tab"
                 }
-
             }
 
             // ═══════════════════════════════════════════════════════════════
@@ -219,7 +218,6 @@ ScrollView {
                     action: i18n("Context menu")
                     shortcut: i18n("Right-click")
                 }
-
             }
 
             // ═══════════════════════════════════════════════════════════════
@@ -253,7 +251,6 @@ ScrollView {
                 TipLabel {
                     tipText: i18n("Zones can overlap for multi-zone snapping")
                 }
-
             }
 
             // ═══════════════════════════════════════════════════════════════
@@ -274,9 +271,7 @@ ScrollView {
             Item {
                 Layout.fillHeight: true
             }
-
         }
-
     }
 
     component SectionHeader: RowLayout {
@@ -299,7 +294,6 @@ ScrollView {
             text: parent.title
             font.weight: Font.DemiBold
         }
-
     }
 
     component SubsectionHeader: Label {
@@ -324,9 +318,8 @@ ScrollView {
         Label {
             text: shortcut
             font.family: Kirigami.Theme.fixedWidthFont.family
-            color: Kirigami.Theme.linkColor
+            color: Kirigami.Theme.textColor
         }
-
     }
 
     component TipLabel: Label {
@@ -336,5 +329,4 @@ ScrollView {
         wrapMode: Text.WordWrap
         Layout.fillWidth: true
     }
-
 }

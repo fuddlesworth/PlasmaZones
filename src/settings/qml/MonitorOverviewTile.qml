@@ -48,9 +48,9 @@ Rectangle {
     implicitWidth: content.implicitWidth + Kirigami.Units.largeSpacing * 2
     implicitHeight: content.implicitHeight + Kirigami.Units.largeSpacing
     radius: Kirigami.Units.smallSpacing
-    color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
+    color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.alpha(Kirigami.Theme.hoverColor, 0.1) : "transparent"
     border.width: 1
-    border.color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+    border.color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : tileMouse.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
     ColumnLayout {
         id: content
@@ -92,7 +92,7 @@ Rectangle {
             width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing
             height: primaryLabel.implicitHeight + Kirigami.Units.smallSpacing / 2
             radius: height / 2
-            color: tile._isPrimary ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15) : "transparent"
+            color: tile._isPrimary ? Qt.alpha(Kirigami.Theme.highlightColor, 0.15) : "transparent"
 
             Label {
                 id: primaryLabel
@@ -100,7 +100,7 @@ Rectangle {
                 anchors.centerIn: parent
                 text: i18n("Primary")
                 font: Kirigami.Theme.smallFont
-                color: Kirigami.Theme.positiveTextColor
+                color: Kirigami.Theme.highlightColor
                 opacity: tile._isPrimary ? 1 : 0
             }
         }

@@ -58,7 +58,7 @@ Item {
             Layout.fillHeight: true
             color: Kirigami.Theme.backgroundColor
             radius: Kirigami.Units.smallSpacing
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             // Chrome border. border.width is in device-independent pixels;
             // the renderer scales it by the device pixel ratio itself, so a
             // plain integer gives a consistent hairline at every scale
@@ -72,7 +72,7 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: Kirigami.Units.smallSpacing
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                color: Kirigami.Theme.alternateBackgroundColor
                 radius: Kirigami.Units.smallSpacing / 2
 
                 Grid {
@@ -124,21 +124,21 @@ Item {
                                     return Kirigami.Theme.highlightColor;
 
                                 if (isHovered && root.enabled)
-                                    return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
+                                    return Qt.alpha(Kirigami.Theme.hoverColor, 0.2);
 
-                                return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
+                                return Kirigami.Theme.alternateBackgroundColor;
                             }
                             border.color: {
                                 if (cell.activeFocus)
-                                    return Kirigami.Theme.highlightColor;
+                                    return Kirigami.Theme.focusColor;
 
                                 if (isSelected)
                                     return Kirigami.Theme.highlightColor;
 
                                 if (isHovered && root.enabled)
-                                    return Kirigami.Theme.highlightColor;
+                                    return Kirigami.Theme.hoverColor;
 
-                                return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3);
+                                return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
                             }
                             border.width: (cell.activeFocus || cell.isSelected) ? 2 : 1
                             opacity: root.enabled ? 1 : 0.5
@@ -146,7 +146,7 @@ Item {
                             // Horizontal bar (top or bottom edge)
                             Rectangle {
                                 visible: cell.isSelected && !cell.isCenter && (cell.isTopRow || cell.isBottomRow)
-                                color: Kirigami.Theme.backgroundColor
+                                color: Kirigami.Theme.highlightedTextColor
                                 opacity: 0.95
                                 radius: 2
                                 width: Math.min(parent.width * 0.7, 24)
@@ -166,7 +166,7 @@ Item {
                             // Center indicator (small rectangle for center position)
                             Rectangle {
                                 visible: cell.isSelected && cell.isCenter
-                                color: Kirigami.Theme.backgroundColor
+                                color: Kirigami.Theme.highlightedTextColor
                                 opacity: 0.95
                                 radius: 2
                                 width: Math.min(parent.width * 0.5, 16)
@@ -177,7 +177,7 @@ Item {
                             // Vertical bar (left or right edge)
                             Rectangle {
                                 visible: cell.isSelected && !cell.isCenter && (cell.isLeftCol || cell.isRightCol)
-                                color: Kirigami.Theme.backgroundColor
+                                color: Kirigami.Theme.highlightedTextColor
                                 opacity: 0.95
                                 radius: 2
                                 width: 4

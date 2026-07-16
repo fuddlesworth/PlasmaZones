@@ -377,6 +377,8 @@ ComboBox {
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
         padding: 1
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.inherit: false
         onClosed: {
             if (root._rebuildPending) {
                 root._rebuildPending = false;
@@ -400,7 +402,7 @@ ComboBox {
 
         background: Rectangle {
             color: Kirigami.Theme.backgroundColor
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: 1
             radius: Kirigami.Units.smallSpacing
         }
@@ -463,8 +465,8 @@ ComboBox {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                 radius: Kirigami.Units.smallSpacing / 2
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                border.color: highlighted ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+                color: Kirigami.Theme.alternateBackgroundColor
+                border.color: highlighted ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 border.width: highlighted ? 2 : 1
                 visible: root.showPreview && hasLayout
 
@@ -483,8 +485,8 @@ ComboBox {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                 radius: Kirigami.Units.smallSpacing / 2
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                border.color: highlighted ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+                color: Kirigami.Theme.alternateBackgroundColor
+                border.color: highlighted ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 border.width: highlighted ? 2 : 1
                 visible: root.showPreview && !hasLayout
 

@@ -55,7 +55,7 @@ Rectangle {
     Kirigami.Theme.inherit: false
     Kirigami.Theme.colorSet: Kirigami.Theme.Tooltip
     color: Kirigami.Theme.backgroundColor
-    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     border.width: constants.tooltipBorderWidth
     z: 250
     Accessible.name: i18nc("@info:accessibility", "Zone dimensions")
@@ -103,7 +103,5 @@ Rectangle {
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
             color: Kirigami.Theme.textColor
         }
-
     }
-
 }

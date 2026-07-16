@@ -8,6 +8,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.phosphor.control as PhosphorUi
+import org.plasmazones.common as QFZCommon
 
 // Top-level settings window. Chrome (sidebar, breadcrumbs, apply/discard
 // footer, "select a page" placeholder) comes from
@@ -155,6 +156,10 @@ PhosphorUi.SettingsAppWindow {
     // in-sidebar page-tree filter, which is disabled in Component.onCompleted.
     headerExtras: Component {
         GlobalSearchField {
+            // Header chrome paints with the Header color set (wallpaper-aware
+            // schemes give it its own hue), not the inherited Window set.
+            Kirigami.Theme.colorSet: Kirigami.Theme.Header
+            Kirigami.Theme.inherit: false
             // Declared inline in Main.qml, so it can reach `window` to feed the
             // page-step shortcut guard while the results dropdown is open.
             onSearchOpenChanged: window._searchOpen = searchOpen
@@ -166,6 +171,9 @@ PhosphorUi.SettingsAppWindow {
     // enable/disable switch.
     headerTrailing: Component {
         RowLayout {
+            // Header chrome — same Header color set as the search field.
+            Kirigami.Theme.colorSet: Kirigami.Theme.Header
+            Kirigami.Theme.inherit: false
             spacing: Kirigami.Units.smallSpacing
 
             Rectangle {
@@ -281,6 +289,13 @@ PhosphorUi.SettingsAppWindow {
     }
 
     Component.onCompleted: {
+        // Zone previews app-wide must show the EFFECTIVE zone colors (the
+        // same settings pipeline the daemon pushes into its overlays). The
+        // ZoneColorDefaults singleton cannot resolve the appSettings context
+        // property itself (compiled-module singletons have no root-context
+        // chain), so inject it once here.
+        QFZCommon.ZoneColorDefaults.settingsSource = appSettings;
+
         // The header search supersedes the sidebar's page-tree search.
         window.sidebar.searchEnabled = false;
 
@@ -1074,6 +1089,11 @@ PhosphorUi.SettingsAppWindow {
     sidebar.trailingDelegate: Component {
         RowLayout {
             id: trailingRow
+
+            // Sidebar navigation is header-family chrome: paint with the
+            // Header color set instead of silently inheriting Window.
+            Kirigami.Theme.colorSet: Kirigami.Theme.Header
+            Kirigami.Theme.inherit: false
 
             // SidebarRow's trailingLoader exposes the row's role data via
             // `modelData`. The lib renamed the row-identifier role from

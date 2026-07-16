@@ -32,10 +32,10 @@ Rectangle {
     radius: Kirigami.Units.smallSpacing / 2
     color: {
         if (root.isDynamic)
-            return Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, backgroundOpacity);
+            return Qt.alpha(Kirigami.Theme.highlightColor, backgroundOpacity);
 
         if (root.effectiveAutoAssign)
-            return Qt.rgba(Kirigami.Theme.activeTextColor.r, Kirigami.Theme.activeTextColor.g, Kirigami.Theme.activeTextColor.b, backgroundOpacity);
+            return Qt.alpha(Kirigami.Theme.highlightColor, backgroundOpacity);
 
         return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, backgroundOpacity);
     }
@@ -54,14 +54,13 @@ Rectangle {
         font.weight: Font.Medium
         color: {
             if (root.isDynamic)
-                return Kirigami.Theme.neutralTextColor;
+                return Kirigami.Theme.textColor;
 
             if (root.effectiveAutoAssign)
-                return Kirigami.Theme.activeTextColor;
+                return Kirigami.Theme.textColor;
 
             return Kirigami.Theme.textColor;
         }
         opacity: (root.isDynamic || root.effectiveAutoAssign) ? 0.8 : root.textOpacity
     }
-
 }

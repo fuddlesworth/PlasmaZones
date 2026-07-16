@@ -30,6 +30,8 @@ Item {
     // change re-runs the C++ preview through the same recalc path.
     property var customParams: ({})
     // Color customization (passed through to ZonePreview)
+    // windowBorder deliberately mirrors the live overlay's default border color
+    // (preview fidelity) — do not swap it for a separator/chrome role.
     property color windowColor: Kirigami.Theme.highlightColor
     property color windowBorder: Kirigami.Theme.textColor
     // Computed zones, rendered by ZonePreview. Recomputed by recalcTimer, which

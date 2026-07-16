@@ -285,7 +285,7 @@ Control {
     }
 
     background: Rectangle {
-        color: root.capturing ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (triggerArea.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05) : "transparent")
+        color: root.capturing ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (triggerArea.containsMouse ? Qt.alpha(Kirigami.Theme.hoverColor, 0.15) : "transparent")
         border.color: root.capturing ? Kirigami.Theme.highlightColor : (triggerArea.containsMouse ? Kirigami.Theme.disabledTextColor : "transparent")
         border.width: 1
         radius: Kirigami.Units.smallSpacing

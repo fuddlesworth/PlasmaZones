@@ -35,8 +35,10 @@ Rectangle {
     implicitWidth: Kirigami.Units.gridUnit * 5
     implicitHeight: Kirigami.Units.gridUnit * 3
     radius: Kirigami.Units.smallSpacing
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
     color: Kirigami.Theme.backgroundColor
-    border.color: (hoverArea.containsMouse || root.activeFocus) ? Kirigami.Theme.highlightColor : (Kirigami.Theme.separatorColor !== undefined ? Kirigami.Theme.separatorColor : Kirigami.Theme.disabledTextColor)
+    border.color: root.activeFocus ? Kirigami.Theme.focusColor : (hoverArea.containsMouse ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast))
     border.width: root.activeFocus ? 2 : 1
     Accessible.name: i18n("Curve preview")
     Accessible.role: Accessible.Button

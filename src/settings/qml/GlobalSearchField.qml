@@ -132,6 +132,8 @@ Item {
         width: field.width
         padding: Kirigami.Units.smallSpacing
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.inherit: false
 
         contentItem: ColumnLayout {
             spacing: Kirigami.Units.smallSpacing

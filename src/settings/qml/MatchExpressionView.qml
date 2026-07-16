@@ -300,13 +300,9 @@ ColumnLayout {
             /// of trailing a dangling line down the left of every deeper row.
             readonly property var _effectiveAncestors: [true].concat(delegate.ancestorIsLastChild || [])
             readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
-            /// Tree connector color. Foreground textColor at 0.75 alpha:
-            /// 0.4 and 0.55 both still vanished into the dark expansion
-            /// surface in user testing. The mockup shows clearly legible
-            /// connector lines, so erring on the bright side here is
-            /// closer to the intended affordance than another low-alpha
-            /// attempt — they should read as tree lines, not whispers.
-            readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
+            /// Tree connector color: the theme's separator token, the
+            /// semantic color for exactly this kind of chrome line.
+            readonly property color _guideColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             /// Hairline: 1 device-independent px, matching the rest of the
             /// chrome's hairline conventions — borders, separators, hover
             /// strokes. Widths here are DPR-scaled at render time, so a
@@ -484,29 +480,18 @@ ColumnLayout {
                 id: groupPill
 
                 Rectangle {
-                    // One semantic tint per group kind. The three hues
-                    // are picked from non-overlapping color families so
-                    // each pill stands clear of the dark-navy expansion
-                    // surface — the previous highlight-blue ANY pill
-                    // blended into the surface hue regardless of alpha.
-                    //   ALL  → positiveText (green)  — every child must match
-                    //   ANY  → neutralText  (amber)  — at least one matches
-                    //   NONE → negativeText (red)    — no child may match
-                    readonly property color _tint: delegate.kind === "all" ? Kirigami.Theme.positiveTextColor : delegate.kind === "none" ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.neutralTextColor
-
+                    // Group kind (ALL / ANY / NONE) is a category, not a
+                    // status, so the pill uses the accent tint and lets
+                    // the label carry the distinction — the stoplight
+                    // positive/neutral/negative colors are reserved for
+                    // genuine status.
                     implicitWidth: groupLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
                     implicitHeight: groupLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
                     // Capsule shape — mockup pills are fully rounded.
                     radius: implicitHeight / 2
-                    // Tinted fill at 0.4 alpha + matching solid border.
-                    // 0.25 was too faint against the dark expansion
-                    // surface to read as a distinct pill background;
-                    // 0.4 gives each badge a clearly visible fill while
-                    // staying soft enough that the white label keeps
-                    // its high-contrast read.
-                    color: Qt.rgba(_tint.r, _tint.g, _tint.b, 0.4)
+                    color: Qt.alpha(Kirigami.Theme.highlightColor, 0.18)
                     border.width: 1
-                    border.color: Qt.rgba(_tint.r, _tint.g, _tint.b, 0.9)
+                    border.color: Qt.alpha(Kirigami.Theme.highlightColor, 0.4)
 
                     Label {
                         id: groupLabel
@@ -596,7 +581,7 @@ ColumnLayout {
                         radius: Kirigami.Units.smallSpacing
                         color: Kirigami.Theme.alternateBackgroundColor
                         border.width: 1
-                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                         Label {
                             id: valueLabel

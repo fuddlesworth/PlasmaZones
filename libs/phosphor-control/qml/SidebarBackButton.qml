@@ -6,7 +6,6 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
-import "ThemeHelpers.js" as ThemeHelpers
 
 /**
  * Drill-out header row shown at the top of the sidebar list when the user has
@@ -65,7 +64,7 @@ QQC2.ItemDelegate {
         property bool _behaviorReady: false
 
         Component.onCompleted: _behaviorReady = true
-        color: backButton.hovered ? ThemeHelpers.hoverTint(Kirigami.Theme.textColor) : Qt.rgba(0, 0, 0, 0)
+        color: backButton.hovered ? Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.hoverColor, 0.15) : Qt.rgba(0, 0, 0, 0)
         radius: Kirigami.Units.smallSpacing
 
         Behavior on color {
