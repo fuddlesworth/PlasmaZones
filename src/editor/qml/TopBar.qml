@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
@@ -39,7 +38,7 @@ ToolBar {
     RowLayout {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.smallSpacing // Use theme spacing (4px)
-        spacing: Kirigami.Units.mediumSpacing // Use theme spacing (8px - between groups)
+        spacing: Kirigami.Units.mediumSpacing // Use theme spacing (between groups)
 
         // ═══════════════════════════════════════════════════════════════
         // SCREEN SELECTOR SECTION
@@ -86,7 +85,7 @@ ToolBar {
                         Behavior on color {
                             PhosphorMotionAnimation {
                                 profile: "popup"
-                                durationOverride: Theme.animDuration
+                                durationOverride: Kirigami.Units.longDuration
                             }
                         }
                     }
@@ -94,20 +93,20 @@ ToolBar {
                     background: Rectangle {
                         radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
                         color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.06) : "transparent")
-                        border.width: Math.round(Screen.devicePixelRatio)
+                        border.width: 1
                         border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
 
                         Behavior on color {
                             PhosphorMotionAnimation {
                                 profile: "popup"
-                                durationOverride: Theme.animDuration
+                                durationOverride: Kirigami.Units.longDuration
                             }
                         }
 
                         Behavior on border.color {
                             PhosphorMotionAnimation {
                                 profile: "popup"
-                                durationOverride: Theme.animDuration
+                                durationOverride: Kirigami.Units.longDuration
                             }
                         }
                     }
@@ -129,11 +128,17 @@ ToolBar {
             id: layoutNameSection
 
             spacing: Kirigami.Units.smallSpacing // Use theme spacing (4px - between label and field)
-            // Initialize on component creation with delay to ensure editorController is ready
+            // Initialize on component creation with delay to ensure editorController is ready.
+            // main.cpp loads the layout before it builds the QML engine, so the
+            // controller's layoutNameChanged has already fired by the time the
+            // Connections below exists — this is the only place the load path
+            // can latch committedName.
             Component.onCompleted: {
                 Qt.callLater(function () {
-                    if (editorController && editorController.layoutName)
-                        layoutNameField.text = editorController.layoutName;
+                    if (editorController) {
+                        layoutNameField.committedName = editorController.layoutName || "";
+                        layoutNameField.text = layoutNameField.committedName;
+                    }
                 });
             }
 
@@ -165,10 +170,23 @@ ToolBar {
             TextField {
                 id: layoutNameField
 
+                // Mirrors PlasmaZones::MaxLayoutNameLength (core/constants.h),
+                // same client-side cap as PropertyPanel's zone name field.
                 readonly property int maxLength: 40
                 readonly property int currentLength: text ? text.length : 0
-                readonly property bool showCounter: currentLength > maxLength * 0.8 || currentLength > maxLength
+                readonly property bool showCounter: currentLength > maxLength * 0.8
+                // The name as the controller last handed it over, latched before
+                // maximumLength can truncate it in the field. A legacy name longer
+                // than maxLength loads truncated, so the field's text differs from
+                // the controller's from the very first frame.
+                property string committedName: ""
+                // Qt emits editingFinished on focus-out as well as on Return, and
+                // on a truncated legacy name a bare text comparison would then
+                // commit the truncation as a rename the user never asked for, undo
+                // entry and all. Only a real keystroke arms the commit.
+                property bool userEdited: false
 
+                maximumLength: maxLength
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                 readOnly: topBar.previewMode
                 enabled: editorController !== null && editorController !== undefined
@@ -176,15 +194,23 @@ ToolBar {
                 Accessible.description: i18nc("@info", "Enter name for the layout")
                 // Add right padding when counter is visible to prevent text overlap
                 rightPadding: (showCounter || activeFocus) ? Kirigami.Units.gridUnit * 3 : 0
+                // textEdited fires only on user input, never on a programmatic write.
+                onTextEdited: {
+                    layoutNameField.userEdited = true;
+                }
                 onEditingFinished: {
-                    if (editorController && text !== editorController.layoutName)
+                    if (!layoutNameField.userEdited)
+                        return;
+
+                    layoutNameField.userEdited = false;
+                    if (editorController && text !== layoutNameField.committedName)
                         editorController.layoutName = text;
                 }
 
                 background: Rectangle {
                     color: Theme.withAlpha(Kirigami.Theme.textColor, layoutNameField.activeFocus ? 0.08 : 0.04)
                     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
-                    border.width: Math.round(Screen.devicePixelRatio)
+                    border.width: 1
                     border.color: layoutNameField.activeFocus ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
 
                     // Character counter overlay (right-aligned inside field)
@@ -194,7 +220,7 @@ ToolBar {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: layoutNameField.showCounter || layoutNameField.activeFocus
                         text: i18nc("@info", "%1/%2", layoutNameField.currentLength, layoutNameField.maxLength)
-                        color: layoutNameField.currentLength > layoutNameField.maxLength ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.disabledTextColor
+                        color: Kirigami.Theme.disabledTextColor
                         font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         opacity: layoutNameField.activeFocus ? 1 : 0.6
                         Accessible.name: i18nc("@info", "Character count: %1 of %2", layoutNameField.currentLength, layoutNameField.maxLength)
@@ -204,14 +230,14 @@ ToolBar {
                     Behavior on color {
                         PhosphorMotionAnimation {
                             profile: "popup"
-                            durationOverride: Theme.animDuration
+                            durationOverride: Kirigami.Units.longDuration
                         }
                     }
 
                     Behavior on border.color {
                         PhosphorMotionAnimation {
                             profile: "popup"
-                            durationOverride: Theme.animDuration
+                            durationOverride: Kirigami.Units.longDuration
                         }
                     }
                 }
@@ -220,8 +246,21 @@ ToolBar {
             // Explicitly connect to layoutNameChanged signal for reliable updates
             Connections {
                 function onLayoutNameChanged() {
-                    if (!layoutNameField.activeFocus && editorController)
-                        layoutNameField.text = editorController.layoutName || "";
+                    if (!editorController)
+                        return;
+
+                    // Latch the controller's value, not the field's: assigning it
+                    // truncates anything past maximumLength. The latch is
+                    // unconditional because a Return commit leaves the field
+                    // focused, and a committedName left at the pre-commit name
+                    // would then describe a name the controller no longer holds.
+                    layoutNameField.committedName = editorController.layoutName || "";
+                    if (!layoutNameField.activeFocus) {
+                        layoutNameField.text = layoutNameField.committedName;
+                        // This sync replaces the field's content, so any edit that
+                        // had not been committed yet is gone.
+                        layoutNameField.userEdited = false;
+                    }
                 }
 
                 target: editorController
@@ -322,8 +361,6 @@ ToolBar {
         // LAYOUT SETTINGS BUTTON (Per-layout gap overrides)
         // ═══════════════════════════════════════════════════════════════
         ToolButton {
-            id: layoutSettingsButton
-
             icon.name: "configure"
             enabled: editorController !== null && editorController !== undefined
             onClicked: topBar.layoutSettingsDialog.open()
@@ -333,11 +370,12 @@ ToolBar {
             Accessible.description: i18nc("@info", "Configure per-layout gap overrides")
         }
 
-        // Visual separator (hide when layout settings is hidden to avoid orphan)
+        // Visual separator. The layout settings button above is always shown,
+        // so this needs no orphan guard of the kind the shader button's
+        // separator carries.
         Kirigami.Separator {
             Layout.fillHeight: true
             Layout.preferredWidth: 1
-            visible: layoutSettingsButton.visible
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -462,7 +500,7 @@ ToolBar {
         Rectangle {
             anchors.bottom: parent.bottom
             width: parent.width
-            height: Math.round(Screen.devicePixelRatio)
+            height: 1
             color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
     }

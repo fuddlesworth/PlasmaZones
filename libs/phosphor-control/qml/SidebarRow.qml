@@ -48,7 +48,9 @@ QQC2.ItemDelegate {
     signal categoryToggleRequested(string pageId)
     signal drillIntoRequested(string pageId)
 
-    width: ListView.view.width
+    // Guard against a null attached view: a pooled/destroyed delegate is
+    // detached from its ListView and the bare access would throw.
+    width: ListView.view ? ListView.view.width : 0
     // Legacy row height — explicit so the rail's vertical rhythm is
     // stable regardless of label metrics. Dividers get a shorter slot
     // than nav rows so the breaks read as breathing-room rather than
@@ -179,15 +181,15 @@ QQC2.ItemDelegate {
             Layout.fillWidth: rowItem.compact
             Layout.alignment: rowItem.compact ? Qt.AlignHCenter : Qt.AlignLeft
             // Legacy opacity model: active rows go to 1.0, everything
-            // else sits at 0.7. The 120-ms `widget.hover` transition
-            // matches the label below so the row's accent changes
-            // feel synchronous.
+            // else sits at 0.7. The `widget.hover` transition matches
+            // the label below so the row's accent changes feel
+            // synchronous.
             opacity: rowItem.isCurrent ? 1 : 0.7
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
-                    durationOverride: 120
+                    durationOverride: Kirigami.Units.shortDuration * 1.2
                 }
             }
         }
@@ -211,7 +213,7 @@ QQC2.ItemDelegate {
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
-                    durationOverride: 120
+                    durationOverride: Kirigami.Units.shortDuration * 1.2
                 }
             }
         }
@@ -275,7 +277,7 @@ QQC2.ItemDelegate {
             Behavior on rotation {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
-                    durationOverride: 150
+                    durationOverride: Kirigami.Units.shortDuration * 1.5
                 }
             }
         }

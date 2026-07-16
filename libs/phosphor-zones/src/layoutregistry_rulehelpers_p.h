@@ -7,10 +7,9 @@
 // These are pure functions with no LayoutRegistry-member dependency: they
 // classify and decode Rule / MatchExpression shapes, build the
 // windowless context query, and read an AssignmentEntry straight off a
-// rule's action list. Split out of layoutregistry_assignments.cpp so that
-// translation unit stays under the project's 800-line ceiling, and so any
-// sibling .cpp in phosphor-zones can share the one classifier set rather
-// than duplicating it.
+// rule's action list. They live here so any sibling .cpp in
+// phosphor-zones can share the one classifier set rather than
+// duplicating it.
 //
 // The functions live in the named PhosphorZones::RuleHelpers namespace
 // (not an anonymous one) precisely so they can be defined once in

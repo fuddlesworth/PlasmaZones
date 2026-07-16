@@ -273,10 +273,8 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Translations (Qt Linguist). Extracted to cmake/PhosphorTranslations.cmake
-# (included in this scope) to keep this file's growth in check — it has
-# since crept past the 800-line cap again; the next self-contained block
-# to outgrow its section should be extracted the same way. See that file
-# for the update-ts / lrelease detail.
+# and included in this scope. Other self-contained blocks can be extracted the
+# same way. See that file for the update-ts / lrelease detail.
 # ---------------------------------------------------------------------------
 include(cmake/PhosphorTranslations.cmake)
 

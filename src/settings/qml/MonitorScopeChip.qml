@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -85,7 +84,7 @@ Item {
         implicitHeight: pillRow.implicitHeight + Kirigami.Units.smallSpacing
         radius: height / 2
         color: pillMouse.containsMouse || popup.visible ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
-        border.width: Math.round(Screen.devicePixelRatio)
+        border.width: 1
         border.color: chip.isPerScreen || popup.visible ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
 
         RowLayout {
@@ -143,8 +142,11 @@ Item {
             activeFocusOnTab: true
             Accessible.role: Accessible.ButtonDropDown
             Accessible.name: i18nc("@action", "Scope: %1", chip.label)
+            Accessible.focusable: true
             Keys.onSpacePressed: popup.visible ? popup.close() : popup.open()
             Keys.onReturnPressed: popup.visible ? popup.close() : popup.open()
+            // Numpad Enter alias, matching the sibling card components.
+            Keys.onEnterPressed: popup.visible ? popup.close() : popup.open()
             onClicked: popup.visible ? popup.close() : popup.open()
         }
 
@@ -199,7 +201,7 @@ Item {
         background: Rectangle {
             radius: Kirigami.Units.smallSpacing * 1.5
             color: Kirigami.Theme.backgroundColor
-            border.width: Math.round(Screen.devicePixelRatio)
+            border.width: 1
             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
         }
     }

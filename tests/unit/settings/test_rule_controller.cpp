@@ -51,6 +51,7 @@ private Q_SLOTS:
     void monitorOverviewIgnoresBareLayoutRules();
     void monitorOverviewLayoutFromSingleWinningRule();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
+    void monitorOverviewDisableEngineUnionsEveryMode();
     void monitorOverviewReportsLock();
     void monitorOverviewLockPriorityResolution();
     void engineModePickerExposesAllVocabularyTokens();
@@ -137,7 +138,6 @@ void TestRuleController::dirtyTrackingAndRevert()
 
     // Adding a rule flips the dirty bit.
     QVERIFY(controller.isDirty());
-    QVERIFY(controller.hasPendingChanges());
     QVERIFY(dirtySpy.count() >= 1);
 
     // revert() re-fetches the daemon's authoritative set asynchronously and
@@ -145,10 +145,22 @@ void TestRuleController::dirtyTrackingAndRevert()
     // test guards is the linkage between the async outcome and the dirty-state
     // transition: a successful revert (rulesLoaded fires) MUST clear dirty, a
     // failed revert MUST preserve it. The earlier bug was a failed revert
-    // silently dropping staged edits while reporting success. The check is
-    // symmetric so it passes both in a fully headless run (daemon absent →
-    // revert fails → dirty stays) and on a dev machine with a live daemon
-    // (revert succeeds → dirty clears).
+    // silently dropping staged edits while reporting success.
+    //
+    // The check is symmetric, so it passes whether or not a daemon answers —
+    // but only one arm is ever a real assertion on a given run, and CI runs the
+    // failure arm exclusively: there is no daemon on the session bus, so
+    // `reverted` is always false there and only "a failed revert preserves
+    // dirty" is exercised. The success arm runs only on a dev box with the
+    // daemon up. That asymmetry is accepted rather than mocked away: the
+    // controller reaches the bus directly through `QDBusConnection::sessionBus()`
+    // (see rulecontroller.cpp's fetchAndLoad), so making the success arm
+    // hermetic means standing up a real `org.plasmazones.Rules` service on a
+    // private bus — a fixture no other test in this file needs, for one
+    // transition the daemon-side rule tests already cover from the other end.
+    // Do NOT read a green CI run as evidence that a successful revert clears
+    // dirty; that leg is covered on demand by running this test under
+    // `dbus-run-session` with the daemon started.
     QSignalSpy loadedSpy(&controller, &RuleController::rulesLoaded);
     controller.revert();
     // Pump the event loop briefly so the QDBusPendingCall reply (success or
@@ -580,6 +592,44 @@ void TestRuleController::monitorOverviewDisableEngineMatchesEffectiveMode()
     QVERIFY(sawB);
 }
 
+void TestRuleController::monitorOverviewDisableEngineUnionsEveryMode()
+{
+    // The daemon's disable check is a per-mode UNION, not a single-winner slot:
+    // it never runs a DisableEngine rule through RuleEvaluator, and
+    // `Settings::disableEntriesFor` simply keeps every disable rule whose token
+    // equals the mode it was asked about. One screen can therefore carry a
+    // separate disable rule per engine — disabling a monitor for BOTH snapping
+    // and autotile in the UI produces exactly that pair — and priority plays no
+    // part in which of them counts.
+    //
+    // The autotile rule is added FIRST deliberately. addRuleFromJson runs
+    // renormalizePriorities(), which re-stamps every rule as `rank * 16` in
+    // store order, so the first-added autotile rule ends up ABOVE the snapping
+    // one (32 vs 16) and the priority-DESC sort puts it first. A scalar
+    // first-wins accumulator would therefore pin "autotile", drop the snapping
+    // rule, and report the engine ON for a screen the daemon has switched off.
+    RuleController controller;
+    for (const QString& mode : {QStringLiteral("autotile"), QStringLiteral("snapping")}) {
+        QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-1");
+        rule[QStringLiteral("match")] = match;
+        rule[QStringLiteral("actions")] = QVariantList{
+            QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")}, {QStringLiteral("mode"), mode}}};
+        QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+    }
+
+    // No SetEngineMode rule, so the screen's effective engine is the cascade's
+    // Snapping default — and a snapping disable IS among the two.
+    const QVariantList overview =
+        controller.monitorOverview(QVariantList{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-1")}}});
+    QCOMPARE(overview.size(), 1);
+    const QVariantMap tile = overview.first().toMap();
+    QVERIFY2(!tile.value(QStringLiteral("tilingEnabled")).toBool(),
+             "a disable for a different engine masked the one matching the screen's effective mode");
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
+}
+
 void TestRuleController::engineModePickerExposesAllVocabularyTokens()
 {
     // Pin that the SetEngineMode + DisableEngine pickers expose exactly
@@ -590,7 +640,7 @@ void TestRuleController::engineModePickerExposesAllVocabularyTokens()
     RuleController controller;
     const QVariantList types = controller.actionTypes();
     // Each entry in `actionTypes()` carries its own `params` list (see the
-    // descriptor docstring in rulecontroller.h:281-291). For each
+    // descriptor docstring in rulecontroller.h:330-344). For each
     // param of kind="enum", the `options` list contains `{value, label}`
     // pairs. We walk to the `mode` param of each action and extract its
     // options to verify the closed engine-mode vocabulary.
@@ -1411,6 +1461,13 @@ void TestRuleController::curveLabelResolverBridgesQmlNaming()
     QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
 
     // A non-callable value clears the resolver — the summary falls back to raw.
+    // Re-install the working resolver first: the empty-resolver step above
+    // already left the summary at the raw value, so clearing straight from there
+    // asserted a no-op transition and stayed green even when the clear did
+    // nothing at all. Going labelled → raw is the transition the contract is
+    // about.
+    controller.setCurveLabelResolver(resolver);
+    QCOMPARE(summary(), QStringLiteral("Curve: Standard (Cubic)"));
     controller.setCurveLabelResolver(QJSValue());
     QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
 }

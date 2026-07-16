@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -93,7 +92,7 @@ ItemDelegate {
         // hover through an accent-tinted border, rather than flooding the
         // whole card with hoverColor.
         color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, root.hovered ? 0.06 : 0.04)
-        border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+        border.width: 1
         border.color: {
             if (root.activeFocus)
                 return Kirigami.Theme.focusColor;
@@ -131,13 +130,13 @@ ItemDelegate {
                 visible: _hasPreview
                 radius: Kirigami.Units.smallSpacing
                 color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-                border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+                border.width: 1
                 border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
                 clip: true
 
                 Image {
                     anchors.fill: parent
-                    anchors.margins: Math.max(1, Math.round(Screen.devicePixelRatio))
+                    anchors.margins: 1
                     // `encodeURI` percent-encodes spaces and unicode while
                     // preserving path separators, which a raw `"file://" + path`
                     // concat would silently break on (e.g. user-installed packs

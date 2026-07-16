@@ -254,15 +254,35 @@ private Q_SLOTS:
         PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
         state->setSplitRatio(0.75);
 
-        // Override with a new algorithm but NO explicit SplitRatio override.
-        // The algorithm override should reset the split ratio to the new algo's default.
+        // Override with an algorithm DIFFERENT from the global default ("bsp")
+        // and NO explicit SplitRatio override. A genuine effective switch
+        // resets the split ratio to the new algorithm's default.
+        QVariantMap overrides;
+        overrides[QStringLiteral("Algorithm")] = QLatin1String("master-stack");
+        engine.applyPerScreenConfig(screen, overrides);
+
+        auto* msAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
+        QVERIFY(msAlgo);
+        QVERIFY(qFuzzyCompare(state->splitRatio(), msAlgo->defaultSplitRatio()));
+    }
+
+    void testPerScreen_applyOverrides_sameAlgorithmAsGlobalKeepsTunedRatio()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        state->setSplitRatio(0.75);
+
+        // Pinning an Algorithm override that matches the algorithm the screen
+        // already follows globally ("bsp") is not an effective change, so the
+        // user's live-tuned split ratio must survive.
         QVariantMap overrides;
         overrides[QStringLiteral("Algorithm")] = QLatin1String("bsp");
         engine.applyPerScreenConfig(screen, overrides);
 
-        auto* bspAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("bsp"));
-        QVERIFY(bspAlgo);
-        QVERIFY(qFuzzyCompare(state->splitRatio(), bspAlgo->defaultSplitRatio()));
+        QVERIFY(qFuzzyCompare(state->splitRatio(), 0.75));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -386,8 +406,11 @@ private Q_SLOTS:
         QVERIFY(bspAlgo);
         QVERIFY(!qFuzzyCompare(bspAlgo->defaultSplitRatio(), 0.42));
 
-        // Establish the concrete algorithm. The first apply legitimately resets to
-        // the algo default (previous map had no algorithm → genuine switch).
+        // Establish the concrete algorithm. No reset fires here: the resolver
+        // reads the previous EFFECTIVE algorithm, and an empty previous map falls
+        // back to the global id ("bsp"), which is what this override pins — so it
+        // is not a switch. The tuned ratio below is set AFTER this apply either
+        // way, so what this line establishes is the previous map, not the ratio.
         QVariantMap first;
         first[QStringLiteral("Algorithm")] = QLatin1String("bsp");
         engine.applyPerScreenConfig(screen, first);
@@ -429,8 +452,8 @@ private Q_SLOTS:
         QCOMPARE(gaps.bottom, 5);
         // Left and right fall back to the global uniform outer gap (10),
         // since no per-screen OuterGap or OuterGapLeft/Right override was set.
-        // Using the literal value instead of engine.effectiveOuterGap(screen) to
-        // avoid a circular assertion that always passes.
+        // Pinned as literals rather than read back off the resolver, so the
+        // assertion cannot go circular and pass against any value.
         QCOMPARE(gaps.left, 10);
         QCOMPARE(gaps.right, 10);
     }
@@ -454,7 +477,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("OuterGap")] = 10;
         engine.applyPerScreenConfig(screen, overrides);
         QCOMPARE(engine.effectiveInnerGap(screen), 8); // per-screen beats global
-        QCOMPARE(engine.effectiveOuterGap(screen), 10);
+        QCOMPARE(engine.effectiveOuterGaps(screen).top, 10);
 
         // A context gap override for this screen must win over both.
         engine.setContextGapProvider([screen](const QString& s) -> QVariantMap {
@@ -467,13 +490,13 @@ private Q_SLOTS:
             return m;
         });
         QCOMPARE(engine.effectiveInnerGap(screen), 14);
-        QCOMPARE(engine.effectiveOuterGap(screen), 18);
+        QCOMPARE(engine.effectiveOuterGaps(screen).top, 18);
 
         // A different screen with no context override still resolves normally.
         const QString other = QStringLiteral("DP-2");
         engine.setAutotileScreens({screen, other});
         QCOMPARE(engine.effectiveInnerGap(other), 4); // global (no per-screen, no context)
-        QCOMPARE(engine.effectiveOuterGap(other), 6);
+        QCOMPARE(engine.effectiveOuterGaps(other).top, 6);
     }
 
     void testPerScreen_contextGapProvider_emptyMapFallsThrough()
@@ -622,6 +645,11 @@ private Q_SLOTS:
         QVERIFY(engine.perScreenOverrides(QString()).isEmpty());
     }
 
+    // removeOverridesForScreen is not public engine API — it is reached by taking
+    // the screen out of the autotile set, which is the production caller
+    // (AutotileEngine's screen-removal teardown). Driving it through
+    // clearPerScreenConfig instead would test a different function and duplicate
+    // testPerScreen_clearOverrides_restoresGlobalDefaults.
     void testPerScreen_removeOverridesForScreen()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
@@ -636,12 +664,17 @@ private Q_SLOTS:
         QVERIFY(engine.hasPerScreenOverride(screen, QStringLiteral("InnerGap")));
         QVERIFY(engine.hasPerScreenOverride(screen, QStringLiteral("OuterGap")));
 
-        // Remove all overrides for the screen (used during screen removal)
-        // clearPerScreenConfig should remove the overrides
-        engine.clearPerScreenConfig(screen);
+        // Drop the screen from the autotile set: the teardown calls
+        // removeOverridesForScreen for the screen's state.
+        engine.setAutotileScreens({});
 
         QVERIFY(!engine.hasPerScreenOverride(screen, QStringLiteral("InnerGap")));
         QVERIFY(!engine.hasPerScreenOverride(screen, QStringLiteral("OuterGap")));
+        QVERIFY(engine.perScreenOverrides(screen).isEmpty());
+        // The in-memory overrides are gone, so the screen resolves to the global
+        // baseline again if it ever comes back.
+        engine.config()->innerGap = 7;
+        QCOMPARE(engine.effectiveInnerGap(screen), 7);
     }
 };
 

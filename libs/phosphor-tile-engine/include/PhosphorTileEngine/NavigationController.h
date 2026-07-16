@@ -51,9 +51,13 @@ public:
     void rotateWindowOrder(bool clockwise);
     /// `explicitWindowId` (when non-empty) overrides the state's internal
     /// focusedWindow() for the operation. The IPlacementEngine virtual-method
-    /// overrides on AutotileEngine pass `ctx.windowId` here so navigation
-    /// follows the daemon's authoritative focus tracking even when the
-    /// engine's per-state focusedWindow tracker is stale.
+    /// overrides on AutotileEngine pass the CANONICALIZED `ctx.windowId`
+    /// (canonicalizeForLookup) here so navigation follows the daemon's
+    /// authoritative focus tracking even when the engine's per-state
+    /// focusedWindow tracker is stale. The canonicalization is load-bearing:
+    /// the lookups below match this id against the ids the tiling states hold,
+    /// so a raw ctx.windowId in a non-canonical form would find no state and
+    /// silently fall through to the focused-screen path.
     void swapFocusedInDirection(const QString& direction, const QString& action,
                                 const QString& explicitWindowId = QString());
     void focusInDirection(const QString& direction, const QString& action, const QString& explicitWindowId = QString());
@@ -170,7 +174,24 @@ private:
      *        the neighbour output is a different (snap) mode: a "swap" defers to
      *        crossModeSwapRequested (two-way exchange), a "move" to
      *        crossModeMoveRequested (one-way insert).
-     * @return false when there is no resolver or no neighbour output.
+     * @return true when the crossing was handled, false when the caller should
+     *         fall through to its next option (cross-desktop, then no_neighbor).
+     *
+     * Returns true WITHOUT touching tiling state on the cross-mode branch: a
+     * neighbour output in a different (snap) mode is handed to the daemon via
+     * crossModeSwapRequested / crossModeMoveRequested, which performs the move.
+     * Returns true after a completed migration on the same-mode (autotile)
+     * branch: the window is re-keyed, migrated, both outputs are reflowed, and
+     * it is activated on the neighbour.
+     *
+     * Returns false — leaving @p focused untouched on @p sourceScreenId — when:
+     *   - there is no cross-surface resolver, or no neighbour output in
+     *     @p direction;
+     *   - the autotile neighbour is already at its effective maxWindows cap (a
+     *     tiled window has no slot there);
+     *   - @p focused would not tile on the destination (shouldTileWindow).
+     * The last two refuse BEFORE any state mutation or the
+     * windowOutputMoveExpected marker, so a refusal never strands the window.
      */
     bool crossOutputMove(const QString& sourceScreenId, const QString& focused, const QString& direction,
                          const QString& action);
@@ -203,9 +224,27 @@ private:
     QRect rectForWindowInState(PhosphorTiles::TilingState* state, const QString& windowId) const;
 
     /**
-     * @brief Helper to apply an operation to all screen states
+     * @brief Helper to apply an operation to EVERY screen state
+     *
+     * Visits every (screen, desktop, activity) state, not just the current
+     * context's. Both callers are absolute global setters whose engine-side entry
+     * point drops the user-tuned flag for every key (AutotileEngine::
+     * setGlobalSplitRatio / setGlobalMasterCount): the write scope has to match
+     * that clear scope, or a state on another desktop keeps a tuned value whose
+     * protecting flag is gone and the next propagateGlobalSplitRatio to run while
+     * that desktop is current silently overwrites it. Contrast
+     * propagateGlobalSplitRatio, which is a passive refresh and so is deliberately
+     * limited to the current context.
+     *
+     * The callback receives each state's screen id so callers can skip screens
+     * carrying a per-screen override of the KEY they write — setGlobalSplitRatio
+     * skips a SplitRatio override, setGlobalMasterCount a MasterCount one
+     * (mirroring propagateGlobalSplitRatio / propagateGlobalMasterCount). Any
+     * other per-screen override on the screen is irrelevant and does not skip it.
+     * It returns whether it wrote the state; a pass that wrote nothing retiles
+     * nothing.
      */
-    void applyToAllStates(const std::function<void(PhosphorTiles::TilingState*)>& operation);
+    void applyToAllStates(const std::function<bool(const QString& screenId, PhosphorTiles::TilingState*)>& operation);
 
     AutotileEngine* m_engine = nullptr;
 };

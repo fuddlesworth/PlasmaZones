@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
@@ -24,7 +23,6 @@ Rectangle {
     required property int dismissTimeout
     property bool showCloseButton: false
     property string accessibleRoleName: ""
-    readonly property alias text: bannerLabel.text
 
     function show(message) {
         bannerLabel.text = message;
@@ -46,7 +44,7 @@ Rectangle {
     opacity: 0
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
     border.color: accentColor
-    border.width: Math.round(Screen.devicePixelRatio * Theme.focusBorderWidth)
+    border.width: Theme.accentBorderWidth
     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
     z: 200
     Accessible.name: accessibleRoleName
@@ -110,7 +108,7 @@ Rectangle {
             properties: "opacity"
             to: 1
             profile: "popup"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
 
         PhosphorMotionAnimation {
@@ -118,7 +116,7 @@ Rectangle {
             properties: "y"
             to: 0
             profile: "popup"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
     }
 
@@ -130,7 +128,7 @@ Rectangle {
             properties: "opacity"
             to: 0
             profile: "widget.fadeOut"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
 
         PhosphorMotionAnimation {
@@ -138,7 +136,7 @@ Rectangle {
             properties: "y"
             to: Kirigami.Units.smallSpacing
             profile: "widget.fadeOut"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
     }
 

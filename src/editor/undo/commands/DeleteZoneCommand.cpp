@@ -14,6 +14,7 @@ DeleteZoneCommand::DeleteZoneCommand(QPointer<ZoneManager> zoneManager, const QS
     : BaseZoneCommand(zoneManager, text.isEmpty() ? PhosphorI18n::tr("Delete Zone", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_zoneData(zoneData)
+    , m_zoneIndex(zoneManager ? zoneManager->findZoneIndex(zoneId) : -1)
 {
 }
 
@@ -22,8 +23,9 @@ void DeleteZoneCommand::undo()
     if (!m_zoneManager || m_zoneId.isEmpty() || m_zoneData.isEmpty()) {
         return;
     }
-    // Restore zone with original data (allow ID reuse for undo/redo)
-    m_zoneManager->addZoneFromMap(m_zoneData, true);
+    // Restore the zone at the index it was deleted from (allow ID reuse for
+    // undo/redo), so it returns to its original height in the stack.
+    m_zoneManager->addZoneFromMap(m_zoneData, true, m_zoneIndex);
 }
 
 void DeleteZoneCommand::redo()

@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -253,7 +252,7 @@ ColumnLayout {
                 Layout.preferredHeight: root._mapHeight + Kirigami.Units.largeSpacing
                 radius: Kirigami.Units.smallSpacing
                 color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : allMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
-                border.width: Math.round(Screen.devicePixelRatio)
+                border.width: 1
                 border.color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : allMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 ColumnLayout {
                     id: allContent
@@ -289,8 +288,11 @@ ColumnLayout {
                     Accessible.role: Accessible.RadioButton
                     Accessible.name: i18n("All Monitors")
                     Accessible.checked: !root.isPerScreen
+                    Accessible.focusable: true
                     Keys.onSpacePressed: root.screenPicked("")
                     Keys.onReturnPressed: root.screenPicked("")
+                    // Numpad Enter alias, matching the sibling card components.
+                    Keys.onEnterPressed: root.screenPicked("")
                     onClicked: root.screenPicked("")
                 }
 
@@ -338,7 +340,7 @@ ColumnLayout {
                         height: rect.h
                         radius: Kirigami.Units.smallSpacing
                         color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
-                        border.width: isSelected ? Math.round(Screen.devicePixelRatio) * 2 : Math.round(Screen.devicePixelRatio)
+                        border.width: isSelected ? 2 : 1
                         border.color: isSelected ? Kirigami.Theme.highlightColor : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
 
                         // Connector-first label (DP-2); vendor + resolution in tooltip.
@@ -388,7 +390,7 @@ ColumnLayout {
                             height: width
                             radius: width / 2
                             color: Kirigami.Theme.highlightColor
-                            border.width: Math.round(Screen.devicePixelRatio)
+                            border.width: 1
                             border.color: Kirigami.Theme.backgroundColor
                         }
 
@@ -405,12 +407,16 @@ ColumnLayout {
                             // name for an output with no connector/label/name.
                             Accessible.name: connectorLabel.text || i18n("Unknown monitor")
                             Accessible.checked: tile.isSelected
+                            Accessible.focusable: true
                             Keys.onSpacePressed: root.screenPicked(tile.screenName)
                             Keys.onReturnPressed: root.screenPicked(tile.screenName)
+                            // Numpad Enter alias, matching the sibling card components.
+                            Keys.onEnterPressed: root.screenPicked(tile.screenName)
                             onClicked: root.screenPicked(tile.screenName)
                         }
 
                         ToolTip.visible: tileMouse.containsMouse && ToolTip.text !== ""
+                        ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: {
                             var parts = [];
                             if (tile.modelData.displayLabel)

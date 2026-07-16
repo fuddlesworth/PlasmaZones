@@ -43,9 +43,12 @@ class TilingState;
  * - Master count adjustment
  * - Split ratio adjustment
  *
- * @note Thread Safety: All algorithms are stateless — their const public
- *       methods can be called concurrently on the same instance. The
- *       TilingState parameter must not be modified during the call.
+ * @note Thread Safety: Built-in geometry algorithms are stateless — their
+ *       const public methods can be called concurrently on the same instance.
+ *       Scripted algorithms are main-thread-only: LuauTileAlgorithm runs on a
+ *       non-thread-safe lua_State and must not be called concurrently (see its
+ *       class documentation). In all cases the TilingState parameter must not be
+ *       modified during the call.
  */
 class PHOSPHORTILES_EXPORT TilingAlgorithm : public QObject
 {
@@ -150,8 +153,15 @@ public:
     /**
      * @brief Get the index of the "master" zone (if applicable)
      *
-     * For algorithms with a master/stack concept, this returns the index
-     * of the primary window zone. Used for "focus master" and "swap with master".
+     * For algorithms with a master/stack concept, this returns the index of the
+     * primary window zone.
+     *
+     * This describes the algorithm for a caller that asks, and nothing in this
+     * tree reads it outside of tests. In particular the engine's focusMaster()
+     * focuses the first tiled window directly rather than consulting this, so
+     * overriding it does not change any built-in behaviour. It stays on the
+     * exported API because a third-party algorithm can declare it and a
+     * third-party consumer can read it, which is what this library is LGPL for.
      *
      * @return Master zone index (0-based), or -1 if no master concept
      */
@@ -283,8 +293,18 @@ public:
      * @brief Whether this algorithm supports per-window minimum size constraints
      *
      * Most algorithms respect the minSizes parameter. Algorithms that ignore
-     * it (e.g., Floating Center, Tatami) return false so the settings UI can
-     * disable min-size controls for them.
+     * it (e.g., Floating Center, Tatami) return false to say so.
+     *
+     * Returning false opts the algorithm out of the engine's min-size pass:
+     * AutotileEngine skips enforceMinSizes (and the removeRectOverlaps implied
+     * by it) for the algorithm's zones, alongside the separate
+     * producesOverlappingZones() opt-out. An algorithm that declares this is
+     * saying min sizes are not a concept it works in, so having the engine
+     * post-process its output into honouring them would contradict the
+     * declaration.
+     *
+     * There is no settings control keyed on it: it describes the algorithm
+     * rather than exposing a user choice.
      *
      * @return true if the algorithm honors minSizes (default: true)
      */

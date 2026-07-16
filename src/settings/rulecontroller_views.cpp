@@ -8,14 +8,14 @@
 //   * matchFields/operatorsForField/actionTypes/defaultPayloadFor — author surfaces
 //   * validationIssuesForJson/matchIsContextOnly — editor validation hooks
 //
-// Split out of rulecontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). All methods are members of
-// PlasmaZones::RuleController and operate on its private model
-// state — same class, separate translation unit, no API change.
+// All methods are members of PlasmaZones::RuleController and operate on its
+// private model state. Same class as rulecontroller.cpp, separate translation
+// unit, no API change.
 
 #include "rulecontroller.h"
 #include "ruleauthoring.h"
 
+#include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
@@ -24,6 +24,7 @@
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSet>
 
 #include <algorithm>
 
@@ -105,17 +106,24 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
     struct Summary
     {
         int ruleCount = 0;
-        // Wire-string engine token (or empty) the highest-priority
-        // matching `DisableEngine` action on this screen targets.
-        // Resolved against the screen's effective `engineMode` at
-        // output time to compute the tile's `engineDisabled` flag —
-        // a `DisableEngine{mode:"scrolling"}` rule on a Snapping-mode
-        // screen must NOT flip the tile to "Engine off" (the active
-        // engine is still Snapping). Stored as a scalar QString
-        // (first-non-empty-wins below mirrors the daemon's per-slot
-        // cascade winner; a QSet would over-state by accumulating
-        // every matching rule).
-        QString disabledEngineMode;
+        // Wire-string engine tokens from EVERY monitor-axis `DisableEngine`
+        // rule on this screen. Resolved against the screen's effective
+        // `engineMode` at output time to compute the tile's `engineDisabled`
+        // flag — a `DisableEngine{mode:"scrolling"}` rule on a Snapping-mode
+        // screen must NOT flip the tile to "Engine off" (the active engine is
+        // still Snapping).
+        //
+        // A SET, not a scalar, because the daemon's disable check is a per-mode
+        // UNION and not a single-winner slot: `Settings::disableEntriesFor`
+        // scans the whole rule store and keeps every disable rule whose token
+        // equals the mode it was asked about, so priority plays no part. One
+        // screen can carry a separate disable rule per engine — `disableRuleIdFor`
+        // keys the engine into the rule's identity precisely so those are
+        // distinct rules — and every disable rule is authored at the same
+        // `kContextBandBase` priority. A scalar first-wins would therefore let a
+        // disable for one engine mask the disable for the engine the screen
+        // actually runs, on nothing better than store order.
+        QSet<QString> disabledEngineModes;
         // Engine mode + BOTH layout tokens come from ONE rule: the highest-
         // priority rule on this screen carrying a SetEngineMode action — the
         // daemon's per-screen assignment winner. LayoutRegistry::
@@ -149,9 +157,9 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
 
     // Sort rules by descending priority before accumulation. Multiple
     // matching enabled context-only rules on the same screen all contribute to
-    // ruleCount, but the "first wins" guards below (s.disabledEngineMode for the
-    // DisableEngine slot, s.assignmentResolved for the engine-mode assignment
-    // winner) mean the FIRST rule visited pins each. Without sorting that's
+    // ruleCount, but the "first wins" guards below (s.assignmentResolved for the
+    // engine-mode assignment winner, s.lockResolved for the Locked slot) mean
+    // the FIRST rule visited pins each. Without sorting that's
     // "first in rule-iteration order"; with sorting it's "highest priority" —
     // which matches the daemon's own resolution order for the same rule
     // set. Sort an index vector rather than the rule list — Rule
@@ -184,21 +192,50 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         if (screenIds.isEmpty()) {
             continue;
         }
+        // The daemon does NOT run a DisableEngine rule through RuleEvaluator.
+        // A monitor is disabled iff its id appears in `Settings::disabledMonitors`
+        // (isMonitorDisabled → contextDisabledReason), and that list is built by
+        // `Settings::disableEntriesFor`, which admits a rule only when it is a
+        // MONITOR-AXIS disable rule: exactly one DisableEngine action carrying a
+        // non-empty mode token (ContextRuleBridge::disableRuleMode) plus a match
+        // whose `contextAxisFor` is Monitor. That second half is exactly what
+        // `matchIsExactContextBase` computes — both sides call the same bridge
+        // helper, so the tile and the daemon's gate admit the same rule set by
+        // construction rather than by two predicates that have to be kept in
+        // step. Anything else is honoured on a narrower axis or not at all:
+        //   - screen + desktop / screen + activity feed disabledDesktops /
+        //     disabledActivities, which gate one desktop or activity, not the
+        //     monitor. The tile is a monitor-level surface, so labelling the
+        //     whole screen "Engine off" from one of those overstates it.
+        //   - a match carrying a window-property leaf, or pinning a non-dimension
+        //     context field (Mode / TiledWindowCount / ScreenOrientation /
+        //     ActiveLayout), is not a bare monitor pin — contextAxisFor reports
+        //     CatchAll for it and the daemon never gates the monitor on it.
+        //   - a rule carrying two DisableEngine actions is ambiguous
+        //     (disableRuleMode returns nullopt) and is not a managed disable
+        //     entry at all.
+        // Accumulating any DisableEngine action regardless of shape put "Engine
+        // off" on tiles for rules the daemon does not honour that way.
+        const auto disableMode = PhosphorRules::ContextRuleBridge::disableRuleMode(rule);
+        const bool isMonitorDisableRule =
+            disableMode.has_value() && PhosphorRules::ContextRuleBridge::matchIsExactContextBase(rule.match);
+
         for (const QString& screenId : screenIds) {
             Summary& s = byScreen[screenId];
             ++s.ruleCount;
-            // DisableEngine slot: first-non-empty wins, mirroring the daemon's
-            // per-slot cascade (RuleEvaluator resolves the engine-enable slot to
-            // ONE winner; indices are priority-DESC so the first seen IS it).
-            // Output-time resolution against the active mode still stops a
+            // DisableEngine: accumulate EVERY monitor-axis disable token this
+            // screen carries — the daemon unions them per mode, so there is no
+            // winner to pick and priority is irrelevant here (see the field's
+            // doc). Output-time resolution against the active mode still stops a
             // Snapping-disable rule from labelling an Autotile screen "off".
             // Independent of the assignment winner below — a DisableEngine rule
             // need not carry a SetEngineMode action.
+            if (isMonitorDisableRule) {
+                s.disabledEngineModes.insert(*disableMode);
+            }
             bool ruleHasEngineMode = false;
             for (const RuleAction& a : rule.actions) {
-                if (a.type == ActionType::DisableEngine && s.disabledEngineMode.isEmpty())
-                    s.disabledEngineMode = a.params.value(PhosphorRules::ActionParam::Mode).toString();
-                else if (a.type == ActionType::SetEngineMode)
+                if (a.type == ActionType::SetEngineMode)
                     ruleHasEngineMode = true;
                 else if (a.type == ActionType::LockContext && !s.lockResolved) {
                     // First-wins on the single Locked slot (priority-DESC): the
@@ -229,10 +266,14 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
     QVariantList out;
     for (const QVariant& sv : screens) {
         const QVariantMap screen = sv.toMap();
-        // SettingsController::screens maps (screenInfoListToVariantList) key
-        // the connector under "name" (always present) with "screenId" (EDID id)
-        // as the alternate; fall back to it so the overview never silently
-        // drops a tile whose name happens to be empty.
+        // Rule matches pin an EDID screen id, so the tile has to be keyed by the
+        // same thing. On the daemon-served path "name" IS that id:
+        // ScreenProvider::fetchScreens fills ScreenInfo::name from the daemon's
+        // `getScreens`, which returns effective screen identifiers (see
+        // dbus/org.plasmazones.Screen.xml), and parks the real connector under a
+        // separate "connectorName" key this lookup never reads. "screenId" is the
+        // alternate; fall back to it so the overview never silently drops a tile
+        // whose name happens to be empty.
         QString screenId = screen.value(QStringLiteral("name")).toString();
         if (screenId.isEmpty()) {
             screenId = screen.value(QStringLiteral("screenId")).toString();
@@ -295,8 +336,7 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         const QString effectiveModeWire = summary.engineMode.isEmpty()
             ? PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping)
             : summary.engineMode;
-        const bool engineDisabled =
-            !summary.disabledEngineMode.isEmpty() && summary.disabledEngineMode == effectiveModeWire;
+        const bool engineDisabled = summary.disabledEngineModes.contains(effectiveModeWire);
         tile[QStringLiteral("tilingEnabled")] = !engineDisabled;
         tile[QStringLiteral("ruleCount")] = summary.ruleCount;
         tile[QStringLiteral("assigned")] = assigned;

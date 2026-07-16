@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "AutotileConstants.h"
 #include "TileScriptMetadata.h"
 #include "TilingAlgorithm.h"
 
@@ -34,7 +35,7 @@ class SplitNode;
  *    fault-isolated heap and per-engine memory cap — a runaway script can only
  *    exhaust its own VM.
  *  - **Shared engine** (engine-arg ctor): the module is loaded into a VM shared
- *    across many *trusted* bundled scripts, so the ~per-VM baseline + 42 KB
+ *    across many *trusted* bundled scripts, so the per-VM baseline plus the
  *    `pluau` prelude is paid once instead of per script. The shared engine is
  *    held by `shared_ptr` so a deferred-deleted algorithm keeps it alive until
  *    its own teardown (which releases just this algorithm's module handle).
@@ -158,7 +159,7 @@ private:
     // Accessor values resolved once at load (override fn → metadata → default).
     int m_cachedMasterZoneIndex = -1;
     int m_cachedMinimumWindows = 1;
-    int m_cachedDefaultMaxWindows = 6;
+    int m_cachedDefaultMaxWindows = AutotileDefaults::ScriptedDefaultMaxWindows;
     qreal m_cachedDefaultSplitRatio = AutotileDefaults::DefaultSplitRatio;
     bool m_cachedSupportsMasterCount = false;
     bool m_cachedSupportsSplitRatio = false;

@@ -23,9 +23,8 @@
  *   - shaderEffectUsages lists the direct overrides using a given effect
  *
  * The decoration-SET surface (the controller's `setsBridge()` ShaderSetStore)
- * lives in its own TU, test_decoration_sets.cpp — same split, and for the same
- * reason, as the motion side's test_animations_motion_sets.cpp: to keep each
- * test file under the project's 800-line cap.
+ * lives in its own TU, test_decoration_sets.cpp, mirroring the motion side's
+ * test_animations_motion_sets.cpp.
  *
  * The controller is constructed with a null SurfaceShaderRegistry — every
  * path exercised here is registry-independent (the registry only feeds the

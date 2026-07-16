@@ -552,7 +552,6 @@ public:
 
     // Effective per-screen values — forwarded to PerScreenConfigResolver
     int effectiveInnerGap(const QString& screenId) const;
-    int effectiveOuterGap(const QString& screenId) const;
     ::PhosphorLayout::EdgeGaps effectiveOuterGaps(const QString& screenId) const;
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
@@ -685,20 +684,29 @@ public:
     Q_INVOKABLE void decreaseMasterRatio(qreal delta = 0.05) override;
 
     /**
-     * @brief Set master ratio globally (config + all per-screen states)
+     * @brief Set master ratio globally (config + every state, every desktop)
      *
-     * Used by D-Bus adaptor to set the ratio as an absolute value,
-     * updating both the global config and all existing per-screen states.
+     * Used by the D-Bus adaptor to set the ratio as an absolute value. This is
+     * the ABSOLUTE setter, so it means what it says: it writes the global config
+     * and every existing state on every desktop and activity, and it discards
+     * every per-desktop tuning recorded by increaseMasterRatio. A screen carrying
+     * an explicit per-screen SplitRatio override is the one exception and keeps
+     * it, mirroring propagateGlobalSplitRatio.
+     *
+     * Contrast increaseMasterRatio, which is the RELATIVE nudge and stays local
+     * to one screen+desktop+activity.
      *
      * @param ratio New split ratio (clamped to valid range)
      */
     void setGlobalSplitRatio(qreal ratio);
 
     /**
-     * @brief Set master count globally (config + all per-screen states)
+     * @brief Set master count globally (config + every state, every desktop)
      *
-     * Used by D-Bus adaptor to set the count as an absolute value,
-     * updating both the global config and all existing per-screen states.
+     * The master-count twin of setGlobalSplitRatio, with the same scope: global
+     * config plus every state on every desktop and activity, every per-desktop
+     * tuning dropped, and screens with an explicit per-screen MasterCount
+     * override left alone.
      *
      * @param count New master count (clamped to valid range)
      */
@@ -825,7 +833,6 @@ public:
     // AutotileEngine pointer from internal callers.
     void swapInDirection(const QString& direction, const QString& action);
     void rotateWindows(bool clockwise, const QString& screenId);
-    void moveToPosition(const QString& windowId, int position, const QString& screenId);
 
     /**
      * @brief Set the floating state of a specific window
@@ -961,7 +968,7 @@ public:
      *
      * @return true if the window is tiled on the screen and preview was started.
      */
-    bool beginDragInsertPreview(const QString& windowId, const QString& screenId) override;
+    bool beginDragInsertPreview(const QString& rawWindowId, const QString& screenId) override;
 
     /**
      * @brief Update the target insert index for the active drag preview.
@@ -1238,14 +1245,33 @@ private:
     PhosphorTiles::TilingState* stateForKey(const PhosphorEngine::TilingStateKey& key);
 
     /**
+     * @brief Which states a global propagate writes.
+     *
+     * CurrentContext is the passive refresh: only the current desktop/activity's
+     * states are written, so a per-desktop tuning on another desktop survives.
+     *
+     * AllContexts is for a refresh that has just DROPPED the per-key user-tuned
+     * flags because the user changed the global value in Settings. The clear
+     * spans every key, so the write must too — a clear that outruns the write
+     * leaves a state holding a tuned value with no flag protecting it, and the
+     * next CurrentContext propagate to run while that state's desktop is current
+     * overwrites the user's value out of nowhere. Same clear-scope/write-scope
+     * pairing as AutotileEngine::setGlobalSplitRatio and its master-count twin.
+     */
+    enum class PropagateScope {
+        CurrentContext,
+        AllContexts,
+    };
+
+    /**
      * @brief Propagate global split ratio to screens without per-screen overrides
      */
-    void propagateGlobalSplitRatio();
+    void propagateGlobalSplitRatio(PropagateScope scope = PropagateScope::CurrentContext);
 
     /**
      * @brief Propagate global master count to screens without per-screen overrides
      */
-    void propagateGlobalMasterCount();
+    void propagateGlobalMasterCount(PropagateScope scope = PropagateScope::CurrentContext);
 
     /**
      * @brief Backfill windows on screens where tiledWindowCount < maxWindows
@@ -1409,6 +1435,30 @@ private:
     // Rule-driven open-floating gate. Empty until the daemon wires it; while empty
     // no window is rule-floated. See FloatPredicate doc above.
     FloatPredicate m_floatPredicate{};
+
+    /**
+     * @brief An already-managed window ARRIVING in a state via
+     *        migrateWindowBetweenKeys, with the float state it held on the
+     *        source, captured before the source removed it.
+     *
+     * Set only for the duration of that migration's synchronous
+     * onWindowAdded() → insertWindow() call, so insertWindow can tell a
+     * migration apart from a genuine open. m_floatPredicate answers "should
+     * this app OPEN floating" — a pure app-rule match with no memory of a later
+     * Meta+F — so re-running it on a migration would silently re-float a
+     * float-ruled window the user had explicitly tiled. A migrating window
+     * carries this live float state across instead.
+     */
+    struct MigrationArrival
+    {
+        QString windowId;
+        bool wasFloating = false;
+    };
+    std::optional<MigrationArrival> m_migrationArrival;
+
+    /// The float state @p windowId must be inserted with: the live state it
+    /// carried across a migration, else the open-time "Float this app" rule.
+    bool insertShouldFloat(const QString& windowId) const;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;

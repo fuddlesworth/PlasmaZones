@@ -538,10 +538,9 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 
 // Hot-plug hook installed by warmUpNotifications. The single
 // ensureOsdScreenAddedConnected / ensurePassiveShellFor / wirePassiveShellSlots /
-// warmUpNotifications / destroyPassiveShell / unwirePassiveShellSlots are
-// extracted to overlayservice/shellhost_bridge.cpp - they're the daemon's
-// bridge to PhosphorOverlay::ShellHost, not OSD-specific. Keeps this TU
-// under the project's <800-line guideline.
+// warmUpNotifications / destroyPassiveShell / unwirePassiveShellSlots live in
+// overlayservice/shellhost_bridge.cpp - they're the daemon's bridge to
+// PhosphorOverlay::ShellHost, not OSD-specific.
 
 void OverlayService::onOsdDismissRequested()
 {

@@ -120,8 +120,7 @@ void RuleController::unsubscribeRulesChanged()
 
 // Label-lookup setters (setScreenLookup, setActivityLookup,
 // setSnappingLayoutLookup, setTilingAlgorithmLookup, setShaderEffectLookup,
-// setCurveLabelResolver) live in rulecontroller_lookups.cpp so this TU
-// stays under the project's 800-line cap.
+// setCurveLabelResolver) live in rulecontroller_lookups.cpp.
 
 bool RuleController::isDirty() const
 {
@@ -423,7 +422,7 @@ void RuleController::revert()
 
 // NOTE: the user-rule dirty check + global managed reset methods
 // (captureSavedSnapshot, userRulesDirty, resetManagedDefaults) live in
-// rulecontroller_baseline.cpp — split out to keep this TU under the 800-line cap.
+// rulecontroller_baseline.cpp.
 
 int RuleController::bandBaseForSection(RuleModel::Section section)
 {

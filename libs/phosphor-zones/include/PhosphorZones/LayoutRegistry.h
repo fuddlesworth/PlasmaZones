@@ -145,6 +145,15 @@ public:
     Q_INVOKABLE void removeLayoutById(const QUuid& id) override;
     Q_INVOKABLE Layout* duplicateLayout(Layout* source) override;
 
+    /// The literal suffix @ref duplicateLayout appends to the source layout's
+    /// name. Public so callers that post-process a duplicate's name (e.g. a
+    /// boundary clamp that must trim the base while keeping the suffix
+    /// intact) reference the same string instead of duplicating the literal.
+    static QString duplicateNameSuffix()
+    {
+        return QStringLiteral(" (Copy)");
+    }
+
     Layout* activeLayout() const override
     {
         return m_activeLayout;
@@ -164,8 +173,39 @@ public:
     Q_INVOKABLE void saveLayouts();
     void saveLayout(Layout* layout);
 
-    Q_INVOKABLE void importLayout(const QString& filePath);
-    Q_INVOKABLE void exportLayout(Layout* layout, const QString& filePath);
+    /// Load a layout from @p filePath and add it to the registry.
+    ///
+    /// Returns the imported layout, so callers can name what was imported
+    /// without guessing at registry order. Returns nullptr when the file is
+    /// missing, unreadable, empty, not JSON, fails schema validation, or does
+    /// not parse into a layout. The reason is logged. Failures report through
+    /// the return value rather than a signal because the D-Bus caller answers
+    /// a user who is waiting on the result of a file picker, and every one of
+    /// these branches used to be a silent early return.
+    Q_INVOKABLE Layout* importLayout(const QString& filePath);
+
+    /// Validate @p json against the bundled layout schema — the single gate
+    /// every untrusted layout document passes before it reaches
+    /// @c Layout::fromJson. Returns false when the document is not a
+    /// well-formed layout, logging @p context (a file path, or a name for the
+    /// ingress) followed by a per-error diagnostic.
+    ///
+    /// Static, and public so ingresses outside this library — the D-Bus layout
+    /// surface — apply the identical gate the file ingresses do. Without it an
+    /// out-of-range value (a zero-width zone, say) is accepted and persisted,
+    /// then refused by this same schema on the next startup, and the layout
+    /// disappears with no user-visible cause. The schema is compiled once
+    /// process-wide and validation reads only it, so this holds no registry
+    /// state and is safe to call from anywhere.
+    static bool isLayoutJsonValid(const QJsonObject& json, const QString& context);
+
+    /// Write @p layout to @p filePath as a standalone layout document.
+    ///
+    /// Returns false when the destination cannot be opened, written or
+    /// committed. Failures report through the return value for the same
+    /// file-picker reason as importLayout(). The write is atomic, so a failure
+    /// leaves whatever was already at the destination untouched.
+    Q_INVOKABLE bool exportLayout(Layout* layout, const QString& filePath);
 
     // ─── Assignment persistence (via config backend) ──────────────────────
 
@@ -329,8 +369,8 @@ public:
     void setDefaultAssignmentSuppressedProvider(std::function<bool()> provider);
 
     /// True when the snapping-preferred provider is wired AND reports true — i.e.
-    /// snapping is globally enabled (the daemon wires the provider to
-    /// `ISettings::snappingEnabled`). Mirrors the internal default-assignment
+    /// snapping is globally enabled (the consumer wires the provider to its
+    /// global snapping-enabled setting). Mirrors the internal default-assignment
     /// branch's `m_snappingPreferredProvider && m_snappingPreferredProvider()`
     /// test, exposed so other engines can gate cross-engine coordination on the
     /// global snap toggle. When unset, returns false (no provider ⇒ not preferred).
@@ -425,13 +465,6 @@ public:
     ContextTilingParams resolveContextTilingParams(const QString& screenId, int virtualDesktop,
                                                    const QString& activity) const;
 
-    /// Stamp the screen-orientation token onto @p query from
-    /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
-    /// returns nullopt). Called at every windowless-context query build site so a
-    /// @c Field::ScreenOrientation predicate can match regardless of which
-    /// context slot (assignment / gap / lock / overlay) is being resolved.
-    /// Orientation is geometry-derived and layout-independent, so this is safe to
-    /// call from the assignment cascade (no recursion, unlike an active-layout read).
     /// The screen-orientation token from @ref m_screenOrientationProvider ("portrait"
     /// / "landscape"), or an empty string when the provider is unset or returns
     /// nullopt. Shared by @ref stampScreenOrientation (the query value) and the
@@ -446,6 +479,13 @@ public:
         return QString();
     }
 
+    /// Stamp the screen-orientation token onto @p query from
+    /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
+    /// returns nullopt). Called at every windowless-context query build site so a
+    /// @c Field::ScreenOrientation predicate can match regardless of which
+    /// context slot (assignment / gap / lock / overlay) is being resolved.
+    /// Orientation is geometry-derived and layout-independent, so this is safe to
+    /// call from the assignment cascade (no recursion, unlike an active-layout read).
     void stampScreenOrientation(PhosphorRules::WindowQuery& query, const QString& screenId) const
     {
         query.screenOrientation = screenOrientationToken(screenId);
@@ -593,8 +633,8 @@ public:
 
     /// quicklayouts.json top-level keys: one nested slot object per tiling
     /// mode. This is the ONLY on-disk shape — there is no flat legacy variant.
-    /// Shared with the v3→v4 schema migration (configmigration.cpp), which
-    /// writes the same nested format, so reader and migration cannot drift.
+    /// Shared with a consumer's v3→v4 schema migration, which writes the same
+    /// nested format, so reader and migration cannot drift.
     static constexpr QLatin1String QuickSlotsSnappingKey{"snapping"};
     static constexpr QLatin1String QuickSlotsAutotileKey{"autotile"};
 

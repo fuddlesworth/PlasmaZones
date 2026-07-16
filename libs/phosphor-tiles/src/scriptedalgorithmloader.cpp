@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/LuauTileAlgorithm.h>
 #include "tileslogging.h"
@@ -273,6 +274,15 @@ void ScriptedAlgorithmLoader::scanAndRegister(PhosphorFsLoader::LiveReload liveR
 QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesInScanOrder)
 {
     auto* registry = m_registry;
+    // The constructor's Q_ASSERT(m_registry) is compiled out of a release
+    // build, where this and loadFromDirectory both dereference the pointer
+    // unguarded and would crash on the first valid script rather than assert.
+    // The destructor already guards the same way, so match it: a null registry
+    // means there is nothing to scan into.
+    if (!registry) {
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithmLoader::performScan: no registry, skipping scan";
+        return {};
+    }
 
     // Track which script IDs we register in this scan
     QSet<QString> newScriptIds;
@@ -280,6 +290,7 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     // Save old tracking map so we can detect stale entries afterwards
     QHash<QString, QString> oldScriptIdToPath = m_scriptIdToPath;
     m_scriptIdToPath.clear();
+    m_refusedFilePaths.clear();
 
     // `algorithmDirectories()` returns dirs in [sys-lowest, ...,
     // sys-highest, user] order (system-first / user-last). Reverse-
@@ -376,9 +387,17 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     // atomic-rename inode-replacement window the legacy followup timer
     // used to cover.
     QStringList desiredFileWatches;
-    desiredFileWatches.reserve(m_scriptIdToPath.size());
+    desiredFileWatches.reserve(m_scriptIdToPath.size() + m_refusedFilePaths.size());
     for (auto it = m_scriptIdToPath.constBegin(); it != m_scriptIdToPath.constEnd(); ++it) {
         desiredFileWatches.append(it.value());
+    }
+    // Refused files (invalid script, duplicate id, built-in collision) stay
+    // watched too. They own no registry entry, but an in-place write that
+    // fixes the script (repaired source, changed id metadata) must trigger a
+    // rescan just like an edit to a registered script — the directory watch
+    // alone misses in-place inode writes.
+    for (const QString& path : std::as_const(m_refusedFilePaths)) {
+        desiredFileWatches.append(path);
     }
     return desiredFileWatches;
 }
@@ -432,34 +451,37 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             qCWarning(PhosphorTiles::lcTilesLib) << "Skipping script with invalid filename:" << fullPath;
             continue;
         }
-        // Create with nullptr parent so the registry takes full ownership
+        // Create with nullptr parent, held by unique_ptr so every refusal below
+        // can just `continue` and stay leak-free by construction. Ownership is
+        // released to the registry on the one success path, which takes it over
         // via the deferred-delete shared_ptr inside its TileAlgorithmEntry
-        // (deleteLater() while Qt is alive) in registerAlgorithm(). If the algo
-        // is invalid, we delete it explicitly below. Pass the watchdog as
-        // shared_ptr so the algorithm keeps it alive across deferred-delete
-        // teardown (the algorithm dtor can run after the loader is gone — see
-        // LuauTileAlgorithm.h for the contract).
+        // (deleteLater() while Qt is alive) in registerAlgorithm(). Pass the
+        // watchdog as shared_ptr so the algorithm keeps it alive across
+        // deferred-delete teardown (the algorithm dtor can run after the loader
+        // is gone — see LuauTileAlgorithm.h for the contract).
         // Trusted bundled scripts share one sandboxed VM (prelude + baseline
         // paid once); untrusted user scripts each get their own isolated,
         // per-engine-capped VM. If the shared VM can't be built, bundled
         // scripts fall back to their own VMs (correct, just less memory-frugal).
-        LuauTileAlgorithm* algo = nullptr;
+        std::unique_ptr<LuauTileAlgorithm> algo;
         if (!isUserDir) {
             if (const std::shared_ptr<PhosphorScripting::LuauEngine> shared = ensureSharedEngine()) {
-                algo = new LuauTileAlgorithm(fullPath, shared, m_watchdog, nullptr);
+                algo = std::make_unique<LuauTileAlgorithm>(fullPath, shared, m_watchdog, nullptr);
             }
         }
         if (!algo) {
-            algo = new LuauTileAlgorithm(fullPath, m_watchdog, nullptr);
+            algo = std::make_unique<LuauTileAlgorithm>(fullPath, m_watchdog, nullptr);
         }
         if (!algo->isValid()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
-            delete algo;
+            m_refusedFilePaths.insert(fullPath);
             continue;
         }
 
-        // Use id metadata if present, otherwise default to "script:filename"
-        const QString scriptId = algo->id().isEmpty() ? (QStringLiteral("script:") + baseName) : algo->id();
+        // Use id metadata if present, otherwise default to "script:filename".
+        // LuauTileAlgorithm builds the same id for itself, so the prefix is
+        // shared rather than spelled twice.
+        const QString scriptId = algo->id().isEmpty() ? (AutotileDefaults::ScriptIdPrefix + baseName) : algo->id();
 
         // registerAlgorithm() handles replacement internally (removes old,
         // takes ownership of new) — no need to unregister first.
@@ -492,11 +514,28 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
                     << "Duplicate algorithm '" << scriptId << "' — kept '" << existingPath << "', skipped '" << fullPath
                     << "' (first registration wins)";
             }
-            delete algo;
+            m_refusedFilePaths.insert(fullPath);
             continue;
         }
 
-        registry->registerAlgorithm(scriptId, algo);
+        // A script may shadow another script (XDG priority, enforced by the
+        // first-wins guard above) but must NEVER shadow a C++ built-in:
+        // registerAlgorithm() replaces on duplicate id, and the stale sweep
+        // in scanAndRegister would later unregister the id outright when the
+        // script file disappears — leaving the built-in gone until restart.
+        // Probe the live registry: a non-scripted entry under this id is a
+        // built-in, so refuse the file. The refusal must keep the id OUT of
+        // m_scriptIdToPath so neither the stale sweep nor the file-watch
+        // bookkeeping ever sees it.
+        if (const TilingAlgorithm* existing = m_registry->algorithm(scriptId); existing && !existing->isScripted()) {
+            qCWarning(PhosphorTiles::lcTilesLib).nospace()
+                << "Script '" << fullPath << "' declares id '" << scriptId
+                << "' which collides with a built-in algorithm — skipped (scripts cannot replace built-ins)";
+            m_refusedFilePaths.insert(fullPath);
+            continue;
+        }
+
+        registry->registerAlgorithm(scriptId, algo.release());
         m_scriptIdToPath[scriptId] = fullPath;
 
         qCInfo(PhosphorTiles::lcTilesLib)

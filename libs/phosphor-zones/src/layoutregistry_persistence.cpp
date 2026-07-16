@@ -37,11 +37,92 @@ const PhosphorFsLoader::SchemaValidator& layoutSchemaValidator()
     return validator;
 }
 
+/// Open @p file and write @p doc into its staging file WITHOUT committing, so
+/// the caller can decide later whether the rename happens. Cancels the staging
+/// file and returns false when the open or the write fails; on success the
+/// caller owns the commit (or a cancelWriting). @p path names the destination
+/// in log output only.
+bool stageJson(QSaveFile& file, const QJsonDocument& doc, const QString& path)
+{
+    if (!file.open(QIODevice::WriteOnly)) {
+        qCWarning(lcZonesLib) << "Failed to open file for writing:" << path << "Error:" << file.errorString();
+        return false;
+    }
+    const QByteArray payload = doc.toJson(QJsonDocument::Indented);
+    if (file.write(payload) != payload.size()) {
+        qCWarning(lcZonesLib) << "Failed to write file:" << path << "Error:" << file.errorString();
+        file.cancelWriting();
+        return false;
+    }
+    return true;
+}
+
 } // namespace
+
+bool LayoutRegistry::isLayoutJsonValid(const QJsonObject& json, const QString& context)
+{
+    const auto errors = layoutSchemaValidator().validate(json);
+    if (!errors) {
+        return true;
+    }
+    qCWarning(lcZonesLib) << "Rejecting layout failing schema validation:" << context;
+    PhosphorFsLoader::logSchemaErrors(lcZonesLib(), *errors);
+    return false;
+}
 
 void LayoutRegistry::loadLayouts()
 {
     ensureLayoutDirectory();
+
+    // Retire the previous in-memory set before the scan. This is a RELOAD, not
+    // an append: callers invoke it precisely to pick up on-disk changes (the
+    // editor and the settings app both re-call it on every daemon layout
+    // signal), and without the clear every entry would hit the duplicate-id
+    // branch below and be skipped — the reload would silently keep serving the
+    // stale objects.
+    //
+    // The retired objects are parented to this registry, so: drop the
+    // active/previous pointers (they are re-seated by id after the scan, since
+    // a layout with the same UUID comes back as a NEW object), disconnect the
+    // save hook so a retired layout can't write back, and deleteLater rather
+    // than delete (project rule; the pointers are also inert from here — out
+    // of m_layouts and disconnected).
+    //
+    // Consumers DO cache a Layout* across this boundary, so deleteLater alone
+    // is not what keeps them safe. The invariant every holder must satisfy is:
+    // hold the layout as a QPointer, or connect to its destroyed signal and
+    // null the cached pointer there. destroyed fires when the deferred delete
+    // runs, i.e. before the memory goes away, so both forms self-null. A
+    // raw-pointer holder in the daemon or the settings app must connect the
+    // layout's destroyed signal and null its cache the same way the QPointer
+    // holders in this library do. Same-library holders show both forms:
+    // LayoutComputeService::m_trackedLayouts is a QPointer set, while
+    // ZoneDetector::m_layout is a raw pointer with a destroyed guard (see
+    // ZoneDetector::setLayout). A new raw-pointer holder without one of those
+    // two is a use-after-free — this function does not protect it.
+    //
+    // Grep for the type alone and you will miss holders: a set typed
+    // QSet<QObject*> rather than QSet<Layout*> matches neither "Layout*" nor
+    // "QPointer<Layout>". Anything that keeps a Layout as a base-class pointer
+    // belongs on this list too.
+    //
+    // Self-nulling only gets a holder to null, not to the replacement object,
+    // which is why the activeLayoutChanged emit at the end of this function is
+    // load-bearing: it is what re-seats them onto the freshly-built instance
+    // (the daemon re-seats ZoneDetector from it).
+    const QUuid activeIdBefore = m_activeLayout ? m_activeLayout->id() : QUuid();
+    const QUuid previousIdBefore = m_previousLayout ? m_previousLayout->id() : QUuid();
+    const QVector<PhosphorZones::Layout*> retired = m_layouts;
+    m_layouts.clear();
+    m_activeLayout = nullptr;
+    m_previousLayout = nullptr;
+    for (PhosphorZones::Layout* layout : retired) {
+        if (!layout) {
+            continue;
+        }
+        disconnect(layout, &PhosphorZones::Layout::layoutModified, this, nullptr);
+        layout->deleteLater();
+    }
 
     // Load the per-layout settings sidecar once up front so each layout's
     // settings can be merged back onto its structural JSON as it loads.
@@ -72,17 +153,34 @@ void LayoutRegistry::loadLayouts()
 
     // Sort by defaultOrder (from layout JSON) so the preferred default is first when defaultLayoutId is empty
     std::stable_sort(m_layouts.begin(), m_layouts.end(), [](PhosphorZones::Layout* a, PhosphorZones::Layout* b) {
-        return (a ? a->defaultOrder() : 999) < (b ? b->defaultOrder() : 999);
+        return (a ? a->defaultOrder() : PhosphorZones::Layout::DefaultOrderUnset)
+            < (b ? b->defaultOrder() : PhosphorZones::Layout::DefaultOrderUnset);
     });
 
-    // Set initial active layout if none set: use defaultLayout() (settings-based fallback)
+    // Re-seat the active / previous pointers onto the freshly-built objects.
+    // Same UUID means the same layout to every consumer, but it is a different
+    // instance now and the old one is queued for deletion. A layout that is
+    // gone from disk re-seats to null.
+    const bool hadActive = !activeIdBefore.isNull();
+    m_activeLayout = hadActive ? layoutById(activeIdBefore) : nullptr;
+    m_previousLayout = previousIdBefore.isNull() ? nullptr : layoutById(previousIdBefore);
+
+    // Set initial active layout if none set: use defaultLayout() (settings-based fallback).
+    // Also covers a reload whose active layout no longer exists on disk.
     if (!m_activeLayout && !m_layouts.isEmpty()) {
         PhosphorZones::Layout* initial = defaultLayout();
         if (initial) {
             qCInfo(lcZonesLib) << "Active layout name=" << initial->name() << "id=" << initial->id().toString()
                                << "zones=" << initial->zoneCount();
         }
-        setActiveLayout(initial);
+        setActiveLayout(initial); // emits activeLayoutChanged itself
+    } else if (m_activeLayout || hadActive) {
+        // Either re-seated to a NEW object behind the same UUID, or the active
+        // layout is gone from disk and there is nothing to fall back to. Both
+        // are real pointer changes, not spurious emits: subscribers cache the
+        // pointer and the instance they hold is deleteLater'd a tick from now,
+        // so they have to be told to re-read it.
+        Q_EMIT activeLayoutChanged(m_activeLayout);
     }
 
     Q_EMIT layoutsLoaded();
@@ -111,7 +209,8 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // the skip-list as a one-release safety net in case a stale copy lingers
         // in a system data dir the migration didn't delete.
         if (entry == QStringLiteral("assignments.json") || entry == QStringLiteral("autotile-overrides.json")
-            || entry == QStringLiteral("rules.json") || entry == QStringLiteral("quicklayouts.json")) {
+            || entry == QStringLiteral("rules.json") || entry == QStringLiteral("quicklayouts.json")
+            || entry == QStringLiteral("layout-settings.json")) {
             continue;
         }
 
@@ -149,9 +248,7 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // third-party layout files (missing zones, out-of-range relative
         // geometry, wrong types) up front with a precise diagnostic, rather
         // than letting them fall through to fromJson and produce broken zones.
-        if (const auto errors = layoutSchemaValidator().validate(structural)) {
-            qCWarning(lcZonesLib) << "Skipping layout file failing schema validation:" << filePath;
-            PhosphorFsLoader::logSchemaErrors(lcZonesLib(), *errors);
+        if (!isLayoutJsonValid(structural, filePath)) {
             continue;
         }
 
@@ -162,6 +259,33 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         const QString layoutId = structural.value(::PhosphorZones::ZoneJsonKeys::Id).toString();
         const QJsonObject merged =
             LayoutSettingsStore::mergeSettings(structural, m_layoutSettings.settingsFor(layoutId));
+
+        // Re-validate after the merge. The sidecar is a separate document that
+        // reaches fromJson through this path, and while mergeSettings restricts
+        // itself to the settings key set (so it can no longer overwrite the id
+        // or any other structural key), the VALUES it inserts under those keys
+        // are still whatever a corrupt or hand-edited sidecar entry holds.
+        //
+        // Be precise about what this catches, because it is narrow. The schema
+        // declares only the structural keys plus showZoneNumbers, and leaves
+        // additionalProperties open — so of everything mergeSettings injects,
+        // only showZoneNumbers is type-checked here. The rest (the gap/padding
+        // values, overlayDisplayMode, autoAssign, hiddenFromSelector,
+        // useFullScreenGeometry, shaderId/shaderParams, the zoneAppearance
+        // block) passes unexamined and is left to fromJson's own per-key
+        // coercion. What this gate is really for is the structural surface the
+        // sidecar can no longer reach: mergeSettings re-emits the zones array
+        // when it applies zoneAppearance, so a merge that damaged a zone object
+        // is caught here rather than becoming broken geometry. Tightening the
+        // schema over the settings keys would widen it, but every producer of
+        // each key has to be enumerated first — a declared type narrower than
+        // what some writer emits rejects the user's whole layout.
+        //
+        // The structural check stays: it runs first so a fault in the layout
+        // file is reported against the layout file.
+        if (!isLayoutJsonValid(merged, filePath + QStringLiteral(" (merged with layout-settings sidecar)"))) {
+            continue;
+        }
 
         auto layout = PhosphorZones::Layout::fromJson(merged, this);
         if (!layout) {
@@ -193,7 +317,8 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
                         layout->setSystemSourcePath(existing->sourcePath());
                     }
                     // Preserve defaultOrder from system layout when user copy doesn't have one
-                    if (layout->defaultOrder() == 999 && existing->defaultOrder() != 999) {
+                    if (layout->defaultOrder() == PhosphorZones::Layout::DefaultOrderUnset
+                        && existing->defaultOrder() != PhosphorZones::Layout::DefaultOrderUnset) {
                         layout->setDefaultOrder(existing->defaultOrder());
                     }
                     int index = m_layouts.indexOf(existing);
@@ -202,13 +327,26 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
                     connect(layout, &PhosphorZones::Layout::layoutModified, this, [this, layout]() {
                         saveLayout(layout);
                     });
-                    delete existing;
+                    // deleteLater, not delete (project rule: no manual delete).
+                    // The replaced object is inert from here — removed from
+                    // m_layouts and disconnected above — and the daemon spins
+                    // its event loop after loadLayouts(), so the deferred
+                    // deletion runs. No layoutRemoved is emitted: bulk load is
+                    // deliberately signal-silent per layout, loadLayouts()
+                    // emits a single layoutsChanged at the end.
+                    //
+                    // No active/previous re-seat here: `existing` was appended
+                    // by this same scan, and loadLayouts() nulls both pointers
+                    // before the scan and re-seats them by id afterwards, so
+                    // neither can be pointing at it.
+                    existing->deleteLater();
                     qCInfo(lcZonesLib) << "User layout overrides system layout name=" << layout->name()
                                        << "from=" << filePath;
                 } else {
                     // Same source type or system trying to override user - skip
                     qCInfo(lcZonesLib) << "Skipping duplicate layout name=" << layout->name() << "id=" << layout->id();
-                    delete layout;
+                    // deleteLater, not delete — see the override branch above.
+                    layout->deleteLater();
                 }
             }
         } else {
@@ -218,7 +356,8 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
                 QFile::remove(filePath);
                 qCInfo(lcZonesLib) << "Removed orphaned layout file:" << filePath;
             }
-            delete layout;
+            // deleteLater, not delete — see the override branch above.
+            layout->deleteLater();
         }
     }
 }
@@ -245,40 +384,71 @@ void LayoutRegistry::saveLayout(PhosphorZones::Layout* layout)
         qCInfo(lcZonesLib) << "Captured system origin for" << layout->name() << "from=" << layout->sourcePath();
     }
 
-    const QString filePath = layoutFilePath(layout->id());
-    // QSaveFile gives atomic temp-write + rename — a crash mid-write never
-    // leaves a truncated layout file on disk.
-    QSaveFile file(filePath);
-
-    if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(lcZonesLib) << "Failed to open layout file for writing:" << filePath
-                              << "Error:" << file.errorString();
-        return;
-    }
-
     // Split the full layout JSON: the per-layout SETTINGS go to the sidecar
     // (keyed by layout UUID), and only the structural definition is written to
     // the layout file. toJson() includes systemSourcePath so it persists across
     // daemon restarts.
     const QJsonObject full = layout->toJson();
-    m_layoutSettings.setSettingsFor(layout->id().toString(), LayoutSettingsStore::extractSettings(full));
-    if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
-        qCWarning(lcZonesLib) << "Failed to persist layout settings sidecar for" << layout->id().toString();
+
+    // The sidecar entry lands on a CANDIDATE copy of the store, not on the
+    // shared one. m_layoutSettings is whole-file state: every saveLayout /
+    // removeLayout writes all of it, so mutating it before the write that can
+    // reject it would let a later successful save for a DIFFERENT layout flush
+    // this layout's new settings while this layout's file still held the old
+    // structure. The candidate is committed into the shared store only once
+    // both files are down.
+    LayoutSettingsStore candidateSettings = m_layoutSettings;
+    candidateSettings.setSettingsFor(layout->id().toString(), LayoutSettingsStore::extractSettings(full));
+
+    // The sidecar and the layout file are ONE unit, so both are STAGED through
+    // QSaveFile (temp-write, no rename) before either is committed. Everything
+    // that can realistically fail — open, write, disk-full — happens during
+    // staging, and any failure there cancels both stagings and leaves the
+    // last-good pair from the previous save untouched. What is left is the two
+    // renames: the layout file commits first, and only its success unlocks the
+    // sidecar's commit.
+    //
+    // That leaves exactly one non-atomic window: the sidecar's rename failing
+    // after the layout file's rename succeeded, which lands new structure
+    // against old settings. Closing it would need a journal; instead, that path
+    // leaves the layout dirty and the shared store un-advanced (so memory still
+    // matches the sidecar on disk), and saveLayouts / the layoutModified
+    // connection retry the whole pair.
+    //
+    // Writing the settings inline to the layout file as a fallback does NOT
+    // work: mergeSettings gives the SIDECAR precedence on key conflict at load
+    // (QJsonObject::insert overwrites the file's inline value), so a stale
+    // sidecar would shadow the fresh inline value and the newer setting would
+    // sit on disk unreachable.
+    const QString filePath = layoutFilePath(layout->id());
+    const QString settingsPath = layoutSettingsFilePath();
+    QSaveFile layoutFile(filePath);
+    QSaveFile sidecarFile(settingsPath);
+
+    if (!stageJson(layoutFile, QJsonDocument(LayoutSettingsStore::stripSettings(full)), filePath)) {
+        return;
     }
-
-    QJsonDocument doc(LayoutSettingsStore::stripSettings(full));
-    const QByteArray data = doc.toJson(QJsonDocument::Indented);
-
-    if (file.write(data) != data.size()) {
-        qCWarning(lcZonesLib) << "Failed to write layout file:" << filePath << "Error:" << file.errorString();
-        file.cancelWriting();
+    if (!stageJson(sidecarFile, QJsonDocument(candidateSettings.toJson()), settingsPath)) {
+        qCWarning(lcZonesLib) << "Abandoning save of layout" << layout->id().toString()
+                              << "- layout stays dirty for retry";
+        layoutFile.cancelWriting();
         return;
     }
 
-    if (!file.commit()) {
-        qCWarning(lcZonesLib) << "Failed to commit layout file:" << filePath << "Error:" << file.errorString();
+    if (!layoutFile.commit()) {
+        qCWarning(lcZonesLib) << "Failed to commit layout file:" << filePath << "Error:" << layoutFile.errorString();
+        sidecarFile.cancelWriting();
         return;
     }
+    if (!sidecarFile.commit()) {
+        qCWarning(lcZonesLib) << "Failed to commit layout settings sidecar:" << settingsPath
+                              << "Error:" << sidecarFile.errorString()
+                              << "- the layout file already landed; layout stays dirty so the pair is rewritten";
+        return;
+    }
+
+    // Both files are down — the candidate is now what disk holds.
+    m_layoutSettings = std::move(candidateSettings);
 
     // Update sourcePath so isSystemLayout() returns correctly after saving
     layout->setSourcePath(filePath);
@@ -400,28 +570,28 @@ void LayoutRegistry::saveAssignments()
     writeQuickLayouts();
 }
 
-void LayoutRegistry::importLayout(const QString& filePath)
+PhosphorZones::Layout* LayoutRegistry::importLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
         qCWarning(lcZonesLib) << "Cannot import layout: file path is empty";
-        return;
+        return nullptr;
     }
 
     QFile file(filePath);
     if (!file.exists()) {
         qCWarning(lcZonesLib) << "Cannot import layout: file does not exist:" << filePath;
-        return;
+        return nullptr;
     }
 
     if (!file.open(QIODevice::ReadOnly)) {
         qCWarning(lcZonesLib) << "Failed to open layout file for import:" << filePath << "Error:" << file.errorString();
-        return;
+        return nullptr;
     }
 
     const QByteArray data = file.readAll();
     if (data.isEmpty()) {
         qCWarning(lcZonesLib) << "Cannot import layout: file is empty:" << filePath;
-        return;
+        return nullptr;
     }
 
     QJsonParseError parseError;
@@ -429,22 +599,20 @@ void LayoutRegistry::importLayout(const QString& filePath)
     if (parseError.error != QJsonParseError::NoError) {
         qCWarning(lcZonesLib) << "Failed to parse layout file for import:" << filePath
                               << "Error:" << parseError.errorString() << "at offset" << parseError.offset;
-        return;
+        return nullptr;
     }
 
     // Import is an untrusted-input load path (a user-picked file), so gate it on
     // the same schema as the directory scan rather than letting a malformed file
     // reach fromJson and produce broken zones.
-    if (const auto errors = layoutSchemaValidator().validate(doc.object())) {
-        qCWarning(lcZonesLib) << "Cannot import layout: file failing schema validation:" << filePath;
-        PhosphorFsLoader::logSchemaErrors(lcZonesLib(), *errors);
-        return;
+    if (!isLayoutJsonValid(doc.object(), filePath)) {
+        return nullptr;
     }
 
     auto* parsed = PhosphorZones::Layout::fromJson(doc.object(), this);
     if (!parsed) {
         qCWarning(lcZonesLib) << "Failed to create layout from imported JSON:" << filePath;
-        return;
+        return nullptr;
     }
 
     // Regenerate IDs if UUID collides with an existing layout
@@ -452,7 +620,8 @@ void LayoutRegistry::importLayout(const QString& filePath)
     if (layoutById(parsed->id())) {
         qCInfo(lcZonesLib) << "importLayout: UUID collision, regenerating IDs";
         layout = new PhosphorZones::Layout(*parsed);
-        delete parsed;
+        // deleteLater, not delete — see the override branch in loadLayouts().
+        parsed->deleteLater();
     }
 
     // Reset visibility restrictions since screen/desktop/activity names are machine-specific
@@ -464,24 +633,31 @@ void LayoutRegistry::importLayout(const QString& filePath)
     addLayout(layout);
 
     qCInfo(lcZonesLib) << "Imported layout:" << layout->name() << "from" << filePath;
+    return layout;
 }
 
-void LayoutRegistry::exportLayout(PhosphorZones::Layout* layout, const QString& filePath)
+bool LayoutRegistry::exportLayout(PhosphorZones::Layout* layout, const QString& filePath)
 {
     if (!layout) {
         qCWarning(lcZonesLib) << "Cannot export layout: layout is null";
-        return;
+        return false;
     }
 
     if (filePath.isEmpty()) {
         qCWarning(lcZonesLib) << "Cannot export layout: file path is empty";
-        return;
+        return false;
     }
 
-    QFile file(filePath);
+    // QSaveFile for the same reason saveLayout uses it, and one more: the
+    // destination is a file the user picked, which may already hold something
+    // they want. A plain QFile opened WriteOnly truncates it the moment it
+    // opens, so a write that then failed left them with neither their old file
+    // nor an export. The temp-write plus rename only replaces the destination
+    // once the whole document is down.
+    QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly)) {
         qCWarning(lcZonesLib) << "Failed to open file for layout export:" << filePath << "Error:" << file.errorString();
-        return;
+        return false;
     }
 
     QJsonDocument doc(layout->toJson());
@@ -489,14 +665,19 @@ void LayoutRegistry::exportLayout(PhosphorZones::Layout* layout, const QString& 
 
     if (file.write(data) != data.size()) {
         qCWarning(lcZonesLib) << "Failed to write layout to file:" << filePath << "Error:" << file.errorString();
-        return;
+        return false;
     }
 
-    if (!file.flush()) {
-        qCWarning(lcZonesLib) << "Failed to flush layout export file:" << filePath << "Error:" << file.errorString();
+    // commit() flushes, closes and renames. It is the only point at which the
+    // export is known to have landed: a buffered write can still fail here, and
+    // the previous form reported success after logging a failed flush.
+    if (!file.commit()) {
+        qCWarning(lcZonesLib) << "Failed to commit layout export file:" << filePath << "Error:" << file.errorString();
+        return false;
     }
 
     qCInfo(lcZonesLib) << "Exported layout:" << layout->name() << "to" << filePath;
+    return true;
 }
 
 PhosphorZones::Layout* LayoutRegistry::restoreSystemLayout(const QUuid& id, const QString& systemPath)
@@ -520,15 +701,16 @@ PhosphorZones::Layout* LayoutRegistry::restoreSystemLayout(const QUuid& id, cons
 
     // Gate on the same schema as the scan/import paths so a corrupt system file
     // is refused rather than restored as broken zones.
-    if (const auto errors = layoutSchemaValidator().validate(doc.object())) {
-        qCWarning(lcZonesLib) << "System layout failing schema validation:" << systemPath;
-        PhosphorFsLoader::logSchemaErrors(lcZonesLib(), *errors);
+    if (!isLayoutJsonValid(doc.object(), systemPath)) {
         return nullptr;
     }
 
     auto* layout = PhosphorZones::Layout::fromJson(doc.object(), this);
     if (!layout || layout->id() != id) {
-        delete layout;
+        if (layout) {
+            // deleteLater, not delete — see the override branch in loadLayouts().
+            layout->deleteLater();
+        }
         return nullptr;
     }
 

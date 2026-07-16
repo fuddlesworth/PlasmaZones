@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -50,16 +49,8 @@ Rectangle {
     implicitHeight: content.implicitHeight + Kirigami.Units.largeSpacing
     radius: Kirigami.Units.smallSpacing
     color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
-    border.width: Math.round(Screen.devicePixelRatio)
+    border.width: 1
     border.color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-    // CheckBox role rather than RadioButton — radio buttons imply that
-    // exactly one option is selected and that clicking the active item is
-    // a no-op, but this tile supports click-to-clear (deselection) so a
-    // checkable-button affordance is the correct semantics for screen
-    // readers ("checked" / "unchecked" toggles per tile).
-    Accessible.role: Accessible.CheckBox
-    Accessible.name: i18n("Filter rules to monitor %1", monitorLabel.text)
-    Accessible.checked: tile.selected
 
     ColumnLayout {
         id: content
@@ -151,17 +142,17 @@ Rectangle {
                     var n = tile._ruleCount;
                     var countLabel = i18np("%n rule", "%n rules", n);
                     if (!tile._assigned)
-                        return i18n("Not assigned") + " · " + countLabel;
+                        return i18nc("@label monitor caption", "%1 · %2", i18n("Not assigned"), countLabel);
 
                     // `tilingEnabled` means "the screen's window-management
                     // engine is NOT disabled" for whatever engine it runs
                     // (snapping / autotile / scrolling), so the label stays
                     // engine-agnostic rather than saying "Tiling off".
                     if (!tile.tileData.tilingEnabled)
-                        return i18n("Engine off") + " · " + countLabel;
+                        return i18nc("@label monitor caption", "%1 · %2", i18n("Engine off"), countLabel);
 
                     if (tile.tileData.layoutName && tile.tileData.layoutName.length > 0)
-                        return tile.tileData.layoutName + " · " + countLabel;
+                        return i18nc("@label monitor caption", "%1 · %2", tile.tileData.layoutName, countLabel);
 
                     return countLabel;
                 }
@@ -176,8 +167,21 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         hoverEnabled: true
         activeFocusOnTab: true
+        // a11y role lives on the focusable item (this MouseArea), so assistive
+        // tech sees the role and the focus together. CheckBox role rather than
+        // RadioButton — radio buttons imply that exactly one option is selected
+        // and that clicking the active item is a no-op, but this tile supports
+        // click-to-clear (deselection) so a checkable-button affordance is the
+        // correct semantics for screen readers ("checked" / "unchecked" toggles
+        // per tile).
+        Accessible.role: Accessible.CheckBox
+        Accessible.name: i18n("Filter rules to monitor %1", monitorLabel.text)
+        Accessible.checked: tile.selected
+        Accessible.focusable: true
         Keys.onSpacePressed: tile.clicked()
         Keys.onReturnPressed: tile.clicked()
+        // Numpad Enter alias, matching the sibling card components.
+        Keys.onEnterPressed: tile.clicked()
         onClicked: tile.clicked()
     }
 

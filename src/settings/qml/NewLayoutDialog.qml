@@ -18,24 +18,24 @@ import org.plasmazones.common as QFZCommon
 Kirigami.Dialog {
     id: root
 
-    required property var appSettings // Settings object (settingsBridge)
     required property var controller // SettingsController — CRUD + signals
     property int currentStep: 0
     property string selectedType: "custom"
     property int selectedAspectRatio: -1
     property bool openInEditor: true
     property string _previousAutoName: ""
-    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
-    readonly property color _subtleBg: _colors.subtleBg
-    readonly property color _subtleBorder: _colors.subtleBorder
-    readonly property color _accentBorder: _colors.accentBorder
-    readonly property color _badgeBg: _colors.badgeBg
-    readonly property color _badgeBorder: _colors.badgeBorder
-    // Match the user's primary monitor aspect ratio for the preview.
-    // Re-evaluated on open so it picks up the correct screen even if the
-    // dialog is constructed before the window is shown on a display.
-    // Clamped to [1.0, 3.6] to keep the preview usable on extreme aspect ratios (e.g. 32:9).
-    property real screenAspectRatio: 16 / 9
+    // Set for the duration of a create, so the button and the Return key
+    // cannot both land a second createNewLayout call.
+    property bool _creating: false
+    // Match the monitor's aspect ratio for the preview, clamped to [1.0, 3.6]
+    // so an extreme ratio (e.g. 32:9) keeps the preview usable.
+    // Read through the content Item rather than this root. `Screen` on a Popup
+    // resolves against no window of its own, so it answers for the primary
+    // monitor: the preview took the primary display's ratio even when the
+    // dialog was open on another one. Through the Item it follows the window,
+    // and as a binding it keeps following it across screens rather than
+    // sampling once on open.
+    readonly property real screenAspectRatio: WizardUtils.clampedScreenAspectRatio(dialogContent.Screen.width, dialogContent.Screen.height)
     // Template previews match TemplateService strategies exactly
     // (see src/editor/services/TemplateService.cpp and core/constants.h)
     readonly property var templates: [
@@ -246,11 +246,13 @@ Kirigami.Dialog {
         root.openInEditor = true;
         nameField.text = "";
         root._previousAutoName = "";
-        root.screenAspectRatio = WizardUtils.clampedScreenAspectRatio(Screen.width, Screen.height);
+        root._creating = false;
         wizardFooter.errorText = "";
     }
 
     ColumnLayout {
+        id: dialogContent
+
         spacing: Kirigami.Units.largeSpacing
 
         // ── Step indicator ─────────────────────────────────────────────
@@ -265,8 +267,6 @@ Kirigami.Dialog {
 
         // ── Page stack ─────────────────────────────────────────────────
         StackLayout {
-            id: pageStack
-
             Layout.fillWidth: true
             currentIndex: root.currentStep
 
@@ -294,7 +294,6 @@ Kirigami.Dialog {
                             id: templateDelegate
 
                             required property var modelData
-                            required property int index
 
                             templateName: templateDelegate.modelData.name
                             templateDesc: templateDelegate.modelData.desc
@@ -329,20 +328,15 @@ Kirigami.Dialog {
                 spacing: Kirigami.Units.largeSpacing
 
                 // Landscape preview matching monitor aspect ratio
-                Rectangle {
-                    Layout.preferredWidth: Math.min(Kirigami.Units.gridUnit * 26, parent ? parent.width : Kirigami.Units.gridUnit * 26)
-                    Layout.preferredHeight: Layout.preferredWidth / root.screenAspectRatio
-                    Layout.maximumHeight: Kirigami.Units.gridUnit * 12
-                    Layout.alignment: Qt.AlignHCenter
-                    radius: Kirigami.Units.smallSpacing * 2
-                    color: root._subtleBg
-                    border.width: Math.round(Screen.devicePixelRatio)
-                    border.color: root._accentBorder
+                WizardPreviewFrame {
+                    aspectRatio: root.screenAspectRatio
 
                     QFZCommon.ZonePreview {
                         anchors.fill: parent
                         anchors.margins: Kirigami.Units.largeSpacing
-                        anchors.bottomMargin: Kirigami.Units.largeSpacing * 2
+                        // Space for the bottom name bar, same reservation as
+                        // LayoutThumbnail makes for its label.
+                        anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5 + Kirigami.Units.smallSpacing
                         zones: root.selectedTemplate.zones
                         showZoneNumbers: true
                         isHovered: true
@@ -372,9 +366,28 @@ Kirigami.Dialog {
 
                             Layout.fillWidth: true
                             placeholderText: i18n("My Layout")
+                            // Mirrors PlasmaZones::MaxLayoutNameLength (core/constants.h),
+                            // same client-side cap as the editor's layout name field.
+                            maximumLength: 40
                             Accessible.name: i18n("Layout name")
-                            Keys.onReturnPressed: {
-                                if (wizardFooter.createEnabled)
+                            // Return creates the layout while the name field holds
+                            // focus, the way a dialog's default button would. Scoped
+                            // to this field rather than a footer-wide Shortcut: a
+                            // Shortcut preempts the focused item, so it would steal
+                            // Return from the aspect-ratio group's own selection
+                            // handler, and it would stay armed after the dialog
+                            // closed. Same contract as NewAlgorithmDialog.
+                            //
+                            // A failed create releases the `_creating` guard so the
+                            // user can retry, which leaves a held Return free to
+                            // re-fire the D-Bus call on every repeat. Ignore
+                            // auto-repeat so one press is one attempt.
+                            Keys.onReturnPressed: event => {
+                                if (!event.isAutoRepeat && wizardFooter.createEnabled)
+                                    wizardFooter.createClicked();
+                            }
+                            Keys.onEnterPressed: event => {
+                                if (!event.isAutoRepeat && wizardFooter.createEnabled)
                                     wizardFooter.createClicked();
                             }
                         }
@@ -400,17 +413,36 @@ Kirigami.Dialog {
                             opacity: 0.7
                         }
 
+                        // Index maps straight onto AspectRatioClass
+                        // (Any=0, Standard=1, Ultrawide=2, SuperUltrawide=3,
+                        // Portrait=4), the same way the editor's
+                        // LayoutSettingsDialog and Main.qml's filter do. The
+                        // value travels unmapped into setLayoutAspectRatioClass,
+                        // so a shift here would tag every layout with the
+                        // neighbouring class and put Portrait out of reach.
+                        //
+                        // selectedAspectRatio starts at -1 for "not chosen",
+                        // which createNewLayout reads as "skip the call" and
+                        // leaves the daemon's own Any default. From that
+                        // initial state, clicking Any is swallowed rather than
+                        // writing 0: the group already displays index 0 (the
+                        // Math.max below clamps -1 to 0), so its same-index
+                        // click guard eats the click and selectedAspectRatio
+                        // stays -1. Once another class has been picked the
+                        // index no longer matches, so clicking Any does write
+                        // 0. The daemon default is Any, so the net behavior is
+                        // the same either way.
                         SettingsButtonGroup {
-                            model: [i18n("Auto"), "16:9", "21:9", "32:9", i18n("Portrait")]
-                            currentIndex: root.selectedAspectRatio + 1
+                            model: [i18n("Any"), "16:9", "21:9", "32:9", i18n("Portrait")]
+                            currentIndex: Math.max(0, root.selectedAspectRatio)
                             onIndexChanged: index => {
-                                root.selectedAspectRatio = index - 1;
+                                root.selectedAspectRatio = index;
                             }
                         }
 
                         Label {
-                            visible: root.selectedAspectRatio === -1
-                            text: i18n("Auto-detected from your primary monitor")
+                            visible: root.selectedAspectRatio <= 0
+                            text: i18n("This layout is offered on every monitor")
                             font: Kirigami.Theme.smallFont
                             opacity: 0.4
                         }
@@ -422,10 +454,10 @@ Kirigami.Dialog {
 
                     // Options
                     CheckBox {
+                        // AbstractButton already names itself from `text`.
                         text: i18n("Open in editor after creation")
                         checked: root.openInEditor
                         onToggled: root.openInEditor = checked
-                        Accessible.name: text
                     }
                 }
             }
@@ -446,13 +478,25 @@ Kirigami.Dialog {
 
         currentStep: root.currentStep
         createText: i18n("Create Layout")
-        createEnabled: nameField.text.trim().length > 0
+        createEnabled: nameField.text.trim().length > 0 && !root._creating
         onBackClicked: root.currentStep = 0
         onNextClicked: root.currentStep = 1
         onCreateClicked: {
+            // close() runs an exit transition during which the footer stays
+            // live, so without this a second click would create a second
+            // layout. Return key auto-repeat reaches the same handler.
+            if (root._creating)
+                return;
+
+            root._creating = true;
             wizardFooter.errorText = "";
-            if (root.controller.createNewLayout(nameField.text.trim(), root.selectedType, root.selectedAspectRatio, root.openInEditor))
+            if (root.controller.createNewLayout(nameField.text.trim(), root.selectedType, root.selectedAspectRatio, root.openInEditor)) {
                 root.close();
+            } else {
+                // Creation failed and the dialog stays open showing why, so
+                // release the guard for the retry.
+                root._creating = false;
+            }
         }
         onCancelClicked: root.close()
     }

@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
-import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -25,6 +23,12 @@ Rectangle {
     required property real spacing
     required property Item drawingArea
     required property Repeater zonesRepeater
+    // Floor the drawn thickness: with zone padding 0 the gap is 0, and a
+    // zero-thickness handle would leave the grip and centre line with nothing to
+    // draw into, so the divider would be invisible even though it is grabbable.
+    // What makes it grabbable at a zero gap is DividerManager raising the whole
+    // subtree over the zones, not this floor.
+    readonly property real handleThickness: Math.max(spacing, Kirigami.Units.smallSpacing)
     // Derived properties from dividerInfo
     property bool isVertical: dividerInfo ? dividerInfo.isVertical : false
     property real dividerPosition: dividerInfo ? dividerInfo.position : 0
@@ -32,8 +36,7 @@ Rectangle {
     // Drag state for smooth visual updates
     property bool isDragging: false
     property real dragPosition: dividerPosition // Current position during drag
-    property var zoneStartPositions: ({
-    }) // Store initial zone positions
+    property var zoneStartPositions: ({}) // Store initial zone positions
     // Use dragPosition if it differs significantly from dividerInfo.position
     // This handles the case where zones haven't updated yet after release
     // Threshold 0.02 matches roundToThreshold precision (0.01) with margin
@@ -43,7 +46,7 @@ Rectangle {
     signal dragStarted(var zoneStartPositions)
     signal dragMoved(real newPosition)
     signal dragEnded(real finalPosition, real originalPosition)
-    signal dragCancelled()
+    signal dragCancelled
 
     // Public methods for parent to call
     function resetDragPosition() {
@@ -52,7 +55,7 @@ Rectangle {
 
     function restoreZoneVisuals() {
         if (!drawingArea)
-            return ;
+            return;
 
         for (var ri = 0; ri < zonesRepeater.count; ri++) {
             var zoneItemR = zonesRepeater.itemAt(ri);
@@ -73,17 +76,19 @@ Rectangle {
     // Position divider in the gap between displayed zones
     // Zones are displayed with x+spacing/2, so divider must align with that
     // Use dragPosition if dragging or if dividerInfo hasn't caught up yet
-    x: dividerInfo ? (dividerInfo.isVertical ? (shouldUseDragPosition ? dragPosition * drawingArea.width - spacing / 2 : dividerInfo.x - spacing / 2) : dividerInfo.x + spacing / 2) : 0
-    y: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.y + spacing / 2 : (shouldUseDragPosition ? dragPosition * drawingArea.height - spacing / 2 : dividerInfo.y - spacing / 2)) : 0
-    width: dividerInfo ? (dividerInfo.isVertical ? spacing : dividerInfo.width - spacing) : 0 // Horizontal: span minus margins
-    height: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.height - spacing : spacing) : 0 // Horizontal divider height = spacing
+    x: dividerInfo ? (dividerInfo.isVertical ? (shouldUseDragPosition ? dragPosition * drawingArea.width - handleThickness / 2 : dividerInfo.x - handleThickness / 2) : dividerInfo.x + spacing / 2) : 0
+    y: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.y + spacing / 2 : (shouldUseDragPosition ? dragPosition * drawingArea.height - handleThickness / 2 : dividerInfo.y - handleThickness / 2)) : 0
+    width: dividerInfo ? (dividerInfo.isVertical ? handleThickness : dividerInfo.width - spacing) : 0 // Horizontal: span minus margins
+    height: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.height - spacing : handleThickness) : 0 // Horizontal divider height = floored spacing
     // Background - subtle base color, more visible on hover/drag
     color: (dividerMouseArea.containsMouse || isDragging) ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, isDragging ? 0.4 : 0.25) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
     border.color: (dividerMouseArea.containsMouse || isDragging) ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
     border.width: isDragging ? 2 : (dividerMouseArea.containsMouse ? 1 : 0)
     radius: isVertical ? (width / 2) : (height / 2)
-    // Dividers stay below zones (z:60) and well below resize handles (z:200+ within zones)
-    // Only raise slightly when dragging to provide visual feedback
+    // Orders this handle against the OTHER handles only: every divider shares
+    // DividerManager's stacking context, so this cannot lift one over a zone.
+    // Where the dividers sit relative to the zones is DividerManager's z.
+    // Raise the dragged handle so it draws over any divider it crosses.
     z: isDragging ? 45 : 40
     // Sync dragPosition to dividerPosition when not dragging (e.g. after undo/redo or
     // any external zone change). Without this, undo/redo leaves dragPosition stale so
@@ -91,7 +96,6 @@ Rectangle {
     onDividerPositionChanged: {
         if (!isDragging && dividerInfo)
             dragPosition = dividerPosition;
-
     }
 
     // Grip pattern - always visible but more prominent on hover/drag
@@ -139,20 +143,15 @@ Rectangle {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
                     }
-
                 }
 
                 Behavior on color {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // Center line indicator - more prominent on hover/drag
@@ -168,9 +167,7 @@ Rectangle {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
             }
-
         }
-
     }
 
     MouseArea {
@@ -190,7 +187,7 @@ Rectangle {
         Accessible.role: Accessible.Slider
         Accessible.name: dividerHandle.isVertical ? i18nc("@action:button", "Vertical zone divider") : i18nc("@action:button", "Horizontal zone divider")
         Accessible.description: dividerHandle.isVertical ? i18nc("@info:tooltip", "Drag horizontally to resize adjacent zones") : i18nc("@info:tooltip", "Drag vertically to resize adjacent zones")
-        onPressed: function(mouse) {
+        onPressed: function (mouse) {
             mouse.accepted = true;
             dividerHandle.isDragging = true;
             preventStealing = true;
@@ -200,8 +197,7 @@ Rectangle {
             startDividerPos = dividerHandle.dividerPosition;
             dividerHandle.dragPosition = startDividerPos;
             // Capture starting positions of all affected zones from the zonesRepeater
-            var startPos = {
-            };
+            var startPos = {};
             for (var i = 0; i < dividerHandle.zonesRepeater.count; i++) {
                 var zoneItem = dividerHandle.zonesRepeater.itemAt(i);
                 if (!zoneItem)
@@ -213,21 +209,20 @@ Rectangle {
                     var z = zoneItem.zoneData;
                     if (z)
                         startPos[zoneId] = {
-                        "x": z.x,
-                        "y": z.y,
-                        "width": z.width,
-                        "height": z.height
-                    };
-
+                            "x": z.x,
+                            "y": z.y,
+                            "width": z.width,
+                            "height": z.height
+                        };
                 }
             }
             dividerHandle.zoneStartPositions = startPos;
             // Emit signal to notify parent of drag start
             dividerHandle.dragStarted(startPos);
         }
-        onPositionChanged: function(mouse) {
+        onPositionChanged: function (mouse) {
             if (!pressed || !dividerHandle.isDragging)
-                return ;
+                return;
 
             var mouseInCanvas = dividerMouseArea.mapToItem(dividerHandle.drawingArea, mouse.x, mouse.y);
             var currentMousePos = dividerHandle.isVertical ? mouseInCanvas.x : mouseInCanvas.y;
@@ -259,7 +254,6 @@ Rectangle {
                         var newWidth = startData.width + posDelta;
                         if (newWidth > 0.05)
                             zoneItem.visualWidth = newWidth * dividerHandle.drawingArea.width;
-
                     } else if (Math.abs(zoneLeft - startDividerPos) < 0.02) {
                         // Zone is to the RIGHT of divider - adjust x and width
                         var newX = startData.x + posDelta;
@@ -278,7 +272,6 @@ Rectangle {
                         var newHeight = startData.height + posDelta;
                         if (newHeight > 0.05)
                             zoneItem.visualHeight = newHeight * dividerHandle.drawingArea.height;
-
                     } else if (Math.abs(zoneTop - startDividerPos) < 0.02) {
                         // Zone is BELOW divider - adjust y and height
                         var newY = startData.y + posDelta;
@@ -295,7 +288,7 @@ Rectangle {
         }
         onReleased: {
             if (!dividerHandle.isDragging)
-                return ;
+                return;
 
             dividerHandle.isDragging = false;
             var finalPos = dividerHandle.dragPosition;
@@ -333,17 +326,14 @@ Rectangle {
     Behavior on color {
         PhosphorMotionAnimation {
             profile: "widget.hover"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
-
     }
 
     Behavior on border.color {
         PhosphorMotionAnimation {
             profile: "widget.hover"
-            durationOverride: Theme.animDuration
+            durationOverride: Kirigami.Units.longDuration
         }
-
     }
-
 }

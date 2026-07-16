@@ -3,7 +3,6 @@
     "name": "Super-Ultrawide 6-Grid",
     "description": "3x2 grid optimized for 32:9 super-ultrawide monitors",
     "type": 3,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "super-ultrawide",
     "zones": [

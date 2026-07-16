@@ -3,7 +3,6 @@
     "name": "Ultrawide Master + Stack",
     "description": "40% master with 3 stacked zones, proportioned for 21:9 monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "ultrawide",
     "zones": [

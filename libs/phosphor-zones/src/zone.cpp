@@ -144,6 +144,15 @@ void Zone::setGeometryModeInt(int mode)
 
 ZONE_SETTER(const QRectF&, FixedGeometry, m_fixedGeometry, fixedGeometryChanged)
 
+QRectF Zone::sanitizeFixedGeometry(const QRectF& geometry)
+{
+    const qreal x = std::isfinite(geometry.x()) ? geometry.x() : 0.0;
+    const qreal y = std::isfinite(geometry.y()) ? geometry.y() : 0.0;
+    const qreal width = std::isfinite(geometry.width()) ? qMax(0.0, geometry.width()) : 0.0;
+    const qreal height = std::isfinite(geometry.height()) ? qMax(0.0, geometry.height()) : 0.0;
+    return QRectF(x, y, width, height);
+}
+
 bool Zone::containsPoint(const QPointF& point) const
 {
     return m_geometry.contains(point);
@@ -216,12 +225,23 @@ QJsonObject Zone::toJson(const QRectF& referenceGeometry) const
     // Relative geometry for resolution independence (always written for backward compat)
     // For fixed-mode zones, compute correct 0-1 coords from pixel geometry so that
     // consumers reading only relativeGeometry (previews, KCM thumbnails) show correct positions.
-    QRectF normGeo = normalizedGeometry(referenceGeometry);
+    //
+    // Clamped to 0–1, the range the key is defined over and the same range
+    // fromJson clamps to on the way back in, so the two ends of the round-trip
+    // agree. This is the ONLY thing that keeps the emitted value inside the
+    // schema, and the schema gate drops the WHOLE layout when it fails: a fixed
+    // zone can sit at a negative offset (the format allows it, see fromJson) or
+    // overflow the screen it is normalized against, and either way the raw
+    // quotient lands outside 0–1. Clamping costs nothing real — a fixed zone
+    // renders from fixedGeometry below, which round-trips untouched, so the
+    // clamp only bounds the derived hint the preview consumers read, and it
+    // bounds it to the closest true statement (the zone's edge of the screen).
+    const QRectF normGeo = normalizedGeometry(referenceGeometry);
     QJsonObject relGeo;
-    relGeo[X] = normGeo.x();
-    relGeo[Y] = normGeo.y();
-    relGeo[Width] = normGeo.width();
-    relGeo[Height] = normGeo.height();
+    relGeo[X] = qBound(0.0, normGeo.x(), 1.0);
+    relGeo[Y] = qBound(0.0, normGeo.y(), 1.0);
+    relGeo[Width] = qBound(0.0, normGeo.width(), 1.0);
+    relGeo[Height] = qBound(0.0, normGeo.height(), 1.0);
     json[RelativeGeometry] = relGeo;
 
     // Per-zone geometry mode (only write when Fixed to maintain backward compat)
@@ -274,22 +294,36 @@ Zone* Zone::fromJson(const QJsonObject& json, QObject* parent)
         QRectF(qBound(0.0, relGeo[X].toDouble(), 1.0), qBound(0.0, relGeo[Y].toDouble(), 1.0),
                qBound(0.0, relGeo[Width].toDouble(), 1.0), qBound(0.0, relGeo[Height].toDouble(), 1.0));
 
-    // Per-zone geometry mode (default Relative if missing)
-    zone->m_geometryMode = static_cast<ZoneGeometryMode>(json[GeometryMode].toInt(0));
+    // Per-zone geometry mode (default Relative if missing). Routed through the
+    // validating setter rather than a raw cast: the cast accepts any int, and
+    // the schema does not constrain the key, so "geometryMode": 7 would survive
+    // every gate and then stick forever — toJson only writes the key when the
+    // mode is Fixed, so the garbage would never be re-emitted and never
+    // repaired. setGeometryModeInt leaves an out-of-range value at the default.
+    const int rawMode = json[GeometryMode].toInt(0);
+    zone->setGeometryModeInt(rawMode);
+    if (rawMode != static_cast<int>(zone->m_geometryMode)) {
+        qCWarning(lcZonesLib) << "Zone::fromJson: out-of-range GeometryMode" << rawMode << "for zone"
+                              << zone->m_id.toString() << "— falling back to" << static_cast<int>(zone->m_geometryMode);
+    }
 
     // Fixed geometry (only present when mode is Fixed). X/Y are pixel offsets
-    // (negative allowed for off-screen positioning); width/height must be >= 0.
+    // (negative allowed for off-screen positioning); width/height must be > 0.
     if (json.contains(FixedGeometry)) {
         const auto fixedGeo = json[FixedGeometry].toObject();
-        zone->m_fixedGeometry = QRectF(fixedGeo[X].toDouble(), fixedGeo[Y].toDouble(),
-                                       qMax(0.0, fixedGeo[Width].toDouble()), qMax(0.0, fixedGeo[Height].toDouble()));
-    } else if (zone->m_geometryMode == ZoneGeometryMode::Fixed) {
-        // GeometryMode=Fixed but no FixedGeometry payload — a hand-edited /
-        // partial JSON would otherwise silently produce an invisible zone
-        // anchored at the screen origin that swallows snap targets. Drop
-        // back to Relative so the zone renders with its authored
-        // relativeGeometry instead.
-        qCWarning(lcZonesLib) << "Zone::fromJson: GeometryMode=Fixed but FixedGeometry missing for zone"
+        zone->m_fixedGeometry = sanitizeFixedGeometry(QRectF(fixedGeo[X].toDouble(), fixedGeo[Y].toDouble(),
+                                                             fixedGeo[Width].toDouble(), fixedGeo[Height].toDouble()));
+    }
+    // GeometryMode=Fixed with no usable FixedGeometry — the key is absent, or
+    // it carries a payload that cannot describe a zone that renders (a negative
+    // or non-finite extent). A hand-edited / partial JSON would otherwise
+    // silently produce an invisible zone anchored at the screen origin that
+    // swallows snap targets, and a zero-extent one would additionally normalize
+    // to a zero-extent relativeGeometry that the schema rejects on the next
+    // read, taking the whole layout with it. Drop back to Relative so the zone
+    // renders with its authored relativeGeometry instead.
+    if (zone->m_geometryMode == ZoneGeometryMode::Fixed && zone->m_fixedGeometry.isEmpty()) {
+        qCWarning(lcZonesLib) << "Zone::fromJson: GeometryMode=Fixed but FixedGeometry missing or degenerate for zone"
                               << zone->m_id.toString() << "— downgrading to Relative";
         zone->m_geometryMode = ZoneGeometryMode::Relative;
     }

@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import PlasmaZones
@@ -521,7 +520,7 @@ Kirigami.Dialog {
                     // shader renders over this, and a tinted background would
                     // contaminate the previewed colors.
                     color: "black"
-                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+                    border.width: 1
                     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
                     clip: true
 

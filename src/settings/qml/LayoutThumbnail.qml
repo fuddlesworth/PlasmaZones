@@ -28,8 +28,8 @@ Rectangle {
     property bool fontStrikeout: false
     readonly property real previewOpacity: 0.2 // Increased for better background contrast
     readonly property real borderOpacity: 0.9 // Increased for better border visibility
-    readonly property int normalBorderWidth: Math.round(Screen.devicePixelRatio)
-    readonly property int selectedBorderWidth: Math.round(Screen.devicePixelRatio * 2.5) // Thicker when selected
+    readonly property int normalBorderWidth: 1
+    readonly property int selectedBorderWidth: 3 // Thicker when selected
     // Override: set to a positive value to force the aspect ratio for the target screen
     // (e.g., a virtual screen that is portrait even though the primary display is landscape).
     property real screenAspectRatio: 0
@@ -59,11 +59,11 @@ Rectangle {
             return refAR > 0 ? refAR : fallbackAspectRatio;
         }
     }
-    // Calculate dimensions based on the layout's aspect ratio.
-    // Portrait layouts use a base width (narrower) instead of base height.
-    readonly property bool isPortraitLayout: layoutAspectRatio < 1
+    // Calculate dimensions based on the layout's aspect ratio. Height is the
+    // fixed side for every class, so a portrait ratio (< 1) simply yields a
+    // narrower width, which the min/max clamp below keeps usable.
     property real baseHeight: Kirigami.Units.gridUnit * 9
-    readonly property real calculatedWidth: isPortraitLayout ? baseHeight * layoutAspectRatio : baseHeight * layoutAspectRatio
+    readonly property real calculatedWidth: baseHeight * layoutAspectRatio
     property real minThumbnailWidth: Kirigami.Units.gridUnit * 5 // Narrower min for portrait
     property real maxThumbnailWidth: Kirigami.Units.gridUnit * 26 // Wider max for super-ultrawide
 

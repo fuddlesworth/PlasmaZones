@@ -3,7 +3,6 @@
     "name": "Grid (2x2)",
     "description": "Four equal quadrants",
     "type": 3,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "standard",
     "zones": [

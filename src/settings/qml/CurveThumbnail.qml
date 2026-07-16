@@ -3,7 +3,6 @@
 
 import "EasingCurve.js" as Easing
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import "SpringPhysics.js" as Spring
 import org.kde.kirigami as Kirigami
@@ -37,10 +36,17 @@ Rectangle {
     implicitHeight: Kirigami.Units.gridUnit * 3
     radius: Kirigami.Units.smallSpacing
     color: Kirigami.Theme.backgroundColor
-    border.color: hoverArea.containsMouse ? Kirigami.Theme.highlightColor : (Kirigami.Theme.separatorColor !== undefined ? Kirigami.Theme.separatorColor : Kirigami.Theme.disabledTextColor)
-    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+    border.color: (hoverArea.containsMouse || root.activeFocus) ? Kirigami.Theme.highlightColor : (Kirigami.Theme.separatorColor !== undefined ? Kirigami.Theme.separatorColor : Kirigami.Theme.disabledTextColor)
+    border.width: root.activeFocus ? 2 : 1
     Accessible.name: i18n("Curve preview")
     Accessible.role: Accessible.Button
+    Accessible.focusable: true
+    // Keyboard and focus support, matching ColorButton.
+    activeFocusOnTab: true
+    Keys.onReturnPressed: root.clicked()
+    // Numpad Enter alias, matching the sibling card components.
+    Keys.onEnterPressed: root.clicked()
+    Keys.onSpacePressed: root.clicked()
     // Repaint when inputs change or when component is ready (theme available)
     Component.onCompleted: canvas.repaintCurve()
     onCurveChanged: canvas.repaintCurve()
@@ -96,7 +102,7 @@ Rectangle {
                 yMax += yRange * 0.08;
                 yRange = yMax - yMin;
                 ctx.strokeStyle = _strokeColor;
-                ctx.lineWidth = Math.max(1, Math.round(Screen.devicePixelRatio));
+                ctx.lineWidth = 1;
                 ctx.beginPath();
                 for (var i = 0; i <= steps; i++) {
                     var px = pad + (i / steps) * drawW;
@@ -132,7 +138,7 @@ Rectangle {
                 spMax += spRange * 0.08;
                 spRange = spMax - spMin;
                 ctx.strokeStyle = _strokeColor;
-                ctx.lineWidth = Math.max(1, Math.round(Screen.devicePixelRatio));
+                ctx.lineWidth = 1;
                 ctx.beginPath();
                 for (var sj = 0; sj <= spSteps; sj++) {
                     var spx = pad + (sj / spSteps) * drawW;
@@ -146,9 +152,12 @@ Rectangle {
             }
         }
 
-        // Re-resolve color when Kirigami theme actually becomes available
+        // Re-resolve the cached stroke colour when the palette changes, so a
+        // light/dark switch doesn't leave the curve in the old highlight colour.
+        // Every PlatformTheme colour shares the one `colorsChanged` notify
+        // signal — there is no per-colour signal to connect to.
         Connections {
-            function onHighlightColorChanged() {
+            function onColorsChanged() {
                 canvas.repaintCurve();
             }
 
@@ -162,6 +171,11 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: root.clicked()
+        onClicked: {
+            // Move active focus here on click so a previously keyboard-focused
+            // sibling doesn't keep the focus ring and the key handlers.
+            root.forceActiveFocus();
+            root.clicked();
+        }
     }
 }

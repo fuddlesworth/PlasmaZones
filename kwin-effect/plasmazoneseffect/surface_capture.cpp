@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The composite fold's INPUT side, split out of surfacelayers.cpp (which owns the
-// fold itself) to keep that TU under the 800-line limit.
+// fold itself).
 //
 // Two steps, in the order the fold runs them:
 //   ensureSurfaceTargets  — (re)allocate the per-window GL targets the fold draws

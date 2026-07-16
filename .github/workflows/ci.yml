@@ -404,6 +404,39 @@ jobs:
             data/algorithms/*.luau \
             libs/phosphor-tiles/src/pluau/pluau.luau
 
+      - name: Analyze the pluau type stubs
+        run: |
+          set -euo pipefail
+          # pluau.d.luau could not be checked the way it is normally used. As a
+          # source file its `declare` lines are a syntax error. And this
+          # analyzer has no defs flag at all — it takes an unknown `--` argument
+          # without a word and carries on, so a run "with" the stub reads it
+          # never. Either way the stub shipped ungated, and a typo'd or dangling
+          # type in it reached editors intact.
+          #
+          # The `declare` lines are the only part that is not valid source, and
+          # they carry no type information of their own. Strip them and analyze
+          # the type definitions, which is the whole rest of the file.
+          #
+          # This gates the stub's syntax and its internal type consistency. It
+          # cannot check the stub against the runtime it describes — that
+          # agreement is reviewed by hand.
+          # The stripped copy sits next to the file it is a copy of, so any
+          # .luaurc that would govern the real stub in this tree governs the
+          # copy too. No such config exists today (the repo's only .luaurc is
+          # data/algorithms/.luaurc, which is out of this path's lookup), so
+          # right now this resolves the same default config /tmp would. The
+          # trap clears the copy on the failing path too, where `set -e` would
+          # otherwise leave it behind.
+          #
+          # An all-declare file would strip to nothing; grep exits 1 on no
+          # match, so `set -e` fails the step rather than analyzing an empty
+          # file and passing.
+          stub_copy=libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
+          trap 'rm -f "$stub_copy"' EXIT
+          grep -v '^declare ' libs/phosphor-tiles/src/pluau/pluau.d.luau > "$stub_copy"
+          ./luau-cli/luau-analyze "$stub_copy"
+
   # ═══════════════════════════════════════════════════════════════════════════
   # Nix Flake CI (x86_64 + aarch64)
   # ═══════════════════════════════════════════════════════════════════════════

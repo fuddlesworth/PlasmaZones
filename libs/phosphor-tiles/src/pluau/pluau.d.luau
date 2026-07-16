@@ -33,11 +33,38 @@ export type ResizeEvent = {
     newRect: Zone,
     edges: { left: boolean, right: boolean, top: boolean, bottom: boolean },
 }
+-- Snapshot of the engine's tiling state, passed as the first argument to the
+-- lifecycle hooks (onWindowAdded / onWindowRemoved / onWindowResized). Built
+-- fresh per call; mutating it has no effect — persist via the onWindowResized
+-- return value instead.
+--
+-- `windows` is the tiled list truncated to the first 256 entries, so a slot's
+-- position is that window's tiled index. Nothing is reordered or substituted, so
+-- a slot never lies about which window sits at that index.
+--
+-- `focusedIndex` is the real tiled index, the same space as ResizeEvent.index and
+-- the `index` argument of onWindowAdded/onWindowRemoved, so compare those against
+-- it directly. It is NOT guaranteed to be a valid slot in `windows`: past 256
+-- tiled windows it can run past the end, so bound-check (`focusedIndex < #windows`)
+-- before indexing with it.
+export type HookState = {
+    windowCount: number, -- real tiled count, uncapped (may exceed #windows)
+    masterCount: number,
+    splitRatio: number,
+    windows: { WindowInfo }, -- first 256 tiled windows, in tiled order
+    focusedIndex: number, -- 0-based TILED index of the focused window (-1 if none); may exceed #windows
+    scriptState: { [string]: any }?, -- prior persistent bag; only with supportsScriptState set and a non-empty bag
+    countAfterRemoval: number?, -- onWindowRemoved only: windowCount minus the departing window
+}
 export type SplitNode = {
     splitRatio: number,
     splitHorizontal: boolean,
     windowId: string,
     isLeaf: boolean,
+    -- Both are absent past MAX_TREE_DEPTH, where the snapshot stops, even on a
+    -- node whose isLeaf is false. Walk on `node.first ~= nil` rather than on
+    -- `not node.isLeaf`, or a tree that deep indexes nil and the whole tile()
+    -- call errors out.
     first: SplitNode?,
     second: SplitNode?,
     leafCount: number?, -- present on the root only
@@ -45,22 +72,42 @@ export type SplitNode = {
 
 -- The context passed to an algorithm's tile() function. `count`/`gap` are the
 -- ergonomic names; `windowCount`/`innerGap` are the equivalents the bundled
--- (faithfully-ported) algorithms use. `area` arrives as a Rect with methods.
+-- (faithfully-ported) algorithms use.
+--
+-- `area` is a Rect (with its split/columns/rows methods) only for an algorithm
+-- declared through `pluau.algorithm{}`, which re-wraps it on the way in. The
+-- host marshals a plain {x,y,width,height} table, so a module exporting `tile`
+-- directly gets that instead. Every bundled algorithm uses the wrapper.
+--
+-- `count` is what tile() lays out: the tiled window count already reduced by the
+-- user's max-windows setting and by the 256 zone ceiling. `windows` runs exactly
+-- `count` long whenever it is present, in tiled order, so a slot's position is
+-- that window's tiled index.
+--
+-- `minSizes` and `currentGeometries` are the ones to guard. Either can be
+-- EMPTY regardless of the window count: minSizes is empty whenever the user
+-- turns off minimum-size handling, and currentGeometries is empty until a
+-- layout has been applied. Use `i < #minSizes` because the list may not be there
+-- at all, not because it might be truncated.
+--
+-- `focusedIndex` is the real tiled index, comparable with the 0 .. count - 1
+-- indices tile() lays out, and a valid slot in `windows` whenever it is not -1.
+-- (In a HookState it can run past #windows — see HookState.)
 export type Context = {
-    count: number,
+    count: number, -- tiled count, capped by the max-windows setting and by 256; equals #windows when windows is present
     windowCount: number,
     gap: number,
     innerGap: number,
     area: Rect,
     masterCount: number,
     splitRatio: number,
-    minSizes: { MinSize },
-    windows: { WindowInfo }?,
-    focusedIndex: number, -- 0-based tiled index of the focused window (-1 if none)
+    minSizes: { MinSize }, -- one per tiled window, or EMPTY if the user disabled minimum-size handling
+    windows: { WindowInfo }?, -- first 256 tiled windows, in tiled order
+    focusedIndex: number, -- 0-based TILED index of the focused window (-1 if none)
     screen: ScreenInfo?,
     tree: SplitNode?, -- present for memory-aware algorithms
     custom: { [string]: any }?,
-    currentGeometries: { Zone }?, -- last applied zones (advisory; post-enforcement)
+    currentGeometries: { Zone }?, -- last applied zones, capped at 256 (advisory; post-enforcement)
     state: { [string]: any }?, -- persistent script-state bag (see supportsScriptState)
 }
 
@@ -72,15 +119,19 @@ export type Metadata = {
     supportsSplitRatio: boolean?,
     supportsMemory: boolean?,
     supportsScriptState: boolean?, -- persists ctx.state across retiles (non-tree memory)
-    supportsMinSizes: boolean?,
+    supportsMinSizes: boolean?, -- defaults to TRUE when omitted (unlike every other flag); set false to opt out
     producesOverlappingZones: boolean?,
     centerLayout: boolean?,
     supportsSingleWindow: boolean?, -- algorithm lays out the lone window itself (else the host fills the work area for a lone window)
     retileOnFocus: boolean?, -- reflow when focus moves between tiled windows (focus-driven layouts, e.g. a spotlight that follows focus)
-    defaultSplitRatio: number?,
-    defaultMaxWindows: number?,
-    minimumWindows: number?,
-    masterZoneIndex: number?, -- 0-based index of the master zone
+    -- Metadata seeds the value the matching override below resolves, so both
+    -- reach the same clamp. The exceptions are the two whose built-in default
+    -- is not the low bound: a value of zero or less is replaced by that default
+    -- before any clamp sees it, so it does not come back as 1 or MIN_SPLIT.
+    defaultSplitRatio: number?, -- omit, or <= 0, for 0.5; otherwise clamped to MIN_SPLIT..MAX_SPLIT
+    defaultMaxWindows: number?, -- omit, or <= 0, for 6; otherwise clamped to 1..100
+    minimumWindows: number?, -- clamped to 1..100
+    masterZoneIndex: number?, -- 0-based index of the master zone, clamped to -1..255
     zoneNumberDisplay: string?,
     customParams: { any }?,
 }
@@ -89,16 +140,33 @@ export type Algorithm = {
     metadata: Metadata,
     tile: (ctx: Context) -> { Zone },
     -- index is the 0-based tiled index (NOT Luau-1-based).
-    onWindowAdded: ((state: any, index: number) -> ())?,
-    onWindowRemoved: ((state: any, index: number) -> ())?,
+    onWindowAdded: ((state: HookState, index: number) -> ())?,
+    onWindowRemoved: ((state: HookState, index: number) -> ())?,
     -- Called after an interactive resize. Return a control table (or nil to do
     -- nothing). Two optional, independent outputs:
     --   * splitRatio: number — a new master/split ratio the engine applies to this
     --     state (clamped); ratio-based algorithms reflow on resize this way. The
-    --     change stays local to the current screen+desktop.
+    --     change stays local to the current screen+desktop+activity.
     --   * any other keys — the new ctx.state bag; persisted only when
-    --     metadata.supportsScriptState is set (see `state` in Context).
-    onWindowResized: ((state: any, resize: ResizeEvent) -> { [string]: any }?)?,
+    --     metadata.supportsScriptState is set (see `state` in Context). The
+    --     table replaces the whole bag rather than merging into it, so return
+    --     every key you want to keep, and return nil to leave it untouched.
+    --     Returning only splitRatio from a supportsScriptState algorithm
+    --     therefore clears the bag, since splitRatio is stripped first.
+    onWindowResized: ((state: HookState, resize: ResizeEvent) -> { [string]: any }?)?,
+    -- Module-level overrides: when present, each takes precedence over the
+    -- metadata field of the same name, so a value can be computed instead of
+    -- declared. Each is called once when the script loads and the result is
+    -- cached for the algorithm's lifetime, so it cannot vary per retile. The
+    -- bundled algorithms all use plain metadata fields.
+    masterZoneIndex: (() -> number)?, -- clamped to -1..255
+    supportsMasterCount: (() -> boolean)?,
+    supportsSplitRatio: (() -> boolean)?,
+    producesOverlappingZones: (() -> boolean)?,
+    centerLayout: (() -> boolean)?,
+    minimumWindows: (() -> number)?, -- clamped to 1..100
+    defaultMaxWindows: (() -> number)?, -- clamped to 1..100
+    defaultSplitRatio: (() -> number)?, -- clamped to MIN_SPLIT..MAX_SPLIT
 }
 
 export type Pluau = {
@@ -112,18 +180,26 @@ export type Pluau = {
     join: (...{ Zone }) -> { Zone },
     algorithm: (def: Algorithm) -> Algorithm,
     -- geometry builtins (see pluau.luau for full signatures)
-    fillArea: (area: Rect, count: number) -> { Zone },
+    --
+    -- Every `area` below is Zone, not Rect: none of these calls a Rect method,
+    -- they only read x/y/width/height. Rect adds the split/columns/rows methods
+    -- on top of those four fields, so a Zone is NOT assignable to a Rect and
+    -- asking for one here would reject a plain {x,y,width,height} table under
+    -- --!strict. A module exporting `tile` directly receives exactly such a
+    -- table as ctx.area (see Context above), so demanding Rect would lock those
+    -- scripts out of their own helpers.
+    fillArea: (area: Zone, count: number) -> { Zone },
     fillRegion: (x: number, y: number, w: number, h: number, count: number) -> { Zone },
-    equalColumnsLayout: (area: Rect, count: number, gap: number, minSizes: { MinSize }) -> { Zone },
-    masterStackLayout: (area: Rect, count: number, gap: number, splitRatio: number, masterCount: number,
+    equalColumnsLayout: (area: Zone, count: number, gap: number, minSizes: { MinSize }) -> { Zone },
+    masterStackLayout: (area: Zone, count: number, gap: number, splitRatio: number, masterCount: number,
         minSizes: { MinSize }, horizontal: boolean) -> { Zone },
-    deckLayout: (area: Rect, count: number, focusedFraction: number, horizontal: boolean) -> { Zone },
-    lShapeLayout: (area: Rect, count: number, gap: number, splitRatio: number, distribute: string,
+    deckLayout: (area: Zone, count: number, focusedFraction: number, horizontal: boolean) -> { Zone },
+    lShapeLayout: (area: Zone, count: number, gap: number, splitRatio: number, distribute: string,
         bottomWidth: any, rightHeight: any) -> { Zone },
-    dwindleLayout: (area: Rect, count: number, splitRatio: number, innerGap: number, minSizes: { MinSize }) -> { Zone },
-    threeColumnLayout: (area: Rect, count: number, gap: number, splitRatio: number, masterCount: number,
+    dwindleLayout: (area: Zone, count: number, splitRatio: number, innerGap: number, minSizes: { MinSize }) -> { Zone },
+    threeColumnLayout: (area: Zone, count: number, gap: number, splitRatio: number, masterCount: number,
         minSizes: { MinSize }) -> { Zone },
-    applyTreeGeometry: (node: SplitNode, rect: Rect, gap: number, depth: number?) -> { Zone },
+    applyTreeGeometry: (node: SplitNode, rect: Zone, gap: number, depth: number?) -> { Zone },
     clampSplitRatio: (ratio: number) -> number,
     distributeWithGaps: (total: number, count: number, gap: number) -> { number },
     distributeWithMinSizes: (total: number, count: number, gap: number, minDims: { number }) -> { number },
@@ -138,19 +214,20 @@ export type Pluau = {
         minC: number, minR: number) -> { leftWidth: number, centerWidth: number, rightWidth: number,
         leftX: number, centerX: number, rightX: number },
     applyPerWindowMinSize: (w: number, h: number, minSizes: { MinSize }, i: number) -> { w: number, h: number },
+    -- minW/minH are keyed 0..windowCount inclusive, not 1-based arrays.
     computeCumulativeMinDims: (windowCount: number, minSizes: { MinSize }, innerGap: number)
-        -> { minW: { number }, minH: { number } },
-    appendGracefulDegradation: (zones: { Zone }, remaining: Rect, leftover: number, innerGap: number) -> (),
+        -> { minW: { [number]: number }, minH: { [number]: number } },
+    appendGracefulDegradation: (zones: { Zone }, remaining: Zone, leftover: number, innerGap: number) -> (),
     -- shared algorithm helpers
-    guardArea: (area: Rect, count: number) -> { Zone }?,
+    guardArea: (area: Zone, count: number) -> { Zone }?,
     clamp: (v: any, lo: number, hi: number) -> number?,
     center: (start: number, total: number, size: number) -> number,
-    gridShape: (count: number) -> (number, number),
+    gridShape: (count: number) -> (number, number), -- returns cols, rows
     cumulativeOffsets: (start: number, sizes: { number }, gap: number) -> { number },
-    minSizeAt: (minSizes: { MinSize }?, i: number) -> (number, number),
+    minSizeAt: (minSizes: { MinSize }?, i: number) -> (number, number), -- returns w, h
     resizeRatioGrow: (newSize: number, oldSize: number, oldRatio: number) -> number,
     resizeRatioShrink: (newSize: number, oldSize: number, oldRatio: number) -> number,
-    masterStackResize: (state: any, resize: ResizeEvent, horizontal: boolean) -> { [string]: any }?,
+    masterStackResize: (state: HookState, resize: ResizeEvent, horizontal: boolean) -> { [string]: any }?,
     stripLayout: (zones: { Zone }, startX: number, startY: number, panelW: number, panelH: number,
         count: number, gap: number, horizontal: boolean) -> (),
 }

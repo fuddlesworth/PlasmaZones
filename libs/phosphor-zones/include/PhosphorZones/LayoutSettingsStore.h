@@ -66,6 +66,14 @@ public:
     /// parse error.
     bool loadFromFile(const QString& path);
 
+    /// The on-disk document for the current in-memory map: stamped with
+    /// SchemaVersion, layouts with empty settings omitted. @ref saveToFile
+    /// writes exactly this. Exposed so a caller that must stage the sidecar
+    /// alongside another file — committing both only once neither can fail —
+    /// can produce the same bytes without going through saveToFile's
+    /// open/write/commit in one step.
+    QJsonObject toJson() const;
+
     /// Atomically write the in-memory map to @p path (stamped with
     /// SchemaVersion). Layouts with empty settings are omitted.
     bool saveToFile(const QString& path) const;

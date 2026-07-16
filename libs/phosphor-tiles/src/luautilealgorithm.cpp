@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 using PhosphorScripting::LuauEngine;
 
@@ -26,7 +27,56 @@ using namespace AutotileDefaults;
 
 namespace {
 
-constexpr qint64 MaxScriptSizeBytes = 1024 * 1024; // 1 MB
+// Numeric-metatype plus finiteness gate for untrusted script metadata values.
+// A non-numeric Luau value (table, bool) marshals to a QVariant whose
+// toDouble() is a finite 0.0, so an isValid()+isfinite check alone would let
+// it silently overwrite a declared default. Shared by parseCustomParam
+// (min/max bounds) and parseMetadata (reals and window counts).
+bool finiteNumber(const QVariantMap& m, const QString& key, double& out)
+{
+    const QVariant v = m.value(key);
+    if (!v.isValid() || !AutotileDefaults::isNumericMetaType(v.typeId())) {
+        return false;
+    }
+    const double d = v.toDouble();
+    if (!std::isfinite(d)) {
+        return false;
+    }
+    out = d;
+    return true;
+}
+
+// Marshal a window list for a script, capped at MaxZones. Shared by buildContext
+// (ctx.windows) and buildStateMap (state.windows) so both paths hand a script the
+// same contract.
+//
+// The cap is a plain truncation of the tiled order, so a slot's position in the
+// list IS that window's tiled index. That keeps one index space across every
+// number a script sees: ctx.focusedIndex, state.focusedIndex, ResizeEvent.index
+// and the windowIndex argument of onWindowAdded/onWindowRemoved are all real
+// tiled indices, and stay directly comparable with each other. Nothing is
+// reordered or substituted into a slot, so a slot never lies about which window
+// sits at that index.
+//
+// The list can therefore be shorter than the window count, and on the
+// buildStateMap path focusedIndex can point past its end (buildContext's caller
+// caps windowInfos at MaxZones first, so there it always lands inside). A script
+// indexing the list by a tiled index must bound-check against #windows.
+QVariantList marshalWindowList(const QVector<WindowInfo>& infos)
+{
+    const int cap = std::min(static_cast<int>(infos.size()), MaxZones);
+
+    QVariantList windows;
+    windows.reserve(cap);
+    for (int i = 0; i < cap; ++i) {
+        QVariantMap w;
+        w[QStringLiteral("appId")] = infos[i].appId;
+        w[QStringLiteral("focused")] = infos[i].focused;
+        w[QStringLiteral("windowId")] = infos[i].windowId;
+        windows.append(w);
+    }
+    return windows;
+}
 
 ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
 {
@@ -35,18 +85,24 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     d.type = m.value(QStringLiteral("type")).toString();
     d.defaultValue = m.value(QStringLiteral("default"));
     d.description = m.value(QStringLiteral("description")).toString();
-    const bool hasMin = m.contains(QStringLiteral("min"));
-    const bool hasMax = m.contains(QStringLiteral("max"));
-    if (hasMin) {
-        d.minValue = m.value(QStringLiteral("min")).toDouble();
+    // A non-numeric or non-finite bound (a script writing min = {} or 0/0 or
+    // math.huge) must not reach the normalisation below: a table/bool marshals
+    // to a finite 0.0 that would replace the default bound, and every NaN
+    // comparison is false, so the swap silently does nothing and the NaN
+    // survives into minValue/maxValue, which toVariantMap() hands to the
+    // settings slider as its range. Keep the default bound instead, as
+    // resolveReal() does for the metadata reals.
+    double bound = 0.0;
+    if (finiteNumber(m, QStringLiteral("min"), bound)) {
+        d.minValue = bound;
     }
-    if (hasMax) {
-        d.maxValue = m.value(QStringLiteral("max")).toDouble();
+    if (finiteNumber(m, QStringLiteral("max"), bound)) {
+        d.maxValue = bound;
     }
     // Guarantee a non-inverted range for the settings UI even when a script
     // supplies only one bound (the other keeps its default): an inverted
-    // [min, max] makes a slider/spinbox undefined. (hasMin/hasMax are read above
-    // to apply the explicit values; the normalisation itself is unconditional.)
+    // [min, max] makes a slider undefined. Both bounds are finite by
+    // here, so the comparison is meaningful and the swap is unconditional.
     if (d.minValue > d.maxValue) {
         const double t = d.minValue;
         d.minValue = d.maxValue;
@@ -54,9 +110,17 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     }
     // Keep a number param's default inside its own [min, max] range so the
     // settings control never initialises outside its track (mirrors the
-    // metadata clamping applied to defaultSplitRatio / window counts).
-    if (d.type == QLatin1String("number") && d.defaultValue.canConvert<double>()) {
-        d.defaultValue = std::clamp(d.defaultValue.toDouble(), d.minValue, d.maxValue);
+    // metadata clamping applied to defaultSplitRatio / window counts). Gated on
+    // the same numeric-metatype check as the bounds above, not on
+    // canConvert<double>(): a Luau table converts to no double at all, which
+    // would skip the clamp entirely and leave toVariantMap() handing the raw
+    // table to the settings control as a number param's default. Anything that
+    // is not a finite number (absent, table, bool, string, NaN) falls back to
+    // the low bound, which is always in range.
+    if (d.type == QLatin1String("number")) {
+        double def = 0.0;
+        d.defaultValue =
+            finiteNumber(m, QStringLiteral("default"), def) ? std::clamp(def, d.minValue, d.maxValue) : d.minValue;
     }
     d.enumOptions = m.value(QStringLiteral("options")).toStringList();
     return d;
@@ -64,6 +128,21 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
 
 ScriptedHelpers::ScriptMetadata parseMetadata(const QVariantMap& m)
 {
+    // Metadata is untrusted script input, and its numeric fields go straight to
+    // QVariant::toInt(), which truncates a double unchecked (0/0 yields 0, 1e18
+    // an arbitrary wrapped int). The callers then clamp that into range, so an
+    // unusable number lands as a plausible answer the script never gave:
+    // `masterZoneIndex = 0/0` comes out as 0, passes the clamp, and the
+    // exported accessor reports "zone 0 is the master". Keep the declared
+    // default instead (via the shared finiteNumber gate above), the same way
+    // parseCustomParam guards its bounds and resolveInt guards the override
+    // path.
+    const auto readInt = [&m](const QString& key, int& field) {
+        double d = 0.0;
+        if (finiteNumber(m, key, d) && d >= std::numeric_limits<int>::min() && d <= std::numeric_limits<int>::max()) {
+            field = static_cast<int>(d);
+        }
+    };
     ScriptedHelpers::ScriptMetadata md;
     md.name = m.value(QStringLiteral("name")).toString();
     md.description = m.value(QStringLiteral("description")).toString();
@@ -79,18 +158,13 @@ ScriptedHelpers::ScriptMetadata parseMetadata(const QVariantMap& m)
     if (m.contains(QStringLiteral("supportsMinSizes"))) {
         md.supportsMinSizes = m.value(QStringLiteral("supportsMinSizes")).toBool();
     }
-    if (m.contains(QStringLiteral("defaultSplitRatio"))) {
-        md.defaultSplitRatio = m.value(QStringLiteral("defaultSplitRatio")).toDouble();
+    double ratio = 0.0;
+    if (finiteNumber(m, QStringLiteral("defaultSplitRatio"), ratio)) {
+        md.defaultSplitRatio = ratio;
     }
-    if (m.contains(QStringLiteral("defaultMaxWindows"))) {
-        md.defaultMaxWindows = m.value(QStringLiteral("defaultMaxWindows")).toInt();
-    }
-    if (m.contains(QStringLiteral("minimumWindows"))) {
-        md.minimumWindows = m.value(QStringLiteral("minimumWindows")).toInt();
-    }
-    if (m.contains(QStringLiteral("masterZoneIndex"))) {
-        md.masterZoneIndex = m.value(QStringLiteral("masterZoneIndex")).toInt();
-    }
+    readInt(QStringLiteral("defaultMaxWindows"), md.defaultMaxWindows);
+    readInt(QStringLiteral("minimumWindows"), md.minimumWindows);
+    readInt(QStringLiteral("masterZoneIndex"), md.masterZoneIndex);
     const QString znd = m.value(QStringLiteral("zoneNumberDisplay")).toString();
     if (!znd.isEmpty()) {
         md.zoneNumberDisplay = PhosphorLayout::zoneNumberDisplayFromString(znd);
@@ -141,11 +215,21 @@ QVariantMap splitNodeToVariant(const SplitNode* node, int depth)
     m[QStringLiteral("splitHorizontal")] = node->splitHorizontal;
     m[QStringLiteral("windowId")] = node->windowId;
     m[QStringLiteral("isLeaf")] = node->isLeaf();
+    // At the depth cap the recursion yields an empty map. Assigning it anyway
+    // would hand the script a non-nil child whose every field is nil, which the
+    // `first: SplitNode?` / `second: SplitNode?` contract says cannot happen —
+    // so an exhausted child stays absent instead.
     if (node->first) {
-        m[QStringLiteral("first")] = splitNodeToVariant(node->first.get(), depth + 1);
+        const QVariantMap first = splitNodeToVariant(node->first.get(), depth + 1);
+        if (!first.isEmpty()) {
+            m[QStringLiteral("first")] = first;
+        }
     }
     if (node->second) {
-        m[QStringLiteral("second")] = splitNodeToVariant(node->second.get(), depth + 1);
+        const QVariantMap second = splitNodeToVariant(node->second.get(), depth + 1);
+        if (!second.isEmpty()) {
+            m[QStringLiteral("second")] = second;
+        }
     }
     return m;
 }
@@ -277,7 +361,7 @@ bool LuauTileAlgorithm::loadScript(const QString& filePath)
     // a supported operation). m_module is -1 and the engine pointers are null on
     // entry by construction.
     m_filePath = filePath;
-    m_scriptId = QStringLiteral("script:") + QFileInfo(filePath).completeBaseName();
+    m_scriptId = ScriptIdPrefix + QFileInfo(filePath).completeBaseName();
     m_valid = false;
     m_metadata = ScriptedHelpers::ScriptMetadata{};
 
@@ -330,14 +414,20 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         m_metadata = parseMetadata(md.toMap());
     }
 
-    // Seed caches from metadata (with unset → base default).
+    // Seed caches from metadata. An unset field falls back to this class's own
+    // default, which for defaultMaxWindows is ScriptedDefaultMaxWindows rather
+    // than TilingAlgorithm's base 5. The settings app's blank scaffold writes
+    // the field out from that same constant, and every bundled algorithm
+    // declares it, so a splice or duplicate inherits it from its source. Only a
+    // hand-authored script omitting it reaches the fallback.
     m_cachedMasterZoneIndex = m_metadata.masterZoneIndex;
     m_cachedSupportsMasterCount = m_metadata.supportsMasterCount;
     m_cachedSupportsSplitRatio = m_metadata.supportsSplitRatio;
     m_cachedProducesOverlappingZones = m_metadata.producesOverlappingZones;
     m_cachedCenterLayout = m_metadata.centerLayout;
     m_cachedMinimumWindows = (m_metadata.minimumWindows > 0) ? m_metadata.minimumWindows : 1;
-    m_cachedDefaultMaxWindows = (m_metadata.defaultMaxWindows > 0) ? m_metadata.defaultMaxWindows : 6;
+    m_cachedDefaultMaxWindows =
+        (m_metadata.defaultMaxWindows > 0) ? m_metadata.defaultMaxWindows : ScriptedDefaultMaxWindows;
     m_cachedDefaultSplitRatio = (m_metadata.defaultSplitRatio > 0.0) ? m_metadata.defaultSplitRatio : DefaultSplitRatio;
 
     // Optional override functions: called once at load, result cached (the
@@ -359,7 +449,34 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         }
         const auto out = m_engine->callModule(m_module, fn, {}, ScriptWatchdogTimeoutMs);
         warnIfFailed(fn, out.status);
-        return out.status == LuauEngine::CallStatus::Ok ? out.result.toInt() : fallback;
+        if (out.status != LuauEngine::CallStatus::Ok) {
+            return fallback;
+        }
+        // Reject a non-numeric return before coercing, not after. An override
+        // that returns nothing, nil, a string or a table marshals to a QVariant
+        // whose toDouble() is 0.0 — finite, in range, and indistinguishable
+        // from a real answer once coerced. That is exactly the case the range
+        // guard below cannot catch, and it turns "the script did not return a
+        // number" into a plausible-looking answer it never gave (masterZoneIndex
+        // 0 reads as "zone 0 is the master"). Same check the onWindowResized
+        // splitRatio path makes; a Luau number marshals to Double or LongLong.
+        if (!AutotileDefaults::isNumericMetaType(out.result.typeId())) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: override" << fn
+                                                 << "did not return a number, using fallback, script=" << m_scriptId;
+            return fallback;
+        }
+        // Same guard as resolveReal below, for the same reason. Luau numbers are
+        // doubles, so a script returning 0/0 or 1e18 marshals as a double and
+        // QVariant::toInt() truncates it unchecked (NaN yields 0; 1e18 yields an
+        // arbitrary wrapped int). The callers then clamp that into range, so
+        // fall back instead.
+        const double v = out.result.toDouble();
+        if (!std::isfinite(v) || v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max()) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: override" << fn << "returned" << v
+                                                 << "which is not a usable int, using fallback, script=" << m_scriptId;
+            return fallback;
+        }
+        return static_cast<int>(v);
     };
     auto resolveBool = [this, &warnIfFailed](const QString& fn, bool fallback) -> bool {
         if (!m_engine->hasFunction(m_module, fn)) {
@@ -367,7 +484,20 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         }
         const auto out = m_engine->callModule(m_module, fn, {}, ScriptWatchdogTimeoutMs);
         warnIfFailed(fn, out.status);
-        return out.status == LuauEngine::CallStatus::Ok ? out.result.toBool() : fallback;
+        if (out.status != LuauEngine::CallStatus::Ok) {
+            return fallback;
+        }
+        // Require an actual boolean rather than coercing. toBool() on an
+        // absent/nil return is false, which would not fall back to the metadata
+        // value but silently override it: a script declaring
+        // producesOverlappingZones = true in metadata and shipping an override
+        // that returns nothing would come out false.
+        if (out.result.typeId() != QMetaType::Bool) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: override" << fn
+                                                 << "did not return a boolean, using fallback, script=" << m_scriptId;
+            return fallback;
+        }
+        return out.result.toBool();
     };
     auto resolveReal = [this, &warnIfFailed](const QString& fn, qreal fallback) -> qreal {
         if (!m_engine->hasFunction(m_module, fn)) {
@@ -378,14 +508,32 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         if (out.status != LuauEngine::CallStatus::Ok) {
             return fallback;
         }
-        // A non-finite result (e.g. a script returning 0/0) must not reach the
-        // clamp below: std::clamp(NaN, lo, hi) returns NaN, which would poison
-        // the geometry. Fall back to the finite default instead.
+        // Same two-step as resolveInt: reject a non-numeric return before
+        // coercing (toDouble() on a nil/table result is a finite-looking 0.0),
+        // then reject a non-finite one. A non-finite result (e.g. a script
+        // returning 0/0) must not reach the clamp below: std::clamp(NaN, lo, hi)
+        // returns NaN, which would poison the geometry.
+        if (!AutotileDefaults::isNumericMetaType(out.result.typeId())) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: override" << fn
+                                                 << "did not return a number, using fallback, script=" << m_scriptId;
+            return fallback;
+        }
         const qreal v = out.result.toDouble();
-        return std::isfinite(v) ? v : fallback;
+        if (!std::isfinite(v)) {
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "LuauTileAlgorithm: override" << fn
+                << "returned a non-finite number, using fallback, script=" << m_scriptId;
+            return fallback;
+        }
+        return v;
     };
 
-    m_cachedMasterZoneIndex = resolveInt(QStringLiteral("masterZoneIndex"), m_cachedMasterZoneIndex);
+    // Script metadata is untrusted input, and this value is exported for
+    // third-party consumers to read, so hold it to the range its contract
+    // promises: a 0-based zone index, or -1 for no master concept. Whether it
+    // indexes a zone the script actually produced is not knowable here.
+    m_cachedMasterZoneIndex =
+        std::clamp(resolveInt(QStringLiteral("masterZoneIndex"), m_cachedMasterZoneIndex), -1, MaxZones - 1);
     m_cachedSupportsMasterCount = resolveBool(QStringLiteral("supportsMasterCount"), m_cachedSupportsMasterCount);
     m_cachedSupportsSplitRatio = resolveBool(QStringLiteral("supportsSplitRatio"), m_cachedSupportsSplitRatio);
     m_cachedProducesOverlappingZones =
@@ -409,8 +557,8 @@ QString LuauTileAlgorithm::name() const
         return m_metadata.name;
     }
     QString fallback = m_scriptId;
-    if (fallback.startsWith(QLatin1String("script:"))) {
-        fallback = fallback.mid(QStringLiteral("script:").size());
+    if (fallback.startsWith(ScriptIdPrefix)) {
+        fallback = fallback.mid(ScriptIdPrefix.size());
     }
     if (!fallback.isEmpty()) {
         fallback[0] = fallback[0].toUpper();
@@ -545,17 +693,11 @@ QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QR
     }
 
     if (!params.windowInfos.isEmpty()) {
-        QVariantList windows;
-        const int wcap = std::min<int>(static_cast<int>(params.windowInfos.size()), MaxZones);
-        for (int i = 0; i < wcap; ++i) {
-            QVariantMap w;
-            w[QStringLiteral("appId")] = params.windowInfos[i].appId;
-            w[QStringLiteral("focused")] = params.windowInfos[i].focused;
-            w[QStringLiteral("windowId")] = params.windowInfos[i].windowId;
-            windows.append(w);
-        }
-        ctx[QStringLiteral("windows")] = windows;
+        ctx[QStringLiteral("windows")] = marshalWindowList(params.windowInfos);
     }
+    // The real tiled index: comparable with the indices tile() itself reasons in
+    // (0 .. count - 1), and an index into ctx.windows too, because the caller
+    // caps windowInfos at MaxZones before we see it.
     ctx[QStringLiteral("focusedIndex")] = params.focusedIndex;
 
     // Last applied zones (advisory) — lets scripts read neighbour positions.
@@ -591,7 +733,7 @@ QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QR
     // metadata.supportsScriptState, so a non-opted-in algorithm can't read a bag
     // left behind by a different algorithm on the same TilingState. Scripts write
     // it back via the onWindowResized hook return.
-    if (m_metadata.supportsScriptState && params.state) {
+    if (supportsScriptState() && params.state) {
         const QJsonObject bag = params.state->scriptState();
         if (!bag.isEmpty()) {
             ctx[QStringLiteral("state")] = bag.toVariantMap();
@@ -626,7 +768,7 @@ QVector<QRect> LuauTileAlgorithm::calculateZones(const TilingParams& params) con
     // Fill the work area for a lone window unless the algorithm opts into laying
     // out the single-window case itself (e.g. a centered single-window layout). Opted-in
     // scripts get tile() called with windowCount == 1.
-    if (params.windowCount == 1 && !m_metadata.supportsSingleWindow) {
+    if (params.windowCount == 1 && !supportsSingleWindow()) {
         return {area};
     }
 
@@ -644,7 +786,7 @@ QVector<QRect> LuauTileAlgorithm::calculateZones(const TilingParams& params) con
 
 void LuauTileAlgorithm::prepareTilingState(TilingState* state) const
 {
-    if (!m_metadata.supportsMemory) {
+    if (!supportsMemory()) {
         return;
     }
     if (!state || state->splitTree()) {
@@ -679,24 +821,29 @@ QVariantMap LuauTileAlgorithm::buildStateMap(const TilingState* state, bool incl
     st[QStringLiteral("masterCount")] = state->masterCount();
     st[QStringLiteral("splitRatio")] = std::clamp(state->splitRatio(), MinSplitRatio, MaxSplitRatio);
 
+    // Visit the whole tiled list rather than a capped prefix, so focusedIndex
+    // comes back as the REAL tiled index — the same space ResizeEvent.index and
+    // the windowIndex argument of onWindowAdded/onWindowRemoved are already in,
+    // which is what makes a hook's `resize.index == state.focusedIndex` test
+    // mean what it reads like. marshalWindowList then applies the MaxZones cap to
+    // the marshalled list, so past that many windows focusedIndex can point past
+    // its end and a hook indexing state.windows has to bound-check.
+    // windowCount / countAfterRemoval below stay uncapped so the counts reflect
+    // reality.
     int focusedIndex = -1;
     const QVector<WindowInfo> infos = buildWindowInfos(state, state->tiledWindowCount(), appIdResolver(), focusedIndex);
-    QVariantList windows;
-    for (const WindowInfo& info : infos) {
-        QVariantMap w;
-        w[QStringLiteral("appId")] = info.appId;
-        w[QStringLiteral("focused")] = info.focused;
-        w[QStringLiteral("windowId")] = info.windowId;
-        windows.append(w);
-    }
-    st[QStringLiteral("windows")] = windows;
+    st[QStringLiteral("windows")] = marshalWindowList(infos);
     st[QStringLiteral("focusedIndex")] = focusedIndex;
 
     // Persistent bag, so a hook can read its own prior state (e.g. column widths)
-    // before computing the update it returns.
-    const QJsonObject bag = state->scriptState();
-    if (!bag.isEmpty()) {
-        st[QStringLiteral("scriptState")] = bag.toVariantMap();
+    // before computing the update it returns. Gated on the same opt-in as
+    // buildContext's ctx.state, so a non-opted-in algorithm's hooks can't read
+    // a bag left behind by a different algorithm on the same TilingState.
+    if (supportsScriptState()) {
+        const QJsonObject bag = state->scriptState();
+        if (!bag.isEmpty()) {
+            st[QStringLiteral("scriptState")] = bag.toVariantMap();
+        }
     }
 
     if (includeCountAfterRemoval) {
@@ -716,7 +863,14 @@ void LuauTileAlgorithm::onWindowAdded(TilingState* state, int windowIndex)
         return;
     }
     const QVariantMap st = buildStateMap(state, false);
-    m_engine->callModule(m_module, QStringLiteral("onWindowAdded"), {st, windowIndex}, ScriptWatchdogTimeoutMs);
+    const auto out =
+        m_engine->callModule(m_module, QStringLiteral("onWindowAdded"), {st, windowIndex}, ScriptWatchdogTimeoutMs);
+    // The hook returns nothing, so a failure has no effect on the layout to
+    // give it away. Log it, as every other call into a script here does.
+    if (out.status != LuauEngine::CallStatus::Ok) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "LuauTileAlgorithm: onWindowAdded() failed script=" << m_scriptId << ":" << out.message;
+    }
 }
 
 void LuauTileAlgorithm::onWindowRemoved(TilingState* state, int windowIndex)
@@ -725,7 +879,12 @@ void LuauTileAlgorithm::onWindowRemoved(TilingState* state, int windowIndex)
         return;
     }
     const QVariantMap st = buildStateMap(state, true);
-    m_engine->callModule(m_module, QStringLiteral("onWindowRemoved"), {st, windowIndex}, ScriptWatchdogTimeoutMs);
+    const auto out =
+        m_engine->callModule(m_module, QStringLiteral("onWindowRemoved"), {st, windowIndex}, ScriptWatchdogTimeoutMs);
+    if (out.status != LuauEngine::CallStatus::Ok) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "LuauTileAlgorithm: onWindowRemoved() failed script=" << m_scriptId << ":" << out.message;
+    }
 }
 
 bool LuauTileAlgorithm::supportsResizeHook() const noexcept
@@ -758,7 +917,8 @@ void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& r
     //     apply to this state — used by the ratio-based algorithms (master-stack,
     //     deck, …) to reflow on an interactive resize. setSplitRatio clamps to
     //     [MinSplitRatio, MaxSplitRatio]. The engine marks the state user-tuned
-    //     (per-desktop, survives a settings refresh) only when the value changes.
+    //     (per screen+desktop+activity, survives a settings refresh) only when
+    //     the value changes.
     //
     //   * the persistent state bag: opt-in via metadata.supportsScriptState — a
     //     script that reacts to resize without declaring it gets no stored bag
@@ -781,7 +941,7 @@ void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& r
             }
         }
 
-        if (m_metadata.supportsScriptState) {
+        if (supportsScriptState()) {
             // "splitRatio" is a reserved control key, not part of the persistent
             // bag (see pluau.d.luau) — strip it so it can't round-trip into
             // ctx.state on the next retile.
@@ -789,6 +949,15 @@ void LuauTileAlgorithm::onWindowResized(TilingState* state, const ResizeEvent& r
             const QJsonObject sanitized = TilingState::sanitizeScriptState(QJsonObject::fromVariantMap(result));
             state->setScriptState(sanitized);
         }
+    } else if (out.result.isValid()) {
+        // Returning nothing is the documented no-op and marshals to an invalid
+        // QVariant, so it stays silent. Any other type meant to control
+        // something and controls nothing: the block above is skipped whole, and
+        // with no layout change to give it away the hook looks like it never
+        // ran. `return state.splitRatio` instead of `return { splitRatio = … }`
+        // is the easy way to land here.
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "LuauTileAlgorithm: onWindowResized() returned a non-table, ignoring it, script=" << m_scriptId;
     }
 }
 

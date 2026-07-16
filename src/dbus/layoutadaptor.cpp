@@ -25,6 +25,7 @@
 #include "../core/utils.h"
 
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
+#include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <QJsonDocument>
@@ -95,15 +96,16 @@ LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* pa
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(manager)
 {
-    Q_ASSERT(manager);
     if (!m_layoutManager) {
-        // Release builds drop the assert above; a null manager is a fatal
-        // misconfiguration but skipping the connect() calls degrades the
-        // crash to a non-functional D-Bus surface that returns empty data.
-        qCCritical(lcDbusLayout)
-            << "LayoutAdaptor constructed with null PhosphorZones::LayoutRegistry — D-Bus surface will be inert";
-        initCoalesceTimer();
-        return;
+        // Every bus-reachable slot dereferences m_layoutManager unguarded, so
+        // there is no inert degradation available here — only a null-deref on
+        // the first D-Bus call, far from the composition root that caused it.
+        // The construction-time pattern in windowtrackingadaptor/enginewiring.cpp
+        // uses qFatal for the same class of misconfiguration; mirror it so debug
+        // AND release both halt loudly at the point of the mistake.
+        qFatal(
+            "LayoutAdaptor: constructed with a null PhosphorZones::LayoutRegistry — "
+            "every D-Bus slot would dereference it");
     }
     connectLayoutManagerSignals();
     initCoalesceTimer();
@@ -116,12 +118,10 @@ LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, PhosphorWor
     , m_virtualDesktopManager(vdm)
     , m_screenManager(screenManager)
 {
-    Q_ASSERT(manager);
     if (!m_layoutManager) {
-        qCCritical(lcDbusLayout)
-            << "LayoutAdaptor constructed with null PhosphorZones::LayoutRegistry — D-Bus surface will be inert";
-        initCoalesceTimer();
-        return;
+        qFatal(
+            "LayoutAdaptor: constructed with a null PhosphorZones::LayoutRegistry — "
+            "every D-Bus slot would dereference it");
     }
     connectLayoutManagerSignals();
     connectVirtualDesktopSignals();
@@ -318,7 +318,7 @@ QStringList LayoutAdaptor::getLayoutList()
             if (layout) {
                 json[QStringLiteral("hasSystemOrigin")] = layout->hasSystemOrigin();
                 json[QStringLiteral("hiddenFromSelector")] = layout->hiddenFromSelector();
-                if (layout->defaultOrder() != 999) {
+                if (layout->defaultOrder() != PhosphorZones::Layout::DefaultOrderUnset) {
                     json[QStringLiteral("defaultOrder")] = layout->defaultOrder();
                 }
 
@@ -505,16 +505,25 @@ void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspec
         return;
     }
 
-    if (static_cast<int>(layout->aspectRatioClass()) == aspectRatioClass) {
+    // The bus hands us a raw int and any session process can reach it, so
+    // normalise once, up front, and use that single value for the change check,
+    // the store, the log and the signal. setAspectRatioClassInt clamps
+    // internally, so anything derived from the raw argument past this point
+    // would broadcast a class that was never stored (e.g. 99 → Any) and that
+    // getLayout would then contradict. The emitted value must be the stored one.
+    const int normalized =
+        static_cast<int>(PhosphorLayout::ScreenClassification::fromJsonValue(QJsonValue(aspectRatioClass)));
+
+    if (static_cast<int>(layout->aspectRatioClass()) == normalized) {
         return;
     }
 
-    layout->setAspectRatioClassInt(aspectRatioClass);
+    layout->setAspectRatioClassInt(normalized);
 
     invalidateLayoutJsonCacheFor(layout->id());
 
-    qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << aspectRatioClass;
-    Q_EMIT layoutPropertyChanged(layoutId, kPropAspectRatioClass, QDBusVariant(aspectRatioClass));
+    qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << normalized;
+    Q_EMIT layoutPropertyChanged(layoutId, kPropAspectRatioClass, QDBusVariant(normalized));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -549,7 +558,8 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
         return QString();
     }
 
-    layout->setName(name);
+    // D-Bus boundary clamp: callers can bypass the editor UI's name cap.
+    layout->setName(clampName(name));
 
     // Auto-detect aspect ratio class from the primary screen (virtual-screen-aware)
     QScreen* screen = Utils::primaryScreen();
@@ -612,6 +622,23 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
         qCWarning(lcDbusLayout) << "Failed to duplicate layout:" << id;
         return QString();
     }
+
+    // The registry appends its duplicate suffix without regard to length (it
+    // has no name limit of its own), so re-apply the boundary clamp here like
+    // every other name-producing adaptor entry point. Trim the BASE, not the
+    // result: a tail clamp on a long name would cut the suffix off and leave
+    // the copy visually identical to its source. clampName's surrogate
+    // back-off keeps the reduced-budget cut from splitting a pair.
+    //
+    // Rebuild the name from the source rather than unpicking the duplicate's:
+    // `duplicateLayout` is contractually `source->name() + duplicateNameSuffix()`,
+    // so clamping the source name to the reduced budget and re-appending the
+    // suffix is the same string, without needing the suffix to still be
+    // recognisable on the far side. A name already within the limit clamps to
+    // itself, so the common case reassigns an identical string and Layout::setName
+    // no-ops on it.
+    const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
+    duplicate->setName(clampName(source->name(), MaxLayoutNameLength - suffix.size()) + suffix);
 
     qCInfo(lcDbusLayout) << "Duplicated layout" << id << "to" << duplicate->id();
     const QString dupId = duplicate->id().toString();

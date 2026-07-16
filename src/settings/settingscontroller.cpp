@@ -5,7 +5,6 @@
 
 #include "editorpagecontroller.h"
 #include "generalpagecontroller.h"
-#include "kzonesimporter.h"
 #include "registryshaderpreviewbackend.h"
 #include "snappingzonescontroller.h"
 #include "../shaderpreview/shaderpreviewcontroller.h"
@@ -47,6 +46,7 @@
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorFsLoader/SchemaValidator.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -91,9 +91,10 @@ namespace {
 
 // Materialise + register the XDG search dirs for a settings-side shader-pack
 // registry (animation / surface): system dirs reversed to lowest-priority-first
-// (the loaders apply first-registration-wins, yielding user > sys-high > ... >
-// sys-low once the user dir is appended last), user dir created up-front so
-// the watcher attaches a direct watch instead of a parent-watch proxy.
+// (the loaders reverse-iterate this list and take the first hit, so the LAST
+// dir registered wins, yielding user > sys-high > ... > sys-low once the user
+// dir is appended last), user dir created up-front so the watcher attaches a
+// direct watch instead of a parent-watch proxy.
 // @p subdir is the ConfigDefaults::user*Subdir() constant (leading '/'):
 // stripped for locateAll's relative-path arg, kept for the writable-base join.
 template<typename Registry>
@@ -208,15 +209,13 @@ SettingsController::SettingsController(QObject* parent)
     // daemon running; the store's idempotent load() makes the overlap a no-op.
     m_localRuleStoreWatcher->start();
 
-    // Wire the layoutsChanged handler BEFORE the initial loadLayouts() so
-    // any QFileSystemWatcher event landing in the window between load +
-    // connect (e.g. the daemon writing to ~/.local/share/plasmazones/layouts/
-    // mid-ctor) is handled. ZonesLayoutSource self-wires to the registry's
-    // unified ILayoutSourceRegistry::contentsChanged; future reads through
-    // the local source reflect current geometry once recalcLocalLayouts has
-    // run. When the file watcher detects a layout change on disk, refresh
-    // m_layouts from the local composite (manual + autotile) so QML rebinds
-    // even if the daemon isn't broadcasting D-Bus signals (or is down). The
+    // Wire the layoutsChanged handler BEFORE the initial loadLayouts() so the
+    // load below is routed through it. ZonesLayoutSource self-wires to the
+    // registry's unified ILayoutSourceRegistry::contentsChanged; future reads
+    // through the local source reflect current geometry once recalcLocalLayouts
+    // has run. On every registry reload, refresh m_layouts from the local
+    // composite (manual + autotile) so QML rebinds even if the daemon isn't
+    // broadcasting D-Bus signals (or is down). The
     // async refresh through scheduleLayoutLoad() / loadLayoutsAsync() also
     // fires from daemon-side D-Bus signals and replaces m_layouts with the
     // D-Bus-enriched view when the daemon is up — these two paths converge
@@ -229,10 +228,9 @@ SettingsController::SettingsController(QObject* parent)
         // path guarded on `!localLayouts.isEmpty()`, which left stale
         // entries in m_layouts after a wipe when the daemon was down.
         SettingsController::sortMergedLayoutList(localLayouts);
-        // Skip when the disk view matches what we already have — file-
-        // watcher events fire on every daemon write during a save
-        // batch, and identical payloads would re-emit the model on
-        // each tick.
+        // Skip when the disk view matches what we already have — a daemon
+        // save batch fires a reload per layout write, and identical
+        // payloads would re-emit the model on each one.
         const bool actuallyChanged = m_layouts != localLayouts;
         if (actuallyChanged) {
             m_layouts = std::move(localLayouts);
@@ -250,10 +248,11 @@ SettingsController::SettingsController(QObject* parent)
 
     // Load the user's layouts immediately so localLayoutPreviews() returns
     // a populated list on first call (before any QML query has had a
-    // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
-    // PhosphorZones::LayoutRegistry scans ~/.local/share/plasmazones/layouts/ on demand
-    // and installs a QFileSystemWatcher so any subsequent disk changes
-    // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
+    // chance to trigger the legacy D-Bus loadLayoutsAsync path).
+    // PhosphorZones::LayoutRegistry scans ~/.local/share/plasmazones/layouts/
+    // only when loadLayouts() is called — it watches nothing, so an explicit
+    // call is the sole reload trigger. This one covers startup;
+    // loadLayoutsAsync() re-calls it off the daemon's D-Bus layout signals.
     m_localLayoutManager->loadLayouts();
     // `loadLayouts()` emits `layoutsChanged` synchronously, which the
     // handler wired above already routes through `recalcLocalLayouts()`
@@ -291,8 +290,7 @@ SettingsController::SettingsController(QObject* parent)
     // future consumer that relies on the transition (rather than
     // querying availableAlgorithms() directly) silently misses initial
     // population.
-    m_algorithmService =
-        std::make_unique<AlgorithmService>(&m_settings, m_localAlgorithmRegistry.get(), m_scriptLoader.get());
+    m_algorithmService = std::make_unique<AlgorithmService>(m_settings, *m_localAlgorithmRegistry, *m_scriptLoader);
     connect(m_algorithmService.get(), &AlgorithmService::algorithmCreated, this, &SettingsController::algorithmCreated);
     connect(m_algorithmService.get(), &AlgorithmService::algorithmOperationFailed, this,
             &SettingsController::algorithmOperationFailed);
@@ -307,9 +305,8 @@ SettingsController::SettingsController(QObject* parent)
     m_scriptLoader->scanAndRegister();
 
     // All D-Bus broadcast subscriptions (settings reload, layout
-    // mutations, virtual desktop / activity changes, rules mirror)
-    // are wired in settingscontroller_dbuswire.cpp so this TU stays under
-    // the project's 800-line cap. Any subscription that returns false at
+    // mutations, virtual desktop / activity changes, rules mirror) are wired in
+    // settingscontroller_dbuswire.cpp. Any subscription that returns false at
     // construction is appended to @c failedSubscriptions so the post-ctor
     // summary below can surface them in one batched warning.
     QStringList failedSubscriptions;
@@ -331,10 +328,36 @@ SettingsController::SettingsController(QObject* parent)
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
         Q_EMIT daemonRunningChanged();
         if (m_daemonController.isRunning()) {
-            // Daemon just came online — reload all D-Bus-dependent data
+            // Daemon just came online — reload all D-Bus-dependent data.
+            // scheduleLayoutLoad() and ScreenHelper::refreshScreens() emit their
+            // own NOTIFY (layoutsChanged / screensChanged). refreshVirtualDesktops
+            // and refreshActivities do NOT: they are plain fetch helpers and the
+            // emit lives in their callers (onVirtualDesktopsChanged /
+            // onActivitiesChanged in settingscontroller_session.cpp). Without the
+            // emits below, everything the daemon just told us about desktops and
+            // activities sat in the members while QML kept rendering the
+            // daemon-down view — virtualDesktopCount / virtualDesktopNames and
+            // activitiesAvailable / activities / currentActivity all stayed stale
+            // until some unrelated signal happened along.
+            //
+            // Snapshot and compare rather than emitting flat: this fires on every
+            // daemon start, and the common case (a daemon restart that enumerates
+            // the same desktops and activities) must not churn every bound view.
             scheduleLayoutLoad();
+            const int desktopCountBefore = m_virtualDesktopCount;
+            const QStringList desktopNamesBefore = m_virtualDesktopNames;
             refreshVirtualDesktops();
+            if (m_virtualDesktopCount != desktopCountBefore || m_virtualDesktopNames != desktopNamesBefore) {
+                Q_EMIT virtualDesktopsChanged();
+            }
+            const bool activitiesAvailableBefore = m_activitiesAvailable;
+            const QVariantList activitiesBefore = m_activities;
+            const QString currentActivityBefore = m_currentActivity;
             refreshActivities();
+            if (m_activitiesAvailable != activitiesAvailableBefore || m_activities != activitiesBefore
+                || m_currentActivity != currentActivityBefore) {
+                Q_EMIT activitiesChanged();
+            }
             m_screenHelper.refreshScreens();
         }
     });
@@ -440,8 +463,11 @@ SettingsController::SettingsController(QObject* parent)
 
     // General page sub-controller — owns rendering-backend picker data and
     // animation bounds. Its startup backend snapshot is captured at ctor
-    // time, so this must run AFTER m_settings is fully initialised (which
-    // is guaranteed since m_settings is the first member declared).
+    // time, so this must run AFTER m_settings is fully initialised (which is
+    // guaranteed by it being a value member: the member-init list runs to
+    // completion before any of this ctor body does. Declaration position has
+    // nothing to do with it — m_localRuleStore is the first member, and says
+    // so itself).
     m_generalPage = new GeneralPageController(m_settings, this);
 
     // Animation shader registry — settings-side mirror of the daemon's.
@@ -532,8 +558,8 @@ SettingsController::SettingsController(QObject* parent)
     // beginResetModel/endResetModel fires modelReset SYNCHRONOUSLY *before* the
     // controller re-baselines its saved snapshot (captureSavedSnapshot runs on
     // the next line). Reconciling on modelReset would therefore compare the
-    // fresh model against the STALE snapshot and spuriously mark both rule-backed
-    // pages dirty on every startup / daemon rulesChanged broadcast. That
+    // fresh model against the STALE snapshot and spuriously mark the Rules page
+    // dirty on every startup / daemon rulesChanged broadcast. That
     // repopulation is instead handled by the rulesLoaded / revertFinished
     // connections below, which fire AFTER the re-baseline.
     const auto reattributeRuleDirty = [this]() {
@@ -668,7 +694,7 @@ SettingsController::SettingsController(QObject* parent)
     // the prefixed form first, then fall back to the bare token (covering the
     // bare-keyed shape PhosphorTiles can also ship, and already-prefixed data).
     auto resolveTilingAlgorithmLookup = [resolveByLayoutsLookup](const QString& algorithmToken) -> QString {
-        const QString prefixed = QStringLiteral("autotile:") + algorithmToken;
+        const QString prefixed = PhosphorLayout::LayoutId::makeAutotileId(algorithmToken);
         const QString label = resolveByLayoutsLookup(prefixed);
         return label == prefixed ? resolveByLayoutsLookup(algorithmToken) : label;
     };
@@ -742,10 +768,9 @@ SettingsController::SettingsController(QObject* parent)
     // m_localLayoutManager's catalogue.
     //
     // The page controller is a `unique_ptr<>` declared after
-    // `m_localLayoutManager` (see header). Constructed without a QObject
-    // parent so member-destructor reverse-order tears it down BEFORE the
-    // borrowed layout registry — a QObject-child parent would defer
-    // destruction to ~QObject, dangling the layout-registry pointer.
+    // `m_localLayoutManager` (see header), so member-destructor reverse-order
+    // tears it down BEFORE the borrowed layout registry. It does take a QObject
+    // parent as well; see its construction below for what that is for.
     m_overlayShaderRegistry = new PlasmaZones::ShaderRegistry(this);
 
     // Shared live-preview feed (T3.1): backed by the local overlay registry +
@@ -807,13 +832,15 @@ SettingsController::SettingsController(QObject* parent)
     });
     m_screenHelper.refreshScreens();
 
-    // PhosphorZones::Layout load timer (debounce). The corresponding D-Bus
+    // PhosphorZones::Layout load timer (debounce). The five layout-mutation
     // subscriptions (layoutCreated / layoutDeleted / layoutChanged /
-    // layoutPropertyChanged / layoutListChanged / screenLayoutChanged /
-    // quickLayoutSlotsChanged + virtual-desktop / activity broadcasts)
-    // are wired in settingscontroller_dbuswire.cpp::wireDaemonSubscriptions
-    // and all funnel into the 50 ms debounce slot below so signal bursts
-    // coalesce into a single loadLayoutsAsync().
+    // layoutPropertyChanged / layoutListChanged) start it directly, so a burst
+    // of them coalesces into a single loadLayoutsAsync(). They are wired in
+    // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions along with every
+    // other daemon broadcast this class listens to. Of those, settingsChanged
+    // reaches this timer as well, by way of onExternalSettingsChanged() ->
+    // load(). quickLayoutSlotsChanged relays straight back out as a signal for
+    // QML. The rest run their own slots and never touch it.
     m_layoutLoadTimer.setSingleShot(true);
     m_layoutLoadTimer.setInterval(50);
     connect(&m_layoutLoadTimer, &QTimer::timeout, this, &SettingsController::loadLayoutsAsync);
@@ -889,8 +916,6 @@ SettingsController::SettingsController(QObject* parent)
     m_updateChecker.checkForUpdates();
 }
 
-// Out-of-line page getters (kept here rather than inline in the header to hold
-// settingscontroller.h under the 800-line cap).
 SnappingZonesController* SettingsController::snappingZonesPage() const
 {
     return m_snappingZonesPage;
@@ -917,7 +942,6 @@ TilingAlgorithmController* SettingsController::tilingAlgorithmPage() const
 }
 
 // setActivePage / dirty-tracking / external-edit methods live in
-// settingscontroller_pagestate.cpp (split to keep this file under the
-// 800-line cap).
+// settingscontroller_pagestate.cpp.
 
 } // namespace PlasmaZones

@@ -28,6 +28,14 @@ Rectangle {
     required property var selectedZone
     required property int selectionCount
     required property bool hasMultipleSelection
+    // Whether the editor is showing its chrome at all. Fullscreen and preview
+    // both hide the panel outright, and folding that into `panelShown` (rather
+    // than assigning `visible` from the instantiation site) keeps the panel the
+    // single owner of its own visibility.
+    required property bool chromeVisible
+    // The predicate the panel's geometry and opacity animate toward. `visible`
+    // is derived from those animated values, so it cannot be the source here.
+    readonly property bool panelShown: propertyPanel.chromeVisible && propertyPanel.panelMode !== "hidden"
     // Panel mode: "hidden" (no selection), "single" (one zone), "multiple" (many zones)
     readonly property string panelMode: {
         if (selectionCount === 0)
@@ -38,10 +46,16 @@ Rectangle {
 
         return "multiple";
     }
+    // The theme-derived zone colours. Multi-select previews start from these
+    // until the user picks something else in one of the dialogs, and the
+    // single-select dialogs open on them when a zone has no colour of its own.
+    readonly property color themeHighlightDefault: Theme.withAlpha(Kirigami.Theme.highlightColor, Theme.zoneHighlightAlpha)
+    readonly property color themeInactiveDefault: Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneInactiveAlpha)
+    readonly property color themeBorderDefault: Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneBorderAlpha)
     // Multi-select color preview properties (stored at panel level to avoid context issues)
-    property color multiHighlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5)
-    property color multiInactiveColor: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25)
-    property color multiBorderColor: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8)
+    property color multiHighlightColor: propertyPanel.themeHighlightDefault
+    property color multiInactiveColor: propertyPanel.themeInactiveDefault
+    property color multiBorderColor: propertyPanel.themeBorderDefault
     // Computed property: true if ALL selected zones have useCustomColors enabled
     readonly property bool allSelectedUseCustomColors: {
         if (!editorController || selectionCount < 2)
@@ -61,43 +75,87 @@ Rectangle {
         return ColorUtils.extractZoneColor(selectedZone, propertyName, Qt.transparent);
     }
 
-    // Imperative sync for the geometry controls. Their declarative bindings
-    // die on the first user edit (QQC2) or imperative write, so both the
-    // selection-change and zonesChanged paths re-apply the model state here.
-    function syncGeometryControls() {
-        if (!selectedZone)
+    // Imperative sync for the geometry controls. The writes below sever these
+    // controls' declarative bindings, so from the first call onward this is the
+    // only thing that keeps them on the model, and both the selection-change and
+    // zonesChanged paths have to re-apply it. Callers that observe the
+    // controller's signal directly can pass a fresh zone map, since the panel's
+    // own selectedZone property lags that signal.
+    function syncGeometryControls(freshZone) {
+        const zone = (freshZone && freshZone.id) ? freshZone : selectedZone;
+        if (!zone)
             return;
 
-        fixedGeometryCheck.checked = selectedZone.geometryMode === 1;
-        fixedXSpin.value = selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0;
-        fixedYSpin.value = selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0;
-        fixedWidthSpin.value = selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50;
-        fixedHeightSpin.value = selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50;
+        fixedGeometryCheck.checked = zone.geometryMode === 1;
+        fixedXSpin.value = zone.fixedX !== undefined ? zone.fixedX : 0;
+        fixedYSpin.value = zone.fixedY !== undefined ? zone.fixedY : 0;
+        fixedWidthSpin.value = zone.fixedWidth !== undefined ? zone.fixedWidth : 50;
+        fixedHeightSpin.value = zone.fixedHeight !== undefined ? zone.fixedHeight : 50;
+    }
+
+    // Same imperative-sync idiom for the name field and number spinbox: their
+    // bindings die on the first imperative write (selection change), so an
+    // undo/redo of a rename/renumber with the same zone still selected must be
+    // re-applied here. Focus guards keep an in-progress edit untouched.
+    function syncNameAndNumber() {
+        const zone = selectedZone;
+        if (!zone)
+            return;
+
+        if (!zoneNameField.activeFocus) {
+            zoneNameField.text = zone.name || "";
+            zoneNameField.validationError = "";
+        }
+        if (!zoneNumberSpinBox.activeFocus) {
+            zoneNumberSpinBox.value = zone.zoneNumber || 1;
+            zoneNumberSpinBox.validationError = "";
+        }
     }
 
     // Layout properties
-    Layout.preferredWidth: visible ? 280 : 0
-    Layout.maximumWidth: visible ? 280 : 0
+    Layout.preferredWidth: propertyPanel.panelShown ? Kirigami.Units.gridUnit * 16 : 0
+    // The animated preferredWidth is the clamp. Binding maximumWidth to the
+    // panelShown predicate directly snapped it to 0 in the same pass that
+    // started the slide, so the layout collapsed the cell instantly and
+    // panel.slideOut animated a zero-width item nobody could see.
+    Layout.maximumWidth: propertyPanel.Layout.preferredWidth
     Layout.minimumWidth: 0
     Layout.fillHeight: true
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
-    border.width: Math.round(Screen.devicePixelRatio)
+    border.width: 1
     border.color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
-    visible: panelMode !== "hidden"
-    opacity: visible ? 1 : 0
+    // Drive opacity/width from panelMode and derive visibility from the
+    // animated values, so the outgoing legs are actually rendered. Binding
+    // `visible` to panelMode directly unrendered the panel in the same pass
+    // that started the fade, so panel.fadeOut and panel.slideOut animated
+    // something nobody could see. Same shape as the multi-select badge in
+    // EditorZone.qml.
+    opacity: propertyPanel.panelShown ? 1 : 0
+    visible: opacity > 0 || Layout.preferredWidth > 0
     z: 50
     onPanelModeChanged: {
+        // Entering "multiple" starts the swatches from the theme again. This is
+        // a mode transition, so growing or shrinking a selection that was
+        // already multiple (2 zones to 3) keeps whatever the user picked. The
+        // color dialogs assign these properties, which severs the binding, so
+        // restore the binding rather than the value or the swatches stop
+        // following the theme after the first multi-select.
         if (panelMode === "multiple") {
-            multiHighlightColor = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
-            multiInactiveColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25);
-            multiBorderColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8);
+            multiHighlightColor = Qt.binding(function () {
+                return propertyPanel.themeHighlightDefault;
+            });
+            multiInactiveColor = Qt.binding(function () {
+                return propertyPanel.themeInactiveDefault;
+            });
+            multiBorderColor = Qt.binding(function () {
+                return propertyPanel.themeBorderDefault;
+            });
         }
     }
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.largeSpacing
-        visible: parent.visible
         spacing: Kirigami.Units.gridUnit
 
         // Header row with title and close button
@@ -173,8 +231,7 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Highlight:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     baseColor: propertyPanel.multiHighlightColor
-                    // Safe reference - multiActiveOpacitySlider is defined later in file
-                    opacityMultiplier: multiActiveOpacitySlider ? multiActiveOpacitySlider.opacityValue : propertyPanel.defaultOpacity
+                    opacityMultiplier: multiActiveOpacitySlider.opacityValue
                     isMultiMode: true
                     accessibleName: i18nc("@label", "Highlight color picker for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Choose highlight color for all selected zones")
@@ -188,8 +245,7 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Inactive:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     baseColor: propertyPanel.multiInactiveColor
-                    // Safe reference - multiInactiveOpacitySlider is defined later in file
-                    opacityMultiplier: multiInactiveOpacitySlider ? multiInactiveOpacitySlider.opacityValue : propertyPanel.defaultInactiveOpacity
+                    opacityMultiplier: multiInactiveOpacitySlider.opacityValue
                     isMultiMode: true
                     accessibleName: i18nc("@label", "Inactive color picker for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Choose inactive color for all selected zones")
@@ -322,12 +378,31 @@ Rectangle {
 
                     visible: panelMode === "single"
                     Kirigami.FormData.label: i18nc("@label", "Name:")
+                    // Mirrors PlasmaZones::MaxLayoutNameLength (core/constants.h),
+                    // same client-side cap as TopBar's layout name field.
+                    maximumLength: 40
                     text: selectedZone ? (selectedZone.name || "") : ""
                     enabled: editorController !== null
                     Accessible.name: i18nc("@label", "Zone name")
                     onTextChanged: {
-                        if (selectedZoneId && editorController)
+                        // Only user edits (field focused) arm the auto-commit
+                        // timer. Programmatic writes — the declarative binding
+                        // on selection change and syncNameAndNumber() — also
+                        // fire onTextChanged, and a legacy >40-char zone name
+                        // truncated by maximumLength would otherwise auto-commit
+                        // a rename (undo entry + unsaved mark) on mere selection.
+                        // The stop() also kills a pending timer from a previous
+                        // zone so its text can't commit under the new zone's id.
+                        if (activeFocus && selectedZoneId && editorController)
                             updateTimer.restart();
+                        else
+                            updateTimer.stop();
+                    }
+                    // textEdited fires only on user input. An error describes the
+                    // text that was rejected, so the first keystroke past it drops
+                    // the message rather than leaving a stale complaint on screen.
+                    onTextEdited: {
+                        validationError = "";
                     }
                     onEditingFinished: {
                         updateTimer.stop();
@@ -363,7 +438,7 @@ Rectangle {
                         color: zoneNameField.hasError ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.15) : zoneNameField.palette.base
                         radius: Kirigami.Units.smallSpacing
                         border.color: zoneNameField.hasError ? Kirigami.Theme.negativeTextColor : zoneNameField.palette.shadow
-                        border.width: zoneNameField.hasError ? Math.max(2, Math.round(Screen.devicePixelRatio * 2)) : Math.max(1, Math.round(Screen.devicePixelRatio))
+                        border.width: zoneNameField.hasError ? 2 : 1
 
                         Behavior on border.color {
                             PhosphorMotionAnimation {
@@ -515,16 +590,19 @@ Rectangle {
                     }
                 }
 
-                // Sync geometry controls when zone data changes (undo/redo, external
-                // updates). Includes the mode checkbox: its `checked` binding dies on
-                // the first manual toggle, so an undone/redone mode toggle must be
-                // reflected imperatively. Not gated on fixedGeometryCheck.checked for
-                // the same reason.
+                // Sync geometry, name, and number controls when zone data changes
+                // (undo/redo, external updates). A user click does not sever a
+                // binding (the control writes its value from C++), but this
+                // function's own imperative writes do, so once it has run these
+                // controls have no bindings left and it is the only thing keeping
+                // them current. Includes the mode checkbox, and is not gated on
+                // fixedGeometryCheck.checked, for that reason.
                 Connections {
                     function onZonesChanged() {
                         // Qt.callLater avoids binding loops, and the stable function
-                        // reference lets it coalesce bursts of zonesChanged into one sync.
+                        // references let it coalesce bursts of zonesChanged into one sync.
                         Qt.callLater(propertyPanel.syncGeometryControls);
+                        Qt.callLater(propertyPanel.syncNameAndNumber);
                     }
 
                     target: editorController
@@ -561,15 +639,14 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Highlight:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     baseColor: getZoneColor("highlightColor")
-                    // Safe reference - activeOpacitySlider is defined later in file
-                    opacityMultiplier: activeOpacitySlider ? activeOpacitySlider.opacityValue : propertyPanel.defaultOpacity
+                    opacityMultiplier: activeOpacitySlider.opacityValue
                     isMultiMode: false
                     accessibleName: i18nc("@label", "Highlight color picker")
                     toolTipText: i18nc("@info:tooltip", "Choose color for highlighted/active zones")
                     onColorButtonClicked: {
                         var currentColor = getZoneColor("highlightColor");
                         if (currentColor.a === 0)
-                            currentColor = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
+                            currentColor = propertyPanel.themeHighlightDefault;
 
                         highlightColorDialog.selectedColor = currentColor;
                         highlightColorDialog.open();
@@ -580,15 +657,14 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Inactive:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     baseColor: getZoneColor("inactiveColor")
-                    // Safe reference - inactiveOpacitySlider is defined later in file
-                    opacityMultiplier: inactiveOpacitySlider ? inactiveOpacitySlider.opacityValue : propertyPanel.defaultInactiveOpacity
+                    opacityMultiplier: inactiveOpacitySlider.opacityValue
                     isMultiMode: false
                     accessibleName: i18nc("@label", "Inactive color picker")
                     toolTipText: i18nc("@info:tooltip", "Choose color for non-selected zones")
                     onColorButtonClicked: {
                         var currentColor = getZoneColor("inactiveColor");
                         if (currentColor.a === 0)
-                            currentColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25);
+                            currentColor = propertyPanel.themeInactiveDefault;
 
                         inactiveColorDialog.selectedColor = currentColor;
                         inactiveColorDialog.open();
@@ -605,7 +681,7 @@ Rectangle {
                     onColorButtonClicked: {
                         var currentColor = getZoneColor("borderColor");
                         if (currentColor.a === 0)
-                            currentColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8);
+                            currentColor = propertyPanel.themeBorderDefault;
 
                         borderColorDialog.selectedColor = currentColor;
                         borderColorDialog.open();
@@ -729,7 +805,7 @@ Rectangle {
                         background: Rectangle {
                             color: Kirigami.Theme.backgroundColor
                             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                            border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+                            border.width: 1
                             radius: Kirigami.Units.smallSpacing
                         }
                     }
@@ -782,16 +858,32 @@ Rectangle {
                 // Handle validation errors and selection changes
                 Connections {
                     function onSelectedZoneIdChanged() {
+                        // This Connections fires on the CONTROLLER's signal,
+                        // before EditorWindow's copy of the id (which feeds
+                        // propertyPanel.selectedZoneId/selectedZone) updates in
+                        // its own, later handler of the same signal. Inside this
+                        // handler the panel's properties are one step stale, so
+                        // read the authoritative controller state directly.
+                        const id = editorController.selectedZoneId;
+                        if (id === "")
+                            return;
+
                         // Re-sync every editable control imperatively: their
                         // declarative bindings die on the first user edit (QQC2)
                         // or imperative sync, after which a selection change
                         // would keep showing the previous zone's values and any
                         // edit would stamp those stale values onto the new zone.
-                        if (selectedZone) {
-                            zoneNameField.text = selectedZone.name || "";
-                            zoneNumberSpinBox.value = selectedZone.zoneNumber || 1;
-                        }
-                        propertyPanel.syncGeometryControls();
+                        // If the lookup comes back empty the zone is gone or
+                        // not yet published; syncing anyway would fall back to
+                        // the panel's stale selectedZone and stamp the previous
+                        // zone's values, so do nothing at all.
+                        const zone = editorController.getZoneById(id);
+                        if (!(zone && zone.id))
+                            return;
+
+                        zoneNameField.text = zone.name || "";
+                        zoneNumberSpinBox.value = zone.zoneNumber || 1;
+                        propertyPanel.syncGeometryControls(zone);
                         zoneNameField.updateTimer.stop();
                         zoneNameField.validationError = "";
                         zoneNumberSpinBox.validationError = "";
@@ -801,7 +893,14 @@ Rectangle {
                         if (zoneId === selectedZoneId) {
                             zoneNameField.validationError = error;
                             Qt.callLater(function () {
-                                if (selectedZone)
+                                // Only reset to the committed name while the field
+                                // is not being edited; mid-retype input stays put
+                                // (same guard as syncNameAndNumber). The error
+                                // survives the revert: it explains why the name the
+                                // user typed is gone, and this is the only feedback
+                                // a rename rejected on blur ever gets. The next
+                                // keystroke clears it.
+                                if (selectedZone && !zoneNameField.activeFocus)
                                     zoneNameField.text = selectedZone.name || "";
                             });
                         }
@@ -813,7 +912,7 @@ Rectangle {
                     }
 
                     target: editorController
-                    enabled: editorController !== null && selectedZoneId !== ""
+                    enabled: editorController !== null
                 }
             }
         }
@@ -908,21 +1007,22 @@ Rectangle {
 
     Behavior on opacity {
         PhosphorMotionAnimation {
-            // Direction is taken from the same `visible` predicate that drives
-            // `opacity` above. Reading the animated `opacity` instead would
-            // re-evaluate during the Behavior and flip the leg mid-animation.
-            profile: visible ? "panel.fadeIn" : "panel.fadeOut"
-            durationOverride: Theme.animDuration
+            // Direction is taken from the same `panelShown` predicate that
+            // drives `opacity` above. Reading the animated `opacity`, or the
+            // `visible` now derived from it, would re-evaluate during the
+            // Behavior and flip the leg mid-animation.
+            profile: propertyPanel.panelShown ? "panel.fadeIn" : "panel.fadeOut"
+            durationOverride: Kirigami.Units.longDuration
         }
     }
 
     Behavior on Layout.preferredWidth {
         PhosphorMotionAnimation {
-            // Direction is taken from `visible` (the same predicate driving
-            // `Layout.preferredWidth: visible ? 280 : 0`). slideIn when
-            // growing into view, slideOut when collapsing out.
-            profile: visible ? "panel.slideIn" : "panel.slideOut"
-            durationOverride: Theme.animDuration
+            // Direction is taken from `panelShown` (the same predicate driving
+            // `Layout.preferredWidth` above). slideIn when growing into view,
+            // slideOut when collapsing out.
+            profile: propertyPanel.panelShown ? "panel.slideIn" : "panel.slideOut"
+            durationOverride: Kirigami.Units.longDuration
         }
     }
 }

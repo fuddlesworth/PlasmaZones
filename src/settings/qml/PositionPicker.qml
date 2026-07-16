@@ -16,11 +16,17 @@ import org.phosphor.animation
  *   6=BottomLeft, 7=Bottom, 8=BottomRight
  *
  * All 9 positions are valid, including Center (4).
+ *
+ * The caller owns `position`. A click only emits positionSelected, so bind
+ * `position` to the state the handler writes and the selection follows.
+ * Writing it from here would sever that binding on the first click, stranding
+ * every later change the caller pushes back, and would show the raw click where
+ * the backend may have clamped or refused it.
  */
 Item {
     id: root
 
-    // Selected cell index (0-8)
+    // Selected cell index (0-8). Bind this; see the note above.
     property int position: 1
     // `enabled` is the built-in Item property (declaring our own shadowed the base
     // member — the "overrides a member of the base object" warning). The internal
@@ -35,11 +41,12 @@ Item {
     implicitHeight: Kirigami.Units.gridUnit * 7
 
     // The miniature uses Kirigami.Units for all structural sizing/spacing/margins.
-    // The few small integer literals that remain below (indicator-bar thickness,
-    // 1-2px insets, corner radii, the hover duration override) are intentional
-    // fixed drawing dimensions of this custom-painted preview — they are visual
-    // detail of the diagram itself, not layout spacing, and are deliberately not
-    // theme-scaled so the bars/insets keep their proportions at every gridUnit.
+    // The small integer literals below are intentional fixed drawing dimensions
+    // of this custom-painted preview: bar thicknesses, insets, corner radii, the
+    // 1-2px borders, and the caps that stop a bar outgrowing its cell. They are
+    // visual detail of the diagram itself rather than layout spacing, and are
+    // deliberately not theme-scaled so the drawing keeps its proportions at
+    // every gridUnit. Same rationale as ZoneSelectorSection's sample zones.
     ColumnLayout {
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
@@ -52,6 +59,14 @@ Item {
             color: Kirigami.Theme.backgroundColor
             radius: Kirigami.Units.smallSpacing
             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+            // Chrome border. border.width is in device-independent pixels;
+            // the renderer scales it by the device pixel ratio itself, so a
+            // plain integer gives a consistent hairline at every scale
+            // factor (multiplying by devicePixelRatio here would
+            // double-scale into a thicker, not crisper, border). This is
+            // the repo-wide chrome-border convention. The drawing
+            // dimensions below stay in logical units on purpose (see the
+            // note above them).
             border.width: 1
 
             Rectangle {
@@ -77,12 +92,25 @@ Item {
 
                             required property int index
                             property bool isCenter: index === 4
-                            property bool isEdge: index === 1 || index === 3 || index === 5 || index === 7
-                            property bool isCorner: !isCenter && !isEdge
                             property bool isSelected: index === root.position
                             property bool isHovered: cellMouse.containsMouse
-                            // Zone selector indicator bars
-                            // Corners show TWO bars (both edges), sides show ONE bar
+                            // The cells are the control: one of nine, exclusive,
+                            // named by the same labels the tooltips use. Without
+                            // these the whole picker is a silent 3x3 of
+                            // rectangles to a screen reader.
+                            Accessible.role: Accessible.RadioButton
+                            Accessible.name: root.positionLabels[cell.index]
+                            Accessible.checked: cell.isSelected
+                            Accessible.focusable: true
+                            // Keyboard path matching WizardTemplateCard: each
+                            // cell is a Tab stop, Return/Enter/Space activates,
+                            // and focus shows through the highlight border.
+                            activeFocusOnTab: root.enabled
+                            Keys.onReturnPressed: root.positionSelected(cell.index)
+                            Keys.onEnterPressed: root.positionSelected(cell.index)
+                            Keys.onSpacePressed: root.positionSelected(cell.index)
+                            // Zone selector indicator bars, drawn per edge this
+                            // cell sits on: a corner is on two, a side on one.
                             property bool isTopRow: cell.index <= 2
                             property bool isBottomRow: cell.index >= 6
                             property bool isLeftCol: cell.index % 3 === 0
@@ -101,6 +129,9 @@ Item {
                                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
                             }
                             border.color: {
+                                if (cell.activeFocus)
+                                    return Kirigami.Theme.highlightColor;
+
                                 if (isSelected)
                                     return Kirigami.Theme.highlightColor;
 
@@ -109,7 +140,7 @@ Item {
 
                                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3);
                             }
-                            border.width: isSelected ? 2 : 1
+                            border.width: (cell.activeFocus || cell.isSelected) ? 2 : 1
                             opacity: root.enabled ? 1 : 0.5
 
                             // Horizontal bar (top or bottom edge)
@@ -171,25 +202,28 @@ Item {
                                 enabled: root.enabled
                                 cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                 onClicked: {
-                                    root.position = cell.index;
+                                    // Move active focus to the clicked cell so a
+                                    // previously keyboard-focused cell doesn't keep
+                                    // the focus ring and the key handlers.
+                                    cell.forceActiveFocus();
                                     root.positionSelected(cell.index);
                                 }
                                 ToolTip.visible: containsMouse && root.enabled
-                                ToolTip.delay: 500
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: root.positionLabels[cell.index]
                             }
 
                             Behavior on color {
                                 PhosphorMotionAnimation {
                                     profile: "widget.hover"
-                                    durationOverride: 100
+                                    durationOverride: Kirigami.Units.shortDuration
                                 }
                             }
 
                             Behavior on border.color {
                                 PhosphorMotionAnimation {
                                     profile: "widget.hover"
-                                    durationOverride: 100
+                                    durationOverride: Kirigami.Units.shortDuration
                                 }
                             }
                         }

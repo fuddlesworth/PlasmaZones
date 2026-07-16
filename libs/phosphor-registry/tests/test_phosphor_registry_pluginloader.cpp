@@ -7,9 +7,8 @@
 // exercises the loader, and tears down.
 //
 // Lifecycle / rescan-reentry / destructor-pin slots live in the
-// sibling TU test_phosphor_registry_pluginloader_lifecycle.cpp to
-// keep both files under the project's 800-line cap. Both TUs share
-// the WarningCapture instrumentation + plugin-fixture install
+// sibling TU test_phosphor_registry_pluginloader_lifecycle.cpp. Both
+// TUs share the WarningCapture instrumentation + plugin-fixture install
 // helpers via test_pluginloader_helpers.h.
 
 #include "test_pluginloader_helpers.h"
@@ -317,6 +316,14 @@ void TestPluginLoader::rejectsSymlinkedSubdirEscapingRoot()
     PluginLoader loader(&registry, pluginRoot);
     QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
     loader.scanAndLoad();
+
+    // The containment assertions, same as rejectsSymlinkedSoEscapingRoot's.
+    // Without them this test asserted only that the skip was quiet, which a
+    // loader that happily followed the symlink also satisfies — it would have
+    // passed on the very escape it is named for.
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
 
     // The guarded skip is silent (the symlinked dir is never a
     // discovery candidate); lock that contract — no warning should fire.

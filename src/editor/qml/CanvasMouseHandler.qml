@@ -35,21 +35,17 @@ Item {
      * @param mouseY Current mouse Y position
      */
     function updateSelectionRect(mouseX, mouseY) {
-        // Calculate selection rectangle (handle negative dimensions)
-        var x = Math.min(selectionStart.x, mouseX);
-        var y = Math.min(selectionStart.y, mouseY);
-        var w = Math.abs(mouseX - selectionStart.x);
-        var h = Math.abs(mouseY - selectionStart.y);
-        // Clamp to canvas bounds
-        x = Math.max(0, x);
-        y = Math.max(0, y);
-        if (x + w > drawingArea.width)
-            w = drawingArea.width - x;
-
-        if (y + h > drawingArea.height)
-            h = drawingArea.height - y;
-
-        selectionRect = Qt.rect(x, y, w, h);
+        // Clamp both edges of the rectangle, then derive the extent from the
+        // clamped pair. MouseArea reports coordinates outside the item during a
+        // grabbed drag, so deriving the extent from the raw origin and clamping
+        // only the origin afterwards would keep the off-canvas overshoot in the
+        // width: dragging left from x=100 to x=-50 gave 0..150 rather than
+        // 0..100 and selected zones the user never dragged over.
+        const left = Math.max(0, Math.min(selectionStart.x, mouseX));
+        const right = Math.min(drawingArea.width, Math.max(selectionStart.x, mouseX));
+        const top = Math.max(0, Math.min(selectionStart.y, mouseY));
+        const bottom = Math.min(drawingArea.height, Math.max(selectionStart.y, mouseY));
+        selectionRect = Qt.rect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
     }
 
     /**
@@ -61,11 +57,11 @@ Item {
      */
     function selectZonesInRect(rect, additive) {
         if (!editorController || !drawingArea || rect.width < 1 || rect.height < 1)
-            return ;
+            return;
 
         // Guard against division by zero
         if (drawingArea.width <= 0 || drawingArea.height <= 0)
-            return ;
+            return;
 
         // Convert to relative coordinates and delegate to C++ for efficient iteration
         var relX = rect.x / drawingArea.width;
@@ -76,7 +72,6 @@ Item {
         // Update anchor for shift+click range selection
         if (selectedIds.length > 0 && editorWindow)
             editorWindow.selectionAnchorId = selectedIds[selectedIds.length - 1];
-
     }
 
     anchors.fill: parent
@@ -94,7 +89,10 @@ Item {
         color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2)
         border.color: Kirigami.Theme.highlightColor
         border.width: 1
-        z: 1000 // Above everything
+        // Shares drawingArea's stacking context with the zones, so it reads the
+        // same ceiling altDragOverlay does. The MouseArea paints nothing, so the
+        // two tying here is fine.
+        z: canvasHandler.editorWindow.canvasOverlayZ
     }
 
     /**
@@ -115,9 +113,12 @@ Item {
         parent: canvasHandler.drawingArea
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
-        z: 100 // Above zones (zones are typically z: 0-10)
+        // Above every zone and divider. The zone stacking range grows with the
+        // zone count, so read the window's ceiling rather than a fixed number
+        // a large layout could overtake.
+        z: canvasHandler.editorWindow.canvasOverlayZ
         hoverEnabled: false
-        onPressed: function(mouse) {
+        onPressed: function (mouse) {
             // Only capture if Alt is held - otherwise let zones handle it
             if (mouse.modifiers & Qt.AltModifier) {
                 mouse.accepted = true;
@@ -129,17 +130,16 @@ Item {
                 if (!(mouse.modifiers & Qt.ControlModifier)) {
                     if (canvasHandler.editorController)
                         canvasHandler.editorController.clearSelection();
-
                 }
             } else {
                 mouse.accepted = false; // Let zones or background handler handle it
                 altDragActive = false;
             }
         }
-        onPositionChanged: function(mouse) {
+        onPositionChanged: function (mouse) {
             if (!altDragActive || !pressed) {
                 mouse.accepted = false;
-                return ;
+                return;
             }
             var dx = mouse.x - canvasHandler.selectionStart.x;
             var dy = mouse.y - canvasHandler.selectionStart.y;
@@ -153,7 +153,7 @@ Item {
 
             mouse.accepted = true;
         }
-        onReleased: function(mouse) {
+        onReleased: function (mouse) {
             if (altDragActive) {
                 if (canvasHandler.isSelecting)
                     canvasHandler.selectZonesInRect(canvasHandler.selectionRect, mouse.modifiers & Qt.ControlModifier);
@@ -181,23 +181,22 @@ Item {
 
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
-        z: -1 // Below zones so zone clicks work
         propagateComposedEvents: false
         // Ensure drawingArea maintains focus when clicking empty space
-        onClicked: function(mouse) {
+        onClicked: function (mouse) {
             canvasHandler.drawingArea.forceActiveFocus();
         }
-        onPressed: function(mouse) {
+        onPressed: function (mouse) {
             // Start potential rectangle selection
             canvasHandler.selectionStart = Qt.point(mouse.x, mouse.y);
             canvasHandler.isSelecting = false; // Will become true if dragged past threshold
             canvasHandler.selectionRect = Qt.rect(mouse.x, mouse.y, 0, 0);
             mouse.accepted = true;
         }
-        onPositionChanged: function(mouse) {
+        onPositionChanged: function (mouse) {
             if (!pressed) {
                 mouse.accepted = false;
-                return ;
+                return;
             }
             var dx = mouse.x - canvasHandler.selectionStart.x;
             var dy = mouse.y - canvasHandler.selectionStart.y;
@@ -210,7 +209,6 @@ Item {
                 if (!(mouse.modifiers & Qt.ControlModifier)) {
                     if (canvasHandler.editorController)
                         canvasHandler.editorController.clearSelection();
-
                 }
             }
             if (canvasHandler.isSelecting)
@@ -218,7 +216,7 @@ Item {
 
             mouse.accepted = true;
         }
-        onReleased: function(mouse) {
+        onReleased: function (mouse) {
             if (canvasHandler.isSelecting) {
                 // Select all zones within the rectangle
                 canvasHandler.selectZonesInRect(canvasHandler.selectionRect, mouse.modifiers & Qt.ControlModifier);
@@ -228,7 +226,6 @@ Item {
                 // Simple click on empty space - clear selection
                 if (canvasHandler.editorController)
                     canvasHandler.editorController.clearSelection();
-
             }
             mouse.accepted = true;
         }
@@ -236,12 +233,12 @@ Item {
             canvasHandler.isSelecting = false;
             canvasHandler.selectionRect = Qt.rect(0, 0, 0, 0);
         }
-        onDoubleClicked: function(mouse) {
+        onDoubleClicked: function (mouse) {
             if (canvasHandler.previewMode)
-                return ;
+                return;
 
             if (!canvasHandler.editorController || !canvasHandler.drawingArea)
-                return ;
+                return;
 
             // Quick add zone at click position
             var relX = Math.max(0, (mouse.x / canvasHandler.drawingArea.width) - 0.125);
@@ -258,5 +255,4 @@ Item {
             canvasHandler.editorController.addZone(relX, relY, relW, relH);
         }
     }
-
 }

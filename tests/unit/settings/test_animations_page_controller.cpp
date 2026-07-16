@@ -12,7 +12,7 @@
  * Uses `setUserProfilesDirOverride()` to redirect file I/O into a
  * tmpdir so the test never touches the real user XDG dir.
  *
- * Companion test files (split for the <800-line guideline):
+ * Companion test files:
  *   - test_animations_motion_sets.cpp      — preset / motion-set / pending
  *   - test_animations_shader_overrides.cpp — shader-effect overrides
  */

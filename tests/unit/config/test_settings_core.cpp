@@ -12,7 +12,7 @@
  * 4. LabelFontWeight default (regression guard)
  * 5. Activation setting load + default fallback
  *
- * Companion test files (split for the <800-line guideline):
+ * Companion test files:
  *   - test_settings_animation_profile.cpp — Profile JSON-blob storage,
  *     per-field signals, aggregate-setter merge semantics
  *   - test_settings_shader_tree.cpp       — ShaderProfileTree persistence,
@@ -513,6 +513,22 @@ private Q_SLOTS:
             backend->sync();
         }
 
+        // Precondition: every stale key really is on disk, in the group it was
+        // written to. Without this the "it is gone after save()" assertions
+        // below cannot tell a working purge from a key that was never there —
+        // which is exactly how the Tiling.Algorithm case passed for so long
+        // while reading back from the wrong group.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            QVERIFY(backend->group(ConfigDefaults::snappingBehaviorGroup())
+                        ->hasKey(QStringLiteral("ObsoleteActivationKey")));
+            QVERIFY(backend->group(ConfigDefaults::snappingEffectsGroup())->hasKey(QStringLiteral("OldDisplayToggle")));
+            QVERIFY(backend->group(ConfigDefaults::snappingZonesColorsGroup())
+                        ->hasKey(QStringLiteral("DeprecatedThemeIndex")));
+            QVERIFY(backend->group(ConfigDefaults::tilingAlgorithmGroup())
+                        ->hasKey(QStringLiteral("RemovedAutotileSetting")));
+        }
+
         // Load picks up the stale keys from disk (but ignores them in members)
         Settings settings;
 
@@ -542,9 +558,16 @@ private Q_SLOTS:
                      "Stale key in Snapping.Zones.Colors group must be purged by save()");
         }
         {
-            auto g = backend->group(ConfigDefaults::tilingGroup());
+            // Read back from the group the key was WRITTEN to. Tiling.Algorithm
+            // and Tiling are distinct nested groups, so asking Tiling whether it
+            // holds a key only ever planted in Tiling.Algorithm is trivially
+            // true and left the purge unverified.
+            auto g = backend->group(ConfigDefaults::tilingAlgorithmGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("RemovedAutotileSetting")),
-                     "Stale key in Tiling group must be purged by save()");
+                     "Stale key in Tiling.Algorithm group must be purged by save()");
+        }
+        {
+            auto g = backend->group(ConfigDefaults::tilingGroup());
             QVERIFY2(g->hasKey(ConfigDefaults::enabledKey()), "Valid key Enabled must survive save()");
         }
     }
@@ -569,6 +592,17 @@ private Q_SLOTS:
             backend->sync();
         }
 
+        // Precondition, mirroring testSave_purgesStaleKeys: both keys really are
+        // on disk in that group before save() runs. Without it the absence
+        // assertion below cannot tell a working purge from a key that was never
+        // written.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+            QVERIFY(g->hasKey(ConfigDefaults::positionKey()));
+            QVERIFY(g->hasKey(QStringLiteral("ObsoletePerScreenKey")));
+        }
+
         Settings settings;
         settings.save();
 
@@ -577,6 +611,15 @@ private Q_SLOTS:
             auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
             QVERIFY2(!g->hasKey(QStringLiteral("ObsoletePerScreenKey")),
                      "Stale key in per-screen group must be purged by save()");
+            // Positive control for the mechanism: save() deletes every
+            // prefix-matching group and rewrites the ones it loaded, so the
+            // stale key vanishing only means "purged" if the group's valid key
+            // came back with it. Absence alone reads the same whether the key
+            // was dropped or the whole group was deleted, and the delete arm is
+            // the one that fires for a group Settings never loaded.
+            QVERIFY2(g->hasKey(ConfigDefaults::positionKey()),
+                     "Valid per-screen key must survive save() — the group was rewritten, not just deleted");
+            QCOMPARE(g->readInt(ConfigDefaults::positionKey(), -1), 2);
         }
     }
 

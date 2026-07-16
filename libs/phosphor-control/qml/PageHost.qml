@@ -36,12 +36,25 @@ Item {
      *  content inset and the breadcrumb row. */
     property real contentMargins: Kirigami.Units.largeSpacing
 
+    // Bumped by onPageRegistered so currentEntry re-evaluates on late
+    // registration (pageData() itself is a non-notifying invokable).
+    // Internal cache-invalidation state, not part of this component's
+    // public surface — hence the `_` prefix, matching `_everCurrent` below.
+    property int _registryRevision: 0
+
     // `pageData()` returns an empty QVariantMap when the id is unknown
     // (mid-startup before registration, or a stale id restored from disk).
     // An empty map marshals to a non-null JS object, so check for a valid
     // `id` field to fall through to the placeholder rather than rendering
     // an empty viewport.
     readonly property var currentEntry: {
+        // Depend on _registryRevision: pageData() is a non-notifying
+        // invokable, so without this a page that registers AFTER becoming
+        // current would leave the placeholder up until the next navigation.
+        // onPageRegistered below bumps the revision to force re-evaluation.
+        // `void (…)` marks the read as a deliberate dependency registration
+        // rather than a stray statement a cleanup would delete.
+        void (root._registryRevision);
         if (root.controller.currentPageId === "")
             return null;
 
@@ -50,27 +63,33 @@ Item {
     }
 
     // ── Instance cache ───────────────────────────────────────────────
-    // Ordered list of page ids that have a live (built, cached) Loader.
+    // Ordered model of page ids that have a live (built, cached) Loader.
     // Appended to the first time each page becomes current; the Repeater
-    // below maps it to one persistent Loader per id. Never reordered, so a
+    // below maps it to one persistent Loader per id. Backed by a ListModel,
+    // NOT a plain JS array: Repeater does not diff array models, so a
+    // reassigned array would destroy and rebuild EVERY delegate on each
+    // first visit, throwing away all cached page instances. ListModel
+    // appends leave existing delegates untouched. Never reordered, so a
     // page's Loader index is stable for the host's lifetime.
-    property var cachedPageIds: []
+    ListModel {
+        id: cacheModel
+    }
 
-    // Append `id` to the cache list if it names a real registered page and
-    // is not already cached. slice()+push()+reassign so the change is a new
-    // array reference — a plain in-place push would not notify the Repeater
-    // model binding.
+    // Append `id` to the cache model if it names a real registered page and
+    // is not already cached.
     function cachePage(id) {
         if (!id)
             return;
         const data = root.controller.registry.pageData(id);
         if (!data || !data.id)
             return;
-        if (root.cachedPageIds.indexOf(id) !== -1)
-            return;
-        const next = root.cachedPageIds.slice();
-        next.push(id);
-        root.cachedPageIds = next;
+        for (let i = 0; i < cacheModel.count; ++i) {
+            if (cacheModel.get(i).pageId === id)
+                return;
+        }
+        cacheModel.append({
+            pageId: id
+        });
     }
 
     Component.onCompleted: root.cachePage(root.controller.currentPageId)
@@ -88,13 +107,12 @@ Item {
     Repeater {
         id: pageRepeater
 
-        model: root.cachedPageIds
+        model: cacheModel
 
         delegate: Loader {
             id: pageLoader
 
-            required property string modelData
-            readonly property string pageId: pageLoader.modelData
+            required property string pageId
             readonly property bool isCurrent: root.controller.currentPageId === pageLoader.pageId
             // Lazy-build latch: a page incubates the first time it becomes
             // current and stays built (cached) thereafter. Without it, `active:
@@ -131,6 +149,10 @@ Item {
             Component.onCompleted: if (pageLoader.isCurrent)
                 pageLoader._everCurrent = true
             source: {
+                // Depend on _registryRevision (same idiom as currentEntry):
+                // pageData() is non-notifying, so a re-registration that
+                // changes a page's qmlSource must force re-evaluation here.
+                void (root._registryRevision);
                 const data = root.controller.registry.pageData(pageLoader.pageId);
                 return (data && data.id) ? data.qmlSource : "";
             }
@@ -173,7 +195,7 @@ Item {
                 from: 0
                 to: 1
                 profile: "widget.fadeIn"
-                durationOverride: 180
+                durationOverride: Kirigami.Units.shortDuration * 1.8
             }
 
             onLoaded: {
@@ -223,6 +245,14 @@ Item {
     // stale pointer. Re-inject into whichever cached Loader matches.
     Connections {
         function onPageRegistered(id) {
+            // pageData() is a non-notifying invokable, so a page registering
+            // after becoming current needs an explicit refresh: bump the
+            // revision currentEntry depends on, and cache the page if it is
+            // the current one (the earlier cachePage call on navigation
+            // found no registration and bailed).
+            root._registryRevision++;
+            if (id === root.controller.currentPageId)
+                root.cachePage(id);
             const pageController = root.controller.registry.controller(id);
             // A registration that explicitly passes a null controller
             // ("detach" path) leaves the previously injected pointer in

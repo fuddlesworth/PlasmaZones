@@ -97,6 +97,9 @@ public:
     std::unique_ptr<IGroup> group(const QString& name) override;
     void reparseConfiguration() override;
     bool sync() override;
+    /// Bypasses the Deferred sync policy's debounce so the return value is a
+    /// real commit result under every policy. Equivalent to @c flushPending().
+    bool commit() override;
     void deleteGroup(const QString& name) override;
     QString readRootString(const QString& key, const QString& defaultValue = {}) const override;
     void writeRootString(const QString& key, const QString& value) override;
@@ -126,6 +129,15 @@ public:
     /// checks (see @c Store::Store) to detect a clobber.
     std::pair<QString, int> versionStamp() const override;
 
+    /// Insert the installed version stamp into @p root when a stamp is
+    /// configured and @p root does not already carry the key. No-op otherwise.
+    ///
+    /// This is the same step @c sync() applies on its way to disk, exposed so
+    /// that a caller writing a root snapshot out of band (an export, say) can
+    /// stamp it identically. A document written without the stamp reads back as
+    /// version-less and re-runs the whole migration chain when it is imported.
+    void applyVersionStamp(QJsonObject& root) const;
+
     /// Run @p schema's migration chain against the in-memory root, and
     /// if any step bumps the version stamp, atomically rewrite the backing
     /// file and refresh the in-memory state. Returns @c true unless the
@@ -149,9 +161,17 @@ public:
     /// to rewrite via @c writeJsonAtomically during schema upgrades).
     QString filePath() const;
 
-    /// Clear the dirty flag without writing. Used by tests + async I/O
-    /// that commits snapshots off-thread.
+    /// Clear the dirty flag without writing. Used by migration
+    /// (@c applyMigration) and by callers that stage something into the root,
+    /// take a snapshot of it, then restore the root and need to put the flag
+    /// back the way they found it (see @c isDirty()).
     void clearDirty();
+
+    /// Whether the in-memory document carries changes that have not been
+    /// committed to disk. Pairs with @c clearDirty() for callers that
+    /// snapshot/restore the root (see @c jsonRootSnapshot / @c replaceRoot)
+    /// and need to put the flag back the way they found it.
+    bool isDirty() const;
 
     /// Replace the in-memory document with @p root. Marks the backend
     /// dirty — callers who paired this with a successful
@@ -193,11 +213,12 @@ public:
     void setSyncPolicy(SyncPolicy policy, int debounceMs = 500);
     SyncPolicy syncPolicy() const;
 
-    /// Flush any pending deferred-sync write to disk now. No-op when the
-    /// policy is @c Synchronous or when the backend is not dirty.
-    /// Returns the commit result (or @c true when there was nothing to
-    /// flush). Safe to call from any context that would otherwise be
-    /// able to call @c sync().
+    /// Flush to disk now, cancelling any pending deferred-sync timer first.
+    /// No-op only when the backend is not dirty — under @c Synchronous policy
+    /// there is no timer to cancel, but a dirty root is still written, so this
+    /// is a commit under every policy rather than a Deferred-only escape
+    /// hatch. Returns the commit result (or @c true when there was nothing to
+    /// flush). Safe to call from any context that could call @c sync().
     bool flushPending();
 
 private:

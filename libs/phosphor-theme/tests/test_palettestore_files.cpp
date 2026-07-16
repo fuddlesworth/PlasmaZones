@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// loadFromFile slots for PaletteStore. Split out of
-// test_palettestore.cpp so each TU stays under the project's 800-line
-// cap. Shares the QTemporaryDir + QFile fixture-write scaffolding with
-// the primary + hot-reload TUs via test_palettestore_helpers.h.
+// loadFromFile slots for PaletteStore. Shares the QTemporaryDir + QFile
+// fixture-write scaffolding with the primary + hot-reload TUs via
+// test_palettestore_helpers.h.
 //
 // These slots specifically pin loadFromFile's documented asymmetry
 // with loadFromJson: a malformed-JSON parse failure does NOT commit

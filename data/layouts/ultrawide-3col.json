@@ -3,7 +3,6 @@
     "name": "Ultrawide 3-Column",
     "description": "Three balanced columns optimized for 21:9 monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "ultrawide",
     "zones": [

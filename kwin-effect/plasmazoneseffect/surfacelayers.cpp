@@ -109,8 +109,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChain(ShaderTransition& transit
     return renderSurfaceChainComposite(w, scale, transition.cached->shader.get());
 }
 
-// This TU owns the composite fold and nothing else. Its neighbours, all split out
-// to keep it under the 800-line limit:
+// This TU owns the composite fold and nothing else. Its neighbours:
 //   surface_capture.cpp    — the fold's INPUT side: target (re)allocation and the raw
 //                            window capture
 //   surface_backdrop.cpp   — captureWindowBackdrop (the scene behind the window)

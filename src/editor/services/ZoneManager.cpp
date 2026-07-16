@@ -10,6 +10,7 @@
 #include <QtMath>
 #include <QCoreApplication>
 #include <QLatin1String>
+#include <QSet>
 #include <algorithm>
 #include "../../core/logging.h"
 
@@ -169,10 +170,18 @@ void ZoneManager::emitZoneSignal(SignalType type, const QString& zoneId, bool in
         case SignalType::GeometryChanged:
             m_pendingGeometryChanges.insert(zoneId);
             break;
+        case SignalType::NameChanged:
+            m_pendingNameChanges.insert(zoneId);
+            break;
+        case SignalType::NumberChanged:
+            m_pendingNumberChanges.insert(zoneId);
+            break;
         case SignalType::ColorChanged:
             m_pendingColorChanges.insert(zoneId);
             break;
-        default:
+        case SignalType::ZOrderChanged:
+            // No per-zone signal — see the immediate branch below. The
+            // aggregate flags set after this switch are the whole notification.
             break;
         }
         m_pendingZonesChanged = true;
@@ -201,7 +210,8 @@ void ZoneManager::emitZoneSignal(SignalType type, const QString& zoneId, bool in
             Q_EMIT zoneColorChanged(zoneId);
             break;
         case SignalType::ZOrderChanged:
-            Q_EMIT zoneZOrderChanged(zoneId);
+            // No per-zone signal: a restack renumbers at least one other zone's
+            // zOrder, so zonesChanged() below is the only honest notification.
             break;
         }
         Q_EMIT zonesChanged();
@@ -232,6 +242,10 @@ ZoneManager::ZoneManager(QObject* parent)
     , m_autoFiller(std::make_unique<ZoneAutoFiller>(this))
 {
 }
+
+// Out-of-line so ~unique_ptr<ZoneAutoFiller> is instantiated here, where
+// ZoneAutoFiller is complete, rather than in every includer of ZoneManager.h.
+ZoneManager::~ZoneManager() = default;
 
 QVariantMap ZoneManager::createZone(const QString& name, int number, qreal x, qreal y, qreal width, qreal height)
 {
@@ -276,7 +290,7 @@ QString ZoneManager::addZone(qreal x, qreal y, qreal width, qreal height)
         return QString();
     }
 
-    int zoneNumber = m_zones.size() + 1;
+    int zoneNumber = nextAvailableZoneNumber();
     QString zoneName = QStringLiteral("Zone %1").arg(zoneNumber);
     QVariantMap zone = createZone(zoneName, zoneNumber, geom.x, geom.y, geom.width, geom.height);
     QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
@@ -463,7 +477,12 @@ void ZoneManager::deleteZone(const QString& zoneId)
     }
 
     m_zones.removeAt(index);
-    renumberZones();
+    // zOrder is the zone's index in the list, so a removal shifts every zone
+    // after it. Recompact so zOrder stays a dense 0..count-1 permutation.
+    // Numbers are user-owned and are NOT recompacted: deleting a zone leaves a
+    // gap in the numbering, which is a valid state (1, 4, 7 is allowed). The
+    // survivors keep the numbers the user gave them.
+    updateAllZOrderValues();
 
     emitZoneSignal(SignalType::ZoneRemoved, zoneId);
 }
@@ -482,6 +501,10 @@ void ZoneManager::clearAllZones()
 void ZoneManager::setZones(const QVariantList& zones)
 {
     m_zones = zones;
+    // The layout format does not persist zOrder, so a list parsed from a saved
+    // layout carries none at all. Stamp it from the list order, which is the
+    // z-order the editor works in.
+    updateAllZOrderValues();
     Q_EMIT zonesChanged();
 }
 
@@ -501,20 +524,44 @@ int ZoneManager::findZoneIndex(const QString& zoneId) const
     return -1;
 }
 
-void ZoneManager::renumberZones()
+int ZoneManager::nextAvailableZoneNumber() const
 {
-    for (int i = 0; i < m_zones.size(); ++i) {
-        QVariantMap zone = m_zones[i].toMap();
-        QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
-        int oldNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
-        int newNumber = i + 1;
-
-        if (oldNumber != newNumber) {
-            zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = newNumber;
-            m_zones[i] = zone;
-            Q_EMIT zoneNumberChanged(zoneId);
+    // Numbers are user-owned and unique but need not be dense: a zone that needs
+    // a fresh number takes the next highest, max(existing) + 1. Gaps left by a
+    // delete or a deliberate 1, 4, 7 numbering are preserved, so this does not
+    // fill them.
+    int maxNumber = 0;
+    QSet<int> used;
+    used.reserve(m_zones.size());
+    for (const QVariant& zoneVar : m_zones) {
+        int number = zoneVar.toMap().value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt();
+        if (number > 0) {
+            used.insert(number);
+            maxNumber = qMax(maxNumber, number);
         }
     }
+
+    const int candidate = maxNumber + 1;
+    if (candidate <= 99) {
+        return candidate;
+    }
+
+    // A zone already holds 99, so next-highest would overflow the 1..99 range.
+    // Fall back to the lowest unused number so the unique invariant still holds.
+    for (int number = 1; number <= 99; ++number) {
+        if (!used.contains(number)) {
+            return number;
+        }
+    }
+
+    // All 99 numbers are in use: there is no unique number left to hand out.
+    // The fresh-number call sites (addZone / duplicateZone / splitZone /
+    // addZoneFromMap) take this as a best-effort unique value and stamp it
+    // as-is; none of them re-run validateZoneNumber. That range check runs only
+    // on the Properties spinbox path (user input), so a saturated layout keeps
+    // the natural overflow here rather than being blocked, matching the
+    // pre-existing ceiling behaviour.
+    return candidate;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -579,6 +626,18 @@ void ZoneManager::emitDeferredSignals()
         Q_EMIT zoneGeometryChanged(zoneId);
     }
     m_pendingGeometryChanges.clear();
+
+    // Emit name change signals for each affected zone
+    for (const QString& zoneId : std::as_const(m_pendingNameChanges)) {
+        Q_EMIT zoneNameChanged(zoneId);
+    }
+    m_pendingNameChanges.clear();
+
+    // Emit number change signals for each affected zone
+    for (const QString& zoneId : std::as_const(m_pendingNumberChanges)) {
+        Q_EMIT zoneNumberChanged(zoneId);
+    }
+    m_pendingNumberChanges.clear();
 
     // Emit color change signals for each affected zone
     for (const QString& zoneId : std::as_const(m_pendingColorChanges)) {

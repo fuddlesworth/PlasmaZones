@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Subscribe / unsubscribe / broadcast paths split out of ipcrouter.cpp
-// to keep both translation units under the 800-line guideline. All
-// three methods are members of IpcRouter and reach into the same
-// private state (m_subscriptionsBySocket); the split is purely
-// organisational. Meta-helpers and the per-socket cap constants
+// Subscribe / unsubscribe / broadcast paths for IpcRouter. All three
+// methods are members of IpcRouter and reach into the same private
+// state (m_subscriptionsBySocket); the split from ipcrouter.cpp is
+// purely organisational. Meta-helpers and the per-socket cap constants
 // live in ipcrouterdetail.h so dispatch() and handleSubscribe()
 // agree on the introspection floor and the cap value.
 

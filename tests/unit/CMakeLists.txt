@@ -213,6 +213,10 @@ p_add_test(test_autotile_engine_core autotile/test_autotile_engine_core.cpp)
 target_compile_definitions(test_autotile_engine_core PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_engine_master autotile/test_autotile_engine_master.cpp)
 target_compile_definitions(test_autotile_engine_master PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+# helpers/AutotileFakes.h declares a Q_OBJECT fake — listing it as a source is
+# what makes AUTOMOC generate its metaobject (a merely #included header is not
+# scanned), and the IAutotileSettings qobject_cast needs it.
+target_sources(test_autotile_engine_master PRIVATE helpers/AutotileFakes.h)
 p_add_test(test_autotile_engine_minsize autotile/test_autotile_engine_minsize.cpp)
 p_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow.cpp)
 p_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
@@ -232,8 +236,18 @@ target_link_libraries(test_autotile_tile_request_validation PRIVATE PhosphorComp
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile + Virtual Screen Integration Tests
 # ═══════════════════════════════════════════════════════════════════════════════
-p_add_test(test_autotile_virtual autotile/test_autotile_virtual.cpp)
 p_add_test(test_autotile_per_screen_desktop autotile/test_autotile_per_screen_desktop.cpp)
+
+# Accepting a virtual screen ID needs the manager to resolve real virtual
+# geometry, which needs a backing physical screen — compile in the
+# FakeScreenProvider (like the cross-surface navigation tests).
+add_executable(test_autotile_virtual
+               autotile/test_autotile_virtual.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_autotile_virtual
+               PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_autotile_virtual PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_autotile_virtual COMMAND test_autotile_virtual)
 target_compile_definitions(test_autotile_virtual PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -275,13 +289,10 @@ p_add_test(test_settings_core config/test_settings_core.cpp)
 
 # Companion test executable: animation Profile JSON-blob storage,
 # per-field signal discrimination, aggregate-setter merge semantics.
-# Split from test_settings_core to keep each test file under the
-# project's <800-line guideline.
 p_add_test(test_settings_animation_profile config/test_settings_animation_profile.cpp)
 
 # Companion test executable: ShaderProfileTree persistence + prune,
-# autoAssignAllLayouts master toggle. Split from test_settings_core to
-# keep each test file under the project's <800-line guideline.
+# autoAssignAllLayouts master toggle.
 p_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 
 # Companion test executable: DecorationProfileTree persistence + JSON facade
@@ -292,8 +303,7 @@ p_add_test(test_settings_decoration_tree config/test_settings_decoration_tree.cp
 
 # Companion test executable: per-page Discard/Reset primitives — committed
 # baseline capture, isKeyModified, discardKeys (revert-to-baseline) and
-# resetKeys (revert-to-default) with NOTIFY re-emission. Split from
-# test_settings_core to keep each test file under the <800-line guideline.
+# resetKeys (revert-to-default) with NOTIFY re-emission.
 p_add_test(test_settings_pagereset config/test_settings_pagereset.cpp)
 
 p_add_test(test_settings_validation config/test_settings_validation.cpp)
@@ -410,6 +420,17 @@ p_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 p_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
 p_add_test(test_layout_registry_cache core/test_layout_registry_cache.cpp)
 
+# The editor's save payload is schema-gated at the D-Bus boundary, so the shape
+# EditorController::saveLayout emits has to satisfy the layout schema. Pins both
+# serialized forms of aspectRatioClass (editor int, canonical string from
+# Layout::toJson) against the schema that gates createLayoutFromJson/updateLayout.
+p_add_test(test_layout_schema_editor_shape core/test_layout_schema_editor_shape.cpp)
+
+# exportLayout / importLayout report their outcome rather than logging it and
+# returning void, and the export writes atomically so a failure leaves the
+# user's chosen destination alone.
+p_add_test(test_layoutregistry_transfer core/test_layoutregistry_transfer.cpp)
+
 # Regression guard for the in-process dual-RuleStore data-loss race
 # where Settings used to construct its own store pointed at the same file
 # as the daemon's. Pins the share-via-borrow-ctor wiring in daemon.cpp.
@@ -509,6 +530,8 @@ p_add_test(test_snap_state_class_mutation snap/test_snap_state_class_mutation.cp
 # output geometry — compile in the FakeScreenProvider (like the WTA tests).
 add_executable(test_navigation_cross_surface
                autotile/test_navigation_cross_surface.cpp
+               # Q_OBJECT fake — listed so AUTOMOC generates its metaobject.
+               helpers/AutotileFakes.h
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_navigation_cross_surface
                PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
@@ -792,6 +815,68 @@ target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::C
     PhosphorControl::PhosphorControl)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
+# Pure string helpers behind AlgorithmService::createNewAlgorithm. Compiled
+# directly because they live in the plasmazones-settings executable rather than
+# plasmazones_core. Split by surface: the template splice / metadata rewrite
+# here, the shapes it refuses in _rejects, the blank scaffold next door. They
+# share no fixture beyond a copyright line.
+#
+# All three targets compile algorithmscaffold.cpp, which reads AutotileConstants.h's
+# ScriptedDefaultMaxWindows and DefaultSplitRatio so a generated algorithm
+# matches the engine's own fallbacks - header-only constants, no .so coupling
+# beyond the include path. Linking PhosphorTiles rather than hand-listing paths
+# lets its interface carry the transitive PhosphorLayoutApi include it needs.
+add_executable(test_algorithm_scaffold
+    settings/test_algorithm_scaffold.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+target_compile_definitions(test_algorithm_scaffold PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_algorithm_scaffold COMMAND test_algorithm_scaffold)
+
+# The one AlgorithmService surface that feeds the scaffold's
+# already-sanitized-caller contract from the translation catalog: the duplicate
+# name suffix. Drives the real service against a real loader + registry over an
+# isolated XDG root, so it needs the service and scaffold TUs (both live in the
+# plasmazones-settings executable) plus PhosphorTiles for the Luau loader.
+add_executable(test_algorithm_copy_suffix
+    settings/test_algorithm_copy_suffix.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/algorithmservice.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_copy_suffix PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorTiles::PhosphorTiles)
+add_test(NAME test_algorithm_copy_suffix COMMAND test_algorithm_copy_suffix)
+
+add_executable(test_algorithm_scaffold_rejects
+    settings/test_algorithm_scaffold_rejects.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_scaffold_rejects PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_algorithm_scaffold_rejects COMMAND test_algorithm_scaffold_rejects)
+
+add_executable(test_algorithm_blank_scaffold
+    settings/test_algorithm_blank_scaffold.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_blank_scaffold PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_algorithm_blank_scaffold COMMAND test_algorithm_blank_scaffold)
+
+# clampName is header-only in src/core/constants.h, so there is no source to
+# compile in beyond the test itself. plasmazones_core supplies LayoutAdaptor
+# (src/dbus/layoutadaptor.cpp), whose duplicateLayout clamp the test drives, and
+# carries the include chain constants.h pulls (PhosphorEngine, PhosphorLayoutApi,
+# PhosphorZones). PhosphorZones is named for the LayoutRegistry and Layout
+# symbols the duplicate cases construct — duplicateNameSuffix() alone would need
+# no link, being inline in the header. Qt6::DBus is LayoutAdaptor's own base
+# class (QDBusAbstractAdaptor); the test calls the slot directly, never a bus.
+add_executable(test_layoutadaptor_nameclamp
+    settings/test_layoutadaptor_nameclamp.cpp
+)
+target_link_libraries(test_layoutadaptor_nameclamp PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+    PhosphorZones::PhosphorZones)
+add_test(NAME test_layoutadaptor_nameclamp COMMAND test_layoutadaptor_nameclamp)
+
 add_executable(test_window_appearance_controller
     settings/test_window_appearance_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowappearancecontroller.cpp
@@ -836,8 +921,7 @@ target_link_libraries(test_animations_page_controller
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
 
-# Companion test executable: motion-set + pending-changes coverage. Split from test_animations_page_controller to keep each test
-# file under the project's <800-line guideline.
+# Companion test executable: motion-set + pending-changes coverage.
 add_executable(test_animations_motion_sets
     settings/test_animations_motion_sets.cpp
     ${_animations_ctrl_SRCS}
@@ -854,8 +938,7 @@ target_link_libraries(test_animations_motion_sets
 add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
 
 # Companion test executable: the user-preset library (AnimationPresetLibrary).
-# Split from test_animations_motion_sets to keep each test file under the
-# project's <800-line guideline, and because presets and sets are separate
+# Split from test_animations_motion_sets because presets and sets are separate
 # sub-services of the controller.
 add_executable(test_animations_presets
     settings/test_animations_presets.cpp
@@ -872,9 +955,7 @@ target_link_libraries(test_animations_presets
 )
 add_test(NAME test_animations_presets COMMAND test_animations_presets)
 
-# Companion test executable: shader-override end-to-end coverage. Split
-# from test_animations_page_controller to keep each test file under the
-# project's <800-line guideline.
+# Companion test executable: shader-override end-to-end coverage.
 add_executable(test_animations_shader_overrides
     settings/test_animations_shader_overrides.cpp
     ${_animations_ctrl_SRCS}
@@ -938,10 +1019,8 @@ add_test(NAME test_decorationpagecontroller COMMAND test_decorationpagecontrolle
 
 # Companion test executable: decoration-set CRUD over the shared
 # ShaderSetStore (save / list / apply / remove / update / export / import,
-# the active-flag containment semantics, and the format-version gate). Split
-# from test_decorationpagecontroller to keep each test file under the
-# project's <800-line guideline — same split as the motion side's
-# test_animations_motion_sets.
+# the active-flag containment semantics, and the format-version gate). Mirrors
+# the motion side's test_animations_motion_sets.
 add_executable(test_decoration_sets
     settings/test_decoration_sets.cpp
     ${_decoration_ctrl_SRCS}
@@ -957,9 +1036,9 @@ target_link_libraries(test_decoration_sets
 )
 add_test(NAME test_decoration_sets COMMAND test_decoration_sets)
 
-# The refusal half of the decoration-set suite. Split from the round-trip half so
-# each file stays under the 800-line cap; both share the sandbox guard and the
-# payload builders in helpers/DecorationSetHelpers.h.
+# The refusal half of the decoration-set suite. It shares the sandbox guard and
+# the payload builders in helpers/DecorationSetHelpers.h with the round-trip
+# half.
 add_executable(test_decoration_sets_validation
     settings/test_decoration_sets_validation.cpp
     ${_decoration_ctrl_SRCS}
@@ -1001,13 +1080,11 @@ add_executable(test_rule_controller
     ${CMAKE_SOURCE_DIR}/src/settings/rulemodel.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller.cpp
     # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
-    # author surfaces, validation) — split out of rulecontroller.cpp
-    # to keep that TU under the 800-line cap; the controller's class
-    # definition spans both TUs.
+    # author surfaces, validation). The controller's class definition spans
+    # this TU and rulecontroller.cpp.
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_views.cpp
-    # Label-lookup setters + wiring-completion gate — split out so
-    # rulecontroller.cpp stays under the 800-line cap; the
-    # controller's class definition spans both TUs.
+    # Label-lookup setters + wiring-completion gate. The controller's class
+    # definition spans this TU and rulecontroller.cpp.
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_lookups.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rulecontroller_baseline.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/ruleauthoring.cpp
@@ -1057,7 +1134,7 @@ add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
 set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# compositor-common/ - Shared Library Types Tests (split for <800-line limit)
+# compositor-common/ - Shared Library Types Tests
 #   test_wire_types: D-Bus wire type signature/roundtrip tests
 #   test_floating_cache: FloatingCache + ZoneCache + TriggerParser tests
 #   test_autotile_state: AutotileStateHelpers + WindowId tests
@@ -1080,6 +1157,48 @@ add_test(NAME test_autotile_state COMMAND test_autotile_state)
 add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
 target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# editor/ - Zone z-order
+# ═══════════════════════════════════════════════════════════════════════════════
+# zOrder is the zone's index in the list, and EditorWindow.qml stacks zones at
+# zoneBaseZ + zOrder while DividerManager derives its own z from the zone count.
+# A hole or a tie in the zOrder run therefore mis-paints the canvas and breaks
+# divider hit-testing, silently. This pins density across every mutation, plus
+# the contract that undoing a delete returns the zone to its original height
+# rather than to the top. ZoneManager lives in the editor executable rather than
+# a library, so its TUs are compiled into the test directly.
+add_executable(test_zone_zorder editor/test_zone_zorder.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/ZoneManager.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/ZoneAutoFiller.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/zonemanager/divider.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/zonemanager/zorder.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/zonemanager/serialization.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/BaseZoneCommand.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/DeleteZoneCommand.cpp)
+# Qt6::Gui is explicit: DeleteZoneCommand derives from QUndoCommand. It arrives
+# transitively via plasmazones_core today, but that is not a contract.
+target_link_libraries(test_zone_zorder PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_zone_zorder COMMAND test_zone_zorder)
+
+# The editor's D-Bus client has to read the daemon's ANSWER, not just the reply
+# type: updateLayout is declared bool and a refusal comes back as an ordinary
+# ReplyMessage, which EditorController::saveLayout then treats as a landed write
+# (clean undo stack, no unsaved-changes prompt, work lost on close). The client
+# hard-binds the daemon's bus name, so the stub registry has to claim it — the
+# test skips itself when a real daemon already owns the name, hence the
+# dbus-run-session wrapper. DBusLayoutService lives in the editor executable
+# rather than a library, so its TU is compiled into the test directly.
+# ILayoutService.h declares its Q_OBJECT base entirely in the header, so it is
+# listed explicitly: AUTOMOC has to see it to emit the base's metaobject.
+add_executable(test_dbus_layout_service_replies editor/test_dbus_layout_service_replies.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/DBusLayoutService.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/ILayoutService.h)
+target_link_libraries(test_dbus_layout_service_replies
+                      PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                              PhosphorProtocol::PhosphorProtocol)
+add_test(NAME test_dbus_layout_service_replies
+         COMMAND dbus-run-session -- $<TARGET_FILE:test_dbus_layout_service_replies>)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation

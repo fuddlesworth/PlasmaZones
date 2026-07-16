@@ -28,6 +28,10 @@ public:
 private:
     QString m_zoneId;
     QVariantMap m_zoneData;
+    // Where the zone sat in the list, and so its height in the stack, when the
+    // command was built. Undo puts it back at that index, so a deleted zone
+    // returns to its original stacking rather than to the top.
+    int m_zoneIndex;
 };
 
 } // namespace PlasmaZones

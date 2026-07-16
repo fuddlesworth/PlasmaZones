@@ -25,34 +25,27 @@ set(plasmazones_settings_SRCS
     registryshaderpreviewbackend.h
     settingscontroller.h
     settingscontroller.cpp
-    # SettingsController is large enough to violate the 800-line cap
-    # if kept as a single TU. The sub-domain methods live in sibling
-    # .cpp files compiled into the same target — same class, multiple
-    # translation units, no API change. Order matches reading order:
-    # construction → lifecycle → page registry → per-domain CRUD.
+    # SettingsController's sub-domain methods live in sibling .cpp files
+    # compiled into the same target — same class, multiple translation units,
+    # no API change. Order matches reading order: construction → lifecycle →
+    # page registry → per-domain CRUD.
     settingscontroller_lifecycle.cpp
     settingscontroller_pageregistration.cpp
     settingscontroller_pagetopology.cpp
     settingscontroller_layouts.cpp
     settingscontroller_session.cpp
-    # Per-screen autotile/snapping/zone-selector override wrappers — split
-    # out so settingscontroller_session.cpp stays under the 800-line cap.
+    # Per-screen autotile/snapping/zone-selector override wrappers.
     settingscontroller_perscreen.cpp
     settingscontroller_ordering.cpp
     # Virtual-screen lifecycle methods (getVirtualScreenConfig +
-    # apply/remove/stage variants). Split out of _session.cpp to
-    # keep that TU under the 800-line cap (CLAUDE.md).
+    # apply/remove/stage variants).
     settingscontroller_virtualscreens.cpp
     # D-Bus subscription wiring (wireDaemonSubscriptions + reloadLocal
-    # RuleStore) — extracted from settingscontroller.cpp so the central
-    # TU stays under the 800-line cap (CLAUDE.md).
+    # RuleStore).
     settingscontroller_dbuswire.cpp
-    # Active-page navigation + per-page dirty tracking + external-edit
-    # envelope — extracted from settingscontroller.cpp so the central TU
-    # stays under the 800-line cap (CLAUDE.md).
+    # Active-page navigation + per-page dirty tracking + external-edit envelope.
     settingscontroller_pagestate.cpp
-    # RAII begin/endExternalEdit wrapper — extracted from
-    # settingscontroller.h so the header stays under the 800-line cap.
+    # RAII begin/endExternalEdit wrapper, extracted from settingscontroller.h.
     externaleditscope.h
     externaleditscope.cpp
     # Per-page sub-controllers — hang off SettingsController as child QObjects,
@@ -64,18 +57,14 @@ set(plasmazones_settings_SRCS
     # definitions make cross-TU linkage independent of unity-build merging.
     animations_controller_detail.h
     # AnimationsPageController shader-leg methods compile into the same
-    # target — same class, separate TU, no API change. Keeps the main
-    # cpp under the 800-line cap (CLAUDE.md).
+    # target — same class, separate TU, no API change.
     animationspagecontroller_shaders.cpp
     # AnimationsPageController override-CRUD methods (userProfilesDir,
     # hasOverride / rawProfile / resolvedProfile / setOverride /
-    # clearOverride). Same split rationale as _shaders.cpp — the main
-    # TU grew past 800 lines after the F#2c async-revert addition.
+    # clearOverride).
     animationspagecontroller_overrides.cpp
-    # AnimationsPageController path-discovery helpers
-    # (sectionForPath / eventLabel / parentChain). Same
-    # split rationale — small per-Q_INVOKABLE methods extracted so the
-    # main TU stays under the 800-line cap.
+    # AnimationsPageController path-discovery helpers, small per-Q_INVOKABLE
+    # methods (sectionForPath / eventLabel / parentChain).
     animationspagecontroller_paths.cpp
     # Shared validate+copy primitive for installing shader packs.
     # Consumed by AnimationsPageController + SnappingShadersPageController.
@@ -83,8 +72,7 @@ set(plasmazones_settings_SRCS
     shaderpackinstaller.h
     shaderpackinstaller.cpp
     # Preset library — a sub-service hosted by AnimationsPageController as a
-    # child QObject. Split out to keep animationspagecontroller.cpp under the
-    # project's 800-line cap.
+    # child QObject.
     animationpresetlibrary.h
     animationpresetlibrary.cpp
     # Shared set store (motion sets + decoration sets) and the motion-set
@@ -120,8 +108,8 @@ set(plasmazones_settings_SRCS
     # mutations write straight to the Settings decorationProfileTree.
     decorationpagecontroller.h
     decorationpagecontroller.cpp
-    # Surface-taxonomy helper (parentChain) split into a sibling TU to keep
-    # the main controller TU under the 800-line cap. Same class, separate TU.
+    # Surface-taxonomy helper (parentChain) in a sibling TU. Same class,
+    # separate TU.
     decorationpagecontroller_paths.cpp
     decorationpagecontroller_browser.cpp
     decorationpagecontroller_sets.cpp
@@ -154,22 +142,19 @@ set(plasmazones_settings_SRCS
     # Read-only / projection methods of RuleController — sections,
     # rulesSnapshot, monitorOverview, ruleScreenIds, author surfaces
     # (matchFields/operatorsForField/actionTypes/defaultPayloadFor),
-    # validation entry points. Split out so rulecontroller.cpp stays
-    # under the 800-line cap; same class, separate TU, no API change.
+    # validation entry points. Same class, separate TU, no API change.
     rulecontroller_views.cpp
-    # RuleController label-lookup setters (screen/activity/layout/
-    # snapping-layout/tiling-algorithm) plus the wiring-completion gate.
-    # Five tiny pass-throughs into RuleModel; split out so
-    # rulecontroller.cpp stays under the project's 800-line cap.
+    # RuleController label-lookup setters (screen / activity / zone /
+    # virtual-desktop / snapping-layout / tiling-algorithm / shader-effect /
+    # overlay-shader / decoration-pack) plus the QML curve-label resolver.
+    # Thin pass-throughs into RuleModel.
     rulecontroller_lookups.cpp
-    # RuleController per-page dirty split + managed-baseline reset/discard,
-    # split out so rulecontroller.cpp stays under the project's 800-line cap.
+    # RuleController per-page dirty split + managed-baseline reset/discard.
     rulecontroller_baseline.cpp
-    # RuleController authoring metadata + templates — pure read-only
-    # helpers split out so rulecontroller.cpp stays under the project's
-    # 800-line cap. The controller's Q_INVOKABLE entry points (matchFields,
-    # operatorsForField, actionTypes, newEmptyRule, ruleTemplates,
-    # newRuleFromTemplate) delegate here.
+    # RuleController authoring metadata + templates — pure read-only helpers.
+    # The controller's Q_INVOKABLE entry points (matchFields, operatorsForField,
+    # actionTypes, newEmptyRule, ruleTemplates, newRuleFromTemplate) delegate
+    # here.
     ruleauthoring.h
     ruleauthoring.cpp
     ruletemplates.h
@@ -189,6 +174,8 @@ set(plasmazones_settings_SRCS
     kzonesimporter.cpp
     stagingservice.h
     stagingservice.cpp
+    algorithmscaffold.h
+    algorithmscaffold.cpp
     algorithmservice.h
     algorithmservice.cpp
     settingslaunchcontroller.h
@@ -401,9 +388,9 @@ qt_add_qml_module(plasmazones-settings
         # Shared row badge (neutral metadata + highlighted state).
         qml/MetadataChip.qml
         qml/FilterMenuButton.qml
-        # Stay-open checkable menu item shared by every filter menu
-        # (Layouts via LayoutFilterBar, Rules + shader browser via
-        # FilterMenuButton).
+        # Stay-open checkable menu item used by FilterMenuButton, the one
+        # checkbox-filter-menu implementation (Layouts via LayoutFilterBar's
+        # invisible instances, Rules + shader browser directly).
         qml/StayOpenMenuItem.qml
         qml/ShaderBrowserDetailDialog.qml
         qml/CurveEditorDialog.qml
@@ -435,6 +422,7 @@ qt_add_qml_module(plasmazones-settings
         qml/WizardTemplateCard.qml
         qml/WizardPreviewBadge.qml
         qml/WizardConfigCard.qml
+        qml/WizardPreviewFrame.qml
         qml/WizardUtils.js
     NO_PLUGIN
 )

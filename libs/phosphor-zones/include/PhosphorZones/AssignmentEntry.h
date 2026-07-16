@@ -92,8 +92,8 @@ struct AssignmentEntry
     /// Per-context engine selection. The v4 rule store persists the WIRE
     /// STRINGS produced by `modeToWireString` ("snapping", "autotile",
     /// "scrolling") — `ContextRuleBridge::makeDisableRule` writes them
-    /// and `disableRuleMode` reads them back. The legacy v3→v4 config
-    /// migration (configmigration.cpp) does still read the int side via
+    /// and `disableRuleMode` reads them back. A consumer's legacy v3→v4
+    /// config migration does still read the int side via
     /// `Display.<screen>:Mode`, so NEVER renumber existing values — a
     /// renumber would silently swap engines for v3 disable lists that
     /// haven't been migrated yet. Append new modes at the end.
@@ -360,9 +360,9 @@ inline std::optional<AssignmentEntry::Mode> modeFromWireString(const QString& wi
  *
  * The order doubles as the UI tab order (Snapping first, Autotile second,
  * Scrolling last). Returns a `QList<Mode>` so range-for over modes is a
- * one-liner — both Settings::saveAll / resetAll and the KCM page builders
- * loop over this instead of hand-coding the {Snapping, Autotile, ...} pair
- * literally. Adding a Mode in the enum and extending this list is all that
+ * one-liner — a consumer's bulk save/reset paths and its settings-page
+ * builders loop over this instead of hand-coding the {Snapping, Autotile, ...}
+ * pair literally. Adding a Mode in the enum and extending this list is all that
  * is required to fan out every (Mode, Family)-keyed routine.
  */
 inline QList<AssignmentEntry::Mode> allModes()

@@ -6,10 +6,9 @@
 // keep-above / keep-below stacking layer (SetWindowLayer).
 //
 // Split out of decorations.cpp, which owns the decoration chain (resolve, apply,
-// tear down), to keep that TU under the 800-line limit. These share the file's
-// per-window rule-resolution entry points but are a separate concern: a window can
-// carry either of these with no decoration at all, and a decorated window can carry
-// neither.
+// tear down). These share that file's per-window rule-resolution entry points but
+// are a separate concern: a window can carry either of these with no decoration at
+// all, and a decorated window can carry neither.
 
 #include "../plasmazoneseffect.h"
 

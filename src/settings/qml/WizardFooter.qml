@@ -17,10 +17,10 @@ Item {
     required property bool createEnabled
     property string errorText: ""
 
-    signal backClicked()
-    signal nextClicked()
-    signal createClicked()
-    signal cancelClicked()
+    signal backClicked
+    signal nextClicked
+    signal createClicked
+    signal cancelClicked
 
     implicitHeight: footerColumn.implicitHeight + Kirigami.Units.largeSpacing * 2
 
@@ -90,9 +90,6 @@ Item {
             Item {
                 Layout.fillWidth: true
             }
-
         }
-
     }
-
 }

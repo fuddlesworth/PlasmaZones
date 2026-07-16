@@ -19,14 +19,9 @@
 #include "../core/logging.h"
 #include "undo/UndoController.h"
 #include "../shaderpreview/ishaderpreviewbackend.h"
-#include <PhosphorLayoutApi/LayoutSourceBundle.h>
 
 #include <memory>
-
-namespace PhosphorTiles {
-class AlgorithmRegistry;
-class ScriptedAlgorithmLoader;
-}
+#include <optional>
 
 namespace PhosphorZones {
 class Layout;
@@ -116,7 +111,6 @@ class EditorController : public QObject, public IShaderPreviewBackend
     Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapChanged)
     Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapChanged)
     Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapChanged)
-    Q_PROPERTY(bool hasPerSideOuterGapOverride READ hasPerSideOuterGapOverride NOTIFY outerGapChanged)
     Q_PROPERTY(bool globalUsePerSideOuterGap READ globalUsePerSideOuterGap NOTIFY globalOuterGapChanged)
     Q_PROPERTY(int globalOuterGapTop READ globalOuterGapTop NOTIFY globalOuterGapChanged)
     Q_PROPERTY(int globalOuterGapBottom READ globalOuterGapBottom NOTIFY globalOuterGapChanged)
@@ -241,7 +235,6 @@ public:
     int outerGapBottom() const;
     int outerGapLeft() const;
     int outerGapRight() const;
-    bool hasPerSideOuterGapOverride() const;
     bool globalUsePerSideOuterGap() const;
     int globalOuterGapTop() const;
     int globalOuterGapBottom() const;
@@ -311,26 +304,6 @@ public:
     }
     QVariantList screenModel() const;
 
-    // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
-    //
-    // The editor runs as its own process. Today its layout-list / template /
-    // import-preview QML still mostly fetches via D-Bus (DBusLayoutService),
-    // requiring a running daemon. The methods below load the SAME on-disk
-    // layouts via an in-process PhosphorZones::LayoutRegistry + PhosphorZones::ZonesLayoutSource so QML
-    // preview-rendering paths work even when the daemon isn't running.
-    //
-    // QVariantMap shape is the QML-facing projection produced by
-    // PlasmaZones::toVariantMap (src/common/layoutpreviewserialize.h):
-    // id / name / zones[]{relativeGeometry{x,y,width,height},zoneNumber} /
-    // isAutotile / aspectRatioClass (string tag) / flat supports* capability
-    // flags. This is intentionally different from LayoutAdaptor::getLayoutPreview's
-    // D-Bus JSON, which is a separate projection optimised for wire transfer.
-    Q_INVOKABLE QVariantList localLayoutPreviews() const;
-    // Non-const: ILayoutSource::previewAt is non-const so implementations
-    // can populate a query cache (scripted autotile algorithms would be
-    // prohibitively expensive to re-run on every picker redraw). Changing
-    // this invoker to const would silently dodge that cache.
-    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4);
     int virtualDesktopCount() const
     {
         return m_virtualDesktopCount;
@@ -382,7 +355,57 @@ public:
     void setSnapOverrideModifier(int modifier);
     void setFillOnDropEnabled(bool enabled);
     void setFillOnDropModifier(int modifier);
+    /**
+     * @brief Request a switch to @p screenName, loading that screen's layout.
+     *
+     * REQUEST, not command. Switching screens replaces the loaded layout, so
+     * with unsaved edits in hand the switch would destroy them. When
+     * hasUnsavedChanges() is set this therefore parks @p screenName as the
+     * pending target, emits targetScreenChangeRequiresConfirmation(), and
+     * returns WITHOUT changing anything — targetScreen() still reports the old
+     * screen, so a QML binding on it stays put until the user answers. The UI
+     * answers with confirmPendingTargetScreen() (after saveLayout(), or to
+     * discard) or cancelPendingTargetScreen().
+     *
+     * With no unsaved changes the switch applies immediately.
+     */
     void setTargetScreen(const QString& screenName);
+
+    /// Apply the screen parked by setTargetScreen(). No-op when nothing is
+    /// pending. The caller decides whether the outgoing edits were saved
+    /// first — this always applies, discarding whatever is still unsaved.
+    Q_INVOKABLE void confirmPendingTargetScreen();
+
+    /// Drop the screen parked by setTargetScreen(), keeping the current screen
+    /// and its unsaved edits. No-op when nothing is pending.
+    Q_INVOKABLE void cancelPendingTargetScreen();
+
+    /**
+     * @brief Request that the editor show what a set of launch arguments names.
+     *
+     * REQUEST, not command, for the same reason setTargetScreen() is one: the
+     * `--new` and `--layout <id>` paths both REPLACE the loaded layout, so with
+     * unsaved edits in hand they would destroy them. A second
+     * `plasmazones-editor --layout Y` is forwarded to the running instance
+     * rather than opening a window of its own, so this is reachable from any
+     * launcher, shortcut or settings button while the user has work in flight.
+     *
+     * With unsaved edits this parks the request, emits
+     * launchRequestRequiresConfirmation() and changes nothing. The UI answers
+     * with confirmPendingLaunch() (after saveLayout(), or to discard) or
+     * cancelPendingLaunch(). With a clean editor — every initial launch, since
+     * a freshly constructed controller has nothing unsaved — it applies at once.
+     */
+    void requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+
+    /// Apply the launch parked by requestLaunch(). No-op when nothing is
+    /// pending. The caller decides whether the outgoing edits were saved
+    /// first — this always applies, discarding whatever is still unsaved.
+    Q_INVOKABLE void confirmPendingLaunch();
+
+    /// Drop the launch parked by requestLaunch(), keeping the loaded layout and
+    /// its unsaved edits. No-op when nothing is pending.
+    Q_INVOKABLE void cancelPendingLaunch();
 
     /**
      * @brief Show a QML Window fullscreen on the target screen from C++
@@ -513,14 +536,23 @@ public Q_SLOTS:
     // PhosphorZones::Layout operations
     void createNewLayout();
     void loadLayout(const QString& layoutId);
-    void saveLayout();
+    /// Persist the current layout. Returns false when the save did not land —
+    /// the daemon refused the payload, or the services are not up — in which
+    /// case layoutSaveFailed carries the reason and the unsaved-changes flag
+    /// stays set. Callers that follow a save with an action that REPLACES the
+    /// loaded layout (a screen switch, closing the window) must gate that
+    /// action on the return value or they discard the work the user just
+    /// pressed Save to keep.
+    bool saveLayout();
     void discardChanges();
 
     // D-Bus subscriber slot — wired in the ctor to all of the daemon's
     // layout-mutation signals (layoutCreated/Deleted/Changed/ListChanged/
-    // PropertyChanged). Forces an in-process PhosphorZones::LayoutRegistry reload so
-    // localLayoutPreviews() reflects the daemon's view regardless of
-    // whether the QFileSystemWatcher saw the underlying file event.
+    // PropertyChanged). Forces an in-process PhosphorZones::LayoutRegistry
+    // reload so loadLayout()'s instant-open fast path resolves against the
+    // daemon's view rather than the snapshot scanned at launch. The registry
+    // watches nothing, so this explicit reload is the only way a daemon-side
+    // layout write reaches the editor.
     void reloadLocalLayouts();
 
     // PhosphorZones::Zone CRUD operations (using zone IDs)
@@ -764,6 +796,18 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     void targetScreenChanged();
+
+    /// A screen switch was requested while unsaved edits were pending, so it
+    /// was parked instead of applied. The UI prompts, then calls
+    /// confirmPendingTargetScreen() or cancelPendingTargetScreen().
+    void targetScreenChangeRequiresConfirmation(const QString& screenName);
+
+    /// A forwarded launch (`plasmazones-editor --new` / `--layout <id>`) wants
+    /// to replace the loaded layout while it has unsaved edits. The UI must
+    /// answer with confirmPendingLaunch() or cancelPendingLaunch(), or the
+    /// parked request lingers.
+    void launchRequestRequiresConfirmation();
+
     void usableAreaInsetsChanged();
     void zonePaddingChanged();
     void outerGapChanged();
@@ -802,6 +846,7 @@ Q_SIGNALS:
     void zoneRemoved(const QString& zoneId);
 
     void layoutSaved();
+    void layoutExported();
     void layoutLoadFailed(const QString& error);
     void layoutSaveFailed(const QString& error);
     void shaderPresetLoadFailed(const QString& error);
@@ -823,6 +868,9 @@ private:
     QVariant audioSpectrumVariant() const;
     void markUnsaved();
     void cacheVirtualScreenGeometry(const QString& screenName);
+    /// Carry out the screen switch setTargetScreen / confirmPendingTargetScreen
+    /// gate on. Caller has already decided the outgoing layout may be replaced.
+    void applyTargetScreen(const QString& screenName);
     void applyUsableAreaInsets(const QRect& fullGeom, const QRect& availGeom);
     void setInsets(int left, int top, int right, int bottom);
 
@@ -899,7 +947,19 @@ private:
     /**
      * @brief Saves editor settings to KConfig
      */
+    /// Queue an editor-settings write. Coalesced behind
+    /// m_editorSettingsSaveTimer — see flushEditorSettings for the real work.
     void saveEditorSettings();
+    /// Write the editor settings to config.json and tell the daemon to reparse.
+    /// Runs off m_editorSettingsSaveTimer.
+    void flushEditorSettings();
+    /// flushEditorSettings for teardown: same write, but the daemon reload is
+    /// blocking so it is actually delivered before the process goes away. Only
+    /// ~EditorController calls this — see the note there.
+    void flushEditorSettingsBlocking();
+    /// The config write both flush paths share. Returns false when nothing
+    /// reached disk, in which case there is nothing for the daemon to reload.
+    bool writeEditorSettingsToDisk();
 
     /**
      * @brief Handles clipboard content changes
@@ -926,26 +986,14 @@ private:
     TemplateService* m_templateService = nullptr;
     UndoController* m_undoController = nullptr;
 
-    // Daemon-independent layout source — exposed via localLayoutPreviews()
-    // for QML preview rendering paths that don't need the daemon (template
-    // gallery, layout-import preview thumbnails, etc.).
-    //
-    // The bundle aggregates manual layouts (over m_localLayoutManager) and
-    // autotile previews (over the editor-owned m_localAlgorithmRegistry)
-    // behind a single ILayoutSource.
-    //
     // ─── DECLARATION ORDER INVARIANT ─────────────────────────────────
-    // m_localAlgorithmRegistry + m_localLayoutManager are borrowed by the
-    // bundle's sources AND by m_scriptLoader below. Reverse-order member
-    // destruction must tear down the loader and the bundle BEFORE the
-    // registries those consumers borrow. With the order below:
-    //   1. ~m_scriptLoader first (unregisters scripted algorithms while
-    //      registry is still alive — fixes a UAF the QObject-child-parent
-    //      pattern had, where ~QObject ran after unique_ptr reset).
-    //   2. ~m_localSources drops borrowed source pointers.
-    //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
+    // m_localRuleStore is borrowed by BOTH m_localRuleStoreWatcher and
+    // m_localLayoutManager below. Members destruct in reverse declaration
+    // order, so the store must be declared FIRST to outlive both borrowers:
+    //   1. ~m_localLayoutManager, ~m_localRuleStoreWatcher (drop borrowed
+    //      pointers into the store).
+    //   2. ~m_localRuleStore last.
     // Do not reorder without revisiting every borrower's destructor.
-    std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
     /// Owned Rule store backing the in-process LayoutRegistry's
     /// assignment cascade. Declared before m_localLayoutManager so it
     /// outlives the registry that borrows it (members destruct in reverse
@@ -958,14 +1006,6 @@ private:
     /// after the store it borrows so it tears down first.
     std::unique_ptr<PhosphorRules::RuleStoreWatcher> m_localRuleStoreWatcher;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
-    PhosphorLayout::LayoutSourceBundle m_localSources;
-    /// Owned here (not parented to `this`) so destruction runs via the
-    /// unique_ptr reset in reverse declaration order — BEFORE the
-    /// m_localAlgorithmRegistry it borrows. A QObject-child parent would
-    /// destroy the loader in ~QObject, which runs AFTER the registry
-    /// unique_ptr, leaving the loader's destructor to call
-    /// unregisterAlgorithm on a freed registry.
-    std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptLoader;
 
     /// Debounces D-Bus layout-mutation bursts (layoutCreated / layoutDeleted /
     /// layoutChanged / layoutListChanged / layoutPropertyChanged) into a
@@ -974,11 +1014,18 @@ private:
     /// layoutChanged + layoutListChanged back-to-back — only hits the
     /// PhosphorZones::LayoutRegistry once.
     QTimer m_layoutReloadTimer;
+    /// Coalesces saveEditorSettings() bursts. Every snapping/fill-on-drop
+    /// setter calls saveEditorSettings, and ControlBar drives snapIntervalX
+    /// from Slider.onMoved — one call per mouse-move step. Each one rewrites
+    /// the whole config document, fsyncs it, and makes the daemon reparse its
+    /// entire config, so running that per tick is a drag-long stutter. Batch
+    /// the burst into one write once the value settles.
+    QTimer m_editorSettingsSaveTimer;
 
-    /// Recompute zone geometry for every manual layout against the
-    /// primary screen so ZonesLayoutSource previews render fixed-geometry
-    /// zones at their authored dimensions — see SettingsController for
-    /// the matching implementation.
+    /// Recompute zone geometry for every manual layout against the primary
+    /// screen so a layout opened through the in-process registry carries its
+    /// fixed-geometry zones at their authored dimensions — see
+    /// SettingsController for the matching implementation.
     void recalcLocalLayouts();
 
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
@@ -998,6 +1045,25 @@ private:
 
     // Screen
     QString m_targetScreen;
+    /// Launch arguments parked by requestLaunch() while unsaved edits are
+    /// pending. nullopt when nothing is awaiting confirmation.
+    struct PendingLaunch
+    {
+        QString screenId;
+        QString layoutId;
+        bool createNew = false;
+        bool preview = false;
+    };
+    std::optional<PendingLaunch> m_pendingLaunch;
+    /// Apply a launch request outright, replacing whatever is loaded.
+    void applyLaunch(const PendingLaunch& launch);
+
+    /// Screen parked by setTargetScreen() while unsaved edits are pending.
+    /// nullopt when nothing is awaiting confirmation. Optional rather than an
+    /// empty string because "" is a legitimate parked value (it is what
+    /// targetScreen() reports before a screen is resolved), so the two states
+    /// need to stay distinguishable even though no caller parks one today.
+    std::optional<QString> m_pendingTargetScreen;
     QSize m_virtualScreenSize; ///< Cached VS geometry size (valid when m_targetScreen is virtual)
     QRect m_virtualScreenRect; ///< Cached VS absolute geometry (position within physical monitor)
     /// Layout-derived reference-size override. When valid, takes precedence

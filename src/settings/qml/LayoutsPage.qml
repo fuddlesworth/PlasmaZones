@@ -333,11 +333,13 @@ SettingsFlickable {
 
             ToolButton {
                 icon.name: "view-filter"
+                // Active state is binding-driven, not a user toggle — checkable omitted.
                 checked: filterBar.hasActiveFilters
                 onClicked: filterBar.popupFilterMenu()
-                Accessible.name: filterBar.hasActiveFilters ? i18n("Filter (active)") : i18n("Filter")
+                Accessible.name: filterBar.hasActiveFilters ? i18nc("@action:button", "Filter (active)") : i18nc("@action:button", "Filter")
                 ToolTip.visible: hovered
-                ToolTip.text: filterBar.hasActiveFilters ? i18n("Filters active. Click to change") : i18n("Filter")
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+                ToolTip.text: filterBar.hasActiveFilters ? i18nc("@info:tooltip", "Filters active. Click to change") : i18nc("@info:tooltip", "Filter")
             }
 
             Button {
@@ -382,7 +384,11 @@ SettingsFlickable {
 
                     return hints.length > 0 ? hints.join("\n") : i18n("Try adjusting your filters or search terms");
                 }
-                return root.viewMode === 1 ? i18n("Enable autotiling to use tiling algorithms") : i18n("Start the PlasmaZones daemon or create a new layout");
+                // The tiling view is only reachable while autotiling is on (the
+                // switch is gated on it, and turning it off forces viewMode back
+                // to 0), so an empty list here means the same thing it means for
+                // snapping: nothing has been loaded yet.
+                return root.viewMode === 1 ? i18n("Start the PlasmaZones daemon or add a tiling algorithm") : i18n("Start the PlasmaZones daemon or create a new layout");
             }
 
             helpfulAction: Kirigami.Action {
@@ -500,11 +506,11 @@ SettingsFlickable {
         nameFilters: [i18n("Luau files (*.luau)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            // Report both outcomes, like the drop zone in LayoutManageCard. A
-            // silent failure read as a chosen file that simply vanished.
-            const ok = settingsController.importAlgorithm(root.filePathFromUrl(selectedFile));
-            if (typeof window !== "undefined" && window && window.showToast)
-                window.showToast(ok ? i18n("Algorithm imported") : i18n("Could not import that algorithm. It must be a Luau file this build can read."));
+            // Success only. A failure already toasts through
+            // algorithmOperationFailed below, with the reason this could not
+            // know, and reporting it here too gave the user two messages.
+            if (settingsController.importAlgorithm(root.filePathFromUrl(selectedFile)) && typeof window !== "undefined" && window && window.showToast)
+                window.showToast(i18n("Algorithm imported"));
         }
     }
 
@@ -561,7 +567,6 @@ SettingsFlickable {
     NewLayoutDialog {
         id: newLayoutDialog
 
-        appSettings: root.settingsBridge
         controller: settingsController
     }
 
@@ -585,16 +590,27 @@ SettingsFlickable {
 
         function onAlgorithmOperationFailed(reason) {
             // Only show toast when the wizard dialog is closed — if the dialog
-            // is open, it shows the error inline via its own Connections block
-            if (!newAlgorithmDialog.opened && typeof window !== "undefined" && window && window.showToast)
-                window.showToast(reason);
+            // is open, it shows the error inline via its own Connections block.
+            // The routing decision is deferred: create can emit this
+            // synchronously for a created-but-degraded result and still return
+            // true, and the wizard only close()s after that return. Checking
+            // `opened` at emit time would see the dialog still open and swallow
+            // the toast even though the dialog is about to close and take its
+            // inline error with it. A plain validation failure keeps the dialog
+            // open, so the deferred check still routes it inline.
+            Qt.callLater(function () {
+                if (!newAlgorithmDialog.opened && typeof window !== "undefined" && window && window.showToast)
+                    window.showToast(reason);
+            });
         }
 
         function onLayoutOperationFailed(reason) {
-            // Only show toast when the wizard dialog is closed — if the dialog
-            // is open, it shows the error inline via its own Connections block
-            if (!newLayoutDialog.opened && typeof window !== "undefined" && window && window.showToast)
-                window.showToast(reason);
+            // Deferred for the same emit-before-close ordering as
+            // onAlgorithmOperationFailed above.
+            Qt.callLater(function () {
+                if (!newLayoutDialog.opened && typeof window !== "undefined" && window && window.showToast)
+                    window.showToast(reason);
+            });
         }
 
         target: settingsController

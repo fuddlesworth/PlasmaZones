@@ -25,12 +25,12 @@ struct Schema;
 ///
 /// Obtained from IBackend::group() as a unique_ptr. Implementations may
 /// restrict the number of concurrently live groups per backend (the bundled
-/// JsonBackend and QSettingsBackend enforce one-at-a-time — destroy the
-/// unique_ptr before asking the backend for another group).
+/// JsonBackend enforces one-at-a-time — destroy the unique_ptr before asking
+/// the backend for another group).
 ///
 /// Groups support dot-path nesting: "Snapping.Behavior.ZoneSpan" addresses
-/// a nested object tree in JsonBackend, and a plain "/"-joined group in
-/// QSettingsBackend. Consumers that need other naming semantics (e.g.
+/// a nested object tree in JsonBackend. Consumers that need other naming
+/// semantics (e.g.
 /// per-screen overrides keyed by "Prefix:ScreenId") can plug in an
 /// IGroupPathResolver on the backend to intercept and rewrite group names
 /// before they reach storage.
@@ -51,8 +51,8 @@ public:
     ///
     /// Callers that need to persist structured data (array/object) should go
     /// through @c writeJson, which preserves the native JSON type where the
-    /// backend supports it (JsonBackend stores as a native array/object;
-    /// QSettingsBackend stringifies).
+    /// backend supports it (JsonBackend stores as a native array/object; a
+    /// backend over a flat key/value store stringifies).
     virtual void writeString(const QString& key, const QString& value) = 0;
     virtual void writeInt(const QString& key, int value) = 0;
     virtual void writeBool(const QString& key, bool value) = 0;
@@ -138,14 +138,15 @@ protected:
 /// Pluggable configuration backend.
 ///
 /// Provides group-based access, persistence, and group enumeration.
-/// Concrete implementations: JsonBackend (atomic-write JSON file),
-/// QSettingsBackend (INI files, for legacy compatibility and migration).
+/// Concrete implementation: JsonBackend (atomic-write JSON file). Legacy INI
+/// files are not a backend — they are read once, through
+/// @c QSettingsBackend::readConfigFromDisk, by a migration chain.
 ///
 /// Root-level ("ungrouped") access is provided via readRootString /
 /// writeRootString. How a backend stores root keys is
-/// implementation-defined: QSettings routes them to a [General] section,
-/// and JsonBackend mirrors that by keeping them under a configurable
-/// root-group name (defaults to "General").
+/// implementation-defined: JsonBackend keeps them under a configurable
+/// root-group name (defaults to "General"), mirroring the [General] section
+/// an INI file would use.
 class PHOSPHORCONFIG_EXPORT IBackend
 {
 public:
@@ -157,12 +158,40 @@ public:
 
     /// Re-read configuration from disk, discarding any pending in-memory
     /// changes. Must not be called while a group view is live.
+    ///
+    /// Discarding is load-bearing, not incidental: callers use this to roll
+    /// back after a failed write, so an implementation that instead FLUSHED
+    /// the pending changes would persist the very mutations the caller is
+    /// asking it to drop. A store that cannot drop unsaved writes therefore
+    /// cannot implement IBackend — which is why @c QSettings, whose
+    /// destructor flushes and which offers no discard API, is confined to the
+    /// read-only @c QSettingsBackend::readConfigFromDisk helper.
     virtual void reparseConfiguration() = 0;
 
-    /// Flush pending writes to disk. No-op when nothing is dirty.
+    /// Request that pending writes reach disk. No-op when nothing is dirty.
     /// Returns @c true on success (or when there was nothing to flush),
     /// @c false on an I/O error — backends log the reason before returning.
+    ///
+    /// @c true means "accepted", NOT "committed": a backend is free to satisfy
+    /// this by scheduling the write (@c JsonBackend's Deferred sync policy
+    /// debounces it), in which case the write has not happened yet and may
+    /// still fail. Callers that must know the bytes landed — anything moving a
+    /// baseline or reporting success to a user — call @c commit() instead.
     virtual bool sync() = 0;
+
+    /// Flush pending writes to disk NOW and report whether they landed.
+    /// Returns @c true when disk holds the current in-memory state on return
+    /// (including when there was nothing to flush), @c false on an I/O error.
+    /// Unlike @c sync() this never defers, so a @c true result is a commitment
+    /// the caller can key state off.
+    ///
+    /// The default forwards to @c sync(), which is correct for any backend
+    /// whose @c sync() already writes inline. Backends that can defer must
+    /// override it to bypass their deferral.
+    virtual bool commit()
+    {
+        return sync();
+    }
 
     /// Delete an entire group and everything inside it. Intermediate
     /// parents are pruned if they become empty (dot-path groups only).
@@ -177,12 +206,29 @@ public:
     /// with their full path ("Snapping", "Snapping.Behavior", ...).
     /// Groups produced by a plugged-in IGroupPathResolver appear in the
     /// resolver's preferred external form.
+    ///
+    /// CONTRACT — reserved names. Whatever container an implementation uses to
+    /// hold the ungrouped keys that @c readRootString / @c writeRootString /
+    /// @c removeRootKey address must NOT appear in this list, nor may any of
+    /// its descendants. Ungrouped keys are not addressable through @c group()
+    /// and no caller can tell them apart from a real group by name, so a
+    /// consumer that sweeps @c groupList() and calls @c deleteGroup on every
+    /// name it does not recognise would wipe them. Enforcing it here rather
+    /// than asking every consumer to know each backend's container name is what
+    /// makes such a sweep safe.
+    ///
+    /// The same applies to any root key an @c IGroupPathResolver reserves: the
+    /// resolver owns that subtree exclusively and enumerates it itself.
+    ///
+    /// Implementations: @c JsonBackend filters its @c rootGroupName (and the
+    /// version stamp, and the resolver's reserved roots) out of the
+    /// enumeration.
     virtual QStringList groupList() const = 0;
 
     // ── Schema-aware hooks (default no-op) ────────────────────────────────
     // Store consults these to wire a schema's resolver, version stamp, and
     // migration chain into the backend. Backends without a JSON-root concept
-    // (QSettingsBackend) inherit the default no-ops; JsonBackend overrides.
+    // (in-memory test mocks) inherit the default no-ops; JsonBackend overrides.
     // Keeping the hooks on IBackend lets Store work against the polymorphic
     // interface instead of a dynamic_cast, and lets a future backend opt in
     // to schema participation by providing its own overrides.

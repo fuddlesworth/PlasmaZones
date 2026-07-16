@@ -27,7 +27,7 @@ namespace {
 // Run the defaultFallbackCurve() invariant check exactly once per
 // process, not once per PhosphorMotionAnimation instantiation. Every
 // `Behavior on X { PhosphorMotionAnimation { … } }` site in the shell's
-// 28+ migrated QML files would otherwise re-pay the dynamic_cast on
+// migrated QML files would otherwise re-pay the dynamic_cast on
 // every scene instantiation. A Meyers-local static gives us the "fail
 // hard in release builds on a broken library" property with no per-
 // instance cost. The lambda body matches the original invariant: the
@@ -117,9 +117,15 @@ void PhosphorMotionAnimation::setDurationOverride(int ms)
     // every bound animation. Duration only feeds QQuickPropertyAnimation's
     // timing machinery, not the easing curve shape, so the direct
     // setDuration is both correct and cheaper.
-    const int durationMs = m_durationOverride > 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
-    QQuickPropertyAnimation::setDuration(durationMs);
+    QQuickPropertyAnimation::setDuration(effectiveDurationMs());
     Q_EMIT durationOverrideChanged();
+}
+
+// The override/profile sentinel rule lives in one place — see the rationale
+// on the declaration in PhosphorMotionAnimation.h.
+int PhosphorMotionAnimation::effectiveDurationMs() const
+{
+    return m_durationOverride >= 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
 }
 
 const Profile& PhosphorMotionAnimation::resolvedProfile() const
@@ -129,16 +135,7 @@ const Profile& PhosphorMotionAnimation::resolvedProfile() const
 
 void PhosphorMotionAnimation::applyResolvedEasing()
 {
-    // Duration: override wins when > 0, otherwise the profile's
-    // effective duration. The override exists so QML authors can bind
-    // `durationOverride: Kirigami.Units.longDuration` onto a shared
-    // profile JSON — the profile provides the curve shape while the
-    // caller's theme-scaled value drives the timing (Plasma's system
-    // animation-speed preference still applies). A zero / negative
-    // override means "use the profile's duration" — this is the
-    // default and the common case.
-    const int durationMs = m_durationOverride > 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
-    QQuickPropertyAnimation::setDuration(durationMs);
+    QQuickPropertyAnimation::setDuration(effectiveDurationMs());
 
     // If no curve is set, fall back to the library default (OutCubic).
     const auto curve = m_resolvedProfile.curve ? m_resolvedProfile.curve : defaultFallbackCurve();

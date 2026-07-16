@@ -10,13 +10,17 @@
 #include <QSignalSpy>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScopedPointer>
 #include <QColor>
 #include <QUuid>
 #include <memory>
+#include <utility>
 #include <vector>
+
+#include <unistd.h> // geteuid — the read-only-directory test is a no-op as root
 
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
@@ -57,6 +61,45 @@ private:
     }
 
     std::vector<std::unique_ptr<IsolatedConfigGuard>> m_guards;
+
+    /// Strips write permission from a directory for the guard's lifetime, so a
+    /// QSaveFile staged inside it fails to open. RAII because the tests below
+    /// use QVERIFY between engage and release — an early abort must not leave a
+    /// read-only directory behind for IsolatedConfigGuard's teardown to trip on.
+    class ReadOnlyDirGuard
+    {
+    public:
+        explicit ReadOnlyDirGuard(QString path)
+            : m_path(std::move(path))
+            , m_original(QFile::permissions(m_path))
+        {
+            m_engaged = QFile::setPermissions(m_path, QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+        }
+        ~ReadOnlyDirGuard()
+        {
+            if (m_engaged) {
+                QFile::setPermissions(m_path, m_original);
+            }
+        }
+        ReadOnlyDirGuard(const ReadOnlyDirGuard&) = delete;
+        ReadOnlyDirGuard& operator=(const ReadOnlyDirGuard&) = delete;
+
+        bool engaged() const
+        {
+            return m_engaged;
+        }
+
+    private:
+        QString m_path;
+        QFileDevice::Permissions m_original;
+        bool m_engaged = false;
+    };
+
+    static QByteArray readFile(const QString& path)
+    {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    }
 
 private Q_SLOTS:
 
@@ -133,6 +176,74 @@ private Q_SLOTS:
 
         QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("screen1")));
         QVERIFY(!mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).contains(1));
+    }
+
+    // A failed sidecar write must abandon the whole removal rather than
+    // half-apply it. The entry is dropped from memory only once disk agrees,
+    // so a user whose sidecar is momentarily unwritable can simply retry.
+    //
+    // The bug this guards: the sidecar was persisted AFTER the layout file was
+    // already unlinked, so a write failure only warned. Memory lost the entry
+    // while disk kept it, and because nothing rewrites the sidecar in between,
+    // the NEXT loadLayouts() merged the deleted override's settings straight
+    // back onto the restored system layout — the exact inheritance the removal
+    // exists to prevent.
+    void testLayoutManager_removeLayout_abandonedWhenSidecarWriteFails()
+    {
+        if (::geteuid() == 0) {
+            QSKIP("running as root — directory mode bits are ignored, so the sidecar write cannot be made to fail");
+        }
+
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("SidecarFail"));
+        mgr->addLayout(layout);
+        const QString layoutIdStr = layout->id().toString();
+
+        // Give the layout a real sidecar entry — removeLayout deliberately skips
+        // the write for a layout that has none, since dropping an absent entry
+        // cannot change the file's bytes.
+        layout->setShowZoneNumbers(!layout->showZoneNumbers());
+        layout->markDirty();
+        mgr->saveLayout(layout);
+
+        const QString settingsPath =
+            QFileInfo(ConfigDefaults::rulesFilePath()).absolutePath() + QStringLiteral("/layout-settings.json");
+        QVERIFY(QFile::exists(settingsPath));
+        const QByteArray sidecarBefore = readFile(settingsPath);
+        QVERIFY(sidecarBefore.contains(layoutIdStr.toUtf8()));
+
+        const QString filePath = mgr->layoutDirectory() + QStringLiteral("/")
+            + layout->id().toString(QUuid::WithoutBraces) + QStringLiteral(".json");
+        QVERIFY(QFile::exists(filePath));
+
+        QSignalSpy removedSpy(mgr.data(), &PhosphorZones::LayoutRegistry::layoutRemoved);
+
+        {
+            // QSaveFile stages its temp file beside the target, so a read-only
+            // parent directory is enough to make the commit fail.
+            ReadOnlyDirGuard roGuard(QFileInfo(settingsPath).absolutePath());
+            QVERIFY(roGuard.engaged());
+
+            mgr->removeLayout(layout);
+
+            // Nothing was destroyed: the layout is still registered and its file
+            // is still on disk, so the removal can be retried.
+            QCOMPARE(mgr->layoutCount(), 1);
+            QCOMPARE(removedSpy.count(), 0);
+            QVERIFY(QFile::exists(filePath));
+        }
+
+        // Memory and disk still agree — the sidecar is byte-for-byte unchanged,
+        // and the in-memory entry that backs it was put back.
+        QCOMPARE(readFile(settingsPath), sidecarBefore);
+
+        // Retry now that the directory is writable again: the removal completes
+        // and takes the sidecar entry with it.
+        mgr->removeLayout(layout);
+        QCOMPARE(mgr->layoutCount(), 0);
+        QVERIFY(!QFile::exists(filePath));
+        QVERIFY(!readFile(settingsPath).contains(layoutIdStr.toUtf8()));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

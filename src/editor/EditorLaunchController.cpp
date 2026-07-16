@@ -40,35 +40,13 @@ bool EditorLaunchController::registerDBusService()
 void EditorLaunchController::applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew,
                                              bool preview)
 {
-    // The loadAssignedLayout flag distinguishes the "no layout arg" path,
-    // which should follow the screen's assigned layout, from the paths where
-    // we already know what layout to load and must not trigger a second load.
-    auto maybeSwitchScreen = [this](const QString& id, bool loadAssignedLayout) {
-        if (id.isEmpty() || m_controller->targetScreen() == id) {
-            return;
-        }
-        if (loadAssignedLayout) {
-            m_controller->setTargetScreen(id);
-        } else {
-            m_controller->setTargetScreenDirect(id);
-        }
-    };
-
-    if (createNew) {
-        m_controller->setPreviewMode(false);
-        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ false);
-        m_controller->createNewLayout();
-    } else if (!layoutId.isEmpty()) {
-        // Switch screen first (direct, no auto-load) so loadLayout resolves
-        // per-screen geometry and virtual-screen context against the target
-        // screen rather than whatever was current before the forward.
-        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ false);
-        m_controller->setPreviewMode(preview || PhosphorLayout::LayoutId::isAutotile(layoutId));
-        m_controller->loadLayout(layoutId);
-    } else {
-        m_controller->setPreviewMode(false);
-        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ true);
-    }
+    // Translation only — the controller owns what the args MEAN and whether
+    // they can be applied right now. A forwarded launch can land on an editor
+    // holding unsaved edits, and `--new` / `--layout <id>` both replace the
+    // loaded layout, so requestLaunch parks the request and has the UI ask
+    // rather than destroying the work. An initial launch has a freshly
+    // constructed controller with nothing unsaved, so it applies immediately.
+    m_controller->requestLaunch(screenId, layoutId, createNew, preview);
 }
 
 void EditorLaunchController::handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,

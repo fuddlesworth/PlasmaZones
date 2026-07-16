@@ -61,10 +61,11 @@ SettingsFlickable {
                     ComboBox {
                         id: renderingBackendCombo
 
-                        function syncIndex() {
-                            currentIndex = Math.max(0, settingsController.generalPage.renderingBackendOptions.indexOf(appSettings.renderingBackend));
-                        }
-
+                        // currentIndex is a binding and stays one. appSettings
+                        // .renderingBackend has a NOTIFY, so the binding already
+                        // re-evaluates on every change; a Connections handler
+                        // assigning currentIndex would sever it on its first run
+                        // and then be the only thing keeping the combo in sync.
                         enabled: !settingsController.daemonRunning
                         Accessible.name: i18n("Rendering backend")
                         model: settingsController.generalPage.renderingBackendDisplayNames
@@ -72,14 +73,6 @@ SettingsFlickable {
                         onActivated: index => {
                             if (index >= 0 && index < settingsController.generalPage.renderingBackendOptions.length)
                                 appSettings.renderingBackend = settingsController.generalPage.renderingBackendOptions[index];
-                        }
-
-                        Connections {
-                            function onRenderingBackendChanged() {
-                                renderingBackendCombo.syncIndex();
-                            }
-
-                            target: appSettings
                         }
                     }
                 }
@@ -321,8 +314,6 @@ SettingsFlickable {
                         description: i18n("Stereo shows left and right bars side by side. Mono collapses to one set of bars.")
 
                         WideComboBox {
-                            id: audioChannelModeCombo
-
                             Accessible.name: i18n("Channels")
                             textRole: "text"
                             valueRole: "value"
@@ -344,16 +335,10 @@ SettingsFlickable {
                                     "value": "mono-right"
                                 }
                             ]
+                            // A binding, not a JS assignment: see
+                            // renderingBackendCombo above.
                             currentIndex: Math.max(0, indexOfValue(appSettings.audioChannelMode))
                             onActivated: appSettings.audioChannelMode = currentValue
-
-                            Connections {
-                                function onAudioChannelModeChanged() {
-                                    audioChannelModeCombo.currentIndex = Math.max(0, audioChannelModeCombo.indexOfValue(appSettings.audioChannelMode));
-                                }
-
-                                target: appSettings
-                            }
                         }
                     }
 
@@ -409,8 +394,6 @@ SettingsFlickable {
                         description: i18n("Leave on Automatic unless capture fails with the detected backend")
 
                         WideComboBox {
-                            id: audioInputMethodCombo
-
                             Accessible.name: i18n("Audio backend")
                             textRole: "text"
                             valueRole: "value"
@@ -428,16 +411,10 @@ SettingsFlickable {
                                     "value": "pulse"
                                 }
                             ]
+                            // A binding, not a JS assignment: see
+                            // renderingBackendCombo above.
                             currentIndex: Math.max(0, indexOfValue(appSettings.audioInputMethod))
                             onActivated: appSettings.audioInputMethod = currentValue
-
-                            Connections {
-                                function onAudioInputMethodChanged() {
-                                    audioInputMethodCombo.currentIndex = Math.max(0, audioInputMethodCombo.indexOfValue(appSettings.audioInputMethod));
-                                }
-
-                                target: appSettings
-                            }
                         }
                     }
 
@@ -450,17 +427,20 @@ SettingsFlickable {
                             id: audioSourceField
 
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 12
-                            text: appSettings.audioInputSource
                             Accessible.name: i18n("Audio source")
                             onEditingFinished: appSettings.audioInputSource = text
 
-                            Connections {
-                                function onAudioInputSourceChanged() {
-                                    if (!audioSourceField.activeFocus)
-                                        audioSourceField.text = appSettings.audioInputSource;
-                                }
-
-                                target: appSettings
+                            // Defer host-driven updates while the user is
+                            // typing. A plain `text:` binding re-fires on every
+                            // audioInputSourceChanged, focused or not, so it
+                            // overwrote the edit in progress before the focus
+                            // guard was ever consulted — the guard only started
+                            // working once an unfocused change had severed the
+                            // binding it was meant to hold back.
+                            Binding on text {
+                                value: appSettings.audioInputSource
+                                when: !audioSourceField.activeFocus
+                                restoreMode: Binding.RestoreNone
                             }
                         }
                     }
@@ -616,7 +596,12 @@ SettingsFlickable {
         nameFilters: [i18n("PlasmaZones Config (*.json)"), i18n("All files (*)")]
         defaultSuffix: "json"
         fileMode: FileDialog.SaveFile
-        onAccepted: settingsController.exportAllSettings(settingsController.urlToLocalFile(selectedFile))
+        // Success only. A failure toasts through settingsTransferFailed with
+        // the reason, which the bool cannot carry.
+        onAccepted: {
+            if (settingsController.exportAllSettings(settingsController.urlToLocalFile(selectedFile)) && typeof window !== "undefined" && window && window.showToast)
+                window.showToast(i18n("Settings exported"));
+        }
     }
 
     FileDialog {
@@ -625,6 +610,21 @@ SettingsFlickable {
         title: i18n("Import Settings")
         nameFilters: [i18n("PlasmaZones Config (*.json *.conf *.ini *.rc)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
-        onAccepted: settingsController.importAllSettings(settingsController.urlToLocalFile(selectedFile))
+        onAccepted: {
+            if (settingsController.importAllSettings(settingsController.urlToLocalFile(selectedFile)) && typeof window !== "undefined" && window && window.showToast)
+                window.showToast(i18n("Settings imported"));
+        }
+    }
+
+    // Both transfers report their failures here rather than through the bool:
+    // a refused path, a file that vanished, and a file that is not settings at
+    // all are the same `false` and want different words.
+    Connections {
+        function onSettingsTransferFailed(reason) {
+            if (typeof window !== "undefined" && window && window.showToast)
+                window.showToast(reason);
+        }
+
+        target: settingsController
     }
 }

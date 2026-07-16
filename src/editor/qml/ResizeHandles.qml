@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -18,10 +17,14 @@ Item {
     required property var root // Parent zone component
     required property real canvasWidth // Canvas width (may be 0 during initialization)
     required property real canvasHeight // Canvas height (may be 0 during initialization)
-    required property real handleSize
     required property real minSize
-    required property var zoneData
     property var snapIndicator: null
+    // How many of the eight handles currently have the cursor over them or are
+    // being dragged. A count rather than a shared boolean: the handles' -4
+    // margin hit areas overlap, so sliding from one handle to its neighbour can
+    // deliver the old handle's onExited after the new one's onEntered, and a
+    // boolean latches false there while the cursor is still over a handle.
+    property int activeHandleCount: 0
     // Get actual canvas dimensions dynamically with fallback to root
     readonly property real actualCanvasWidth: {
         // Try passed property first
@@ -29,7 +32,7 @@ Item {
             return resizeHandles.canvasWidth;
 
         // Fallback to root's canvasWidth if available
-        if (resizeHandles.root && resizeHandles.root.canvasWidth !== undefined && resizeHandles.root.canvasWidth > 0 && isFinite(resizeHandles.root.canvasWidth))
+        if (resizeHandles.root.canvasWidth !== undefined && resizeHandles.root.canvasWidth > 0 && isFinite(resizeHandles.root.canvasWidth))
             return resizeHandles.root.canvasWidth;
 
         return 0;
@@ -40,15 +43,21 @@ Item {
             return resizeHandles.canvasHeight;
 
         // Fallback to root's canvasHeight if available
-        if (resizeHandles.root && resizeHandles.root.canvasHeight !== undefined && resizeHandles.root.canvasHeight > 0 && isFinite(resizeHandles.root.canvasHeight))
+        if (resizeHandles.root.canvasHeight !== undefined && resizeHandles.root.canvasHeight > 0 && isFinite(resizeHandles.root.canvasHeight))
             return resizeHandles.root.canvasHeight;
 
         return 0;
     }
-    // Track if canvas has valid dimensions for handle visibility
-    readonly property bool canvasReady: actualCanvasWidth > 0 && actualCanvasHeight > 0
 
     anchors.fill: parent
+
+    // ResizeHandles is the only writer of the zone's anyHandleHovered, so the
+    // predicate can own it outright instead of each handle poking it.
+    Binding {
+        target: resizeHandles.root
+        property: "anyHandleHovered"
+        value: resizeHandles.activeHandleCount > 0
+    }
 
     // Constants for visual styling
     QtObject {
@@ -116,53 +125,11 @@ Item {
 
             required property var modelData
             required property int index
-            // Use root's visual dimensions instead of parent dimensions
-            // Root is EditorZone, which has visualWidth/visualHeight (actual zone size)
-            // Parent is ResizeHandles Item with anchors.fill: parent (EditorZone)
-            // But parent width/height has spacing subtracted, so use root.visualWidth/Height instead
-            readonly property bool hasValidRoot: resizeHandles.root !== null && resizeHandles.root !== undefined
-            // Get zone dimensions - use visualWidth/Height if available, otherwise calculate from zoneData
-            readonly property real zoneW: {
-                if (!hasValidRoot)
-                    return 0;
-
-                if (isFinite(resizeHandles.root.visualWidth) && resizeHandles.root.visualWidth > 0)
-                    return resizeHandles.root.visualWidth;
-
-                // Fallback: calculate from zoneData if visualWidth not set yet
-                if (resizeHandles.zoneData && resizeHandles.canvasWidth > 0) {
-                    var w = resizeHandles.zoneData.width || (resizeHandles.zoneData.relativeGeometry && resizeHandles.zoneData.relativeGeometry.width) || 0.25;
-                    return w * resizeHandles.canvasWidth;
-                }
-                return 0;
-            }
-            readonly property real zoneH: {
-                if (!hasValidRoot)
-                    return 0;
-
-                if (isFinite(resizeHandles.root.visualHeight) && resizeHandles.root.visualHeight > 0)
-                    return resizeHandles.root.visualHeight;
-
-                // Fallback: calculate from zoneData if visualHeight not set yet
-                if (resizeHandles.zoneData && resizeHandles.canvasHeight > 0) {
-                    var h = resizeHandles.zoneData.height || (resizeHandles.zoneData.relativeGeometry && resizeHandles.zoneData.relativeGeometry.height) || 0.25;
-                    return h * resizeHandles.canvasHeight;
-                }
-                return 0;
-            }
-            // Check if zone has reasonable size for showing handles
-            readonly property bool hasValidZoneSize: zoneW > 20 && zoneH > 20
-            // But parent (EditorZone) has spacing-adjusted dimensions, so use that for bounds
-            readonly property bool hasValidParent: resizeHandles.parent !== null && resizeHandles.parent !== undefined
-            readonly property real parentW: hasValidParent ? resizeHandles.parent.width : 0
-            readonly property real parentH: hasValidParent ? resizeHandles.parent.height : 0
             // Handle type detection
             readonly property bool isCornerHandle: modelData.id.length === 2
             // nw, ne, se, sw
             readonly property bool isHorizontalEdge: modelData.id === "n" || modelData.id === "s"
             readonly property bool isVerticalEdge: modelData.id === "e" || modelData.id === "w"
-            // Ensure handle size has a fallback
-            readonly property real effectiveHandleSize: resizeHandles.handleSize > 0 ? resizeHandles.handleSize : 12
             // Corner handles: small circles (10px diameter)
             // Edge handles: thin pills (4px thick, 24px long)
             readonly property real cornerSize: 10
@@ -182,7 +149,8 @@ Item {
             border.width: constants.handleBorderWidth
             // Handles are always present for mouse detection, only visible when hovered/selected
             visible: parent.width > 0 && parent.height > 0
-            opacity: (resizeHandles.root.isSelected || resizeHandles.root.mouseOverZone) ? 1 : 0
+            // root is the EditorZone that owns these handles, always present.
+            opacity: resizeHandles.root.isSelected || resizeHandles.root.mouseOverZone ? 1 : 0
             z: 200
 
             // Drop shadow for depth
@@ -219,7 +187,9 @@ Item {
                 // Store actual canvas dimensions for use during resize
                 property real actualCanvasWidth: resizeHandles.canvasWidth
                 property real actualCanvasHeight: resizeHandles.canvasHeight
-                property int lastModifiers: 0
+                // A dragged handle counts as active even once the cursor leaves
+                // its hit area, so the handles stay visible for the whole resize.
+                readonly property bool handleActive: containsMouse || pressed
 
                 anchors.fill: parent
                 anchors.margins: -4 // Larger hit area for easier grabbing
@@ -257,22 +227,14 @@ Item {
                     };
                     return handleDescriptions[modelData.id] || i18nc("@info:tooltip", "Drag to resize zone");
                 }
-                onEntered: {
-                    resizeHandles.root.anyHandleHovered = true;
-                }
-                onExited: {
-                    resizeHandles.root.anyHandleHovered = false;
-                }
-                onPressedChanged: {
-                    // Clear hover state when starting resize to avoid conflicts
-                    if (pressed)
-                        resizeHandles.root.anyHandleHovered = true;
+                onHandleActiveChanged: {
+                    resizeHandles.activeHandleCount += handleActive ? 1 : -1;
                 }
                 onPressed: function (mouse) {
                     var actualCanvasW = resizeHandles.actualCanvasWidth;
                     var actualCanvasH = resizeHandles.actualCanvasHeight;
                     // Validate dimensions before proceeding
-                    if (!resizeHandles.root || !isFinite(actualCanvasW) || !isFinite(actualCanvasH) || actualCanvasW <= 0 || actualCanvasH <= 0) {
+                    if (!isFinite(actualCanvasW) || !isFinite(actualCanvasH) || actualCanvasW <= 0 || actualCanvasH <= 0) {
                         mouse.accepted = false;
                         return;
                     }
@@ -319,7 +281,6 @@ Item {
                     if (!pressed || resizeHandles.root.operationState !== 2)
                         return;
 
-                    handleMouse.lastModifiers = mouse.modifiers;
                     var actualW = resizeHandles.actualCanvasWidth;
                     var actualH = resizeHandles.actualCanvasHeight;
                     // Fallback: Use stored values from onPressed if actualCanvas properties still invalid
@@ -483,7 +444,7 @@ Item {
                             // This is the key fix: only snap the edges being moved, preserve others
                             if (snapLeft) {
                                 // Left edge moved - adjust both X and width to maintain right edge
-                                var rightEdge = newX + newW;
+                                let rightEdge = newX + newW;
                                 newX = snappedX;
                                 newW = rightEdge - newX;
                                 // Ensure minimum width
@@ -493,7 +454,7 @@ Item {
                                 }
                             } else if (snapRight) {
                                 // Right edge moved - adjust width only (X stays same)
-                                var rightEdge = snappedX + snappedW;
+                                let rightEdge = snappedX + snappedW;
                                 newW = rightEdge - newX;
                                 if (newW < resizeHandles.minSize) {
                                     newW = resizeHandles.minSize;
@@ -502,7 +463,7 @@ Item {
                             }
                             if (snapTop) {
                                 // Top edge moved - adjust both Y and height to maintain bottom edge
-                                var bottomEdge = newY + newH;
+                                let bottomEdge = newY + newH;
                                 newY = snappedY;
                                 newH = bottomEdge - newY;
                                 // Ensure minimum height
@@ -512,7 +473,7 @@ Item {
                                 }
                             } else if (snapBottom) {
                                 // Bottom edge moved - adjust height only (Y stays same)
-                                var bottomEdge = snappedY + snappedH;
+                                let bottomEdge = snappedY + snappedH;
                                 newH = bottomEdge - newY;
                                 if (newH < resizeHandles.minSize) {
                                     newH = resizeHandles.minSize;
@@ -539,8 +500,6 @@ Item {
                                 resizeHandles.snapIndicator.setSnapLines(finalRelX, finalRelY, finalRight, finalBottom, origX, origY, origRight, origBottom, 0.005);
                             }
                             // Final bounds check after snapping
-                            var beforeBoundsY = newY;
-                            var beforeBoundsH = newH;
                             if (newX < 0) {
                                 newW = newW + newX; // Reduce width by overflow
                                 newX = 0;
@@ -589,7 +548,7 @@ Item {
                     // Signal operation updated
                     resizeHandles.root.operationUpdated(resizeHandles.root.zoneId, newX, newY, newW, newH);
                 }
-                onReleased: {
+                onReleased: function (mouse) {
                     // State 2 = Resizing, 0 = Idle
                     // Store references early to avoid scope issues
                     var rootItem = resizeHandles.root;
@@ -619,11 +578,13 @@ Item {
                     var relH = rootItem.toRelativeH(rootItem.visualHeight);
                     // Set state to Idle BEFORE committing so onZoneGeometryChanged can process
                     rootItem.operationState = 0;
-                    // Check if snap override modifier was held — skip C++ re-snapping if so
+                    // Check if snap override modifier was held — skip C++ re-snapping if so.
+                    // The release event's own modifiers are authoritative: they describe
+                    // the keys held at the moment this geometry is committed.
                     var ctrl = resizeHandles.root.controller;
                     var baseSnap = ctrl && (ctrl.gridSnappingEnabled || ctrl.edgeSnappingEnabled);
                     var overrideMod = ctrl ? ctrl.snapOverrideModifier : Qt.ShiftModifier;
-                    var skipSnap = (handleMouse.lastModifiers & overrideMod) !== 0 ? baseSnap : !baseSnap;
+                    var skipSnap = (mouse.modifiers & overrideMod) !== 0 ? baseSnap : !baseSnap;
                     // Commit to model - this triggers C++ updateZoneGeometry
                     rootItem.geometryChanged(relX, relY, relW, relH, skipSnap);
                     // Signal operation ended (state is already Idle)

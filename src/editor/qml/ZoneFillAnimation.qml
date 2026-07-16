@@ -45,11 +45,11 @@ Item {
     // Trigger animated fill operation
     function animatedExpandToFill() {
         if (!controller || !zoneRoot.zoneId)
-            return ;
+            return;
 
         // Guard against re-entrancy - don't start if already animating
         if (fillAnimation.running || zoneRoot.isAnimatingFill)
-            return ;
+            return;
 
         // Calculate the fill region using zone center
         var zoneX = zoneRoot.zoneData ? zoneRoot.zoneData.x : 0;
@@ -58,7 +58,7 @@ Item {
         var zoneH = zoneRoot.zoneData ? zoneRoot.zoneData.height : 0.25;
         var centerX = zoneX + zoneW / 2;
         var centerY = zoneY + zoneH / 2;
-        // Store center coords for use in expandToFillRequested
+        // Store center coords for use in expandToFillWithCoords
         fillCenterX = centerX;
         fillCenterY = centerY;
         var region = controller.calculateFillRegion(zoneRoot.zoneId, centerX, centerY);
@@ -116,7 +116,5 @@ Item {
             to: fillAnimator.targetHeight
             profile: "editor.snapIn"
         }
-
     }
-
 }

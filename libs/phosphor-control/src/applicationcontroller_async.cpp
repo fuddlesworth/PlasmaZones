@@ -13,11 +13,10 @@
 //   * asyncBatchTimeoutMs / setAsyncBatchTimeoutMs — consumer-facing
 //     timeout tuning.
 //
-// Split out of applicationcontroller.cpp so that TU stays under the
-// project's 800-line cap (CLAUDE.md). All methods here are members of
-// PhosphorControl::ApplicationController and only touch private
-// members declared in the public header — same class, separate TU,
-// no API change.
+// All methods here are members of PhosphorControl::ApplicationController
+// and only touch private members declared in the public header — same
+// class, separate TU, no API change. See applicationcontroller.cpp for
+// the synchronous half.
 
 #include "PhosphorControl/ApplicationController.h"
 
@@ -142,7 +141,8 @@ void ApplicationController::applyAllAsync()
     // shared signal bus, a cascading config-write), the single-pass
     // form would lose that emission because N+1's lambda hadn't been
     // connected yet — m_applyPending then never reaches 0 and the
-    // 60 s timer is the only recovery. Two-pass closes that hole.
+    // asyncBatchTimeoutMs timer is the only recovery. Two-pass closes
+    // that hole.
     //
     // Track every per-domain connection so completeApplyIfDone can
     // disconnect the lot at terminal emit. Qt::SingleShotConnection
@@ -399,13 +399,16 @@ void ApplicationController::forceResetAsyncState()
     // destroyed() guard failed to fire (should be unreachable but
     // chrome buttons would be permanently disabled if it did).
     //
-    // Bumping the generation counter is essential: the per-domain
-    // applyResult/destroyed lambdas from the wedged batch are STILL
-    // WIRED on the domains. If those domains later fire either signal
-    // after this reset, the lambdas' generation guard will see the
-    // new value and bail — without the bump, a stale fire after
-    // reset would corrupt whatever state-machine state happens to be
-    // live (the NEXT batch's counters, most likely).
+    // Bumping the generation counter is essential, and the wedged batch's
+    // in-flight timeout lambda is why. The per-domain applyResult/destroyed
+    // lambdas are NOT the reason: completeApplyIfDone (called below)
+    // disconnects every entry in m_applyConnections, so those are gone by
+    // the time this returns. The QTimer::singleShot posted by applyAllAsync
+    // is untracked, though, and stays armed until its m_asyncBatchTimeoutMs
+    // deadline elapses. Without the bump, that lambda would wake up after
+    // this reset, see a live m_applying, and corrupt whatever state-machine
+    // state happens to be current (the NEXT batch's counters, most likely).
+    // With it, the lambda's generation guard sees the new value and bails.
     // Mutually-exclusive `if / else if` rather than two sequential
     // if-blocks: applyAllAsync/discardAllAsync upstream guards forbid
     // both flags being true concurrently, so in a healthy state at

@@ -8,9 +8,8 @@
 // visibility into the booleans ShellHost::syncSurfaceState expects.
 //
 // Extracted from osd.cpp where these methods accumulated during the
-// Phase 2-4 ShellHost lift. They are not OSD-specific - they belong
-// with the shell-host wiring conceptually - and keep osd.cpp under
-// the <800-line cap.
+// Phase 2-4 ShellHost lift. They are not OSD-specific, they belong
+// with the shell-host wiring conceptually.
 
 #include "internal.h"
 #include "../overlayservice.h"

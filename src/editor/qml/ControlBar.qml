@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
@@ -23,8 +22,6 @@ ToolBar {
     required property var confirmCloseDialog
     required property var editorWindow
     required property bool previewMode
-    // Expose addZoneButton for access from parent
-    property alias addZoneButton: addZoneButtonItem
 
     height: Kirigami.Units.gridUnit * 5
     z: 100
@@ -32,7 +29,7 @@ ToolBar {
     RowLayout {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.smallSpacing // Use theme spacing (4px)
-        spacing: Kirigami.Units.mediumSpacing // Use theme spacing (8px - between major sections)
+        spacing: Kirigami.Units.mediumSpacing // Use theme spacing (between major sections)
 
         // ═══════════════════════════════════════════════════════════════
         // ZONE CREATION SECTION
@@ -41,12 +38,9 @@ ToolBar {
             id: zoneCreationSection
 
             visible: !controlBar.previewMode
-            spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - within section)
+            spacing: Kirigami.Units.gridUnit // Use theme spacing (within section)
 
-            // Add Zone button (exposed via alias)
             Button {
-                id: addZoneButtonItem
-
                 text: i18nc("@action:button", "Add Zone")
                 icon.name: "list-add"
                 enabled: editorController !== null && editorController !== undefined
@@ -162,20 +156,27 @@ ToolBar {
                     required property int index
 
                     width: templateCombo.width
+                    // The label lives in the custom contentItem below, which leaves
+                    // the delegate anonymous to a screen reader. Setting `text` is
+                    // what gives it an Accessible.name; the default contentItem it
+                    // would otherwise feed is replaced, so nothing renders twice.
+                    text: modelData.text || ""
 
                     contentItem: RowLayout {
                         spacing: Kirigami.Units.smallSpacing
 
-                        // Visual preview
+                        // Visual preview. Sized on the grid unit at a 3:2 ratio so
+                        // the thumbnail scales with the theme instead of pinning to
+                        // pixels.
                         TemplatePreview {
                             visible: modelData.templateType && modelData.templateType !== ""
                             templateType: modelData.templateType || ""
                             columns: modelData.columns || 2
                             rows: modelData.rows || 2
-                            Layout.preferredWidth: 60
-                            Layout.preferredHeight: 40
-                            Layout.maximumWidth: 60
-                            Layout.maximumHeight: 40
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                            Layout.preferredHeight: Kirigami.Units.gridUnit * 2
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 3
+                            Layout.maximumHeight: Kirigami.Units.gridUnit * 2
                             Layout.alignment: Qt.AlignVCenter
                         }
 
@@ -204,7 +205,7 @@ ToolBar {
             id: snappingSection
 
             visible: !controlBar.previewMode
-            spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - within section)
+            spacing: Kirigami.Units.gridUnit // Use theme spacing (within section)
 
             // Edge snapping toggle - first in snapping section
             Button {
@@ -263,7 +264,7 @@ ToolBar {
                 Slider {
                     id: gridIntervalXSlider
 
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     from: 0.01
                     to: 0.5
                     stepSize: 0.01
@@ -271,12 +272,8 @@ ToolBar {
                     Accessible.name: i18nc("@label", "Horizontal grid interval")
                     Accessible.description: i18nc("@info", "Adjust horizontal grid interval (1% to 50%)")
                     onMoved: {
-                        if (editorController) {
+                        if (editorController)
                             editorController.snapIntervalX = value;
-                            // Ensure grid snapping is enabled when changing interval
-                            if (!editorController.gridSnappingEnabled)
-                                editorController.gridSnappingEnabled = true;
-                        }
                     }
 
                     // Update when snapIntervalX changes externally
@@ -293,7 +290,7 @@ ToolBar {
 
                 Label {
                     text: Math.round(gridIntervalXSlider.value * 100) + "%"
-                    Layout.preferredWidth: 32
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     horizontalAlignment: Text.AlignRight
                     Accessible.name: i18nc("@info", "Horizontal interval: %1%", Math.round(gridIntervalXSlider.value * 100))
                 }
@@ -308,7 +305,7 @@ ToolBar {
                 Slider {
                     id: gridIntervalYSlider
 
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     from: 0.01
                     to: 0.5
                     stepSize: 0.01
@@ -316,12 +313,8 @@ ToolBar {
                     Accessible.name: i18nc("@label", "Vertical grid interval")
                     Accessible.description: i18nc("@info", "Adjust vertical grid interval (1% to 50%)")
                     onMoved: {
-                        if (editorController) {
+                        if (editorController)
                             editorController.snapIntervalY = value;
-                            // Ensure grid snapping is enabled when changing interval
-                            if (!editorController.gridSnappingEnabled)
-                                editorController.gridSnappingEnabled = true;
-                        }
                     }
 
                     // Update when snapIntervalY changes externally
@@ -338,7 +331,7 @@ ToolBar {
 
                 Label {
                     text: Math.round(gridIntervalYSlider.value * 100) + "%"
-                    Layout.preferredWidth: 32
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     horizontalAlignment: Text.AlignRight
                     Accessible.name: i18nc("@info", "Vertical interval: %1%", Math.round(gridIntervalYSlider.value * 100))
                 }
@@ -378,13 +371,12 @@ ToolBar {
             spacing: Kirigami.Units.smallSpacing
             visible: editorController ? (editorController.hasUnsavedChanges || false) : false
             onVisibleChanged: {
-                if (visible) {
+                // stop() fires pulseAnim.onStopped, which is what restores the
+                // opacities. Repeating that here would be the same reset twice.
+                if (visible)
                     pulseAnim.restart();
-                } else {
+                else
                     pulseAnim.stop();
-                    unsavedIcon.opacity = 1;
-                    unsavedIndicator.opacity = 1;
-                }
             }
 
             Kirigami.Icon {
@@ -440,7 +432,7 @@ ToolBar {
         RowLayout {
             id: actionButtonsSection
 
-            spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - between buttons)
+            spacing: Kirigami.Units.gridUnit // Use theme spacing (between buttons)
 
             // Cancel button
             Button {
@@ -482,7 +474,7 @@ ToolBar {
         Rectangle {
             anchors.top: parent.top
             width: parent.width
-            height: Math.round(Screen.devicePixelRatio)
+            height: 1
             color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
     }

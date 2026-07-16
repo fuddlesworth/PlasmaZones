@@ -15,6 +15,7 @@
 #include "../core/utils.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorConfig/JsonBackend.h>
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
@@ -52,6 +53,104 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
     ConfigMigration::ensureJsonConfig();
     return createDefaultConfigBackend();
 }
+
+// ── Per-mode disable-list helpers ────────────────────────────────────────────
+// Declared up here rather than beside the disable-list section further down
+// because load()'s change detection is the first user of them. See that
+// section for what the (axis, mode) rule families are.
+
+// Disable-axis enum mirrors the persisted (axis, mode) family layout. Distinct
+// from `ContextRuleBridge::ContextAxis` only because the bridge enum also
+// carries `CatchAll` and `Combined`, neither of which is a managed disable
+// family — see `axisOf` for why `Combined` is excluded.
+enum class DisableAxis {
+    Monitor,
+    Desktop,
+    Activity
+};
+
+// Resolve a connector name ("DP-2") to its stable screen id
+// ("Manuf:Model:Serial"), or return @p screen unchanged.
+//
+// The ONE resolution rule for the disable lists, shared by the getter
+// (disabledMonitors, which resolves on every read) and by
+// canonicalDisableEntries. The two must agree exactly: if the canonical form
+// resolved an entry differently from the getter, re-saving an unchanged list
+// would look like a change and misfire disabled*Changed.
+//
+// An unresolvable name falls through to the name itself, which is what we want:
+// canonicalizing an entry down to an empty screen segment would erase which
+// screen it names. That fall-through is idForName's own contract — when no live
+// screen carries the connector (an unplugged monitor, a name from another
+// machine) it returns the NAME UNCHANGED, never empty. So there is nothing to
+// guard against here: for a connector name the result is either the resolved id
+// or the name back, and a non-connector name (which includes the empty string,
+// isConnectorName rejects it) is already canonical. Mirrors the fall-through in
+// ScreenIdentity::variantsFor.
+QString resolveScreenId(const QString& screen)
+{
+    if (PhosphorScreens::ScreenIdentity::isConnectorName(screen)) {
+        return PhosphorScreens::ScreenIdentity::idForName(screen);
+    }
+    return screen;
+}
+
+// The canonical form of a disable list for @p axis: entries trimmed, their
+// screen segment resolved through resolveScreenId, malformed entries dropped,
+// duplicates collapsed, and the result sorted.
+//
+// This is what "the same disable list" means. Two lists are the same set of
+// disable rules iff their canonical forms are equal — the store returns
+// entries in rule order, so a raw list compare would report a change for a
+// mere reordering (setAllRules rewrites the whole list, so rule order churns
+// for reasons that have nothing to do with this axis).
+//
+// For Desktop/Activity the entry is a composite (`screenId/desktop`,
+// `screenId/activity`); split on the LAST '/' so a screen id that legitimately
+// contains one (the disambiguated `Manuf:Model:Serial/CONNECTOR` shape) isn't
+// truncated. Entries the write path's parse loop would reject (missing or edge
+// '/', and for Desktop a non-positive or non-numeric desktop segment) are
+// dropped here as well: the canonical form has to be the EFFECTIVE set, or a
+// write whose every kept entry already matches the current rules would look
+// like a change.
+QStringList canonicalDisableEntries(DisableAxis axis, const QStringList& list)
+{
+    QStringList c;
+    for (const QString& raw : list) {
+        QString value = raw.trimmed();
+        if (axis == DisableAxis::Monitor) {
+            value = resolveScreenId(value);
+        } else {
+            const int slash = value.lastIndexOf(QLatin1Char('/'));
+            if (slash <= 0 || slash == value.size() - 1) {
+                continue;
+            }
+            const QString screen = resolveScreenId(value.left(slash));
+            if (axis == DisableAxis::Desktop) {
+                bool ok = false;
+                const int desktop = value.mid(slash + 1).toInt(&ok);
+                if (!ok || desktop <= 0) {
+                    continue;
+                }
+                // Rebuild the desktop segment via QString::number so the
+                // canonical form matches the getter's serialization
+                // (disableEntriesFor) — otherwise numeric aliases like "+3" or
+                // "03" survive as distinct entries, defeat the write path's
+                // no-op guard, and produce a second disable rule with the same
+                // deterministic UUID.
+                value = screen + QLatin1Char('/') + QString::number(desktop);
+            } else {
+                value = screen + QLatin1Char('/') + value.mid(slash + 1);
+            }
+        }
+        if (!value.isEmpty() && !c.contains(value)) {
+            c.append(value);
+        }
+    }
+    c.sort();
+    return c;
+}
+
 } // namespace
 
 Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
@@ -181,14 +280,21 @@ void Settings::load()
     // Iterating PhosphorZones::allModes() keeps the snapshot in lockstep
     // with the enum: adding a future mode automatically gets snapshotted +
     // re-emitted without touching this block.
+    //
+    // Snapshot the CANONICAL form, and compare canonically below. The getters
+    // return entries in rule order, and setAllRules rewrites the whole rule
+    // list, so a reload can hand back the same disable set in a different order
+    // for reasons that have nothing to do with these lists. A raw compare would
+    // read that as a change and fire disabled*Changed + settingsChanged, which
+    // on the daemon side means a retile nobody asked for.
     using Mode = PhosphorZones::AssignmentEntry::Mode;
     QHash<Mode, QStringList> monitorsBefore;
     QHash<Mode, QStringList> desktopsBefore;
     QHash<Mode, QStringList> activitiesBefore;
     for (const Mode mode : PhosphorZones::allModes()) {
-        monitorsBefore.insert(mode, disabledMonitors(mode));
-        desktopsBefore.insert(mode, disabledDesktops(mode));
-        activitiesBefore.insert(mode, disabledActivities(mode));
+        monitorsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)));
+        desktopsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)));
+        activitiesBefore.insert(mode, canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)));
     }
 
     m_configBackend->reparseConfiguration();
@@ -258,15 +364,15 @@ void Settings::load()
     // automatically participate without touching this block.
     bool anyDisableChanged = false;
     for (const Mode mode : PhosphorZones::allModes()) {
-        if (disabledMonitors(mode) != monitorsBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)) != monitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);
             anyDisableChanged = true;
         }
-        if (disabledDesktops(mode) != desktopsBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)) != desktopsBefore.value(mode)) {
             Q_EMIT disabledDesktopsChanged(mode);
             anyDisableChanged = true;
         }
-        if (disabledActivities(mode) != activitiesBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)) != activitiesBefore.value(mode)) {
             Q_EMIT disabledActivitiesChanged(mode);
             anyDisableChanged = true;
         }
@@ -357,13 +463,14 @@ void Settings::purgeStaleKeys()
     // in quicklayouts.json (separate sidecar) — neither is visible to
     // this purge after the v4 migration retired assignments.json.
     //
-    // "General" is preserved because JsonBackend uses it as the default
-    // rootGroupName for writeRootString/readRootString — any caller
-    // that persists a root-level key (current or future: KCM metadata,
-    // first-run markers, etc.) lands there. Wiping it on every save
-    // would silently destroy those values.
+    // The backend's root container (where writeRootString / readRootString put
+    // ungrouped keys) needs no entry here: IBackend::groupList()'s
+    // reserved-name contract requires every backend to keep it out of the
+    // enumeration, so Pass 2 cannot reach it. This holds against the interface
+    // and not just the JsonBackend we happen to construct today.
+    //
     // Mixed list of (a) root-level GROUP names that must survive Pass 2's
-    // blanket-delete loop ("General", "Updates")
+    // blanket-delete loop ("Updates")
     // and (b) root-level KEYS holding stash data — `_v4DisableStash`,
     // `_v4ExclusionStash` and `_v4AnimationExclusionStash` are JSON
     // OBJECTS and survive Pass 2 via `preservedGroups.contains(topLevel)`
@@ -375,7 +482,6 @@ void Settings::purgeStaleKeys()
     // against future Pass 2 restructuring. All four stashes feed the v4
     // chain-stall retry path in configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {
-        ConfigDefaults::generalGroup(),
         ConfigDefaults::updatesGroup(),
         ConfigKeys::Legacy::v4DisableStashKey(),
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
@@ -530,11 +636,68 @@ void Settings::save()
     saveAllPerScreenOverrides(m_configBackend);
     saveVirtualScreenConfigs(m_configBackend);
 
-    m_configBackend->sync();
+    // commit(), not sync(): the baseline moves below on a true return, so this
+    // has to be a "the bytes landed" answer. sync() is allowed to return true
+    // for a write it merely scheduled (JsonBackend's Deferred policy debounces
+    // it), which would advance the baseline against a write that has not
+    // happened and may still fail.
+    if (!m_configBackend->commit()) {
+        // Nothing reached disk. The backend stays dirty and retries on the next
+        // sync, so the values are not lost — but the baseline must NOT move:
+        // it is the "what disk holds" reference per-page Discard reverts to and
+        // isKeyModified() compares against. Advancing it here would tell the
+        // user their unsaved edits were saved and take away their ability to
+        // discard them.
+        qCWarning(lcConfig) << "save: failed to write the configuration to disk — keeping the previous baseline so "
+                               "the unsaved values stay discardable; the next save retries";
+        return;
+    }
 
     // Disk now holds the flushed store — the just-saved values become the new
     // committed baseline for per-page Discard / dirty checks.
     captureBaseline();
+}
+
+bool Settings::exportTo(const QString& filePath)
+{
+    auto* json = dynamic_cast<PhosphorConfig::JsonBackend*>(m_configBackend);
+    if (!json) {
+        qCWarning(lcConfig) << "exportTo: backend is not JSON-backed, cannot export";
+        return false;
+    }
+
+    // Store-backed groups persist through their setters on every write, so the
+    // backend's in-memory root already carries whatever the user currently has,
+    // saved or not. The non-Store groups (per-screen overrides, virtual screen
+    // configs) only reach it during save(), so write them in as well. The
+    // helpers can only stage into the LIVE root, and anything left there would
+    // be committed by a later sync() or the backend's flush-on-destruction.
+    // So: snapshot the root and dirty flag first, stage, take the export
+    // snapshot, then restore both — the staged groups reach the export
+    // document only, never the live config.
+    const QJsonObject liveRoot = json->jsonRootSnapshot();
+    const bool wasDirty = json->isDirty();
+
+    saveAllPerScreenOverrides(m_configBackend);
+    saveVirtualScreenConfigs(m_configBackend);
+    QJsonObject exportRoot = json->jsonRootSnapshot();
+    // sync() stamps the schema version on its way to disk, so a store that has
+    // never synced carries no `_version` in memory. Apply the same stamp here
+    // or the export reads back as version-less and re-runs the entire migration
+    // chain when someone imports it.
+    json->applyVersionStamp(exportRoot);
+
+    json->replaceRoot(liveRoot);
+    if (!wasDirty) {
+        // replaceRoot marks dirty as a precaution; the root we put back is
+        // exactly the one that matched disk, so restore the clean state.
+        json->clearDirty();
+    }
+
+    // Deliberately no sync() and no captureBaseline(). Exporting must not
+    // commit pending edits to the live config, and must not move the baseline
+    // that per-page Discard reverts to.
+    return PhosphorConfig::JsonBackend::writeJsonAtomically(filePath, exportRoot);
 }
 
 // ── Per-page reset / discard support ────────────────────────────────────────
@@ -1595,39 +1758,78 @@ P_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOn
 
 namespace {
 
-// Disable-axis enum mirrors the persisted (axis, mode) family layout. Distinct
-// from `ContextRuleBridge::ContextAxis` only because the bridge enum also
-// carries `CatchAll` and `Combined` — the disable list classifies a tuple as
-// Activity-axis whether or not it also pins a desktop (mirroring the historic
-// per-activity disable family), so we project the bridge axis through here.
-enum class DisableAxis {
-    Monitor,
-    Desktop,
-    Activity
-};
-
-// Classify a context rule's pinned-dimension shape into a disable axis.
-// Returns nullopt for a catch-all or a shape that pins no screen — those are
-// not valid disable rules. Delegates to the bridge so the cascade-axis
-// formula lives in one place.
-std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, const QString& activity)
+// Classify a disable rule's MATCH into a disable axis. Returns nullopt for a
+// shape no disable axis can represent — those are not managed disable entries,
+// so the getter must not report them and the write path's kept-walk must not
+// rewrite them. Routed through `ContextRuleBridge::contextAxisFor` so the
+// cascade-axis formula lives in one place, and so the three admission gates that
+// formula folds in apply here identically to the assignment side:
+//   - `isContextOnly()` — a rule carrying a window-property leaf is not a
+//     context rule at all. Rebuilding it from the decoded dims would drop that
+//     leaf, and `disableEntryFor` has nowhere to put it.
+//   - `pinsNonDimensionContextField()` — a rule pinning Mode /
+//     TiledWindowCount / ScreenOrientation / ActiveLayout is more specific than
+//     the (screen, desktop, activity) shape the entry strings can key. Taking it
+//     as a bare axis rule would BOTH over-report the gate (an
+//     `All{ScreenId==A, ScreenOrientation=="portrait"}` disable would switch the
+//     engine off on screen A in every orientation) and destroy the extra leaf on
+//     the next rebuild of the family.
+//   - the axis decode itself, below.
+//
+// STRICT, like the assignment side's `matchIsExactContextActivityStrict`: a
+// Combined (screen+desktop+activity) tuple is NOT the Activity axis. The three
+// disable-list keys are `screenId`, `screenId/desktop` and `screenId/activity`
+// — none of them can carry all three dimensions, so projecting a Combined rule
+// onto the Activity axis loses information both ways:
+//   - disableEntriesFor() would serialize it as `screenId/activity`, dropping
+//     the desktop pin, and the rebuild loop below would recreate it from that
+//     entry with desktop=0 — silently widening a rule that gated ONE desktop
+//     into one that gates ALL desktops (under a different disableRuleIdFor
+//     UUID, so it is a different rule, not an edit).
+//   - a Combined rule and a plain Activity rule for the same (screen,
+//     activity) produce the SAME entry string, so canonicalDisableEntries'
+//     de-duplication would collapse the pair and the rebuild would emit only
+//     one — losing the other outright.
+// Excluded here instead, a Combined disable rule is invisible to the disable
+// lists (it cannot be keyed by them) and the rebuild's kept-walk preserves it
+// untouched, exactly as it already does for a rule that pins a non-dimension
+// context field. Nothing in-tree authors one — the v3→v4 migration emits
+// desktop-only and activity-only disables — so this is only reachable for a
+// rule hand-built in the rule editor, which is precisely the rule the disable
+// lists must not rewrite.
+std::optional<DisableAxis> axisOf(const PhosphorRules::MatchExpression& match)
 {
     namespace CRB = PhosphorRules::ContextRuleBridge;
-    switch (CRB::contextAxisOf(screenId, virtualDesktop, activity)) {
+    switch (CRB::contextAxisFor(match)) {
     case CRB::ContextAxis::Monitor:
         return DisableAxis::Monitor;
     case CRB::ContextAxis::Desktop:
         return DisableAxis::Desktop;
     case CRB::ContextAxis::Activity:
-    case CRB::ContextAxis::Combined:
-        // A combined (screen+desktop+activity) tuple is treated as
-        // Activity-axis for disable-list purposes — mirrors the legacy
-        // classifier which only checked the activity dimension.
         return DisableAxis::Activity;
+    case CRB::ContextAxis::Combined:
     case CRB::ContextAxis::CatchAll:
         return std::nullopt;
     }
     return std::nullopt;
+}
+
+// Serialize a decoded (screen, desktop, activity) tuple into the disable-list
+// entry string for @p axis. The ONE place the entry shape is spelled, shared by
+// the getter (disableEntriesFor) and the write path's kept-walk — the two have
+// to agree on what "the entry for this rule" is, or the kept-walk would fail to
+// recognise the very entries the getter produced.
+QString disableEntryFor(DisableAxis axis, const QString& screenId, int desktop, const QString& activity)
+{
+    switch (axis) {
+    case DisableAxis::Monitor:
+        return screenId;
+    case DisableAxis::Desktop:
+        return screenId + QLatin1Char('/') + QString::number(desktop);
+    case DisableAxis::Activity:
+        return screenId + QLatin1Char('/') + activity;
+    }
+    return QString();
 }
 
 } // namespace
@@ -1639,35 +1841,32 @@ QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mod
     const QString wantToken = PhosphorZones::modeToWireString(mode);
     QStringList out;
     for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
+        if (!rule.enabled) {
+            // A disabled rule does not gate anything. The evaluator skips
+            // !enabled before filling any slot, and these lists ARE the gate
+            // (isMonitorDisabled reads them straight), so honouring a disabled
+            // rule here would keep an engine switched off that the user had
+            // explicitly toggled off in the rule editor. The rule itself is
+            // preserved — see the kept-walk in writeDisableEntries, which must
+            // not delete what this getter no longer reports.
+            continue;
+        }
         const auto ruleToken = CRB::disableRuleMode(rule);
         if (!ruleToken || *ruleToken != wantToken) {
             continue; // not a disable rule, or scoped to a different mode
         }
-        if (CRB::pinsNonDimensionContextField(rule.match)) {
-            continue; // a rule that also pins a non-dimension context field (e.g.
-                      // TiledWindowCount) is more specific than a pure (screen,
-                      // desktop, activity) disable; it cannot be represented by
-                      // the disable-axis key, so it is not a managed disable entry.
+        // axisOf() is the single admission gate — see its comment for the three
+        // shapes it refuses (window-property leaves, a pinned non-dimension
+        // context field, an axis the entry strings cannot key).
+        const auto ruleAxis = axisOf(rule.match);
+        if (!ruleAxis || *ruleAxis != axis) {
+            continue;
         }
         QString screenId;
         int desktop = 0;
         QString activity;
         CRB::contextDimsOf(rule.match, screenId, desktop, activity);
-        const auto ruleAxis = axisOf(screenId, desktop, activity);
-        if (!ruleAxis || *ruleAxis != axis) {
-            continue;
-        }
-        switch (axis) {
-        case DisableAxis::Monitor:
-            out.append(screenId);
-            break;
-        case DisableAxis::Desktop:
-            out.append(screenId + QLatin1Char('/') + QString::number(desktop));
-            break;
-        case DisableAxis::Activity:
-            out.append(screenId + QLatin1Char('/') + activity);
-            break;
-        }
+        out.append(disableEntryFor(axis, screenId, desktop, activity));
     }
     return out;
 }
@@ -1679,57 +1878,12 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     const auto axis = static_cast<DisableAxis>(axisInt);
     const QString modeToken = PhosphorZones::modeToWireString(mode);
 
-    // Snapshot the current entries for this (axis, mode) so a no-op write
-    // does not fire a spurious changed signal. Compare canonically — both
-    // sides are de-duplicated, whitespace-trimmed sets. The Monitor axis
-    // additionally resolves connector names → stable screen ids so the
-    // comparison matches the public getter (disabledMonitors), which always
-    // resolves on read: without this, re-saving a list that stores a
-    // connector name where the getter reports the canonical id would look
-    // like a change and misfire the changed signal.
-    // Resolve the SCREEN segment of any composite entry to its canonical id.
-    // For Monitor axis the entry IS the screen id; for Desktop/Activity the
-    // entry is `screenId/desktop` or `screenId/activity` and the leading
-    // segment needs the same resolution. Without this, a write that mixes
-    // connector-name and canonical-id forms produces two separate Rules
-    // (different UUIDs via disableRuleIdFor) covering the same logical
-    // context, and the no-op short-circuit below misfires because the
-    // pre/post sets look different.
-    const auto canonical = [axis](const QStringList& list) {
-        const auto resolveScreen = [](const QString& screen) {
-            if (PhosphorScreens::ScreenIdentity::isConnectorName(screen)) {
-                const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screen);
-                if (resolved != screen) {
-                    return resolved;
-                }
-            }
-            return screen;
-        };
-        QStringList c;
-        for (const QString& raw : list) {
-            QString value = raw.trimmed();
-            if (axis == DisableAxis::Monitor) {
-                value = resolveScreen(value);
-            } else if (axis == DisableAxis::Desktop || axis == DisableAxis::Activity) {
-                // Composite entry: split on the LAST '/' so a screen id
-                // that happens to contain a '/' (rare but legal in the
-                // disambiguated `Manuf:Model:Serial/CONNECTOR` shape)
-                // doesn't truncate.
-                const int slash = value.lastIndexOf(QLatin1Char('/'));
-                if (slash > 0 && slash < value.size() - 1) {
-                    const QString screen = resolveScreen(value.left(slash));
-                    value = screen + QLatin1Char('/') + value.mid(slash + 1);
-                }
-            }
-            if (!value.isEmpty() && !c.contains(value)) {
-                c.append(value);
-            }
-        }
-        c.sort();
-        return c;
-    };
-    const QStringList before = canonical(disableEntriesFor(mode, axisInt));
-    const QStringList after = canonical(entries);
+    // Snapshot the current entries for this (axis, mode) so a no-op write does
+    // not fire a spurious changed signal. Both sides go through
+    // canonicalDisableEntries — see it for what the canonical form is and why
+    // a raw compare is not enough.
+    const QStringList before = canonicalDisableEntries(axis, disableEntriesFor(mode, axisInt));
+    const QStringList after = canonicalDisableEntries(axis, entries);
 
     // No-op guard: when the canonical disable sets are equal there is nothing
     // to persist. Skip the kept-rebuild + setAllRules walk entirely — the
@@ -1749,17 +1903,43 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     QList<PhosphorRules::Rule> kept;
     for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
         const auto ruleToken = CRB::disableRuleMode(rule);
-        // Keep a disable rule that also pins a non-dimension context field (e.g.
-        // TiledWindowCount): it is not the pure (screen, desktop, activity) shape
-        // this (axis, mode) rewrite owns, so dropping it would lose that leaf.
-        if (ruleToken && *ruleToken == modeToken && !CRB::pinsNonDimensionContextField(rule.match)) {
-            QString screenId;
-            int desktop = 0;
-            QString activity;
-            CRB::contextDimsOf(rule.match, screenId, desktop, activity);
-            const auto ruleAxis = axisOf(screenId, desktop, activity);
+        // axisOf() gates admission with exactly the shapes disableEntriesFor
+        // reports, so this walk drops only rules the append loop below rebuilds.
+        // Anything it refuses — a window-property leaf, a pinned non-dimension
+        // context field (Mode / TiledWindowCount / ScreenOrientation /
+        // ActiveLayout), a Combined tuple — is NOT the pure (screen, desktop,
+        // activity) shape this (axis, mode) rewrite owns, so it falls through to
+        // `kept` untouched. Dropping it would destroy the rule outright: the
+        // append loop rebuilds only the bare tuple, so the extra leaf would be
+        // gone and the rule's derived UUID with it.
+        if (ruleToken && *ruleToken == modeToken) {
+            const auto ruleAxis = axisOf(rule.match);
             if (ruleAxis && *ruleAxis == axis) {
-                continue; // drop — replaced below
+                QString screenId;
+                int desktop = 0;
+                QString activity;
+                CRB::contextDimsOf(rule.match, screenId, desktop, activity);
+                // A DISABLED rule of this family is invisible to
+                // disableEntriesFor, so it is in neither `before` nor `after` and
+                // the append loop below will not recreate it. Dropping it here
+                // would silently delete the user's rule on the next unrelated
+                // write to this (axis, mode) family. Keep it — unless this write
+                // re-asserts its exact entry, in which case the append loop
+                // rebuilds the same tuple as an ENABLED rule with the same
+                // deterministic id. The append loop runs after this walk, so
+                // keeping the disabled one too would hand setAllRules the
+                // disabled rule first, and RuleSet::setRules keeps the FIRST
+                // entry for any id and drops later collisions — the rebuilt
+                // ENABLED rule would be the one thrown away, leaving the
+                // re-enable a silent no-op. Ticking a monitor back on in the UI
+                // is precisely that case, and re-enabling the rule is what the
+                // user asked for.
+                const QStringList canonical =
+                    canonicalDisableEntries(axis, {disableEntryFor(axis, screenId, desktop, activity)});
+                const bool reasserted = !canonical.isEmpty() && after.contains(canonical.first());
+                if (rule.enabled || reasserted) {
+                    continue; // drop — replaced below
+                }
             }
         }
         kept.append(rule);
@@ -1774,21 +1954,15 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             screenId = canonicalEntry;
             break;
         case DisableAxis::Desktop: {
+            // No shape check: `after` came out of canonicalDisableEntries, which
+            // already dropped every entry this loop could reject and rebuilt the
+            // survivors as `<non-empty screen>/<QString::number(desktop > 0)>`.
+            // The screen segment is non-empty (resolveScreenId returns its input
+            // unchanged when it doesn't resolve) and the desktop segment never
+            // contains '/', so lastIndexOf always lands on the separator we put
+            // there and the tail always parses back to the same positive int.
             const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
-            if (slash <= 0 || slash == canonicalEntry.size() - 1) {
-                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
-                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
-                qCDebug(lcConfig) << "Skipping malformed desktop disable entry";
-                continue;
-            }
-            bool ok = false;
-            desktop = canonicalEntry.mid(slash + 1).toInt(&ok);
-            if (!ok || desktop <= 0) {
-                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
-                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
-                qCDebug(lcConfig) << "Skipping malformed desktop disable entry";
-                continue;
-            }
+            desktop = canonicalEntry.mid(slash + 1).toInt();
             screenId = canonicalEntry.left(slash);
             break;
         }
@@ -1799,14 +1973,9 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             // splits at the activity boundary, not at the connector
             // boundary inside the screen ID. Activity UUIDs are
             // canonical and never contain `/`, so the trailing segment
-            // is unambiguous. Mirrors the Desktop axis above.
+            // is unambiguous. Mirrors the Desktop axis above, including
+            // the shape guarantee canonicalDisableEntries provides.
             const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
-            if (slash <= 0 || slash == canonicalEntry.size() - 1) {
-                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
-                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
-                qCDebug(lcConfig) << "Skipping malformed activity disable entry";
-                continue;
-            }
             screenId = canonicalEntry.left(slash);
             activity = canonicalEntry.mid(slash + 1);
             break;
@@ -1873,7 +2042,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         // leave the value MOVED. Announcing nothing there would strand every UI on the old
         // list while the getters report the new one — which is the same silent divergence,
         // just from the other side.
-        if (canonical(disableEntriesFor(mode, axisInt)) != before) {
+        if (canonicalDisableEntries(axis, disableEntriesFor(mode, axisInt)) != before) {
             Q_EMIT(this->*signalFn)(mode);
             Q_EMIT settingsChanged();
         }
@@ -1886,20 +2055,18 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
 
 QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    // Resolve connector names → stable screen ids on every read. Stored
-    // connector names stay human-readable; consumers see canonical ids.
+    // Resolve connector names → stable screen ids on every read, through the
+    // same resolveScreenId helper canonicalDisableEntries uses — an
+    // unresolvable name therefore stays the name here too, instead of
+    // collapsing to an empty entry. Stored connector names stay human-readable;
+    // consumers see canonical ids.
     // Desktop/activity getters intentionally skip this resolution because
     // their composite keys (`screenId/desktop`, `screenId/activity`) embed
     // the screen id in a non-isolatable way; the connector↔id matching is
     // done at lookup time inside isDesktopDisabled / isActivityDisabled.
     QStringList entries = disableEntriesFor(mode, static_cast<int>(DisableAxis::Monitor));
     for (auto& name : entries) {
-        if (PhosphorScreens::ScreenIdentity::isConnectorName(name)) {
-            const QString resolved = PhosphorScreens::ScreenIdentity::idForName(name);
-            if (resolved != name) {
-                name = resolved;
-            }
-        }
+        name = resolveScreenId(name);
     }
     return entries;
 }
@@ -2791,14 +2958,13 @@ bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop
     const QStringList namesToCheck = PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName);
     for (const QString& name : namesToCheck) {
         if (virtualDesktop > 0 && !activity.isEmpty()) {
-            const QString k =
-                name + QStringLiteral(":") + QString::number(virtualDesktop) + QStringLiteral(":") + activity;
+            const QString k = name + QLatin1Char(':') + QString::number(virtualDesktop) + QLatin1Char(':') + activity;
             if (locked.contains(k)) {
                 return true;
             }
         }
         if (virtualDesktop > 0) {
-            const QString k = name + QStringLiteral(":") + QString::number(virtualDesktop);
+            const QString k = name + QLatin1Char(':') + QString::number(virtualDesktop);
             if (locked.contains(k)) {
                 return true;
             }
@@ -2831,9 +2997,9 @@ void Settings::setContextLocked(const QString& screenIdOrName, int virtualDeskto
     }
     QString key = screenIdOrName;
     if (virtualDesktop > 0) {
-        key += QStringLiteral(":") + QString::number(virtualDesktop);
+        key += QLatin1Char(':') + QString::number(virtualDesktop);
         if (!activity.isEmpty()) {
-            key += QStringLiteral(":") + activity;
+            key += QLatin1Char(':') + activity;
         }
     }
     QStringList current = lockedScreens();
@@ -2867,11 +3033,32 @@ void Settings::reset()
         m_configBackend->deleteGroup(groupName);
     }
     m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
+    deletePerScreenGroups(m_configBackend);
+    // commit(), not sync(), for the same reason save() uses it: sync() is
+    // allowed to return true for a write it merely scheduled (JsonBackend's
+    // Deferred policy debounces it), and the result gates whether the other two
+    // stores are touched at all.
+    //
+    // config.json goes FIRST, and a failure returns before the session file and
+    // the rule store are touched. reset() spans three files with no journal, so
+    // the only ordering that cannot half-apply is: do the one that can fail
+    // cleanly (nothing has been destroyed yet) before the two that are
+    // irreversible. Returning here is safe precisely because deleteGroup only
+    // mutated the backend's in-memory root, and the load() below reparses from
+    // disk, discarding those deletions and restoring the live state.
+    if (!m_configBackend->commit()) {
+        qCWarning(lcConfig) << "reset: failed to write the cleared configuration to disk — the deletions were "
+                               "dropped and the previous values remain";
+        // Reparse from disk so the in-memory store stops reporting the dropped
+        // deletions, and re-baseline onto what disk actually holds. The session
+        // file and the rule store were never touched, so there is nothing else
+        // to undo.
+        load();
+        return;
+    }
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
     }
-    deletePerScreenGroups(m_configBackend);
-    m_configBackend->sync();
 
     // Per-mode disable lists live in rules.json as DisableEngine
     // context rules — drop every such rule from the store (assignment /
@@ -2930,6 +3117,10 @@ void Settings::reset()
     }
 
     load();
+
+    // No baseline fix-up here: load() reparses config.json from disk and closes
+    // with captureBaseline(), so the baseline already describes exactly what
+    // disk holds.
 
     // Re-emit per-mode disable signals against the pre-clear snapshot taken
     // above. load()'s internal snapshot saw the already-cleared store, so it

@@ -11,6 +11,7 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorConfig/MigrationRunner.h>
+#include <PhosphorConfig/QSettingsBackend.h>
 #include <PhosphorConfig/Schema.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorRules/ContextRuleBridge.h>

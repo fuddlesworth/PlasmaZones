@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.plasmazones.settings
@@ -103,7 +102,7 @@ ExpandableRowDelegate {
         implicitHeight: pillLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
         radius: implicitHeight / 2
         color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
-        border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+        border.width: 1
         border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.9)
 
         Label {

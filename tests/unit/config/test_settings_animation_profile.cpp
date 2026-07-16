@@ -5,8 +5,7 @@
  * @file test_settings_animation_profile.cpp
  * @brief Settings — animation Profile JSON-blob storage & per-field signals.
  *
- * Split from test_settings_core.cpp to keep each test file under the
- * project's <800-line guideline. Pinned behaviour:
+ * Pinned behaviour:
  *   - Full round-trip of every Profile field (curve, duration, minDistance,
  *     sequenceMode, staggerInterval)
  *   - Malformed-blob → library defaults; missing-blob → project defaults

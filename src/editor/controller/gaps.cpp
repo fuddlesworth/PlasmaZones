@@ -14,6 +14,7 @@
 #include "../../core/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include "../../core/utils.h"
+#include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -129,12 +130,6 @@ int EditorController::outerGapLeft() const
 int EditorController::outerGapRight() const
 {
     return m_outerGapRight;
-}
-
-bool EditorController::hasPerSideOuterGapOverride() const
-{
-    return m_usePerSideOuterGap
-        && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
 }
 
 bool EditorController::globalUsePerSideOuterGap() const
@@ -386,7 +381,7 @@ int EditorController::aspectRatioClass() const
 
 void EditorController::setAspectRatioClass(int cls)
 {
-    if (cls < 0 || cls > 4) {
+    if (cls < 0 || cls > static_cast<int>(PhosphorLayout::AspectRatioClass::Portrait)) {
         return;
     }
     if (m_aspectRatioClass != cls) {

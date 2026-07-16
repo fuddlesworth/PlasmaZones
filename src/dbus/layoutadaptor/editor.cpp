@@ -3,6 +3,7 @@
 
 #include "../layoutadaptor.h"
 #include "../../core/interfaces.h"
+#include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutFactory.h>
 #include <PhosphorZones/Zone.h>
@@ -61,35 +62,68 @@ QString LayoutAdaptor::importLayout(const QString& filePath)
         return QString();
     }
 
-    int layoutCountBefore = m_layoutManager->layouts().size();
-    m_layoutManager->importLayout(filePath);
-
-    const auto layouts = m_layoutManager->layouts();
-    if (layouts.size() > layoutCountBefore) {
-        PhosphorZones::Layout* newLayout = layouts.last();
-        qCInfo(lcDbusLayout) << "Imported layout from" << filePath << "with ID" << newLayout->id();
-        const QString newId = newLayout->id().toString();
-        Q_EMIT layoutCreated(newId);
-        return newId;
+    // The path comes off the bus, which any session process can reach, and the
+    // registry opens it verbatim. Sanitise here: this is the only chokepoint all
+    // callers share (the settings app sanitises too, but the editor client and
+    // direct bus calls do not).
+    const QString safePath = Utils::sanitizeIOPath(filePath);
+    if (safePath.isEmpty()) {
+        qCWarning(lcDbusLayout) << "import layout: refusing unsafe path" << filePath;
+        return QString();
     }
 
-    qCWarning(lcDbusLayout) << "Failed to import layout from" << filePath;
-    return QString();
+    // The registry hands back the imported layout itself, so the new ID comes
+    // straight from it. Deriving it from layouts().last() encoded an
+    // append-order assumption nothing in the registry enforces.
+    PhosphorZones::Layout* newLayout = m_layoutManager->importLayout(safePath);
+    if (!newLayout) {
+        qCWarning(lcDbusLayout) << "Failed to import layout from" << safePath;
+        return QString();
+    }
+
+    // Imported files bypass the editor UI, so apply the same D-Bus boundary
+    // name clamp the other entry points enforce. The setters only emit when
+    // the value actually changes, so re-setting an already-short name is free.
+    newLayout->setName(clampName(newLayout->name()));
+    const auto zones = newLayout->zones();
+    for (PhosphorZones::Zone* zone : zones) {
+        zone->setName(clampName(zone->name()));
+    }
+
+    qCInfo(lcDbusLayout) << "Imported layout from" << safePath << "with ID" << newLayout->id();
+    const QString newId = newLayout->id().toString();
+    Q_EMIT layoutCreated(newId);
+    return newId;
 }
 
-void LayoutAdaptor::exportLayout(const QString& layoutId, const QString& filePath)
+bool LayoutAdaptor::exportLayout(const QString& layoutId, const QString& filePath)
 {
     if (!validateNonEmpty(filePath, QStringLiteral("file path"), QStringLiteral("export layout"))) {
-        return;
+        return false;
+    }
+
+    // Export WRITES the caller's path, so an unsanitised value off the bus
+    // clobbers whatever it names. Same chokepoint reasoning as importLayout.
+    const QString safePath = Utils::sanitizeIOPath(filePath);
+    if (safePath.isEmpty()) {
+        qCWarning(lcDbusLayout) << "export layout: refusing unsafe path" << filePath;
+        return false;
     }
 
     auto* layout = getValidatedLayout(layoutId, QStringLiteral("export layout"));
     if (!layout) {
-        return;
+        return false;
     }
 
-    m_layoutManager->exportLayout(layout, filePath);
-    qCInfo(lcDbusLayout) << "Exported layout" << layoutId << "to" << filePath;
+    // Report what the write actually did. The previous form logged success
+    // unconditionally, so the journal said "Exported layout" for an export that
+    // never reached the disk.
+    if (!m_layoutManager->exportLayout(layout, safePath)) {
+        qCWarning(lcDbusLayout) << "Failed to export layout" << layoutId << "to" << safePath;
+        return false;
+    }
+    qCInfo(lcDbusLayout) << "Exported layout" << layoutId << "to" << safePath;
+    return true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -151,6 +185,18 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         return true;
     }
 
+    // Past the autotile branch this is the full-layout replace path, and it is
+    // as bus-reachable as createLayoutFromJson: the zone loop below reads the
+    // incoming geometry straight into setRelativeGeometry, so it takes the same
+    // schema gate for the same reason. It sits after the autotile branch on
+    // purpose — an autotile payload names an algorithm rather than a layout and
+    // only ever contributes an allow-listed set of sidecar keys, so the
+    // full-layout schema (zones required, and none supplied) is the wrong shape
+    // for it. That branch reaches no zone geometry to validate.
+    if (!PhosphorZones::LayoutRegistry::isLayoutJsonValid(obj, QStringLiteral("D-Bus updateLayout"))) {
+        return false;
+    }
+
     auto* layout = getValidatedLayout(idStr, QStringLiteral("update layout"));
     if (!layout) {
         return false;
@@ -162,8 +208,8 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         layout->endBatchModify();
     });
 
-    // Update basic properties
-    layout->setName(obj[::PhosphorZones::ZoneJsonKeys::Name].toString());
+    // Update basic properties (name clamped at the D-Bus boundary)
+    layout->setName(clampName(obj[::PhosphorZones::ZoneJsonKeys::Name].toString()));
 
     // Update per-layout gap overrides (-1 = use global setting)
     if (obj.contains(::PhosphorZones::ZoneJsonKeys::ZonePadding)) {
@@ -200,12 +246,10 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Update full screen geometry mode
     layout->setUseFullScreenGeometry(obj[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false));
 
-    // Update aspect ratio classification
-    if (obj.contains(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)) {
-        layout->setAspectRatioClassInt(obj[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey].toInt(0));
-    } else {
-        layout->setAspectRatioClassInt(0);
-    }
+    // Update aspect ratio classification. fromJsonValue accepts both serialized
+    // forms and maps a missing key to Any, which is the reset this branch wants.
+    layout->setAspectRatioClassInt(static_cast<int>(
+        PhosphorLayout::ScreenClassification::fromJsonValue(obj[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey])));
 
     // Update shader settings
     layout->setShaderId(obj[::PhosphorZones::ZoneJsonKeys::ShaderId].toString());
@@ -234,7 +278,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         QJsonObject zoneObj = zoneVal.toObject();
         auto* zone = new PhosphorZones::Zone(layout);
 
-        zone->setName(zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString());
+        zone->setName(clampName(zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString()));
         zone->setZoneNumber(zoneObj[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt());
 
         QJsonObject relGeo = zoneObj[::PhosphorZones::ZoneJsonKeys::RelativeGeometry].toObject();
@@ -245,12 +289,29 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
 
         // Per-zone geometry mode
         zone->setGeometryModeInt(zoneObj[::PhosphorZones::ZoneJsonKeys::GeometryMode].toInt(0));
+        // fixedGeometry is the one geometry key the schema gate above does not
+        // cover — the schema describes relativeGeometry and never mentions it.
+        // This is also the more exposed of the two ingresses that accept it
+        // (any session process can reach the bus, where a file has to be
+        // imported), so it takes the same normalization Zone::fromJson applies
+        // to the file side. Without it a negative width or a NaN lands verbatim
+        // and the daemon then persists a layout it will refuse to load.
         if (zoneObj.contains(::PhosphorZones::ZoneJsonKeys::FixedGeometry)) {
             QJsonObject fixedGeo = zoneObj[::PhosphorZones::ZoneJsonKeys::FixedGeometry].toObject();
-            zone->setFixedGeometry(QRectF(fixedGeo[::PhosphorZones::ZoneJsonKeys::X].toDouble(),
-                                          fixedGeo[::PhosphorZones::ZoneJsonKeys::Y].toDouble(),
-                                          fixedGeo[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
-                                          fixedGeo[::PhosphorZones::ZoneJsonKeys::Height].toDouble()));
+            zone->setFixedGeometry(PhosphorZones::Zone::sanitizeFixedGeometry(
+                QRectF(fixedGeo[::PhosphorZones::ZoneJsonKeys::X].toDouble(),
+                       fixedGeo[::PhosphorZones::ZoneJsonKeys::Y].toDouble(),
+                       fixedGeo[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
+                       fixedGeo[::PhosphorZones::ZoneJsonKeys::Height].toDouble())));
+        }
+        // Same fallback the file ingress applies: a Fixed zone with no usable
+        // pixel payload renders from its authored relativeGeometry instead of
+        // becoming an invisible snap-target sink.
+        if (zone->isFixedGeometry() && zone->fixedGeometry().isEmpty()) {
+            qCWarning(lcDbusLayout) << "updateLayout: zone" << zone->name()
+                                    << "declares Fixed geometry with no usable fixedGeometry payload"
+                                    << "— downgrading to Relative";
+            zone->setGeometryMode(PhosphorZones::ZoneGeometryMode::Relative);
         }
 
         QJsonObject appearance = zoneObj[::PhosphorZones::ZoneJsonKeys::Appearance].toObject();
@@ -305,7 +366,42 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
         return QString();
     }
 
-    auto* layout = PhosphorZones::Layout::fromJson(*objOpt, m_layoutManager);
+    // Clamp layout and zone names before handing the JSON to fromJson
+    // (same D-Bus boundary rule as updateLayout).
+    QJsonObject obj = *objOpt;
+    if (obj.contains(::PhosphorZones::ZoneJsonKeys::Name)) {
+        obj[::PhosphorZones::ZoneJsonKeys::Name] = clampName(obj[::PhosphorZones::ZoneJsonKeys::Name].toString());
+    }
+    QJsonArray zones = obj[::PhosphorZones::ZoneJsonKeys::Zones].toArray();
+    for (auto zoneRef : zones) {
+        QJsonObject zoneObj = zoneRef.toObject();
+        if (zoneObj.contains(::PhosphorZones::ZoneJsonKeys::Name)) {
+            zoneObj[::PhosphorZones::ZoneJsonKeys::Name] =
+                clampName(zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString());
+            zoneRef = zoneObj;
+        }
+    }
+    if (obj.contains(::PhosphorZones::ZoneJsonKeys::Zones)) {
+        obj[::PhosphorZones::ZoneJsonKeys::Zones] = zones;
+    }
+
+    // D-Bus is an untrusted boundary, so it takes the same schema gate the file
+    // ingresses do (directory scan / import / system restore). The structural
+    // invariants are the point: zone geometry lands in the layout verbatim, so
+    // without this gate a zero-width zone reaches the zone list and persists as
+    // an unselectable dead region the user cannot see or fix from the editor.
+    //
+    // Note the gate does not have to police every key's serialized form. Keys
+    // whose reader normalizes on the way in (aspectRatioClass, read through
+    // fromJsonValue, which takes both wire forms) are re-emitted canonically by
+    // Layout::toJson when the registry persists them, so the on-disk file is
+    // well-formed regardless of which form arrived here. Those keys are widened
+    // in the schema to match the contract rather than narrowed to one form.
+    if (!PhosphorZones::LayoutRegistry::isLayoutJsonValid(obj, QStringLiteral("D-Bus createLayoutFromJson"))) {
+        return QString();
+    }
+
+    auto* layout = PhosphorZones::Layout::fromJson(obj, m_layoutManager);
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout from JSON";
         return QString();

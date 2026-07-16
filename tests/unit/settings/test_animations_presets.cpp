@@ -5,9 +5,9 @@
  * @file test_animations_presets.cpp
  * @brief AnimationsPageController user-preset library tests.
  *
- * Split from test_animations_motion_sets.cpp to keep each test file under the
- * project's 800-line cap, and because presets and sets are separate
- * sub-services (AnimationPresetLibrary vs ShaderSetStore). Pinned behaviour:
+ * Split from test_animations_motion_sets.cpp because presets and sets are
+ * separate sub-services (AnimationPresetLibrary vs ShaderSetStore). Pinned
+ * behaviour:
  *   - User preset CRUD (addUserPreset, userPresets, removeUserPreset), with
  *     slugified filenames
  *   - A preset can never shadow an event-override slot: a name matching a

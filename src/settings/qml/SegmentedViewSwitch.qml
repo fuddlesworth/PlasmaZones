@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -45,7 +44,7 @@ Item {
             Rectangle {
                 id: tile
 
-                required property var modelData
+                required property string modelData
                 required property int index
                 readonly property bool selected: root.currentIndex === index
 
@@ -53,11 +52,28 @@ Item {
                 implicitHeight: tileContent.implicitHeight + Kirigami.Units.largeSpacing
                 radius: Kirigami.Units.smallSpacing
                 color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
-                border.width: Math.round(Screen.devicePixelRatio)
-                border.color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                // Focus wins over selection: a keyboard user lands on the
+                // selected tile most of the time, so testing `selected` first
+                // would leave that tile with no focus indication at all.
+                border.width: tile.activeFocus ? 2 : 1
+                border.color: tile.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 Accessible.role: Accessible.RadioButton
                 Accessible.name: tile.modelData
                 Accessible.checked: tile.selected
+                Accessible.focusable: true
+                // Keyboard path matching SettingsButtonGroup / WizardTemplateCard:
+                // the tile itself is the Tab stop, Return/Enter/Space activates,
+                // and focus shows through the highlight border.
+                activeFocusOnTab: true
+                Keys.onReturnPressed: tile.activate()
+                Keys.onEnterPressed: tile.activate()
+                Keys.onSpacePressed: tile.activate()
+
+                // Radio semantics — re-selecting the active mode is a no-op.
+                function activate() {
+                    if (!tile.selected)
+                        root.indexChanged(tile.index);
+                }
 
                 Label {
                     id: tileContent
@@ -73,14 +89,13 @@ Item {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
-                    activeFocusOnTab: true
-                    // Radio semantics — re-selecting the active mode is a no-op.
-                    Keys.onSpacePressed: if (!tile.selected)
-                        root.indexChanged(tile.index)
-                    Keys.onReturnPressed: if (!tile.selected)
-                        root.indexChanged(tile.index)
-                    onClicked: if (!tile.selected)
-                        root.indexChanged(tile.index)
+                    onClicked: {
+                        // Move active focus to the clicked tile so a previously
+                        // keyboard-focused tile doesn't keep the focus ring and
+                        // the key handlers.
+                        tile.forceActiveFocus();
+                        tile.activate();
+                    }
                 }
 
                 Behavior on color {
@@ -91,6 +106,13 @@ Item {
                 }
 
                 Behavior on border.color {
+                    PhosphorMotionAnimation {
+                        profile: "widget.hover"
+                        durationOverride: Kirigami.Units.shortDuration
+                    }
+                }
+
+                Behavior on border.width {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -14,11 +13,17 @@ import org.phosphor.animation
  * A row of options where one is selected at a time, with a sliding
  * accent background indicator. Matches the SettingsSwitch aesthetic.
  *
+ * The caller owns currentIndex. A click only emits indexChanged, so bind
+ * currentIndex to the state the handler writes and the selection follows.
+ * Assigning it a plain value instead leaves the group inert, and writing to
+ * it from here would sever the caller's binding on the first click, which
+ * strands every later state change the caller pushes back.
+ *
  * Usage:
  *   SettingsButtonGroup {
  *       model: [i18n("Snapping"), i18n("Tiling")]
- *       currentIndex: 0
- *       onIndexChanged: (index) => { ... }
+ *       currentIndex: view.mode
+ *       onIndexChanged: (index) => { view.mode = index; }
  *   }
  */
 Row {
@@ -53,11 +58,25 @@ Row {
 
                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04);
             }
-            border.width: Math.round(Screen.devicePixelRatio)
-            border.color: isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+            border.width: optionDelegate.activeFocus ? 2 : 1
+            border.color: optionDelegate.activeFocus ? Kirigami.Theme.highlightColor : isActive ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
             Accessible.role: Accessible.RadioButton
             Accessible.name: optionDelegate.modelData
             Accessible.checked: optionDelegate.isActive
+            Accessible.focusable: true
+            // Keyboard path matching WizardTemplateCard: each option is a Tab
+            // stop, Return/Enter/Space selects, and focus shows through the
+            // highlight border. Activation reuses the click path's same-index
+            // guard so a re-select of the current option stays a no-op.
+            activeFocusOnTab: true
+            Keys.onReturnPressed: optionDelegate.activate()
+            Keys.onEnterPressed: optionDelegate.activate()
+            Keys.onSpacePressed: optionDelegate.activate()
+
+            function activate() {
+                if (root.currentIndex !== optionDelegate.index)
+                    root.indexChanged(optionDelegate.index);
+            }
 
             TextMetrics {
                 id: optionMetrics
@@ -74,7 +93,7 @@ Row {
                 Behavior on opacity {
                     PhosphorMotionAnimation {
                         profile: "widget.press"
-                        durationOverride: 150
+                        durationOverride: Kirigami.Units.shortDuration * 1.5
                     }
                 }
             }
@@ -86,24 +105,32 @@ Row {
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
                 onClicked: {
-                    if (root.currentIndex !== optionDelegate.index) {
-                        root.currentIndex = optionDelegate.index;
-                        root.indexChanged(optionDelegate.index);
-                    }
+                    // Move active focus to the clicked option so a previously
+                    // keyboard-focused option doesn't keep the focus ring and
+                    // the key handlers.
+                    optionDelegate.forceActiveFocus();
+                    optionDelegate.activate();
                 }
             }
 
             Behavior on color {
                 PhosphorMotionAnimation {
                     profile: "widget.press"
-                    durationOverride: 150
+                    durationOverride: Kirigami.Units.shortDuration * 1.5
                 }
             }
 
             Behavior on border.color {
                 PhosphorMotionAnimation {
                     profile: "widget.press"
-                    durationOverride: 150
+                    durationOverride: Kirigami.Units.shortDuration * 1.5
+                }
+            }
+
+            Behavior on border.width {
+                PhosphorMotionAnimation {
+                    profile: "widget.press"
+                    durationOverride: Kirigami.Units.shortDuration * 1.5
                 }
             }
         }

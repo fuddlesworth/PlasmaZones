@@ -259,11 +259,11 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
     // per-activity gap rules that sit ABOVE the per-layout tier in the geometry
     // cascade (getEffectiveInnerGap / getEffectiveOuterGaps tier 1). It is NOT
     // the cascade's default tier: the global default gap lives on the managed
-    // catch-all baseline rule and is read separately, BY ID, through
-    // Settings::innerGap()/outerGap*() at the cascade's default tier (tier 3),
-    // with the per-layout override sitting between this override layer and that
-    // default. The clean tiering is: context overrides (here) → per-layout →
-    // global default (baseline by id) → compile default.
+    // catch-all baseline rule and is read separately, BY ID, through the
+    // consumer's global inner/outer gap settings at the cascade's default tier
+    // (tier 3), with the per-layout override sitting between this override layer
+    // and that default. The clean tiering is: context overrides (here) →
+    // per-layout → global default (baseline by id) → compile default.
     //
     // Unlike resolveAssignmentEntry (single winning engine-mode rule), gap
     // overrides are read PER SLOT from the evaluator's ResolvedActions, so a
@@ -301,9 +301,10 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
             // carries that slot's action. The CATCH-ALL managed baseline rule is
             // EXCLUDED because it is the cascade's DEFAULT TIER, not a context
             // override: it carries the GLOBAL default gap values and is read by id
-            // through Settings::innerGap()/outerGap*() at the geometry cascade's
-            // default tier, with the per-layout override sitting between this
-            // override layer and that default. Were the baseline included here, its
+            // through the consumer's global inner/outer gap settings at the
+            // geometry cascade's default tier, with the per-layout override sitting
+            // between this override layer and that default. Were the baseline
+            // included here, its
             // catch-all match would fill every gap slot with the global default and
             // masquerade as a top-tier context override, shadowing the per-layout
             // tier that must sit below context overrides. SCREEN-scoped gap rules

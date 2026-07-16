@@ -78,7 +78,7 @@ return pluau.algorithm {
         local clusterOrder = {}
         local clusterMap = {}
         local focusedIndex = (type(ctx.focusedIndex) == "number") and ctx.focusedIndex or -1
-        local winLen = windows and #windows or 0
+        local winLen = #windows
 
         for i = 0, count - 1 do
             local appId = "unknown"
@@ -91,7 +91,7 @@ return pluau.algorithm {
             end
             local cm = clusterMap[appId]
             cm.indices[#cm.indices + 1] = i
-            if i == focusedIndex and i < winLen then
+            if i == focusedIndex then
                 cm.hasFocus = true
             end
         end

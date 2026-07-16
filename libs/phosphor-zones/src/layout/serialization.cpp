@@ -9,6 +9,8 @@
 #include <PhosphorZones/LayoutUtils.h>
 #include "../zoneslogging.h"
 #include <PhosphorZones/Zone.h>
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QStandardPaths>
 
@@ -47,10 +49,11 @@ QJsonObject Layout::toJson() const
     if (m_overlayDisplayMode >= 0) {
         json[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode] = m_overlayDisplayMode;
     }
-    if (m_defaultOrder != 999) {
+    if (m_defaultOrder != DefaultOrderUnset) {
         json[::PhosphorZones::ZoneJsonKeys::DefaultOrder] = m_defaultOrder;
     }
-    // Note: isBuiltIn is no longer serialized - it's determined by source path at load time
+    // Note: system classification is not serialized — isSystemLayout() derives it
+    // from the source path at load time.
 
     // Persist system origin path so user overrides can be restored on deletion
     if (!m_systemSourcePath.isEmpty()) {
@@ -104,9 +107,25 @@ QJsonObject Layout::toJson() const
     }
     LayoutUtils::serializeAllowLists(json, m_allowedScreens, m_allowedDesktops, m_allowedActivities);
 
+    // Reference geometry for normalizing fixed-pixel zones into the 0–1
+    // relativeGeometry every zone carries. fixedZoneReferenceGeometry() is the
+    // same helper layoutToVariantMap and the preview projection already use, so
+    // the persisted rect matches what those consumers compute from the same
+    // zones. It resolves to the screen the layout was last laid out against,
+    // which is the frame the relative coords are defined over and therefore the
+    // reference that makes the emitted value MEAN the zone's position on that
+    // screen. Only a genuine overflow (or a layout no screen is known for)
+    // falls back to the fixed-zone bounding box.
+    //
+    // The reference alone does not bound the result — a negative fixed offset
+    // normalizes below 0 against either reference, and an overflow above 1
+    // against the screen. Zone::toJson clamps for that; see the note there.
+    // An all-relative layout gets an empty rect here, which normalizedGeometry
+    // ignores because it returns the stored relative rect for those zones.
+    const QRectF zoneReference = fixedZoneReferenceGeometry();
     QJsonArray zonesArray;
     for (const auto* zone : m_zones) {
-        zonesArray.append(zone->toJson(m_lastRecalcGeometry));
+        zonesArray.append(zone->toJson(zoneReference));
     }
     json[::PhosphorZones::ZoneJsonKeys::Zones] = zonesArray;
 
@@ -132,12 +151,16 @@ void Layout::initFromJson(const QJsonObject& json)
     // Behaviour is preserved (synthesise an Id, accept an empty name) so we
     // don't break round-trips of older layouts that were tolerated previously,
     // but every defaulted boundary now leaves a trail.
-    if (!json.contains(::PhosphorZones::ZoneJsonKeys::Id)
-        || json[::PhosphorZones::ZoneJsonKeys::Id].toString().isEmpty()) {
-        qCWarning(lcLayoutLib) << "Layout::initFromJson: missing or empty Id, generating fresh UUID";
-    }
-    m_id = QUuid::fromString(json[::PhosphorZones::ZoneJsonKeys::Id].toString());
+    //
+    // The warning is tied to the regeneration itself, not to the absent/blank
+    // case alone: a present-but-unparseable Id ("not-a-uuid") and a nil Id
+    // ("{00000000-...}") both land on a fresh UUID too, and those are exactly
+    // the corrupt-file cases this breadcrumb exists for.
+    const QString idString = json[::PhosphorZones::ZoneJsonKeys::Id].toString();
+    m_id = QUuid::fromString(idString);
     if (m_id.isNull()) {
+        qCWarning(lcLayoutLib) << "Layout::initFromJson: missing, empty or unusable Id" << idString
+                               << "- generating fresh UUID";
         m_id = QUuid::createUuid();
     }
 
@@ -178,36 +201,68 @@ void Layout::initFromJson(const QJsonObject& json)
     m_overlayDisplayMode = json.contains(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)
         ? json[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode].toInt(-1)
         : -1;
-    m_defaultOrder = json[::PhosphorZones::ZoneJsonKeys::DefaultOrder].toInt(999);
+    m_defaultOrder = json[::PhosphorZones::ZoneJsonKeys::DefaultOrder].toInt(DefaultOrderUnset);
     // Note: sourcePath is set by LayoutManager after loading, not from JSON
     // But systemSourcePath IS persisted in user JSON for system override restoration
     m_systemSourcePath = json[::PhosphorZones::ZoneJsonKeys::SystemSourcePath].toString();
 
-    // Sanity-check the persisted systemSourcePath: it must resolve under a
-    // known system data prefix (the OS-level GenericDataLocation list,
-    // minus the writable user dir). If the value doesn't match any prefix,
-    // a stale or hand-edited config can leak an arbitrary path into the
-    // "restore system original" code path — drop it with a warning.
+    // Sanity-check the persisted systemSourcePath: it must resolve to a file
+    // CONTAINED IN a known system data directory (the OS-level
+    // GenericDataLocation list, minus the writable user dir). A stale or
+    // hand-edited config would otherwise leak an arbitrary path into the
+    // "restore system original" code path, which opens and parses it — drop
+    // it with a warning instead.
     //
-    // Skip the check entirely when no prefixes are configured (headless
-    // test environments), so fixture tests stay portable. Also skip when
-    // the path is empty (no override tracked).
+    // Containment, not a string prefix. Both sides are resolved before the
+    // compare and the match is anchored on a directory separator, so neither
+    // "/usr/share/../../home/user/evil.json" (traversal) nor
+    // "/usr/share-evil/x.json" (a sibling directory that merely shares a name
+    // prefix) passes. The candidate is resolved with canonicalFilePath() when
+    // the file exists, so a symlink planted inside a system directory cannot
+    // point out of it either; when it does not exist, the lexically cleaned
+    // absolute path is used instead, which still resolves ".." and keeps a
+    // temporarily-missing system file (package upgrade in flight) from losing
+    // its recorded origin.
+    //
+    // The check FAILS CLOSED: a path that no system prefix admits is dropped,
+    // including when no prefix resolves at all. An environment with no
+    // readable system data directory has nowhere a system layout could live,
+    // so there is no candidate such an environment could legitimately accept —
+    // "no prefixes, allow anything" would hand that case the widest answer
+    // instead of the narrowest. The cost of dropping is bounded and visible:
+    // the layout keeps working and only loses its "restore system original"
+    // origin, which that environment could not have honoured anyway. Nothing
+    // in the suite exercises this field, so no fixture depends on the check
+    // being skipped. Skip only when the path is empty (no override tracked).
     if (!m_systemSourcePath.isEmpty()) {
+        const QFileInfo sourceInfo(m_systemSourcePath);
+        const QString canonicalSource =
+            sourceInfo.exists() ? sourceInfo.canonicalFilePath() : QDir::cleanPath(sourceInfo.absoluteFilePath());
         const QStringList systemPrefixes = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
-        const QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+        // Canonicalised so the user-dir compare below is resolved-vs-resolved
+        // like every other compare in this block. writableLocation() and the
+        // matching standardLocations() entry can differ textually (a trailing
+        // separator, a symlinked $HOME) while naming one directory, and a raw
+        // compare would miss that and admit the user dir as a system prefix.
+        const QString canonicalUserDataPath =
+            QFileInfo(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)).canonicalFilePath();
         bool valid = false;
-        bool anyPrefix = false;
         for (const QString& prefix : systemPrefixes) {
-            if (prefix.isEmpty() || prefix == userDataPath) {
+            // A prefix that doesn't resolve is not a directory anything can be
+            // contained in, so it can neither admit nor reject a candidate.
+            const QString canonicalPrefix = QFileInfo(prefix).canonicalFilePath();
+            if (canonicalPrefix.isEmpty()) {
+                continue;
+            }
+            if (canonicalPrefix == canonicalUserDataPath) {
                 continue; // user dir isn't a "system" prefix
             }
-            anyPrefix = true;
-            if (m_systemSourcePath.startsWith(prefix)) {
+            if (canonicalSource.startsWith(canonicalPrefix + QLatin1Char('/'))) {
                 valid = true;
                 break;
             }
         }
-        if (anyPrefix && !valid) {
+        if (!valid) {
             qCWarning(lcLayoutLib) << "dropping invalid systemSourcePath" << m_systemSourcePath;
             m_systemSourcePath.clear();
         }
@@ -225,9 +280,11 @@ void Layout::initFromJson(const QJsonObject& json)
     // Full screen geometry mode
     m_useFullScreenGeometry = json[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false);
 
-    // Aspect ratio classification
-    m_aspectRatioClass = ::PhosphorLayout::ScreenClassification::fromString(
-        json[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey].toString());
+    // Aspect ratio classification. Two serialized forms are live and
+    // fromJsonValue accepts both, clamping an out-of-range int to Any the same
+    // way Layout::setAspectRatioClassInt does.
+    m_aspectRatioClass =
+        ::PhosphorLayout::ScreenClassification::fromJsonValue(json[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey]);
     m_minAspectRatio = json[::PhosphorZones::ZoneJsonKeys::MinAspectRatio].toDouble(0.0);
     m_maxAspectRatio = json[::PhosphorZones::ZoneJsonKeys::MaxAspectRatio].toDouble(0.0);
     // NaN comparisons always return false, so a non-finite bound silently

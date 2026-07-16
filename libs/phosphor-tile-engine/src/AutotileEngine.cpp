@@ -109,7 +109,7 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
     , m_navigation(std::make_unique<NavigationController>(this))
     , m_algorithmId(PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId())
 {
-    // In production (Daemon::start) all three dependencies are non-null.
+    // In production (Daemon::start) all four dependencies are non-null.
     // Headless unit tests deliberately pass nullptr to construct an engine
     // with minimal parents for testing peripheral classes (adaptors, bridges,
     // sub-controllers) — every method that dereferences a dependency guards
@@ -220,10 +220,14 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 // Signal connections
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::onWindowZoneChanged(const QString& windowId, const QString& zoneId)
+void AutotileEngine::onWindowZoneChanged(const QString& rawWindowId, const QString& zoneId)
 {
     if (m_retiling)
         return;
+    // Canonicalize at the event boundary like windowClosed()/windowFocused():
+    // a mutated-appId alias would otherwise miss the isFloating() check below
+    // and hand onWindowRemoved() an id no state tracks.
+    const QString windowId = canonicalizeWindowId(rawWindowId);
     if (zoneId.isEmpty()) {
         for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
             if (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
@@ -460,28 +464,6 @@ void AutotileEngine::rotateWindows(bool clockwise, const QString& /*screenId*/)
 {
     // AutotileEngine operates on the active screen internally
     rotateWindowOrder(clockwise);
-}
-
-void AutotileEngine::moveToPosition(const QString& windowId, int position, const QString& /*screenId*/)
-{
-    if (windowId.isEmpty()) {
-        // Fall back to focused window when no windowId is provided
-        moveFocusedToPosition(position);
-        return;
-    }
-
-    QString resolvedScreenId;
-    PhosphorTiles::TilingState* state = stateForWindow(windowId, &resolvedScreenId);
-    if (!state) {
-        qCWarning(PhosphorTileEngine::lcTileEngine)
-            << "moveToPosition: window" << windowId << "not found in any tiling state";
-        return;
-    }
-
-    // position is 1-based (from snap-to-zone-N shortcuts), convert to 0-based
-    const int targetIndex = qBound(0, position - 1, qMax(0, state->tiledWindowCount() - 1));
-    const bool moved = state->moveToTiledPosition(windowId, targetIndex);
-    retileAfterOperation(resolvedScreenId, moved);
 }
 
 void AutotileEngine::setCurrentDesktop(int desktop)
@@ -880,12 +862,26 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         return;
     }
 
+    // A per-screen Algorithm override pins that screen's effective algorithm, so
+    // this global switch does not touch it. Shared by the tuning drop here, the
+    // re-seed loop, and the split-tree/script-state clear loop below.
+    const auto hasAlgoOverride = [this](const QString& screenId) {
+        return hasPerScreenOverride(screenId, PerScreenKeys::Algorithm);
+    };
+
     // Switching algorithms resets ratios/counts to the new algorithm's saved or
-    // default values, so per-desktop user tunings no longer apply — drop them all.
-    // The propagate calls below re-seed the current-context states synchronously;
-    // other desktops re-seed on their own next propagate.
-    m_userTunedSplitRatio.clear();
-    m_userTunedMasterCount.clear();
+    // default values, so per-desktop user tunings no longer apply — drop them.
+    // Only for states whose screen follows the global algorithm, though: an
+    // Algorithm-overridden screen keeps its effective algorithm across this
+    // switch, so its tunings are still live and must survive (same gate as the
+    // state-clear loop below). The re-seed loop below refreshes current-context
+    // states synchronously; other desktops re-seed on their own next propagate.
+    m_userTunedSplitRatio.removeIf([&](const auto& key) {
+        return !hasAlgoOverride(key.screenId);
+    });
+    m_userTunedMasterCount.removeIf([&](const auto& key) {
+        return !hasAlgoOverride(key.screenId);
+    });
 
     PhosphorTiles::TilingAlgorithm* oldAlgo = registry->algorithm(m_algorithmId);
     PhosphorTiles::TilingAlgorithm* newAlgo = registry->algorithm(newId);
@@ -928,8 +924,27 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         // initializing on the first-ever call (oldAlgo null): the save block
         // above already persisted the outgoing algorithm's values when present.
         restorePerAlgoSettings(newAlgo, savedIt);
-        propagateGlobalSplitRatio();
-        propagateGlobalMasterCount();
+        // Re-seed the restored ratio/count onto current-context states. Mirrors
+        // propagateGlobalSplitRatio()/propagateGlobalMasterCount() with one
+        // extra skip: Algorithm-overridden screens keep their effective
+        // algorithm across this switch, so their live ratios/counts must
+        // survive. That skip stays out of the shared propagate helpers because
+        // the settings-refresh path must keep reaching those screens. No
+        // m_userTuned* check needed: the selective drop above pruned the tuned
+        // sets to exactly the Algorithm-overridden states skipped here.
+        for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
+            const auto& key = it.key();
+            if (!it.value() || key.desktop != currentKeyForScreen(key.screenId).desktop
+                || key.activity != m_context.currentActivity() || hasAlgoOverride(key.screenId)) {
+                continue;
+            }
+            if (!hasPerScreenOverride(key.screenId, PerScreenKeys::SplitRatio)) {
+                it.value()->setSplitRatio(m_config->splitRatio);
+            }
+            if (!hasPerScreenOverride(key.screenId, PerScreenKeys::MasterCount)) {
+                it.value()->setMasterCount(m_config->masterCount);
+            }
+        }
     }
 
     // Commit the new algorithm id BEFORE the write-back block so that any
@@ -972,27 +987,36 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         }
     }
 
-    // Clear stale split trees when switching away from a memory algorithm.
+    // Clear stale per-algorithm state, but only on states whose effective
+    // algorithm follows the global one. Screens with a per-screen Algorithm
+    // override keep their effective algorithm across this global switch (see
+    // the retile loop below), so their split trees and script state are still
+    // live and must survive.
+    //
+    // Split trees: cleared when switching away from a memory algorithm.
     // Without this, deserialized trees from a previous DwindleMemory session
     // persist after algorithm switch, wasting memory and risking confusion.
+    //
+    // Script state: the per-algorithm script-state bag is opaque state private
+    // to the previous algorithm (e.g. an aligned grid's column fractions) with
+    // no meaning to the next — a different scripted algorithm that also opts
+    // into supportsScriptState must not inherit it. Unlike the split tree
+    // (which two memory algorithms can meaningfully share), script state has
+    // no cross-algorithm validity, so it is wiped on every effective change.
+    //
     // Must happen BEFORE emitting algorithmChanged so that listeners see
-    // consistent state (no stale trees from the old algorithm).
-    if (newAlgo && !newAlgo->supportsMemory()) {
-        for (auto* state : m_states.states()) {
-            state->clearSplitTree();
+    // consistent state (no stale trees from the old algorithm). Safe because
+    // this point is reached only when the algorithm id changed (early return
+    // above), so every non-overridden state's effective algorithm changed.
+    const bool clearSplitTrees = newAlgo && !newAlgo->supportsMemory();
+    for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
+        if (!it.value() || hasAlgoOverride(it.key().screenId)) {
+            continue;
         }
-    }
-
-    // Clear the per-algorithm script-state bag on every switch. It is opaque
-    // state private to the previous algorithm (e.g. an aligned grid's column
-    // fractions) with no meaning to the next — a different scripted algorithm
-    // that also opts into supportsScriptState must not inherit it. Unlike the
-    // split tree above (which two memory algorithms can meaningfully share),
-    // script state has no cross-algorithm validity, so this is unconditional.
-    // Safe because this point is reached only when the algorithm id changed
-    // (early return above).
-    for (auto* state : m_states.states()) {
-        state->setScriptState({});
+        if (clearSplitTrees) {
+            it.value()->clearSplitTree();
+        }
+        it.value()->setScriptState({});
     }
 
     Q_EMIT algorithmChanged(m_algorithmId);
@@ -1257,6 +1281,11 @@ void AutotileEngine::refreshConfigFromSettings()
     bool configChanged = false;
     const int oldMaxWindows = m_config->maxWindows;
     const auto oldOverflow = m_config->overflowBehavior;
+    // Set when an explicit global change below drops every per-key user-tuned
+    // flag. The propagates at the end of this method then have to span every
+    // state, matching that clear — see PropagateScope.
+    bool masterCountDroppedTunings = false;
+    bool splitRatioDroppedTunings = false;
 
 #define SYNC_FIELD(field, getter)                                                                                      \
     do {                                                                                                               \
@@ -1273,8 +1302,11 @@ void AutotileEngine::refreshConfigFromSettings()
             m_config->masterCount = newMasterCount;
             configChanged = true;
             // An explicit global master-count change (settings) overrides any
-            // per-desktop tunings, which the propagate below then re-applies.
+            // per-desktop tuning, on every desktop and activity — the same
+            // meaning setGlobalMasterCount gives the D-Bus setter. This clear
+            // spans every key, so the propagate below is widened to match it.
             m_userTunedMasterCount.clear();
+            masterCountDroppedTunings = true;
         }
     }
     SYNC_FIELD(innerGap, autotileInnerGap);
@@ -1303,8 +1335,11 @@ void AutotileEngine::refreshConfigFromSettings()
             m_config->splitRatio = newRatio;
             configChanged = true;
             // An explicit global split-ratio change (settings) overrides any
-            // per-desktop tunings, which the propagate below then re-applies.
+            // per-desktop tuning, on every desktop and activity — the same
+            // meaning setGlobalSplitRatio gives the D-Bus setter. This clear
+            // spans every key, so the propagate below is widened to match it.
             m_userTunedSplitRatio.clear();
+            splitRatioDroppedTunings = true;
         }
     }
     {
@@ -1355,8 +1390,9 @@ void AutotileEngine::refreshConfigFromSettings()
         }
     }
 
-    propagateGlobalSplitRatio();
-    propagateGlobalMasterCount();
+    propagateGlobalSplitRatio(splitRatioDroppedTunings ? PropagateScope::AllContexts : PropagateScope::CurrentContext);
+    propagateGlobalMasterCount(masterCountDroppedTunings ? PropagateScope::AllContexts
+                                                         : PropagateScope::CurrentContext);
 
     // Float→Unlimited: backfill previously-overflowed floating windows
     const bool overflowBackfilled = oldOverflow == PhosphorTiles::AutotileOverflowBehavior::Float
@@ -1437,11 +1473,6 @@ void AutotileEngine::noteMasterCountUserTuned(const QString& screenId)
 int AutotileEngine::effectiveInnerGap(const QString& screenId) const
 {
     return m_configResolver->effectiveInnerGap(screenId);
-}
-
-int AutotileEngine::effectiveOuterGap(const QString& screenId) const
-{
-    return m_configResolver->effectiveOuterGap(screenId);
 }
 
 ::PhosphorLayout::EdgeGaps AutotileEngine::effectiveOuterGaps(const QString& screenId) const
@@ -1765,12 +1796,21 @@ void AutotileEngine::setGlobalSplitRatio(qreal ratio)
     // An explicit global set overrides any per-desktop tunings, matching the
     // settings-refresh path — otherwise the next propagate would skip the
     // just-set value on still-tuned current-desktop states.
+    //
+    // This clear spans EVERY key, so the write below must span every state to
+    // match: NavigationController::setGlobalSplitRatio walks all of them. Do not
+    // narrow one scope without the other. A clear that outruns the write leaves a
+    // state holding a tuned value with no flag protecting it, and the next
+    // propagateGlobalSplitRatio to run while that state's desktop is current
+    // overwrites the user's value — a clobber deferred until some unrelated
+    // settings refresh, which is what makes it so hard to trace back here.
     m_userTunedSplitRatio.clear();
     m_navigation->setGlobalSplitRatio(ratio);
 }
 
 void AutotileEngine::setGlobalMasterCount(int count)
 {
+    // Same clear-scope/write-scope pairing as setGlobalSplitRatio above.
     m_userTunedMasterCount.clear();
     m_navigation->setGlobalMasterCount(count);
 }
@@ -2491,6 +2531,10 @@ void AutotileEngine::migrateWindowBetweenKeys(const QString& windowId, const Til
     if (!oldState || !oldState->containsWindow(windowId)) {
         return;
     }
+    // Capture the float state BEFORE the source drops the window: the re-add
+    // below must carry it across (see MigrationArrival). Reading it after the
+    // removal is impossible — no state holds the window in between.
+    const bool wasFloating = oldState->isFloating(windowId);
     // Use the algorithm's lifecycle hook for clean removal (e.g.
     // dwindle-memory updates its split tree) — mirrors windowOpened's
     // migration path.
@@ -2511,7 +2555,17 @@ void AutotileEngine::migrateWindowBetweenKeys(const QString& windowId, const Til
     scheduleRetileForScreen(oldKey.screenId);
     if (isAutotileScreen(newScreenId)) {
         // Re-add to the new screen's normal flow (will be overflow-checked
-        // on next retile).
+        // on next retile). Mark the re-add as a migration ARRIVAL for the
+        // duration of this synchronous call so insertWindow carries the
+        // window's live float state across instead of re-deriving it from the
+        // open-time float rule. Scope-guarded: the marker describes this one
+        // re-add and must not leak into a later open, and onWindowAdded runs the
+        // daemon-injected float predicate and emits into daemon slots inside the
+        // window.
+        QScopeGuard clearArrival([this] {
+            m_migrationArrival.reset();
+        });
+        m_migrationArrival = MigrationArrival{windowId, wasFloating};
         onWindowAdded(windowId);
     }
     // Re-adding on a non-autotile destination would route through
@@ -2559,7 +2613,34 @@ void AutotileEngine::revalidateWindowContext(const QString& windowId, const QStr
 void AutotileEngine::onWindowAdded(const QString& windowId)
 {
     const QString screenId = screenForWindow(windowId);
-    if (!isAutotileScreen(screenId) || !shouldTileWindow(windowId)) {
+    // Computed before the first gate: BOTH gates below need it, and hoisting it
+    // also keeps the daemon-injected float predicate out of an arrival's path
+    // entirely (see ruleWillFloat) rather than running it inside the marker's
+    // window on a path the marker says it has no say over.
+    const bool isMigrationArrival = m_migrationArrival && m_migrationArrival->windowId == windowId;
+    // The two disjuncts are NOT symmetric for an arrival, so they are not
+    // exempted together:
+    //
+    // isAutotileScreen stays unconditional. It asks whether the DESTINATION can
+    // hold a tile at all, which an arrival can never make true by itself — and
+    // migrateWindowBetweenKeys only re-adds under its own isAutotileScreen check
+    // on the same screen id (the reverse map is re-pointed at the destination
+    // before the re-add, so screenForWindow returns it here), so an arrival
+    // cannot reach this line with a non-autotile screen. Exempting it would buy
+    // nothing and would drop the guard against ever tiling onto a snap screen.
+    //
+    // shouldTileWindow IS exempted for an arrival, for the reason the cap gate
+    // below is: the source state has already dropped the window, so refusing here
+    // strands it — removed from the source, keyed to the destination, present in
+    // neither, and isWindowTiled() then reports a phantom tile forever. An
+    // arrival's tileability was already settled on the source (a sticky window
+    // tiled there under TreatAsNormal, or before the user made it sticky, stays
+    // tiled here), its float half is carried across by insertShouldFloat, and
+    // applyTiling's overflow pass floats out whatever the destination cannot
+    // hold. Screens that must turn an arrival away have to refuse BEFORE the
+    // removal, which is what NavigationController::crossOutputMove's
+    // pre-mutation shouldTileWindow check does on the proactive path.
+    if (!isAutotileScreen(screenId) || (!isMigrationArrival && !shouldTileWindow(windowId))) {
         qCDebug(PhosphorTileEngine::lcTileEngine) << "onWindowAdded: skipping" << windowId << "screen=" << screenId
                                                   << "isAutotile=" << isAutotileScreen(screenId);
         return;
@@ -2567,13 +2648,30 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     const int maxWin = effectiveMaxWindows(screenId);
-    // A window matched by a "Float this app" rule must bypass the tiled-window
-    // cap: it opens floating and so consumes no tile slot (tiledWindowCount
-    // excludes floats), and insertWindow marks it floating once inserted. Dropping
-    // it here would leave it untracked — neither floating in autotile (so the
-    // IsFloating match field stays false) nor re-tileable via Meta+F.
-    const bool ruleWillFloat = m_floatPredicate && m_floatPredicate(windowId);
-    if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat) {
+    // A window OPENING under a matched "Float this app" rule must bypass the
+    // tiled-window cap: it opens floating and so consumes no tile slot
+    // (tiledWindowCount excludes floats), and insertWindow marks it floating once
+    // inserted. Dropping it here would leave it untracked — neither floating in
+    // autotile (so the IsFloating match field stays false) nor re-tileable via
+    // Meta+F.
+    //
+    // A migration ARRIVAL bypasses the cap outright, whatever float state it
+    // carries across (see insertShouldFloat). By the time it reaches here its
+    // source state has already dropped it, so refusing would strand it: removed
+    // from the source, keyed to the destination, and present in neither state —
+    // isWindowTiled() would then report a phantom tile forever. Accepting is
+    // safe because applyTiling's overflow pass floats everything past the cap
+    // back out. Screens that must turn a full destination away have to refuse
+    // BEFORE the removal, which is what the proactive bare-cap guard in
+    // NavigationController::crossOutputMove does.
+    //
+    // The predicate is skipped outright for an arrival: it is dead there (the
+    // arrival exemption already carries the gate) and it is a daemon-injected
+    // callback, so not running it keeps an arrival's marker window free of
+    // foreign code — matching insertShouldFloat, which short-circuits it for the
+    // same reason.
+    const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId);
+    if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat && !isMigrationArrival) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
         // Purge this window from pending initial orders so the order doesn't
@@ -2841,8 +2939,8 @@ void AutotileEngine::onWindowResized(const QString& rawWindowId, const QRect& ol
         if (ev.left || ev.right || ev.top || ev.bottom) {
             // The hook may apply a new split ratio to the state (ratio-based
             // algorithms reflow this way). If it did, mark the state user-tuned so
-            // the change stays local to this screen+desktop and survives a settings
-            // refresh — exactly like an interactive master-ratio keystroke.
+            // the change stays local to this screen+desktop+activity and survives a
+            // settings refresh — exactly like an interactive master-ratio keystroke.
             const qreal ratioBefore = state->splitRatio();
             algo->onWindowResized(state, ev);
             if (!qFuzzyCompare(1.0 + state->splitRatio(), 1.0 + ratioBefore)) {
@@ -2866,14 +2964,16 @@ bool AutotileEngine::applyTreeResizeReflow(PhosphorTiles::TilingState* state, co
     const QStringList tiled = state->tiledWindows();
     const QVector<QRect> zones = state->calculatedZones();
     // The reflow reads split extents from the rendered zones, so they must be in
-    // lockstep with the tiled-window list. The divergence is transient: while a
-    // capped layout (recalculateLayout sizes calculatedZones to
-    // min(tiledCount, maxWindows)) is being applied, applyTiling has not yet
-    // floated the over-cap windows out of tiledWindows(), so the lists briefly
-    // differ in length. In steady state they match again under both overflow
-    // modes (Float floats over-cap windows out of tiledWindows(); Unlimited
-    // never caps). Bail rather than read a stale/short vector — resizing during
-    // that transient is a no-op, which is fine.
+    // lockstep with the tiled-window list. The divergence is usually transient:
+    // while a capped layout (recalculateLayout sizes calculatedZones to
+    // min(tiledCount, maxWindows, MaxZones)) is being applied, applyTiling has
+    // not yet floated the over-cap windows out of tiledWindows(), so the lists
+    // briefly differ in length. Float mode reconverges once applyTiling floats
+    // the over-cap windows. Unlimited mode still caps zones at MaxZones (the
+    // recalculateLayout clamp), so with >MaxZones tiled windows the divergence
+    // recurs on every retile until applyTiling floats the excess. Bail rather
+    // than read a stale/short vector — resizing during the divergence is a
+    // no-op, which is fine.
     if (zones.isEmpty() || zones.size() != tiled.size()) {
         return false;
     }
@@ -3010,6 +3110,21 @@ void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QSt
     } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
         Q_EMIT windowFloatingStateSynced(windowId, false, screenId);
     }
+}
+
+bool AutotileEngine::insertShouldFloat(const QString& windowId) const
+{
+    // A window ARRIVING from another state was already managed, so the open-time
+    // "Float this app" rule has nothing to say about it — it carries the float
+    // state it held on the source. Re-running the predicate here would re-float a
+    // float-ruled window the user had explicitly tiled with Meta+F: the predicate
+    // is a pure app-rule match that stays true for the window's whole life, so a
+    // cross-output move would silently undo the user's tiling.
+    if (m_migrationArrival && m_migrationArrival->windowId == windowId) {
+        return m_migrationArrival->wasFloating;
+    }
+    // A genuine open consults the rule.
+    return m_floatPredicate && m_floatPredicate(windowId);
 }
 
 bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenId)
@@ -3211,13 +3326,14 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // parallel saved-floating set — the WindowPlacement record is the single
     // source of truth for cross-mode float state.
 
-    // A matched "Float this app" rule opens the window floating: it is
-    // inserted above (so it stays managed and Meta+F can re-tile it), then marked
-    // floating here, identical to a manual float toggle. Guarded on not-already-
-    // floating so the placement-record float-restore branch above is not
-    // re-applied. onWindowAdded then emits windowFloatingStateSynced so the daemon
-    // mirrors the state.
-    if (m_floatPredicate && !state->isFloating(windowId) && m_floatPredicate(windowId)) {
+    // Float the window when its insert state says so: a matched "Float this app"
+    // rule on a genuine open, or the live float state a migrating window carried
+    // across (insertShouldFloat). Either way it is inserted above (so it stays
+    // managed and Meta+F can re-tile it), then marked floating here, identical to
+    // a manual float toggle. Guarded on not-already-floating so the
+    // placement-record float-restore branch above is not re-applied. onWindowAdded
+    // then emits windowFloatingStateSynced so the daemon mirrors the state.
+    if (!state->isFloating(windowId) && insertShouldFloat(windowId)) {
         state->setFloating(windowId, true);
     }
 
@@ -3307,8 +3423,14 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         return true; // Successfully computed (empty) layout
     }
 
-    // Cap to user's max windows setting — excess windows are not tiled
-    const int windowCount = std::min(tiledCount, effectiveMaxWindows(screenId));
+    // Cap to user's max windows setting — excess windows are not tiled.
+    // Also cap at MaxZones: every scripted-algorithm zone path caps its output
+    // there, so the engine and algorithm must agree on that ceiling (relevant
+    // under Unlimited overflow, where effectiveMaxWindows returns a huge
+    // sentinel). Without it, >MaxZones tiled windows would fail the
+    // zones.size() == windowCount check below on every retile.
+    const int windowCount =
+        std::min({tiledCount, effectiveMaxWindows(screenId), PhosphorTiles::AutotileDefaults::MaxZones});
 
     const QRect screen = screenGeometry(screenId);
     if (!screen.isValid()) {
@@ -3451,14 +3573,34 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // Lightweight safety net: the algorithm handles min sizes directly, but
     // enforceMinSizes catches any residual deficits from rounding or
     // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable
-    // constraints). Skip for any algorithm where producesOverlappingZones()
-    // is true (Monocle, Cascade, Stair, Deck, Paper, Spread, horizontal-deck
-    // and any future opt-in): zones intentionally overlap and the implicit
-    // removeRectOverlaps inside enforceMinSizes would destroy the
-    // intended layout.
-    // minSizes is populated iff respectMin (see above); windowCount > 0 is
-    // already guaranteed by the early return at the top of this function.
-    if (respectMin && !algo->producesOverlappingZones()) {
+    // constraints).
+    //
+    // Two opt-outs, and both are the algorithm's own declaration:
+    //   - producesOverlappingZones() (Monocle, Cascade, Stair, Deck, Paper,
+    //     Spread, horizontal-deck and any future opt-in): zones intentionally
+    //     overlap and the implicit removeRectOverlaps inside enforceMinSizes
+    //     would destroy the intended layout.
+    //   - !supportsMinSizes(): the algorithm says min sizes are not a concept
+    //     it works in. Running the pass anyway would apply the very treatment
+    //     the flag opts out of, and would silently overrule a shipped script.
+    //     Four bundled algorithms declare it: tatami, floating-center, cluster
+    //     and theater. All four resolve producesOverlappingZones to false
+    //     (three declare it so, theater omits it and takes the default), so
+    //     before this gate all four were min-size corrected despite opting out.
+    //
+    // minSizes is populated iff respectMin (see above). windowCount is
+    // tiledCount (>= 1 past the early return at the top) capped by
+    // effectiveMaxWindows and by MaxZones. Every source feeding the
+    // effectiveMaxWindows cap is clamped to MinMaxWindows or above (the
+    // settings-schema validator on the global setting, perAlgoFromVariantMap
+    // on per-algorithm entries, AutotileConfig::fromJson, the algorithms'
+    // defaultMaxWindows, the qBound on the per-screen MaxWindows override in
+    // PerScreenConfigResolver::effectiveMaxWindows, and the Unlimited
+    // sentinel), and MaxZones is well above 1, so a zero windowCount is not
+    // reachable here. It is a pure backstop anyway:
+    // a zero windowCount yields empty zones, which pass the equality check
+    // above and leave this block a no-op.
+    if (respectMin && algo->supportsMinSizes() && !algo->producesOverlappingZones()) {
         const int threshold = effectiveInnerGap(screenId) + PhosphorTiles::AutotileDefaults::GapEdgeThresholdPx;
         const QVector<QRect> preEnforceZones = zones;
         PhosphorGeometry::enforceMinSizes(zones, minSizes, threshold, innerGap);
@@ -3528,8 +3670,16 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
 // Drag-insert preview
 // ═══════════════════════════════════════════════════════════════════════════
 
-bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QString& screenId)
+bool AutotileEngine::beginDragInsertPreview(const QString& rawWindowId, const QString& screenId)
 {
+    // Neither D-Bus caller canonicalizes, and every m_states lookup below keys on
+    // the canonical id. canonicalizeForLookup, NOT canonicalizeWindowId: a drag
+    // preview is a transient view of an existing window, not a registration
+    // point, so it must not mint a canonical entry in m_canonicalByInstance for
+    // an id the engine has never tracked — an unknown window falls through as its
+    // raw self and the hadPriorState lookup below simply misses, exactly as it
+    // does today.
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     if (windowId.isEmpty() || screenId.isEmpty() || !isAutotileScreen(screenId)) {
         return false;
     }
@@ -4062,16 +4212,19 @@ bool AutotileEngine::isKnownScreen(const QString& screenId) const
     return PhosphorScreens::ScreenIdentity::findByIdOrName(screenId) != nullptr;
 }
 
-void AutotileEngine::propagateGlobalSplitRatio()
+void AutotileEngine::propagateGlobalSplitRatio(PropagateScope scope)
 {
-    // Only propagate to current desktop/activity states — per-desktop split
-    // ratio adjustments (via increaseMasterRatio) are preserved on other desktops.
-    // States the user explicitly tuned (m_userTunedSplitRatio) and screens with a
-    // per-screen override are skipped, so a local ratio tweak is never clobbered
-    // by a settings refresh.
+    // A passive refresh (CurrentContext) propagates only to current
+    // desktop/activity states — per-desktop split ratio adjustments (via
+    // increaseMasterRatio) are preserved on other desktops. States the user
+    // explicitly tuned (m_userTunedSplitRatio) and screens with a per-screen
+    // override are skipped, so a local ratio tweak is never clobbered by a
+    // settings refresh. AllContexts is the caller saying it has just dropped
+    // every tuned flag for this value (see PropagateScope).
     for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
-        if (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
-            || it.key().activity != m_context.currentActivity()) {
+        if (scope == PropagateScope::CurrentContext
+            && (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
+                || it.key().activity != m_context.currentActivity())) {
             continue;
         }
         if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::SplitRatio)
@@ -4081,15 +4234,19 @@ void AutotileEngine::propagateGlobalSplitRatio()
     }
 }
 
-void AutotileEngine::propagateGlobalMasterCount()
+void AutotileEngine::propagateGlobalMasterCount(PropagateScope scope)
 {
-    // Only propagate to current desktop/activity states — per-desktop master
-    // count adjustments are preserved on other desktops. States the user
-    // explicitly tuned (m_userTunedMasterCount) and per-screen-override screens
-    // are skipped, so a local master-count tweak is never clobbered by a refresh.
+    // A passive refresh (CurrentContext) propagates only to current
+    // desktop/activity states — per-desktop master count adjustments are
+    // preserved on other desktops. States the user explicitly tuned
+    // (m_userTunedMasterCount) and per-screen-override screens are skipped, so a
+    // local master-count tweak is never clobbered by a refresh. AllContexts is
+    // the caller saying it has just dropped every tuned flag for this value (see
+    // PropagateScope).
     for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
-        if (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
-            || it.key().activity != m_context.currentActivity()) {
+        if (scope == PropagateScope::CurrentContext
+            && (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
+                || it.key().activity != m_context.currentActivity())) {
             continue;
         }
         if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::MasterCount)
@@ -4195,8 +4352,16 @@ void AutotileEngine::retileScreen(const QString& screenId)
     // signal handlers from seeing partially-modified state).
     QStringList unfloated;
     if (!m_overflow.isEmpty()) {
+        // Clamp the recovery ceiling at MaxZones, mirroring recalculateLayout's
+        // windowCount cap: under Unlimited overflow effectiveMaxWindows returns
+        // a huge sentinel, but the layout never places more than MaxZones
+        // zones. Recovery must not admit windows the layout can never place,
+        // or applyTiling re-floats them and the next retile unfloats them
+        // again — a stable float/unfloat signal churn.
+        const int recoveryMaxWindows =
+            std::min(effectiveMaxWindows(screenId), PhosphorTiles::AutotileDefaults::MaxZones);
         unfloated = m_overflow.recoverIfRoom(
-            screenId, state->tiledWindowCount(), effectiveMaxWindows(screenId),
+            screenId, state->tiledWindowCount(), recoveryMaxWindows,
             [state](const QString& wid) {
                 return state->isFloating(wid);
             },

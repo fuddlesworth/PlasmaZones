@@ -3,7 +3,6 @@
     "name": "Portrait 3-Row",
     "description": "Three stacked rows with larger center for vertical monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "portrait",
     "zones": [

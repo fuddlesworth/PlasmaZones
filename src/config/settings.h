@@ -3,22 +3,20 @@
 
 #pragma once
 
-#include "../core/interfaces.h"
 #include "../core/constants.h"
+#include "../core/interfaces.h"
+#include "configbackends.h"
+#include "configdefaults.h"
+
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
-#include <PhosphorTileEngine/IAutotileSettings.h>
-#include <PhosphorSnapEngine/ISnapSettings.h>
-#include <PhosphorScreens/VirtualScreen.h>
-#include "configdefaults.h"
-#include "configbackends.h"
-
 #include <PhosphorConfig/Store.h>
 #include <PhosphorRules/RuleStore.h>
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
+#include <PhosphorTileEngine/IAutotileSettings.h>
 
-#include <memory>
-#include <optional>
 #include <QFont>
 #include <QHash>
 #include <QJsonValue>
@@ -27,6 +25,9 @@
 #include <QUuid>
 #include <QVariantMap>
 #include <QVector>
+
+#include <memory>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -1253,13 +1254,32 @@ public:
     int fillOnDropModifier() const override;
     void setFillOnDropModifier(int mod) override;
 
-    // Old inline accessors replaced above — kept anchors below so the second
-    // half of the replaced region can be collapsed in one edit pass.
-
     // Persistence
     void load() override;
     void save() override;
     void reset() override;
+
+    /// Write the current settings to @p filePath as a standalone config file,
+    /// without touching the live config or the per-page Discard baseline.
+    ///
+    /// This is deliberately not `save()`-then-copy. `save()` commits to
+    /// ~/.config and re-baselines, so exporting would persist edits the user
+    /// never chose to save and leave a later Discard with nothing to revert
+    /// to. The values reaching the file are the same ones: Store-backed groups
+    /// already write through to the backend's in-memory root on every setter,
+    /// so a snapshot of it carries pending edits whether or not Save was
+    /// pressed.
+    ///
+    /// The per-screen override and virtual-screen helpers can only stage into
+    /// the live root, so exportTo snapshots the root (and the backend's dirty
+    /// flag) before staging and restores both after taking the export
+    /// snapshot. That snapshot/restore is what keeps the export side-effect
+    /// free: without it the staged groups would sit in the live root and be
+    /// committed by a later sync() or the backend's flush-on-destruction.
+    ///
+    /// Returns false if the write fails, or if the backend is not JSON-backed
+    /// (exports are config.json documents).
+    bool exportTo(const QString& filePath);
 
     // ── Per-page reset / discard support (settings app) ─────────────────────
     // A config key addressed as (group, key). A page "owns" a list of these;
@@ -1356,7 +1376,7 @@ private:
     // Only non-Store groups need dedicated helpers now. Store-backed groups
     // (Activation/Display/ZoneGeometry/Behavior/ZoneSelector/Shortcut/
     // Autotiling/Editor/Appearance/Rendering/Shaders/Ordering) persist via
-    // setters and flush via m_configBackend->sync() in save().
+    // setters and flush via m_configBackend->commit() in save().
     void loadPerScreenOverrides(PhosphorConfig::IBackend* backend);
     void loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
     void saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend);
@@ -1522,7 +1542,6 @@ private:
 
     // PhosphorZones::Zone Selector
     // PhosphorZones::Zone selector is stored in m_store.
-    // (remaining zone selector members stored in m_store)
 
     // Virtual screen configurations (physicalScreenId -> config)
     QHash<QString, PhosphorScreens::VirtualScreenConfig> m_virtualScreenConfigs;

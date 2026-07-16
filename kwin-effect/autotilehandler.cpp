@@ -805,7 +805,6 @@ void AutotileHandler::onDaemonReady()
 // handleAutotileFloatToggle removed: float toggle is now daemon-local via
 // WindowTrackingAdaptor::toggleWindowFloat (which emits applyGeometryRequested).
 
-// connectSignals() / loadSettings() live in autotilehandler/wiring.cpp
-// (split for the 800-line limit).
+// connectSignals() / loadSettings() live in autotilehandler/wiring.cpp.
 
 } // namespace PlasmaZones

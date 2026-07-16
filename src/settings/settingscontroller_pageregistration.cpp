@@ -11,10 +11,8 @@
 // pageGroupChildren, pageOwnedConfigKeys, validPageNames) live in the sibling
 // settingscontroller_pagetopology.cpp.
 //
-// Split out of settingscontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). All methods here are members of
-// PlasmaZones::SettingsController — same class, separate translation
-// unit, no API change.
+// All methods here are members of PlasmaZones::SettingsController. Same class
+// as settingscontroller.cpp, separate translation unit, no API change.
 
 #include "settingscontroller.h"
 

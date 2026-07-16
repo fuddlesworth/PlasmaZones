@@ -3,7 +3,6 @@
     "name": "Portrait Master + Stack",
     "description": "Top master with side-by-side stack below for vertical monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "portrait",
     "zones": [

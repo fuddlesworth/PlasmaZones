@@ -32,10 +32,6 @@ constexpr QLatin1String IsAutotile{"isAutotile"};
 // translate, and the C++ `isAutotile` consumer keeps its name.
 constexpr QLatin1String Category{"category"};
 constexpr QLatin1String IsSystem{"isSystem"};
-// Back-compat alias for isSystem. Older consumers historically read
-// isSystemEntry; emitting both for one release cycle; drop isSystemEntry
-// in a subsequent release.
-constexpr QLatin1String IsSystemEntry{"isSystemEntry"};
 constexpr QLatin1String Recommended{"recommended"};
 constexpr QLatin1String AutoAssign{"autoAssign"};
 constexpr QLatin1String AspectRatioClass{"aspectRatioClass"};
@@ -43,7 +39,6 @@ constexpr QLatin1String ReferenceAspectRatio{"referenceAspectRatio"};
 constexpr QLatin1String SectionKey{"sectionKey"};
 constexpr QLatin1String SectionLabel{"sectionLabel"};
 constexpr QLatin1String SectionOrder{"sectionOrder"};
-constexpr QLatin1String Algorithm{"algorithm"};
 
 // Per-zone
 constexpr QLatin1String X{"x"};
@@ -65,6 +60,10 @@ constexpr QLatin1String ReflowsOnFocus{"reflowsOnFocus"};
 constexpr QLatin1String IsScripted{"isScripted"};
 constexpr QLatin1String IsUserScript{"isUserScript"};
 constexpr QLatin1String ZoneNumberDisplay{"zoneNumberDisplay"};
+// Resolved master count the zones were computed with (LayoutPreview field, not
+// AlgorithmMetadata — see the header note there). Emitted alongside the
+// algorithm block because it is only meaningful for autotile entries.
+constexpr QLatin1String MasterCount{"masterCount"};
 } // namespace K
 
 QJsonObject zoneJson(const QRectF& r, int zoneNumber)
@@ -128,8 +127,6 @@ QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
     json[K::IsAutotile] = preview.isAutotile();
     json[K::Category] = preview.isAutotile() ? 1 : 0;
     json[K::IsSystem] = preview.isSystem;
-    // Back-compat alias: emit alongside `isSystem` for one release cycle.
-    json[K::IsSystemEntry] = preview.isSystem;
     json[K::Recommended] = preview.recommended;
     json[K::AutoAssign] = preview.autoAssign;
     json[K::AspectRatioClass] = aspectRatioClassTag(preview.aspectRatioClass);
@@ -156,6 +153,7 @@ QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
 
     if (preview.algorithm.has_value()) {
         writeAlgorithmFlat(json, preview.algorithm.value());
+        json[K::MasterCount] = preview.masterCount;
     }
 
     return json;
@@ -183,8 +181,6 @@ QVariantMap toVariantMap(const PhosphorLayout::LayoutPreview& preview)
     map[K::IsAutotile] = preview.isAutotile();
     map[K::Category] = preview.isAutotile() ? 1 : 0;
     map[K::IsSystem] = preview.isSystem;
-    // Back-compat alias: emit alongside `isSystem` for one release cycle.
-    map[K::IsSystemEntry] = preview.isSystem;
     map[K::Recommended] = preview.recommended;
     map[K::AutoAssign] = preview.autoAssign;
     map[K::AspectRatioClass] = aspectRatioClassTag(preview.aspectRatioClass);
@@ -212,6 +208,7 @@ QVariantMap toVariantMap(const PhosphorLayout::LayoutPreview& preview)
 
     if (preview.algorithm.has_value()) {
         writeAlgorithmFlat(map, preview.algorithm.value());
+        map[K::MasterCount] = preview.masterCount;
     }
 
     return map;

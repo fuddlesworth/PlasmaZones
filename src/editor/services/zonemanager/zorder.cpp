@@ -24,7 +24,7 @@ QString ZoneManager::duplicateZone(const QString& zoneId)
 
     const QVariantMap& srcZone = *zoneOpt;
     QString originalName = srcZone[::PhosphorZones::ZoneJsonKeys::Name].toString();
-    int zoneNumber = m_zones.size() + 1;
+    int zoneNumber = nextAvailableZoneNumber();
     QString copyName = originalName + QStringLiteral(" (Copy)");
 
     if (isFixedMode(srcZone)) {
@@ -99,7 +99,7 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
         emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
 
         // Create new zone in pixel space
-        int zoneNumber = m_zones.size() + 1;
+        int zoneNumber = nextAvailableZoneNumber();
         QVariantMap newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, 0, 0, 0.25, 0.25);
         newZone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
         if (horizontal) {
@@ -142,7 +142,7 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
         }
     }
 
-    int zoneNumber = m_zones.size() + 1;
+    int zoneNumber = nextAvailableZoneNumber();
     QVariantMap newZone;
 
     if (horizontal) {

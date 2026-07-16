@@ -175,11 +175,12 @@ public:
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();
-    /// Parent name → set of leaf child page names. Covers top-level sidebar
-    /// parents (snapping / tiling / animations) AND mid-level virtual parents
-    /// (animations-transitions / animations-motion / animations-library) whose
-    /// children don't share their name prefix. Drives dirty-state propagation in
-    /// `isPageDirty`.
+    /// Parent name → set of leaf child page names. Covers the top-level sidebar
+    /// categories AND the mid-level virtual parents nested beneath them (among
+    /// them snapping / tiling under placement, and the animations-* parents
+    /// whose children don't share their name prefix). See the definition for
+    /// the full classification rather than trusting a list here to stay
+    /// current. Drives dirty-state propagation in `isPageDirty`.
     static const QHash<QString, QSet<QString>>& pageGroupChildren();
 
     bool needsSave() const
@@ -191,8 +192,11 @@ public:
     /// like "snapping" / "tiling") currently has unsaved changes. For pages in
     /// the per-page config manifest (@ref pageOwnedConfigKeys) the answer is
     /// value-based — any owned key differing from the committed baseline —
-    /// which stays correct across a per-page Discard/Reset. Non-manifest pages
-    /// fall back to the m_dirtyPages membership set.
+    /// which stays correct across a per-page Discard/Reset. The ordering,
+    /// shortcuts, virtual-screens, animation and decoration pages are
+    /// value-based too, each against its own staged state rather than the
+    /// manifest. Only a page in none of those groups falls back to the
+    /// m_dirtyPages membership set.
     Q_INVOKABLE bool isPageDirty(const QString& page) const;
 
     // ── Per-page Reset / Discard (kebab menu in the breadcrumb row) ──────────
@@ -296,9 +300,18 @@ public:
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
     // Loads the on-disk layouts via an in-process LayoutRegistry +
     // ZonesLayoutSource so QML preview paths render even when the daemon
-    // is down (early launch, crash). Returns the QML projection produced
-    // by PlasmaZones::toVariantMap — intentionally different from the
-    // D-Bus getLayoutPreviewList wire shape.
+    // is down (early launch, crash). Drives the Step-1 instant paint in
+    // loadLayoutsAsync, which the daemon's enriched reply then replaces.
+    //
+    // Returns the projection produced by PlasmaZones::toVariantMap. That is
+    // the SAME projection, key for key, that the D-Bus side emits via toJson
+    // — the two differ only in container type (QVariantMap vs QJsonObject).
+    // What differs is the daemon's LayoutAdaptor::getLayoutList, which adds an
+    // enrichment layer on top (hasSystemOrigin / hiddenFromSelector /
+    // defaultOrder / allow-lists) from Layout state that LayoutPreview does not
+    // carry. So the list this returns is a strict SUBSET of the Step-2 D-Bus
+    // list: any consumer reading an enrichment-only key off these previews
+    // gets `undefined`, not `false`. See src/common/layoutpreviewserialize.h.
     //
     // @note Autotile preview-parameter drift: the local AlgorithmRegistry
     // is independent of the daemon's (see m_localAlgorithmRegistry below),
@@ -307,11 +320,6 @@ public:
     // built-in defaults. When the daemon is up, D-Bus carries the tuned
     // previews; the fallback is only a "daemon is down" safety net.
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
-    // Non-const: ILayoutSource::previewAt is non-const so implementations
-    // can populate a query cache (scripted autotile algorithms would be
-    // prohibitively expensive to re-run on every picker redraw). Const
-    // would silently dodge that cache.
-    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4);
 
     // Screen accessors
     QVariantList screens() const
@@ -363,8 +371,6 @@ public:
     // PhosphorZones::Layout CRUD (D-Bus to daemon)
     Q_INVOKABLE void createNewLayout();
     Q_INVOKABLE bool createNewLayout(const QString& name, const QString& type, int aspectRatioClass, bool openInEditor);
-    Q_INVOKABLE QString createNewAlgorithm(const QString& name, const QString& baseTemplate, bool supportsMasterCount,
-                                           bool supportsSplitRatio, bool producesOverlappingZones, bool supportsMemory);
     Q_INVOKABLE void deleteLayout(const QString& layoutId);
     Q_INVOKABLE void duplicateLayout(const QString& layoutId);
     Q_INVOKABLE void editLayout(const QString& layoutId);
@@ -504,6 +510,8 @@ public:
                                                       int masterCount, const QVariantMap& customParams) const;
     Q_INVOKABLE QVariantList generateAlgorithmDefaultPreview(const QString& algorithmId) const;
     Q_INVOKABLE void openAlgorithmsFolder();
+    Q_INVOKABLE QString createNewAlgorithm(const QString& name, const QString& baseTemplate,
+                                           const QVariantMap& capabilities);
     Q_INVOKABLE bool importAlgorithm(const QString& filePath);
     Q_INVOKABLE static QString algorithmIdFromLayoutId(const QString& layoutId);
     Q_INVOKABLE void openAlgorithm(const QString& algorithmId);
@@ -577,6 +585,17 @@ Q_SIGNALS:
     void algorithmCreated(const QString& algorithmId);
     void algorithmOperationFailed(const QString& reason);
     void layoutOperationFailed(const QString& reason);
+    /// Emitted when exportAllSettings / importAllSettings gives up, and on the
+    /// partial-success path where the import landed but the animation pages
+    /// still hold pre-import snapshots. Both functions also return a bool, but
+    /// no caller sequences on it: the General page uses it only to gate a
+    /// success toast, because a refused path, a file that vanished, and a file
+    /// that is not settings at all are the same `false` and want different
+    /// words. This signal carries those words and is the only failure channel.
+    /// The partial path returns `false` for the same reason: the toast surface
+    /// replaces whatever is in flight, so a `true` there would let the caller's
+    /// success toast overwrite the reason emitted a moment earlier.
+    void settingsTransferFailed(const QString& reason);
     /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
     /// fails at the daemon — QML can surface the reason in a toast so the
     /// user knows the change wasn't saved.
@@ -601,22 +620,27 @@ Q_SIGNALS:
      * @brief Fresh running-windows list has arrived from the daemon.
      *
      * Emitted in response to requestRunningWindows(). The @p windows list
-     * is a QVariantList of {windowClass, appName, caption} maps ready for
-     * QML consumption. Also updates cachedRunningWindows() so later
-     * queries can read the last-seen value synchronously.
+     * is a QVariantList of {windowClass, appName, caption, desktopFile}
+     * maps ready for QML consumption. Also updates cachedRunningWindows()
+     * so later queries can read the last-seen value synchronously.
      */
     void runningWindowsAvailable(const QVariantList& windows);
 
     /**
-     * @brief No reply arrived within RunningWindowsTimeoutMs.
+     * @brief The running-windows request produced no data.
      *
      * Emitted by the client-side timeout timer when the KWin effect never
-     * answers a requestRunningWindows() call (effect unloaded, crashed,
-     * or slow). QML dialogs should surface an error state so the user
-     * can distinguish "no windows" from "daemon or effect not responding".
-     * Note: cachedRunningWindows() is empty by the time this fires —
-     * requestRunningWindows() invalidated the cache at the start of the
-     * request, so the timeout signal means "no data, refresh failed."
+     * answers a requestRunningWindows() call within RunningWindowsTimeoutMs
+     * (effect unloaded, crashed, or slow). ALSO emitted synchronously from
+     * requestRunningWindows() itself when the daemon is not running: the
+     * request is never dispatched at all, so waiting out the full timeout
+     * would only delay the same outcome.
+     *
+     * QML dialogs should surface an error state so the user can distinguish
+     * "no windows" from "daemon or effect not responding". Note:
+     * cachedRunningWindows() is empty by the time this fires — both paths
+     * invalidate the cache before emitting, so the signal always means
+     * "no data, refresh failed."
      */
     void runningWindowsTimedOut();
 
@@ -638,8 +662,9 @@ private Q_SLOTS:
     // Debounce slot: all layout-mutation D-Bus signals (layoutCreated,
     // layoutDeleted, layoutChanged, layoutPropertyChanged, layoutListChanged)
     // route here so bursts coalesce into one loadLayoutsAsync() on the
-    // 50 ms m_layoutLoadTimer. Reachable by SLOT() because it's a
-    // private slot.
+    // 50 ms m_layoutLoadTimer. Reachable by SLOT() because it is a slot at
+    // all: the string-based connect resolves through the meta-object, which
+    // carries private slots and public ones alike.
     void scheduleLayoutLoad();
     void onVirtualDesktopsChanged();
     void onActivitiesChanged();
@@ -709,19 +734,25 @@ private:
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
     WindowAppearanceController* m_windowAppearancePage = nullptr;
     GeneralPageController* m_generalPage = nullptr;
-    /// Parented to `this` so Qt manages lifetime; the raw pointer is fine
-    /// because every consumer is also a child of this controller and Qt's
-    /// child cleanup walks in reverse-insertion order. Constructed before
-    /// m_animationsPage so the page controller's non-owned pointer
-    /// outlives the page through child-destruction order.
+    /// Parented to `this` so Qt manages lifetime. Every consumer is also a child
+    /// of this controller, and `~QObject` deletes children in INSERTION order
+    /// (QObjectPrivate::deleteChildren walks the child list front to back — it
+    /// is not a reverse walk). This registry is constructed before
+    /// m_animationsPage, so it is destroyed BEFORE the page, and the page's
+    /// non-owned pointer to it dangles for the remainder of the teardown. That
+    /// is safe only because ~AnimationsPageController is `= default` and touches
+    /// nothing through the pointer. Anything added to that dtor which reaches
+    /// this registry is a use-after-free — construct the registry AFTER the page
+    /// (or reparent it) before writing such a dtor.
     PhosphorAnimationShaders::AnimationShaderRegistry* m_animationShaderRegistry = nullptr;
     AnimationsPageController* m_animationsPage = nullptr;
     /// Settings-side mirror of the daemon's/compositor's surface-shader
     /// registry — drives the Decoration page's per-surface pack chains. Same
-    /// parent / declaration-order rationale as `m_animationShaderRegistry`
-    /// above: a QObject child of `this`, constructed before
-    /// `m_decorationPage` so the page controller's non-owned registry
-    /// pointer outlives the page through child-destruction order.
+    /// parent / construction-order situation as `m_animationShaderRegistry`
+    /// above: a QObject child of `this` constructed before `m_decorationPage`,
+    /// so insertion-order child deletion tears the registry down FIRST and the
+    /// page's non-owned registry pointer dangles through its own destruction.
+    /// Safe only while `~DecorationPageController` stays `= default`.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
     DecorationPageController* m_decorationPage = nullptr;
     /// Rules page sub-controller. Parented to `this`; owns its
@@ -730,7 +761,7 @@ private:
     RuleController* m_rulesPage = nullptr;
     /// Settings-side mirror of the daemon's overlay-shader registry —
     /// drives the read-only Snapping → Shaders browser. Same parent /
-    /// declaration-order rationale as `m_animationShaderRegistry` above.
+    /// construction-order situation as `m_animationShaderRegistry` above.
     /// The companion `m_snappingShadersPage` is declared further down as
     /// a `std::unique_ptr<>` (after `m_localLayoutManager`) because that
     /// page borrows the layout registry — see the declaration-order
@@ -772,14 +803,24 @@ private:
     QString m_pendingSelectLayoutId;
 
     // Suppresses the local-path layoutsChanged emit while a D-Bus
-    // getLayoutList round-trip is in flight. Without this gate, every
-    // loadLayoutsAsync() emits twice: once synchronously from the
-    // PhosphorZones::LayoutRegistry::layoutsChanged lambda (local composite) and once
-    // from the async D-Bus reply lambda (daemon-enriched list). Set true
-    // right before the D-Bus asyncCall dispatch; cleared in the reply
-    // lambda's entry (before any early-return on error, so the local
-    // fallback emit resumes if the daemon is unreachable). Only relevant
-    // when the daemon is available — when the D-Bus call errors out, the
+    // getLayoutList round-trip is in flight.
+    //
+    // This does NOT collapse loadLayoutsAsync()'s own two emits: that call
+    // reloads the local manager (emitting synchronously through the
+    // PhosphorZones::LayoutRegistry::layoutsChanged lambda) BEFORE this gate is
+    // set, and the reply lambda emits again with the daemon-enriched list. That
+    // pair is the deliberate Step-1 instant-paint / Step-2 enrichment design.
+    //
+    // What the gate suppresses is a local emit that lands BETWEEN the dispatch
+    // and the reply. A second daemon layout signal arriving in that window
+    // restarts the scheduleLayoutLoad() debounce, and its loadLayoutsAsync()
+    // calls loadLayouts() on the local registry, which drives that lambda
+    // synchronously. Ungated it would repaint the page from the un-enriched
+    // local composite only for the in-flight reply to immediately replace it.
+    // Set true right before the D-Bus asyncCall dispatch;
+    // cleared at the reply lambda's entry (before any early-return on error, so
+    // the local fallback emit resumes if the daemon is unreachable). Only
+    // relevant when the daemon is available — when the D-Bus call errors out, the
     // local path's emit remains the authoritative refresh.
     bool m_awaitingDaemonLayouts = false;
 
@@ -794,11 +835,15 @@ private:
     // bundle's sources AND by m_scriptLoader below. Reverse-order member
     // destruction must tear down the loader and the bundle BEFORE the
     // registries those consumers borrow. With the order below:
-    //   1. ~m_scriptLoader first (unregisters scripted algorithms while
-    //      the registry is still alive — fixes a UAF the QObject-child-
-    //      parent pattern had, where ~QObject ran after unique_ptr reset).
-    //   2. ~m_localSources drops borrowed source pointers.
-    //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
+    //   1. The registry/loader borrowers declared after them run first:
+    //      ~m_snappingShadersPage, ~m_tilingAlgorithmPage, ~m_algorithmService
+    //      (which disconnects its watchers — see ~AlgorithmService in
+    //      algorithmservice.cpp).
+    //   2. ~m_scriptLoader (unregisters scripted algorithms while the
+    //      registry is still alive — fixes a UAF the QObject-child-parent
+    //      pattern had, where ~QObject ran after unique_ptr reset).
+    //   3. ~m_localSources drops borrowed source pointers.
+    //   4. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
@@ -901,20 +946,16 @@ private:
 
     /// Wire daemon D-Bus broadcast subscriptions. Failed connects are
     /// appended to @p failedSubscriptions for one batched ctor warning.
-    /// Defined in settingscontroller_dbuswire.cpp (800-line cap).
+    /// Defined in settingscontroller_dbuswire.cpp.
     void wireDaemonSubscriptions(QStringList& failedSubscriptions);
 
     // File-scope sort helper exposed as a private static member so both
-    // settingscontroller.cpp (file-watcher rebind path) and
-    // settingscontroller_layouts.cpp (D-Bus refresh path) link to the
+    // settingscontroller.cpp (the ctor-wired LayoutRegistry::layoutsChanged
+    // lambda) and settingscontroller_layouts.cpp (D-Bus refresh path) link to the
     // same external-linkage symbol regardless of unity-build batching.
     // Manual layouts sort first; within each category alphabetical by
     // displayName (case-insensitive).
     static void sortMergedLayoutList(QVariantList& list);
-    // Defence-in-depth path sanitiser shared by importLayout/exportLayout
-    // (layouts TU) and importAllSettings/exportAllSettings (session TU).
-    // See the implementation comment for the rejection rules.
-    static QString sanitizeIOPath(const QString& raw);
 };
 
 } // namespace PlasmaZones

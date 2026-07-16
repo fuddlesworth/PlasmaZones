@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -49,9 +48,9 @@ ColumnLayout {
     /// look like one consistent tree visualisation.
     readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
     readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
-    // 1 physical pixel — matches MatchExpressionView's revised guide
+    // 1 device-independent px — matches MatchExpressionView's guide
     // thickness. See the rationale comment there.
-    readonly property int _guideThickness: Math.max(1, Math.round(Screen.devicePixelRatio))
+    readonly property int _guideThickness: 1
 
     /// Look up the `{ value, label, params }` entry for a wire type
     /// string, or null when the type isn't in the registry.
@@ -394,7 +393,7 @@ ColumnLayout {
                             implicitHeight: pillContent.implicitHeight + Kirigami.Units.smallSpacing
                             radius: Kirigami.Units.smallSpacing
                             color: Kirigami.Theme.alternateBackgroundColor
-                            border.width: Math.round(Screen.devicePixelRatio)
+                            border.width: 1
                             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
 
                             RowLayout {
@@ -415,7 +414,7 @@ ColumnLayout {
                                     implicitHeight: valueLabel.implicitHeight
                                     radius: Math.round(Kirigami.Units.smallSpacing / 2)
                                     color: paramRow.modelData.kind !== "color" ? "transparent" : (_rawColor === "accent" ? Kirigami.Theme.highlightColor : (_rawColor === "" ? Kirigami.Theme.backgroundColor : _rawColor))
-                                    border.width: Math.round(Screen.devicePixelRatio)
+                                    border.width: 1
                                     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
                                 }
 

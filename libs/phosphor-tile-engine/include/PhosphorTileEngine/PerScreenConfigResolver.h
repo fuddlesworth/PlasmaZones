@@ -87,6 +87,12 @@ public:
 
     /**
      * @brief Remove all overrides for a screen (used during screen removal)
+     *
+     * Unlike clearPerScreenConfig() this restores nothing on the TilingState and
+     * schedules no retile — the caller is tearing the screen down. It does still
+     * wipe per-algorithm state bags when dropping an Algorithm override changes
+     * the screen's effective algorithm, because the caller's teardown may leave
+     * other (desktop, activity) states of the screen alive.
      */
     void removeOverridesForScreen(const QString& screenId);
 
@@ -114,7 +120,6 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     int effectiveInnerGap(const QString& screenId) const;
-    int effectiveOuterGap(const QString& screenId) const;
     ::PhosphorLayout::EdgeGaps effectiveOuterGaps(const QString& screenId) const;
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
@@ -133,14 +138,34 @@ public:
 private:
     std::optional<QVariant> perScreenOverride(const QString& screenId, const QString& key) const;
 
+    /// Wipe the per-algorithm state bags (script state, and split tree when the
+    /// incoming algorithm lacks memory) on every (desktop, activity) state of
+    /// `screenId` when its effective algorithm changed. State bags never cross
+    /// algorithms; see the implementation comment for why this lives here.
+    void wipeStateBagsOnEffectiveAlgorithmChange(const QString& screenId, const QString& oldEffectiveId,
+                                                 const QString& newEffectiveId);
+
+    /// The per-context (window-rule) gap map for @p screenId, or an empty map
+    /// when no provider is wired. Resolving it runs a full
+    /// LayoutRegistry::resolveContextGaps on the daemon side, so callers that
+    /// need more than one key resolve it once and pass it to the *FromMap
+    /// helpers below rather than calling this per key.
+    QVariantMap contextGapMap(const QString& screenId) const;
+
     /// Clamped per-context override for a single gap key (InnerGap / OuterGap),
-    /// or nullopt when no provider is wired or the context map lacks the key.
-    std::optional<int> contextGap(const QString& screenId, QLatin1String key) const;
+    /// or nullopt when @p ctx lacks the key.
+    static std::optional<int> contextGapFromMap(const QVariantMap& ctx, QLatin1String key);
 
     /// Per-context outer-gap override resolved as one atomic layer (per-side
     /// honoured only when UsePerSideOuterGap is set), mirroring the snapping
     /// pipeline. nullopt when the context layer carries no outer-gap info.
-    std::optional<::PhosphorLayout::EdgeGaps> contextOuterGaps(const QString& screenId) const;
+    std::optional<::PhosphorLayout::EdgeGaps> contextOuterGapsFromMap(const QVariantMap& ctx) const;
+
+    /// The uniform outer-gap value the per-side resolution fills missing sides
+    /// from: the context layer's uniform OuterGap, else the per-screen override,
+    /// else the global config. Only a BASE for the missing sides — it skips the
+    /// per-side layers that effectiveOuterGaps resolves on top of it.
+    int outerGapBase(const QString& screenId, const QVariantMap& ctx) const;
 
     AutotileEngine* m_engine = nullptr;
     QHash<QString, QVariantMap> m_perScreenOverrides;

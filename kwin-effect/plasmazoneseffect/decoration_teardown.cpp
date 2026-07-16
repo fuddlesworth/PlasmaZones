@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Decoration TEARDOWN, split out of decorations.cpp to keep that file under the
-// 800-line limit. Every path that takes a decoration away lives here: the single
-// per-window remove, the two GL release halves it delegates to (both guarded
-// against tearing down state a live shader transition is still sampling), and the
-// bulk clear used on genuine teardown (daemon lost, effect unloaded).
+// Decoration TEARDOWN, split out of decorations.cpp. Every path that takes a
+// decoration away lives here: the single per-window remove, the two GL release
+// halves it delegates to (both guarded against tearing down state a live shader
+// transition is still sampling), and the bulk clear used on genuine teardown
+// (daemon lost, effect unloaded).
 //
 // NOT the focus/rule refresh path: updateAllDecorations reconciles in place and
 // removes only what it did not revisit. See decorations.cpp.

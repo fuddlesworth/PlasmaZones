@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -49,8 +48,6 @@ Item {
     signal selected(int index)
     signal activated(string layoutId)
     signal deleteRequested(var layout)
-    signal exportRequested(string layoutId)
-    signal setAsDefaultRequested(var layout)
     signal contextMenuRequested(var layout)
 
     width: cellWidth
@@ -76,9 +73,30 @@ Item {
     Accessible.name: modelData.displayName || i18n("Unnamed Layout")
     Accessible.description: i18n("Layout with %1 zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
-    Keys.onReturnPressed: root.activated(root.modelData.id)
+    Accessible.focusable: true
+    // Keyboard reachability for the Keys handlers below (matches
+    // WizardTemplateCard): without a tab stop this Item can never gain
+    // active focus inside the hosting Flow, making them dead code.
+    activeFocusOnTab: true
+    // Select before activating, matching the mouse path (single-click selects,
+    // double-click delivers selection then activation) so keyboard activation
+    // never leaves a stale selection highlight on another card.
+    Keys.onReturnPressed: {
+        root.selected(root.index);
+        root.activated(root.modelData.id);
+    }
+    // Numpad Enter alias, matching the sibling card components.
+    Keys.onEnterPressed: {
+        root.selected(root.index);
+        root.activated(root.modelData.id);
+    }
+    // Space selects without activating (WizardTemplateCard/PositionPicker
+    // semantics).
+    Keys.onSpacePressed: root.selected(root.index)
     Keys.onDeletePressed: {
-        if (!root.modelData.isSystem && !root.modelData.isAutotile)
+        // Only system items are undeletable; user (non-system) algorithms are
+        // deletable via the context menu, so keyboard Delete matches that path.
+        if (!root.modelData.isSystem)
             root.deleteRequested(root.modelData);
     }
 
@@ -95,6 +113,10 @@ Item {
         acceptedButtons: root.contextMenuEnabled ? (Qt.LeftButton | Qt.RightButton) : Qt.LeftButton
         hoverEnabled: false
         onClicked: mouse => {
+            // Move active focus to the clicked card so a previously
+            // keyboard-focused card doesn't keep the focus ring and receive
+            // subsequent Return/Delete presses.
+            root.forceActiveFocus();
             if (mouse.button === Qt.RightButton) {
                 root.selected(root.index);
                 root.contextMenuRequested(root.modelData);
@@ -123,8 +145,14 @@ Item {
 
             return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03);
         }
-        border.width: Math.round(Screen.devicePixelRatio)
+        border.width: root.activeFocus ? 2 : 1
         border.color: {
+            // Keyboard-focus indicator (tab stop on the root Item); takes
+            // precedence over the selection/hover tints so the focused card
+            // is always visually identifiable.
+            if (root.activeFocus)
+                return Kirigami.Theme.highlightColor;
+
             if (root.isSelected)
                 return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
 

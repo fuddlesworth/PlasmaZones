@@ -41,6 +41,11 @@ namespace AutotileDefaults {
 constexpr qreal DefaultSplitRatio = 0.5; ///< 50/50 split when nothing else specified
 constexpr int DefaultMasterCount = 1; ///< Single master window
 constexpr int DefaultMaxWindows = 5; ///< Maximum tiled windows before overflow
+/// Window cap for a scripted algorithm whose metadata omits `defaultMaxWindows`.
+/// Scripted layouts carry more windows comfortably than the built-in default of
+/// 5, so they resolve to this instead. Shared with the settings app's blank
+/// scaffold, which writes this value into every algorithm it generates.
+constexpr int ScriptedDefaultMaxWindows = 6;
 inline constexpr QLatin1String DefaultAlgorithmId{"bsp"}; ///< Default tiling algorithm
 constexpr qreal DefaultSplitRatioStep = 0.05;
 constexpr qreal MinSplitRatioStep = 0.01;
@@ -81,6 +86,16 @@ constexpr int ScriptStateMaxKeys = 4096; ///< Max total object keys across the b
 constexpr qreal SplitRatioHysteresis = 0.05; ///< Band within which algorithm-switch ratio reset is suppressed
 constexpr int MinMetadataWindows = 1;
 constexpr int MaxMetadataWindows = 100;
+/// Largest algorithm script the engine will load. LuauTileAlgorithm refuses
+/// anything bigger, so a writer that lands a larger file on disk leaves the
+/// user an algorithm that never appears. Shared so the settings app's import
+/// can reject it up front instead.
+constexpr qint64 MaxScriptSizeBytes = 1024 * 1024;
+/// Prefix of the id a scripted algorithm gets when its metadata declares none:
+/// this plus the file's base name. Shared because the loader builds that id for
+/// the registry while LuauTileAlgorithm builds its own and strips this back off
+/// for the display-name fallback, and the two must agree on the spelling.
+inline constexpr QLatin1String ScriptIdPrefix{"script:"};
 constexpr int MinInsertPosition = 0;
 constexpr int MaxInsertPosition = 2;
 // Bounds for AutotileOverflowBehavior (Float=0 .. Unlimited=1), defined below.
@@ -101,7 +116,9 @@ constexpr int MaxOverflowBehavior = 1;
 constexpr int ScriptWatchdogTimeoutMs = 100;
 
 /// Returns true if typeId is a numeric QMetaType (Double, Float, Int, UInt, LongLong, ULongLong).
-/// Used for fuzzy-comparing QVariant values after JSON round-trip type drift.
+/// Two uses: gating untrusted Luau metadata/override returns before they are
+/// accepted as numbers (the primary use since the finiteNumber validation),
+/// and fuzzy-comparing QVariant values after JSON round-trip type drift.
 constexpr bool isNumericMetaType(int typeId)
 {
     return typeId == QMetaType::Double || typeId == QMetaType::Float || typeId == QMetaType::Int

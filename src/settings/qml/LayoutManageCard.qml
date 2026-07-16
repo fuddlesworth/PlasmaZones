@@ -71,11 +71,11 @@ SettingsCard {
                     // handled by the page, matching the import-dialog path).
                     settingsController.importLayout(path);
                 } else {
-                    // Report both outcomes. A silent failure here read as a
-                    // dropped file that simply vanished.
-                    const ok = settingsController.importAlgorithm(path);
-                    if (typeof window !== "undefined" && window && window.showToast)
-                        window.showToast(ok ? i18n("Algorithm imported") : i18n("Could not import that algorithm. It must be a Luau file this build can read."));
+                    // Success only, matching the import dialog: a failure
+                    // toasts through algorithmOperationFailed, which carries
+                    // the reason a dropped file was refused.
+                    if (settingsController.importAlgorithm(path) && typeof window !== "undefined" && window && window.showToast)
+                        window.showToast(i18n("Algorithm imported"));
                 }
             }
         }
@@ -97,6 +97,14 @@ SettingsCard {
                 Menu {
                     id: importMenu
 
+                    // hasKZonesConfig() is a non-reactive Q_INVOKABLE, so a
+                    // plain `enabled:` binding samples it once at creation.
+                    // Refresh the cached value each time the menu opens,
+                    // mirroring LayoutFilterBar's _refreshHasPriorityOrder.
+                    property bool _hasKZonesConfig: false
+
+                    onAboutToShow: importMenu._hasKZonesConfig = settingsController.hasKZonesConfig()
+
                     MenuItem {
                         text: i18n("Import Layout File…")
                         icon.name: "document-open"
@@ -108,7 +116,7 @@ SettingsCard {
                     MenuItem {
                         text: i18n("Import from KZones")
                         icon.name: "document-import"
-                        enabled: settingsController.hasKZonesConfig()
+                        enabled: importMenu._hasKZonesConfig
                         onTriggered: root.requestImportFromKZones()
                     }
 

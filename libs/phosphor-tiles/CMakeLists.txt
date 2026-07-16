@@ -13,11 +13,13 @@
 # code can render autotile previews without depending on the daemon engine.
 #
 # This library does NOT include the runtime engine that actually places windows
-# (that lives in the host application, pending a future phosphor-tile-engine
-# extraction). It also does NOT include daemon-side overflow handling, settings
-# bridge, or per-screen config resolution — those are host-application internals.
+# (that lives in phosphor-tile-engine). It also does NOT include daemon-side
+# overflow handling, settings bridge, or per-screen config resolution — those
+# are host-application internals.
 #
-# Self-contained: depends only on Qt6 + PhosphorLayoutApi.  Logging is
+# Depends on Qt6::Core plus PhosphorLayoutApi, PhosphorEngine, PhosphorScripting
+# and PhosphorFsLoader publicly, and PhosphorRegistry privately (see the link
+# set below, which PhosphorTilesConfig.cmake.in mirrors).  Logging is
 # library-local (`PhosphorTiles::lcTilesLib`).  Strings in
 # luautilealgorithm.cpp ship as untranslated English placeholders — the
 # application config layer overrides them via algorithm display name.
@@ -50,16 +52,36 @@ if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
+# phosphor-engine — IPlacementEngine contracts + PlacementEngineBase that
+# AutotileLayoutSource and TilingState build on. PUBLIC link dep, but it
+# CANNOT use the if(NOT TARGET) find_package fallback the other deps use:
+# in-tree the engine subdirectory is added after this one, so the target
+# does not exist yet at this point and the fallback would wrongly pull an
+# installed copy. In-tree, CMake resolves the link-target name at generate
+# time, so no find_package is needed. For a standalone configure (this
+# directory IS the top level), resolve it explicitly here; the guard below
+# never fires in-tree.
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
+    find_package(PhosphorEngine CONFIG REQUIRED)
+endif()
+
+# phosphor-scripting — the embedded Luau host that LuauTileAlgorithm and
+# ScriptedAlgorithmLoader evaluate scripts through. PUBLIC link dep, so a
+# standalone configure must resolve it here too.
+if(NOT TARGET PhosphorScripting::PhosphorScripting)
+    find_package(PhosphorScripting 0.1.0 CONFIG REQUIRED)
+endif()
+
 # phosphor-fsloader — shared filesystem-loader scaffolding (used by
 # ScriptedAlgorithmLoader's WatchedDirectorySet + LuauScanStrategy).
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
-    find_package(PhosphorFsLoader 0.1.0 REQUIRED)
+    find_package(PhosphorFsLoader 0.1.0 CONFIG REQUIRED)
 endif()
 
 # phosphor-registry — AlgorithmRegistry's storage is a Registry<TileAlgorithmEntry>.
 # Used only in algorithmregistry.cpp (the header is pimpl), so a PRIVATE link.
 if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
-    find_package(PhosphorRegistry 0.1.0 REQUIRED)
+    find_package(PhosphorRegistry 0.1.0 CONFIG REQUIRED)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -182,8 +204,9 @@ endif()
 # Ship the pluau standard-library type definitions so users authoring custom
 # `.luau` algorithms get luau-lsp autocomplete and luau-analyze type-checking
 # (see docs/architecture/luau-algorithm-authoring.md). Installed OUTSIDE the
-# scanned algorithms subdirectory — the loader globs `*.luau`, and a `.d.luau`
-# sitting next to the algorithms would be mistaken for one.
+# scanned algorithms subdirectory: the loader globs `*.luau`, so a `.d.luau`
+# sitting next to the algorithms would be picked up by the scan and then
+# skipped with a warning, since `pluau.d` fails the basename check.
 install(FILES src/pluau/pluau.d.luau
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones)
 

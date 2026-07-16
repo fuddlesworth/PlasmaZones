@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Registry-event handlers and the per-global bind helpers extracted from
-// pipewireconnection.cpp to keep that TU under the 800-line cap. All
-// definitions are members of PipeWireConnection::Private and share the
-// declarations in pipewireconnection_p.h; this file does not introduce
-// any new public surface.
+// Registry-event handlers and the per-global bind helpers for
+// PipeWireConnection. All definitions are members of
+// PipeWireConnection::Private and share the declarations in
+// pipewireconnection_p.h; this file does not introduce any new public
+// surface.
 
 #include "pipewireconnection_p.h"
 
