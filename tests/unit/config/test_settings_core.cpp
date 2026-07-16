@@ -513,6 +513,22 @@ private Q_SLOTS:
             backend->sync();
         }
 
+        // Precondition: every stale key really is on disk, in the group it was
+        // written to. Without this the "it is gone after save()" assertions
+        // below cannot tell a working purge from a key that was never there —
+        // which is exactly how the Tiling.Algorithm case passed for so long
+        // while reading back from the wrong group.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            QVERIFY(backend->group(ConfigDefaults::snappingBehaviorGroup())
+                        ->hasKey(QStringLiteral("ObsoleteActivationKey")));
+            QVERIFY(backend->group(ConfigDefaults::snappingEffectsGroup())->hasKey(QStringLiteral("OldDisplayToggle")));
+            QVERIFY(backend->group(ConfigDefaults::snappingZonesColorsGroup())
+                        ->hasKey(QStringLiteral("DeprecatedThemeIndex")));
+            QVERIFY(backend->group(ConfigDefaults::tilingAlgorithmGroup())
+                        ->hasKey(QStringLiteral("RemovedAutotileSetting")));
+        }
+
         // Load picks up the stale keys from disk (but ignores them in members)
         Settings settings;
 
@@ -542,9 +558,16 @@ private Q_SLOTS:
                      "Stale key in Snapping.Zones.Colors group must be purged by save()");
         }
         {
-            auto g = backend->group(ConfigDefaults::tilingGroup());
+            // Read back from the group the key was WRITTEN to. Tiling.Algorithm
+            // and Tiling are distinct nested groups, so asking Tiling whether it
+            // holds a key only ever planted in Tiling.Algorithm is trivially
+            // true and left the purge unverified.
+            auto g = backend->group(ConfigDefaults::tilingAlgorithmGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("RemovedAutotileSetting")),
-                     "Stale key in Tiling group must be purged by save()");
+                     "Stale key in Tiling.Algorithm group must be purged by save()");
+        }
+        {
+            auto g = backend->group(ConfigDefaults::tilingGroup());
             QVERIFY2(g->hasKey(ConfigDefaults::enabledKey()), "Valid key Enabled must survive save()");
         }
     }

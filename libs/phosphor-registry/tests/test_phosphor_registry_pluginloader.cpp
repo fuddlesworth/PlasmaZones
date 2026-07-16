@@ -317,6 +317,14 @@ void TestPluginLoader::rejectsSymlinkedSubdirEscapingRoot()
     QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
     loader.scanAndLoad();
 
+    // The containment assertions, same as rejectsSymlinkedSoEscapingRoot's.
+    // Without them this test asserted only that the skip was quiet, which a
+    // loader that happily followed the symlink also satisfies — it would have
+    // passed on the very escape it is named for.
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
+
     // The guarded skip is silent (the symlinked dir is never a
     // discovery candidate); lock that contract — no warning should fire.
     QStringList captured;
