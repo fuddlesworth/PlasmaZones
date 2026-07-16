@@ -249,9 +249,10 @@ private:
      * Numbers are user-owned and unique but need not be dense. This hands out
      * the next highest number, max(existing) + 1, clamped to 99. If a zone
      * already holds 99 it falls back to the lowest unused number so the unique
-     * invariant always holds; if all 99 are taken it returns the overflow value
-     * (validateZoneNumber then rejects it). Reads live m_zones on every call, so
-     * a batch of inserts each gets a distinct number.
+     * invariant always holds; if all 99 are taken it returns the overflow value,
+     * which the fresh-number callers stamp as-is (validateZoneNumber runs only on
+     * the Properties spinbox path, never here). Reads live m_zones on every call,
+     * so a batch of inserts each gets a distinct number.
      */
     int nextAvailableZoneNumber() const;
 
