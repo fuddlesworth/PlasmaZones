@@ -13,11 +13,12 @@
  * zonesTopZ from the zone count, which DividerManager uses to decide when it can
  * win a hit test. A hole or a tie in the zOrder run breaks both.
  *
- * The zoneNumber invariant: a zone's number is its index plus one, so after any
- * mutation of the list the numbers must be exactly 1..count with no duplicate.
- * zoneNumber is serialized and drives the user-facing "Zone N" labels, and
- * EditorController::validateZoneNumber rejects a duplicate outright when the user
- * types one.
+ * The zoneNumber invariant: a zone's number is user-owned and UNIQUE in 1..99,
+ * but not positional. Gaps are allowed (1, 4, 7 is valid), so no mutation may
+ * force the numbers dense. A zone that needs a fresh number takes the next
+ * highest, max(existing) + 1. zoneNumber is serialized and drives the
+ * user-facing "Zone N" labels, and EditorController::validateZoneNumber rejects
+ * a duplicate outright when the user types one.
  *
  * The stacking contract for undo: deleting a zone and undoing must put it back
  * at its original height, not on top. Paste and duplicate deliberately land on
@@ -26,6 +27,7 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <QSet>
 #include <QUndoStack>
 
 #include <algorithm>
@@ -68,24 +70,29 @@ private:
     }
 
     /**
-     * @brief The number invariant: zone at index i carries zoneNumber i+1, for every i.
+     * @brief The number invariant: every zone has a UNIQUE number in 1..99.
      *
-     * Stronger than "the numbers are unique": renumberZones() ties the number to
-     * the list position, so a set that happens to be 1..n in another order is
-     * still a state the manager never produces.
+     * Numbers are user-owned, so they are NOT tied to list position and gaps are
+     * allowed: 1, 4, 7 is a valid state. This checks only that the numbers are
+     * distinct and each in range, never that they are contiguous.
      */
-    static void verifyNumbersDense(const ZoneManager& manager, const char* context)
+    static void verifyNumbersUnique(const ZoneManager& manager, const char* context)
     {
         const QVariantList zones = manager.zones();
+        QSet<int> seen;
         for (int i = 0; i < zones.size(); ++i) {
             const QVariantMap zone = zones[i].toMap();
             const int number = zone.value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt();
-            QVERIFY2(number == i + 1,
-                     qPrintable(QStringLiteral("%1: zone at index %2 has zoneNumber %3, expected %4")
+            QVERIFY2(number >= 1 && number <= 99,
+                     qPrintable(QStringLiteral("%1: zone at index %2 has zoneNumber %3, out of the 1..99 range")
                                     .arg(QLatin1String(context))
                                     .arg(i)
-                                    .arg(number)
-                                    .arg(i + 1)));
+                                    .arg(number)));
+            QVERIFY2(!seen.contains(number),
+                     qPrintable(QStringLiteral("%1: zoneNumber %2 is used by more than one zone")
+                                    .arg(QLatin1String(context))
+                                    .arg(number)));
+            seen.insert(number);
         }
     }
 
@@ -163,7 +170,7 @@ private Q_SLOTS:
 
         QCOMPARE(manager.zoneCount(), 2);
         verifyDense(manager, "after deleteZoneWithFill");
-        verifyNumbersDense(manager, "after deleteZoneWithFill");
+        verifyNumbersUnique(manager, "after deleteZoneWithFill");
         QCOMPARE(stackingOrder(manager), QStringList({QStringLiteral("A"), QStringLiteral("C")}));
     }
 
@@ -180,7 +187,7 @@ private Q_SLOTS:
         // assertion here.
         QCOMPARE(manager.zoneCount(), 0);
         verifyDense(manager, "after deleting the only zone");
-        verifyNumbersDense(manager, "after deleting the only zone");
+        verifyNumbersUnique(manager, "after deleting the only zone");
     }
 
     /// clearAllZones mutates the list too, and an empty list is trivially dense.
@@ -193,13 +200,13 @@ private Q_SLOTS:
 
         QCOMPARE(manager.zoneCount(), 0);
         verifyDense(manager, "after clearAllZones");
-        verifyNumbersDense(manager, "after clearAllZones");
+        verifyNumbersUnique(manager, "after clearAllZones");
 
         // Adding after a clear restarts the run at 0/1 rather than continuing it.
         const QString id = manager.addZone(0.0, 0.0, 0.2, 0.2);
         QCOMPARE(manager.zoneCount(), 1);
         verifyDense(manager, "after adding to a cleared list");
-        verifyNumbersDense(manager, "after adding to a cleared list");
+        verifyNumbersUnique(manager, "after adding to a cleared list");
         QCOMPARE(manager.getZoneById(id).value(::PhosphorZones::ZoneJsonKeys::ZOrder).toInt(), 0);
     }
 
@@ -451,71 +458,129 @@ private Q_SLOTS:
     }
 
     /**
-     * @brief Undoing a delete renumbers, rather than replaying the stale pre-delete number.
+     * @brief Undoing a delete restores the zone's ORIGINAL number, not a repositioned one.
      *
-     * Zones A(1), B(2), C(3): deleting A renumbers the survivors to B(1), C(2),
-     * so the number 1 the snapshot still carries for A now belongs to B. Restoring
-     * that number verbatim would put two zones on 1 and leave nobody on 3, a state
-     * EditorController::validateZoneNumber rejects when the user types it, and one
-     * that is serialized straight to disk and shown in the "Zone N" labels.
+     * Numbers are user-owned. Zones numbered 1, 4, 7: deleting the "4" leaves the
+     * survivors on 1 and 7 (a gap on 4 is valid, nothing collapses to 1, 2). The
+     * delete freed the number 4, so undo replays the pre-delete snapshot and the
+     * restored zone carries 4 again, at its original height in the stack.
      */
-    void testUndoDelete_renumbersInsteadOfRestoringTheStaleNumber()
+    void testUndoDelete_restoresTheOriginalNumber()
     {
         ZoneManager manager;
-        const QStringList ids = addThreeZones(manager);
-        verifyNumbersDense(manager, "after adding three zones");
+        const QStringList ids = addThreeZones(manager); // A(1), B(2), C(3)
+        // Renumber to a gapped 1, 4, 7 to prove numbers are user-owned.
+        manager.updateZoneNumber(ids[1], 4);
+        manager.updateZoneNumber(ids[2], 7);
+        verifyNumbersUnique(manager, "after numbering 1, 4, 7");
 
-        const QVariantMap zoneData = manager.getZoneById(ids[0]);
-        QCOMPARE(zoneData.value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 1);
+        const QVariantMap zoneData = manager.getZoneById(ids[1]); // B, number 4, zOrder 1
+        QCOMPARE(zoneData.value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 4);
+        QCOMPARE(zoneData.value(::PhosphorZones::ZoneJsonKeys::ZOrder).toInt(), 1);
 
         QUndoStack stack;
-        stack.push(new DeleteZoneCommand(QPointer<ZoneManager>(&manager), ids[0], zoneData, QString()));
-        verifyNumbersDense(manager, "after the delete command");
+        stack.push(new DeleteZoneCommand(QPointer<ZoneManager>(&manager), ids[1], zoneData, QString()));
+
+        // The survivors keep 1 and 7 — deleting the "4" did NOT renumber them.
+        QCOMPARE(manager.zoneCount(), 2);
+        QCOMPARE(manager.getZoneById(ids[0]).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 1);
+        QCOMPARE(manager.getZoneById(ids[2]).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 7);
+        verifyNumbersUnique(manager, "after deleting the 4");
 
         stack.undo();
 
         QCOMPARE(manager.zoneCount(), 3);
-        verifyNumbersDense(manager, "after undoing the delete");
+        verifyNumbersUnique(manager, "after undoing the delete");
         verifyDense(manager, "after undoing the delete");
+        // The restored zone is 4 again, back in the middle of the stack.
+        QCOMPARE(manager.getZoneById(ids[1]).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 4);
+        QCOMPARE(manager.getZoneById(ids[1]).value(::PhosphorZones::ZoneJsonKeys::ZOrder).toInt(), 1);
+        QCOMPARE(stackingOrder(manager), QStringList({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")}));
 
         // Redo re-deletes and a second undo must land on the same numbers, so the
-        // renumber is not a one-shot that a replay can slip past.
+        // restore is not a one-shot that a replay can slip past.
         stack.redo();
-        verifyNumbersDense(manager, "after redoing the delete");
+        QCOMPARE(manager.getZoneById(ids[2]).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 7);
         stack.undo();
         QCOMPARE(manager.zoneCount(), 3);
-        verifyNumbersDense(manager, "after the second undo");
+        QCOMPARE(manager.getZoneById(ids[1]).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 4);
+        verifyNumbersUnique(manager, "after the second undo");
         verifyDense(manager, "after the second undo");
     }
 
-    /// Undoing a MIDDLE delete: the restored zone's number must match its restored index.
-    void testUndoDelete_renumbersAMiddleZoneToItsRestoredIndex()
+    /// A colliding paste takes the next-highest number; a non-colliding one keeps its own.
+    void testPaste_collidingNumberGetsNextHighest()
     {
         ZoneManager manager;
-        const QStringList ids = addThreeZones(manager);
+        const QStringList ids = addThreeZones(manager); // numbers 1, 2, 3
 
-        const QVariantMap zoneData = manager.getZoneById(ids[1]);
-        QUndoStack stack;
-        stack.push(new DeleteZoneCommand(QPointer<ZoneManager>(&manager), ids[1], zoneData, QString()));
-        stack.undo();
+        // Paste a copy of the bottom zone, whose number 1 collides with a live
+        // zone. It must be reassigned to max(1, 2, 3) + 1 = 4.
+        QVariantMap colliding = manager.getZoneById(ids[0]); // zoneNumber 1
+        colliding[::PhosphorZones::ZoneJsonKeys::Y] = 0.5;
+        const QString collidingId = manager.addZoneFromMap(colliding);
+        QVERIFY(!collidingId.isEmpty());
+        QCOMPARE(manager.getZoneById(collidingId).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 4);
+        verifyNumbersUnique(manager, "after a colliding paste");
 
-        verifyNumbersDense(manager, "after undoing a middle delete");
-        QCOMPARE(manager.getZoneById(ids[1]).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 2);
+        // Now paste with a number that is free (60): it must be kept verbatim, not
+        // bumped to the top, because a user-owned number that does not collide is
+        // never touched.
+        QVariantMap free = manager.getZoneById(ids[0]);
+        free[::PhosphorZones::ZoneJsonKeys::Y] = 0.7;
+        free[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = 60;
+        const QString freeId = manager.addZoneFromMap(free);
+        QVERIFY(!freeId.isEmpty());
+        QCOMPARE(manager.getZoneById(freeId).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 60);
+        verifyNumbersUnique(manager, "after a non-colliding paste");
     }
 
-    /// Paste lands on top, so it takes the top number rather than the source's.
-    void testPaste_takesTheTopNumberNotTheSourceNumber()
+    /// Deleting a zone leaves a gap in the numbering rather than renumbering survivors.
+    void testDelete_leavesAGapNotARenumber()
+    {
+        ZoneManager manager;
+        const QStringList ids = addThreeZones(manager); // numbers 1, 2, 3
+
+        manager.deleteZone(ids[1]); // remove the "2"
+
+        QCOMPARE(manager.zoneCount(), 2);
+        // The survivors keep 1 and 3 — they are NOT collapsed to 1, 2.
+        QCOMPARE(manager.getZoneById(ids[0]).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 1);
+        QCOMPARE(manager.getZoneById(ids[2]).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 3);
+        verifyNumbersUnique(manager, "after deleting the middle zone");
+        // zOrder still recompacts to a dense run.
+        verifyDense(manager, "after deleting the middle zone");
+    }
+
+    /// A new zone drawn into a gapped layout takes the next highest, not a gap or a position.
+    void testNewZone_withAGapGetsNextHighest()
     {
         ZoneManager manager;
         const QStringList ids = addThreeZones(manager);
+        manager.updateZoneNumber(ids[1], 4);
+        manager.updateZoneNumber(ids[2], 7); // numbers are now 1, 4, 7
 
-        QVariantMap source = manager.getZoneById(ids[0]); // zoneNumber 1
-        source[::PhosphorZones::ZoneJsonKeys::Y] = 0.5;
-        const QString pastedId = manager.addZoneFromMap(source);
-        QVERIFY(!pastedId.isEmpty());
+        const QString newId = manager.addZone(0.0, 0.5, 0.2, 0.2);
+        QVERIFY(!newId.isEmpty());
 
-        verifyNumbersDense(manager, "after paste");
-        QCOMPARE(manager.getZoneById(pastedId).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 4);
+        // 8 = max(1, 4, 7) + 1. NOT 5 (the count), NOT 2 (the lowest gap).
+        QCOMPARE(manager.getZoneById(newId).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 8);
+        verifyNumbersUnique(manager, "after drawing a new zone into a gapped layout");
+    }
+
+    /// Duplicate hands the copy the next-highest number, reading live state.
+    void testDuplicate_getsNextHighest()
+    {
+        ZoneManager manager;
+        const QStringList ids = addThreeZones(manager);
+        manager.updateZoneNumber(ids[1], 4);
+        manager.updateZoneNumber(ids[2], 7); // numbers are now 1, 4, 7
+
+        const QString copyId = manager.duplicateZone(ids[0]);
+        QVERIFY(!copyId.isEmpty());
+
+        QCOMPARE(manager.getZoneById(copyId).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(), 8);
+        verifyNumbersUnique(manager, "after duplicating into a gapped layout");
     }
 
     /// Same contract for a zone deleted from the middle of the stack.

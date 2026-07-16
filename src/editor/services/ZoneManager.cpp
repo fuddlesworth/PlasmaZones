@@ -10,6 +10,7 @@
 #include <QtMath>
 #include <QCoreApplication>
 #include <QLatin1String>
+#include <QSet>
 #include <algorithm>
 #include "../../core/logging.h"
 
@@ -289,7 +290,7 @@ QString ZoneManager::addZone(qreal x, qreal y, qreal width, qreal height)
         return QString();
     }
 
-    int zoneNumber = m_zones.size() + 1;
+    int zoneNumber = nextAvailableZoneNumber();
     QString zoneName = QStringLiteral("Zone %1").arg(zoneNumber);
     QVariantMap zone = createZone(zoneName, zoneNumber, geom.x, geom.y, geom.width, geom.height);
     QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
@@ -478,10 +479,10 @@ void ZoneManager::deleteZone(const QString& zoneId)
     m_zones.removeAt(index);
     // zOrder is the zone's index in the list, so a removal shifts every zone
     // after it. Recompact so zOrder stays a dense 0..count-1 permutation.
-    // This runs before renumberZones(), which emits zoneNumberChanged per zone
-    // synchronously: no observer may see a half-updated list.
+    // Numbers are user-owned and are NOT recompacted: deleting a zone leaves a
+    // gap in the numbering, which is a valid state (1, 4, 7 is allowed). The
+    // survivors keep the numbers the user gave them.
     updateAllZOrderValues();
-    renumberZones();
 
     emitZoneSignal(SignalType::ZoneRemoved, zoneId);
 }
@@ -523,28 +524,40 @@ int ZoneManager::findZoneIndex(const QString& zoneId) const
     return -1;
 }
 
-void ZoneManager::renumberZones()
+int ZoneManager::nextAvailableZoneNumber() const
 {
-    // A renumber can touch every zone in the list, and each caller emits its own
-    // aggregate once it returns. Run the loop inside a batch so the per-zone
-    // zoneNumberChanged signals collect behind a single aggregate instead of one
-    // per zone. Called from inside a caller's batch (a paste wraps its
-    // addZoneFromMap calls in one) the depth never reaches zero here, so the
-    // signals defer to that batch rather than firing mid-update.
-    beginBatchUpdate();
-    for (int i = 0; i < m_zones.size(); ++i) {
-        QVariantMap zone = m_zones[i].toMap();
-        QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
-        int oldNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
-        int newNumber = i + 1;
-
-        if (oldNumber != newNumber) {
-            zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = newNumber;
-            m_zones[i] = zone;
-            emitZoneSignal(SignalType::NumberChanged, zoneId);
+    // Numbers are user-owned and unique but need not be dense: a zone that needs
+    // a fresh number takes the next highest, max(existing) + 1. Gaps left by a
+    // delete or a deliberate 1, 4, 7 numbering are preserved, so this does not
+    // fill them.
+    int maxNumber = 0;
+    QSet<int> used;
+    used.reserve(m_zones.size());
+    for (const QVariant& zoneVar : m_zones) {
+        int number = zoneVar.toMap().value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt();
+        if (number > 0) {
+            used.insert(number);
+            maxNumber = qMax(maxNumber, number);
         }
     }
-    endBatchUpdate();
+
+    const int candidate = maxNumber + 1;
+    if (candidate <= 99) {
+        return candidate;
+    }
+
+    // A zone already holds 99, so next-highest would overflow the 1..99 range.
+    // Fall back to the lowest unused number so the unique invariant still holds.
+    for (int number = 1; number <= 99; ++number) {
+        if (!used.contains(number)) {
+            return number;
+        }
+    }
+
+    // All 99 numbers are in use: there is no unique number left to hand out.
+    // Return the natural overflow and let validateZoneNumber reject it, matching
+    // the pre-existing ceiling behaviour.
+    return candidate;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -169,6 +169,25 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
             Q_EMIT zonesModified();
         }
     } else {
+        // The number is user-owned: keep the incoming value verbatim unless it
+        // collides with a live zone's number, in which case hand out the next
+        // highest free number so the unique invariant holds. Undo of a delete
+        // replays the pre-delete number, which the delete freed and nothing has
+        // renumbered into, so it comes back exactly as the user had it. A paste
+        // or a duplicate redo can carry a number that already exists, and only
+        // that case is reassigned.
+        const int desiredNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
+        bool numberCollides = false;
+        for (int i = 0; i < m_zones.size(); ++i) {
+            if (m_zones[i].toMap().value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt() == desiredNumber) {
+                numberCollides = true;
+                break;
+            }
+        }
+        if (numberCollides) {
+            zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = nextAvailableZoneNumber();
+        }
+
         // The list index IS the z-order. A caller that knows where the zone used
         // to sit (undo of a delete) passes that index so it comes back at its
         // original height; everyone else lands on top, the end of the list.
@@ -177,14 +196,6 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
         // An insert below the top shifts every zone after it, so recompact rather
         // than stamping this one zone. Keeps zOrder a dense 0..count-1 permutation.
         updateAllZOrderValues();
-        // zoneNumber is index+1 across the whole list, the same invariant
-        // deleteZone() holds with its own renumberZones(). The incoming map
-        // carries a number that was assigned against a different list (an undo of
-        // a delete replays the pre-delete number, which the delete's renumber has
-        // since handed to another zone), so the list wins here too. Without this
-        // the restored zone collides with a live number and no zone carries the
-        // top one.
-        renumberZones();
 
         // Handle signal emission (deferred during batch updates)
         if (m_batchUpdateDepth > 0) {

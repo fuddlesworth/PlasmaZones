@@ -244,9 +244,16 @@ private:
     QVariantMap createZone(const QString& name, int number, qreal x, qreal y, qreal width, qreal height);
 
     /**
-     * @brief Renumbers all zones sequentially starting from 1
+     * @brief Returns a fresh, unique zone number for a zone that needs one.
+     *
+     * Numbers are user-owned and unique but need not be dense. This hands out
+     * the next highest number, max(existing) + 1, clamped to 99. If a zone
+     * already holds 99 it falls back to the lowest unused number so the unique
+     * invariant always holds; if all 99 are taken it returns the overflow value
+     * (validateZoneNumber then rejects it). Reads live m_zones on every call, so
+     * a batch of inserts each gets a distinct number.
      */
-    void renumberZones();
+    int nextAvailableZoneNumber() const;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Private Helper Methods
