@@ -592,6 +592,17 @@ private Q_SLOTS:
             backend->sync();
         }
 
+        // Precondition, mirroring testSave_purgesStaleKeys: both keys really are
+        // on disk in that group before save() runs. Without it the absence
+        // assertion below cannot tell a working purge from a key that was never
+        // written.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+            QVERIFY(g->hasKey(ConfigDefaults::positionKey()));
+            QVERIFY(g->hasKey(QStringLiteral("ObsoletePerScreenKey")));
+        }
+
         Settings settings;
         settings.save();
 
@@ -600,6 +611,15 @@ private Q_SLOTS:
             auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
             QVERIFY2(!g->hasKey(QStringLiteral("ObsoletePerScreenKey")),
                      "Stale key in per-screen group must be purged by save()");
+            // Positive control for the mechanism: save() deletes every
+            // prefix-matching group and rewrites the ones it loaded, so the
+            // stale key vanishing only means "purged" if the group's valid key
+            // came back with it. Absence alone reads the same whether the key
+            // was dropped or the whole group was deleted, and the delete arm is
+            // the one that fires for a group Settings never loaded.
+            QVERIFY2(g->hasKey(ConfigDefaults::positionKey()),
+                     "Valid per-screen key must survive save() — the group was rewritten, not just deleted");
+            QCOMPARE(g->readInt(ConfigDefaults::positionKey(), -1), 2);
         }
     }
 

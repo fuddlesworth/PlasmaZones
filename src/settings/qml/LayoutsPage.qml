@@ -333,6 +333,7 @@ SettingsFlickable {
 
             ToolButton {
                 icon.name: "view-filter"
+                // Active state is binding-driven, not a user toggle — checkable omitted.
                 checked: filterBar.hasActiveFilters
                 onClicked: filterBar.popupFilterMenu()
                 Accessible.name: filterBar.hasActiveFilters ? i18nc("@action:button", "Filter (active)") : i18nc("@action:button", "Filter")

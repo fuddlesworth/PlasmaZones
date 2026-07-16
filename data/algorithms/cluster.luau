@@ -91,7 +91,7 @@ return pluau.algorithm {
             end
             local cm = clusterMap[appId]
             cm.indices[#cm.indices + 1] = i
-            if i == focusedIndex and i < winLen then
+            if i == focusedIndex then
                 cm.hasFocus = true
             end
         end

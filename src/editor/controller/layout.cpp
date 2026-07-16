@@ -627,6 +627,7 @@ void EditorController::loadLayout(const QString& layoutId)
         : -1;
     m_useFullScreenGeometry =
         layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry)].toBool(false);
+    int oldAspectRatioClass = m_aspectRatioClass;
     // fromJsonValue accepts the canonical string from Layout::toJson and the int
     // from an editor save round-trip, and maps a missing key to Any.
     m_aspectRatioClass = static_cast<int>(PhosphorLayout::ScreenClassification::fromJsonValue(
@@ -688,7 +689,9 @@ void EditorController::loadLayout(const QString& layoutId)
     if (m_useFullScreenGeometry != oldUseFullScreen) {
         Q_EMIT useFullScreenGeometryChanged();
     }
-    Q_EMIT aspectRatioClassChanged();
+    if (m_aspectRatioClass != oldAspectRatioClass) {
+        Q_EMIT aspectRatioClassChanged();
+    }
     if (m_overlayDisplayMode != oldOverlayDisplayMode) {
         Q_EMIT overlayDisplayModeChanged();
     }

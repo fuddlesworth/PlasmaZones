@@ -464,6 +464,9 @@ void ZoneManager::deleteZone(const QString& zoneId)
 
     m_zones.removeAt(index);
     renumberZones();
+    // zOrder is the zone's index in the list, so a removal shifts every zone
+    // after it. Recompact so zOrder stays a dense 0..count-1 permutation.
+    updateAllZOrderValues();
 
     emitZoneSignal(SignalType::ZoneRemoved, zoneId);
 }
@@ -482,6 +485,10 @@ void ZoneManager::clearAllZones()
 void ZoneManager::setZones(const QVariantList& zones)
 {
     m_zones = zones;
+    // The layout format does not persist zOrder, so a list parsed from a saved
+    // layout carries none at all. Stamp it from the list order, which is the
+    // z-order the editor works in.
+    updateAllZOrderValues();
     Q_EMIT zonesChanged();
 }
 

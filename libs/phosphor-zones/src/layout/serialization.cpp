@@ -9,6 +9,8 @@
 #include <PhosphorZones/LayoutUtils.h>
 #include "../zoneslogging.h"
 #include <PhosphorZones/Zone.h>
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QStandardPaths>
 
@@ -47,7 +49,7 @@ QJsonObject Layout::toJson() const
     if (m_overlayDisplayMode >= 0) {
         json[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode] = m_overlayDisplayMode;
     }
-    if (m_defaultOrder != 999) {
+    if (m_defaultOrder != DefaultOrderUnset) {
         json[::PhosphorZones::ZoneJsonKeys::DefaultOrder] = m_defaultOrder;
     }
     // Note: isBuiltIn is no longer serialized - it's determined by source path at load time
@@ -132,12 +134,16 @@ void Layout::initFromJson(const QJsonObject& json)
     // Behaviour is preserved (synthesise an Id, accept an empty name) so we
     // don't break round-trips of older layouts that were tolerated previously,
     // but every defaulted boundary now leaves a trail.
-    if (!json.contains(::PhosphorZones::ZoneJsonKeys::Id)
-        || json[::PhosphorZones::ZoneJsonKeys::Id].toString().isEmpty()) {
-        qCWarning(lcLayoutLib) << "Layout::initFromJson: missing or empty Id, generating fresh UUID";
-    }
-    m_id = QUuid::fromString(json[::PhosphorZones::ZoneJsonKeys::Id].toString());
+    //
+    // The warning is tied to the regeneration itself, not to the absent/blank
+    // case alone: a present-but-unparseable Id ("not-a-uuid") and a nil Id
+    // ("{00000000-...}") both land on a fresh UUID too, and those are exactly
+    // the corrupt-file cases this breadcrumb exists for.
+    const QString idString = json[::PhosphorZones::ZoneJsonKeys::Id].toString();
+    m_id = QUuid::fromString(idString);
     if (m_id.isNull()) {
+        qCWarning(lcLayoutLib) << "Layout::initFromJson: missing, empty or unusable Id" << idString
+                               << "- generating fresh UUID";
         m_id = QUuid::createUuid();
     }
 
@@ -178,21 +184,36 @@ void Layout::initFromJson(const QJsonObject& json)
     m_overlayDisplayMode = json.contains(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)
         ? json[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode].toInt(-1)
         : -1;
-    m_defaultOrder = json[::PhosphorZones::ZoneJsonKeys::DefaultOrder].toInt(999);
+    m_defaultOrder = json[::PhosphorZones::ZoneJsonKeys::DefaultOrder].toInt(DefaultOrderUnset);
     // Note: sourcePath is set by LayoutManager after loading, not from JSON
     // But systemSourcePath IS persisted in user JSON for system override restoration
     m_systemSourcePath = json[::PhosphorZones::ZoneJsonKeys::SystemSourcePath].toString();
 
-    // Sanity-check the persisted systemSourcePath: it must resolve under a
-    // known system data prefix (the OS-level GenericDataLocation list,
-    // minus the writable user dir). If the value doesn't match any prefix,
-    // a stale or hand-edited config can leak an arbitrary path into the
-    // "restore system original" code path — drop it with a warning.
+    // Sanity-check the persisted systemSourcePath: it must resolve to a file
+    // CONTAINED IN a known system data directory (the OS-level
+    // GenericDataLocation list, minus the writable user dir). A stale or
+    // hand-edited config would otherwise leak an arbitrary path into the
+    // "restore system original" code path, which opens and parses it — drop
+    // it with a warning instead.
     //
-    // Skip the check entirely when no prefixes are configured (headless
-    // test environments), so fixture tests stay portable. Also skip when
-    // the path is empty (no override tracked).
+    // Containment, not a string prefix. Both sides are resolved before the
+    // compare and the match is anchored on a directory separator, so neither
+    // "/usr/share/../../home/user/evil.json" (traversal) nor
+    // "/usr/share-evil/x.json" (a sibling directory that merely shares a name
+    // prefix) passes. The candidate is resolved with canonicalFilePath() when
+    // the file exists, so a symlink planted inside a system directory cannot
+    // point out of it either; when it does not exist, the lexically cleaned
+    // absolute path is used instead, which still resolves ".." and keeps a
+    // temporarily-missing system file (package upgrade in flight) from losing
+    // its recorded origin.
+    //
+    // Skip the check entirely when no prefixes exist (headless test
+    // environments), so fixture tests stay portable. Also skip when the path
+    // is empty (no override tracked).
     if (!m_systemSourcePath.isEmpty()) {
+        const QFileInfo sourceInfo(m_systemSourcePath);
+        const QString canonicalSource =
+            sourceInfo.exists() ? sourceInfo.canonicalFilePath() : QDir::cleanPath(sourceInfo.absoluteFilePath());
         const QStringList systemPrefixes = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
         const QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
         bool valid = false;
@@ -201,8 +222,14 @@ void Layout::initFromJson(const QJsonObject& json)
             if (prefix.isEmpty() || prefix == userDataPath) {
                 continue; // user dir isn't a "system" prefix
             }
+            // A prefix that doesn't resolve is not a directory anything can be
+            // contained in, so it can neither admit nor reject a candidate.
+            const QString canonicalPrefix = QFileInfo(prefix).canonicalFilePath();
+            if (canonicalPrefix.isEmpty()) {
+                continue;
+            }
             anyPrefix = true;
-            if (m_systemSourcePath.startsWith(prefix)) {
+            if (canonicalSource.startsWith(canonicalPrefix + QLatin1Char('/'))) {
                 valid = true;
                 break;
             }

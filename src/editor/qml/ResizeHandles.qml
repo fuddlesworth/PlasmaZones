@@ -112,9 +112,6 @@ Item {
 
             required property var modelData
             required property int index
-            // Root is the EditorZone. Guards the selection/hover reads below,
-            // which decide whether the handle fades in.
-            readonly property bool hasValidRoot: resizeHandles.root !== null && resizeHandles.root !== undefined
             // Handle type detection
             readonly property bool isCornerHandle: modelData.id.length === 2
             // nw, ne, se, sw
@@ -139,7 +136,8 @@ Item {
             border.width: constants.handleBorderWidth
             // Handles are always present for mouse detection, only visible when hovered/selected
             visible: parent.width > 0 && parent.height > 0
-            opacity: hasValidRoot && (resizeHandles.root.isSelected || resizeHandles.root.mouseOverZone) ? 1 : 0
+            // root is the EditorZone that owns these handles, always present.
+            opacity: resizeHandles.root.isSelected || resizeHandles.root.mouseOverZone ? 1 : 0
             z: 200
 
             // Drop shadow for depth
@@ -496,8 +494,6 @@ Item {
                                 resizeHandles.snapIndicator.setSnapLines(finalRelX, finalRelY, finalRight, finalBottom, origX, origY, origRight, origBottom, 0.005);
                             }
                             // Final bounds check after snapping
-                            var beforeBoundsY = newY;
-                            var beforeBoundsH = newH;
                             if (newX < 0) {
                                 newW = newW + newX; // Reduce width by overflow
                                 newX = 0;

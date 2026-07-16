@@ -23,6 +23,7 @@ Rectangle {
     Accessible.name: i18n("Color picker")
     Accessible.description: i18n("Current color: %1", root.color.toString())
     Accessible.role: Accessible.Button
+    Accessible.focusable: true
     // Keyboard and focus support
     activeFocusOnTab: true
     Keys.onReturnPressed: root.clicked()
@@ -33,7 +34,12 @@ Rectangle {
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: root.clicked()
+        onClicked: {
+            // Move active focus here on click so a previously keyboard-focused
+            // sibling doesn't keep the focus ring and the key handlers.
+            root.forceActiveFocus();
+            root.clicked();
+        }
     }
 
     // Checkerboard pattern for transparency preview

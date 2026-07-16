@@ -51,9 +51,13 @@ public:
     void rotateWindowOrder(bool clockwise);
     /// `explicitWindowId` (when non-empty) overrides the state's internal
     /// focusedWindow() for the operation. The IPlacementEngine virtual-method
-    /// overrides on AutotileEngine pass `ctx.windowId` here so navigation
-    /// follows the daemon's authoritative focus tracking even when the
-    /// engine's per-state focusedWindow tracker is stale.
+    /// overrides on AutotileEngine pass the CANONICALIZED `ctx.windowId`
+    /// (canonicalizeForLookup) here so navigation follows the daemon's
+    /// authoritative focus tracking even when the engine's per-state
+    /// focusedWindow tracker is stale. The canonicalization is load-bearing:
+    /// the lookups below match this id against the ids the tiling states hold,
+    /// so a raw ctx.windowId in a non-canonical form would find no state and
+    /// silently fall through to the focused-screen path.
     void swapFocusedInDirection(const QString& direction, const QString& action,
                                 const QString& explicitWindowId = QString());
     void focusInDirection(const QString& direction, const QString& action, const QString& explicitWindowId = QString());

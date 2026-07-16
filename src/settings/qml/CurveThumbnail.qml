@@ -40,6 +40,7 @@ Rectangle {
     border.width: root.activeFocus ? 2 : 1
     Accessible.name: i18n("Curve preview")
     Accessible.role: Accessible.Button
+    Accessible.focusable: true
     // Keyboard and focus support, matching ColorButton.
     activeFocusOnTab: true
     Keys.onReturnPressed: root.clicked()
@@ -167,6 +168,11 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: root.clicked()
+        onClicked: {
+            // Move active focus here on click so a previously keyboard-focused
+            // sibling doesn't keep the focus ring and the key handlers.
+            root.forceActiveFocus();
+            root.clicked();
+        }
     }
 }

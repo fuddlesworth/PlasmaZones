@@ -14,6 +14,7 @@
 #include "../../core/logging.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include "../../core/utils.h"
+#include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -386,7 +387,7 @@ int EditorController::aspectRatioClass() const
 
 void EditorController::setAspectRatioClass(int cls)
 {
-    if (cls < 0 || cls > 4) {
+    if (cls < 0 || cls > static_cast<int>(PhosphorLayout::AspectRatioClass::Portrait)) {
         return;
     }
     if (m_aspectRatioClass != cls) {

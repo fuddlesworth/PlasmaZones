@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The 40-unit name clamp every name-producing boundary re-applies.
+// The 40-unit name clamp every name-producing boundary re-applies, and
+// LayoutAdaptor::duplicateLayout — the boundary that has to re-apply it the
+// hard way, around a suffix the registry appended.
 //
 // The UI cap (QQuickTextInput::maximumLength) is advisory: a D-Bus caller can
 // skip it entirely, and even the UI counts UTF-16 code units, so it can hand
@@ -13,12 +15,18 @@
 
 #include "../../../src/core/constants.h"
 
+#include "dbus/layoutadaptor.h"
+#include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+
+#include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 #include <QtTest>
 
 using PlasmaZones::clampName;
 using PlasmaZones::MaxLayoutNameLength;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 
@@ -57,6 +65,28 @@ bool isValidUtf16(const QString& s)
     return true;
 }
 
+// A registry whose duplicateLayout does NOT append the suffix. duplicateLayout's
+// clamp has a second arm for exactly this: the suffix is a library-side detail,
+// so the adaptor only trims the base when the suffix is really on the name and
+// otherwise clamps the whole thing. The real registry always appends, so that
+// arm is unreachable without overriding the (virtual) hook.
+class NoSuffixLayoutRegistry : public PhosphorZones::LayoutRegistry
+{
+public:
+    using PhosphorZones::LayoutRegistry::LayoutRegistry;
+
+    PhosphorZones::Layout* duplicateLayout(PhosphorZones::Layout* source) override
+    {
+        if (!source) {
+            return nullptr;
+        }
+        auto* copy = new PhosphorZones::Layout(*source);
+        copy->setName(source->name());
+        addLayout(copy);
+        return copy;
+    }
+};
+
 } // namespace
 
 class TestLayoutAdaptorNameClamp : public QObject
@@ -69,6 +99,9 @@ private Q_SLOTS:
     void repairsLoneHighSurrogateAtExactlyTheLimit();
     void trimsWhitespaceTheCutExposes();
     void honoursReducedBudget();
+    void duplicateLeavesAnInLimitNameAlone();
+    void duplicateTrimsTheBaseAndKeepsTheSuffix();
+    void duplicateClampsTheWholeNameWhenTheSuffixIsAbsent();
 };
 
 void TestLayoutAdaptorNameClamp::clampsWithinLimitUntouched()
@@ -145,10 +178,13 @@ void TestLayoutAdaptorNameClamp::trimsWhitespaceTheCutExposes()
 
 void TestLayoutAdaptorNameClamp::honoursReducedBudget()
 {
-    // duplicateLayout re-appends the registry's suffix after clamping, so it
-    // clamps the BASE to a reduced budget and the two together still fit. The
-    // suffix is read from the registry rather than spelled here, so this tracks
-    // the caller instead of drifting from it.
+    // clampName's reduced-budget contract, which duplicateLayout leans on when
+    // it trims a duplicate's BASE and re-appends the suffix. This pins the
+    // CLAMP only: the arithmetic below re-derives what the adaptor does rather
+    // than calling it, so it would still pass if duplicateLayout stopped
+    // clamping altogether. duplicateTrimsTheBaseAndKeepsTheSuffix is what pins
+    // the caller. Reading the suffix from the registry keeps the budget under
+    // test the real one instead of a re-spelled literal.
     const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
     QVERIFY(!suffix.isEmpty());
     const int budget = MaxLayoutNameLength - suffix.size();
@@ -170,6 +206,86 @@ void TestLayoutAdaptorNameClamp::honoursReducedBudget()
     // would wrap and hand back the whole name unclamped.
     QCOMPARE(clampName(repeated(MaxLayoutNameLength - 1), 0), QString());
     QCOMPARE(clampName(repeated(MaxLayoutNameLength - 1), -1), QString());
+}
+
+namespace {
+
+// The adaptor's duplicateLayout, driven end to end: register @p sourceName in
+// @p registry, duplicate it through a LayoutAdaptor, and hand back the
+// duplicate's stored name. The adaptor is a QDBusAbstractAdaptor but the slot
+// is called directly, so no bus is involved.
+QString duplicatedNameFor(PhosphorZones::LayoutRegistry* registry, QObject* parent, const QString& sourceName)
+{
+    auto* source = new PhosphorZones::Layout(sourceName);
+    registry->addLayout(source);
+
+    auto* adaptor = new PlasmaZones::LayoutAdaptor(registry, parent);
+    const QString dupId = adaptor->duplicateLayout(source->id().toString());
+    if (dupId.isEmpty()) {
+        return QString();
+    }
+    auto* duplicate = registry->layoutById(QUuid::fromString(dupId));
+    return duplicate ? duplicate->name() : QString();
+}
+
+} // namespace
+
+void TestLayoutAdaptorNameClamp::duplicateLeavesAnInLimitNameAlone()
+{
+    // The clamp is gated on the DUPLICATE's length, not the source's, and a
+    // name that already fits must survive with its suffix untouched. A gate
+    // that ran unconditionally would re-trim every ordinary copy.
+    IsolatedConfigGuard guard;
+    QObject parent;
+    auto* registry = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &parent);
+    const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
+
+    const QString out = duplicatedNameFor(registry, &parent, QStringLiteral("Grid"));
+    QCOMPARE(out, QStringLiteral("Grid") + suffix);
+    QVERIFY(out.size() <= MaxLayoutNameLength);
+}
+
+void TestLayoutAdaptorNameClamp::duplicateTrimsTheBaseAndKeepsTheSuffix()
+{
+    // The registry appends its suffix with no length limit of its own, so a
+    // source at the limit yields a duplicate over it. The adaptor must trim the
+    // BASE: a tail clamp would cut the suffix off and leave the copy reading
+    // exactly like its source in the picker.
+    IsolatedConfigGuard guard;
+    QObject parent;
+    auto* registry = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &parent);
+    const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
+    const int budget = MaxLayoutNameLength - suffix.size();
+
+    const QString out = duplicatedNameFor(registry, &parent, repeated(MaxLayoutNameLength));
+    QVERIFY2(out.endsWith(suffix), "the clamp ate the suffix, so the copy is indistinguishable from its source");
+    QCOMPARE(out.size(), MaxLayoutNameLength);
+    QCOMPARE(out, repeated(budget) + suffix);
+
+    // The clamp's surrogate back-off reaches through the reduced budget: a
+    // base whose emoji straddles the trimmed cut loses the whole pair rather
+    // than half of it.
+    const QString emojiSource = repeated(budget - 1) + grinningFace() + repeated(MaxLayoutNameLength);
+    const QString emojiOut = duplicatedNameFor(registry, &parent, emojiSource);
+    QVERIFY2(isValidUtf16(emojiOut), "duplicate's trimmed base ends on a lone surrogate");
+    QCOMPARE(emojiOut, repeated(budget - 1) + suffix);
+}
+
+void TestLayoutAdaptorNameClamp::duplicateClampsTheWholeNameWhenTheSuffixIsAbsent()
+{
+    // The other arm: the suffix is the registry's business, so the adaptor only
+    // chops a base it can see the suffix on. With no suffix there is nothing to
+    // preserve and the whole over-long name is clamped — an unconditional
+    // chopped(suffix.size()) here would eat 7 real characters.
+    IsolatedConfigGuard guard;
+    QObject parent;
+    auto* store = new PhosphorRules::RuleStore(PlasmaZones::ConfigDefaults::rulesFilePath());
+    auto* registry = new NoSuffixLayoutRegistry(store, QStringLiteral("plasmazones/layouts"), &parent);
+    store->setParent(registry);
+
+    const QString out = duplicatedNameFor(registry, &parent, repeated(MaxLayoutNameLength + 5));
+    QCOMPARE(out, repeated(MaxLayoutNameLength));
+    QVERIFY(!out.endsWith(PhosphorZones::LayoutRegistry::duplicateNameSuffix()));
 }
 
 QTEST_GUILESS_MAIN(TestLayoutAdaptorNameClamp)

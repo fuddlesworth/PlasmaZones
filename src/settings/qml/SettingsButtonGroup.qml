@@ -104,7 +104,13 @@ Row {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
-                onClicked: optionDelegate.activate()
+                onClicked: {
+                    // Move active focus to the clicked option so a previously
+                    // keyboard-focused option doesn't keep the focus ring and
+                    // the key handlers.
+                    optionDelegate.forceActiveFocus();
+                    optionDelegate.activate();
+                }
             }
 
             Behavior on color {

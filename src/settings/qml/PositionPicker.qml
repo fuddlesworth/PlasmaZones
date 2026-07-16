@@ -201,7 +201,13 @@ Item {
                                 hoverEnabled: true
                                 enabled: root.enabled
                                 cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: root.positionSelected(cell.index)
+                                onClicked: {
+                                    // Move active focus to the clicked cell so a
+                                    // previously keyboard-focused cell doesn't keep
+                                    // the focus ring and the key handlers.
+                                    cell.forceActiveFocus();
+                                    root.positionSelected(cell.index);
+                                }
                                 ToolTip.visible: containsMouse && root.enabled
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: root.positionLabels[cell.index]

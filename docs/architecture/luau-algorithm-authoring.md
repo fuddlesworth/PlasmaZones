@@ -136,9 +136,8 @@ fields:
 | `masterCount` | number | Master windows (always set; user-adjustable only with `supportsMasterCount`) |
 | `splitRatio` | number | Master/stack split 0.1–0.9 (always set; user-adjustable only with `supportsSplitRatio`) |
 | `minSizes` | `{ {w, h} }` | Per-window minimum sizes, 1-indexed; capped at 256 entries |
-| `focusedIndex` | number | 0-based tiled index of the focused window (`-1` if none) |
-| `focusedListIndex` | number? | 0-based index of the focused window in `windows` (`-1` if none); rides along with `windows` |
-| `windows` | `{ {appId, focused, windowId} }?` | Per-window info, when available; first 256 tiled windows, plus the focused one if it is past the cap |
+| `focusedIndex` | number | 0-based tiled index of the focused window (`-1` if none); also a valid `windows` slot, since the engine caps the list before building the context |
+| `windows` | `{ {appId, focused, windowId} }?` | Per-window info, when available; first 256 tiled windows, in tiled order |
 | `screen` | `{id, portrait, aspectRatio}?` | Output info |
 | `tree` | `SplitNode?` | Persistent split tree (memory algorithms only) |
 | `custom` | `{[string]: any}?` | Your `customParams` values, keyed by name |
@@ -280,9 +279,8 @@ state (the `HookState` type in the stubs):
 | `windowCount` | number | Currently tiled windows |
 | `masterCount` | number | Master windows |
 | `splitRatio` | number | Current split ratio (clamped 0.1–0.9) |
-| `windows` | `{ {appId, focused, windowId} }` | Per-window info; first 256 tiled windows, plus the focused one if it is past the cap |
-| `focusedIndex` | number | 0-based tiled index of the focused window (`-1` if none). Same index space as `resize.index` and the `index` hook argument, so those compare directly against it |
-| `focusedListIndex` | number | 0-based index of the focused window in `windows` (`-1` if none). Index the list with this, never with `focusedIndex` |
+| `windows` | `{ {appId, focused, windowId} }` | Per-window info; first 256 tiled windows, in tiled order |
+| `focusedIndex` | number | 0-based tiled index of the focused window (`-1` if none). Same index space as `resize.index` and the `index` hook argument, so those compare directly against it. Past 256 tiled windows it can run past `#windows`, so bound-check before indexing the list with it |
 | `scriptState` | table? | Prior persistent state (§9); present only when `supportsScriptState` is set and the bag is non-empty |
 | `countAfterRemoval` | number? | `onWindowRemoved` only: count minus the departing window |
 

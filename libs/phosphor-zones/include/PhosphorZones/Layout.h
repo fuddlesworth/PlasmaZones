@@ -309,6 +309,14 @@ public:
     /// no fixed-geometry zones.
     QRectF fixedZoneReferenceGeometry() const;
 
+    /// Sentinel for "no explicit default order set" on @c defaultOrder.
+    ///
+    /// Ordering is ascending (lower sorts first), so an unset layout has to sort
+    /// after every ordered one. This is a large value rather than a negative one
+    /// for that reason. Unset layouts are also omitted from toJson, so the key is
+    /// absent rather than written out as a magic number.
+    static constexpr int DefaultOrderUnset = 999;
+
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const
     {
@@ -461,7 +469,7 @@ private:
     int m_overlayDisplayMode = -1; // -1 = use global setting
     QString m_sourcePath; // Path where layout was loaded from (empty for new layouts)
     QString m_systemSourcePath; // Original system path if this is a user override of a system layout
-    int m_defaultOrder = 999; // Optional: lower values appear first when choosing default (999 = not set)
+    int m_defaultOrder = DefaultOrderUnset; // Optional: lower values appear first when choosing default
     QVector<Zone*> m_zones;
 
     // Auto-assign: new windows fill first empty zone

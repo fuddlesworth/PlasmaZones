@@ -51,14 +51,6 @@ Rectangle {
     color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
     border.width: 1
     border.color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-    // CheckBox role rather than RadioButton — radio buttons imply that
-    // exactly one option is selected and that clicking the active item is
-    // a no-op, but this tile supports click-to-clear (deselection) so a
-    // checkable-button affordance is the correct semantics for screen
-    // readers ("checked" / "unchecked" toggles per tile).
-    Accessible.role: Accessible.CheckBox
-    Accessible.name: i18n("Filter rules to monitor %1", monitorLabel.text)
-    Accessible.checked: tile.selected
 
     ColumnLayout {
         id: content
@@ -175,6 +167,17 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         hoverEnabled: true
         activeFocusOnTab: true
+        // a11y role lives on the focusable item (this MouseArea), so assistive
+        // tech sees the role and the focus together. CheckBox role rather than
+        // RadioButton — radio buttons imply that exactly one option is selected
+        // and that clicking the active item is a no-op, but this tile supports
+        // click-to-clear (deselection) so a checkable-button affordance is the
+        // correct semantics for screen readers ("checked" / "unchecked" toggles
+        // per tile).
+        Accessible.role: Accessible.CheckBox
+        Accessible.name: i18n("Filter rules to monitor %1", monitorLabel.text)
+        Accessible.checked: tile.selected
+        Accessible.focusable: true
         Keys.onSpacePressed: tile.clicked()
         Keys.onReturnPressed: tile.clicked()
         // Numpad Enter alias, matching the sibling card components.

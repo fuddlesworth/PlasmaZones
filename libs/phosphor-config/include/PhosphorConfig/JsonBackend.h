@@ -126,6 +126,15 @@ public:
     /// checks (see @c Store::Store) to detect a clobber.
     std::pair<QString, int> versionStamp() const override;
 
+    /// Insert the installed version stamp into @p root when a stamp is
+    /// configured and @p root does not already carry the key. No-op otherwise.
+    ///
+    /// This is the same step @c sync() applies on its way to disk, exposed so
+    /// that a caller writing a root snapshot out of band (an export, say) can
+    /// stamp it identically. A document written without the stamp reads back as
+    /// version-less and re-runs the whole migration chain when it is imported.
+    void applyVersionStamp(QJsonObject& root) const;
+
     /// Run @p schema's migration chain against the in-memory root, and
     /// if any step bumps the version stamp, atomically rewrite the backing
     /// file and refresh the in-memory state. Returns @c true unless the
@@ -150,9 +159,9 @@ public:
     QString filePath() const;
 
     /// Clear the dirty flag without writing. Used by migration
-    /// (@c applyMigration) and by callers that snapshot/restore the root
-    /// and need to put the flag back the way they found it (see
-    /// @c isDirty()), such as @c Settings::exportTo.
+    /// (@c applyMigration) and by callers that stage something into the root,
+    /// take a snapshot of it, then restore the root and need to put the flag
+    /// back the way they found it (see @c isDirty()).
     void clearDirty();
 
     /// Whether the in-memory document carries changes that have not been

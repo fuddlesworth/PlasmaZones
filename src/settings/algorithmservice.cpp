@@ -42,6 +42,12 @@ namespace PlasmaZones {
 
 namespace {
 
+/// Suffix appended to a duplicated algorithm's display name. Single-sourced so
+/// the strip below and the append can never disagree on the spelling or the
+/// length. This is the algorithm domain's own suffix, deliberately independent
+/// of LayoutRegistry::duplicateNameSuffix().
+constexpr QLatin1String CopyNameSuffix{" (Copy)"};
+
 QString userAlgorithmsDir()
 {
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
@@ -634,9 +640,9 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     // would miss, and the suffix appended below must never be re-mangled.
     const QString newFilename = QFileInfo(destPath).completeBaseName();
     QString baseCopyName = AlgorithmScaffold::sanitizeMetadataString(algo->name());
-    while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
-        baseCopyName.chop(7);
-    const QString newName = baseCopyName + QStringLiteral(" (Copy)");
+    while (baseCopyName.endsWith(CopyNameSuffix))
+        baseCopyName.chop(CopyNameSuffix.size());
+    const QString newName = baseCopyName + CopyNameSuffix;
     // Same depth-aware metadata rewrite the wizard's template path uses: it
     // touches only the top-level name/id fields, so a table elsewhere in the
     // file (or a nested customParams `name`) is never mistaken for metadata.

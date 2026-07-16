@@ -25,6 +25,7 @@
 #include "../core/utils.h"
 
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
+#include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <QJsonDocument>
@@ -317,7 +318,7 @@ QStringList LayoutAdaptor::getLayoutList()
             if (layout) {
                 json[QStringLiteral("hasSystemOrigin")] = layout->hasSystemOrigin();
                 json[QStringLiteral("hiddenFromSelector")] = layout->hiddenFromSelector();
-                if (layout->defaultOrder() != 999) {
+                if (layout->defaultOrder() != PhosphorZones::Layout::DefaultOrderUnset) {
                     json[QStringLiteral("defaultOrder")] = layout->defaultOrder();
                 }
 
@@ -504,16 +505,25 @@ void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspec
         return;
     }
 
-    if (static_cast<int>(layout->aspectRatioClass()) == aspectRatioClass) {
+    // The bus hands us a raw int and any session process can reach it, so
+    // normalise once, up front, and use that single value for the change check,
+    // the store, the log and the signal. setAspectRatioClassInt clamps
+    // internally, so anything derived from the raw argument past this point
+    // would broadcast a class that was never stored (e.g. 99 → Any) and that
+    // getLayout would then contradict. The emitted value must be the stored one.
+    const int normalized =
+        static_cast<int>(PhosphorLayout::ScreenClassification::fromJsonValue(QJsonValue(aspectRatioClass)));
+
+    if (static_cast<int>(layout->aspectRatioClass()) == normalized) {
         return;
     }
 
-    layout->setAspectRatioClassInt(aspectRatioClass);
+    layout->setAspectRatioClassInt(normalized);
 
     invalidateLayoutJsonCacheFor(layout->id());
 
-    qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << aspectRatioClass;
-    Q_EMIT layoutPropertyChanged(layoutId, kPropAspectRatioClass, QDBusVariant(aspectRatioClass));
+    qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << normalized;
+    Q_EMIT layoutPropertyChanged(layoutId, kPropAspectRatioClass, QDBusVariant(normalized));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

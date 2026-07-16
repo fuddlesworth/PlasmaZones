@@ -308,8 +308,11 @@ QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCo
 void EditorController::reloadLocalLayouts()
 {
     // Slot wired to the daemon's layout-mutation signals — see ctor for
-    // the connect block + rationale. Cheap on no-op (PhosphorZones::LayoutRegistry
-    // diff-checks file mtimes / hashes internally).
+    // the connect block + rationale. loadLayouts() does no diffing: it
+    // re-reads and rebuilds the whole catalogue every call, which is what
+    // makes it a reload. The layout set is O(10s) of small JSON files and
+    // this only fires on a daemon layout signal, so the re-scan is not on
+    // any hot path.
     if (m_localLayoutManager) {
         m_localLayoutManager->loadLayouts();
     }

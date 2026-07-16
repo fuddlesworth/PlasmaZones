@@ -184,6 +184,21 @@ public:
     /// these branches used to be a silent early return.
     Q_INVOKABLE Layout* importLayout(const QString& filePath);
 
+    /// Validate @p json against the bundled layout schema — the single gate
+    /// every untrusted layout document passes before it reaches
+    /// @c Layout::fromJson. Returns false when the document is not a
+    /// well-formed layout, logging @p context (a file path, or a name for the
+    /// ingress) followed by a per-error diagnostic.
+    ///
+    /// Static, and public so ingresses outside this library — the D-Bus layout
+    /// surface — apply the identical gate the file ingresses do. Without it an
+    /// out-of-range value (a zero-width zone, say) is accepted and persisted,
+    /// then refused by this same schema on the next startup, and the layout
+    /// disappears with no user-visible cause. The schema is compiled once
+    /// process-wide and validation reads only it, so this holds no registry
+    /// state and is safe to call from anywhere.
+    static bool isLayoutJsonValid(const QJsonObject& json, const QString& context);
+
     /// Write @p layout to @p filePath as a standalone layout document.
     ///
     /// Returns false when the destination cannot be opened, written or

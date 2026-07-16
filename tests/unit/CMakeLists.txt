@@ -827,14 +827,17 @@ target_link_libraries(test_algorithm_blank_scaffold PRIVATE Qt6::Test Qt6::Core 
 add_test(NAME test_algorithm_blank_scaffold COMMAND test_algorithm_blank_scaffold)
 
 # clampName is header-only in src/core/constants.h, so there is no source to
-# compile in beyond the test itself. plasmazones_core carries the include chain
-# that header pulls (PhosphorEngine, PhosphorLayoutApi, PhosphorZones), and
-# PhosphorZones is named directly for LayoutRegistry::duplicateNameSuffix(),
-# which the reduced-budget case reads rather than re-spelling.
+# compile in beyond the test itself. plasmazones_core supplies LayoutAdaptor
+# (src/dbus/layoutadaptor.cpp), whose duplicateLayout clamp the test drives, and
+# carries the include chain constants.h pulls (PhosphorEngine, PhosphorLayoutApi,
+# PhosphorZones). PhosphorZones is named for the LayoutRegistry and Layout
+# symbols the duplicate cases construct — duplicateNameSuffix() alone would need
+# no link, being inline in the header. Qt6::DBus is LayoutAdaptor's own base
+# class (QDBusAbstractAdaptor); the test calls the slot directly, never a bus.
 add_executable(test_layoutadaptor_nameclamp
     settings/test_layoutadaptor_nameclamp.cpp
 )
-target_link_libraries(test_layoutadaptor_nameclamp PRIVATE Qt6::Test Qt6::Core plasmazones_core
+target_link_libraries(test_layoutadaptor_nameclamp PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
     PhosphorZones::PhosphorZones)
 add_test(NAME test_layoutadaptor_nameclamp COMMAND test_layoutadaptor_nameclamp)
 

@@ -356,6 +356,15 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
         obj[::PhosphorZones::ZoneJsonKeys::Zones] = zones;
     }
 
+    // D-Bus is an untrusted boundary, so it takes the same schema gate the file
+    // ingresses do (directory scan / import / system restore). Without it a
+    // value the schema forbids — a zero-width zone, say — is accepted here and
+    // persisted, then rejected by this same schema on the next startup, and the
+    // layout vanishes with nothing to point the user at.
+    if (!PhosphorZones::LayoutRegistry::isLayoutJsonValid(obj, QStringLiteral("D-Bus createLayoutFromJson"))) {
+        return QString();
+    }
+
     auto* layout = PhosphorZones::Layout::fromJson(obj, m_layoutManager);
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout from JSON";

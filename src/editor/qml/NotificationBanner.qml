@@ -45,7 +45,7 @@ Rectangle {
     opacity: 0
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
     border.color: accentColor
-    border.width: Theme.focusBorderWidth
+    border.width: Theme.accentBorderWidth
     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
     z: 200
     Accessible.name: accessibleRoleName

@@ -288,6 +288,7 @@ ColumnLayout {
                     Accessible.role: Accessible.RadioButton
                     Accessible.name: i18n("All Monitors")
                     Accessible.checked: !root.isPerScreen
+                    Accessible.focusable: true
                     Keys.onSpacePressed: root.screenPicked("")
                     Keys.onReturnPressed: root.screenPicked("")
                     // Numpad Enter alias, matching the sibling card components.
@@ -406,6 +407,7 @@ ColumnLayout {
                             // name for an output with no connector/label/name.
                             Accessible.name: connectorLabel.text || i18n("Unknown monitor")
                             Accessible.checked: tile.isSelected
+                            Accessible.focusable: true
                             Keys.onSpacePressed: root.screenPicked(tile.screenName)
                             Keys.onReturnPressed: root.screenPicked(tile.screenName)
                             // Numpad Enter alias, matching the sibling card components.
@@ -414,6 +416,7 @@ ColumnLayout {
                         }
 
                         ToolTip.visible: tileMouse.containsMouse && ToolTip.text !== ""
+                        ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: {
                             var parts = [];
                             if (tile.modelData.displayLabel)

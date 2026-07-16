@@ -144,16 +144,13 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
         syncRelativeFromFixed(zone);
     }
 
-    // Copy z-order if present, otherwise set to end
-    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::ZOrder)) {
-        zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = zoneData[::PhosphorZones::ZoneJsonKeys::ZOrder].toInt();
-    } else {
-        zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = m_zones.size();
-    }
-
     if (existingIndex >= 0 && allowIdReuse) {
         // Update existing zone in place (for undo/redo)
         // This prevents QML from seeing the zone disappear and reappear
+        // zOrder is the zone's index in the list, never whatever the incoming
+        // map carried: a paste source or a pre-delete snapshot was numbered
+        // against a different list.
+        zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = existingIndex;
         m_zones[existingIndex] = zone;
 
         // Handle signal emission (deferred during batch updates)
@@ -172,7 +169,8 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
             Q_EMIT zonesModified();
         }
     } else {
-        // Add new zone
+        // Add new zone on top of the stack, which is the end of the list
+        zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = m_zones.size();
         m_zones.append(zone);
 
         // Handle signal emission (deferred during batch updates)
@@ -299,6 +297,10 @@ void ZoneManager::restoreZones(const QVariantList& zones)
 
     // Restore the deduplicated list
     m_zones = hasDuplicates ? validated : zones;
+    // The list order is the z-order, so stamping zOrder from it reproduces the
+    // snapshot's stacking and closes the hole a dropped duplicate would leave
+    // in the run.
+    updateAllZOrderValues();
     Q_EMIT zonesChanged();
     Q_EMIT zonesModified();
 }

@@ -440,9 +440,12 @@ QString moduleWithMetadataBody(const QString& metadataBody)
 // source's id and collide with it.
 //
 // Every call site asserts the same four things about a different shape, so
-// each carries its @p label into the failure message. Without it a report
-// names only this helper's line and says nothing about which shape broke, and
-// a failure takes the rest of that test's remaining shapes with it.
+// each carries its @p label into the failure message. Without it a report names
+// only this helper's line and says nothing about which shape broke. The label
+// earns its keep precisely because a failure here does NOT stop the slot:
+// QVERIFY2 expands to a bare `return`, which returns from this helper, so the
+// caller runs its remaining shapes and several may report against the same
+// line.
 void verifyRewrittenOnce(const QString& out, const char* label)
 {
     QVERIFY2(!out.isEmpty(), label);

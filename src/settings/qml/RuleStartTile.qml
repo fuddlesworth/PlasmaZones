@@ -35,6 +35,7 @@ Rectangle {
     Accessible.name: tile.label
     Accessible.description: tile.description
     Accessible.role: Accessible.Button
+    Accessible.focusable: true
     activeFocusOnTab: true
     implicitWidth: Kirigami.Units.gridUnit * 10
     implicitHeight: tile.tileHeight
@@ -53,7 +54,13 @@ Rectangle {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         hoverEnabled: true
-        onClicked: tile.activated()
+        onClicked: {
+            // Move active focus to the clicked tile so a previously
+            // keyboard-focused sibling doesn't keep the focus ring and the key
+            // handlers.
+            tile.forceActiveFocus();
+            tile.activated();
+        }
     }
 
     ColumnLayout {
@@ -95,13 +102,15 @@ Rectangle {
     // every tile in the app moves with the same easing curve.
     Behavior on color {
         PhosphorMotionAnimation {
-            profile: "popup"
+            profile: "widget.hover"
+            durationOverride: Kirigami.Units.shortDuration
         }
     }
 
     Behavior on border.color {
         PhosphorMotionAnimation {
-            profile: "popup"
+            profile: "widget.hover"
+            durationOverride: Kirigami.Units.shortDuration
         }
     }
 }

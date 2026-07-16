@@ -50,9 +50,7 @@ QString sanitizeMetadataString(QString value);
 /// key as the bare one, and cannot be rewritten in place), a bracketed key this
 /// cannot read back as a plain string literal and so cannot prove is not one
 /// (`["na" .. "me"]`, `[someVar]`), or a top-level name/id field
-/// that is not a whole line of that form. A bracketed key that IS provably
-/// something else (`["description"] = ...`) is left alone and does not refuse
-/// the file. That last one covers a field sharing
+/// that is not a whole line of that form. That last one covers a field sharing
 /// its line with another (in either
 /// order), one trailing a long bracket's closer, one whose key and `=` fall on
 /// different lines, one whose value is a long-bracket string (`name = [[x]]`,
@@ -61,6 +59,9 @@ QString sanitizeMetadataString(QString value);
 /// leave a second field somewhere a line-anchored read will not look. None can
 /// be rewritten in place, and leaving one would let Luau's last-wins keep the
 /// template's value.
+///
+/// A bracketed key that IS provably something else (`["description"] = ...`) is
+/// left alone and does not refuse the file.
 ///
 /// The table's closer ends the read, wherever on its line it falls: a line that
 /// closes it and opens a sibling (`}, extra = {`) stops here rather than

@@ -89,7 +89,13 @@ Item {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
-                    onClicked: tile.activate()
+                    onClicked: {
+                        // Move active focus to the clicked tile so a previously
+                        // keyboard-focused tile doesn't keep the focus ring and
+                        // the key handlers.
+                        tile.forceActiveFocus();
+                        tile.activate();
+                    }
                 }
 
                 Behavior on color {

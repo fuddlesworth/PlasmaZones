@@ -142,6 +142,7 @@ Item {
             activeFocusOnTab: true
             Accessible.role: Accessible.ButtonDropDown
             Accessible.name: i18nc("@action", "Scope: %1", chip.label)
+            Accessible.focusable: true
             Keys.onSpacePressed: popup.visible ? popup.close() : popup.open()
             Keys.onReturnPressed: popup.visible ? popup.close() : popup.open()
             // Numpad Enter alias, matching the sibling card components.

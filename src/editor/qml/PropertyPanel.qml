@@ -46,10 +46,15 @@ Rectangle {
 
         return "multiple";
     }
+    // What the multi-select color previews start from: the theme, until the
+    // user picks something else in one of the dialogs.
+    readonly property color multiHighlightDefault: Theme.withAlpha(Kirigami.Theme.highlightColor, 0.5)
+    readonly property color multiInactiveDefault: Theme.withAlpha(Kirigami.Theme.disabledTextColor, 0.25)
+    readonly property color multiBorderDefault: Theme.withAlpha(Kirigami.Theme.disabledTextColor, 0.8)
     // Multi-select color preview properties (stored at panel level to avoid context issues)
-    property color multiHighlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5)
-    property color multiInactiveColor: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25)
-    property color multiBorderColor: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8)
+    property color multiHighlightColor: propertyPanel.multiHighlightDefault
+    property color multiInactiveColor: propertyPanel.multiInactiveDefault
+    property color multiBorderColor: propertyPanel.multiBorderDefault
     // Computed property: true if ALL selected zones have useCustomColors enabled
     readonly property bool allSelectedUseCustomColors: {
         if (!editorController || selectionCount < 2)
@@ -127,10 +132,20 @@ Rectangle {
     visible: opacity > 0 || Layout.preferredWidth > 0
     z: 50
     onPanelModeChanged: {
+        // A fresh multi-selection starts from the theme again. The color dialogs
+        // assign these properties, which severs the binding, so restore the
+        // binding rather than the value or the swatches stop following the theme
+        // after the first multi-select.
         if (panelMode === "multiple") {
-            multiHighlightColor = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
-            multiInactiveColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25);
-            multiBorderColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8);
+            multiHighlightColor = Qt.binding(function () {
+                return propertyPanel.multiHighlightDefault;
+            });
+            multiInactiveColor = Qt.binding(function () {
+                return propertyPanel.multiInactiveDefault;
+            });
+            multiBorderColor = Qt.binding(function () {
+                return propertyPanel.multiBorderDefault;
+            });
         }
     }
 
@@ -381,6 +396,12 @@ Rectangle {
                             updateTimer.restart();
                         else
                             updateTimer.stop();
+                    }
+                    // textEdited fires only on user input. An error describes the
+                    // text that was rejected, so the first keystroke past it drops
+                    // the message rather than leaving a stale complaint on screen.
+                    onTextEdited: {
+                        validationError = "";
                     }
                     onEditingFinished: {
                         updateTimer.stop();
@@ -873,13 +894,13 @@ Rectangle {
                             Qt.callLater(function () {
                                 // Only reset to the committed name while the field
                                 // is not being edited; mid-retype input stays put
-                                // (same guard as syncNameAndNumber). Reverting the
-                                // text also clears the error, which described the
-                                // rejected text and no longer matches the field.
-                                if (selectedZone && !zoneNameField.activeFocus) {
+                                // (same guard as syncNameAndNumber). The error
+                                // survives the revert: it explains why the name the
+                                // user typed is gone, and this is the only feedback
+                                // a rename rejected on blur ever gets. The next
+                                // keystroke clears it.
+                                if (selectedZone && !zoneNameField.activeFocus)
                                     zoneNameField.text = selectedZone.name || "";
-                                    zoneNameField.validationError = "";
-                                }
                             });
                         }
                     }

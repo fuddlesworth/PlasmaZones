@@ -67,9 +67,9 @@ void SettingsController::loadLayoutsAsync()
     // by the PhosphorZones::LayoutRegistry::layoutsChanged lambda wired in
     // settingscontroller.cpp's ctor
     // (it calls recalcLocalLayouts() + swaps m_layouts from localLayoutPreviews()
-    // and emits layoutsChanged). loadLayouts() above triggers that signal
-    // synchronously when the disk contents actually changed, so the instant-paint
-    // path runs without a duplicate recalc/emit here.
+    // and emits layoutsChanged). loadLayouts() above emits that signal
+    // synchronously on every call, so the instant-paint path runs without a
+    // duplicate recalc/emit here.
 
     // Step 2: async D-Bus call to pick up daemon-side enrichment
     // (hasSystemOrigin / hiddenFromSelector / defaultOrder / allow-lists)

@@ -3,22 +3,20 @@
 
 #pragma once
 
-#include "../core/interfaces.h"
 #include "../core/constants.h"
+#include "../core/interfaces.h"
+#include "configbackends.h"
+#include "configdefaults.h"
+
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
-#include <PhosphorTileEngine/IAutotileSettings.h>
-#include <PhosphorSnapEngine/ISnapSettings.h>
-#include <PhosphorScreens/VirtualScreen.h>
-#include "configdefaults.h"
-#include "configbackends.h"
-
 #include <PhosphorConfig/Store.h>
 #include <PhosphorRules/RuleStore.h>
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
+#include <PhosphorTileEngine/IAutotileSettings.h>
 
-#include <memory>
-#include <optional>
 #include <QFont>
 #include <QHash>
 #include <QJsonValue>
@@ -27,6 +25,9 @@
 #include <QUuid>
 #include <QVariantMap>
 #include <QVector>
+
+#include <memory>
+#include <optional>
 
 namespace PlasmaZones {
 

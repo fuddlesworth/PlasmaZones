@@ -120,7 +120,11 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
             const QString previousAlgo =
                 previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString();
             if (algoId != previousAlgo && !overrides.contains(QString(PerScreenKeys::SplitRatio))) {
-                if (auto* newAlgo = m_engine->algorithmRegistry()->algorithm(algoId)) {
+                // Guard the registry locally: AutotileEngine's ctor deliberately
+                // does not assert its dependencies, so every method that
+                // dereferences one guards it here (same rule as the wipe helper).
+                auto* registry = m_engine->algorithmRegistry();
+                if (auto* newAlgo = registry ? registry->algorithm(algoId) : nullptr) {
                     state->setSplitRatio(newAlgo->defaultSplitRatio());
                     m_engine->m_userTunedSplitRatio.remove(m_engine->currentKeyForScreen(screenId));
                 }
@@ -325,12 +329,16 @@ int clampGap(int v)
 }
 } // namespace
 
-std::optional<int> PerScreenConfigResolver::contextGap(const QString& screenId, QLatin1String key) const
+QVariantMap PerScreenConfigResolver::contextGapMap(const QString& screenId) const
 {
     if (!m_contextGapProvider) {
-        return std::nullopt;
+        return {};
     }
-    const QVariantMap ctx = m_contextGapProvider(screenId);
+    return m_contextGapProvider(screenId);
+}
+
+std::optional<int> PerScreenConfigResolver::contextGapFromMap(const QVariantMap& ctx, QLatin1String key)
+{
     const auto it = ctx.constFind(key);
     if (it == ctx.constEnd()) {
         return std::nullopt;
@@ -338,7 +346,7 @@ std::optional<int> PerScreenConfigResolver::contextGap(const QString& screenId, 
     return clampGap(it->toInt());
 }
 
-std::optional<::PhosphorLayout::EdgeGaps> PerScreenConfigResolver::contextOuterGaps(const QString& screenId) const
+std::optional<::PhosphorLayout::EdgeGaps> PerScreenConfigResolver::contextOuterGapsFromMap(const QVariantMap& ctx) const
 {
     // Resolve the per-context (window-rule) outer-gap override as ONE atomic
     // layer, mirroring the snapping pipeline (the daemon's
@@ -346,10 +354,7 @@ std::optional<::PhosphorLayout::EdgeGaps> PerScreenConfigResolver::contextOuterG
     // anything in PhosphorEngine): per-side values are honoured only when the rule
     // set UsePerSideOuterGap, and if the layer yields any outer gap it wins
     // wholesale — no per-key blending with the static per-screen layer below.
-    if (!m_contextGapProvider) {
-        return std::nullopt;
-    }
-    const QVariantMap ctx = m_contextGapProvider(screenId);
+    // An empty map means no provider is wired or the context carries no gaps.
     if (ctx.isEmpty()) {
         return std::nullopt;
     }
@@ -380,27 +385,42 @@ std::optional<::PhosphorLayout::EdgeGaps> PerScreenConfigResolver::contextOuterG
 
 int PerScreenConfigResolver::effectiveInnerGap(const QString& screenId) const
 {
-    if (auto ctx = contextGap(screenId, PerScreenKeys::InnerGap))
+    if (auto ctx = contextGapFromMap(contextGapMap(screenId), PerScreenKeys::InnerGap))
         return *ctx;
     if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::InnerGap)))
         return clampGap(v->toInt());
     return m_engine->config()->innerGap;
 }
 
-int PerScreenConfigResolver::effectiveOuterGap(const QString& screenId) const
+int PerScreenConfigResolver::outerGapBase(const QString& screenId, const QVariantMap& ctx) const
 {
-    if (auto ctx = contextGap(screenId, PerScreenKeys::OuterGap))
-        return *ctx;
+    if (auto c = contextGapFromMap(ctx, PerScreenKeys::OuterGap))
+        return *c;
     if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::OuterGap)))
         return clampGap(v->toInt());
     return m_engine->config()->outerGap;
 }
 
+int PerScreenConfigResolver::effectiveOuterGap(const QString& screenId) const
+{
+    // Defined as the top side of the full resolution so the two helpers can
+    // never disagree. Resolving the uniform layers directly would miss any
+    // per-side-only layer — e.g. a context rule that sets UsePerSideOuterGap
+    // plus per-side values but no uniform OuterGap, which effectiveOuterGaps
+    // honours and a uniform-only walk would fall straight through.
+    return effectiveOuterGaps(screenId).top;
+}
+
 ::PhosphorLayout::EdgeGaps PerScreenConfigResolver::effectiveOuterGaps(const QString& screenId) const
 {
+    // Resolve the context layer ONCE: the provider runs a full
+    // LayoutRegistry::resolveContextGaps on every call, and both the atomic
+    // context layer and the per-side base below consult it.
+    const QVariantMap ctx = contextGapMap(screenId);
+
     // Highest precedence: the per-context override, resolved as one atomic layer.
-    if (auto ctx = contextOuterGaps(screenId))
-        return *ctx;
+    if (auto ctxGaps = contextOuterGapsFromMap(ctx))
+        return *ctxGaps;
 
     // Per-screen per-side overrides next.
     auto topOv = perScreenOverride(screenId, QString(PerScreenKeys::OuterGapTop));
@@ -410,8 +430,8 @@ int PerScreenConfigResolver::effectiveOuterGap(const QString& screenId) const
 
     // If any per-screen per-side override exists, build from those
     if (topOv || bottomOv || leftOv || rightOv) {
-        // Use per-screen uniform gap as base, then per-side overrides on top
-        const int base = effectiveOuterGap(screenId);
+        // Use the uniform gap as base, then per-side overrides on top
+        const int base = outerGapBase(screenId, ctx);
         return ::PhosphorLayout::EdgeGaps{
             topOv ? clampGap(topOv->toInt()) : base, bottomOv ? clampGap(bottomOv->toInt()) : base,
             leftOv ? clampGap(leftOv->toInt()) : base, rightOv ? clampGap(rightOv->toInt()) : base};
@@ -502,9 +522,12 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     //    explicitly customized global maxWindows away from the global algo's default.
     const QString screenAlgo = effectiveAlgorithmId(screenId);
     if (screenAlgo != m_engine->m_algorithmId) {
+        // Registry guarded locally (AutotileEngine's ctor asserts nothing). With
+        // no registry both lookups yield null, so this falls to the warning below
+        // and returns the global maxWindows — the same outcome as an unknown id.
         auto* registry = m_engine->algorithmRegistry();
-        auto* screenAlgoPtr = registry->algorithm(screenAlgo);
-        auto* globalAlgoPtr = registry->algorithm(m_engine->m_algorithmId);
+        auto* screenAlgoPtr = registry ? registry->algorithm(screenAlgo) : nullptr;
+        auto* globalAlgoPtr = registry ? registry->algorithm(m_engine->m_algorithmId) : nullptr;
         if (screenAlgoPtr) {
             // Only override with per-screen default if global is still at its algo's default
             if (!globalAlgoPtr || m_engine->config()->maxWindows == globalAlgoPtr->defaultMaxWindows()) {
@@ -539,7 +562,10 @@ QString PerScreenConfigResolver::effectiveAlgorithmId(const QString& screenId) c
 
 PhosphorTiles::TilingAlgorithm* PerScreenConfigResolver::effectiveAlgorithm(const QString& screenId) const
 {
-    return m_engine->algorithmRegistry()->algorithm(effectiveAlgorithmId(screenId));
+    // Registry guarded locally (AutotileEngine's ctor asserts nothing); null
+    // registry resolves to no algorithm, same as an unknown id.
+    auto* registry = m_engine->algorithmRegistry();
+    return registry ? registry->algorithm(effectiveAlgorithmId(screenId)) : nullptr;
 }
 
 } // namespace PhosphorTileEngine

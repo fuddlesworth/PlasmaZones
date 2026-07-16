@@ -15,6 +15,7 @@
 #include "rulecontroller.h"
 #include "ruleauthoring.h"
 
+#include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
@@ -104,16 +105,14 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
     struct Summary
     {
         int ruleCount = 0;
-        // Wire-string engine token (or empty) the highest-priority
-        // matching `DisableEngine` action on this screen targets.
-        // Resolved against the screen's effective `engineMode` at
-        // output time to compute the tile's `engineDisabled` flag —
-        // a `DisableEngine{mode:"scrolling"}` rule on a Snapping-mode
-        // screen must NOT flip the tile to "Engine off" (the active
-        // engine is still Snapping). Stored as a scalar QString
-        // (first-non-empty-wins below mirrors the daemon's per-slot
-        // cascade winner; a QSet would over-state by accumulating
-        // every matching rule).
+        // Wire-string engine token (or empty) from the highest-priority
+        // monitor-axis `DisableEngine` rule on this screen. Resolved against
+        // the screen's effective `engineMode` at output time to compute the
+        // tile's `engineDisabled` flag — a `DisableEngine{mode:"scrolling"}`
+        // rule on a Snapping-mode screen must NOT flip the tile to "Engine
+        // off" (the active engine is still Snapping). Stored as a scalar
+        // QString (first-non-empty-wins below); a QSet would over-state by
+        // accumulating every matching rule.
         QString disabledEngineMode;
         // Engine mode + BOTH layout tokens come from ONE rule: the highest-
         // priority rule on this screen carrying a SetEngineMode action — the
@@ -183,21 +182,44 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         if (screenIds.isEmpty()) {
             continue;
         }
+        // The daemon does NOT run a DisableEngine rule through RuleEvaluator.
+        // A monitor is disabled iff its id appears in `Settings::disabledMonitors`
+        // (isMonitorDisabled → contextDisabledReason), and that list is built by
+        // `Settings::disableEntriesFor`, which admits a rule only when it is a
+        // MONITOR-AXIS disable rule: exactly one DisableEngine action carrying a
+        // non-empty mode token (ContextRuleBridge::disableRuleMode), a
+        // context-only match pinning the screen and nothing else, and no
+        // non-dimension context leaf — which is precisely
+        // `matchIsExactContextBase`. Anything else is honoured on a narrower
+        // axis or not at all:
+        //   - screen + desktop / screen + activity feed disabledDesktops /
+        //     disabledActivities, which gate one desktop or activity, not the
+        //     monitor. The tile is a monitor-level surface, so labelling the
+        //     whole screen "Engine off" from one of those overstates it.
+        //   - a rule pinning TiledWindowCount, or carrying two DisableEngine
+        //     actions, is not a managed disable entry at all and the daemon
+        //     never gates on it.
+        // Accumulating any DisableEngine action regardless of shape put "Engine
+        // off" on tiles for rules the daemon does not honour that way.
+        const auto disableMode = PhosphorRules::ContextRuleBridge::disableRuleMode(rule);
+        const bool isMonitorDisableRule =
+            disableMode.has_value() && PhosphorRules::ContextRuleBridge::matchIsExactContextBase(rule.match);
+
         for (const QString& screenId : screenIds) {
             Summary& s = byScreen[screenId];
             ++s.ruleCount;
-            // DisableEngine slot: first-non-empty wins, mirroring the daemon's
-            // per-slot cascade (RuleEvaluator resolves the engine-enable slot to
-            // ONE winner; indices are priority-DESC so the first seen IS it).
+            // DisableEngine slot: first-wins (indices are priority-DESC, so the
+            // first monitor-axis disable rule seen is the highest-priority one).
             // Output-time resolution against the active mode still stops a
             // Snapping-disable rule from labelling an Autotile screen "off".
             // Independent of the assignment winner below — a DisableEngine rule
             // need not carry a SetEngineMode action.
+            if (isMonitorDisableRule && s.disabledEngineMode.isEmpty()) {
+                s.disabledEngineMode = *disableMode;
+            }
             bool ruleHasEngineMode = false;
             for (const RuleAction& a : rule.actions) {
-                if (a.type == ActionType::DisableEngine && s.disabledEngineMode.isEmpty())
-                    s.disabledEngineMode = a.params.value(PhosphorRules::ActionParam::Mode).toString();
-                else if (a.type == ActionType::SetEngineMode)
+                if (a.type == ActionType::SetEngineMode)
                     ruleHasEngineMode = true;
                 else if (a.type == ActionType::LockContext && !s.lockResolved) {
                     // First-wins on the single Locked slot (priority-DESC): the

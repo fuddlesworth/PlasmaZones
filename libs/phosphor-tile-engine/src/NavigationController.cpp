@@ -318,8 +318,11 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // The resolver returns ANY connected output in the direction — it has no
     // autotile knowledge, and even an autotile destination can be full.
     // migrateWindowBetweenKeys removes the window from the source state and only
-    // re-adds it when the neighbour is an autotile screen under its maxWindows
-    // cap (onWindowAdded rejects WITHOUT inserting otherwise). Committing the
+    // re-adds it when onWindowAdded accepts it there: the neighbour must be an
+    // autotile screen, the window must tile on it, and the destination must be
+    // under its maxWindows cap UNLESS a float rule matches the window (a
+    // float-ruled window consumes no tile slot, so the cap does not apply to it).
+    // onWindowAdded rejects WITHOUT inserting otherwise. Committing the
     // move toward a destination that won't accept the window would remove it
     // from the source, re-key it to a screen with no TilingState, and strand it
     // (tracked nowhere) — the exact failure the cross-desktop path was rewritten
@@ -351,8 +354,15 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // window without returning a partner.
     const PhosphorEngine::TilingStateKey oldKey = m_engine->currentKeyForScreen(sourceScreenId);
     const PhosphorEngine::TilingStateKey newKey = m_engine->currentKeyForScreen(neighbor);
+    // Mirror onWindowAdded's cap gate EXACTLY, float predicate included: a
+    // window a "Float this app" rule matches opens floating on the destination
+    // and consumes no tile slot (tiledWindowCount excludes floats), so
+    // onWindowAdded lets it past a full screen. Refusing at the bare cap here
+    // would strand such a window on this side of a full autotile output that
+    // would in fact have accepted it.
+    const bool ruleWillFloat = m_engine->m_floatPredicate && m_engine->m_floatPredicate(focused);
     if (const PhosphorTiles::TilingState* destState = m_engine->m_states.stateForKey(newKey);
-        destState && destState->tiledWindowCount() >= m_engine->effectiveMaxWindows(neighbor)) {
+        destState && destState->tiledWindowCount() >= m_engine->effectiveMaxWindows(neighbor) && !ruleWillFloat) {
         return false;
     }
     // The other reason onWindowAdded rejects a re-add (see its

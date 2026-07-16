@@ -98,6 +98,29 @@ void writeAtPathWithChain(QJsonObject& root, const QStringList& segments, const 
     root[segments[0]] = current;
 }
 
+/// Coerce @p val to the string form the backend's string readers return.
+/// Arrays / objects come back as compact JSON so callers that round-trip
+/// complex values (trigger lists etc.) via strings keep working; bools and
+/// numbers get their canonical text. Shared by @c JsonGroup::readString and
+/// @c JsonBackend::readRootString so the two cannot drift: the same value
+/// under a group key and under a root key must read back the same way.
+QString jsonValueToString(const QJsonValue& val, const QString& defaultValue)
+{
+    if (val.isArray()) {
+        return QString::fromUtf8(QJsonDocument(val.toArray()).toJson(QJsonDocument::Compact));
+    }
+    if (val.isObject()) {
+        return QString::fromUtf8(QJsonDocument(val.toObject()).toJson(QJsonDocument::Compact));
+    }
+    if (val.isBool()) {
+        return val.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+    }
+    if (val.isDouble()) {
+        return QString::number(val.toDouble(), 'g', 17);
+    }
+    return val.toString(defaultValue);
+}
+
 void removeAtPath(QJsonObject& root, const QStringList& segments)
 {
     if (segments.isEmpty()) {
@@ -268,22 +291,7 @@ QString JsonGroup::readString(const QString& key, const QString& defaultValue) c
     if (!obj.contains(key)) {
         return defaultValue;
     }
-    const QJsonValue val = obj.value(key);
-    // JSON arrays/objects returned as compact JSON so callers that round-trip
-    // complex values (trigger lists etc.) via strings keep working.
-    if (val.isArray()) {
-        return QString::fromUtf8(QJsonDocument(val.toArray()).toJson(QJsonDocument::Compact));
-    }
-    if (val.isObject()) {
-        return QString::fromUtf8(QJsonDocument(val.toObject()).toJson(QJsonDocument::Compact));
-    }
-    if (val.isBool()) {
-        return val.toBool() ? QStringLiteral("true") : QStringLiteral("false");
-    }
-    if (val.isDouble()) {
-        return QString::number(val.toDouble(), 'g', 17);
-    }
-    return val.toString(defaultValue);
+    return jsonValueToString(obj.value(key), defaultValue);
 }
 
 int JsonGroup::readInt(const QString& key, int defaultValue) const
@@ -587,6 +595,18 @@ void JsonBackend::loadFromDisk()
         d->root = QJsonObject();
         return;
     }
+    if (!doc.isObject()) {
+        // Well-formed JSON that isn't an object (a bare array / literal at the
+        // root). doc.object() would silently hand back {} — same outcome as the
+        // missing-file and parse-error paths above, so it gets the same
+        // breadcrumb rather than looking like a first run.
+        qWarning(
+            "PhosphorConfig::JsonBackend: %s does not hold a JSON object at its root — starting from an empty "
+            "configuration",
+            qPrintable(d->filePath));
+        d->root = QJsonObject();
+        return;
+    }
     d->root = doc.object();
 }
 
@@ -658,9 +678,7 @@ bool JsonBackend::flushNow()
         return true;
     }
 
-    if (!d->versionStampKey.isEmpty() && !d->root.contains(d->versionStampKey)) {
-        d->root[d->versionStampKey] = d->versionStampValue;
-    }
+    applyVersionStamp(d->root);
 
     // writeJsonAtomically already logs on failure; leave dirty=true so the
     // next sync() retries. Propagate the failure up so callers can surface
@@ -738,7 +756,7 @@ JsonBackend::SyncPolicy JsonBackend::syncPolicy() const
 bool JsonBackend::writeJsonAtomically(const QString& filePath, const QJsonObject& root)
 {
     QDir dir = QFileInfo(filePath).absoluteDir();
-    if (!dir.exists() && !dir.mkpath(QLatin1String("."))) {
+    if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
         qWarning("PhosphorConfig::JsonBackend: failed to create directory %s", qPrintable(dir.absolutePath()));
         return false;
     }
@@ -819,23 +837,34 @@ void JsonBackend::deleteGroup(const QString& name)
 QString JsonBackend::readRootString(const QString& key, const QString& defaultValue) const
 {
     const QJsonObject general = d->root.value(d->rootGroupName).toObject();
-    if (general.contains(key)) {
-        return general.value(key).toString(defaultValue);
+    if (!general.contains(key)) {
+        return defaultValue;
     }
-    return defaultValue;
+    // Same coercion as JsonGroup::readString — a root key holding a bool,
+    // number, array or object reads back exactly as it would under a group.
+    return jsonValueToString(general.value(key), defaultValue);
 }
 
 // writeRootString / removeRootKey deliberately carry NO active-group guard
 // (unlike deleteGroup / replaceRoot / reparseConfiguration): a live JsonGroup
 // never caches its object — every read/write re-resolves through
-// groupObject() against the shared root — so a single-key mutation of the
-// rootGroupName object cannot leave a group dangling. It is no different in
-// character from a concurrent write through another JsonGroup, which is
-// likewise permitted. The guarded operations, by contrast, delete or swap
-// whole subtrees a live group may be scoped to.
+// groupObject() against the shared root — so mutating the rootGroupName
+// object cannot leave a group dangling. The guarded operations, by contrast,
+// delete or swap whole subtrees a live group may be scoped to.
+//
+// Note this is NOT a claim that two writers may run concurrently: a second
+// live JsonGroup is refused its writes outright (see the JsonGroup
+// constructor's single-active-group invariant). The root-key mutators are
+// unguarded because of what they touch, not because concurrency is allowed.
 void JsonBackend::writeRootString(const QString& key, const QString& value)
 {
     QJsonObject general = d->root.value(d->rootGroupName).toObject();
+    // Only a real change dirties the backend — mirrors removeRootKey's
+    // contains() guard, so a rewrite of an identical value doesn't schedule a
+    // pointless flush.
+    if (general.value(key) == QJsonValue(value)) {
+        return;
+    }
     general[key] = value;
     d->root[d->rootGroupName] = general;
     markDirty();
@@ -887,15 +916,26 @@ QStringList JsonBackend::groupList() const
 {
     QStringList groups;
 
-    // Reserved root keys (version stamp + whatever the resolver owns at the
-    // top level) are hidden from the default dot-path enumeration. Resolver-
-    // owned keys are its EXCLUSIVE domain: the entire subtree under them is
-    // also skipped so descendants don't leak as dot-path groups the Store
-    // doesn't know how to purge. Otherwise a blanket deleteGroup on a leaked
-    // descendant would recursively wipe resolver-managed data.
+    // Reserved root keys (version stamp, the root group, and whatever the
+    // resolver owns at the top level) are hidden from the default dot-path
+    // enumeration. Resolver-owned keys are its EXCLUSIVE domain: the entire
+    // subtree under them is also skipped so descendants don't leak as dot-path
+    // groups the Store doesn't know how to purge. Otherwise a blanket
+    // deleteGroup on a leaked descendant would recursively wipe
+    // resolver-managed data.
+    //
+    // The root group (see @c rootGroupName) is reserved for the same reason:
+    // it is not a group anyone addresses through group() — it is the container
+    // writeRootString / readRootString / removeRootKey own — so enumerating it
+    // alongside real groups invites a caller sweeping groupList() to delete the
+    // ungrouped keys out from under them. Filtering it here rather than in each
+    // consumer keeps that from being every consumer's problem to remember.
     QSet<QString> skipRoots;
     if (!d->versionStampKey.isEmpty()) {
         skipRoots.insert(d->versionStampKey);
+    }
+    if (!d->rootGroupName.isEmpty()) {
+        skipRoots.insert(d->rootGroupName);
     }
     if (d->resolver) {
         const QStringList reserved = d->resolver->reservedRootKeys();
@@ -951,6 +991,13 @@ void JsonBackend::setVersionStamp(const QString& key, int version)
 std::pair<QString, int> JsonBackend::versionStamp() const
 {
     return {d->versionStampKey, d->versionStampValue};
+}
+
+void JsonBackend::applyVersionStamp(QJsonObject& root) const
+{
+    if (!d->versionStampKey.isEmpty() && !root.contains(d->versionStampKey)) {
+        root[d->versionStampKey] = d->versionStampValue;
+    }
 }
 
 QJsonObject JsonBackend::jsonRootSnapshot() const

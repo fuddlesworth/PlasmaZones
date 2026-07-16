@@ -120,6 +120,8 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     int effectiveInnerGap(const QString& screenId) const;
+    /// The resolved outer gap for @p screenId as a single value. Defined as
+    /// effectiveOuterGaps(screenId).top, so the two never disagree on any layer.
     int effectiveOuterGap(const QString& screenId) const;
     ::PhosphorLayout::EdgeGaps effectiveOuterGaps(const QString& screenId) const;
     bool effectiveSmartGaps(const QString& screenId) const;
@@ -146,14 +148,27 @@ private:
     void wipeStateBagsOnEffectiveAlgorithmChange(const QString& screenId, const QString& oldEffectiveId,
                                                  const QString& newEffectiveId);
 
+    /// The per-context (window-rule) gap map for @p screenId, or an empty map
+    /// when no provider is wired. Resolving it runs a full
+    /// LayoutRegistry::resolveContextGaps on the daemon side, so callers that
+    /// need more than one key resolve it once and pass it to the *FromMap
+    /// helpers below rather than calling this per key.
+    QVariantMap contextGapMap(const QString& screenId) const;
+
     /// Clamped per-context override for a single gap key (InnerGap / OuterGap),
-    /// or nullopt when no provider is wired or the context map lacks the key.
-    std::optional<int> contextGap(const QString& screenId, QLatin1String key) const;
+    /// or nullopt when @p ctx lacks the key.
+    static std::optional<int> contextGapFromMap(const QVariantMap& ctx, QLatin1String key);
 
     /// Per-context outer-gap override resolved as one atomic layer (per-side
     /// honoured only when UsePerSideOuterGap is set), mirroring the snapping
     /// pipeline. nullopt when the context layer carries no outer-gap info.
-    std::optional<::PhosphorLayout::EdgeGaps> contextOuterGaps(const QString& screenId) const;
+    std::optional<::PhosphorLayout::EdgeGaps> contextOuterGapsFromMap(const QVariantMap& ctx) const;
+
+    /// The uniform outer-gap value the per-side resolution fills missing sides
+    /// from: the context layer's uniform OuterGap, else the per-screen override,
+    /// else the global config. Distinct from the public effectiveOuterGap, which
+    /// reports the fully resolved top side.
+    int outerGapBase(const QString& screenId, const QVariantMap& ctx) const;
 
     AutotileEngine* m_engine = nullptr;
     QHash<QString, QVariantMap> m_perScreenOverrides;

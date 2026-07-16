@@ -24,6 +24,11 @@ var toolbarAlpha = 0.90; // TopBar, ControlBar — lighter, chrome-level
 // for the screen's device pixel ratio, so call sites use it as-is.
 var focusBorderWidth = 2;
 
+// Border width for a surface whose outline carries a status accent colour, such
+// as a notification banner. Same units as focusBorderWidth, different meaning:
+// this one is always on, and it is not about keyboard focus.
+var accentBorderWidth = 2;
+
 function withAlpha(baseColor, alpha) {
     return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha);
 }

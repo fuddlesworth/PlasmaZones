@@ -43,10 +43,17 @@ Window {
     }
     property var _zonesRepeater: null
     // Base of the zone stacking range inside drawingArea. Each zone sits at
-    // zoneBaseZ + its zOrder, and zOrder is the zone's index in the model, so
-    // the top zone is zoneBaseZ + zone count - 1. DividerManager needs that top
-    // to decide when it can win a hit test against the zones.
+    // zoneBaseZ + its zOrder, and ZoneManager keeps zOrder a dense 0..count-1
+    // permutation matching the zone's index in the model, so the top zone sits
+    // at zonesTopZ.
     readonly property int zoneBaseZ: 60
+    // Top of the zone stacking range. DividerManager needs it to decide when it
+    // can win a hit test against the zones.
+    readonly property int zonesTopZ: editorWindow.zoneBaseZ + Math.max(0, zonesRepeater.count - 1)
+    // Where an overlay has to sit to beat every zone and every divider inside
+    // drawingArea, whatever the zone count. DividerManager takes zonesTopZ + 1
+    // when the zones leave it no gap of its own.
+    readonly property int canvasOverlayZ: editorWindow.zonesTopZ + 2
     // Helper to get selected zone data - reactive to both selectedZoneId AND zones changes
     // Uses C++ Q_INVOKABLE method for O(1) lookup instead of O(n) JavaScript loop
     property var selectedZone: {
@@ -112,8 +119,6 @@ Window {
             // Normal click: single selection (clears others)
             editorWindow._editorController.setSelectedZoneIds([zoneId]);
             editorWindow.selectionAnchorId = zoneId;
-            // Also update local for backward compatibility
-            editorWindow.selectedZoneId = zoneId;
         }
     }
 
@@ -315,7 +320,13 @@ Window {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        visible: !editorWindow.fullscreenMode
+        // Fades out on the way into fullscreen, paired with the "Exit
+        // Fullscreen" pill below. `visible` follows the animated opacity rather
+        // than the mode, so the outgoing leg is actually rendered. mainLayout
+        // re-anchors off fullscreenMode itself, so the canvas does not wait for
+        // this fade and nothing jumps.
+        opacity: !editorWindow.fullscreenMode ? 1 : 0
+        visible: opacity > 0
         // Pass stored context properties to avoid scoping issues
         editorController: editorWindow._editorController
         availableScreens: editorWindow._editorController ? editorWindow._editorController.screenModel : []
@@ -526,7 +537,7 @@ Window {
                     drawingArea: drawingArea
                     zonesRepeater: zonesRepeater
                     previewMode: editorWindow.previewMode
-                    zonesTopZ: editorWindow.zoneBaseZ + Math.max(0, zonesRepeater.count - 1)
+                    zonesTopZ: editorWindow.zonesTopZ
                 }
 
                 // Snap line visualization
@@ -655,7 +666,9 @@ Window {
     Rectangle {
         id: fullscreenExitButton
 
-        visible: editorWindow.fullscreenMode
+        // `visible` follows the animated opacity, not the mode, or the pill
+        // would be unrendered in the same pass its fade-out starts.
+        visible: opacity > 0
         width: exitButtonRow.width + Kirigami.Units.gridUnit * 2
         height: Kirigami.Units.gridUnit * 3
         radius: Kirigami.Units.smallSpacing

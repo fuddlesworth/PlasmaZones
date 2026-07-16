@@ -18,8 +18,7 @@ class ScreenManager;
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QDir>
-#include <QFile>
-#include <QLatin1StringView>
+#include <climits>
 #include <optional>
 
 namespace PlasmaZones {

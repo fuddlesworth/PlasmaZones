@@ -160,7 +160,7 @@ bool LayoutSettingsStore::loadFromFile(const QString& path)
     return true;
 }
 
-bool LayoutSettingsStore::saveToFile(const QString& path) const
+QJsonObject LayoutSettingsStore::toJson() const
 {
     QJsonObject root;
     root.insert(QString(kVersionKey), SchemaVersion);
@@ -169,6 +169,12 @@ bool LayoutSettingsStore::saveToFile(const QString& path) const
             root.insert(it.key(), it.value());
         }
     }
+    return root;
+}
+
+bool LayoutSettingsStore::saveToFile(const QString& path) const
+{
+    const QJsonObject root = toJson();
 
     // QSaveFile gives atomic temp-write + rename — a crash mid-write never
     // leaves a truncated sidecar behind.

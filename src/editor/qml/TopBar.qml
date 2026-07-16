@@ -128,11 +128,17 @@ ToolBar {
             id: layoutNameSection
 
             spacing: Kirigami.Units.smallSpacing // Use theme spacing (4px - between label and field)
-            // Initialize on component creation with delay to ensure editorController is ready
+            // Initialize on component creation with delay to ensure editorController is ready.
+            // main.cpp loads the layout before it builds the QML engine, so the
+            // controller's layoutNameChanged has already fired by the time the
+            // Connections below exists — this is the only place the load path
+            // can latch committedName.
             Component.onCompleted: {
                 Qt.callLater(function () {
-                    if (editorController && editorController.layoutName)
-                        layoutNameField.text = editorController.layoutName;
+                    if (editorController) {
+                        layoutNameField.committedName = editorController.layoutName || "";
+                        layoutNameField.text = layoutNameField.committedName;
+                    }
                 });
             }
 
@@ -240,10 +246,16 @@ ToolBar {
             // Explicitly connect to layoutNameChanged signal for reliable updates
             Connections {
                 function onLayoutNameChanged() {
-                    if (!layoutNameField.activeFocus && editorController) {
-                        // Latch the controller's value, not the field's: assigning
-                        // it truncates anything past maximumLength.
-                        layoutNameField.committedName = editorController.layoutName || "";
+                    if (!editorController)
+                        return;
+
+                    // Latch the controller's value, not the field's: assigning it
+                    // truncates anything past maximumLength. The latch is
+                    // unconditional because a Return commit leaves the field
+                    // focused, and a committedName left at the pre-commit name
+                    // would then describe a name the controller no longer holds.
+                    layoutNameField.committedName = editorController.layoutName || "";
+                    if (!layoutNameField.activeFocus) {
                         layoutNameField.text = layoutNameField.committedName;
                         // This sync replaces the field's content, so any edit that
                         // had not been committed yet is gone.
