@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <QtQml/qqmlextensionplugin.h>
 #include "../core/animationbootstrap.h"
 #include "../core/logging.h"
 #include "../core/single_instance_service.h"
@@ -38,6 +39,11 @@
 
 #include <memory>
 #include <vector>
+
+// Import the static org.plasmazones.common QML module (same pattern as the
+// daemon, src/daemon/main.cpp). The generated plugin carries the
+// auto-generated qmldir, so shared types can never silently go missing again.
+Q_IMPORT_QML_PLUGIN(org_plasmazones_commonPlugin)
 
 namespace {
 
