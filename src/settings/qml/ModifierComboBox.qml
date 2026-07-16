@@ -17,6 +17,10 @@ RowLayout {
 
     property int modifierValue: 0
     property string tooltipText
+    //* @brief Screen-reader name for the INNER ComboBox (the focusable control).
+    //* Setting Accessible.name on this RowLayout wrapper never reaches the
+    //* ComboBox, so callers use this instead (mirrors SettingsSlider).
+    property string accessibleName: ""
 
     signal modifierSelected(int value)
 
@@ -25,25 +29,32 @@ RowLayout {
     ComboBox {
         id: combo
 
-        readonly property var modifierOptions: [{
-            "text": i18n("None"),
-            "value": 0
-        }, {
-            "text": i18n("Shift"),
-            "value": (1 << 25)
-        }, {
-            "text": i18n("Ctrl"),
-            "value": (1 << 26)
-        }, {
-            "text": i18n("Alt"),
-            "value": (1 << 27)
-        }, {
-            "text": i18n("Meta"),
-            "value": (1 << 28)
-        }]
+        readonly property var modifierOptions: [
+            {
+                "text": i18n("None"),
+                "value": 0
+            },
+            {
+                "text": i18n("Shift"),
+                "value": (1 << 25)
+            },
+            {
+                "text": i18n("Ctrl"),
+                "value": (1 << 26)
+            },
+            {
+                "text": i18n("Alt"),
+                "value": (1 << 27)
+            },
+            {
+                "text": i18n("Meta"),
+                "value": (1 << 28)
+            }
+        ]
 
+        Accessible.name: root.accessibleName
         Layout.preferredWidth: Kirigami.Units.gridUnit * 10
-        model: modifierOptions.map((o) => {
+        model: modifierOptions.map(o => {
             return o.text;
         })
         currentIndex: {
@@ -51,15 +62,13 @@ RowLayout {
             for (let i = 0; i < modifierOptions.length; i++) {
                 if (modifierOptions[i].value === val)
                     return i;
-
             }
             return 0;
         }
-        onActivated: (idx) => {
+        onActivated: idx => {
             root.modifierSelected(modifierOptions[idx].value);
         }
         ToolTip.visible: hovered && root.tooltipText.length > 0
         ToolTip.text: root.tooltipText
     }
-
 }

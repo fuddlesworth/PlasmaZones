@@ -156,8 +156,8 @@ public:
     virtual void setShowZonesOnAllMonitors(bool show) = 0;
     // Per-mode disable lists. The `mode` argument selects which list to read
     // or write — disabling a monitor for snap leaves the autotile gate untouched
-    // and vice versa. Storage is `Display.{Snapping,Autotile}Disabled*`
-    // in the v3 schema.
+    // and vice versa. Since the v4 schema these are stored as DisableEngine
+    // context rules in rules.json (not Display.* config keys).
     virtual QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const = 0;
     virtual void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames) = 0;
     virtual bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const = 0;

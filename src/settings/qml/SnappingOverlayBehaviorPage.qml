@@ -179,6 +179,7 @@ SettingsFlickable {
                         SettingsSpinBox {
                             id: edgeThresholdSpin
 
+                            accessibleName: i18n("Edge threshold")
                             from: root.settingsBridge.adjacentThresholdMin
                             to: root.thresholdMax
                             onValueModified: value => {

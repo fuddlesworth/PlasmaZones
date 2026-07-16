@@ -452,7 +452,7 @@ void SettingsController::resetPage(const QString& page)
 
     // Animation pages (whole tree, shared domain): reset to defaults =
     // clear every per-event override file AND reset the animation config keys
-    // (Profile, ShaderProfileTree, WindowFiltering, Enabled, Backend) to their
+    // (Profile, ShaderProfileTree, WindowFiltering, Enabled) to their
     // schema defaults. Both are STAGED like ordinary animation edits — the
     // cleared files are snapshotted, so a subsequent Discard restores them, and
     // Save commits. User presets / motion-set libraries are left alone (like

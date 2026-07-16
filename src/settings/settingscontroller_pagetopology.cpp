@@ -277,6 +277,11 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingBehaviorZoneSpanGroup(), CD::enabledKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::toggleActivationKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::triggersKey()},
+             // Legacy modifier is rewritten by every triggers edit
+             // (setZoneSpanTriggers syncs it from the first non-zero trigger),
+             // so it must be reverted alongside Triggers or a per-page Discard
+             // leaves it desynced while the page reports clean.
+             {CD::snappingBehaviorZoneSpanGroup(), CD::modifierKey()},
              {CD::snappingGapsGroup(), CD::adjacentThresholdKey()},
              {CD::snappingBehaviorDisplayGroup(), CD::showOnAllMonitorsKey()},
              {CD::snappingBehaviorDisplayGroup(), CD::filterByAspectRatioKey()},

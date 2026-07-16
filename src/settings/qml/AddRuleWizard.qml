@@ -50,6 +50,11 @@ Kirigami.Dialog {
     /// (currentStep == 0); in that case there is nothing to lose, so the
     /// close paths bypass the prompt.
     property string _initialSnapshot: ""
+    /// Re-entrancy guard for Create. `close()` runs an exit transition during
+    /// which the footer stays live, so without this a double-click (or Return
+    /// key auto-repeat) would emit `ruleSaved` twice and add the rule twice.
+    /// Same pattern as NewLayoutDialog.
+    property bool _creating: false
     /// True while Kirigami.Dialog's internal ScrollView is reserving space for
     /// a vertical scrollbar (its `rightPadding` is the scrollbar's width, 0
     /// otherwise). Fill-width content keys its right gutter off this so the
@@ -165,6 +170,7 @@ Kirigami.Dialog {
         root.currentStep = 0;
         root._workingRule = ({});
         root._initialSnapshot = "";
+        root._creating = false;
         wizardFooter.errorText = "";
     }
     // Every step transition (picker → editor, Next fallback, Back → picker)
@@ -288,7 +294,7 @@ Kirigami.Dialog {
         createText: i18n("Add rule")
         // Step 2's body gates Save on a complete + semantically-clean rule
         // exactly like the edit sheet; the wizard footer reuses that.
-        createEnabled: editorBody.canSave
+        createEnabled: editorBody.canSave && !root._creating
         onBackClicked: root._requestBack()
         onNextClicked: {
             // Picker auto-advances on tile click; this button is a fallback
@@ -301,6 +307,12 @@ Kirigami.Dialog {
                 wizardFooter.errorText = i18n("Pick a starting point first.");
         }
         onCreateClicked: {
+            // See the `_creating` doc comment — the footer stays live during
+            // the close transition, so guard against a second activation.
+            if (root._creating)
+                return;
+
+            root._creating = true;
             wizardFooter.errorText = "";
             // Read body's live workingRule (not the picker seed) — see
             // the binding-loop comment on editorBody above.

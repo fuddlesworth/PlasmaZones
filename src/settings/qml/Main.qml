@@ -485,7 +485,7 @@ PhosphorUi.SettingsAppWindow {
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
 
     Shortcut {
         sequence: "Ctrl+PgUp"

@@ -573,17 +573,18 @@ Item {
                 }
                 onReleased: {
                     if (activeHandle) {
-                        // Snap to 0.01 increments only on release for clean config values
-                        root.cp1x = Math.round(root.cp1x * 100) / 100;
-                        root.cp1y = Math.round(root.cp1y * 100) / 100;
-                        root.cp2x = Math.round(root.cp2x * 100) / 100;
-                        root.cp2y = Math.round(root.cp2y * 100) / 100;
                         activeHandle = 0;
                         root.replay();
                         // Emit the update only once at the end of the drag to ensure
                         // stability, and only if the curve actually changed — a plain
-                        // click on a handle must not rewrite/dirty the value.
+                        // click on a handle must not rewrite/dirty the value, and it
+                        // must not snap the drawn curve away from the stored string.
                         if (dragStarted) {
+                            // Snap to 0.01 increments only on release for clean config values
+                            root.cp1x = Math.round(root.cp1x * 100) / 100;
+                            root.cp1y = Math.round(root.cp1y * 100) / 100;
+                            root.cp2x = Math.round(root.cp2x * 100) / 100;
+                            root.cp2y = Math.round(root.cp2y * 100) / 100;
                             var formatted = root.formatCurve();
                             if (formatted !== root.curve)
                                 root.curveEdited(formatted);

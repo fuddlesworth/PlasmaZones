@@ -13,7 +13,7 @@ Line numbers as of 2026-07-16.
 > `fix/theme-color-pipeline` branch landed, so they no longer match the
 > code. In addition, every Replacement cell that prescribes
 > `Kirigami.Theme.separatorColor` (including the HACK-BORDER verdict
-> definition above) is WRONG. That property does not exist in Kirigami
+> definition below) is WRONG. That property does not exist in Kirigami
 > and evaluates to `undefined` at runtime. The correct replacement is
 > `Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor,
 > Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)` (see the

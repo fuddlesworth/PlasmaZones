@@ -148,7 +148,7 @@ ColumnLayout {
                     // form in most icon themes, and Kirigami.Icon's
                     // color binding only applies to monochrome / mask
                     // sources — otherwise the tint here is silently
-                    // ignored and the warning glyph keeps its theme's
+                    // ignored and the glyph keeps its theme's
                     // built-in colour, mismatching the "Unsaved
                     // changes" label beside it.
                     source: "dialog-information-symbolic"

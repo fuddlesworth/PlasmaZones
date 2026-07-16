@@ -310,6 +310,7 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.ForbiddenCursor
+                            Accessible.role: Accessible.Button
                             Accessible.name: i18nc("@info:whatsthis layout picker lock overlay", "Layout is locked. Unlock the current layout before switching to another one.")
                             onClicked: function (mouse) {
                                 mouse.accepted = true;

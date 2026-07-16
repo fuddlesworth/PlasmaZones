@@ -216,10 +216,13 @@ Control {
                     root.pendingModifierMask = modMask;
                     return;
                 }
+                // Record the non-modifier press before the MetaOnly early
+                // return: releasing a modifier after e.g. Ctrl+A must not
+                // count as a bare-modifier capture.
+                root.nonModifierKeyPressed = true;
                 if (root.acceptMode === root.acceptModeMetaOnly)
                     return;
 
-                root.nonModifierKeyPressed = true;
                 var seq = root.keyToSequenceString(event.key, event.modifiers);
                 if (seq.length > 0) {
                     root.endCapture();

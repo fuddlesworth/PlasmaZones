@@ -146,6 +146,14 @@ Item {
                 required property var modelData
                 required property int index
 
+                // Shared contract with ZoneOverlayContent.hasCustomColors() and
+                // SnapAssistContent's useCustom: only true, 1, or "true" enable
+                // per-zone colors (raw truthiness would accept "false").
+                readonly property bool useCustom: {
+                    var v = modelData.useCustomColors;
+                    return v === true || v === 1 || (typeof v === "string" && v.toLowerCase() === "true");
+                }
+
                 visible: root.shaderSource.toString() === "" || zoneShaderRenderer.status !== ZoneShaderItem.Ready
                 x: modelData.x !== undefined ? modelData.x : 0
                 y: modelData.y !== undefined ? modelData.y : 0
@@ -155,9 +163,9 @@ Item {
                 zoneName: modelData.name || ""
                 isHighlighted: modelData.isHighlighted || (root.hoveredZoneIndex === index)
                 showNumber: root.showNumbers
-                highlightColor: (modelData.useCustomColors && modelData.highlightColor) ? modelData.highlightColor : root.highlightColor
-                inactiveColor: (modelData.useCustomColors && modelData.inactiveColor) ? modelData.inactiveColor : root.inactiveColor
-                borderColor: (modelData.useCustomColors && modelData.borderColor) ? modelData.borderColor : root.borderColor
+                highlightColor: (useCustom && modelData.highlightColor) ? modelData.highlightColor : root.highlightColor
+                inactiveColor: (useCustom && modelData.inactiveColor) ? modelData.inactiveColor : root.inactiveColor
+                borderColor: (useCustom && modelData.borderColor) ? modelData.borderColor : root.borderColor
                 labelFontColor: root.labelFontColor
                 fontFamily: root.fontFamily
                 fontSizeScale: root.fontSizeScale
@@ -165,10 +173,10 @@ Item {
                 fontItalic: root.fontItalic
                 fontUnderline: root.fontUnderline
                 fontStrikeout: root.fontStrikeout
-                activeOpacity: (modelData.useCustomColors && modelData.activeOpacity !== undefined) ? modelData.activeOpacity : root.activeOpacity
-                inactiveOpacity: (modelData.useCustomColors && modelData.inactiveOpacity !== undefined) ? modelData.inactiveOpacity : root.inactiveOpacity
-                borderWidth: (modelData.useCustomColors && modelData.borderWidth !== undefined) ? modelData.borderWidth : root.borderWidth
-                borderRadius: (modelData.useCustomColors && modelData.borderRadius !== undefined) ? modelData.borderRadius : root.borderRadius
+                activeOpacity: (useCustom && modelData.activeOpacity !== undefined) ? modelData.activeOpacity : root.activeOpacity
+                inactiveOpacity: (useCustom && modelData.inactiveOpacity !== undefined) ? modelData.inactiveOpacity : root.inactiveOpacity
+                borderWidth: (useCustom && modelData.borderWidth !== undefined) ? modelData.borderWidth : root.borderWidth
+                borderRadius: (useCustom && modelData.borderRadius !== undefined) ? modelData.borderRadius : root.borderRadius
             }
         }
 

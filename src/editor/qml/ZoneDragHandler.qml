@@ -28,6 +28,11 @@ MouseArea {
     property var fillRegion: null
     property var committedFillRegion: null // Preserve fill region even after modifier key released
     property bool hasDragged: false // Track if actual drag movement occurred
+    // Last snapped/clamped drag position computed in onPositionChanged. Committed on
+    // release instead of visualX/visualY, because the visual properties have Behaviors
+    // and may hold a mid-animation (interpolated) value at release time.
+    property real lastFinalX: 0
+    property real lastFinalY: 0
 
     anchors.fill: parent
     hoverEnabled: true
@@ -78,6 +83,8 @@ MouseArea {
             zoneRoot.operationState = 1; // EditorZone.State.Dragging = 1
             dragStart = Qt.point(zoneRoot.visualX, zoneRoot.visualY);
             originalSize = Qt.size(zoneRoot.visualWidth, zoneRoot.visualHeight);
+            lastFinalX = dragStart.x;
+            lastFinalY = dragStart.y;
             animateOffTimer.stop();
             fillPreviewActive = false;
             fillRegion = null;
@@ -205,6 +212,11 @@ MouseArea {
                 if (snapIndicator)
                     snapIndicator.clearSnapLines();
             }
+            // Remember the final (snapped, clamped) position for commit on release.
+            // onReleased must not read visualX/visualY: those have Behaviors attached
+            // and can be mid-animation at release time.
+            lastFinalX = finalX;
+            lastFinalY = finalY;
             // Fill preview (reuse variables already computed above)
             var ctrlHeld = fillModifierHeld;
             if (ctrlHeld && controller && zoneRoot.zoneId) {
@@ -280,20 +292,29 @@ MouseArea {
             // Only update geometry if actual drag movement occurred
             if (hasDragged) {
                 var relX, relY, relW, relH;
-                // Use committed fill region if available (even if modifier key was released).
-                // The visual already holds the fill geometry at release, so commit through
-                // the same converters as a plain drag: for fixed zones they produce screen
-                // pixels (raw normalized region coords would be rejected by C++ as sub-
-                // minimum pixel sizes), and for relative zones they are identity-equivalent
-                // to the region's normalized coords.
-                if (committedFillRegion || fillRegion) {
-                    relX = zoneRoot.toRelativeX(zoneRoot.visualX);
-                    relY = zoneRoot.toRelativeY(zoneRoot.visualY);
-                    relW = zoneRoot.toRelativeW(zoneRoot.visualWidth);
-                    relH = zoneRoot.toRelativeH(zoneRoot.visualHeight);
+                // Commit targets, never visualX/visualY/visualWidth/visualHeight: the
+                // visual properties have Behaviors and hold interpolated mid-animation
+                // values if the mouse is released while a fill preview (or its revert)
+                // is still animating. Committing them would persist a transient
+                // rectangle as undoable state.
+                if (committedFillRegion) {
+                    // Use the committed fill region TARGET (fillRegion is set/cleared
+                    // strictly together with committedFillRegion, so checking one
+                    // suffices). Route through the converters: for fixed zones they
+                    // produce screen pixels (raw normalized region coords would be
+                    // rejected by C++ as sub-minimum pixel sizes), and for relative
+                    // zones they are identity-equivalent to the region's normalized
+                    // coords.
+                    relX = zoneRoot.toRelativeX(committedFillRegion.x * zoneRoot.canvasWidth);
+                    relY = zoneRoot.toRelativeY(committedFillRegion.y * zoneRoot.canvasHeight);
+                    relW = zoneRoot.toRelativeW(committedFillRegion.width * zoneRoot.canvasWidth);
+                    relH = zoneRoot.toRelativeH(committedFillRegion.height * zoneRoot.canvasHeight);
                 } else {
-                    relX = zoneRoot.toRelativeX(zoneRoot.visualX);
-                    relY = zoneRoot.toRelativeY(zoneRoot.visualY);
+                    // Plain drag: use the last final position computed in
+                    // onPositionChanged (already snapped and clamped), not the
+                    // possibly mid-animation visual position.
+                    relX = zoneRoot.toRelativeX(lastFinalX);
+                    relY = zoneRoot.toRelativeY(lastFinalY);
                     relW = zoneRoot.toRelativeW(originalSize.width);
                     relH = zoneRoot.toRelativeH(originalSize.height);
                 }

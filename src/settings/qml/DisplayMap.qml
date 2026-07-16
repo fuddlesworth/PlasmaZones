@@ -254,7 +254,7 @@ ColumnLayout {
                 Kirigami.Theme.colorSet: Kirigami.Theme.View
                 Kirigami.Theme.inherit: false
                 color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : allMouse.containsMouse ? Kirigami.Theme.alternateBackgroundColor : "transparent"
-                border.width: 1
+                border.width: allMouse.activeFocus ? 2 : 1
                 border.color: allMouse.activeFocus ? Kirigami.Theme.focusColor : !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 ColumnLayout {
                     id: allContent

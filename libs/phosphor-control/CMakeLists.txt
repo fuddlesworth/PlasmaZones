@@ -67,6 +67,12 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
 # alone cannot provide it.
 if(NOT TARGET PhosphorAnimation::PhosphorAnimationQml)
     find_package(PhosphorAnimation CONFIG REQUIRED)
+    # find_package succeeding is not enough — surface the missing QML
+    # target here with a clear message instead of an opaque "Target not
+    # found" later in the configure.
+    if(NOT TARGET PhosphorAnimation::PhosphorAnimationQml)
+        message(FATAL_ERROR "phosphor-control: the installed PhosphorAnimation package exports only the C++ target; vendor phosphor-animation via add_subdirectory for a standalone build")
+    endif()
 endif()
 
 # Shared-vs-static lib type. SHARED is the LGPL-friendly default: an
@@ -206,12 +212,21 @@ target_link_libraries(PhosphorControl
 )
 
 set_target_properties(PhosphorControl PROPERTIES
-    VERSION ${PHOSPHORCONTROL_VERSION}
-    SOVERSION 0
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
     UNITY_BUILD OFF
 )
+
+# VERSION/SOVERSION apply to SHARED libraries only and are silently
+# ignored on STATIC — set them only on the SHARED build so the property
+# surface matches what the target actually carries (same principle as
+# the PhosphorControlQml STATIC note below).
+if(PHOSPHOR_CONTROL_BUILD_SHARED)
+    set_target_properties(PhosphorControl PROPERTIES
+        VERSION ${PHOSPHORCONTROL_VERSION}
+        SOVERSION 0
+    )
+endif()
 
 # Surface the CMake version to the C++ version() accessor so the two
 # stay in sync (avoid drift between the project metadata + a hardcoded

@@ -93,7 +93,10 @@ Item {
             Rectangle {
                 id: zoneBg
 
-                readonly property bool useCustom: zone && (zone.useCustomColors === true || zone.useCustomColors === 1)
+                // Shared contract with ZoneOverlayContent.hasCustomColors() and
+                // RenderNodeOverlayContent's useCustom: only true, 1, or "true"
+                // enable per-zone colors (raw truthiness would accept "false").
+                readonly property bool useCustom: zone !== null && zone !== undefined && (zone.useCustomColors === true || zone.useCustomColors === 1 || (typeof zone.useCustomColors === "string" && zone.useCustomColors.toLowerCase() === "true"))
                 readonly property color fillColor: useCustom && zone.inactiveColor ? zone.inactiveColor : root.inactiveColor
                 readonly property real fillOpacity: useCustom && zone.inactiveOpacity !== undefined ? zone.inactiveOpacity : root.inactiveOpacity
                 readonly property color strokeColor: useCustom && zone.borderColor ? zone.borderColor : root.borderColor
@@ -232,6 +235,7 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: root.visible
                             cursorShape: Qt.PointingHandCursor
+                            Accessible.role: Accessible.Button
                             Accessible.name: candidate && candidate.caption ? i18n("Snap %1 to this zone", candidate.caption) : i18n("Snap window to this zone")
                             onClicked: {
                                 const wId = candidate ? candidate.windowId : "";

@@ -51,15 +51,13 @@ SettingsFlickable {
 
                             keySequence: root.settingsBridge.duplicateShortcut
                             placeholderText: "Ctrl+D"
-                            onKeySequenceModified: (seq) => {
+                            onKeySequenceModified: seq => {
                                 root.settingsBridge.duplicateShortcut = seq;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Split horizontally")
@@ -70,15 +68,13 @@ SettingsFlickable {
 
                             keySequence: root.settingsBridge.splitHorizontalShortcut
                             placeholderText: "Ctrl+Shift+H"
-                            onKeySequenceModified: (seq) => {
+                            onKeySequenceModified: seq => {
                                 root.settingsBridge.splitHorizontalShortcut = seq;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Split vertically")
@@ -89,15 +85,13 @@ SettingsFlickable {
 
                             keySequence: root.settingsBridge.splitVerticalShortcut
                             placeholderText: "Ctrl+Alt+V"
-                            onKeySequenceModified: (seq) => {
+                            onKeySequenceModified: seq => {
                                 root.settingsBridge.splitVerticalShortcut = seq;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Fill space")
@@ -108,15 +102,13 @@ SettingsFlickable {
 
                             keySequence: root.settingsBridge.fillShortcut
                             placeholderText: "Ctrl+Shift+F"
-                            onKeySequenceModified: (seq) => {
+                            onKeySequenceModified: seq => {
                                 root.settingsBridge.fillShortcut = seq;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Reset shortcuts")
@@ -127,13 +119,9 @@ SettingsFlickable {
                             icon.name: "edit-reset"
                             onClicked: root.settingsBridge.resetDefaults()
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -161,15 +149,13 @@ SettingsFlickable {
                         SettingsSwitch {
                             checked: root.settingsBridge.gridSnappingEnabled
                             accessibleName: i18n("Enable grid snapping")
-                            onToggled: function(newValue) {
+                            onToggled: function (newValue) {
                                 root.settingsBridge.gridSnappingEnabled = newValue;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Edge snapping")
@@ -178,15 +164,13 @@ SettingsFlickable {
                         SettingsSwitch {
                             checked: root.settingsBridge.edgeSnappingEnabled
                             accessibleName: i18n("Enable edge snapping")
-                            onToggled: function(newValue) {
+                            onToggled: function (newValue) {
                                 root.settingsBridge.edgeSnappingEnabled = newValue;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     // ── Grid Intervals ─────────────────────────────────────
                     SettingsRow {
@@ -200,18 +184,16 @@ SettingsFlickable {
                             to: 0.5
                             stepSize: 0.01
                             value: root.settingsBridge.snapIntervalX
-                            formatValue: function(v) {
+                            formatValue: function (v) {
                                 return Math.round(v * 100) + "%";
                             }
-                            onMoved: (value) => {
+                            onMoved: value => {
                                 return root.settingsBridge.snapIntervalX = value;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Grid interval Y")
@@ -224,18 +206,16 @@ SettingsFlickable {
                             to: 0.5
                             stepSize: 0.01
                             value: root.settingsBridge.snapIntervalY
-                            formatValue: function(v) {
+                            formatValue: function (v) {
                                 return Math.round(v * 100) + "%";
                             }
-                            onMoved: (value) => {
+                            onMoved: value => {
                                 return root.settingsBridge.snapIntervalY = value;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     // ── Modifier ───────────────────────────────────────────
                     SettingsRow {
@@ -243,18 +223,15 @@ SettingsFlickable {
                         description: i18n("Hold this key to temporarily bypass snap behavior")
 
                         ModifierComboBox {
+                            accessibleName: i18n("Override modifier")
                             modifierValue: root.settingsBridge.snapOverrideModifier
-                            onModifierSelected: (value) => {
+                            onModifierSelected: value => {
                                 root.settingsBridge.snapOverrideModifier = value;
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -271,7 +248,7 @@ SettingsFlickable {
                 headerText: i18n("Fill on Drop")
                 showToggle: true
                 toggleChecked: root.settingsBridge.fillOnDropEnabled
-                onToggleClicked: (checked) => {
+                onToggleClicked: checked => {
                     return root.settingsBridge.fillOnDropEnabled = checked;
                 }
 
@@ -283,20 +260,16 @@ SettingsFlickable {
                         description: i18n("Hold this key while dropping a zone to expand it into available space")
 
                         ModifierComboBox {
+                            accessibleName: i18n("Fill on drop modifier key")
                             modifierValue: root.settingsBridge.fillOnDropModifier
-                            onModifierSelected: (value) => {
+                            onModifierSelected: value => {
                                 root.settingsBridge.fillOnDropModifier = value;
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // Keep inputs in sync with editorPage sub-controller properties
@@ -304,40 +277,33 @@ SettingsFlickable {
         function onDuplicateShortcutChanged() {
             if (!editorDuplicateShortcutField.capturing)
                 editorDuplicateShortcutField.keySequence = root.settingsBridge.duplicateShortcut;
-
         }
 
         function onSplitHorizontalShortcutChanged() {
             if (!editorSplitHorizontalShortcutField.capturing)
                 editorSplitHorizontalShortcutField.keySequence = root.settingsBridge.splitHorizontalShortcut;
-
         }
 
         function onSplitVerticalShortcutChanged() {
             if (!editorSplitVerticalShortcutField.capturing)
                 editorSplitVerticalShortcutField.keySequence = root.settingsBridge.splitVerticalShortcut;
-
         }
 
         function onFillShortcutChanged() {
             if (!editorFillShortcutField.capturing)
                 editorFillShortcutField.keySequence = root.settingsBridge.fillShortcut;
-
         }
 
         function onSnapIntervalXChanged() {
             if (!snapIntervalXSlider.slider.pressed)
                 snapIntervalXSlider.value = root.settingsBridge.snapIntervalX;
-
         }
 
         function onSnapIntervalYChanged() {
             if (!snapIntervalYSlider.slider.pressed)
                 snapIntervalYSlider.value = root.settingsBridge.snapIntervalY;
-
         }
 
         target: root.settingsBridge
     }
-
 }

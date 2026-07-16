@@ -1216,9 +1216,28 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
             continue;
         }
         anyChanged = true;
-        const int propertyIndex = metaObject->indexOfProperty(it.key().toUtf8().constData());
+        int propertyIndex = metaObject->indexOfProperty(it.key().toUtf8().constData());
         if (propertyIndex < 0) {
-            continue;
+            // JSON-facade aliases: these registry keys are registered under the
+            // protocol names ("shaderProfileTree"/"decorationProfileTree") but the
+            // Settings Q_PROPERTYs carry a Json suffix, so indexOfProperty misses.
+            // Daemon consumers (OverlayService) connect to the facade NOTIFYs and
+            // do NOT refresh from the aggregate settingsChanged, so skipping them
+            // here would leave the overlay stale after a D-Bus batch write.
+            static const QHash<QString, QByteArray> jsonFacadeAliases = {
+                {QString(PhosphorProtocol::Service::SettingProperty::ShaderProfileTree),
+                 QByteArrayLiteral("shaderProfileTreeJson")},
+                {QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree),
+                 QByteArrayLiteral("decorationProfileTreeJson")},
+            };
+            const auto aliasIt = jsonFacadeAliases.constFind(it.key());
+            if (aliasIt == jsonFacadeAliases.constEnd()) {
+                continue;
+            }
+            propertyIndex = metaObject->indexOfProperty(aliasIt.value().constData());
+            if (propertyIndex < 0) {
+                continue;
+            }
         }
         const QMetaMethod notify = metaObject->property(propertyIndex).notifySignal();
         if (notify.isValid() && notify.parameterCount() == 0) {

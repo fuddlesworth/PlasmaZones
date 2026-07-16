@@ -23,13 +23,12 @@ QtObject {
      */
     function deleteWithFillAnimation(zoneIdToDelete, controller, zonesRepeater, canvasWidth, canvasHeight) {
         if (!controller || !zoneIdToDelete)
-            return ;
+            return;
 
         // Find adjacent zones and store their current geometry BEFORE delete
         var adjacentZones = controller.findAdjacentZones(zoneIdToDelete);
         var adjacentIds = [];
-        var oldGeometries = {
-        };
+        var oldGeometries = {};
         // Collect all adjacent zone IDs and current geometry
         var directions = ["left", "right", "top", "bottom"];
         for (var d = 0; d < directions.length; d++) {
@@ -60,10 +59,9 @@ QtObject {
         controller.deleteZoneWithFill(zoneIdToDelete, true);
         // Animate the adjacent zones - use Qt.callLater to ensure model is updated
         if (adjacentIds.length > 0)
-            Qt.callLater(function() {
-            animateAdjacentZones(adjacentIds, oldGeometries, controller, zonesRepeater, canvasWidth, canvasHeight);
-        });
-
+            Qt.callLater(function () {
+                animateAdjacentZones(adjacentIds, oldGeometries, controller, zonesRepeater, canvasWidth, canvasHeight);
+            });
     }
 
     /**
@@ -77,7 +75,6 @@ QtObject {
             var candidate = zonesRepeater.itemAt(j);
             if (candidate && candidate.zoneId === zoneId)
                 return candidate;
-
         }
         return null;
     }
@@ -112,10 +109,14 @@ QtObject {
 
                 continue;
             }
-            var newX = foundZone.x * canvasW;
-            var newY = foundZone.y * canvasH;
-            var newW = foundZone.width * canvasW;
-            var newH = foundZone.height * canvasH;
+            // Convert model coords to canvas pixels via the item's mode-aware
+            // converters: relative zones store 0-1 normalized values, but fixed
+            // zones (geometryMode === 1) store screen pixels. Multiplying pixels
+            // by canvas size would send the animation target off-canvas.
+            var newX = item.toCanvasX(foundZone.x);
+            var newY = item.toCanvasY(foundZone.y);
+            var newW = item.toCanvasW(foundZone.width);
+            var newH = item.toCanvasH(foundZone.height);
             // Only animate if geometry changed significantly
             if (Math.abs(newX - oldGeom.x) > 1 || Math.abs(newY - oldGeom.y) > 1 || Math.abs(newW - oldGeom.width) > 1 || Math.abs(newH - oldGeom.height) > 1) {
                 // Ensure visual is at old values (in case item was recreated)
@@ -131,5 +132,4 @@ QtObject {
             }
         }
     }
-
 }

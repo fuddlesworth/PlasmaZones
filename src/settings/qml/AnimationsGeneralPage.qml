@@ -239,7 +239,7 @@ SettingsFlickable {
                     description: i18n("Pause between each window's animation start")
 
                     SettingsSlider {
-                        Accessible.name: i18n("Stagger delay")
+                        accessibleName: i18n("Stagger delay")
                         enabled: animationsCard.toggleChecked
                         from: settingsController.generalPage.animationStaggerIntervalMin
                         to: settingsController.generalPage.animationStaggerIntervalMax

@@ -94,7 +94,9 @@ Item {
 
             anchors.horizontalCenter: parent.horizontalCenter
             text: zoneItem.zoneNumber
-            font.pixelSize: Math.min(zoneItem.width, zoneItem.height) * 0.3 * zoneItem.fontSizeScale
+            // Floor at 1: a 0x0 delegate (transient geometry) would otherwise
+            // produce pixelSize 0 and trigger a QFont warning.
+            font.pixelSize: Math.max(1, Math.min(zoneItem.width, zoneItem.height) * 0.3 * zoneItem.fontSizeScale)
             font.weight: zoneItem.fontWeight
             font.italic: zoneItem.fontItalic
             font.underline: zoneItem.fontUnderline

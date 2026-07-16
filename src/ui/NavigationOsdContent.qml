@@ -287,6 +287,7 @@ Item {
     MouseArea {
         anchors.fill: container
         onClicked: dismiss.fire()
+        Accessible.role: Accessible.Button
         Accessible.name: i18n("Dismiss notification")
     }
 }

@@ -65,6 +65,11 @@ Control {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            // The label wraps to availableWidth, but the ScrollView would
+            // otherwise derive contentWidth from the label's unwrapped
+            // implicitWidth, leaving a dead horizontal scroll range on long
+            // single-line GLSL errors.
+            contentWidth: availableWidth
 
             Label {
                 // The ScrollView's own availableWidth, not the Control's —
