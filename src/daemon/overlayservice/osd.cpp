@@ -61,7 +61,7 @@ void sizeOsdToScreen(QQuickWindow* window, const QRect& targetGeom)
 
 bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer::Surface*& outSurface,
                                             QQuickItem*& outOsdSlot, QScreen*& outPhysScreen, QRect& screenGeom,
-                                            qreal& aspectRatio, const QString& screenId)
+                                            qreal& aspectRatio, QString& outEffectiveScreenId, const QString& screenId)
 {
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
@@ -79,6 +79,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     }
 
     QString effectiveId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(physScreen) : screenId;
+    outEffectiveScreenId = effectiveId;
 
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
     if (!state || !state->shell || !state->shell->shellWindow() || !state->shell->shellSurface() || !state->osdSlot()) {
@@ -139,7 +140,9 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     QScreen* physScreen = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, screenId)) {
+    QString effectiveScreenId;
+    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
+                                screenId)) {
         return;
     }
 
@@ -147,6 +150,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     // the screen we're about to render on, not Layout::lastRecalcGeometry()
     // (which may belong to a different screen).
     LayoutOsdContentParams p;
+    p.screenId = effectiveScreenId;
     p.id = layout->id().toString();
     p.name = layout->name();
     p.zones = layout->zones().isEmpty()
@@ -200,7 +204,9 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     QScreen* physScreen = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, screenId)) {
+    QString effectiveScreenId;
+    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
+                                screenId)) {
         return;
     }
 
@@ -235,6 +241,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     }
 
     LayoutOsdContentParams p;
+    p.screenId = effectiveScreenId;
     p.id = id;
     p.name = name;
     p.zones = zones;
@@ -298,14 +305,22 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     writeQmlProperty(osdSlot, QStringLiteral("zones"), p.zones);
     writeFontProperties(osdSlot, m_settings, /*includeLabelFontColor=*/false);
     // Zone preview colors follow the same settings pipeline as the live
-    // overlays and the picker/selector slots (per-zone custom colors ride
-    // inside p.zones; these are the layout-wide effective defaults). Without
-    // this push the OSD fell back to QML-side theme roles and rendered
-    // differently from the picker/selector for the same layout.
+    // overlays and the picker/selector/snap-assist slots (per-zone custom
+    // colors ride inside p.zones; these are the layout-wide effective
+    // defaults). The context overlay-appearance override is layered on top,
+    // exactly like the siblings' writeColorSettings(..., &overlayOverride)
+    // path, so a context rule that recolors the popups recolors this OSD
+    // too. Without this push the OSD fell back to QML-side theme roles and
+    // rendered differently from the picker/selector for the same layout.
     if (m_settings) {
-        writeQmlProperty(osdSlot, QStringLiteral("highlightColor"), m_settings->highlightColor());
-        writeQmlProperty(osdSlot, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
-        writeQmlProperty(osdSlot, QStringLiteral("borderColor"), m_settings->borderColor());
+        const PhosphorZones::ContextOverlayOverride overlayOverride =
+            overlayOverrideForScreen(m_layoutManager, p.screenId);
+        writeQmlProperty(osdSlot, QStringLiteral("highlightColor"),
+                         overlayOverride.highlightColor.value_or(m_settings->highlightColor()));
+        writeQmlProperty(osdSlot, QStringLiteral("inactiveColor"),
+                         overlayOverride.inactiveColor.value_or(m_settings->inactiveColor()));
+        writeQmlProperty(osdSlot, QStringLiteral("borderColor"),
+                         overlayOverride.borderColor.value_or(m_settings->borderColor()));
     }
     // Stage d: resolve + push the OSD's surface-shader decoration (rounded
     // corners + border) onto the slot. Done here so every layout-OSD show path
@@ -476,7 +491,9 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     QScreen* physScreen = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, screenId)) {
+    QString effectiveScreenId;
+    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
+                                screenId)) {
         return;
     }
 
@@ -508,6 +525,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     // navigation-mode properties. See the matching note in
     // PassiveOverlayShell.qml's caveat block.
     LayoutOsdContentParams p;
+    p.screenId = effectiveScreenId;
     p.name = reason; // shown in nameLabel when disabled
     p.screenAspectRatio = aspectRatio;
     pushLayoutOsdContent(osdSlot, p);

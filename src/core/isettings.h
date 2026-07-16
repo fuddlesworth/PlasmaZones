@@ -398,7 +398,6 @@ Q_SIGNALS:
     void inactiveOpacityChanged();
     void borderWidthChanged();
     void borderRadiusChanged();
-    void enableBlurChanged();
     void labelFontFamilyChanged();
     void labelFontSizeScaleChanged();
     void labelFontWeightChanged();

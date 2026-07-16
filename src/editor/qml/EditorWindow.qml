@@ -19,7 +19,6 @@ Window {
     property var _editorController: editorController
     // State properties
     property string selectedZoneId: editorWindow._editorController ? (editorWindow._editorController.selectedZoneId || "") : ""
-    property var selectedZoneIds: editorWindow._editorController ? editorWindow._editorController.selectedZoneIds : []
     property int selectionCount: editorWindow._editorController ? editorWindow._editorController.selectionCount : 0
     property bool hasMultipleSelection: editorWindow._editorController ? editorWindow._editorController.hasMultipleSelection : false
     property string selectionAnchorId: "" // For Shift+click range selection

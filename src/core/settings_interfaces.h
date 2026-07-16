@@ -210,8 +210,6 @@ public:
     virtual void setBorderWidth(int width) = 0;
     virtual int borderRadius() const = 0;
     virtual void setBorderRadius(int radius) = 0;
-    virtual bool enableBlur() const = 0;
-    virtual void setEnableBlur(bool enable) = 0;
 
     // Label font settings
     virtual QString labelFontFamily() const = 0;

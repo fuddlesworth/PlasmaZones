@@ -430,7 +430,6 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_DOUBLE_SETTING("inactiveOpacity", inactiveOpacity, setInactiveOpacity)
     REGISTER_INT_SETTING("borderWidth", borderWidth, setBorderWidth)
     REGISTER_INT_SETTING("borderRadius", borderRadius, setBorderRadius)
-    REGISTER_BOOL_SETTING("enableBlur", enableBlur, setEnableBlur)
 
     // Window decoration appearance (config-backed default the KWin effect resolves
     // against, with user rules overriding per slot). The two colour keys carry a

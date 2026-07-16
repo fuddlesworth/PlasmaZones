@@ -342,7 +342,8 @@ Kirigami.Dialog {
                         zones: root.selectedTemplate.zones
                         showZoneNumbers: true
                         isHovered: true
-                        highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
+                        highlightColor: Kirigami.Theme.highlightColor
+                        activeOpacity: 0.7
                     }
 
                     WizardPreviewBadge {

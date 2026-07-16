@@ -16,6 +16,12 @@ import org.kde.kirigami as Kirigami
  * Multi-bind mode (allowMultiple: true):
  * Shows a list of triggers with Add/Remove buttons. Each trigger is a separate
  * modifier or mouse button that can independently activate the feature.
+ *
+ * The caller owns the state in both modes. The component never writes
+ * modifierValue/mouseButtonValue/triggers itself; it emits valueModified,
+ * mouseButtonsModified, or triggersModified and the caller persists the
+ * value and propagates it back through the property binding. A consumer
+ * that ignores the signals will not see captures or clears reflected.
  */
 Item {
     // Edit mode: replace the trigger at the edited index
@@ -151,9 +157,10 @@ Item {
     }
 
     function clearAll() {
+        // Emit only; writing modifierValue/mouseButtonValue here would sever
+        // the caller's bindings. The caller persists the defaults and the
+        // bindings propagate them back.
         if (modifierValue !== defaultModifierValue || mouseButtonValue !== defaultMouseButtonValue) {
-            modifierValue = defaultModifierValue;
-            mouseButtonValue = defaultMouseButtonValue;
             valueModified(defaultModifierValue);
             mouseButtonsModified(defaultMouseButtonValue);
         }
@@ -430,9 +437,10 @@ Item {
         visible: false
         acceptMode: root.acceptMode
         tooltipEnabled: root.tooltipEnabled
+        // Emit only, mirroring multi-mode's triggersModified contract:
+        // self-assigning modifierValue/mouseButtonValue would sever the
+        // caller's bindings on first capture.
         onModifierCaptured: mask => {
-            root.modifierValue = mask;
-            root.mouseButtonValue = 0;
             root.valueModified(mask);
             root.mouseButtonsModified(0);
         }
@@ -440,8 +448,6 @@ Item {
             if (root.acceptMode === root.acceptModeMetaOnly)
                 return;
 
-            root.modifierValue = 0;
-            root.mouseButtonValue = bit;
             root.valueModified(0);
             root.mouseButtonsModified(bit);
         }

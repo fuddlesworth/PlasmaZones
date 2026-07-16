@@ -304,10 +304,19 @@ private Q_SLOTS:
     }
 
     /**
-     * A reload that changes nothing must stay silent. Pins the system-colors
-     * regression where load()'s palette re-derive routed through the public
-     * color setters, firing each color NOTIFY twice and settingsChanged
-     * several times per themed reload even when no value changed.
+     * A reload that leaves the effective (palette-derived) values unchanged
+     * must stay silent. Pins the system-colors regression where load()'s
+     * palette re-derive routed through the public color setters, firing each
+     * color NOTIFY twice and settingsChanged several times per themed reload
+     * even when no value changed.
+     *
+     * The on-disk highlight color is deliberately made stale before load():
+     * with useSystemColors on, the mid-load derive silently restores the
+     * palette color, so no signal may fire. Without the load-suppression
+     * guard the derive would route the palette value through the public
+     * setter (disk value != palette value, so the same-value early-return
+     * cannot mask the regression) and emit highlightColorChanged +
+     * settingsChanged mid-load.
      */
     void testLoad_noSignal_whenUnchanged()
     {
@@ -317,6 +326,19 @@ private Q_SLOTS:
         QVERIFY(settings.useSystemColors()); // default: themed reload path
         settings.save(); // commit the constructor-derived state to disk
 
+        const QColor derivedHighlight = settings.highlightColor();
+
+        // Hand-write a stale highlight color to disk so load()'s reparse sees
+        // a value that differs from the palette-derived one.
+        const QColor staleHighlight(1, 2, 3);
+        QVERIFY(staleHighlight != derivedHighlight);
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
+            g->writeColor(ConfigDefaults::highlightKey(), staleHighlight);
+            backend->sync();
+        }
+
         QSignalSpy spy(&settings, &Settings::settingsChanged);
         QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
         QSignalSpy fontColorSpy(&settings, &Settings::labelFontColorChanged);
@@ -324,6 +346,9 @@ private Q_SLOTS:
 
         settings.load();
 
+        // The derive restored the palette color over the stale disk value...
+        QCOMPARE(settings.highlightColor(), derivedHighlight);
+        // ...without any signal traffic.
         QCOMPARE(spy.count(), 0);
         QCOMPARE(highlightSpy.count(), 0);
         QCOMPARE(fontColorSpy.count(), 0);

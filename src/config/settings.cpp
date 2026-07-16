@@ -1031,10 +1031,6 @@ P_STORE_SET_INT(setBorderWidth, snappingZonesBorderGroup, widthKey, borderWidthC
 P_STORE_GET(int, borderRadius, snappingZonesBorderGroup, radiusKey, int)
 P_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadiusChanged)
 
-// Effects group (blur lives here for historical reasons)
-P_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
-P_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChanged)
-
 // ── Ordering (PhosphorConfig::Store-backed) ─────────────────────────────────
 // On disk: comma-joined QString. In API: QStringList. The schema validator
 // normalizes the canonical format (trim/dedup), so the round-trip through

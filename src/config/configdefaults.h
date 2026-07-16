@@ -243,10 +243,6 @@ public:
     {
         return 50;
     }
-    static bool enableBlur()
-    {
-        return true;
-    }
     static QString labelFontFamily()
     {
         return QString();

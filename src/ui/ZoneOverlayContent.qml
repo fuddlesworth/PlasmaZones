@@ -109,10 +109,10 @@ Item {
                 required property var modelData
                 required property int index
 
-                x: modelData.x
-                y: modelData.y
-                width: modelData.width
-                height: modelData.height
+                x: modelData.x !== undefined ? modelData.x : 0
+                y: modelData.y !== undefined ? modelData.y : 0
+                width: modelData.width !== undefined ? modelData.width : 0
+                height: modelData.height !== undefined ? modelData.height : 0
                 sourceComponent: (modelData.overlayDisplayMode === 1) ? layoutPreviewComponent : zoneRectComponent
             }
         }

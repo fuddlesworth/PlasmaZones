@@ -388,22 +388,6 @@ SettingsFlickable {
                     spacing: Kirigami.Units.smallSpacing
 
                     SettingsRow {
-                        title: i18n("Blur behind zones")
-                        searchAnchor: "blurBehindZones"
-                        description: i18n("Apply a blur effect to the area behind zone overlays")
-
-                        SettingsSwitch {
-                            checked: appSettings.enableBlur
-                            accessibleName: i18n("Enable blur behind zones")
-                            onToggled: function (newValue) {
-                                appSettings.enableBlur = newValue;
-                            }
-                        }
-                    }
-
-                    SettingsSeparator {}
-
-                    SettingsRow {
                         title: i18n("Zone numbers")
                         searchAnchor: "zoneNumbers"
                         description: i18n("Display a number label inside each zone")

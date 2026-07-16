@@ -887,6 +887,7 @@ private:
         bool producesOverlappingZones = false;
         QString zoneNumberDisplay = QStringLiteral("all");
         int masterCount = 1;
+        QString screenId; ///< effective screen id, resolves the context overlay-appearance override
     };
     void pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdContentParams& params);
 
@@ -1028,12 +1029,16 @@ private:
      * @param outSurface Output: the backing PhosphorLayer::Surface (nullptr on failure)
      * @param screenGeom Output: screen geometry
      * @param aspectRatio Output: calculated aspect ratio
+     * @param outEffectiveScreenId Output: resolved screen id (caller's
+     *        @p screenId, or the target physical screen's identity when the
+     *        caller passed an empty id) — feed this to per-screen context
+     *        lookups such as overlayOverrideForScreen
      * @param screenId Target screen (empty = primary)
      * @return true if window is ready, false on failure
      */
     bool prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer::Surface*& outSurface, QQuickItem*& outOsdSlot,
                                 QScreen*& outPhysScreen, QRect& screenGeom, qreal& aspectRatio,
-                                const QString& screenId = QString());
+                                QString& outEffectiveScreenId, const QString& screenId = QString());
 
     /**
      * @brief Parameters for @ref createLayerSurface, kept as a named-member

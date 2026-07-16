@@ -49,7 +49,10 @@ ColumnLayout {
     property bool enableImage: false
     property bool enableGroups: true
     property bool compact: true
-    property int expandedGroupIndex: 0
+    /// Two-way alias onto the inner editor: the editor self-assigns on
+    /// accordion toggle, and an alias keeps host reads/writes in sync
+    /// instead of severing a one-way forwarding binding.
+    property alias expandedGroupIndex: editor.expandedGroupIndex
 
     /// Fired for a single edit AND for a colour pick (paramId resolved).
     /// @p effectId echoes the effect/pack captured at the time of the edit.
@@ -84,7 +87,6 @@ ColumnLayout {
         enableImage: root.enableImage
         enableGroups: root.enableGroups
         compact: root.compact
-        expandedGroupIndex: root.expandedGroupIndex
         onValueChanged: function (paramId, value) {
             root.valueChanged(root.effectId, paramId, value);
         }

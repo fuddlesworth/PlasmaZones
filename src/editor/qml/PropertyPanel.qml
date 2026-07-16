@@ -119,8 +119,8 @@ Rectangle {
     // bindings die on the first imperative write (selection change), so an
     // undo/redo of a rename/renumber with the same zone still selected must be
     // re-applied here. Focus guards keep an in-progress edit untouched.
-    function syncNameAndNumber() {
-        const zone = selectedZone;
+    function syncNameAndNumber(freshZone) {
+        const zone = (freshZone && freshZone.id) ? freshZone : selectedZone;
         if (!zone)
             return;
 
@@ -172,6 +172,21 @@ Rectangle {
             multiBorderColor = Qt.binding(function () {
                 return propertyPanel.themeBorderDefault;
             });
+        }
+        // Entering "single" from "multiple" with the same selectedZoneId gets no
+        // onSelectedZoneIdChanged, and the onZonesChanged re-sync Connections was
+        // disabled while in multi mode, so edits made during multi-select never
+        // reached these controls. Re-run the sync trio against the authoritative
+        // controller state (the panel's own selectedZone lags), with the same
+        // Qt.callLater coalescing idiom the Connections uses. Bail if the lookup
+        // is empty: syncing then would fall back to stale panel state.
+        if (panelMode === "single" && editorController) {
+            const zone = editorController.getZoneById(editorController.selectedZoneId);
+            if (zone && zone.id) {
+                Qt.callLater(propertyPanel.syncGeometryControls, zone);
+                Qt.callLater(propertyPanel.syncAppearanceControls, zone);
+                Qt.callLater(propertyPanel.syncNameAndNumber, zone);
+            }
         }
     }
 

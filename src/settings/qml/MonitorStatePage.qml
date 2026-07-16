@@ -97,6 +97,16 @@ SettingsFlickable {
         var snapping = "";
         var tiling = "";
         if (stateView.localMode === 1) {
+            if (stateView.localAlgorithmCleared) {
+                // The user explicitly picked "Default". The controller exposes
+                // no invokable that stages an assignment clear
+                // (StagingService::stageFullClear is not surfaced to QML), so
+                // stage nothing rather than pinning the currently-resolved
+                // algorithm as an explicit assignment via the fallback below.
+                return;
+            }
+            // The || fallback serves the mode-toggle path, which stages the
+            // currently-resolved algorithm when the user has not picked one.
             var algoId = stateView.localAlgorithmId || state.algorithmId;
             if (!algoId)
                 return;
@@ -235,6 +245,10 @@ SettingsFlickable {
             // combo reports Default as an empty value, which is otherwise
             // indistinguishable from the not-yet-touched state.
             property bool localLayoutCleared: false
+            // Same tracking for the algorithm selector's "Default" pick: the
+            // combo reports it as an empty value, indistinguishable from the
+            // not-yet-touched state without this flag.
+            property bool localAlgorithmCleared: false
             property bool isTiling: localMode === 1
             // Resolved layout object for LayoutThumbnail
             property var currentLayout: root._findLayout(localLayoutId)
@@ -252,6 +266,7 @@ SettingsFlickable {
                 // "Default" pick; the state below re-initializes from
                 // staged or daemon values.
                 localLayoutCleared = false;
+                localAlgorithmCleared = false;
                 var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
                 if (Object.keys(staged).length > 0) {
                     // Restore from staged state
@@ -322,6 +337,13 @@ SettingsFlickable {
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
                     stateView.localMode = idx;
+                    // A mode toggle is an explicit re-pin: the user is asking
+                    // for this mode on this screen, so any earlier "Default"
+                    // pick no longer applies. Clear both flags so
+                    // _stageCurrentState stages the currently-resolved value
+                    // instead of silently dropping the mode change.
+                    stateView.localLayoutCleared = false;
+                    stateView.localAlgorithmCleared = false;
                     root._stageCurrentState();
                 }
             }
@@ -360,6 +382,7 @@ SettingsFlickable {
                         stateView.localAlgorithmId = id.substring(9);
                     else
                         stateView.localAlgorithmId = id;
+                    stateView.localAlgorithmCleared = (id === "");
                     root._stageCurrentState();
                 }
             }

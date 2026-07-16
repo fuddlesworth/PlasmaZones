@@ -633,7 +633,6 @@ private Q_SLOTS:
         // Appearance defaults
         QCOMPARE(settings.borderWidth(), ConfigDefaults::borderWidth());
         QCOMPARE(settings.borderRadius(), ConfigDefaults::borderRadius());
-        QCOMPARE(settings.enableBlur(), ConfigDefaults::enableBlur());
         QCOMPARE(settings.labelFontWeight(), ConfigDefaults::labelFontWeight());
         QVERIFY(qFuzzyCompare(settings.labelFontSizeScale(), ConfigDefaults::labelFontSizeScale()));
 

@@ -57,7 +57,18 @@ SettingsCard {
 
                 required property int index
                 property int slotNumber: index + 1
-                property string shortcutText: root.appSettings.getQuickLayoutShortcut(slotNumber)
+                // Revision-driven: getQuickLayoutShortcut is an invokable, so
+                // this binding has no reactive dependency of its own.
+                // slotRevision bumps on the daemon's quickLayoutSlotsChanged,
+                // the only slot-related change signal the controller exposes,
+                // so the caption re-reads alongside the slot combos. The
+                // controller currently returns the fixed default (Meta+Alt+N,
+                // it cannot query KGlobalAccel), so there is no separate
+                // shortcut-changed signal to wire.
+                property string shortcutText: {
+                    void root.slotRevision;
+                    return root.appSettings.getQuickLayoutShortcut(slotNumber);
+                }
 
                 Layout.fillWidth: true
                 spacing: 0

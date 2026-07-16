@@ -140,7 +140,6 @@ public:
     Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity WRITE setInactiveOpacity NOTIFY inactiveOpacityChanged)
     Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth NOTIFY borderWidthChanged)
     Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
-    Q_PROPERTY(bool enableBlur READ enableBlur WRITE setEnableBlur NOTIFY enableBlurChanged)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily WRITE setLabelFontFamily NOTIFY labelFontFamilyChanged)
     Q_PROPERTY(
         qreal labelFontSizeScale READ labelFontSizeScale WRITE setLabelFontSizeScale NOTIFY labelFontSizeScaleChanged)
@@ -651,8 +650,6 @@ public:
     void setBorderWidth(int width) override;
     int borderRadius() const override;
     void setBorderRadius(int radius) override;
-    bool enableBlur() const override;
-    void setEnableBlur(bool enable) override;
     QString labelFontFamily() const override;
     void setLabelFontFamily(const QString& family) override;
     qreal labelFontSizeScale() const override;

@@ -810,7 +810,8 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
     // ── Snapping.Effects ────────────────────────────────────────────────────
     QJsonObject effects;
-    moveKey(v1Appearance, QLatin1String("EnableBlur"), effects, QLatin1String("Blur"));
+    // v1 "EnableBlur" is intentionally not migrated: the blur setting was
+    // retired (no runtime consumer), so the old value is silently dropped.
     moveKey(v1Display, QLatin1String("ShowNumbers"), effects, QLatin1String("ShowNumbers"));
     moveKey(v1Display, QLatin1String("FlashOnSwitch"), effects, QLatin1String("FlashOnSwitch"));
     moveKey(v1Display, QLatin1String("ShowOsdOnLayoutSwitch"), effects, QLatin1String("OsdOnLayoutSwitch"));

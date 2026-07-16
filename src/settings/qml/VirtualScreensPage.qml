@@ -63,19 +63,19 @@ SettingsFlickable {
         settingsController.stageVirtualScreenConfig(_selectedScreen, _pendingScreens);
     }
 
-    // Detect grid dimensions from the flat pendingScreens array by
-    // extracting unique x-start and y-start positions.
-    function _detectGrid() {
-        if (_pendingScreens.length <= 1) {
-            _columns = 1;
-            _rows = 1;
-            return;
-        }
+    // Detect grid dimensions from a flat screens array by extracting unique
+    // x-start and y-start positions. Pure helper: returns {cols, rows}.
+    function _detectGridOf(screensArray) {
+        if (screensArray.length <= 1)
+            return {
+                "cols": 1,
+                "rows": 1
+            };
         var tol = 0.01;
         var xStarts = [];
         var yStarts = [];
-        for (var i = 0; i < _pendingScreens.length; i++) {
-            var s = _pendingScreens[i];
+        for (var i = 0; i < screensArray.length; i++) {
+            var s = screensArray[i];
             var foundX = false;
             for (var j = 0; j < xStarts.length; j++) {
                 if (Math.abs(xStarts[j] - s.x) < tol) {
@@ -98,13 +98,22 @@ SettingsFlickable {
         }
         var detectedCols = xStarts.length;
         var detectedRows = yStarts.length;
-        if (detectedCols * detectedRows === _pendingScreens.length) {
-            _columns = detectedCols;
-            _rows = detectedRows;
-        } else {
-            _columns = _pendingScreens.length;
-            _rows = 1;
-        }
+        if (detectedCols * detectedRows === screensArray.length)
+            return {
+                "cols": detectedCols,
+                "rows": detectedRows
+            };
+        return {
+            "cols": screensArray.length,
+            "rows": 1
+        };
+    }
+
+    // Detect grid dimensions of the staged (pending) config into _columns/_rows.
+    function _detectGrid() {
+        var grid = _detectGridOf(_pendingScreens);
+        _columns = grid.cols;
+        _rows = grid.rows;
     }
 
     // Build horizontal split regions from percentage ratios.
@@ -215,12 +224,16 @@ SettingsFlickable {
         }
         // Uniform grid fallback: when all cells share one height (e.g. 2x2),
         // height-grouping collapses every row into a single group, so
-        // rowWidths[0] is the summed width of ALL cells = _rows × (one row's
-        // full width). Dividing by _rows recovers one physical row's width;
-        // multiplying the shared cell height by _rows recovers the full height.
-        if (rowHeights.length === 1 && _rows > 1 && _columns > 0) {
-            _screenWidth = Math.round(rowWidths[0] / _rows);
-            _screenHeight = rowHeights[0] * _rows;
+        // rowWidths[0] is the summed width of ALL cells = rows × (one row's
+        // full width). Dividing by the row count recovers one physical row's
+        // width; multiplying the shared cell height by it recovers the full
+        // height. The /vs: children reflect the APPLIED config, so derive the
+        // grid from _savedScreens (which mirrors it) rather than _rows/_columns,
+        // which track the staged config and may differ mid-edit.
+        var appliedGrid = _detectGridOf(_savedScreens);
+        if (rowHeights.length === 1 && appliedGrid.rows > 1 && appliedGrid.cols > 0) {
+            _screenWidth = Math.round(rowWidths[0] / appliedGrid.rows);
+            _screenHeight = rowHeights[0] * appliedGrid.rows;
             return;
         }
         // Physical width: any row's total width (should be the same for all rows)
@@ -789,18 +802,9 @@ SettingsFlickable {
                                 var newCols = value;
                                 var maxRows = Math.max(1, Math.floor(root._maxVirtualScreens / newCols));
                                 var newRows = Math.min(root._rows, maxRows);
-                                if (newCols * newRows <= 1) {
-                                    settingsController.stageVirtualScreenRemoval(root._selectedScreen);
-                                    // Read the staged state back through the single
-                                    // reconciliation path. Not left to the
-                                    // onDirtyPagesChanged connection: staging emits
-                                    // dirtyPagesChanged only on the clean→dirty
-                                    // transition, so it stays silent when the page
-                                    // is already dirty.
-                                    root._refreshConfig();
-                                } else {
-                                    root._redistributeGrid(newCols, newRows);
-                                }
+                                // _redistributeGrid handles the <=1 case itself
+                                // (stages removal + refreshes).
+                                root._redistributeGrid(newCols, newRows);
                             }
                             Accessible.name: i18n("Number of columns")
                         }
@@ -825,15 +829,9 @@ SettingsFlickable {
                                 var newRows = value;
                                 var maxCols = Math.max(1, Math.floor(root._maxVirtualScreens / newRows));
                                 var newCols = Math.min(root._columns, maxCols);
-                                if (newCols * newRows <= 1) {
-                                    settingsController.stageVirtualScreenRemoval(root._selectedScreen);
-                                    // Same as the columns spinbox above: refresh
-                                    // explicitly — the dirtyPagesChanged connection
-                                    // only fires on the clean→dirty transition.
-                                    root._refreshConfig();
-                                } else {
-                                    root._redistributeGrid(newCols, newRows);
-                                }
+                                // _redistributeGrid handles the <=1 case itself
+                                // (stages removal + refreshes).
+                                root._redistributeGrid(newCols, newRows);
                             }
                             Accessible.name: i18n("Number of rows")
                         }

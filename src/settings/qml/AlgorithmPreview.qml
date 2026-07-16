@@ -32,9 +32,10 @@ Item {
     // Color customization (passed through to ZonePreview). The defaults track
     // the shared zone-color pipeline (ZoneColorDefaults resolves the user's
     // effective zone colors, the same values the daemon pushes into its live
-    // overlays). Fidelity is base-color-only: the ZonePreview bindings below
-    // re-apply fixed 0.7 / 0.9 alphas, so a custom alpha in the effective
-    // colors is not reproduced here.
+    // overlays). Fidelity is base-color-only: the binding below re-applies a
+    // fixed 0.9 border alpha, and fill opacity comes from ZonePreview's
+    // activeOpacity, so a custom alpha in the effective colors is not
+    // reproduced here.
     property color windowColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
     property color windowBorder: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
     // Computed zones, rendered by ZonePreview. Recomputed by recalcTimer, which

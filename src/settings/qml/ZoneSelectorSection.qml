@@ -259,14 +259,25 @@ ColumnLayout {
                     description: i18n("Number of layout previews per row")
 
                     SettingsSpinBox {
+                        id: gridColumnsSpin
+
                         from: root.constants.zoneSelectorGridColumnsMin
                         to: root.constants.zoneSelectorGridColumnsMax
-                        value: root.effectiveGridColumns
                         unitText: ""
                         onValueModified: value => {
                             return root.writeSetting("GridColumns", value, function (v) {
                                 appSettings.zoneSelectorGridColumns = v;
                             });
+                        }
+                        // Feed value through a guarded Binding so scope switches and
+                        // override clears keep refreshing the control: a plain `value:`
+                        // binding is destroyed by SettingsSpinBox's own edit echo after
+                        // the first edit. RestoreNone + the focus gate keeps a live
+                        // edit from being clobbered.
+                        Binding on value {
+                            value: root.effectiveGridColumns
+                            when: !gridColumnsSpin.editing
+                            restoreMode: Binding.RestoreNone
                         }
                     }
                 }
@@ -282,14 +293,22 @@ ColumnLayout {
                     description: i18n("Scrolling enabled when more rows exist")
 
                     SettingsSpinBox {
+                        id: maxRowsSpin
+
                         from: root.constants.zoneSelectorMaxRowsMin
                         to: root.constants.zoneSelectorMaxRowsMax
-                        value: root.effectiveMaxRows
                         unitText: ""
                         onValueModified: value => {
                             return root.writeSetting("MaxRows", value, function (v) {
                                 appSettings.zoneSelectorMaxRows = v;
                             });
+                        }
+                        // See gridColumnsSpin: guarded Binding so scope switches keep
+                        // refreshing after the first edit destroys a plain binding.
+                        Binding on value {
+                            value: root.effectiveMaxRows
+                            when: !maxRowsSpin.editing
+                            restoreMode: Binding.RestoreNone
                         }
                     }
                 }

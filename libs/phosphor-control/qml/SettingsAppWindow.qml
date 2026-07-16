@@ -409,10 +409,11 @@ Kirigami.ApplicationWindow {
 
                     // The Loaders adopt their loaded item's implicit size (slot
                     // contract: the consumer Component declares implicitWidth/Height)
-                    // and collapse to zero width when the loaded item hides itself.
-                    // Same Layout.preferredWidth gating as the breadcrumb trailing
-                    // slot below — see the comment there for why the gate must not
-                    // route through the Loader's own `visible`.
+                    // and collapse to zero size when the loaded item hides itself.
+                    // Gated via Layout.preferredWidth/Height, like the breadcrumb
+                    // trailing slot below (which gates width only) — see the
+                    // comment there for why the gate must not route through the
+                    // Loader's own `visible`.
                     Loader {
                         id: headerExtrasLoader
 

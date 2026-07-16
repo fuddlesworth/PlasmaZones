@@ -802,7 +802,6 @@ private Q_SLOTS:
                                     "LabelFontItalic=false\n"
                                     "LabelFontUnderline=false\n"
                                     "LabelFontStrikeout=false\n"
-                                    "EnableBlur=false\n"
                                     "\n"
                                     "[Zones]\n"
                                     "Padding=4\n"

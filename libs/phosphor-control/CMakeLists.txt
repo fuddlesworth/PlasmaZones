@@ -58,6 +58,14 @@ endif()
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
 
+# phosphor-animation -- PhosphorControlQml links the QML plugin so the
+# chrome's org.phosphor.animation imports resolve for consumers. In the
+# superbuild the target already exists; standalone configures resolve it
+# from an installed package.
+if(NOT TARGET PhosphorAnimation::PhosphorAnimationQml)
+    find_package(PhosphorAnimation CONFIG REQUIRED)
+endif()
+
 # Shared-vs-static lib type. SHARED is the LGPL-friendly default: an
 # end-user can relink against a modified copy of this library without
 # also having to relink the consuming application, satisfying the

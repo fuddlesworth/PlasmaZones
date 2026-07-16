@@ -298,7 +298,6 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingZonesOpacityGroup(), CD::inactiveKey()},
              {CD::snappingZonesBorderGroup(), CD::widthKey()},
              {CD::snappingZonesBorderGroup(), CD::radiusKey()},
-             {CD::snappingEffectsGroup(), CD::blurKey()},
              {CD::snappingEffectsGroup(), CD::showNumbersKey()},
              {CD::snappingEffectsGroup(), CD::flashOnSwitchKey()},
          }},

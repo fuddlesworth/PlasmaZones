@@ -455,19 +455,6 @@ public:
         Q_EMIT borderRadiusChanged();
         Q_EMIT settingsChanged();
     }
-    bool enableBlur() const override
-    {
-        return m_enableBlur;
-    }
-    void setEnableBlur(bool value) override
-    {
-        if (m_enableBlur == value) {
-            return;
-        }
-        m_enableBlur = value;
-        Q_EMIT enableBlurChanged();
-        Q_EMIT settingsChanged();
-    }
     QString labelFontFamily() const override
     {
         return m_labelFontFamily;
@@ -2189,7 +2176,6 @@ private:
     bool m_autotileDragInsertToggle = ConfigDefaults::autotileDragInsertToggle();
     bool m_autotileFocusFollowsMouse = ConfigDefaults::autotileFocusFollowsMouse();
     bool m_enableAudioVisualizer = ConfigDefaults::enableAudioVisualizer();
-    bool m_enableBlur = ConfigDefaults::enableBlur();
     bool m_filterLayoutsByAspectRatio = ConfigDefaults::filterLayoutsByAspectRatio();
     bool m_flashZonesOnSwitch = ConfigDefaults::flashOnSwitch();
     bool m_keepWindowsInZonesOnResolutionChange = ConfigDefaults::keepWindowsInZonesOnResolutionChange();

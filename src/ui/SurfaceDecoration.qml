@@ -298,11 +298,15 @@ Item {
                 // first: a centerIn-driven move of the anchor is always
                 // accompanied by a size change (of the anchor or the host),
                 // and touching those values makes a resize-driven recenter
-                // re-resolve the mapped origin.
+                // re-resolve the mapped origin. The anchor's own x/y are read
+                // too so a pure move of the anchor itself re-resolves; ancestor
+                // pure-moves (position changes higher in the mapped chain)
+                // still require content re-instantiation, which the slots
+                // guarantee per show.
                 readonly property point anchorOrigin: {
                     if (!root.decorationActive || !root.shaderAnchorItem)
                         return Qt.point(0, 0);
-                    void (root.shaderAnchorItem.width + root.shaderAnchorItem.height + root.width + root.height);
+                    void (root.shaderAnchorItem.x + root.shaderAnchorItem.y + root.shaderAnchorItem.width + root.shaderAnchorItem.height + root.width + root.height);
                     return root.shaderAnchorItem.mapToItem(root, 0, 0);
                 }
 

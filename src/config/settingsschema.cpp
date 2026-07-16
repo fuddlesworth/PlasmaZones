@@ -671,12 +671,12 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
         {CD::filterByAspectRatioKey(), CD::filterLayoutsByAspectRatio(), QMetaType::Bool},
     };
 
-    // Full Effects group declared here in one shot. Blur is logically an
-    // appearance-level setting but shares the Effects JSON container with
-    // the display-OSD keys below; declaring the whole container from one
-    // call site keeps the schema build order-independent.
+    // Full Effects group declared here in one shot; declaring the whole
+    // container from one call site keeps the schema build order-independent.
+    // The retired blur toggle ("Blur") is intentionally NOT declared:
+    // purgeStaleKeys() evicts the leftover key from existing user configs
+    // on the next save().
     schema.groups[CD::snappingEffectsGroup()] = {
-        {CD::blurKey(), CD::enableBlur(), QMetaType::Bool},
         {CD::showNumbersKey(), CD::showNumbers(), QMetaType::Bool},
         {CD::flashOnSwitchKey(), CD::flashOnSwitch(), QMetaType::Bool},
         {CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool},

@@ -61,7 +61,7 @@ Item {
                 var baseSize = Kirigami.Theme.defaultFont.pixelSize;
                 var zoneSize = Math.min(zoneContent.width || 0, zoneContent.height || 0);
                 var scaleFactor = zoneSize / 200; // Normalize to ~200px reference
-                var scaledSize = baseSize * Math.max(0.4, Math.min(1, scaleFactor)); // Scale between 40% and 100% of base
+                var scaledSize = baseSize * Math.max(0.4, Math.min(1, scaleFactor)) * zoneContent.fontSizeScale; // Scale between 40% and 100% of base
                 return Math.max(8, Math.round(scaledSize)); // Minimum 8px for readability
             }
             font.weight: zoneContent.fontWeight

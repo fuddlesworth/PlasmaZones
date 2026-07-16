@@ -303,7 +303,6 @@ public:
     // Config Keys — Snapping.Effects
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_KEY(blurKey, "Blur")
     P_CONFIG_KEY(showNumbersKey, "ShowNumbers")
     P_CONFIG_KEY(flashOnSwitchKey, "FlashOnSwitch")
     P_CONFIG_KEY(osdOnLayoutSwitchKey, "OsdOnLayoutSwitch")

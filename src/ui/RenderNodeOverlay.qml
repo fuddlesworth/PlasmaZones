@@ -78,7 +78,7 @@ Window {
     /// Forward to the hosted content's reloadShader() — invoked by the
     /// hot-reload path via QMetaObject::invokeMethod on the window root.
     function reloadShader() {
-        contentItem.reloadShader();
+        hostedContent.reloadShader();
     }
 
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
@@ -88,7 +88,7 @@ Window {
     visible: false
 
     RenderNodeOverlayContent {
-        id: contentItem
+        id: hostedContent
 
         anchors.fill: parent
         shaderSource: root.shaderSource
