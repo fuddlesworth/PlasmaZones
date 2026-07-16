@@ -97,6 +97,9 @@ public:
     std::unique_ptr<IGroup> group(const QString& name) override;
     void reparseConfiguration() override;
     bool sync() override;
+    /// Bypasses the Deferred sync policy's debounce so the return value is a
+    /// real commit result under every policy. Equivalent to @c flushPending().
+    bool commit() override;
     void deleteGroup(const QString& name) override;
     QString readRootString(const QString& key, const QString& defaultValue = {}) const override;
     void writeRootString(const QString& key, const QString& value) override;
@@ -210,11 +213,12 @@ public:
     void setSyncPolicy(SyncPolicy policy, int debounceMs = 500);
     SyncPolicy syncPolicy() const;
 
-    /// Flush any pending deferred-sync write to disk now. No-op when the
-    /// policy is @c Synchronous or when the backend is not dirty.
-    /// Returns the commit result (or @c true when there was nothing to
-    /// flush). Safe to call from any context that would otherwise be
-    /// able to call @c sync().
+    /// Flush to disk now, cancelling any pending deferred-sync timer first.
+    /// No-op only when the backend is not dirty — under @c Synchronous policy
+    /// there is no timer to cancel, but a dirty root is still written, so this
+    /// is a commit under every policy rather than a Deferred-only escape
+    /// hatch. Returns the commit result (or @c true when there was nothing to
+    /// flush). Safe to call from any context that could call @c sync().
     bool flushPending();
 
 private:

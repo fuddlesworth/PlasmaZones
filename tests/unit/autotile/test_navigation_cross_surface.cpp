@@ -104,6 +104,8 @@ private Q_SLOTS:
     void crossOutput_moveRight_emitsExpectedMoveOnceBeforeReflowsAndActivate();
     void crossOutput_moveTowardNonAutotileOutput_doesNotStrandWindow();
     void crossOutput_moveTowardFullAutotileOutput_doesNotStrandWindow();
+    void crossOutput_moveFloatRuledTiledWindow_towardFullOutput_refuses();
+    void crossOutput_moveFloatRuledTiledWindow_keepsItTiled();
     void inSurfaceMove_doesNotEmitExpectedMove();
     void crossVirtualScreen_focusRight_crossesToSiblingVirtualScreen();
 
@@ -428,6 +430,89 @@ void TestNavigationCrossSurface::crossOutput_moveTowardFullAutotileOutput_doesNo
     // destination either. A refusal that removed-then-rejected would leave it
     // duplicated on DP-2; the asserts above alone would not catch that.
     QVERIFY(!fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->containsWindow(QStringLiteral("a2")));
+}
+
+// ── The float predicate must not leak opening-window semantics into a move ──
+//
+// AutotileEngine's FloatPredicate answers "should this app OPEN floating"
+// (a "Float this app" rule match). It is a pure app-rule match with NO memory of
+// a later Meta+F, so for an app the user has explicitly TILED it stays true for
+// the window's whole life. The cross-output MOVE path must therefore never
+// consult it about a live migration: the user asked for a TILED window to be
+// moved, and the only two acceptable outcomes are "tiled at the destination" or
+// "refused, and reported as refused". Silently floating it and reporting success
+// is the bug these two guard.
+
+void TestNavigationCrossSurface::crossOutput_moveFloatRuledTiledWindow_towardFullOutput_refuses()
+{
+    TwoOutputFixture fx;
+    // a2 is TILED on DP-1 but matches a "Float this app" rule — i.e. the user
+    // tiled a float-ruled app with Meta+F. DP-2 is autotile and already at the
+    // cap (b1, b2).
+    fx.engine->config()->maxWindows = 2;
+    fx.engine->setFloatPredicate([](const QString& id) {
+        return id == QStringLiteral("float-me") || id == QStringLiteral("a2");
+    });
+
+    QSignalSpy expectedSpy(fx.engine.get(), &AutotileEngine::windowOutputMoveExpected);
+    QSignalSpy feedbackSpy(fx.engine.get(), &AutotileEngine::navigationFeedback);
+    fx.engine->moveFocusedInDirection(QStringLiteral("right"),
+                                      NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
+
+    // The cap gate must refuse on the BARE cap. a2 is tiled, so it WILL consume a
+    // tile slot on the destination — the float rule's "consumes no slot" exemption
+    // (correct for an OPENING window) does not apply to it. Refuse before any
+    // state mutation or marker: a2 stays tiled and tracked on DP-1, and never
+    // reaches the full DP-2.
+    QCOMPARE(expectedSpy.count(), 0);
+    QVERIFY(fx.engine->isWindowTracked(QStringLiteral("a2")));
+    QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->tiledWindows().contains(QStringLiteral("a2")));
+    QVERIFY(!fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->containsWindow(QStringLiteral("a2")));
+
+    // And the refusal must be REPORTED as one. A success OSD for a move that did
+    // not happen (or that floated the window) is the user-visible half of the bug:
+    // no neighbour desktop is resolvable here either, so the feedback is the
+    // no_neighbor refusal.
+    QVERIFY(!feedbackSpy.isEmpty());
+    bool reportedSuccess = false;
+    for (const QList<QVariant>& call : feedbackSpy) {
+        if (call.at(0).toBool()) {
+            reportedSuccess = true;
+            break;
+        }
+    }
+    QVERIFY2(!reportedSuccess, "a refused cross-output move must not report success");
+}
+
+void TestNavigationCrossSurface::crossOutput_moveFloatRuledTiledWindow_keepsItTiled()
+{
+    TwoOutputFixture fx;
+    // Same float-ruled-but-tiled a2, but now DP-2 has room. The move goes through,
+    // and a2 must arrive TILED: the migration carries its live float state across
+    // rather than re-running the open-time rule, which would re-float the window
+    // the user had explicitly tiled.
+    fx.engine->setFloatPredicate([](const QString& id) {
+        return id == QStringLiteral("a2");
+    });
+
+    // Assert on windowFloatingStateSynced — the insert-time float decision, which
+    // is exactly what the daemon mirrors — rather than reading isFloating() back
+    // off DP-2. Under this harness's null algorithm the destination's zone count
+    // is stale, so applyTiling's overflow pass floats the excess window
+    // afterwards; that is a separate, cap-driven mechanism and would confound a
+    // direct isFloating() read here.
+    QSignalSpy floatSyncSpy(fx.engine.get(), &AutotileEngine::windowFloatingStateSynced);
+    fx.engine->moveFocusedInDirection(QStringLiteral("right"),
+                                      NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
+
+    // The move happened.
+    QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->containsWindow(QStringLiteral("a2")));
+    // And it was NOT inserted floating.
+    for (const QList<QVariant>& call : floatSyncSpy) {
+        if (call.at(0).toString() == QLatin1String("a2")) {
+            QVERIFY2(!call.at(1).toBool(), "a tiled window moved across outputs must not be silently re-floated");
+        }
+    }
 }
 
 void TestNavigationCrossSurface::inSurfaceMove_doesNotEmitExpectedMove()

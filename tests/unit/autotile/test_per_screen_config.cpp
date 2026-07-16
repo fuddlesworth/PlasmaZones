@@ -406,8 +406,11 @@ private Q_SLOTS:
         QVERIFY(bspAlgo);
         QVERIFY(!qFuzzyCompare(bspAlgo->defaultSplitRatio(), 0.42));
 
-        // Establish the concrete algorithm. The first apply legitimately resets to
-        // the algo default (previous map had no algorithm → genuine switch).
+        // Establish the concrete algorithm. No reset fires here: the resolver
+        // reads the previous EFFECTIVE algorithm, and an empty previous map falls
+        // back to the global id ("bsp"), which is what this override pins — so it
+        // is not a switch. The tuned ratio below is set AFTER this apply either
+        // way, so what this line establishes is the previous map, not the ratio.
         QVariantMap first;
         first[QStringLiteral("Algorithm")] = QLatin1String("bsp");
         engine.applyPerScreenConfig(screen, first);
@@ -449,8 +452,8 @@ private Q_SLOTS:
         QCOMPARE(gaps.bottom, 5);
         // Left and right fall back to the global uniform outer gap (10),
         // since no per-screen OuterGap or OuterGapLeft/Right override was set.
-        // Using the literal value instead of engine.effectiveOuterGap(screen) to
-        // avoid a circular assertion that always passes.
+        // Pinned as literals rather than read back off the resolver, so the
+        // assertion cannot go circular and pass against any value.
         QCOMPARE(gaps.left, 10);
         QCOMPARE(gaps.right, 10);
     }
@@ -474,7 +477,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("OuterGap")] = 10;
         engine.applyPerScreenConfig(screen, overrides);
         QCOMPARE(engine.effectiveInnerGap(screen), 8); // per-screen beats global
-        QCOMPARE(engine.effectiveOuterGap(screen), 10);
+        QCOMPARE(engine.effectiveOuterGaps(screen).top, 10);
 
         // A context gap override for this screen must win over both.
         engine.setContextGapProvider([screen](const QString& s) -> QVariantMap {
@@ -487,13 +490,13 @@ private Q_SLOTS:
             return m;
         });
         QCOMPARE(engine.effectiveInnerGap(screen), 14);
-        QCOMPARE(engine.effectiveOuterGap(screen), 18);
+        QCOMPARE(engine.effectiveOuterGaps(screen).top, 18);
 
         // A different screen with no context override still resolves normally.
         const QString other = QStringLiteral("DP-2");
         engine.setAutotileScreens({screen, other});
         QCOMPARE(engine.effectiveInnerGap(other), 4); // global (no per-screen, no context)
-        QCOMPARE(engine.effectiveOuterGap(other), 6);
+        QCOMPARE(engine.effectiveOuterGaps(other).top, 6);
     }
 
     void testPerScreen_contextGapProvider_emptyMapFallsThrough()

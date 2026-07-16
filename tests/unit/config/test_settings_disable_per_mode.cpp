@@ -24,11 +24,22 @@
 #include "../../../src/core/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
+#include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/RuleStore.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using Mode = PhosphorZones::AssignmentEntry::Mode;
+
+// Stable-id-shaped screen names for the tests that assert on a rule's
+// deterministic UUID. `resolveScreenId` only rewrites CONNECTOR names, which
+// ScreenIdentity defines as "contains no ':'", so a "Manuf:Model:Serial" string
+// canonicalizes to itself on every machine. A connector name like "DP-2" would
+// resolve against whatever is actually plugged into the box running the suite,
+// re-keying the rebuilt rule to that monitor's EDID id and changing the UUID the
+// assertions below derive.
+static const QString kScreenA = QStringLiteral("TestVendor:PanelA:0001");
+static const QString kScreenB = QStringLiteral("TestVendor:PanelB:0002");
 
 class TestSettingsDisablePerMode : public QObject
 {
@@ -69,6 +80,76 @@ private Q_SLOTS:
         QVERIFY(!settings.isMonitorDisabled(Mode::Snapping, screen));
         QVERIFY2(settings.isMonitorDisabled(Mode::Autotile, screen),
                  "autotile-side disable was wiped when snap was cleared");
+    }
+
+    /// A disable rule the user toggled OFF in the rule editor must not gate the
+    /// engine, and must not be deleted by an unrelated write to its own (axis,
+    /// mode) family.
+    ///
+    /// The two halves are one fix. `disableEntriesFor` skipping `!enabled` is
+    /// what stops the gate, but that same getter is what `writeDisableEntries`
+    /// round-trips to decide which rules its rebuild owns: once a disabled rule
+    /// is invisible to the getter it is in neither `before` nor `after`, so the
+    /// kept-walk has to recognise and preserve it or the next write to any other
+    /// monitor silently deletes the user's rule.
+    void testMonitorDisable_disabledRuleNeitherGatesNorIsDeleted()
+    {
+        IsolatedConfigGuard guard;
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath(), nullptr);
+        Settings settings(&store, nullptr);
+
+        PhosphorRules::Rule off = PhosphorRules::ContextRuleBridge::makeDisableRule(
+            QStringLiteral("Snapping off · ") + kScreenB, kScreenB, 0, QString(),
+            PhosphorZones::modeToWireString(Mode::Snapping), PhosphorRules::ContextRuleBridge::kContextBandBase);
+        off.enabled = false;
+        QVERIFY(store.addRule(off));
+
+        // The gate reads these lists directly (isMonitorDisabled →
+        // contextDisabledReason), so reporting a switched-off rule here would
+        // keep snapping dead on that screen with no rule in the editor claiming
+        // to do it.
+        QVERIFY2(!settings.isMonitorDisabled(Mode::Snapping, kScreenB), "a disabled rule still gated the engine off");
+        QVERIFY(settings.disabledMonitors(Mode::Snapping).isEmpty());
+
+        // An unrelated write to the same family. The getter no longer reports the
+        // screen-B rule, so the kept-walk is the only thing between it and
+        // deletion.
+        settings.setDisabledMonitors(Mode::Snapping, {kScreenA});
+        QCOMPARE(settings.disabledMonitors(Mode::Snapping), QStringList{kScreenA});
+
+        PhosphorRules::RuleStore reloaded(ConfigDefaults::rulesFilePath(), nullptr);
+        reloaded.load();
+        const auto survivor = reloaded.ruleSet().ruleById(off.id);
+        QVERIFY2(survivor.has_value(), "an unrelated write to the family deleted the user's disabled rule");
+        QVERIFY2(!survivor->enabled, "the preserved rule came back enabled");
+    }
+
+    /// Re-asserting a disabled rule's own entry through the list re-enables it
+    /// rather than colliding with it. `makeDisableRule` derives a deterministic
+    /// id from (screen, desktop, activity, mode), so a kept-walk that preserved
+    /// the disabled rule unconditionally would leave two rules sharing one id the
+    /// moment the user ticked that monitor back on.
+    void testMonitorDisable_reAssertingADisabledRuleReEnablesIt()
+    {
+        IsolatedConfigGuard guard;
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath(), nullptr);
+        Settings settings(&store, nullptr);
+
+        PhosphorRules::Rule off = PhosphorRules::ContextRuleBridge::makeDisableRule(
+            QStringLiteral("Snapping off · ") + kScreenB, kScreenB, 0, QString(),
+            PhosphorZones::modeToWireString(Mode::Snapping), PhosphorRules::ContextRuleBridge::kContextBandBase);
+        off.enabled = false;
+        QVERIFY(store.addRule(off));
+
+        settings.setDisabledMonitors(Mode::Snapping, {kScreenB});
+        QVERIFY(settings.isMonitorDisabled(Mode::Snapping, kScreenB));
+
+        PhosphorRules::RuleStore reloaded(ConfigDefaults::rulesFilePath(), nullptr);
+        reloaded.load();
+        QCOMPARE(reloaded.count(), 1);
+        const auto revived = reloaded.ruleSet().ruleById(off.id);
+        QVERIFY(revived.has_value());
+        QVERIFY2(revived->enabled, "ticking the monitor back on left the rule disabled");
     }
 
     /// Each per-mode list survives a save → reload round-trip with its

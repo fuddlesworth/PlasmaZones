@@ -53,7 +53,14 @@ Item {
         anchors.fill: parent
         hoverEnabled: false
         cursorShape: Qt.PointingHandCursor
-        onClicked: root.clicked()
+        onClicked: {
+            // Move active focus to the clicked card so a previously
+            // keyboard-focused sibling doesn't keep the focus ring and the key
+            // handlers. onDoubleClicked delivers `clicked` first, so the
+            // double-click path picks the focus up from here.
+            root.forceActiveFocus();
+            root.clicked();
+        }
         onDoubleClicked: root.doubleClicked()
     }
 

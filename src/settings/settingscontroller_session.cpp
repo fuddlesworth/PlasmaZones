@@ -359,8 +359,19 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
 
 namespace {
 
+// Drop a leading UTF-8 BOM from @p bytes. Qt's JSON parser treats a BOM as a
+// syntax error rather than skipping it, so any bytes handed to
+// QJsonDocument::fromJson have to come through here first. Shared by the import
+// probe's head sniff and its whole-file parse so the two agree on where the
+// content starts.
+QByteArray withoutUtf8Bom(const QByteArray& bytes)
+{
+    static const QByteArray kUtf8Bom("\xEF\xBB\xBF", 3);
+    return bytes.startsWith(kUtf8Bom) ? bytes.mid(kUtf8Bom.size()) : bytes;
+}
+
 // Parses the daemon's running-windows JSON payload into a QVariantList of
-// {windowClass, appName, caption} maps ready for QML consumption. The
+// {windowClass, appName, caption, desktopFile} maps ready for QML consumption. The
 // synchronous getRunningWindows() predecessor was removed in Phase 6 of
 // refactor/dbus-performance; only onRunningWindowsAvailable calls this now.
 // Anonymous namespace keeps this TU-local — same convention as the
@@ -585,11 +596,8 @@ bool SettingsController::importAllSettings(const QString& filePath)
                 Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
                 return false;
             }
-            head = head.trimmed();
             // Skip UTF-8 BOM (EF BB BF) if present — trimmed() only strips ASCII whitespace.
-            if (head.size() >= 3 && byte(0) == 0xEF && byte(1) == 0xBB && byte(2) == 0xBF) {
-                head = head.mid(3).trimmed();
-            }
+            head = withoutUtf8Bom(head.trimmed()).trimmed();
             // A leading '[' is ambiguous: a legacy INI file starts with its
             // first "[Group]" header, but so does a JSON array. The array is
             // valid JSON yet never a settings file (the config root is always
@@ -599,7 +607,14 @@ bool SettingsController::importAllSettings(const QString& filePath)
             // it with the accurate message; a parse failure means a real INI
             // section header and the migration path proceeds as before.
             if (!head.isEmpty() && head.at(0) == '[') {
-                if (!QJsonDocument::fromJson(f.readAll()).isNull()) {
+                // Parse the body under the SAME normalization `head` got. peek()
+                // left the read position at 0, so readAll() re-reads the BOM that
+                // was stripped from `head` above, and Qt's JSON parser rejects a
+                // leading BOM outright — a BOM'd JSON array would look like a
+                // parse failure, fall through to isLegacyIni, and earn exactly the
+                // misleading "older settings file" error this branch exists to
+                // prevent.
+                if (!QJsonDocument::fromJson(withoutUtf8Bom(f.readAll().trimmed())).isNull()) {
                     qCWarning(PlasmaZones::lcCore)
                         << "Import file is a JSON array, not a settings object, refusing:" << filePath;
                     Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));

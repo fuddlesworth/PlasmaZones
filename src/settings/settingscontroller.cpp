@@ -208,15 +208,13 @@ SettingsController::SettingsController(QObject* parent)
     // daemon running; the store's idempotent load() makes the overlap a no-op.
     m_localRuleStoreWatcher->start();
 
-    // Wire the layoutsChanged handler BEFORE the initial loadLayouts() so
-    // any QFileSystemWatcher event landing in the window between load +
-    // connect (e.g. the daemon writing to ~/.local/share/plasmazones/layouts/
-    // mid-ctor) is handled. ZonesLayoutSource self-wires to the registry's
-    // unified ILayoutSourceRegistry::contentsChanged; future reads through
-    // the local source reflect current geometry once recalcLocalLayouts has
-    // run. When the file watcher detects a layout change on disk, refresh
-    // m_layouts from the local composite (manual + autotile) so QML rebinds
-    // even if the daemon isn't broadcasting D-Bus signals (or is down). The
+    // Wire the layoutsChanged handler BEFORE the initial loadLayouts() so the
+    // load below is routed through it. ZonesLayoutSource self-wires to the
+    // registry's unified ILayoutSourceRegistry::contentsChanged; future reads
+    // through the local source reflect current geometry once recalcLocalLayouts
+    // has run. On every registry reload, refresh m_layouts from the local
+    // composite (manual + autotile) so QML rebinds even if the daemon isn't
+    // broadcasting D-Bus signals (or is down). The
     // async refresh through scheduleLayoutLoad() / loadLayoutsAsync() also
     // fires from daemon-side D-Bus signals and replaces m_layouts with the
     // D-Bus-enriched view when the daemon is up — these two paths converge
@@ -229,10 +227,9 @@ SettingsController::SettingsController(QObject* parent)
         // path guarded on `!localLayouts.isEmpty()`, which left stale
         // entries in m_layouts after a wipe when the daemon was down.
         SettingsController::sortMergedLayoutList(localLayouts);
-        // Skip when the disk view matches what we already have — file-
-        // watcher events fire on every daemon write during a save
-        // batch, and identical payloads would re-emit the model on
-        // each tick.
+        // Skip when the disk view matches what we already have — a daemon
+        // save batch fires a reload per layout write, and identical
+        // payloads would re-emit the model on each one.
         const bool actuallyChanged = m_layouts != localLayouts;
         if (actuallyChanged) {
             m_layouts = std::move(localLayouts);
@@ -250,10 +247,11 @@ SettingsController::SettingsController(QObject* parent)
 
     // Load the user's layouts immediately so localLayoutPreviews() returns
     // a populated list on first call (before any QML query has had a
-    // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
-    // PhosphorZones::LayoutRegistry scans ~/.local/share/plasmazones/layouts/ on demand
-    // and installs a QFileSystemWatcher so any subsequent disk changes
-    // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
+    // chance to trigger the legacy D-Bus loadLayoutsAsync path).
+    // PhosphorZones::LayoutRegistry scans ~/.local/share/plasmazones/layouts/
+    // only when loadLayouts() is called — it watches nothing, so an explicit
+    // call is the sole reload trigger. This one covers startup;
+    // loadLayoutsAsync() re-calls it off the daemon's D-Bus layout signals.
     m_localLayoutManager->loadLayouts();
     // `loadLayouts()` emits `layoutsChanged` synchronously, which the
     // handler wired above already routes through `recalcLocalLayouts()`

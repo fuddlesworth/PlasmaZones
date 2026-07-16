@@ -18,7 +18,7 @@ void ZoneManager::setDefaultColors(const QString& highlightColor, const QString&
     m_defaultBorderColor = borderColor;
 }
 
-QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReuse)
+QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReuse, int insertIndex)
 {
     if (zoneData.isEmpty()) {
         qCWarning(lcEditorZone) << "Empty zone data for addZoneFromMap";
@@ -169,9 +169,14 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
             Q_EMIT zonesModified();
         }
     } else {
-        // Add new zone on top of the stack, which is the end of the list
-        zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = m_zones.size();
-        m_zones.append(zone);
+        // The list index IS the z-order. A caller that knows where the zone used
+        // to sit (undo of a delete) passes that index so it comes back at its
+        // original height; everyone else lands on top, the end of the list.
+        const int at = (insertIndex >= 0 && insertIndex < m_zones.size()) ? insertIndex : m_zones.size();
+        m_zones.insert(at, zone);
+        // An insert below the top shifts every zone after it, so recompact rather
+        // than stamping this one zone. Keeps zOrder a dense 0..count-1 permutation.
+        updateAllZOrderValues();
 
         // Handle signal emission (deferred during batch updates)
         if (m_batchUpdateDepth > 0) {
@@ -299,7 +304,8 @@ void ZoneManager::restoreZones(const QVariantList& zones)
     m_zones = hasDuplicates ? validated : zones;
     // The list order is the z-order, so stamping zOrder from it reproduces the
     // snapshot's stacking and closes the hole a dropped duplicate would leave
-    // in the run.
+    // in the run. Never trust the zOrder the incoming maps carry: a snapshot was
+    // numbered against a different list, and a parsed layout carries none at all.
     updateAllZOrderValues();
     Q_EMIT zonesChanged();
     Q_EMIT zonesModified();

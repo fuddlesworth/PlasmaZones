@@ -13,12 +13,12 @@
 namespace PhosphorZones {
 
 namespace {
-// Screen-id resolver state. The resolver is installed by the daemon / editor /
-// settings at startup and read by Layout::fromJson, which can run on any
-// thread — the QFileSystemWatcher worker in particular services layout-file
-// change notifications off the main thread. A plain static std::function is
-// subject to torn reads when set() races with an ongoing get(); guard it with
-// a mutex and return copies so readers never outlive the stored callable.
+// Screen-id resolver state. This is process-wide static state with no thread
+// affinity of its own: it is installed by the daemon / editor / settings at
+// startup and read by Layout::fromJson, which is a plain static any caller on
+// any thread may reach. A bare static std::function is subject to torn reads
+// when set() races an in-flight get(), so guard it with a mutex and return
+// copies, which also keeps a reader from outliving the stored callable.
 std::mutex& resolverMutex()
 {
     static std::mutex m;

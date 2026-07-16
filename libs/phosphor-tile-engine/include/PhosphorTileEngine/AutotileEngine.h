@@ -552,7 +552,6 @@ public:
 
     // Effective per-screen values — forwarded to PerScreenConfigResolver
     int effectiveInnerGap(const QString& screenId) const;
-    int effectiveOuterGap(const QString& screenId) const;
     ::PhosphorLayout::EdgeGaps effectiveOuterGaps(const QString& screenId) const;
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
@@ -1408,6 +1407,30 @@ private:
     // Rule-driven open-floating gate. Empty until the daemon wires it; while empty
     // no window is rule-floated. See FloatPredicate doc above.
     FloatPredicate m_floatPredicate{};
+
+    /**
+     * @brief An already-managed window ARRIVING in a state via
+     *        migrateWindowBetweenKeys, with the float state it held on the
+     *        source, captured before the source removed it.
+     *
+     * Set only for the duration of that migration's synchronous
+     * onWindowAdded() → insertWindow() call, so insertWindow can tell a
+     * migration apart from a genuine open. m_floatPredicate answers "should
+     * this app OPEN floating" — a pure app-rule match with no memory of a later
+     * Meta+F — so re-running it on a migration would silently re-float a
+     * float-ruled window the user had explicitly tiled. A migrating window
+     * carries this live float state across instead.
+     */
+    struct MigrationArrival
+    {
+        QString windowId;
+        bool wasFloating = false;
+    };
+    std::optional<MigrationArrival> m_migrationArrival;
+
+    /// The float state @p windowId must be inserted with: the live state it
+    /// carried across a migration, else the open-time "Float this app" rule.
+    bool insertShouldFloat(const QString& windowId) const;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;

@@ -120,9 +120,6 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     int effectiveInnerGap(const QString& screenId) const;
-    /// The resolved outer gap for @p screenId as a single value. Defined as
-    /// effectiveOuterGaps(screenId).top, so the two never disagree on any layer.
-    int effectiveOuterGap(const QString& screenId) const;
     ::PhosphorLayout::EdgeGaps effectiveOuterGaps(const QString& screenId) const;
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
@@ -166,8 +163,8 @@ private:
 
     /// The uniform outer-gap value the per-side resolution fills missing sides
     /// from: the context layer's uniform OuterGap, else the per-screen override,
-    /// else the global config. Distinct from the public effectiveOuterGap, which
-    /// reports the fully resolved top side.
+    /// else the global config. Only a BASE for the missing sides — it skips the
+    /// per-side layers that effectiveOuterGaps resolves on top of it.
     int outerGapBase(const QString& screenId, const QVariantMap& ctx) const;
 
     AutotileEngine* m_engine = nullptr;

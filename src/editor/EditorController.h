@@ -518,9 +518,10 @@ public Q_SLOTS:
 
     // D-Bus subscriber slot — wired in the ctor to all of the daemon's
     // layout-mutation signals (layoutCreated/Deleted/Changed/ListChanged/
-    // PropertyChanged). Forces an in-process PhosphorZones::LayoutRegistry reload so
-    // localLayoutPreviews() reflects the daemon's view regardless of
-    // whether the QFileSystemWatcher saw the underlying file event.
+    // PropertyChanged). Forces an in-process PhosphorZones::LayoutRegistry
+    // reload so localLayoutPreviews() reflects the daemon's view. The registry
+    // watches nothing, so this explicit reload is the only way a daemon-side
+    // layout write reaches the editor.
     void reloadLocalLayouts();
 
     // PhosphorZones::Zone CRUD operations (using zone IDs)

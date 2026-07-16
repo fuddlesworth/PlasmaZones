@@ -691,6 +691,11 @@ bool JsonBackend::flushNow()
     return true;
 }
 
+bool JsonBackend::commit()
+{
+    return flushPending();
+}
+
 bool JsonBackend::flushPending()
 {
     // A pending debounce timer would fire flushNow() on next timeout; stop

@@ -42,11 +42,27 @@ namespace PlasmaZones {
 
 namespace {
 
-/// Suffix appended to a duplicated algorithm's display name. Single-sourced so
-/// the strip below and the append can never disagree on the spelling or the
-/// length. This is the algorithm domain's own suffix, deliberately independent
-/// of LayoutRegistry::duplicateNameSuffix().
-constexpr QLatin1String CopyNameSuffix{" (Copy)"};
+/// The untranslated duplicate suffix. Every algorithm name a pre-translation
+/// build wrote carries this form, and it is also what a copy made under a
+/// different language leaves behind, so the strip below has to know it
+/// regardless of the running locale. This is the algorithm domain's own suffix,
+/// deliberately independent of LayoutRegistry::duplicateNameSuffix().
+constexpr QLatin1String UntranslatedCopyNameSuffix{" (Copy)"};
+
+/// The suffix a duplicate made right now gets, in the user's language. The name
+/// lands in the copy's `.luau` metadata and is what the algorithm picker shows,
+/// so it is user-facing text and goes through the translation catalog.
+///
+/// An empty translation would be worse than none: `endsWith(QString())` is true
+/// and `chop(0)` changes nothing, so the strip loop below would spin forever,
+/// and the copy would come out sharing its source's exact name. Fall back to the
+/// untranslated form rather than trust the catalog.
+QString copyNameSuffix()
+{
+    const QString translated =
+        PhosphorI18n::tr(" (Copy)", "Suffix appended to the name of a duplicated algorithm. Keep the leading space.");
+    return translated.isEmpty() ? QString(UntranslatedCopyNameSuffix) : translated;
+}
 
 QString userAlgorithmsDir()
 {
@@ -640,9 +656,27 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     // would miss, and the suffix appended below must never be re-mangled.
     const QString newFilename = QFileInfo(destPath).completeBaseName();
     QString baseCopyName = AlgorithmScaffold::sanitizeMetadataString(algo->name());
-    while (baseCopyName.endsWith(CopyNameSuffix))
-        baseCopyName.chop(CopyNameSuffix.size());
-    const QString newName = baseCopyName + CopyNameSuffix;
+    // Strip BOTH forms. The name is persisted in the source's metadata, so the
+    // suffix already on it was written by whatever language was running when
+    // that copy was made — matching only the current locale's suffix would let
+    // "Grid (Copie)" grow a second one and read "Grid (Copie) (Copy)". Copies
+    // made under a THIRD language still accumulate: the catalog cannot be
+    // enumerated backwards, so a French suffix is unrecognisable to a German
+    // build. Covering the current locale and the untranslated form handles the
+    // cases that actually occur (one language throughout, and names written
+    // before this string was translatable).
+    const QString suffix = copyNameSuffix();
+    for (bool stripped = true; stripped;) {
+        stripped = false;
+        if (baseCopyName.endsWith(suffix)) {
+            baseCopyName.chop(suffix.size());
+            stripped = true;
+        } else if (baseCopyName.endsWith(UntranslatedCopyNameSuffix)) {
+            baseCopyName.chop(UntranslatedCopyNameSuffix.size());
+            stripped = true;
+        }
+    }
+    const QString newName = baseCopyName + suffix;
     // Same depth-aware metadata rewrite the wizard's template path uses: it
     // touches only the top-level name/id fields, so a table elsewhere in the
     // file (or a nested customParams `name`) is never mistaken for metadata.

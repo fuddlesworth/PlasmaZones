@@ -423,6 +423,19 @@ void QSettingsBackend::removeRootKey(const QString& key)
 
 QStringList QSettingsBackend::groupList() const
 {
+    // IBackend::groupList()'s reserved-name contract needs no filtering here.
+    // Root keys go through setValue(key) with no group prefix, and the
+    // KConfig-INI format writes them section-less at the top of the file and
+    // reads them back the same way (see readKConfigIni / writeKConfigIni), so
+    // QSettings holds them as unprefixed map entries. childGroups() derives
+    // groups from the prefixes of keys that have one, which these do not — it
+    // reports them as child keys instead and can never name them here. There
+    // is no root container to reserve.
+    //
+    // Note this backend does NOT adopt QSettings::IniFormat's convention of
+    // parking ungrouped keys in a "[General]" section. A literal [General] in
+    // a file written by some other tool is therefore an ordinary group to this
+    // backend, not the root, and is reported as such.
     return m_settings->childGroups();
 }
 

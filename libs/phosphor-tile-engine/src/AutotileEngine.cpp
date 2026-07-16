@@ -1463,11 +1463,6 @@ int AutotileEngine::effectiveInnerGap(const QString& screenId) const
     return m_configResolver->effectiveInnerGap(screenId);
 }
 
-int AutotileEngine::effectiveOuterGap(const QString& screenId) const
-{
-    return m_configResolver->effectiveOuterGap(screenId);
-}
-
 ::PhosphorLayout::EdgeGaps AutotileEngine::effectiveOuterGaps(const QString& screenId) const
 {
     return m_configResolver->effectiveOuterGaps(screenId);
@@ -2515,6 +2510,10 @@ void AutotileEngine::migrateWindowBetweenKeys(const QString& windowId, const Til
     if (!oldState || !oldState->containsWindow(windowId)) {
         return;
     }
+    // Capture the float state BEFORE the source drops the window: the re-add
+    // below must carry it across (see MigrationArrival). Reading it after the
+    // removal is impossible — no state holds the window in between.
+    const bool wasFloating = oldState->isFloating(windowId);
     // Use the algorithm's lifecycle hook for clean removal (e.g.
     // dwindle-memory updates its split tree) — mirrors windowOpened's
     // migration path.
@@ -2535,8 +2534,14 @@ void AutotileEngine::migrateWindowBetweenKeys(const QString& windowId, const Til
     scheduleRetileForScreen(oldKey.screenId);
     if (isAutotileScreen(newScreenId)) {
         // Re-add to the new screen's normal flow (will be overflow-checked
-        // on next retile).
+        // on next retile). Mark the re-add as a migration ARRIVAL for the
+        // duration of this synchronous call so insertWindow carries the
+        // window's live float state across instead of re-deriving it from the
+        // open-time float rule. Cleared unconditionally afterwards: the marker
+        // describes this one re-add and must not leak into a later open.
+        m_migrationArrival = MigrationArrival{windowId, wasFloating};
         onWindowAdded(windowId);
+        m_migrationArrival.reset();
     }
     // Re-adding on a non-autotile destination would route through
     // screenForWindow()'s primary-screen fallback and re-tile a window that
@@ -2591,11 +2596,22 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
     const int maxWin = effectiveMaxWindows(screenId);
-    // A window matched by a "Float this app" rule must bypass the tiled-window
-    // cap: it opens floating and so consumes no tile slot (tiledWindowCount
-    // excludes floats), and insertWindow marks it floating once inserted. Dropping
-    // it here would leave it untracked — neither floating in autotile (so the
-    // IsFloating match field stays false) nor re-tileable via Meta+F.
+    // A window OPENING under a matched "Float this app" rule must bypass the
+    // tiled-window cap: it opens floating and so consumes no tile slot
+    // (tiledWindowCount excludes floats), and insertWindow marks it floating once
+    // inserted. Dropping it here would leave it untracked — neither floating in
+    // autotile (so the IsFloating match field stays false) nor re-tileable via
+    // Meta+F.
+    //
+    // The rule is deliberately consulted here even for a migration ARRIVAL, which
+    // insertWindow may then insert TILED (it carries the window's live float state
+    // across — see insertShouldFloat). That combination lands a float-ruled window
+    // the user had tiled onto a cap-full screen, where applyTiling's overflow pass
+    // floats the excess back out. Refusing instead would be worse: the arrival's
+    // source state has already dropped it, so a refusal here strands it. The
+    // proactive cross-output guard in NavigationController::crossOutputMove
+    // therefore applies the BARE cap and refuses BEFORE migrating, which is where
+    // a full destination is turned away without stranding anything.
     const bool ruleWillFloat = m_floatPredicate && m_floatPredicate(windowId);
     if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
@@ -3038,6 +3054,21 @@ void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QSt
     }
 }
 
+bool AutotileEngine::insertShouldFloat(const QString& windowId) const
+{
+    // A window ARRIVING from another state was already managed, so the open-time
+    // "Float this app" rule has nothing to say about it — it carries the float
+    // state it held on the source. Re-running the predicate here would re-float a
+    // float-ruled window the user had explicitly tiled with Meta+F: the predicate
+    // is a pure app-rule match that stays true for the window's whole life, so a
+    // cross-output move would silently undo the user's tiling.
+    if (m_migrationArrival && m_migrationArrival->windowId == windowId) {
+        return m_migrationArrival->wasFloating;
+    }
+    // A genuine open consults the rule.
+    return m_floatPredicate && m_floatPredicate(windowId);
+}
+
 bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenId)
 {
     PhosphorTiles::TilingState* state = tilingStateForScreen(screenId);
@@ -3237,13 +3268,14 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // parallel saved-floating set — the WindowPlacement record is the single
     // source of truth for cross-mode float state.
 
-    // A matched "Float this app" rule opens the window floating: it is
-    // inserted above (so it stays managed and Meta+F can re-tile it), then marked
-    // floating here, identical to a manual float toggle. Guarded on not-already-
-    // floating so the placement-record float-restore branch above is not
-    // re-applied. onWindowAdded then emits windowFloatingStateSynced so the daemon
-    // mirrors the state.
-    if (m_floatPredicate && !state->isFloating(windowId) && m_floatPredicate(windowId)) {
+    // Float the window when its insert state says so: a matched "Float this app"
+    // rule on a genuine open, or the live float state a migrating window carried
+    // across (insertShouldFloat). Either way it is inserted above (so it stays
+    // managed and Meta+F can re-tile it), then marked floating here, identical to
+    // a manual float toggle. Guarded on not-already-floating so the
+    // placement-record float-restore branch above is not re-applied. onWindowAdded
+    // then emits windowFloatingStateSynced so the daemon mirrors the state.
+    if (!state->isFloating(windowId) && insertShouldFloat(windowId)) {
         state->setFloating(windowId, true);
     }
 

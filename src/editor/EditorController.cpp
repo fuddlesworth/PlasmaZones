@@ -112,9 +112,8 @@ EditorController::EditorController(QObject* parent)
     // the new algorithm set on the next composite query.
 
     // Wire the layoutsChanged → recalcLocalLayouts connection BEFORE the
-    // initial loadLayouts() so that QFileSystemWatcher events arriving in
-    // the window between load + connect (e.g. the daemon writing a layout
-    // file mid-ctor) are handled. ZonesLayoutSource self-wires to the
+    // initial loadLayouts() so the load below is routed through it.
+    // ZonesLayoutSource self-wires to the
     // registry's unified ILayoutSourceRegistry::contentsChanged — no manual
     // bridge required. Editor has no downstream consumer of
     // ILayoutSource::contentsChanged, so slot ordering against
@@ -124,9 +123,11 @@ EditorController::EditorController(QObject* parent)
             &EditorController::recalcLocalLayouts);
 
     // Populate the daemon-independent layout source from disk on startup
-    // so localLayoutPreviews() returns a populated list immediately. The
-    // PhosphorZones::LayoutRegistry installs a QFileSystemWatcher so subsequent disk
-    // changes (daemon writes, settings creates, hand edits) auto-reload.
+    // so localLayoutPreviews() returns a populated list immediately.
+    // PhosphorZones::LayoutRegistry does NOT watch the layout directory: an
+    // explicit loadLayouts() call is the only thing that rescans disk. This
+    // one covers startup, and the D-Bus subscriptions wired below cover every
+    // later change. Do not drop either as redundant.
     m_localLayoutManager->loadLayouts();
     // Recompute zone geometry for fixed-geometry layouts so ZonesLayoutSource
     // emits non-empty zones + a real referenceAspectRatio — see the matching
@@ -138,15 +139,16 @@ EditorController::EditorController(QObject* parent)
     recalcLocalLayouts();
 
     // Subscribe to the daemon's layout-change D-Bus signals and force
-    // a local-source reload when any fire. Belt-and-suspenders alongside
-    // the QFileSystemWatcher: Qt's QFSW has known misses on cross-process
-    // atomic-rename writes (the daemon writes via QSaveFile, which
-    // creates a new inode the watcher may not bind to in time). Tying
-    // the local reload to the daemon's signal stream guarantees the
-    // editor's preview surface stays in sync with the daemon's view
-    // regardless of which file-event path fires first. When the daemon
-    // isn't running, none of these signals fire — the QFSW path covers
-    // single-process editor + manual hand-edits.
+    // a local-source reload when any fire. Nothing watches the layout
+    // directory, so this subscription is the ONLY thing that refreshes the
+    // editor's view of another process's writes — it is not a backup for a
+    // file watcher. Dropping it strands the preview surface on whatever disk
+    // held at startup.
+    //
+    // With the daemon down none of these fire. The editor's own edits go
+    // through its in-process registry and are already in memory, so the gap is
+    // narrow: a hand-edit to a layout file made while the editor is open and
+    // the daemon is down is picked up on the next editor start.
     //
     // Debounce the 5 signals through a 50 ms single-shot timer so a
     // typical editor save (layoutChanged + layoutListChanged back-to-back)

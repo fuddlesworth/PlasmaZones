@@ -257,7 +257,7 @@ SettingsFlickable {
                 Layout.alignment: Qt.AlignHCenter
                 visible: !stateView.isTiling
                 layout: stateView.currentLayout || ({
-                        "name": i18n("Default"),
+                        "displayName": i18n("Default"),
                         "zones": root._getZones(stateView.localLayoutId)
                     })
                 isSelected: true
@@ -266,7 +266,7 @@ SettingsFlickable {
                 screenAspectRatio: root._selectedScreenAspectRatio
                 Accessible.name: {
                     var l = stateView.currentLayout;
-                    return l ? i18n("Snapping layout preview: %1", l.name) : i18n("Snapping layout preview");
+                    return l ? i18n("Snapping layout preview: %1", l.displayName) : i18n("Snapping layout preview");
                 }
             }
 
@@ -281,7 +281,7 @@ SettingsFlickable {
                         return found;
 
                     return {
-                        "name": stateView.localAlgorithmId || i18n("Default"),
+                        "displayName": stateView.localAlgorithmId || i18n("Default"),
                         "zones": []
                     };
                 }
@@ -292,7 +292,7 @@ SettingsFlickable {
                 Accessible.name: {
                     var algoId = "autotile:" + stateView.localAlgorithmId;
                     var found = root._findLayout(algoId);
-                    return found ? i18n("Tiling algorithm preview: %1", found.name) : i18n("Tiling algorithm preview");
+                    return found ? i18n("Tiling algorithm preview: %1", found.displayName) : i18n("Tiling algorithm preview");
                 }
             }
 

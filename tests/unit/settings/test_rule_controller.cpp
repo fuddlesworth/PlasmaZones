@@ -51,6 +51,7 @@ private Q_SLOTS:
     void monitorOverviewIgnoresBareLayoutRules();
     void monitorOverviewLayoutFromSingleWinningRule();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
+    void monitorOverviewDisableEngineUnionsEveryMode();
     void monitorOverviewReportsLock();
     void monitorOverviewLockPriorityResolution();
     void engineModePickerExposesAllVocabularyTokens();
@@ -578,6 +579,43 @@ void TestRuleController::monitorOverviewDisableEngineMatchesEffectiveMode()
     }
     QVERIFY(sawA);
     QVERIFY(sawB);
+}
+
+void TestRuleController::monitorOverviewDisableEngineUnionsEveryMode()
+{
+    // The daemon's disable check is a per-mode UNION, not a single-winner slot:
+    // it never runs a DisableEngine rule through RuleEvaluator, and
+    // `Settings::disableEntriesFor` simply keeps every disable rule whose token
+    // equals the mode it was asked about. One screen can therefore carry a
+    // separate disable rule per engine — disabling a monitor for BOTH snapping
+    // and autotile in the UI produces exactly that pair — and priority plays no
+    // part in which of them counts.
+    //
+    // The autotile rule is added FIRST deliberately. Every disable rule is
+    // authored at the same kContextBandBase priority, so the stable sort leaves
+    // store order untouched, and a scalar first-wins accumulator would pin
+    // "autotile", drop the snapping rule, and report the engine ON for a screen
+    // the daemon has switched off.
+    RuleController controller;
+    for (const QString& mode : {QStringLiteral("autotile"), QStringLiteral("snapping")}) {
+        QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-1");
+        rule[QStringLiteral("match")] = match;
+        rule[QStringLiteral("actions")] = QVariantList{
+            QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")}, {QStringLiteral("mode"), mode}}};
+        QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+    }
+
+    // No SetEngineMode rule, so the screen's effective engine is the cascade's
+    // Snapping default — and a snapping disable IS among the two.
+    const QVariantList overview =
+        controller.monitorOverview(QVariantList{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-1")}}});
+    QCOMPARE(overview.size(), 1);
+    const QVariantMap tile = overview.first().toMap();
+    QVERIFY2(!tile.value(QStringLiteral("tilingEnabled")).toBool(),
+             "a disable for a different engine masked the one matching the screen's effective mode");
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
 }
 
 void TestRuleController::engineModePickerExposesAllVocabularyTokens()

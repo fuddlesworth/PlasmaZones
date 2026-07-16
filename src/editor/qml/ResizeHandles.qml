@@ -27,7 +27,7 @@ Item {
             return resizeHandles.canvasWidth;
 
         // Fallback to root's canvasWidth if available
-        if (resizeHandles.root && resizeHandles.root.canvasWidth !== undefined && resizeHandles.root.canvasWidth > 0 && isFinite(resizeHandles.root.canvasWidth))
+        if (resizeHandles.root.canvasWidth !== undefined && resizeHandles.root.canvasWidth > 0 && isFinite(resizeHandles.root.canvasWidth))
             return resizeHandles.root.canvasWidth;
 
         return 0;
@@ -38,7 +38,7 @@ Item {
             return resizeHandles.canvasHeight;
 
         // Fallback to root's canvasHeight if available
-        if (resizeHandles.root && resizeHandles.root.canvasHeight !== undefined && resizeHandles.root.canvasHeight > 0 && isFinite(resizeHandles.root.canvasHeight))
+        if (resizeHandles.root.canvasHeight !== undefined && resizeHandles.root.canvasHeight > 0 && isFinite(resizeHandles.root.canvasHeight))
             return resizeHandles.root.canvasHeight;
 
         return 0;
@@ -227,7 +227,7 @@ Item {
                     var actualCanvasW = resizeHandles.actualCanvasWidth;
                     var actualCanvasH = resizeHandles.actualCanvasHeight;
                     // Validate dimensions before proceeding
-                    if (!resizeHandles.root || !isFinite(actualCanvasW) || !isFinite(actualCanvasH) || actualCanvasW <= 0 || actualCanvasH <= 0) {
+                    if (!isFinite(actualCanvasW) || !isFinite(actualCanvasH) || actualCanvasW <= 0 || actualCanvasH <= 0) {
                         mouse.accepted = false;
                         return;
                     }

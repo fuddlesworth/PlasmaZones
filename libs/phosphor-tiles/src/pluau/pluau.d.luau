@@ -79,25 +79,29 @@ export type SplitNode = {
 -- host marshals a plain {x,y,width,height} table, so a module exporting `tile`
 -- directly gets that instead. Every bundled algorithm uses the wrapper.
 --
--- Three of the lists are capped at 256 entries: `windows`, `minSizes` and
--- `currentGeometries`. Each is a plain truncation of the tiled order, so a
--- slot's position is that window's tiled index, but `count`/`windowCount` are
--- uncapped and can exceed all three. Guard the lookup (`i < #minSizes`) rather
--- than assuming a slot exists for every window you lay out.
+-- `count` is what tile() lays out: the tiled window count already reduced by the
+-- user's max-windows setting and by the 256 zone ceiling. `windows` runs exactly
+-- `count` long whenever it is present, in tiled order, so a slot's position is
+-- that window's tiled index.
+--
+-- `minSizes` and `currentGeometries` are the ones to guard. Either can be
+-- EMPTY regardless of the window count: minSizes is empty whenever the user
+-- turns off minimum-size handling, and currentGeometries is empty until a
+-- layout has been applied. Use `i < #minSizes` because the list may not be there
+-- at all, not because it might be truncated.
 --
 -- `focusedIndex` is the real tiled index, comparable with the 0 .. count - 1
--- indices tile() lays out. In a Context it is also a valid slot in `windows`
--- whenever it is not -1, because the engine caps the window list before building
--- the context. (In a HookState it can run past #windows — see HookState.)
+-- indices tile() lays out, and a valid slot in `windows` whenever it is not -1.
+-- (In a HookState it can run past #windows — see HookState.)
 export type Context = {
-    count: number, -- real tiled count, uncapped (may exceed #windows / #minSizes / #currentGeometries)
+    count: number, -- tiled count, capped by the max-windows setting and by 256; equals #windows when windows is present
     windowCount: number,
     gap: number,
     innerGap: number,
     area: Rect,
     masterCount: number,
     splitRatio: number,
-    minSizes: { MinSize }, -- capped at 256 entries
+    minSizes: { MinSize }, -- one per tiled window, or EMPTY if the user disabled minimum-size handling
     windows: { WindowInfo }?, -- first 256 tiled windows, in tiled order
     focusedIndex: number, -- 0-based TILED index of the focused window (-1 if none)
     screen: ScreenInfo?,

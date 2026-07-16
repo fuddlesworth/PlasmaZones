@@ -629,18 +629,16 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
     // result: a tail clamp on a long name would cut the suffix off and leave
     // the copy visually identical to its source. clampName's surrogate
     // back-off keeps the reduced-budget cut from splitting a pair.
-    // The suffix is a library-side detail, so do not assume it survived onto the
-    // name — chopping blind would eat real characters if the registry ever stops
-    // appending it. Only trim the base when the suffix is actually there.
-    if (duplicate->name().size() > MaxLayoutNameLength) {
-        const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
-        if (duplicate->name().endsWith(suffix)) {
-            duplicate->setName(clampName(duplicate->name().chopped(suffix.size()), MaxLayoutNameLength - suffix.size())
-                               + suffix);
-        } else {
-            duplicate->setName(clampName(duplicate->name()));
-        }
-    }
+    //
+    // Rebuild the name from the source rather than unpicking the duplicate's:
+    // `duplicateLayout` is contractually `source->name() + duplicateNameSuffix()`,
+    // so clamping the source name to the reduced budget and re-appending the
+    // suffix is the same string, without needing the suffix to still be
+    // recognisable on the far side. A name already within the limit clamps to
+    // itself, so the common case reassigns an identical string and Layout::setName
+    // no-ops on it.
+    const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
+    duplicate->setName(clampName(source->name(), MaxLayoutNameLength - suffix.size()) + suffix);
 
     qCInfo(lcDbusLayout) << "Duplicated layout" << id << "to" << duplicate->id();
     const QString dupId = duplicate->id().toString();

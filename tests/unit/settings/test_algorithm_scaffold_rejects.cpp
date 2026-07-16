@@ -461,7 +461,7 @@ void TestAlgorithmScaffoldRejects::acceptsBracketedKeyThatIsNotNameOrId()
 {
     // A script is free to spell any other metadata key in bracketed form. That
     // is none of this rewrite's business, and refusing it would fail the whole
-    // copy over a key it never needed to touch. `["namex"]` is included because
+    // copy over a key it never needed to touch. `['namex']` is included because
     // it shares a prefix with `name` without being it.
     const QString bracketedSibling = QStringLiteral(
         "return pluau.algorithm {\n"

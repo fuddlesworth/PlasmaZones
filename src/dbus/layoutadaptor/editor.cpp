@@ -185,6 +185,18 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         return true;
     }
 
+    // Past the autotile branch this is the full-layout replace path, and it is
+    // as bus-reachable as createLayoutFromJson: the zone loop below reads the
+    // incoming geometry straight into setRelativeGeometry, so it takes the same
+    // schema gate for the same reason. It sits after the autotile branch on
+    // purpose — an autotile payload names an algorithm rather than a layout and
+    // only ever contributes an allow-listed set of sidecar keys, so the
+    // full-layout schema (zones required, and none supplied) is the wrong shape
+    // for it. That branch reaches no zone geometry to validate.
+    if (!PhosphorZones::LayoutRegistry::isLayoutJsonValid(obj, QStringLiteral("D-Bus updateLayout"))) {
+        return false;
+    }
+
     auto* layout = getValidatedLayout(idStr, QStringLiteral("update layout"));
     if (!layout) {
         return false;
@@ -357,10 +369,17 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
     }
 
     // D-Bus is an untrusted boundary, so it takes the same schema gate the file
-    // ingresses do (directory scan / import / system restore). Without it a
-    // value the schema forbids — a zero-width zone, say — is accepted here and
-    // persisted, then rejected by this same schema on the next startup, and the
-    // layout vanishes with nothing to point the user at.
+    // ingresses do (directory scan / import / system restore). The structural
+    // invariants are the point: zone geometry lands in the layout verbatim, so
+    // without this gate a zero-width zone reaches the zone list and persists as
+    // an unselectable dead region the user cannot see or fix from the editor.
+    //
+    // Note the gate does not have to police every key's serialized form. Keys
+    // whose reader normalizes on the way in (aspectRatioClass, read through
+    // fromJsonValue, which takes both wire forms) are re-emitted canonically by
+    // Layout::toJson when the registry persists them, so the on-disk file is
+    // well-formed regardless of which form arrived here. Those keys are widened
+    // in the schema to match the contract rather than narrowed to one form.
     if (!PhosphorZones::LayoutRegistry::isLayoutJsonValid(obj, QStringLiteral("D-Bus createLayoutFromJson"))) {
         return QString();
     }

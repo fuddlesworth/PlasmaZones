@@ -182,13 +182,17 @@ public:
      * @brief Adds a zone from complete QVariantMap (for paste operations)
      * @param zoneData Complete zone data including all properties (colors, appearance, etc.)
      * @param allowIdReuse If true, allows reusing existing zone IDs (for undo/redo operations)
+     * @param insertIndex Position in the list, and therefore the height in the stack, to insert
+     *        at. Negative, or past the end, means the top. Only an undo that puts a deleted zone
+     *        back where it came from passes a real index; paste, duplicate and the redo of an
+     *        add all belong on top.
      * @return PhosphorZones::Zone ID of the created zone, or empty string on failure
      *
      * Allows pasting zones with all their properties intact. Validates
      * zone data and creates new zone with specified properties.
      * If allowIdReuse is true and zone ID already exists, deletes existing zone first.
      */
-    QString addZoneFromMap(const QVariantMap& zoneData, bool allowIdReuse = false);
+    QString addZoneFromMap(const QVariantMap& zoneData, bool allowIdReuse = false, int insertIndex = -1);
 
     /**
      * @brief Get complete zone data by ID (for undo state and QML lookup)
@@ -221,7 +225,6 @@ Q_SIGNALS:
     void zoneNameChanged(const QString& zoneId);
     void zoneNumberChanged(const QString& zoneId);
     void zoneColorChanged(const QString& zoneId);
-    void zoneZOrderChanged(const QString& zoneId);
     void zoneAdded(const QString& zoneId);
     void zoneRemoved(const QString& zoneId);
     void zonesChanged();
@@ -285,6 +288,11 @@ private:
 
     /**
      * @brief Signal types for deferred emission
+     *
+     * ZOrderChanged carries no per-zone signal of its own: restacking one zone
+     * renumbers every other zone's zOrder, so a signal naming a single zone
+     * would be wrong by construction. It emits the aggregate zonesChanged() and
+     * zonesModified() only.
      */
     enum class SignalType {
         ZoneAdded,

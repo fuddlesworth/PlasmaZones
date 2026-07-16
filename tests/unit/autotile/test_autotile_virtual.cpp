@@ -508,9 +508,9 @@ private Q_SLOTS:
         engine.applyPerScreenConfig(vs1, o1);
 
         // vs2 has no override — uses global
-        QCOMPARE(engine.effectiveOuterGap(vs0), 15);
-        QCOMPARE(engine.effectiveOuterGap(vs1), 20);
-        QCOMPARE(engine.effectiveOuterGap(vs2), 10);
+        QCOMPARE(engine.effectiveOuterGaps(vs0).top, 15);
+        QCOMPARE(engine.effectiveOuterGaps(vs1).top, 20);
+        QCOMPARE(engine.effectiveOuterGaps(vs2).top, 10);
     }
 
     // =========================================================================

@@ -22,8 +22,6 @@ ToolBar {
     required property var confirmCloseDialog
     required property var editorWindow
     required property bool previewMode
-    // Expose addZoneButton for access from parent
-    property alias addZoneButton: addZoneButtonItem
 
     height: Kirigami.Units.gridUnit * 5
     z: 100
@@ -42,10 +40,7 @@ ToolBar {
             visible: !controlBar.previewMode
             spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - within section)
 
-            // Add Zone button (exposed via alias)
             Button {
-                id: addZoneButtonItem
-
                 text: i18nc("@action:button", "Add Zone")
                 icon.name: "list-add"
                 enabled: editorController !== null && editorController !== undefined
@@ -161,20 +156,27 @@ ToolBar {
                     required property int index
 
                     width: templateCombo.width
+                    // The label lives in the custom contentItem below, which leaves
+                    // the delegate anonymous to a screen reader. Setting `text` is
+                    // what gives it an Accessible.name; the default contentItem it
+                    // would otherwise feed is replaced, so nothing renders twice.
+                    text: modelData.text || ""
 
                     contentItem: RowLayout {
                         spacing: Kirigami.Units.smallSpacing
 
-                        // Visual preview
+                        // Visual preview. Sized on the grid unit at a 3:2 ratio so
+                        // the thumbnail scales with the theme instead of pinning to
+                        // pixels.
                         TemplatePreview {
                             visible: modelData.templateType && modelData.templateType !== ""
                             templateType: modelData.templateType || ""
                             columns: modelData.columns || 2
                             rows: modelData.rows || 2
-                            Layout.preferredWidth: 60
-                            Layout.preferredHeight: 40
-                            Layout.maximumWidth: 60
-                            Layout.maximumHeight: 40
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                            Layout.preferredHeight: Kirigami.Units.gridUnit * 2
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 3
+                            Layout.maximumHeight: Kirigami.Units.gridUnit * 2
                             Layout.alignment: Qt.AlignVCenter
                         }
 
@@ -262,7 +264,7 @@ ToolBar {
                 Slider {
                     id: gridIntervalXSlider
 
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     from: 0.01
                     to: 0.5
                     stepSize: 0.01
@@ -292,7 +294,7 @@ ToolBar {
 
                 Label {
                     text: Math.round(gridIntervalXSlider.value * 100) + "%"
-                    Layout.preferredWidth: 32
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     horizontalAlignment: Text.AlignRight
                     Accessible.name: i18nc("@info", "Horizontal interval: %1%", Math.round(gridIntervalXSlider.value * 100))
                 }
@@ -307,7 +309,7 @@ ToolBar {
                 Slider {
                     id: gridIntervalYSlider
 
-                    Layout.preferredWidth: 80
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     from: 0.01
                     to: 0.5
                     stepSize: 0.01
@@ -337,7 +339,7 @@ ToolBar {
 
                 Label {
                     text: Math.round(gridIntervalYSlider.value * 100) + "%"
-                    Layout.preferredWidth: 32
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     horizontalAlignment: Text.AlignRight
                     Accessible.name: i18nc("@info", "Vertical interval: %1%", Math.round(gridIntervalYSlider.value * 100))
                 }
@@ -377,13 +379,12 @@ ToolBar {
             spacing: Kirigami.Units.smallSpacing
             visible: editorController ? (editorController.hasUnsavedChanges || false) : false
             onVisibleChanged: {
-                if (visible) {
+                // stop() fires pulseAnim.onStopped, which is what restores the
+                // opacities. Repeating that here would be the same reset twice.
+                if (visible)
                     pulseAnim.restart();
-                } else {
+                else
                     pulseAnim.stop();
-                    unsavedIcon.opacity = 1;
-                    unsavedIndicator.opacity = 1;
-                }
             }
 
             Kirigami.Icon {

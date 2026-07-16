@@ -81,15 +81,28 @@ void LayoutRegistry::loadLayouts()
     // branch below and be skipped — the reload would silently keep serving the
     // stale objects.
     //
-    // The retired objects are parented to this registry and observers hold
-    // bare pointers into m_layouts, so: drop the active/previous pointers
-    // (they are re-seated by id after the scan, since a layout with the same
-    // UUID comes back as a NEW object), disconnect the save hook so a retired
-    // layout can't write back, and deleteLater rather than delete (project
-    // rule; the pointers are also inert from here — out of m_layouts and
-    // disconnected). Every consumer of m_layouts re-reads through layouts() /
-    // layoutById() on each query and none caches a Layout* across the
-    // layoutsChanged this function ends with.
+    // The retired objects are parented to this registry, so: drop the
+    // active/previous pointers (they are re-seated by id after the scan, since
+    // a layout with the same UUID comes back as a NEW object), disconnect the
+    // save hook so a retired layout can't write back, and deleteLater rather
+    // than delete (project rule; the pointers are also inert from here — out
+    // of m_layouts and disconnected).
+    //
+    // Consumers DO cache a Layout* across this boundary, so deleteLater alone
+    // is not what keeps them safe. The invariant every holder must satisfy is:
+    // hold the layout as a QPointer, or connect to its destroyed signal and
+    // null the cached pointer there. destroyed fires when the deferred delete
+    // runs, i.e. before the memory goes away, so both forms self-null.
+    // Current holders: OverlayService::m_layout / m_observedLayouts and
+    // LayoutComputeService::m_trackedLayouts are QPointers;
+    // ZoneDetector::m_layout is a raw pointer with a destroyed guard
+    // (see ZoneDetector::setLayout). A new raw-pointer holder without one of
+    // those two is a use-after-free — this function does not protect it.
+    //
+    // Self-nulling only gets a holder to null, not to the replacement object,
+    // which is why the activeLayoutChanged emit at the end of this function is
+    // load-bearing: it is what re-seats them onto the freshly-built instance
+    // (the daemon re-seats ZoneDetector from it).
     const QUuid activeIdBefore = m_activeLayout ? m_activeLayout->id() : QUuid();
     const QUuid previousIdBefore = m_previousLayout ? m_previousLayout->id() : QUuid();
     const QVector<PhosphorZones::Layout*> retired = m_layouts;
@@ -239,6 +252,20 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         const QString layoutId = structural.value(::PhosphorZones::ZoneJsonKeys::Id).toString();
         const QJsonObject merged =
             LayoutSettingsStore::mergeSettings(structural, m_layoutSettings.settingsFor(layoutId));
+
+        // Re-validate after the merge. The sidecar is a separate document that
+        // reaches fromJson through this path, and mergeSettings inserts its
+        // keys verbatim — it does not restrict them to the settings key set,
+        // so a corrupt or hand-edited sidecar entry can introduce keys the
+        // check above never saw, or overwrite structural ones it passed. The
+        // merged shape is just the full (pre-split) layout format, which is
+        // what the schema describes and what importLayout already validates,
+        // so this is the same gate rather than a second one. The structural
+        // check stays: it runs first so a fault in the layout file is reported
+        // against the layout file.
+        if (!isLayoutJsonValid(merged, filePath + QStringLiteral(" (merged with layout-settings sidecar)"))) {
+            continue;
+        }
 
         auto layout = PhosphorZones::Layout::fromJson(merged, this);
         if (!layout) {

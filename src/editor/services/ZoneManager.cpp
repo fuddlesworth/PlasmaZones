@@ -201,7 +201,8 @@ void ZoneManager::emitZoneSignal(SignalType type, const QString& zoneId, bool in
             Q_EMIT zoneColorChanged(zoneId);
             break;
         case SignalType::ZOrderChanged:
-            Q_EMIT zoneZOrderChanged(zoneId);
+            // No per-zone signal: a restack renumbers every zone's zOrder, so
+            // zonesChanged() below is the only honest notification.
             break;
         }
         Q_EMIT zonesChanged();
@@ -463,10 +464,12 @@ void ZoneManager::deleteZone(const QString& zoneId)
     }
 
     m_zones.removeAt(index);
-    renumberZones();
     // zOrder is the zone's index in the list, so a removal shifts every zone
     // after it. Recompact so zOrder stays a dense 0..count-1 permutation.
+    // This runs before renumberZones(), which emits zoneNumberChanged per zone
+    // synchronously: no observer may see a half-updated list.
     updateAllZOrderValues();
+    renumberZones();
 
     emitZoneSignal(SignalType::ZoneRemoved, zoneId);
 }

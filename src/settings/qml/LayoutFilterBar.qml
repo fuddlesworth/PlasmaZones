@@ -252,14 +252,22 @@ RowLayout {
 
     // Priority order can be staged on the Configuration → Priority page while
     // this bar is alive — refresh the cached availability so the Priority sort
-    // option ungreys without a mode switch.
+    // option ungreys without a mode switch. The order itself is read
+    // imperatively by the host's rebuildModel (effectiveSnappingOrder /
+    // effectiveTilingOrder), which only reruns on filterSettingsChanged, so
+    // emit that too or a staged reorder leaves the cards in the stale order
+    // while Priority sort is active. Not folded into _refreshHasPriorityOrder:
+    // its other two callers (Component.onCompleted, onViewModeChanged) already
+    // sit next to a loadState() that emits, and would rebuild twice.
     Connections {
         function onStagedSnappingOrderChanged() {
             root._refreshHasPriorityOrder();
+            root.filterSettingsChanged();
         }
 
         function onStagedTilingOrderChanged() {
             root._refreshHasPriorityOrder();
+            root.filterSettingsChanged();
         }
 
         target: settingsController

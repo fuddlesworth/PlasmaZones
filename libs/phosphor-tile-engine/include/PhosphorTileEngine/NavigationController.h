@@ -174,7 +174,24 @@ private:
      *        the neighbour output is a different (snap) mode: a "swap" defers to
      *        crossModeSwapRequested (two-way exchange), a "move" to
      *        crossModeMoveRequested (one-way insert).
-     * @return false when there is no resolver or no neighbour output.
+     * @return true when the crossing was handled, false when the caller should
+     *         fall through to its next option (cross-desktop, then no_neighbor).
+     *
+     * Returns true WITHOUT touching tiling state on the cross-mode branch: a
+     * neighbour output in a different (snap) mode is handed to the daemon via
+     * crossModeSwapRequested / crossModeMoveRequested, which performs the move.
+     * Returns true after a completed migration on the same-mode (autotile)
+     * branch: the window is re-keyed, migrated, both outputs are reflowed, and
+     * it is activated on the neighbour.
+     *
+     * Returns false — leaving @p focused untouched on @p sourceScreenId — when:
+     *   - there is no cross-surface resolver, or no neighbour output in
+     *     @p direction;
+     *   - the autotile neighbour is already at its effective maxWindows cap (a
+     *     tiled window has no slot there);
+     *   - @p focused would not tile on the destination (shouldTileWindow).
+     * The last two refuse BEFORE any state mutation or the
+     * windowOutputMoveExpected marker, so a refusal never strands the window.
      */
     bool crossOutputMove(const QString& sourceScreenId, const QString& focused, const QString& direction,
                          const QString& action);

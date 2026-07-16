@@ -370,14 +370,6 @@ Kirigami.Dialog {
                             // same client-side cap as the editor's layout name field.
                             maximumLength: 40
                             Accessible.name: i18n("Layout name")
-                            Keys.onReturnPressed: {
-                                if (wizardFooter.createEnabled)
-                                    wizardFooter.createClicked();
-                            }
-                            Keys.onEnterPressed: {
-                                if (wizardFooter.createEnabled)
-                                    wizardFooter.createClicked();
-                            }
                         }
 
                         Connections {
@@ -467,6 +459,10 @@ Kirigami.Dialog {
         currentStep: root.currentStep
         createText: i18n("Create Layout")
         createEnabled: nameField.text.trim().length > 0 && !root._creating
+        // Step 2 is a name field, an aspect-ratio group and a checkbox, none of
+        // which need Return, so Return creates the layout from anywhere on the
+        // step rather than only while the name field holds focus.
+        returnActivatesCreate: true
         onBackClicked: root.currentStep = 0
         onNextClicked: root.currentStep = 1
         onCreateClicked: {

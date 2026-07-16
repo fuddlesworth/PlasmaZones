@@ -6,6 +6,7 @@ import QtQuick.Controls as QQC
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
+import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -176,11 +177,12 @@ Window {
         // Initialize selectedZoneId from editorController context property
         if (editorWindow._editorController) {
             editorWindow.selectedZoneId = editorWindow._editorController.selectedZoneId || "";
-            // Set default zone colors from theme (so new zones use theme colors)
-            // Match PropertyPanel.qml multiselect/single-select fallback defaults
-            var highlightColor = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
-            var inactiveColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25);
-            var borderColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8);
+            // Set default zone colors from theme (so new zones use theme colors).
+            // The alphas come from ThemeHelpers, the same definitions PropertyPanel's
+            // multi-select previews and single-select dialogs open on.
+            var highlightColor = Theme.withAlpha(Kirigami.Theme.highlightColor, Theme.zoneHighlightAlpha);
+            var inactiveColor = Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneInactiveAlpha);
+            var borderColor = Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneBorderAlpha);
             // Convert QML colors to ARGB hex strings
             var highlightHex = "#" + Math.round(highlightColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
             var inactiveHex = "#" + Math.round(inactiveColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
@@ -327,6 +329,10 @@ Window {
         // this fade and nothing jumps.
         opacity: !editorWindow.fullscreenMode ? 1 : 0
         visible: opacity > 0
+        // `visible` keeps the outgoing leg on screen for the length of the fade,
+        // so gate hit-testing on the mode itself: a bar on its way out must not
+        // answer clicks meant for the canvas underneath.
+        enabled: !editorWindow.fullscreenMode
         // Pass stored context properties to avoid scoping issues
         editorController: editorWindow._editorController
         availableScreens: editorWindow._editorController ? editorWindow._editorController.screenModel : []
@@ -379,7 +385,7 @@ Window {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.preferredWidth: parent.width - (propertiesPanel.visible ? propertiesPanel.width : 0)
-            Layout.minimumWidth: 400
+            Layout.minimumWidth: Kirigami.Units.gridUnit * 22
 
             // Actual drawing area (zones handle their own gaps via edgeGap and zoneSpacing)
             // When !useFullScreenGeometry, insets shrink the canvas to match the usable area
@@ -449,7 +455,10 @@ Window {
                         zoneSpacing: editorWindow.zoneSpacing // Pass spacing for gaps between zones
                         edgeGap: editorWindow.edgeGap // Pass gap for screen edges
                         snapIndicator: snapIndicator // Pass snapIndicator for visual feedback
-                        // Z-order: zoneBaseZ (above DividerManager) + zOrder from model
+                        // Z-order: zoneBaseZ + zOrder from model. This sits above
+                        // DividerManager's usual z, but not above it unconditionally:
+                        // at a zero zone gap DividerManager deliberately lifts itself
+                        // over every zone so its handles stay grabbable.
                         z: editorWindow.zoneBaseZ + (modelData.zOrder !== undefined ? modelData.zOrder : 0)
                         onClicked: function (event) {
                             if (editorWindow._editorController && modelData && modelData.id)
@@ -667,13 +676,18 @@ Window {
         id: fullscreenExitButton
 
         // `visible` follows the animated opacity, not the mode, or the pill
-        // would be unrendered in the same pass its fade-out starts.
+        // would be unrendered in the same pass its fade-out starts. Hit-testing
+        // follows the mode instead, so a click on the fading pill cannot toggle
+        // fullscreen straight back on.
         visible: opacity > 0
+        enabled: editorWindow.fullscreenMode
         width: exitButtonRow.width + Kirigami.Units.gridUnit * 2
         height: Kirigami.Units.gridUnit * 3
         radius: Kirigami.Units.smallSpacing
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
-        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+        // Tracks hover through a binding: assigning the colour from onEntered/
+        // onExited would sever this, and the pill would stop following the theme.
+        color: exitButtonMouse.containsMouse ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.3) : Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
+        border.color: Theme.withAlpha(Kirigami.Theme.textColor, 0.2)
         border.width: 1
         z: 200
         // Fade in/out animation
@@ -705,12 +719,12 @@ Window {
         }
 
         MouseArea {
+            id: exitButtonMouse
+
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
             onClicked: editorWindow.toggleFullscreenMode()
-            onEntered: parent.color = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3)
-            onExited: parent.color = Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
         }
 
         Behavior on opacity {

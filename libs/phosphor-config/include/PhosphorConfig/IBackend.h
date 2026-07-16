@@ -159,10 +159,30 @@ public:
     /// changes. Must not be called while a group view is live.
     virtual void reparseConfiguration() = 0;
 
-    /// Flush pending writes to disk. No-op when nothing is dirty.
+    /// Request that pending writes reach disk. No-op when nothing is dirty.
     /// Returns @c true on success (or when there was nothing to flush),
     /// @c false on an I/O error — backends log the reason before returning.
+    ///
+    /// @c true means "accepted", NOT "committed": a backend is free to satisfy
+    /// this by scheduling the write (@c JsonBackend's Deferred sync policy
+    /// debounces it), in which case the write has not happened yet and may
+    /// still fail. Callers that must know the bytes landed — anything moving a
+    /// baseline or reporting success to a user — call @c commit() instead.
     virtual bool sync() = 0;
+
+    /// Flush pending writes to disk NOW and report whether they landed.
+    /// Returns @c true when disk holds the current in-memory state on return
+    /// (including when there was nothing to flush), @c false on an I/O error.
+    /// Unlike @c sync() this never defers, so a @c true result is a commitment
+    /// the caller can key state off.
+    ///
+    /// The default forwards to @c sync(), which is correct for any backend
+    /// whose @c sync() already writes inline. Backends that can defer must
+    /// override it to bypass their deferral.
+    virtual bool commit()
+    {
+        return sync();
+    }
 
     /// Delete an entire group and everything inside it. Intermediate
     /// parents are pruned if they become empty (dot-path groups only).
@@ -177,6 +197,25 @@ public:
     /// with their full path ("Snapping", "Snapping.Behavior", ...).
     /// Groups produced by a plugged-in IGroupPathResolver appear in the
     /// resolver's preferred external form.
+    ///
+    /// CONTRACT — reserved names. Whatever container an implementation uses to
+    /// hold the ungrouped keys that @c readRootString / @c writeRootString /
+    /// @c removeRootKey address must NOT appear in this list, nor may any of
+    /// its descendants. Ungrouped keys are not addressable through @c group()
+    /// and no caller can tell them apart from a real group by name, so a
+    /// consumer sweeping @c groupList() and calling @c deleteGroup on what it
+    /// does not recognise (as @c Settings::purgeStaleKeys does on every save)
+    /// would wipe them. Enforcing it here rather than asking every consumer to
+    /// know each backend's container name is what makes that sweep safe.
+    ///
+    /// The same applies to any root key an @c IGroupPathResolver reserves: the
+    /// resolver owns that subtree exclusively and enumerates it itself.
+    ///
+    /// Implementations: @c JsonBackend filters its @c rootGroupName (and the
+    /// version stamp, and the resolver's reserved roots) out of the
+    /// enumeration. @c QSettingsBackend satisfies this structurally — its
+    /// ungrouped keys have no group prefix, so @c QSettings reports them as
+    /// child KEYS and never as a child group.
     virtual QStringList groupList() const = 0;
 
     // ── Schema-aware hooks (default no-op) ────────────────────────────────

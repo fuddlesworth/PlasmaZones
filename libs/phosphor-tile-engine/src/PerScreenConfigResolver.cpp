@@ -401,16 +401,6 @@ int PerScreenConfigResolver::outerGapBase(const QString& screenId, const QVarian
     return m_engine->config()->outerGap;
 }
 
-int PerScreenConfigResolver::effectiveOuterGap(const QString& screenId) const
-{
-    // Defined as the top side of the full resolution so the two helpers can
-    // never disagree. Resolving the uniform layers directly would miss any
-    // per-side-only layer — e.g. a context rule that sets UsePerSideOuterGap
-    // plus per-side values but no uniform OuterGap, which effectiveOuterGaps
-    // honours and a uniform-only walk would fall straight through.
-    return effectiveOuterGaps(screenId).top;
-}
-
 ::PhosphorLayout::EdgeGaps PerScreenConfigResolver::effectiveOuterGaps(const QString& screenId) const
 {
     // Resolve the context layer ONCE: the provider runs a full

@@ -207,34 +207,45 @@ void Layout::initFromJson(const QJsonObject& json)
     // temporarily-missing system file (package upgrade in flight) from losing
     // its recorded origin.
     //
-    // Skip the check entirely when no prefixes exist (headless test
-    // environments), so fixture tests stay portable. Also skip when the path
-    // is empty (no override tracked).
+    // The check FAILS CLOSED: a path that no system prefix admits is dropped,
+    // including when no prefix resolves at all. An environment with no
+    // readable system data directory has nowhere a system layout could live,
+    // so there is no candidate such an environment could legitimately accept —
+    // "no prefixes, allow anything" would hand that case the widest answer
+    // instead of the narrowest. The cost of dropping is bounded and visible:
+    // the layout keeps working and only loses its "restore system original"
+    // origin, which that environment could not have honoured anyway. Nothing
+    // in the suite exercises this field, so no fixture depends on the check
+    // being skipped. Skip only when the path is empty (no override tracked).
     if (!m_systemSourcePath.isEmpty()) {
         const QFileInfo sourceInfo(m_systemSourcePath);
         const QString canonicalSource =
             sourceInfo.exists() ? sourceInfo.canonicalFilePath() : QDir::cleanPath(sourceInfo.absoluteFilePath());
         const QStringList systemPrefixes = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
-        const QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+        // Canonicalised so the user-dir compare below is resolved-vs-resolved
+        // like every other compare in this block. writableLocation() and the
+        // matching standardLocations() entry can differ textually (a trailing
+        // separator, a symlinked $HOME) while naming one directory, and a raw
+        // compare would miss that and admit the user dir as a system prefix.
+        const QString canonicalUserDataPath =
+            QFileInfo(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)).canonicalFilePath();
         bool valid = false;
-        bool anyPrefix = false;
         for (const QString& prefix : systemPrefixes) {
-            if (prefix.isEmpty() || prefix == userDataPath) {
-                continue; // user dir isn't a "system" prefix
-            }
             // A prefix that doesn't resolve is not a directory anything can be
             // contained in, so it can neither admit nor reject a candidate.
             const QString canonicalPrefix = QFileInfo(prefix).canonicalFilePath();
             if (canonicalPrefix.isEmpty()) {
                 continue;
             }
-            anyPrefix = true;
+            if (canonicalPrefix == canonicalUserDataPath) {
+                continue; // user dir isn't a "system" prefix
+            }
             if (canonicalSource.startsWith(canonicalPrefix + QLatin1Char('/'))) {
                 valid = true;
                 break;
             }
         }
-        if (anyPrefix && !valid) {
+        if (!valid) {
             qCWarning(lcLayoutLib) << "dropping invalid systemSourcePath" << m_systemSourcePath;
             m_systemSourcePath.clear();
         }

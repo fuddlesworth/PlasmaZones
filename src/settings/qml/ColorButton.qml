@@ -67,6 +67,18 @@ Rectangle {
                 }
             }
         }
+
+        // onPaint samples disabledTextColor and backgroundColor, so a light/dark
+        // switch while the swatch is visible would otherwise leave the
+        // checkerboard in the old palette. Every PlatformTheme colour shares the
+        // one `colorsChanged` notify signal, so this covers both reads.
+        Connections {
+            function onColorsChanged() {
+                checkerboard.requestPaint();
+            }
+
+            target: Kirigami.Theme
+        }
     }
 
     Rectangle {

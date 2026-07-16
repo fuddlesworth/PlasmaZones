@@ -24,6 +24,7 @@
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QSet>
 
 #include <algorithm>
 
@@ -105,15 +106,24 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
     struct Summary
     {
         int ruleCount = 0;
-        // Wire-string engine token (or empty) from the highest-priority
-        // monitor-axis `DisableEngine` rule on this screen. Resolved against
-        // the screen's effective `engineMode` at output time to compute the
-        // tile's `engineDisabled` flag — a `DisableEngine{mode:"scrolling"}`
-        // rule on a Snapping-mode screen must NOT flip the tile to "Engine
-        // off" (the active engine is still Snapping). Stored as a scalar
-        // QString (first-non-empty-wins below); a QSet would over-state by
-        // accumulating every matching rule.
-        QString disabledEngineMode;
+        // Wire-string engine tokens from EVERY monitor-axis `DisableEngine`
+        // rule on this screen. Resolved against the screen's effective
+        // `engineMode` at output time to compute the tile's `engineDisabled`
+        // flag — a `DisableEngine{mode:"scrolling"}` rule on a Snapping-mode
+        // screen must NOT flip the tile to "Engine off" (the active engine is
+        // still Snapping).
+        //
+        // A SET, not a scalar, because the daemon's disable check is a per-mode
+        // UNION and not a single-winner slot: `Settings::disableEntriesFor`
+        // scans the whole rule store and keeps every disable rule whose token
+        // equals the mode it was asked about, so priority plays no part. One
+        // screen can carry a separate disable rule per engine — `disableRuleIdFor`
+        // keys the engine into the rule's identity precisely so those are
+        // distinct rules — and every disable rule is authored at the same
+        // `kContextBandBase` priority. A scalar first-wins would therefore let a
+        // disable for one engine mask the disable for the engine the screen
+        // actually runs, on nothing better than store order.
+        QSet<QString> disabledEngineModes;
         // Engine mode + BOTH layout tokens come from ONE rule: the highest-
         // priority rule on this screen carrying a SetEngineMode action — the
         // daemon's per-screen assignment winner. LayoutRegistry::
@@ -147,9 +157,9 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
 
     // Sort rules by descending priority before accumulation. Multiple
     // matching enabled context-only rules on the same screen all contribute to
-    // ruleCount, but the "first wins" guards below (s.disabledEngineMode for the
-    // DisableEngine slot, s.assignmentResolved for the engine-mode assignment
-    // winner) mean the FIRST rule visited pins each. Without sorting that's
+    // ruleCount, but the "first wins" guards below (s.assignmentResolved for the
+    // engine-mode assignment winner, s.lockResolved for the Locked slot) mean
+    // the FIRST rule visited pins each. Without sorting that's
     // "first in rule-iteration order"; with sorting it's "highest priority" —
     // which matches the daemon's own resolution order for the same rule
     // set. Sort an index vector rather than the rule list — Rule
@@ -208,14 +218,15 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         for (const QString& screenId : screenIds) {
             Summary& s = byScreen[screenId];
             ++s.ruleCount;
-            // DisableEngine slot: first-wins (indices are priority-DESC, so the
-            // first monitor-axis disable rule seen is the highest-priority one).
-            // Output-time resolution against the active mode still stops a
+            // DisableEngine: accumulate EVERY monitor-axis disable token this
+            // screen carries — the daemon unions them per mode, so there is no
+            // winner to pick and priority is irrelevant here (see the field's
+            // doc). Output-time resolution against the active mode still stops a
             // Snapping-disable rule from labelling an Autotile screen "off".
             // Independent of the assignment winner below — a DisableEngine rule
             // need not carry a SetEngineMode action.
-            if (isMonitorDisableRule && s.disabledEngineMode.isEmpty()) {
-                s.disabledEngineMode = *disableMode;
+            if (isMonitorDisableRule) {
+                s.disabledEngineModes.insert(*disableMode);
             }
             bool ruleHasEngineMode = false;
             for (const RuleAction& a : rule.actions) {
@@ -316,8 +327,7 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         const QString effectiveModeWire = summary.engineMode.isEmpty()
             ? PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping)
             : summary.engineMode;
-        const bool engineDisabled =
-            !summary.disabledEngineMode.isEmpty() && summary.disabledEngineMode == effectiveModeWire;
+        const bool engineDisabled = summary.disabledEngineModes.contains(effectiveModeWire);
         tile[QStringLiteral("tilingEnabled")] = !engineDisabled;
         tile[QStringLiteral("ruleCount")] = summary.ruleCount;
         tile[QStringLiteral("assigned")] = assigned;

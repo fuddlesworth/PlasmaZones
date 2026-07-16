@@ -616,22 +616,27 @@ Q_SIGNALS:
      * @brief Fresh running-windows list has arrived from the daemon.
      *
      * Emitted in response to requestRunningWindows(). The @p windows list
-     * is a QVariantList of {windowClass, appName, caption} maps ready for
-     * QML consumption. Also updates cachedRunningWindows() so later
-     * queries can read the last-seen value synchronously.
+     * is a QVariantList of {windowClass, appName, caption, desktopFile}
+     * maps ready for QML consumption. Also updates cachedRunningWindows()
+     * so later queries can read the last-seen value synchronously.
      */
     void runningWindowsAvailable(const QVariantList& windows);
 
     /**
-     * @brief No reply arrived within RunningWindowsTimeoutMs.
+     * @brief The running-windows request produced no data.
      *
      * Emitted by the client-side timeout timer when the KWin effect never
-     * answers a requestRunningWindows() call (effect unloaded, crashed,
-     * or slow). QML dialogs should surface an error state so the user
-     * can distinguish "no windows" from "daemon or effect not responding".
-     * Note: cachedRunningWindows() is empty by the time this fires —
-     * requestRunningWindows() invalidated the cache at the start of the
-     * request, so the timeout signal means "no data, refresh failed."
+     * answers a requestRunningWindows() call within RunningWindowsTimeoutMs
+     * (effect unloaded, crashed, or slow). ALSO emitted synchronously from
+     * requestRunningWindows() itself when the daemon is not running: the
+     * request is never dispatched at all, so waiting out the full timeout
+     * would only delay the same outcome.
+     *
+     * QML dialogs should surface an error state so the user can distinguish
+     * "no windows" from "daemon or effect not responding". Note:
+     * cachedRunningWindows() is empty by the time this fires — both paths
+     * invalidate the cache before emitting, so the signal always means
+     * "no data, refresh failed."
      */
     void runningWindowsTimedOut();
 
@@ -788,14 +793,21 @@ private:
     QString m_pendingSelectLayoutId;
 
     // Suppresses the local-path layoutsChanged emit while a D-Bus
-    // getLayoutList round-trip is in flight. Without this gate, every
-    // loadLayoutsAsync() emits twice: once synchronously from the
-    // PhosphorZones::LayoutRegistry::layoutsChanged lambda (local composite) and once
-    // from the async D-Bus reply lambda (daemon-enriched list). Set true
-    // right before the D-Bus asyncCall dispatch; cleared in the reply
-    // lambda's entry (before any early-return on error, so the local
-    // fallback emit resumes if the daemon is unreachable). Only relevant
-    // when the daemon is available — when the D-Bus call errors out, the
+    // getLayoutList round-trip is in flight.
+    //
+    // This does NOT collapse loadLayoutsAsync()'s own two emits: that call
+    // reloads the local manager (emitting synchronously through the
+    // PhosphorZones::LayoutRegistry::layoutsChanged lambda) BEFORE this gate is
+    // set, and the reply lambda emits again with the daemon-enriched list. That
+    // pair is the deliberate Step-1 instant-paint / Step-2 enrichment design.
+    //
+    // What the gate suppresses is a local emit that lands BETWEEN the dispatch
+    // and the reply — a file-watcher refresh, say — which would repaint the page
+    // from the un-enriched local composite only for the in-flight reply to
+    // immediately replace it. Set true right before the D-Bus asyncCall dispatch;
+    // cleared at the reply lambda's entry (before any early-return on error, so
+    // the local fallback emit resumes if the daemon is unreachable). Only
+    // relevant when the daemon is available — when the D-Bus call errors out, the
     // local path's emit remains the authoritative refresh.
     bool m_awaitingDaemonLayouts = false;
 

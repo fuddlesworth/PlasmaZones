@@ -406,6 +406,12 @@ p_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 p_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
 p_add_test(test_layout_registry_cache core/test_layout_registry_cache.cpp)
 
+# The editor's save payload is schema-gated at the D-Bus boundary, so the shape
+# EditorController::saveLayout emits has to satisfy the layout schema. Pins both
+# serialized forms of aspectRatioClass (editor int, canonical string from
+# Layout::toJson) against the schema that gates createLayoutFromJson/updateLayout.
+p_add_test(test_layout_schema_editor_shape core/test_layout_schema_editor_shape.cpp)
+
 # exportLayout / importLayout report their outcome rather than logging it and
 # returning void, and the export writes atomically so a failure leaves the
 # user's chosen destination alone.
@@ -1121,6 +1127,29 @@ add_test(NAME test_autotile_state COMMAND test_autotile_state)
 add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
 target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# editor/ - Zone z-order
+# ═══════════════════════════════════════════════════════════════════════════════
+# zOrder is the zone's index in the list, and EditorWindow.qml stacks zones at
+# zoneBaseZ + zOrder while DividerManager derives its own z from the zone count.
+# A hole or a tie in the zOrder run therefore mis-paints the canvas and breaks
+# divider hit-testing, silently. This pins density across every mutation, plus
+# the contract that undoing a delete returns the zone to its original height
+# rather than to the top. ZoneManager lives in the editor executable rather than
+# a library, so its TUs are compiled into the test directly.
+add_executable(test_zone_zorder editor/test_zone_zorder.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/ZoneManager.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/ZoneAutoFiller.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/zonemanager/divider.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/zonemanager/zorder.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/zonemanager/serialization.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/BaseZoneCommand.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/DeleteZoneCommand.cpp)
+# Qt6::Gui is explicit: DeleteZoneCommand derives from QUndoCommand. It arrives
+# transitively via plasmazones_core today, but that is not a contract.
+target_link_libraries(test_zone_zorder PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_zone_zorder COMMAND test_zone_zorder)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation

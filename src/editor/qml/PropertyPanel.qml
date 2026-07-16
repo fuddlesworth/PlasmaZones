@@ -46,15 +46,16 @@ Rectangle {
 
         return "multiple";
     }
-    // What the multi-select color previews start from: the theme, until the
-    // user picks something else in one of the dialogs.
-    readonly property color multiHighlightDefault: Theme.withAlpha(Kirigami.Theme.highlightColor, 0.5)
-    readonly property color multiInactiveDefault: Theme.withAlpha(Kirigami.Theme.disabledTextColor, 0.25)
-    readonly property color multiBorderDefault: Theme.withAlpha(Kirigami.Theme.disabledTextColor, 0.8)
+    // The theme-derived zone colours. Multi-select previews start from these
+    // until the user picks something else in one of the dialogs, and the
+    // single-select dialogs open on them when a zone has no colour of its own.
+    readonly property color themeHighlightDefault: Theme.withAlpha(Kirigami.Theme.highlightColor, Theme.zoneHighlightAlpha)
+    readonly property color themeInactiveDefault: Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneInactiveAlpha)
+    readonly property color themeBorderDefault: Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneBorderAlpha)
     // Multi-select color preview properties (stored at panel level to avoid context issues)
-    property color multiHighlightColor: propertyPanel.multiHighlightDefault
-    property color multiInactiveColor: propertyPanel.multiInactiveDefault
-    property color multiBorderColor: propertyPanel.multiBorderDefault
+    property color multiHighlightColor: propertyPanel.themeHighlightDefault
+    property color multiInactiveColor: propertyPanel.themeInactiveDefault
+    property color multiBorderColor: propertyPanel.themeBorderDefault
     // Computed property: true if ALL selected zones have useCustomColors enabled
     readonly property bool allSelectedUseCustomColors: {
         if (!editorController || selectionCount < 2)
@@ -111,7 +112,7 @@ Rectangle {
     }
 
     // Layout properties
-    Layout.preferredWidth: propertyPanel.panelShown ? 280 : 0
+    Layout.preferredWidth: propertyPanel.panelShown ? Kirigami.Units.gridUnit * 16 : 0
     // The animated preferredWidth is the clamp. Binding maximumWidth to the
     // panelShown predicate directly snapped it to 0 in the same pass that
     // started the slide, so the layout collapsed the cell instantly and
@@ -132,19 +133,21 @@ Rectangle {
     visible: opacity > 0 || Layout.preferredWidth > 0
     z: 50
     onPanelModeChanged: {
-        // A fresh multi-selection starts from the theme again. The color dialogs
-        // assign these properties, which severs the binding, so restore the
-        // binding rather than the value or the swatches stop following the theme
-        // after the first multi-select.
+        // Entering "multiple" starts the swatches from the theme again. This is
+        // a mode transition, so growing or shrinking a selection that was
+        // already multiple (2 zones to 3) keeps whatever the user picked. The
+        // color dialogs assign these properties, which severs the binding, so
+        // restore the binding rather than the value or the swatches stop
+        // following the theme after the first multi-select.
         if (panelMode === "multiple") {
             multiHighlightColor = Qt.binding(function () {
-                return propertyPanel.multiHighlightDefault;
+                return propertyPanel.themeHighlightDefault;
             });
             multiInactiveColor = Qt.binding(function () {
-                return propertyPanel.multiInactiveDefault;
+                return propertyPanel.themeInactiveDefault;
             });
             multiBorderColor = Qt.binding(function () {
-                return propertyPanel.multiBorderDefault;
+                return propertyPanel.themeBorderDefault;
             });
         }
     }
@@ -152,7 +155,6 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.largeSpacing
-        visible: parent.visible
         spacing: Kirigami.Units.gridUnit
 
         // Header row with title and close button
@@ -644,7 +646,7 @@ Rectangle {
                     onColorButtonClicked: {
                         var currentColor = getZoneColor("highlightColor");
                         if (currentColor.a === 0)
-                            currentColor = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
+                            currentColor = propertyPanel.themeHighlightDefault;
 
                         highlightColorDialog.selectedColor = currentColor;
                         highlightColorDialog.open();
@@ -663,7 +665,7 @@ Rectangle {
                     onColorButtonClicked: {
                         var currentColor = getZoneColor("inactiveColor");
                         if (currentColor.a === 0)
-                            currentColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25);
+                            currentColor = propertyPanel.themeInactiveDefault;
 
                         inactiveColorDialog.selectedColor = currentColor;
                         inactiveColorDialog.open();
@@ -680,7 +682,7 @@ Rectangle {
                     onColorButtonClicked: {
                         var currentColor = getZoneColor("borderColor");
                         if (currentColor.a === 0)
-                            currentColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8);
+                            currentColor = propertyPanel.themeBorderDefault;
 
                         borderColorDialog.selectedColor = currentColor;
                         borderColorDialog.open();

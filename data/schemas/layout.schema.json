@@ -27,8 +27,11 @@
         "showZoneNumbers": { "type": "boolean" },
         "defaultOrder": { "type": "integer" },
         "aspectRatioClass": {
-            "type": "string",
-            "description": "Aspect-ratio bucket the layout targets (e.g. standard, ultrawide, portrait)."
+            "oneOf": [
+                { "type": "string", "enum": ["any", "standard", "ultrawide", "super-ultrawide", "portrait"] },
+                { "type": "integer", "minimum": 0, "maximum": 4 }
+            ],
+            "description": "Aspect-ratio bucket the layout targets. Both serialized forms are on the wire and readers accept either: Layout::toJson emits the canonical string, while the editor's save round-trip carries the raw enum int. Omitting the key means Any."
         },
         "zones": {
             "type": "array",

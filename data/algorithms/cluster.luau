@@ -78,7 +78,7 @@ return pluau.algorithm {
         local clusterOrder = {}
         local clusterMap = {}
         local focusedIndex = (type(ctx.focusedIndex) == "number") and ctx.focusedIndex or -1
-        local winLen = windows and #windows or 0
+        local winLen = #windows
 
         for i = 0, count - 1 do
             local appId = "unknown"

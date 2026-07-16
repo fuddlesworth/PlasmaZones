@@ -110,11 +110,17 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     }
     // Keep a number param's default inside its own [min, max] range so the
     // settings control never initialises outside its track (mirrors the
-    // metadata clamping applied to defaultSplitRatio / window counts). A
-    // non-finite default cannot be clamped, so it falls back to the low bound.
-    if (d.type == QLatin1String("number") && d.defaultValue.canConvert<double>()) {
-        const double v = d.defaultValue.toDouble();
-        d.defaultValue = std::isfinite(v) ? std::clamp(v, d.minValue, d.maxValue) : d.minValue;
+    // metadata clamping applied to defaultSplitRatio / window counts). Gated on
+    // the same numeric-metatype check as the bounds above, not on
+    // canConvert<double>(): a Luau table converts to no double at all, which
+    // would skip the clamp entirely and leave toVariantMap() handing the raw
+    // table to the settings control as a number param's default. Anything that
+    // is not a finite number (absent, table, bool, string, NaN) falls back to
+    // the low bound, which is always in range.
+    if (d.type == QLatin1String("number")) {
+        double def = 0.0;
+        d.defaultValue =
+            finiteNumber(m, QStringLiteral("default"), def) ? std::clamp(def, d.minValue, d.maxValue) : d.minValue;
     }
     d.enumOptions = m.value(QStringLiteral("options")).toStringList();
     return d;

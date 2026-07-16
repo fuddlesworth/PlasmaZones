@@ -462,9 +462,11 @@ void Settings::purgeStaleKeys()
     // in quicklayouts.json (separate sidecar) — neither is visible to
     // this purge after the v4 migration retired assignments.json.
     //
-    // The backend's root group (JsonBackend's rootGroupName, where
-    // writeRootString / readRootString put ungrouped keys) needs no entry here:
-    // groupList() reserves it and never reports it, so Pass 2 cannot reach it.
+    // The backend's root container (where writeRootString / readRootString put
+    // ungrouped keys) needs no entry here: IBackend::groupList()'s
+    // reserved-name contract requires every backend to keep it out of the
+    // enumeration, so Pass 2 cannot reach it. This holds against the interface
+    // and not just the JsonBackend we happen to construct today.
     //
     // Mixed list of (a) root-level GROUP names that must survive Pass 2's
     // blanket-delete loop ("Updates")
@@ -633,7 +635,12 @@ void Settings::save()
     saveAllPerScreenOverrides(m_configBackend);
     saveVirtualScreenConfigs(m_configBackend);
 
-    if (!m_configBackend->sync()) {
+    // commit(), not sync(): the baseline moves below on a true return, so this
+    // has to be a "the bytes landed" answer. sync() is allowed to return true
+    // for a write it merely scheduled (JsonBackend's Deferred policy debounces
+    // it), which would advance the baseline against a write that has not
+    // happened and may still fail.
+    if (!m_configBackend->commit()) {
         // Nothing reached disk. The backend stays dirty and retries on the next
         // sync, so the values are not lost — but the baseline must NOT move:
         // it is the "what disk holds" reference per-page Discard reverts to and
@@ -1793,6 +1800,24 @@ std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, c
     return std::nullopt;
 }
 
+// Serialize a decoded (screen, desktop, activity) tuple into the disable-list
+// entry string for @p axis. The ONE place the entry shape is spelled, shared by
+// the getter (disableEntriesFor) and the write path's kept-walk — the two have
+// to agree on what "the entry for this rule" is, or the kept-walk would fail to
+// recognise the very entries the getter produced.
+QString disableEntryFor(DisableAxis axis, const QString& screenId, int desktop, const QString& activity)
+{
+    switch (axis) {
+    case DisableAxis::Monitor:
+        return screenId;
+    case DisableAxis::Desktop:
+        return screenId + QLatin1Char('/') + QString::number(desktop);
+    case DisableAxis::Activity:
+        return screenId + QLatin1Char('/') + activity;
+    }
+    return QString();
+}
+
 } // namespace
 
 QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mode, int axisInt) const
@@ -1802,6 +1827,16 @@ QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mod
     const QString wantToken = PhosphorZones::modeToWireString(mode);
     QStringList out;
     for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
+        if (!rule.enabled) {
+            // A disabled rule does not gate anything. The evaluator skips
+            // !enabled before filling any slot, and these lists ARE the gate
+            // (isMonitorDisabled reads them straight), so honouring a disabled
+            // rule here would keep an engine switched off that the user had
+            // explicitly toggled off in the rule editor. The rule itself is
+            // preserved — see the kept-walk in writeDisableEntries, which must
+            // not delete what this getter no longer reports.
+            continue;
+        }
         const auto ruleToken = CRB::disableRuleMode(rule);
         if (!ruleToken || *ruleToken != wantToken) {
             continue; // not a disable rule, or scoped to a different mode
@@ -1820,17 +1855,7 @@ QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mod
         if (!ruleAxis || *ruleAxis != axis) {
             continue;
         }
-        switch (axis) {
-        case DisableAxis::Monitor:
-            out.append(screenId);
-            break;
-        case DisableAxis::Desktop:
-            out.append(screenId + QLatin1Char('/') + QString::number(desktop));
-            break;
-        case DisableAxis::Activity:
-            out.append(screenId + QLatin1Char('/') + activity);
-            break;
-        }
+        out.append(disableEntryFor(axis, screenId, desktop, activity));
     }
     return out;
 }
@@ -1877,7 +1902,23 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             CRB::contextDimsOf(rule.match, screenId, desktop, activity);
             const auto ruleAxis = axisOf(screenId, desktop, activity);
             if (ruleAxis && *ruleAxis == axis) {
-                continue; // drop — replaced below
+                // A DISABLED rule of this family is invisible to
+                // disableEntriesFor, so it is in neither `before` nor `after` and
+                // the append loop below will not recreate it. Dropping it here
+                // would silently delete the user's rule on the next unrelated
+                // write to this (axis, mode) family. Keep it — unless this write
+                // re-asserts its exact entry, in which case the append loop
+                // rebuilds the same tuple as an ENABLED rule with the same
+                // deterministic id, and keeping the disabled one too would put
+                // two rules with one id in the store. Ticking a monitor back on
+                // in the UI is precisely that case, and re-enabling the rule is
+                // what the user asked for.
+                const QStringList canonical =
+                    canonicalDisableEntries(axis, {disableEntryFor(axis, screenId, desktop, activity)});
+                const bool reasserted = !canonical.isEmpty() && after.contains(canonical.first());
+                if (rule.enabled || reasserted) {
+                    continue; // drop — replaced below
+                }
             }
         }
         kept.append(rule);
@@ -2986,7 +3027,10 @@ void Settings::reset()
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
     }
     deletePerScreenGroups(m_configBackend);
-    const bool syncedToDisk = m_configBackend->sync();
+    // commit(), not sync(), for the same reason save() uses it: the result
+    // gates whether the baseline moves, so a merely-scheduled write reported
+    // as success would strand the baseline over a disk state that isn't there.
+    const bool syncedToDisk = m_configBackend->commit();
     // A failed sync leaves the deletions in memory only — disk still holds the
     // pre-reset values, and the backend retries on the next sync. The load()
     // below re-reads the in-memory store and ends by capturing a baseline over

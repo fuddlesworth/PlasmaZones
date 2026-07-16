@@ -47,18 +47,15 @@ void SettingsController::scheduleLayoutLoad()
 
 void SettingsController::loadLayoutsAsync()
 {
-    // Force-reload the in-process PhosphorZones::LayoutRegistry from disk before reading.
-    // The LayoutManager's QFileSystemWatcher catches most disk changes,
-    // but Qt's QFSW has known misses on cross-process atomic-rename
-    // writes (the daemon writes layouts via QSaveFile, which creates a
-    // new inode the watcher may not bind to in time). Belt-and-suspenders:
-    // every D-Bus layout signal that triggers loadLayoutsAsync (layoutCreated
+    // Force-reload the in-process PhosphorZones::LayoutRegistry from disk
+    // before reading. The registry watches nothing — an explicit
+    // loadLayouts() is the only thing that rescans disk — so this call is
+    // what carries a daemon-side layout write into the local preview path.
+    // Every D-Bus layout signal that triggers loadLayoutsAsync (layoutCreated
     // / layoutDeleted / layoutChanged / layoutPropertyChanged /
     // layoutListChanged — see
-    // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions) ALSO forces
-    // an explicit reload here, so the local-source preview path stays
-    // strictly in sync with the daemon's view regardless of which file-
-    // event path fires first.
+    // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions) relies on it.
+    // It is not a redundant backup for a file watcher.
     if (m_localLayoutManager) {
         m_localLayoutManager->loadLayouts();
     }

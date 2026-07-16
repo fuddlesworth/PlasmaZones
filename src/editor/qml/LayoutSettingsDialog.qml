@@ -18,7 +18,10 @@ Kirigami.Dialog {
     required property var editorController
 
     title: i18nc("@title:window", "Layout Settings")
-    standardButtons: Kirigami.Dialog.NoButton
+    // Every control here applies its change as it is made, so all the dialog
+    // needs is a way out. A button labelled Apply would suggest the changes are
+    // pending and that closing drops them, the opposite of what happens.
+    standardButtons: Kirigami.Dialog.Close
     preferredWidth: Kirigami.Units.gridUnit * 22
     padding: Kirigami.Units.largeSpacing
     // Refresh checkbox/spinbox state every time the dialog opens,
@@ -72,12 +75,22 @@ Kirigami.Dialog {
             if (!root.editorController.hasOuterGapOverride)
                 outerGapSpin.value = root.editorController.globalOuterGap;
 
-            if (!root.editorController.hasPerSideOuterGapOverride) {
+            // Each side is tested on its own stored value, matching onOpened and
+            // onOuterGapChanged. hasPerSideOuterGapOverride is an ANY-test across
+            // the four sides, so using it here would leave a partial override
+            // showing stale globals on the sides it does not cover, and would
+            // overwrite the stored values on the sides it does.
+            if (root.editorController.outerGapTop < 0)
                 perSideTopSpin.value = root.editorController.globalOuterGapTop;
+
+            if (root.editorController.outerGapBottom < 0)
                 perSideBottomSpin.value = root.editorController.globalOuterGapBottom;
+
+            if (root.editorController.outerGapLeft < 0)
                 perSideLeftSpin.value = root.editorController.globalOuterGapLeft;
+
+            if (root.editorController.outerGapRight < 0)
                 perSideRightSpin.value = root.editorController.globalOuterGapRight;
-            }
         }
 
         function onOverlayDisplayModeChanged() {
@@ -271,7 +284,7 @@ Kirigami.Dialog {
 
                     from: 0
                     to: 100
-                    value: root.editorController ? (root.editorController.outerGapTop >= 0 ? root.editorController.outerGapTop : root.editorController.globalOuterGapTop) : 8
+                    value: root.editorController ? (root.editorController.outerGapTop >= 0 ? root.editorController.outerGapTop : root.editorController.globalOuterGapTop) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Top edge gap override")
                     onValueModified: {
@@ -293,7 +306,7 @@ Kirigami.Dialog {
 
                     from: 0
                     to: 100
-                    value: root.editorController ? (root.editorController.outerGapBottom >= 0 ? root.editorController.outerGapBottom : root.editorController.globalOuterGapBottom) : 8
+                    value: root.editorController ? (root.editorController.outerGapBottom >= 0 ? root.editorController.outerGapBottom : root.editorController.globalOuterGapBottom) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Bottom edge gap override")
                     onValueModified: {
@@ -315,7 +328,7 @@ Kirigami.Dialog {
 
                     from: 0
                     to: 100
-                    value: root.editorController ? (root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft) : 8
+                    value: root.editorController ? (root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Left edge gap override")
                     onValueModified: {
@@ -337,7 +350,7 @@ Kirigami.Dialog {
 
                     from: 0
                     to: 100
-                    value: root.editorController ? (root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight) : 8
+                    value: root.editorController ? (root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight) : 0
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Right edge gap override")
                     onValueModified: {
@@ -501,28 +514,6 @@ Kirigami.Dialog {
                     if (root.editorController)
                         root.editorController.useFullScreenGeometry = checked;
                 }
-            }
-        }
-    }
-
-    footer: Item {
-        implicitHeight: footerLayout.implicitHeight + Kirigami.Units.largeSpacing * 2
-        implicitWidth: footerLayout.implicitWidth
-
-        RowLayout {
-            id: footerLayout
-
-            anchors.fill: parent
-            anchors.margins: Kirigami.Units.largeSpacing
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            Button {
-                text: i18nc("@action:button", "Apply")
-                icon.name: "dialog-ok-apply"
-                onClicked: root.close()
             }
         }
     }
