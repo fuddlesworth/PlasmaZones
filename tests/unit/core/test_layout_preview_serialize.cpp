@@ -65,6 +65,36 @@ private Q_SLOTS:
         QVERIFY(!toVariantMap(preview).contains(QStringLiteral("reflowsOnFocus")));
         QVERIFY(!toJson(preview).contains(QStringLiteral("reflowsOnFocus")));
     }
+
+    void masterCount_emittedInBothShapes()
+    {
+        // The renderer marks this many leading zones as masters, so the resolved
+        // count the source computed the geometry with has to reach the wire. It
+        // previously did not, pinning every preview's dot count to 1.
+        PhosphorLayout::LayoutPreview preview;
+        preview.id = QStringLiteral("autotile:master-stack");
+        preview.displayName = QStringLiteral("Master Stack");
+        PhosphorLayout::AlgorithmMetadata meta;
+        meta.supportsMasterCount = true;
+        preview.algorithm = meta;
+        preview.masterCount = 3;
+
+        QCOMPARE(toVariantMap(preview).value(QStringLiteral("masterCount")).toInt(), 3);
+        QCOMPARE(toJson(preview).value(QStringLiteral("masterCount")).toInt(), 3);
+    }
+
+    void masterCount_absentForManualLayout()
+    {
+        // Manual layouts have no master concept, so the key stays off the wire
+        // and the QML side keeps its `!== undefined` fallback to 1.
+        PhosphorLayout::LayoutPreview preview;
+        preview.id = QStringLiteral("{00000000-0000-0000-0000-000000000000}");
+        preview.displayName = QStringLiteral("Manual");
+        QVERIFY(!preview.isAutotile());
+
+        QVERIFY(!toVariantMap(preview).contains(QStringLiteral("masterCount")));
+        QVERIFY(!toJson(preview).contains(QStringLiteral("masterCount")));
+    }
 };
 
 QTEST_MAIN(TestLayoutPreviewSerialize)

@@ -173,6 +173,10 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     preview.displayName = algorithm->name();
     preview.description = algorithm->description();
     preview.zoneCount = rects.size();
+    // Publish the same master count `previewState` above computed the geometry
+    // with, so a renderer marking the leading zones as masters agrees with the
+    // rects it draws them over.
+    preview.masterCount = masterCount;
     // Setting preview.algorithm = ... makes isAutotile() return true.
     preview.algorithm = buildMetadata(algorithm);
     // Built-in C++ algorithms and system-installed scripts are system

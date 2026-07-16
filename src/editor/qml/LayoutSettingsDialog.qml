@@ -76,10 +76,9 @@ Kirigami.Dialog {
                 outerGapSpin.value = root.editorController.globalOuterGap;
 
             // Each side is tested on its own stored value, matching onOpened and
-            // onOuterGapChanged. hasPerSideOuterGapOverride is an ANY-test across
-            // the four sides, so using it here would leave a partial override
-            // showing stale globals on the sides it does not cover, and would
-            // overwrite the stored values on the sides it does.
+            // onOuterGapChanged. A single any-side test would be wrong here: a
+            // partial override would leave stale globals on the sides it does not
+            // cover, and would overwrite the stored values on the sides it does.
             if (root.editorController.outerGapTop < 0)
                 perSideTopSpin.value = root.editorController.globalOuterGapTop;
 
@@ -469,7 +468,10 @@ Kirigami.Dialog {
                     id: aspectRatioCombo
 
                     model: [i18nc("@item:inlistbox aspect ratio class", "Any"), i18nc("@item:inlistbox aspect ratio class", "Standard (16:9)"), i18nc("@item:inlistbox aspect ratio class", "Ultrawide (21:9)"), i18nc("@item:inlistbox aspect ratio class", "Super-Ultrawide (32:9)"), i18nc("@item:inlistbox aspect ratio class", "Portrait (9:16)")]
-                    currentIndex: root.editorController ? root.editorController.aspectRatioClass : 0
+                    // Clamped like the two imperative re-syncs (onOpened and
+                    // onAspectRatioClassChanged): a class outside the model's range
+                    // would blank the combo rather than fall back to a real entry.
+                    currentIndex: root.editorController ? Math.max(0, Math.min(root.editorController.aspectRatioClass, aspectRatioCombo.count - 1)) : 0
                     Layout.fillWidth: true
                     Accessible.name: i18nc("@label", "Aspect ratio class")
                     Accessible.description: i18nc("@info:accessibility", "Set which screen aspect ratio this layout is designed for")

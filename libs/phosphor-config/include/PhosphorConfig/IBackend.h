@@ -203,10 +203,10 @@ public:
     /// @c removeRootKey address must NOT appear in this list, nor may any of
     /// its descendants. Ungrouped keys are not addressable through @c group()
     /// and no caller can tell them apart from a real group by name, so a
-    /// consumer sweeping @c groupList() and calling @c deleteGroup on what it
-    /// does not recognise (as @c Settings::purgeStaleKeys does on every save)
-    /// would wipe them. Enforcing it here rather than asking every consumer to
-    /// know each backend's container name is what makes that sweep safe.
+    /// consumer that sweeps @c groupList() and calls @c deleteGroup on every
+    /// name it does not recognise would wipe them. Enforcing it here rather
+    /// than asking every consumer to know each backend's container name is what
+    /// makes such a sweep safe.
     ///
     /// The same applies to any root key an @c IGroupPathResolver reserves: the
     /// resolver owns that subtree exclusively and enumerates it itself.

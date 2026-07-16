@@ -254,10 +254,10 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
             LayoutSettingsStore::mergeSettings(structural, m_layoutSettings.settingsFor(layoutId));
 
         // Re-validate after the merge. The sidecar is a separate document that
-        // reaches fromJson through this path, and mergeSettings inserts its
-        // keys verbatim — it does not restrict them to the settings key set,
-        // so a corrupt or hand-edited sidecar entry can introduce keys the
-        // check above never saw, or overwrite structural ones it passed. The
+        // reaches fromJson through this path, and while mergeSettings restricts
+        // itself to the settings key set (so it can no longer overwrite the id
+        // or any other structural key), the VALUES it inserts under those keys
+        // are still whatever a corrupt or hand-edited sidecar entry holds. The
         // merged shape is just the full (pre-split) layout format, which is
         // what the schema describes and what importLayout already validates,
         // so this is the same gate rather than a second one. The structural

@@ -300,9 +300,18 @@ public:
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
     // Loads the on-disk layouts via an in-process LayoutRegistry +
     // ZonesLayoutSource so QML preview paths render even when the daemon
-    // is down (early launch, crash). Returns the QML projection produced
-    // by PlasmaZones::toVariantMap — intentionally different from the
-    // D-Bus getLayoutPreviewList wire shape.
+    // is down (early launch, crash). Drives the Step-1 instant paint in
+    // loadLayoutsAsync, which the daemon's enriched reply then replaces.
+    //
+    // Returns the projection produced by PlasmaZones::toVariantMap. That is
+    // the SAME projection, key for key, that the D-Bus side emits via toJson
+    // — the two differ only in container type (QVariantMap vs QJsonObject).
+    // What differs is the daemon's LayoutAdaptor::getLayoutList, which adds an
+    // enrichment layer on top (hasSystemOrigin / hiddenFromSelector /
+    // defaultOrder / allow-lists) from Layout state that LayoutPreview does not
+    // carry. So the list this returns is a strict SUBSET of the Step-2 D-Bus
+    // list: any consumer reading an enrichment-only key off these previews
+    // gets `undefined`, not `false`. See src/common/layoutpreviewserialize.h.
     //
     // @note Autotile preview-parameter drift: the local AlgorithmRegistry
     // is independent of the daemon's (see m_localAlgorithmRegistry below),
@@ -311,11 +320,6 @@ public:
     // built-in defaults. When the daemon is up, D-Bus carries the tuned
     // previews; the fallback is only a "daemon is down" safety net.
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
-    // Non-const: ILayoutSource::previewAt is non-const so implementations
-    // can populate a query cache (scripted autotile algorithms would be
-    // prohibitively expensive to re-run on every picker redraw). Const
-    // would silently dodge that cache.
-    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4);
 
     // Screen accessors
     QVariantList screens() const
@@ -802,9 +806,12 @@ private:
     // pair is the deliberate Step-1 instant-paint / Step-2 enrichment design.
     //
     // What the gate suppresses is a local emit that lands BETWEEN the dispatch
-    // and the reply — a file-watcher refresh, say — which would repaint the page
-    // from the un-enriched local composite only for the in-flight reply to
-    // immediately replace it. Set true right before the D-Bus asyncCall dispatch;
+    // and the reply. A second daemon layout signal arriving in that window
+    // restarts the scheduleLayoutLoad() debounce, and its loadLayoutsAsync()
+    // calls loadLayouts() on the local registry, which drives that lambda
+    // synchronously. Ungated it would repaint the page from the un-enriched
+    // local composite only for the in-flight reply to immediately replace it.
+    // Set true right before the D-Bus asyncCall dispatch;
     // cleared at the reply lambda's entry (before any early-return on error, so
     // the local fallback emit resumes if the daemon is unreachable). Only
     // relevant when the daemon is available — when the D-Bus call errors out, the
@@ -937,8 +944,8 @@ private:
     void wireDaemonSubscriptions(QStringList& failedSubscriptions);
 
     // File-scope sort helper exposed as a private static member so both
-    // settingscontroller.cpp (file-watcher rebind path) and
-    // settingscontroller_layouts.cpp (D-Bus refresh path) link to the
+    // settingscontroller.cpp (the ctor-wired LayoutRegistry::layoutsChanged
+    // lambda) and settingscontroller_layouts.cpp (D-Bus refresh path) link to the
     // same external-linkage symbol regardless of unity-build batching.
     // Manual layouts sort first; within each category alphabetical by
     // displayName (case-insensitive).

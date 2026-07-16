@@ -107,15 +107,19 @@ QJsonObject LayoutSettingsStore::stripSettings(const QJsonObject& fullLayout)
 
 QJsonObject LayoutSettingsStore::mergeSettings(QJsonObject structural, const QJsonObject& settings)
 {
-    QJsonObject zoneAppearance;
-    for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
-        if (it.key() == kZoneAppearanceMapKey) {
-            zoneAppearance = it.value().toObject();
-            continue;
+    // Insert only the keys extractSettings is allowed to move out, so merge is
+    // the exact inverse of extract. Iterating the sidecar object instead would
+    // let a hand-edited entry insert ANY key over the structural JSON — the id
+    // included, which would give the constructed Layout an id disagreeing with
+    // the file it came from and send a later save to a different path. Anything
+    // else the sidecar carries is not ours and is dropped here.
+    for (const QLatin1String key : layoutSettingKeys) {
+        if (settings.contains(key)) {
+            structural.insert(key, settings.value(key));
         }
-        structural.insert(it.key(), it.value());
     }
 
+    const QJsonObject zoneAppearance = settings.value(kZoneAppearanceMapKey).toObject();
     if (!zoneAppearance.isEmpty()) {
         QJsonArray zones = structural.value(ZoneJsonKeys::Zones).toArray();
         for (int i = 0; i < zones.size(); ++i) {

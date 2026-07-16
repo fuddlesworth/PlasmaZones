@@ -1376,7 +1376,7 @@ private:
     // Only non-Store groups need dedicated helpers now. Store-backed groups
     // (Activation/Display/ZoneGeometry/Behavior/ZoneSelector/Shortcut/
     // Autotiling/Editor/Appearance/Rendering/Shaders/Ordering) persist via
-    // setters and flush via m_configBackend->sync() in save().
+    // setters and flush via m_configBackend->commit() in save().
     void loadPerScreenOverrides(PhosphorConfig::IBackend* backend);
     void loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
     void saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend);

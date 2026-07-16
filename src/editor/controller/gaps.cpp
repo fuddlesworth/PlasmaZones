@@ -132,12 +132,6 @@ int EditorController::outerGapRight() const
     return m_outerGapRight;
 }
 
-bool EditorController::hasPerSideOuterGapOverride() const
-{
-    return m_usePerSideOuterGap
-        && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
-}
-
 bool EditorController::globalUsePerSideOuterGap() const
 {
     return m_cachedGlobalUsePerSideOuterGap;

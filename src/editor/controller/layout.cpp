@@ -18,6 +18,7 @@
 
 #include "phosphor_i18n.h"
 #include <memory>
+#include <utility>
 #include <QDBusMessage>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -119,48 +120,85 @@ QVariantList EditorController::screenModel() const
     return model;
 }
 
+// Carry out a screen switch: swap the target, then load whatever layout that
+// screen is assigned. Both entry points (setTargetScreen when nothing is
+// unsaved, confirmPendingTargetScreen once the user has answered the prompt)
+// land here so the switch itself is written once.
+void EditorController::applyTargetScreen(const QString& screenName)
+{
+    const QString previousLayout = m_layoutId;
+    m_targetScreen = screenName;
+
+    cacheVirtualScreenGeometry(screenName);
+    // Clear the per-layout override — the previous layout's bbox doesn't
+    // apply to the new screen. loadLayout / createNewLayout below set it
+    // again if the incoming layout uses fixed geometry.
+    m_layoutBoundsOverride = QSize();
+
+    Q_EMIT targetScreenChanged();
+    refreshUsableAreaInsets();
+
+    // Defer targetScreenSizeChanged + setReferenceScreenSize to
+    // loadLayout/createNewLayout, which know the final reference size
+    // (fixed-zone bounding box for fixed layouts; physical/VS size
+    // otherwise). Emitting here would make QML react with the old
+    // zones against the new size before the layout swap completes.
+    if (!screenName.isEmpty() && m_layoutService) {
+        QString layoutId = m_layoutService->getLayoutIdForScreen(screenName);
+        qCDebug(lcEditor) << "applyTargetScreen:" << screenName << "daemon returned layoutId:" << layoutId
+                          << "current layoutId:" << previousLayout;
+        if (!layoutId.isEmpty()) {
+            loadLayout(layoutId);
+        } else {
+            qCInfo(lcEditor) << "No layout assigned to screen" << screenName << "- creating new layout";
+            createNewLayout();
+        }
+    } else {
+        // No layout will be loaded — publish the new size now.
+        Q_EMIT targetScreenSizeChanged();
+        m_zoneManager->setReferenceScreenSize(targetScreenSize());
+    }
+}
+
 void EditorController::setTargetScreen(const QString& screenName)
 {
-    if (m_targetScreen != screenName) {
-        // Check for unsaved changes before switching screens
-        if (m_hasUnsavedChanges) {
-            // For now, just warn - in future could prompt user
-            qCWarning(lcEditor) << "Switching screens with unsaved changes";
-        }
-
-        QString previousLayout = m_layoutId;
-        m_targetScreen = screenName;
-
-        cacheVirtualScreenGeometry(screenName);
-        // Clear the per-layout override — the previous layout's bbox doesn't
-        // apply to the new screen. loadLayout / createNewLayout below set it
-        // again if the incoming layout uses fixed geometry.
-        m_layoutBoundsOverride = QSize();
-
-        Q_EMIT targetScreenChanged();
-        refreshUsableAreaInsets();
-
-        // Defer targetScreenSizeChanged + setReferenceScreenSize to
-        // loadLayout/createNewLayout, which know the final reference size
-        // (fixed-zone bounding box for fixed layouts; physical/VS size
-        // otherwise). Emitting here would make QML react with the old
-        // zones against the new size before the layout swap completes.
-        if (!screenName.isEmpty() && m_layoutService) {
-            QString layoutId = m_layoutService->getLayoutIdForScreen(screenName);
-            qCDebug(lcEditor) << "setTargetScreen:" << screenName << "daemon returned layoutId:" << layoutId
-                              << "current layoutId:" << previousLayout;
-            if (!layoutId.isEmpty()) {
-                loadLayout(layoutId);
-            } else {
-                qCInfo(lcEditor) << "No layout assigned to screen" << screenName << "- creating new layout";
-                createNewLayout();
-            }
-        } else {
-            // No layout will be loaded — publish the new size now.
-            Q_EMIT targetScreenSizeChanged();
-            m_zoneManager->setReferenceScreenSize(targetScreenSize());
-        }
+    if (m_targetScreen == screenName) {
+        return;
     }
+
+    // The switch loads the new screen's layout over the current one, so any
+    // unsaved edits go with it. Park the request and let the UI ask the user
+    // rather than deciding for them. targetScreen() keeps reporting the old
+    // screen until the answer arrives, which is what holds the screen-selector
+    // binding on the current screen while the prompt is up.
+    if (m_hasUnsavedChanges) {
+        m_pendingTargetScreen = screenName;
+        Q_EMIT targetScreenChangeRequiresConfirmation(screenName);
+        return;
+    }
+
+    applyTargetScreen(screenName);
+}
+
+void EditorController::confirmPendingTargetScreen()
+{
+    if (m_pendingTargetScreen.isEmpty()) {
+        return;
+    }
+
+    // Clear before applying: applyTargetScreen loads a layout, which re-enters
+    // enough of the controller that leaving the pending screen set would let a
+    // second confirm apply it twice.
+    const QString screenName = std::exchange(m_pendingTargetScreen, QString());
+    if (screenName == m_targetScreen) {
+        return;
+    }
+    applyTargetScreen(screenName);
+}
+
+void EditorController::cancelPendingTargetScreen()
+{
+    m_pendingTargetScreen.clear();
 }
 
 namespace {
@@ -725,7 +763,6 @@ void EditorController::saveLayout()
     QJsonObject layoutObj;
     layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = m_layoutId;
     layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = m_layoutName;
-    layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
 
     QJsonArray zonesArray;
     QVariantList zones = m_zoneManager->zones();

@@ -232,8 +232,18 @@ target_link_libraries(test_autotile_tile_request_validation PRIVATE PhosphorComp
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile + Virtual Screen Integration Tests
 # ═══════════════════════════════════════════════════════════════════════════════
-p_add_test(test_autotile_virtual autotile/test_autotile_virtual.cpp)
 p_add_test(test_autotile_per_screen_desktop autotile/test_autotile_per_screen_desktop.cpp)
+
+# Accepting a virtual screen ID needs the manager to resolve real virtual
+# geometry, which needs a backing physical screen — compile in the
+# FakeScreenProvider (like the cross-surface navigation tests).
+add_executable(test_autotile_virtual
+               autotile/test_autotile_virtual.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_autotile_virtual
+               PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_autotile_virtual PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_autotile_virtual COMMAND test_autotile_virtual)
 target_compile_definitions(test_autotile_virtual PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -818,6 +828,20 @@ target_link_libraries(test_algorithm_scaffold PRIVATE Qt6::Test Qt6::Core Phosph
 target_compile_definitions(test_algorithm_scaffold PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_algorithm_scaffold COMMAND test_algorithm_scaffold)
 
+# The one AlgorithmService surface that feeds the scaffold's
+# already-sanitized-caller contract from the translation catalog: the duplicate
+# name suffix. Drives the real service against a real loader + registry over an
+# isolated XDG root, so it needs the service and scaffold TUs (both live in the
+# plasmazones-settings executable) plus PhosphorTiles for the Luau loader.
+add_executable(test_algorithm_copy_suffix
+    settings/test_algorithm_copy_suffix.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/algorithmservice.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
+)
+target_link_libraries(test_algorithm_copy_suffix PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorTiles::PhosphorTiles)
+add_test(NAME test_algorithm_copy_suffix COMMAND test_algorithm_copy_suffix)
+
 add_executable(test_algorithm_scaffold_rejects
     settings/test_algorithm_scaffold_rejects.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/algorithmscaffold.cpp
@@ -1150,6 +1174,25 @@ add_executable(test_zone_zorder editor/test_zone_zorder.cpp
 # transitively via plasmazones_core today, but that is not a contract.
 target_link_libraries(test_zone_zorder PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_zone_zorder COMMAND test_zone_zorder)
+
+# The editor's D-Bus client has to read the daemon's ANSWER, not just the reply
+# type: updateLayout is declared bool and a refusal comes back as an ordinary
+# ReplyMessage, which EditorController::saveLayout then treats as a landed write
+# (clean undo stack, no unsaved-changes prompt, work lost on close). The client
+# hard-binds the daemon's bus name, so the stub registry has to claim it — the
+# test skips itself when a real daemon already owns the name, hence the
+# dbus-run-session wrapper. DBusLayoutService lives in the editor executable
+# rather than a library, so its TU is compiled into the test directly.
+# ILayoutService.h declares its Q_OBJECT base entirely in the header, so it is
+# listed explicitly: AUTOMOC has to see it to emit the base's metaobject.
+add_executable(test_dbus_layout_service_replies editor/test_dbus_layout_service_replies.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/DBusLayoutService.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/services/ILayoutService.h)
+target_link_libraries(test_dbus_layout_service_replies
+                      PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                              PhosphorProtocol::PhosphorProtocol)
+add_test(NAME test_dbus_layout_service_replies
+         COMMAND dbus-run-session -- $<TARGET_FILE:test_dbus_layout_service_replies>)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation

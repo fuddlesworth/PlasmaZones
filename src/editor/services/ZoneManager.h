@@ -190,7 +190,7 @@ public:
      *
      * Allows pasting zones with all their properties intact. Validates
      * zone data and creates new zone with specified properties.
-     * If allowIdReuse is true and zone ID already exists, deletes existing zone first.
+     * If allowIdReuse is true and zone ID already exists, updates the existing zone in place.
      */
     QString addZoneFromMap(const QVariantMap& zoneData, bool allowIdReuse = false, int insertIndex = -1);
 
@@ -290,9 +290,9 @@ private:
      * @brief Signal types for deferred emission
      *
      * ZOrderChanged carries no per-zone signal of its own: restacking one zone
-     * renumbers every other zone's zOrder, so a signal naming a single zone
-     * would be wrong by construction. It emits the aggregate zonesChanged() and
-     * zonesModified() only.
+     * renumbers at least one other zone's zOrder, so a signal naming a single
+     * zone would be wrong by construction. It emits the aggregate zonesChanged()
+     * and zonesModified() only.
      */
     enum class SignalType {
         ZoneAdded,

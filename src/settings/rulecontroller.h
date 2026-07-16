@@ -335,7 +335,8 @@ public:
     /// zoneOrdinals, screenId, virtualDesktop, snappingLayout, tilingAlgorithm,
     /// animationEvent, shaderEffect, overlayShader, decorationChain,
     /// curveEditor); for
-    /// `kind == "enum"` there is also an `options` string list, and for
+    /// `kind == "enum"` there is also an `options` list of
+    /// `{ value: QString (wire token), label }` maps, and for
     /// `kind == "number"`/`"percent"`, `min`/`max`/`scale` (the value stored is
     /// `display * scale`).
     /// QML drives the per-type editor entirely from this descriptor; the

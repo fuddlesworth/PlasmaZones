@@ -3,7 +3,6 @@
     "name": "Super-Ultrawide Dual",
     "description": "Two virtual 16:9 halves for 32:9 super-ultrawide monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "super-ultrawide",
     "zones": [

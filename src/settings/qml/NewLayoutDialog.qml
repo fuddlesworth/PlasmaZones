@@ -370,6 +370,26 @@ Kirigami.Dialog {
                             // same client-side cap as the editor's layout name field.
                             maximumLength: 40
                             Accessible.name: i18n("Layout name")
+                            // Return creates the layout while the name field holds
+                            // focus, the way a dialog's default button would. Scoped
+                            // to this field rather than a footer-wide Shortcut: a
+                            // Shortcut preempts the focused item, so it would steal
+                            // Return from the aspect-ratio group's own selection
+                            // handler, and it would stay armed after the dialog
+                            // closed. Same contract as NewAlgorithmDialog.
+                            //
+                            // A failed create releases the `_creating` guard so the
+                            // user can retry, which leaves a held Return free to
+                            // re-fire the D-Bus call on every repeat. Ignore
+                            // auto-repeat so one press is one attempt.
+                            Keys.onReturnPressed: event => {
+                                if (!event.isAutoRepeat && wizardFooter.createEnabled)
+                                    wizardFooter.createClicked();
+                            }
+                            Keys.onEnterPressed: event => {
+                                if (!event.isAutoRepeat && wizardFooter.createEnabled)
+                                    wizardFooter.createClicked();
+                            }
                         }
 
                         Connections {
@@ -459,10 +479,6 @@ Kirigami.Dialog {
         currentStep: root.currentStep
         createText: i18n("Create Layout")
         createEnabled: nameField.text.trim().length > 0 && !root._creating
-        // Step 2 is a name field, an aspect-ratio group and a checkbox, none of
-        // which need Return, so Return creates the layout from anywhere on the
-        // step rather than only while the name field holds focus.
-        returnActivatesCreate: true
         onBackClicked: root.currentStep = 0
         onNextClicked: root.currentStep = 1
         onCreateClicked: {

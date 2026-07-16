@@ -8,6 +8,9 @@
 #include "../../core/logging.h"
 #include "../helpers/SettingsDbusQueries.h"
 
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include "phosphor_i18n.h"
 #include "../../config/configdefaults.h"
 #include "../../config/configmigration.h"
@@ -208,12 +211,20 @@ void EditorController::loadEditorSettings()
 
 void EditorController::saveEditorSettings()
 {
-    // Creates an ephemeral backend — reads from disk, writes one group, syncs.
-    // If the daemon has unsaved in-memory changes to the same file, QSaveFile's
-    // atomic rename prevents corruption but the daemon's next sync will overwrite
-    // editor changes (and vice versa).  Proper fix requires IPC (D-Bus) for
-    // cross-process settings writes; acceptable for now since the editor only
-    // writes to the Editor group which the daemon doesn't modify at runtime.
+    // Write-in-process-then-reload, the same contract the settings app follows
+    // (see src/settings/dbusutils.h — nothing in the tree writes a setting over
+    // D-Bus). The ephemeral backend reads config.json fresh off disk, applies
+    // the Editor.* groups below and flushes; the reloadSettings call at the
+    // bottom then makes the daemon reparse.
+    //
+    // The reload is load-bearing, not a courtesy. JsonBackend::sync rewrites the
+    // WHOLE document from its in-memory root, and the daemon's root is only
+    // refreshed by a reparse. Without the reload the daemon would keep the
+    // pre-write snapshot and its next flush — any setting change, from any
+    // source — would put the stale Editor.* values back, silently reverting the
+    // editor's settings some arbitrary time later. Group ownership does not
+    // protect against that: the clobber is whole-file, so it does not matter
+    // that the daemon never edits Editor.* itself.
     auto backend = PlasmaZones::createDefaultConfigBackend();
 
     // Save editor snapping settings
@@ -242,7 +253,20 @@ void EditorController::saveEditorSettings()
         fillOnDrop->writeInt(ConfigDefaults::modifierKey(), m_fillOnDropModifier);
     }
 
-    backend->sync();
+    if (!backend->sync()) {
+        // Nothing reached disk, so there is nothing for the daemon to pick up
+        // and its snapshot is still the truth. Skipping the reload here keeps
+        // the two in agreement instead of asking the daemon to reparse a file
+        // that never changed.
+        qCWarning(lcEditor) << "Failed to write editor settings to" << ConfigDefaults::configFilePath();
+        return;
+    }
+
+    // Hand the daemon the new on-disk state. Synchronous so the reparse has
+    // happened before this returns — an async call would leave a window in
+    // which a daemon flush still carries the pre-write Editor.* values.
+    PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Settings,
+                                              QStringLiteral("reloadSettings"));
 }
 
 } // namespace PlasmaZones

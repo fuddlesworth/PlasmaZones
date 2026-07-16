@@ -140,10 +140,9 @@ void SettingsController::loadLayoutsAsync()
 }
 
 // ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
-// See header doc for why these exist. Both helpers route through the shared
-// toVariantMap so settings + editor + future consumers emit the
-// same QML-compatible shape (drop-in replacement for the legacy m_layouts
-// produced by LayoutAdaptor::getLayoutList).
+// See header doc for why this exists. It routes through the shared
+// toVariantMap, so it emits the same projection the daemon's D-Bus side emits
+// via toJson — minus that path's getLayoutList enrichment layer.
 
 QVariantList SettingsController::localLayoutPreviews() const
 {
@@ -178,18 +177,6 @@ void SettingsController::recalcLocalLayouts()
         PhosphorZones::LayoutComputeService::recalculateSync(
             layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
     }
-}
-
-QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount)
-{
-    if (id.isEmpty() || !m_localSources.composite()) {
-        return {};
-    }
-    const auto preview = m_localSources.composite()->previewAt(id, windowCount);
-    if (preview.id.isEmpty()) {
-        return {};
-    }
-    return toVariantMap(preview);
 }
 
 void SettingsController::createNewLayout()

@@ -46,6 +46,23 @@ using Mode = PhosphorZones::AssignmentEntry::Mode;
 
 namespace {
 
+// Stable-id-shaped screen names, for the same reason spelled out at the top of
+// tests/unit/config/test_settings_disable_per_mode.cpp: every assertion below
+// compares a screen name the code stored and handed back through
+// Settings::disabledMonitors, which resolves connector names on EVERY read.
+//
+// `resolveScreenId` only rewrites CONNECTOR names, which ScreenIdentity defines
+// as "contains no ':'", so a "Manuf:Model:Serial" string canonicalizes to itself
+// on every machine. A connector name like "DP-2" would instead resolve against
+// whatever is actually plugged into the box running the suite, and
+// `QCOMPARE(disabledMonitors(...), {"DP-2"})` would come back as that monitor's
+// EDID id. Under QT_QPA_PLATFORM=offscreen no connector matches and the name
+// falls through untouched, which is why such a test passes ctest and fails a
+// bare run on a host that owns the connector.
+const QString kDisabledScreenSnapping = QStringLiteral("TestVendor:PanelA:0001");
+const QString kDisabledScreenAutotile = QStringLiteral("TestVendor:PanelB:0002");
+const QString kDisabledScreenBorrow = QStringLiteral("TestVendor:PanelC:0003");
+
 /// Mint a deterministic assignment rule representing what the daemon's
 /// LayoutRegistry / RuleAdaptor writes when the KCM saves a per-screen
 /// layout choice. The exact action shape doesn't matter for the race test;
@@ -113,7 +130,7 @@ private Q_SLOTS:
         // before step 1) and called setAllRules({disableRule}), clobbering
         // the assignment from disk. With one shared store, the rebuild
         // sees the assignment in ruleSet() and carries it forward.
-        const QString disabledScreen = QStringLiteral("HDMI-A-1");
+        const QString& disabledScreen = kDisabledScreenSnapping;
         settings.setDisabledMonitors(Mode::Snapping, {disabledScreen});
 
         // In-memory invariant — both writes are present in the one live
@@ -151,7 +168,7 @@ private Q_SLOTS:
         Settings settings(backend.get(), /*curveRegistry=*/nullptr, daemonStore.get(), nullptr);
 
         // (1) Settings-side writer first.
-        const QString disabledScreen = QStringLiteral("DP-2");
+        const QString& disabledScreen = kDisabledScreenAutotile;
         settings.setDisabledMonitors(Mode::Autotile, {disabledScreen});
         QCOMPARE(daemonStore->count(), 1);
 
@@ -187,10 +204,10 @@ private Q_SLOTS:
 
         // Inject a disable rule directly through the daemon-owned store
         // (the path RuleAdaptor takes when KCM edits a rule by id).
-        const QString disabledScreen = QStringLiteral("eDP-1");
+        const QString& disabledScreen = kDisabledScreenBorrow;
         const auto rule = PhosphorRules::ContextRuleBridge::makeDisableRule(
-            QStringLiteral("Snapping off · eDP-1"), disabledScreen, 0, QString(), QStringLiteral("snapping"),
-            PhosphorRules::ContextRuleBridge::kContextBandBase);
+            QStringLiteral("Snapping off · %1").arg(disabledScreen), disabledScreen, 0, QString(),
+            QStringLiteral("snapping"), PhosphorRules::ContextRuleBridge::kContextBandBase);
         QVERIFY(daemonStore->addRule(rule));
 
         // Settings reads through the same store, so the disable is visible

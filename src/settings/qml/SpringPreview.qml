@@ -28,7 +28,10 @@ Item {
     required property real zeta
     required property bool previewEnabled
 
-    onVisibleChanged: if (!visible) { springAnimTimer.stop(); springReplayDelay.stop(); }
+    onVisibleChanged: if (!visible) {
+        springAnimTimer.stop();
+        springReplayDelay.stop();
+    }
     // Match EasingPreview dimensions exactly
     readonly property int canvasHeight: Kirigami.Units.gridUnit * 15
     readonly property int boxTrackHeight: Kirigami.Units.gridUnit * 2
@@ -57,7 +60,7 @@ Item {
 
     function replay() {
         if (!root.previewEnabled)
-            return ;
+            return;
 
         springAnimTimer.stop();
         boxTrack.animBox.x = 0;
@@ -232,20 +235,11 @@ Item {
                 }
             }
 
+            // onPaint samples highlight, text, background and positive-text
+            // colours. Every PlatformTheme colour shares the one `colorsChanged`
+            // notify signal, so this one handler covers all of them.
             Connections {
-                function onHighlightColorChanged() {
-                    springCanvas.requestPaint();
-                }
-
-                function onTextColorChanged() {
-                    springCanvas.requestPaint();
-                }
-
-                function onBackgroundColorChanged() {
-                    springCanvas.requestPaint();
-                }
-
-                function onPositiveTextColorChanged() {
+                function onColorsChanged() {
                     springCanvas.requestPaint();
                 }
 
@@ -260,7 +254,6 @@ Item {
                 Accessible.role: Accessible.Button
                 onClicked: root.replay()
             }
-
         }
 
         // ── Spring description label ──────────────────────────────────
@@ -282,7 +275,6 @@ Item {
             Layout.preferredHeight: root.boxTrackHeight
             boxSize: root.boxSize
         }
-
     }
 
     // Replay delay (matches EasingPreview pattern)
@@ -324,5 +316,4 @@ Item {
             }
         }
     }
-
 }

@@ -29,7 +29,7 @@ ToolBar {
     RowLayout {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.smallSpacing // Use theme spacing (4px)
-        spacing: Kirigami.Units.mediumSpacing // Use theme spacing (8px - between major sections)
+        spacing: Kirigami.Units.mediumSpacing // Use theme spacing (between major sections)
 
         // ═══════════════════════════════════════════════════════════════
         // ZONE CREATION SECTION
@@ -38,7 +38,7 @@ ToolBar {
             id: zoneCreationSection
 
             visible: !controlBar.previewMode
-            spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - within section)
+            spacing: Kirigami.Units.gridUnit // Use theme spacing (within section)
 
             Button {
                 text: i18nc("@action:button", "Add Zone")
@@ -205,7 +205,7 @@ ToolBar {
             id: snappingSection
 
             visible: !controlBar.previewMode
-            spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - within section)
+            spacing: Kirigami.Units.gridUnit // Use theme spacing (within section)
 
             // Edge snapping toggle - first in snapping section
             Button {
@@ -440,7 +440,7 @@ ToolBar {
         RowLayout {
             id: actionButtonsSection
 
-            spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - between buttons)
+            spacing: Kirigami.Units.gridUnit // Use theme spacing (between buttons)
 
             // Cancel button
             Button {

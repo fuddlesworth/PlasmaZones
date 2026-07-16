@@ -3,7 +3,6 @@
     "name": "Ultrawide Priority",
     "description": "Primary center column with narrow side panels for 21:9 monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "ultrawide",
     "zones": [

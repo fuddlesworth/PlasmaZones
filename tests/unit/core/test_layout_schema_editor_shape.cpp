@@ -21,16 +21,26 @@
  *     what the registry persists and re-reads at startup, and
  *   - the raw int (2), emitted by EditorController::saveLayout.
  * The schema is the contract both must satisfy, so this test pins both.
+ *
+ * The fixed-zone case builds its payload from Layout::toJson rather than by
+ * hand. Fixed zones are where the two ends of the round-trip disagree about
+ * what the derived relativeGeometry should be, so a hand-written rect would
+ * only pin what this file believes the serializer does.
  */
+
+#include <memory>
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QRectF>
 #include <QString>
 #include <QTest>
 #include <QUuid>
 
 #include <PhosphorLayoutApi/AspectRatioClass.h>
+#include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 using PhosphorLayout::AspectRatioClass;
@@ -38,21 +48,24 @@ namespace Keys = PhosphorZones::ZoneJsonKeys;
 
 namespace {
 
-/// One zone in the exact shape EditorController::saveLayout writes: an id, a
-/// name, a zoneNumber and a relativeGeometry of four doubles.
+/// One relative-mode zone carrying the keys EditorController::saveLayout
+/// writes for every zone: an id, a name, a zoneNumber and a relativeGeometry
+/// of four doubles. saveLayout also always writes an `appearance` block, which
+/// the schema lets through unconstrained, so it is left off here — the
+/// fixed-zone test below covers the real emitted shape end to end.
 QJsonObject makeZone()
 {
     QJsonObject relGeo;
-    relGeo[QLatin1String(Keys::X)] = 0.0;
-    relGeo[QLatin1String(Keys::Y)] = 0.0;
-    relGeo[QLatin1String(Keys::Width)] = 0.5;
-    relGeo[QLatin1String(Keys::Height)] = 1.0;
+    relGeo[Keys::X] = 0.0;
+    relGeo[Keys::Y] = 0.0;
+    relGeo[Keys::Width] = 0.5;
+    relGeo[Keys::Height] = 1.0;
 
     QJsonObject zone;
-    zone[QLatin1String(Keys::Id)] = QUuid::createUuid().toString();
-    zone[QLatin1String(Keys::Name)] = QStringLiteral("Left");
-    zone[QLatin1String(Keys::ZoneNumber)] = 1;
-    zone[QLatin1String(Keys::RelativeGeometry)] = relGeo;
+    zone[Keys::Id] = QUuid::createUuid().toString();
+    zone[Keys::Name] = QStringLiteral("Left");
+    zone[Keys::ZoneNumber] = 1;
+    zone[Keys::RelativeGeometry] = relGeo;
     return zone;
 }
 
@@ -60,13 +73,12 @@ QJsonObject makeZone()
 QJsonObject makeEditorLayout()
 {
     QJsonObject layout;
-    layout[QLatin1String(Keys::Id)] = QUuid::createUuid().toString();
-    layout[QLatin1String(Keys::Name)] = QStringLiteral("Test Layout");
-    layout[QLatin1String(Keys::IsBuiltIn)] = false;
+    layout[Keys::Id] = QUuid::createUuid().toString();
+    layout[Keys::Name] = QStringLiteral("Test Layout");
 
     QJsonArray zones;
     zones.append(makeZone());
-    layout[QLatin1String(Keys::Zones)] = zones;
+    layout[Keys::Zones] = zones;
     return layout;
 }
 
@@ -96,6 +108,12 @@ private Q_SLOTS:
     /// Without this the oneOf could degrade to a rubber stamp unnoticed.
     void offContractFormsRejected_data();
     void offContractFormsRejected();
+
+    /// A fixed-geometry zone authored against the full screen, then recalculated
+    /// against the smaller available area the daemon uses by default. This is
+    /// the shape that reaches disk and the shape the editor re-emits, so
+    /// Layout::toJson has to produce it inside the schema's 0-1 range.
+    void fixedZoneOverflowingRecalcGeometryValidates();
 };
 
 void TestLayoutSchemaEditorShape::editorIntFormValidates_data()
@@ -114,7 +132,7 @@ void TestLayoutSchemaEditorShape::editorIntFormValidates()
     QFETCH(int, aspectRatioClass);
 
     QJsonObject layout = makeEditorLayout();
-    layout[QLatin1String(Keys::AspectRatioClassKey)] = aspectRatioClass;
+    layout[Keys::AspectRatioClassKey] = aspectRatioClass;
 
     QVERIFY2(PhosphorZones::LayoutRegistry::isLayoutJsonValid(layout, QStringLiteral("editor int form")),
              "EditorController::saveLayout emits aspectRatioClass as an int; the schema must accept it "
@@ -139,7 +157,7 @@ void TestLayoutSchemaEditorShape::canonicalStringFormValidates()
     QFETCH(QString, aspectRatioClass);
 
     QJsonObject layout = makeEditorLayout();
-    layout[QLatin1String(Keys::AspectRatioClassKey)] = aspectRatioClass;
+    layout[Keys::AspectRatioClassKey] = aspectRatioClass;
 
     QVERIFY2(PhosphorZones::LayoutRegistry::isLayoutJsonValid(layout, QStringLiteral("canonical string form")),
              "Layout::toJson emits the canonical string, and that is the form the registry persists; "
@@ -172,9 +190,51 @@ void TestLayoutSchemaEditorShape::offContractFormsRejected()
     QFETCH(QJsonValue, aspectRatioClass);
 
     QJsonObject layout = makeEditorLayout();
-    layout[QLatin1String(Keys::AspectRatioClassKey)] = aspectRatioClass;
+    layout[Keys::AspectRatioClassKey] = aspectRatioClass;
 
     QVERIFY(!PhosphorZones::LayoutRegistry::isLayoutJsonValid(layout, QStringLiteral("off-contract form")));
+}
+
+void TestLayoutSchemaEditorShape::fixedZoneOverflowingRecalcGeometryValidates()
+{
+    // The default path, end to end. The editor authors fixed pixels against the
+    // full screen (targetScreenSize reports screen->geometry()), so a full-height
+    // zone on a 2160px panel is 2160px tall. The daemon then recalculates against
+    // the AVAILABLE area whenever useFullScreenGeometry is off, which is the
+    // default, so the reference shrinks to 2126px once a panel is up.
+    PhosphorZones::Layout layout(QStringLiteral("Fixed Full Screen"));
+    auto* zone = new PhosphorZones::Zone();
+    zone->setName(QStringLiteral("Full"));
+    zone->setZoneNumber(1);
+    zone->setGeometryMode(PhosphorZones::ZoneGeometryMode::Fixed);
+    zone->setFixedGeometry(QRectF(0, 0, 3840, 2160));
+    layout.addZone(zone);
+    layout.recalculateZoneGeometries(QRectF(0, 0, 3840, 2126));
+
+    const QJsonObject json = layout.toJson();
+
+    // relativeGeometry is derived, and the only reference that keeps it inside
+    // 0-1 for a zone whose pixels overflow the recalc rect is the fixed-zone
+    // bounding box. Dividing by the recalc height instead yields 2160/2126 =
+    // 1.016, which the schema rejects — and it rejects the WHOLE layout, so a
+    // save after any recalc makes the layout vanish from the picker at the next
+    // startup and makes every later updateLayout refuse the payload.
+    const QJsonObject relGeo = json[Keys::Zones].toArray().first().toObject()[Keys::RelativeGeometry].toObject();
+    QVERIFY2(relGeo[Keys::Height].toDouble() <= 1.0,
+             "Layout::toJson must normalize a fixed zone against a reference that contains it.");
+
+    QVERIFY2(PhosphorZones::LayoutRegistry::isLayoutJsonValid(json, QStringLiteral("fixed zone overflowing recalc")),
+             "LayoutRegistry::saveLayout persists exactly this object and re-reads it through the same schema "
+             "gate on the next startup; rejecting it silently drops the user's layout.");
+
+    // The pixels are what a fixed zone actually renders from, and they must
+    // survive the round-trip untouched — normalizing for the schema must not
+    // reach back into the geometry.
+    std::unique_ptr<PhosphorZones::Layout> reloaded(PhosphorZones::Layout::fromJson(json));
+    QVERIFY(reloaded);
+    QCOMPARE(reloaded->zoneCount(), 1);
+    QCOMPARE(reloaded->zone(0)->geometryMode(), PhosphorZones::ZoneGeometryMode::Fixed);
+    QCOMPARE(reloaded->zone(0)->fixedGeometry(), QRectF(0, 0, 3840, 2160));
 }
 
 QTEST_MAIN(TestLayoutSchemaEditorShape)

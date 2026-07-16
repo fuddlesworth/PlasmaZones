@@ -78,18 +78,19 @@ enum class DisableAxis {
 // resolved an entry differently from the getter, re-saving an unchanged list
 // would look like a change and misfire disabled*Changed.
 //
-// An unresolvable name falls through to the name itself. idForName returns
-// empty when no live screen carries the connector (an unplugged monitor, a
-// name from another machine), and canonicalizing such an entry down to an
-// empty screen segment would erase which screen it names. Mirrors the
-// fall-through in ScreenIdentity::variantsFor.
+// An unresolvable name falls through to the name itself, which is what we want:
+// canonicalizing an entry down to an empty screen segment would erase which
+// screen it names. That fall-through is idForName's own contract — when no live
+// screen carries the connector (an unplugged monitor, a name from another
+// machine) it returns the NAME UNCHANGED, never empty. So there is nothing to
+// guard against here: for a connector name the result is either the resolved id
+// or the name back, and a non-connector name (which includes the empty string,
+// isConnectorName rejects it) is already canonical. Mirrors the fall-through in
+// ScreenIdentity::variantsFor.
 QString resolveScreenId(const QString& screen)
 {
     if (PhosphorScreens::ScreenIdentity::isConnectorName(screen)) {
-        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screen);
-        if (!resolved.isEmpty()) {
-            return resolved;
-        }
+        return PhosphorScreens::ScreenIdentity::idForName(screen);
     }
     return screen;
 }
@@ -1909,10 +1910,14 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
                 // write to this (axis, mode) family. Keep it — unless this write
                 // re-asserts its exact entry, in which case the append loop
                 // rebuilds the same tuple as an ENABLED rule with the same
-                // deterministic id, and keeping the disabled one too would put
-                // two rules with one id in the store. Ticking a monitor back on
-                // in the UI is precisely that case, and re-enabling the rule is
-                // what the user asked for.
+                // deterministic id. The append loop runs after this walk, so
+                // keeping the disabled one too would hand setAllRules the
+                // disabled rule first, and RuleSet::setRules keeps the FIRST
+                // entry for any id and drops later collisions — the rebuilt
+                // ENABLED rule would be the one thrown away, leaving the
+                // re-enable a silent no-op. Ticking a monitor back on in the UI
+                // is precisely that case, and re-enabling the rule is what the
+                // user asked for.
                 const QStringList canonical =
                     canonicalDisableEntries(axis, {disableEntryFor(axis, screenId, desktop, activity)});
                 const bool reasserted = !canonical.isEmpty() && after.contains(canonical.first());
@@ -3023,26 +3028,31 @@ void Settings::reset()
         m_configBackend->deleteGroup(groupName);
     }
     m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
+    deletePerScreenGroups(m_configBackend);
+    // commit(), not sync(), for the same reason save() uses it: sync() is
+    // allowed to return true for a write it merely scheduled (JsonBackend's
+    // Deferred policy debounces it), and the result gates whether the other two
+    // stores are touched at all.
+    //
+    // config.json goes FIRST, and a failure returns before the session file and
+    // the rule store are touched. reset() spans three files with no journal, so
+    // the only ordering that cannot half-apply is: do the one that can fail
+    // cleanly (nothing has been destroyed yet) before the two that are
+    // irreversible. Returning here is safe precisely because deleteGroup only
+    // mutated the backend's in-memory root, and the load() below reparses from
+    // disk, discarding those deletions and restoring the live state.
+    if (!m_configBackend->commit()) {
+        qCWarning(lcConfig) << "reset: failed to write the cleared configuration to disk — the deletions were "
+                               "dropped and the previous values remain";
+        // Reparse from disk so the in-memory store stops reporting the dropped
+        // deletions, and re-baseline onto what disk actually holds. The session
+        // file and the rule store were never touched, so there is nothing else
+        // to undo.
+        load();
+        return;
+    }
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
-    }
-    deletePerScreenGroups(m_configBackend);
-    // commit(), not sync(), for the same reason save() uses it: the result
-    // gates whether the baseline moves, so a merely-scheduled write reported
-    // as success would strand the baseline over a disk state that isn't there.
-    const bool syncedToDisk = m_configBackend->commit();
-    // A failed sync leaves the deletions in memory only — disk still holds the
-    // pre-reset values, and the backend retries on the next sync. The load()
-    // below re-reads the in-memory store and ends by capturing a baseline over
-    // the defaults, which would then describe a disk state that does not exist
-    // and strand the user's real values beyond Discard's reach. Snapshot the
-    // current baseline (which still describes disk exactly, precisely because
-    // nothing was written) and put it back afterwards.
-    QHash<QString, QVariantMap> baselineBeforeReset;
-    if (!syncedToDisk) {
-        qCWarning(lcConfig) << "reset: failed to write the cleared configuration to disk — keeping the previous "
-                               "baseline; the next save retries";
-        baselineBeforeReset = m_baseline;
     }
 
     // Per-mode disable lists live in rules.json as DisableEngine
@@ -3103,12 +3113,9 @@ void Settings::reset()
 
     load();
 
-    if (!syncedToDisk) {
-        // See the snapshot above: load()'s closing captureBaseline() just moved
-        // the baseline onto values that never reached disk. Put back the one
-        // that still describes what is actually there.
-        m_baseline = baselineBeforeReset;
-    }
+    // No baseline fix-up here: load() reparses config.json from disk and closes
+    // with captureBaseline(), so the baseline already describes exactly what
+    // disk holds.
 
     // Re-emit per-mode disable signals against the pre-clear snapshot taken
     // above. load()'s internal snapshot saw the already-cleared store, so it

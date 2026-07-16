@@ -47,7 +47,17 @@ QString DBusLayoutService::loadLayout(const QString& layoutId)
         Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Failed to load layout: %1").arg(err));
         return QString();
     }
-    return reply.arguments().constFirst().toString();
+    // An empty document is how getLayout reports a layout it does not hold, and
+    // that is a ReplyMessage like any other. The caller reads an empty return as
+    // failure and stays silent on the strength of this method having reported
+    // it, so the report has to happen here or the load fails with no diagnostic.
+    const QString jsonLayout = reply.arguments().constFirst().toString();
+    if (jsonLayout.isEmpty()) {
+        qCWarning(lcDbus) << "loadLayout: daemon holds no layout with id" << layoutId;
+        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "That layout is no longer available."));
+        return QString();
+    }
+    return jsonLayout;
 }
 
 QString DBusLayoutService::createLayout(const QString& jsonLayout)
@@ -86,6 +96,17 @@ bool DBusLayoutService::updateLayout(const QString& jsonLayout)
         const QString err = errorMessage(reply);
         qCWarning(lcDbus) << "updateLayout: failed:" << err;
         Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Failed to update layout: %1").arg(err));
+        return false;
+    }
+    // A reply arrived, which only says the daemon was reachable. updateLayout is
+    // declared bool and answers false for a payload it refused (schema gate,
+    // unknown layout id, empty autotile algorithm key), and that refusal is a
+    // ReplyMessage like any other. Reporting success on the message type alone
+    // would let the editor clear its unsaved-changes flag and undo stack over a
+    // write the daemon threw away.
+    if (reply.arguments().isEmpty() || !reply.arguments().constFirst().toBool()) {
+        qCWarning(lcDbus) << "updateLayout: daemon rejected the layout";
+        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "The layout could not be saved."));
         return false;
     }
     return true;

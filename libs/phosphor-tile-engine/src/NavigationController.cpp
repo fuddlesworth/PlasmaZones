@@ -223,7 +223,12 @@ QString NavigationController::entryWindowOnScreen(const QString& screenId, const
     }
     // The entry edge faces back toward the source: a crossing moving "right"
     // enters the target's LEFT edge, "down" its TOP, etc. Pick the extreme tile
-    // on that edge.
+    // on that edge. An unrecognised direction matches no arm below, which would
+    // leave `best` at 0 and silently pass off the first tile as an entry window —
+    // reject it instead of guessing.
+    if (!PhosphorGeometry::directionFromString(direction).has_value()) {
+        return QString();
+    }
     int best = 0;
     for (int i = 1; i < zones.size(); ++i) {
         const QRect& r = zones.at(i);
@@ -695,7 +700,8 @@ void NavigationController::increaseMasterRatio(qreal delta)
         }
     }
 
-    // Always show OSD with the clamped value — even at min/max bounds
+    // Always show OSD with the clamped value — even at min/max bounds.
+    // A zero delta reads as "increased", matching adjustMasterCount.
     int pct = qRound(resultRatio * 100.0);
     QString reason = (delta >= 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(pct);
     Q_EMIT m_engine->navigationFeedback(changed, QStringLiteral("master_ratio"), reason, QString(), QString(),
@@ -717,9 +723,10 @@ void NavigationController::setGlobalSplitRatio(qreal ratio)
         // mirroring propagateGlobalSplitRatio — writing them here would only
         // last until the next settings refresh resurfaces the override.
         if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::SplitRatio)) {
-            return;
+            return false;
         }
         state->setSplitRatio(ratio);
+        return true;
     });
 }
 
@@ -732,9 +739,10 @@ void NavigationController::setGlobalMasterCount(int count)
         // Screens carrying an explicit per-screen MasterCount override keep
         // it, mirroring propagateGlobalMasterCount.
         if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::MasterCount)) {
-            return;
+            return false;
         }
         state->setMasterCount(count);
+        return true;
     });
 }
 
@@ -777,9 +785,10 @@ void NavigationController::adjustMasterCount(int delta)
         }
     }
 
-    // Always show OSD with the clamped value — even at bounds
+    // Always show OSD with the clamped value — even at bounds. A zero delta
+    // reads as "increased", matching increaseMasterRatio.
     QString reason =
-        (delta > 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(resultCount);
+        (delta >= 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(resultCount);
     Q_EMIT m_engine->navigationFeedback(changed, QStringLiteral("master_count"), reason, QString(), QString(),
                                         screenId);
 }
@@ -912,23 +921,38 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
 }
 
 void NavigationController::applyToAllStates(
-    const std::function<void(const QString& screenId, PhosphorTiles::TilingState*)>& operation)
+    const std::function<bool(const QString& screenId, PhosphorTiles::TilingState*)>& operation)
 {
     if (m_engine->m_states.states().isEmpty()) {
         return; // No states to modify
     }
 
-    // Only apply to states for each screen's current desktop/activity. Under
-    // per-output virtual desktops (#648) the desktop is resolved per-screen,
-    // matching propagateGlobalSplitRatio/propagateGlobalMasterCount.
+    // Every state, on every desktop and activity — see the header for why this
+    // must not be narrowed to the current context the way the passive
+    // propagateGlobalSplitRatio/propagateGlobalMasterCount refresh is.
+    //
+    // Only a write to a state in the CURRENT context can change anything on
+    // screen: retile() reflows the current desktop/activity's autotile screens
+    // and nothing else. Track that case specifically, so a pass that wrote only
+    // other desktops (or wrote nothing at all, e.g. every screen carries a
+    // per-screen override of this key) does not trigger a pointless full retile.
+    bool wroteCurrentContext = false;
     for (auto it = m_engine->m_states.states().constBegin(); it != m_engine->m_states.states().constEnd(); ++it) {
+        if (!it.value()) {
+            continue;
+        }
+        if (!operation(it.key().screenId, it.value())) {
+            continue;
+        }
+        // Under per-output virtual desktops (#648) the desktop is resolved
+        // per-screen, so "current" is a per-screen question.
         if (it.key().desktop == m_engine->currentKeyForScreen(it.key().screenId).desktop
-            && it.key().activity == m_engine->m_context.currentActivity() && it.value()) {
-            operation(it.key().screenId, it.value());
+            && it.key().activity == m_engine->m_context.currentActivity()) {
+            wroteCurrentContext = true;
         }
     }
 
-    if (m_engine->isEnabled()) {
+    if (wroteCurrentContext && m_engine->isEnabled()) {
         m_engine->retile();
     }
 }

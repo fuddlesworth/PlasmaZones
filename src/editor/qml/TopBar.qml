@@ -38,7 +38,7 @@ ToolBar {
     RowLayout {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.smallSpacing // Use theme spacing (4px)
-        spacing: Kirigami.Units.mediumSpacing // Use theme spacing (8px - between groups)
+        spacing: Kirigami.Units.mediumSpacing // Use theme spacing (between groups)
 
         // ═══════════════════════════════════════════════════════════════
         // SCREEN SELECTOR SECTION

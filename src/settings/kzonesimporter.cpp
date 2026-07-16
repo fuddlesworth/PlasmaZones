@@ -137,7 +137,6 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
         pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
             kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported Layout"));
         pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Description)] = QStringLiteral("Imported from KZones");
-        pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
         pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers)] = true;
 
         const int padding = kzLayout[QStringLiteral("padding")].toInt(0);

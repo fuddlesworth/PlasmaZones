@@ -479,20 +479,11 @@ Item {
                 }
             }
 
+            // onPaint samples highlight, text, background and positive-text
+            // colours. Every PlatformTheme colour shares the one `colorsChanged`
+            // notify signal, so this one handler covers all of them.
             Connections {
-                function onHighlightColorChanged() {
-                    curveCanvas.requestPaint();
-                }
-
-                function onTextColorChanged() {
-                    curveCanvas.requestPaint();
-                }
-
-                function onBackgroundColorChanged() {
-                    curveCanvas.requestPaint();
-                }
-
-                function onPositiveTextColorChanged() {
+                function onColorsChanged() {
                     curveCanvas.requestPaint();
                 }
 

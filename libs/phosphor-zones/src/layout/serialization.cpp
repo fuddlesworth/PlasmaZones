@@ -52,7 +52,8 @@ QJsonObject Layout::toJson() const
     if (m_defaultOrder != DefaultOrderUnset) {
         json[::PhosphorZones::ZoneJsonKeys::DefaultOrder] = m_defaultOrder;
     }
-    // Note: isBuiltIn is no longer serialized - it's determined by source path at load time
+    // Note: system classification is not serialized — isSystemLayout() derives it
+    // from the source path at load time.
 
     // Persist system origin path so user overrides can be restored on deletion
     if (!m_systemSourcePath.isEmpty()) {
@@ -106,9 +107,24 @@ QJsonObject Layout::toJson() const
     }
     LayoutUtils::serializeAllowLists(json, m_allowedScreens, m_allowedDesktops, m_allowedActivities);
 
+    // Reference geometry for normalizing fixed-pixel zones into the 0–1
+    // relativeGeometry every zone carries. fixedZoneReferenceGeometry() is the
+    // same helper layoutToVariantMap and the preview projection already use, so
+    // the persisted rect matches what those consumers compute from the same
+    // zones. m_lastRecalcGeometry alone is the wrong reference whenever the
+    // fixed zones overflow it: a full-height zone authored against a 2160px
+    // screen, recalculated against the 2126px available area the daemon uses by
+    // default, normalizes to a height of 1.016 — outside the 0–1 range the key
+    // is defined over, so the schema gate drops the whole layout on the next
+    // read. fixedZoneReferenceGeometry() falls back to the fixed-zone bounding
+    // box in exactly that case, which keeps every fixed zone at or under 1 by
+    // construction and loses nothing: fixedGeometry below carries the pixels.
+    // An all-relative layout gets an empty rect here, which normalizedGeometry
+    // ignores because it returns the stored relative rect for those zones.
+    const QRectF zoneReference = fixedZoneReferenceGeometry();
     QJsonArray zonesArray;
     for (const auto* zone : m_zones) {
-        zonesArray.append(zone->toJson(m_lastRecalcGeometry));
+        zonesArray.append(zone->toJson(zoneReference));
     }
     json[::PhosphorZones::ZoneJsonKeys::Zones] = zonesArray;
 

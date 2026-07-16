@@ -545,8 +545,15 @@ qreal PerScreenConfigResolver::effectiveSplitRatioStep(const QString& screenId) 
 
 QString PerScreenConfigResolver::effectiveAlgorithmId(const QString& screenId) const
 {
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::Algorithm)))
-        return v->toString();
+    // An override storing an empty id names no algorithm — treat it as absent
+    // rather than returning "", which reads as "differs from the global id" and
+    // sends effectiveMaxWindows down its unknown-algorithm warning arm on every
+    // call for the same global fallback it would reach anyway.
+    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::Algorithm))) {
+        const QString id = v->toString();
+        if (!id.isEmpty())
+            return id;
+    }
     return m_engine->m_algorithmId;
 }
 

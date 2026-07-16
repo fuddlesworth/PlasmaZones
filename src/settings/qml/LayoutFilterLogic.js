@@ -18,10 +18,21 @@
 
 // ── Predicates ──────────────────────────────────────────────────────────────
 
-// Both fields are checked for all item types — snapping layouts typically
-// set hasSystemOrigin while algorithms set isSystem; the other is undefined/false.
+// `isSystem` is the sole classifier, and the producer emits it for BOTH item
+// types (layoutpreviewserialize): ZonesLayoutSource takes it from
+// Layout::isSystemLayout(), AutotileLayoutSource from
+// !(isScripted && isUserScript). It means "shipped with the app, read-only".
+//
+// Deliberately NOT `|| item.hasSystemOrigin`. That is a narrower, different
+// thing: a USER layout in the user's own directory that shadows a system
+// original. It is editable and deletable, so it belongs on the user side of
+// this partition — LayoutGridDelegate agrees, badging it "Modified system
+// layout" with a document-edit icon rather than the read-only lock. It is also
+// added only by the D-Bus enrichment layer (LayoutAdaptor::getLayoutList), so
+// reading it here made the built-in/user split flip once the daemon reply
+// replaced the local instant-paint list.
 function isBuiltIn(item) {
-    return item.isSystem || item.hasSystemOrigin;
+    return item.isSystem === true;
 }
 
 function matchesCommonFilters(item, search, showHidden) {

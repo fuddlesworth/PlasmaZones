@@ -591,11 +591,12 @@ void TestRuleController::monitorOverviewDisableEngineUnionsEveryMode()
     // and autotile in the UI produces exactly that pair — and priority plays no
     // part in which of them counts.
     //
-    // The autotile rule is added FIRST deliberately. Every disable rule is
-    // authored at the same kContextBandBase priority, so the stable sort leaves
-    // store order untouched, and a scalar first-wins accumulator would pin
-    // "autotile", drop the snapping rule, and report the engine ON for a screen
-    // the daemon has switched off.
+    // The autotile rule is added FIRST deliberately. addRuleFromJson runs
+    // renormalizePriorities(), which re-stamps every rule as `rank * 16` in
+    // store order, so the first-added autotile rule ends up ABOVE the snapping
+    // one (32 vs 16) and the priority-DESC sort puts it first. A scalar
+    // first-wins accumulator would therefore pin "autotile", drop the snapping
+    // rule, and report the engine ON for a screen the daemon has switched off.
     RuleController controller;
     for (const QString& mode : {QStringLiteral("autotile"), QStringLiteral("snapping")}) {
         QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
@@ -628,7 +629,7 @@ void TestRuleController::engineModePickerExposesAllVocabularyTokens()
     RuleController controller;
     const QVariantList types = controller.actionTypes();
     // Each entry in `actionTypes()` carries its own `params` list (see the
-    // descriptor docstring in rulecontroller.h:281-291). For each
+    // descriptor docstring in rulecontroller.h:330-344). For each
     // param of kind="enum", the `options` list contains `{value, label}`
     // pairs. We walk to the `mode` param of each action and extract its
     // options to verify the closed engine-mode vocabulary.

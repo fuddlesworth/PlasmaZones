@@ -31,15 +31,26 @@ using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using Mode = PhosphorZones::AssignmentEntry::Mode;
 
-// Stable-id-shaped screen names for the tests that assert on a rule's
-// deterministic UUID. `resolveScreenId` only rewrites CONNECTOR names, which
-// ScreenIdentity defines as "contains no ':'", so a "Manuf:Model:Serial" string
-// canonicalizes to itself on every machine. A connector name like "DP-2" would
-// resolve against whatever is actually plugged into the box running the suite,
-// re-keying the rebuilt rule to that monitor's EDID id and changing the UUID the
-// assertions below derive.
+// Stable-id-shaped screen names, required by every test that asserts on a
+// screen name the code stored or returned, or on a rule's deterministic UUID.
+//
+// `resolveScreenId` only rewrites CONNECTOR names, which ScreenIdentity defines
+// as "contains no ':'", so a "Manuf:Model:Serial" string canonicalizes to itself
+// on every machine. A connector name like "DP-2" would resolve against whatever
+// is actually plugged into the box running the suite: the write path
+// (setDisabledMonitors → writeDisableEntries → canonicalDisableEntries) and the
+// read path (disabledMonitors, which resolves on every read) would both rewrite
+// it to that monitor's EDID id, so a `QCOMPARE(disabledMonitors(...), {"DP-2"})`
+// fails on a host with a real DP-2 and the rebuilt rule's derived UUID changes.
+// Under QT_QPA_PLATFORM=offscreen no connector matches and the name falls
+// through untouched, which is why such a test can pass ctest and fail a bare run.
+//
+// Tests that only round-trip a name through isMonitorDisabled() are immune (it
+// resolves both sides via ScreenIdentity::variantsFor), but they use these
+// constants too rather than leave the distinction to the next reader.
 static const QString kScreenA = QStringLiteral("TestVendor:PanelA:0001");
 static const QString kScreenB = QStringLiteral("TestVendor:PanelB:0002");
+static const QString kScreenC = QStringLiteral("TestVendor:PanelC:0003");
 
 class TestSettingsDisablePerMode : public QObject
 {
@@ -159,8 +170,8 @@ private Q_SLOTS:
     void testMonitorDisable_perModeRoundTrip()
     {
         IsolatedConfigGuard guard;
-        const QStringList snapList{QStringLiteral("DP-1"), QStringLiteral("HDMI-A-1")};
-        const QStringList autotileList{QStringLiteral("DP-2")};
+        const QStringList snapList{kScreenA, kScreenC};
+        const QStringList autotileList{kScreenB};
 
         {
             Settings settings;
@@ -186,11 +197,11 @@ private Q_SLOTS:
         QSignalSpy monitorSpy(&settings, &Settings::disabledMonitorsChanged);
         QVERIFY(monitorSpy.isValid());
 
-        settings.setDisabledMonitors(Mode::Snapping, {QStringLiteral("DP-1")});
+        settings.setDisabledMonitors(Mode::Snapping, {kScreenA});
         QCOMPARE(monitorSpy.count(), 1);
         QCOMPARE(monitorSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Snapping));
 
-        settings.setDisabledMonitors(Mode::Autotile, {QStringLiteral("DP-2")});
+        settings.setDisabledMonitors(Mode::Autotile, {kScreenB});
         QCOMPARE(monitorSpy.count(), 1);
         QCOMPARE(monitorSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Autotile));
     }
@@ -317,7 +328,7 @@ private Q_SLOTS:
         QVERIFY(activitySpy.isValid());
 
         // Writer flips snap-side monitor list and persists.
-        writerSettings.setDisabledMonitors(Mode::Snapping, {QStringLiteral("DP-1")});
+        writerSettings.setDisabledMonitors(Mode::Snapping, {kScreenA});
         writerSettings.save();
 
         // Observer's load() picks up the on-disk delta. Only the snap-side
@@ -331,7 +342,7 @@ private Q_SLOTS:
         QCOMPARE(activitySpy.count(), 0);
 
         // Observer now sees the new value via its own getter.
-        QCOMPARE(observerSettings.disabledMonitors(Mode::Snapping), QStringList{QStringLiteral("DP-1")});
+        QCOMPARE(observerSettings.disabledMonitors(Mode::Snapping), QStringList{kScreenA});
         QVERIFY(observerSettings.disabledMonitors(Mode::Autotile).isEmpty());
     }
 
@@ -458,8 +469,8 @@ private Q_SLOTS:
         Settings settings(nullptr, nullptr);
 
         // No crash, and disable-lists work against the internally-owned store.
-        settings.setDisabledMonitors(Mode::Autotile, {QStringLiteral("DP-2")});
-        QVERIFY(settings.isMonitorDisabled(Mode::Autotile, QStringLiteral("DP-2")));
+        settings.setDisabledMonitors(Mode::Autotile, {kScreenB});
+        QVERIFY(settings.isMonitorDisabled(Mode::Autotile, kScreenB));
     }
 
     /// A BORROWED store is NOT reloaded by Settings::load() — that is the owner's

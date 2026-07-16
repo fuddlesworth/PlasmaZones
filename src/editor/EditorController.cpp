@@ -14,14 +14,8 @@
 #include "undo/commands/UpdateLayoutNameCommand.h"
 #include "undo/commands/ChangeSelectionCommand.h"
 #include "helpers/ZoneSerialization.h"
-#include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorRules/RuleStoreWatcher.h>
-#include <PhosphorZones/IZoneLayoutRegistry.h>
-#include "../common/layoutpreviewserialize.h"
-#include "../core/constants.h"
 #include "../core/geometryutils.h"
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/LayoutComputeService.h>
@@ -29,9 +23,7 @@
 #include "../core/utils.h"
 #include "../shaderpreview/shaderpreviewcontroller.h"
 
-#include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <QClipboard>
 #include <QDBusConnection>
@@ -39,7 +31,6 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 
 #include "../common/screenidresolver.h"
-#include "../common/layoutbundlebuilder.h"
 
 namespace PlasmaZones {
 
@@ -50,7 +41,6 @@ EditorController::EditorController(QObject* parent)
     , m_snappingService(new SnappingService(this))
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
-    , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localRuleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath()))
     , m_localRuleStoreWatcher(std::make_unique<PhosphorRules::RuleStoreWatcher>(*m_localRuleStore))
     , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(),
@@ -75,15 +65,6 @@ EditorController::EditorController(QObject* parent)
     connect(m_shaderPreview, &ShaderPreviewController::shaderPresetLoadFailed, this,
             &EditorController::shaderPresetLoadFailed);
 
-    // Auto-discovery pattern: every linked provider library has
-    // already registered a builder via static-init. The editor just
-    // publishes the registries it owns via the shared helper
-    // (buildStandardLayoutSourceBundle) so the context-wiring is the
-    // same across daemon/editor/settings. Adding a new engine library
-    // doesn't require editing this file unless the engine demands a
-    // service the editor doesn't already publish.
-    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
-
     // Begin watching rules.json for external writes. The editor has no
     // D-Bus rules-reload path, so without this its m_localRuleStore would serve
     // the snapshot scanned at launch — the assignment cascade would ignore rule
@@ -91,46 +72,20 @@ EditorController::EditorController(QObject* parent)
     // store's idempotent load() means a self-write or no-op change emits nothing.
     m_localRuleStoreWatcher->start();
 
-    // Discover + register user-authored scripted algorithms in the editor-
-    // owned AlgorithmRegistry so standalone editor launches (daemon down)
-    // still surface them in layout pickers. The loader also sets up a
-    // QFileSystemWatcher so hot-edits roll through automatically.
-    //
-    // Owned by unique_ptr (not parented to `this`) so reverse member-
-    // destruction tears the loader down BEFORE m_localAlgorithmRegistry.
-    // Parenting to `this` would defer destruction to ~QObject, which runs
-    // AFTER the registry's unique_ptr has already been reset — a UAF in
-    // ~ScriptedAlgorithmLoader's unregisterAlgorithm loop.
-    m_scriptLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir),
-                                                                              m_localAlgorithmRegistry.get());
-    m_scriptLoader->scanAndRegister();
-    // Intentionally NOT connecting algorithmsChanged → reloadLocalLayouts:
-    // manual zone layouts are unaffected by an algorithm hot-reload, so a
-    // disk re-scan here would be wasted work. AutotileLayoutSource self-
-    // wires to the registry's contentsChanged and invalidates its preview
-    // cache directly — the editor's localLayoutPreviews() already reflects
-    // the new algorithm set on the next composite query.
-
     // Wire the layoutsChanged → recalcLocalLayouts connection BEFORE the
     // initial loadLayouts() so the load below is routed through it.
-    // ZonesLayoutSource self-wires to the
-    // registry's unified ILayoutSourceRegistry::contentsChanged — no manual
-    // bridge required. Editor has no downstream consumer of
-    // ILayoutSource::contentsChanged, so slot ordering against
-    // recalcLocalLayouts is not load-bearing here; consumers always query
-    // availableLayouts() directly after an interactive edit.
     connect(m_localLayoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this,
             &EditorController::recalcLocalLayouts);
 
-    // Populate the daemon-independent layout source from disk on startup
-    // so localLayoutPreviews() returns a populated list immediately.
+    // Populate the in-process registry from disk on startup so loadLayout()'s
+    // instant-open fast path can resolve a layout by id without the daemon.
     // PhosphorZones::LayoutRegistry does NOT watch the layout directory: an
     // explicit loadLayouts() call is the only thing that rescans disk. This
     // one covers startup, and the D-Bus subscriptions wired below cover every
     // later change. Do not drop either as redundant.
     m_localLayoutManager->loadLayouts();
-    // Recompute zone geometry for fixed-geometry layouts so ZonesLayoutSource
-    // emits non-empty zones + a real referenceAspectRatio — see the matching
+    // Recompute zone geometry for fixed-geometry layouts so a loaded layout
+    // carries real zone rects — see the matching
     // comment in SettingsController. The connect above also fires
     // recalcLocalLayouts on the first loadLayouts() emission, but the
     // explicit call here covers the single-shot path where loadLayouts()
@@ -274,37 +229,6 @@ QString EditorController::layoutName() const
 QVariantList EditorController::zones() const
 {
     return m_zoneManager ? m_zoneManager->zones() : QVariantList();
-}
-
-// ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
-// Same shape as SettingsController's localLayoutPreviews — both processes
-// route through the shared toVariantMap so QML preview-rendering
-// code stays identical across the two consumers.
-
-QVariantList EditorController::localLayoutPreviews() const
-{
-    QVariantList list;
-    if (!m_localSources.composite()) {
-        return list;
-    }
-    const auto previews = m_localSources.composite()->availableLayouts();
-    list.reserve(previews.size());
-    for (const auto& preview : previews) {
-        list.append(toVariantMap(preview));
-    }
-    return list;
-}
-
-QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCount)
-{
-    if (id.isEmpty() || !m_localSources.composite()) {
-        return {};
-    }
-    const auto preview = m_localSources.composite()->previewAt(id, windowCount);
-    if (preview.id.isEmpty()) {
-        return {};
-    }
-    return toVariantMap(preview);
 }
 
 void EditorController::reloadLocalLayouts()

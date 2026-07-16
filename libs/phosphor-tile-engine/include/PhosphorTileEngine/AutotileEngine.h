@@ -684,20 +684,29 @@ public:
     Q_INVOKABLE void decreaseMasterRatio(qreal delta = 0.05) override;
 
     /**
-     * @brief Set master ratio globally (config + all per-screen states)
+     * @brief Set master ratio globally (config + every state, every desktop)
      *
-     * Used by D-Bus adaptor to set the ratio as an absolute value,
-     * updating both the global config and all existing per-screen states.
+     * Used by the D-Bus adaptor to set the ratio as an absolute value. This is
+     * the ABSOLUTE setter, so it means what it says: it writes the global config
+     * and every existing state on every desktop and activity, and it discards
+     * every per-desktop tuning recorded by increaseMasterRatio. A screen carrying
+     * an explicit per-screen SplitRatio override is the one exception and keeps
+     * it, mirroring propagateGlobalSplitRatio.
+     *
+     * Contrast increaseMasterRatio, which is the RELATIVE nudge and stays local
+     * to one screen+desktop+activity.
      *
      * @param ratio New split ratio (clamped to valid range)
      */
     void setGlobalSplitRatio(qreal ratio);
 
     /**
-     * @brief Set master count globally (config + all per-screen states)
+     * @brief Set master count globally (config + every state, every desktop)
      *
-     * Used by D-Bus adaptor to set the count as an absolute value,
-     * updating both the global config and all existing per-screen states.
+     * The master-count twin of setGlobalSplitRatio, with the same scope: global
+     * config plus every state on every desktop and activity, every per-desktop
+     * tuning dropped, and screens with an explicit per-screen MasterCount
+     * override left alone.
      *
      * @param count New master count (clamped to valid range)
      */

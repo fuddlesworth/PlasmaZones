@@ -211,6 +211,116 @@ private Q_SLOTS:
     }
 
     // =========================================================================
+    // Global setters vs per-desktop tunings
+    //
+    // setGlobalSplitRatio/setGlobalMasterCount drop the user-tuned flag for
+    // EVERY key, on every desktop. The write has to reach just as far. If it
+    // stops at the current desktop, a tuned state on another desktop keeps its
+    // tuned VALUE while losing the flag that protected it, and the next
+    // propagateGlobal* to run while that desktop is current silently overwrites
+    // the user's value — a clobber deferred until some unrelated settings
+    // refresh, long after the global set that caused it.
+    // =========================================================================
+
+    void testSetGlobalSplitRatio_reachesTunedStateOnAnotherDesktop()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen1 = QStringLiteral("Screen1");
+
+        // Desktop 2: tune the ratio locally, the way Meta+= does.
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d2"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(screen1);
+        engine.windowFocused(QStringLiteral("win-d2"), screen1);
+        d2->setSplitRatio(0.6);
+        engine.increaseMasterRatio(0.1); // → 0.7, and marks desktop 2 user-tuned
+        QVERIFY(qFuzzyCompare(d2->splitRatio(), 0.7));
+
+        // Desktop 1: an absolute global set, e.g. the D-Bus masterRatio property.
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(screen1);
+        QVERIFY(d1 != d2);
+
+        engine.setGlobalSplitRatio(0.35);
+
+        // The current desktop takes the new value, and so does desktop 2: the set
+        // dropped desktop 2's tuned flag, so it must also write desktop 2's value.
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.35));
+        QVERIFY(qFuzzyCompare(d1->splitRatio(), 0.35));
+        QVERIFY2(qFuzzyCompare(d2->splitRatio(), 0.35),
+                 "a global set that drops every tuned flag must write every state it unprotected");
+    }
+
+    void testSetGlobalMasterCount_reachesTunedStateOnAnotherDesktop()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen1 = QStringLiteral("Screen1");
+
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d2"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(screen1);
+        engine.windowFocused(QStringLiteral("win-d2"), screen1);
+        d2->setMasterCount(1);
+        engine.increaseMasterCount(); // → 2, and marks desktop 2 user-tuned
+        QCOMPARE(d2->masterCount(), 2);
+
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(screen1);
+        QVERIFY(d1 != d2);
+
+        engine.setGlobalMasterCount(3);
+
+        QCOMPARE(engine.config()->masterCount, 3);
+        QCOMPARE(d1->masterCount(), 3);
+        QCOMPARE(d2->masterCount(), 3);
+    }
+
+    // The delayed half of the same bug, driven end to end: with the flag dropped
+    // but the value left behind, this propagate is what actually destroys the
+    // user's ratio — triggered by an unrelated settings refresh, back on the
+    // desktop they tuned.
+    void testSetGlobalSplitRatio_thenPropagateOnTunedDesktop_holdsTheSetValue()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen1 = QStringLiteral("Screen1");
+
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d2"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(screen1);
+        engine.windowFocused(QStringLiteral("win-d2"), screen1);
+        d2->setSplitRatio(0.6);
+        engine.increaseMasterRatio(0.1);
+
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        engine.setGlobalSplitRatio(0.35);
+
+        // Back on desktop 2, a settings refresh runs propagateGlobalSplitRatio.
+        // Desktop 2 already holds 0.35, so the propagate is a no-op and the value
+        // the user last saw set is the value that survives.
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({screen1});
+        engine.refreshConfigFromSettings();
+
+        QVERIFY(qFuzzyCompare(d2->splitRatio(), 0.35));
+    }
+
+    // =========================================================================
     // Per-screen override interaction tests
     // =========================================================================
 

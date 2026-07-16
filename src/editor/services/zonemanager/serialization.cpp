@@ -177,6 +177,14 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
         // An insert below the top shifts every zone after it, so recompact rather
         // than stamping this one zone. Keeps zOrder a dense 0..count-1 permutation.
         updateAllZOrderValues();
+        // zoneNumber is index+1 across the whole list, the same invariant
+        // deleteZone() holds with its own renumberZones(). The incoming map
+        // carries a number that was assigned against a different list (an undo of
+        // a delete replays the pre-delete number, which the delete's renumber has
+        // since handed to another zone), so the list wins here too. Without this
+        // the restored zone collides with a live number and no zone carries the
+        // top one.
+        renumberZones();
 
         // Handle signal emission (deferred during batch updates)
         if (m_batchUpdateDepth > 0) {

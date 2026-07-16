@@ -16,14 +16,6 @@ Item {
     required property string createText
     required property bool createEnabled
     property string errorText: ""
-    /// Opt in to Return/Enter triggering Create on the final step, the way a
-    /// dialog's default button would. Hosts with a custom footer get no default
-    /// button from QQC2, and the focused control swallows Return first (each
-    /// SettingsButtonGroup option and every card handles it), so the affordance
-    /// has to come from a Shortcut. Off by default because a Shortcut preempts
-    /// the focused item: a final step carrying a ComboBox or any other control
-    /// that needs Return of its own must not enable it.
-    property bool returnActivatesCreate: false
 
     signal backClicked
     signal nextClicked
@@ -31,14 +23,6 @@ Item {
     signal cancelClicked
 
     implicitHeight: footerColumn.implicitHeight + Kirigami.Units.largeSpacing * 2
-
-    Shortcut {
-        // `sequences` (plural) binds every sequence mapped to Return/Enter;
-        // the singular form only catches one.
-        sequences: [StandardKey.InsertParagraphSeparator]
-        enabled: root.returnActivatesCreate && root.currentStep === 1 && root.createEnabled
-        onActivated: root.createClicked()
-    }
 
     ColumnLayout {
         id: footerColumn

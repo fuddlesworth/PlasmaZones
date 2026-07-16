@@ -201,8 +201,8 @@ void ZoneManager::emitZoneSignal(SignalType type, const QString& zoneId, bool in
             Q_EMIT zoneColorChanged(zoneId);
             break;
         case SignalType::ZOrderChanged:
-            // No per-zone signal: a restack renumbers every zone's zOrder, so
-            // zonesChanged() below is the only honest notification.
+            // No per-zone signal: a restack renumbers at least one other zone's
+            // zOrder, so zonesChanged() below is the only honest notification.
             break;
         }
         Q_EMIT zonesChanged();

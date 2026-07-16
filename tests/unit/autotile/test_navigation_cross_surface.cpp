@@ -106,6 +106,8 @@ private Q_SLOTS:
     void crossOutput_moveTowardFullAutotileOutput_doesNotStrandWindow();
     void crossOutput_moveFloatRuledTiledWindow_towardFullOutput_refuses();
     void crossOutput_moveFloatRuledTiledWindow_keepsItTiled();
+    void crossOutput_focusMigrationToFullOutput_doesNotStrandWindow();
+    void crossOutput_focusMigrationOfFloatedWindowToFullOutput_doesNotStrandWindow();
     void inSurfaceMove_doesNotEmitExpectedMove();
     void crossVirtualScreen_focusRight_crossesToSiblingVirtualScreen();
 
@@ -194,8 +196,11 @@ struct TwoOutputFixture
 {
     PhosphorScreens::FakeScreenProvider provider;
     std::unique_ptr<PhosphorScreens::ScreenManager> manager;
-    std::unique_ptr<AutotileEngine> engine;
+    // Declared BEFORE engine: the engine holds the resolver as a raw
+    // m_crossSurfaceResolver, so it must not outlive it. Members destroy in
+    // reverse declaration order, which puts the engine down first.
     std::unique_ptr<PlasmaZones::CrossSurfaceResolver> resolver;
+    std::unique_ptr<AutotileEngine> engine;
 
     TwoOutputFixture()
     {
@@ -336,9 +341,11 @@ void TestNavigationCrossSurface::crossOutput_swapTowardNonAutotileOutput_emitsCr
     auto manager = std::make_unique<PhosphorScreens::ScreenManager>(
         PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
     manager->start();
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
+    auto resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
     auto engine =
         std::make_unique<AutotileEngine>(nullptr, nullptr, manager.get(), PlasmaZones::TestHelpers::testRegistry());
-    auto resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
     engine->setCrossSurfaceResolver(resolver.get());
     engine->setAutotileScreens({QStringLiteral("DP-1")}); // DP-2 deliberately NOT autotile
     engine->windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
@@ -379,9 +386,11 @@ void TestNavigationCrossSurface::crossOutput_moveTowardNonAutotileOutput_doesNot
     auto manager = std::make_unique<PhosphorScreens::ScreenManager>(
         PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
     manager->start();
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
+    auto resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
     auto engine =
         std::make_unique<AutotileEngine>(nullptr, nullptr, manager.get(), PlasmaZones::TestHelpers::testRegistry());
-    auto resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
     engine->setCrossSurfaceResolver(resolver.get());
     engine->setAutotileScreens({QStringLiteral("DP-1")}); // DP-2 deliberately NOT autotile
     engine->windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
@@ -495,24 +504,98 @@ void TestNavigationCrossSurface::crossOutput_moveFloatRuledTiledWindow_keepsItTi
         return id == QStringLiteral("a2");
     });
 
-    // Assert on windowFloatingStateSynced — the insert-time float decision, which
-    // is exactly what the daemon mirrors — rather than reading isFloating() back
-    // off DP-2. Under this harness's null algorithm the destination's zone count
-    // is stale, so applyTiling's overflow pass floats the excess window
-    // afterwards; that is a separate, cap-driven mechanism and would confound a
-    // direct isFloating() read here.
+    // Reading isFloating() off DP-2 afterwards cannot answer this: under this
+    // harness's null algorithm the destination's zone count is stale, so
+    // applyTiling's overflow pass floats the excess window once the insert has
+    // landed. Separate the two mechanisms by their channels instead.
+    // windowsBatchFloated is the OVERFLOW channel, and applyTiling feeds it from
+    // state->tiledWindows() — so a2 can only appear there if it was inserted
+    // TILED. That makes it the positive proof, and the insert-time
+    // windowFloatingStateSynced channel then pins the other half.
     QSignalSpy floatSyncSpy(fx.engine.get(), &AutotileEngine::windowFloatingStateSynced);
+    QSignalSpy batchFloatSpy(fx.engine.get(), &AutotileEngine::windowsBatchFloated);
     fx.engine->moveFocusedInDirection(QStringLiteral("right"),
                                       NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
 
     // The move happened.
     QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->containsWindow(QStringLiteral("a2")));
-    // And it was NOT inserted floating.
+
+    // a2 reached DP-2's TILED set: the cap-driven overflow pass floated it back
+    // out, and only a tiled window can be overflowed. Had the migration re-run
+    // the open-time float rule, a2 would have been inserted floating, never
+    // entered tiledWindows(), and so never reached this channel.
+    bool overflowFloatedA2 = false;
+    for (const QList<QVariant>& call : batchFloatSpy) {
+        if (call.at(0).toStringList().contains(QStringLiteral("a2"))
+            && call.at(1).toString() == QLatin1String("DP-2")) {
+            overflowFloatedA2 = true;
+        }
+    }
+    QVERIFY2(overflowFloatedA2, "a tiled window moved across outputs must arrive in the destination's tiled set");
+
+    // And the insert itself never announced a float for it.
     for (const QList<QVariant>& call : floatSyncSpy) {
         if (call.at(0).toString() == QLatin1String("a2")) {
             QVERIFY2(!call.at(1).toBool(), "a tiled window moved across outputs must not be silently re-floated");
         }
     }
+}
+
+// ── Reactive focus migration onto a cap-full output ──
+//
+// NavigationController::crossOutputMove guards the destination cap BEFORE it
+// migrates, so a full output turns the window away with nothing removed. The
+// REACTIVE path has no such luxury: by the time windowFocused() reports the
+// window on another output, the compositor has already moved it, and
+// migrateWindowBetweenKeys has already removed it from the source state to
+// re-add it at the destination. A cap refusal at that point removes the window
+// from the source, leaves it keyed to the destination, and inserts it into
+// neither — isWindowTiled() then reports a tile that no state holds.
+//
+// Both arrival shapes below must therefore be ACCEPTED at the destination and
+// left to applyTiling's overflow pass, which floats whatever exceeds the cap.
+
+void TestNavigationCrossSurface::crossOutput_focusMigrationToFullOutput_doesNotStrandWindow()
+{
+    TwoOutputFixture fx;
+    // DP-2 is autotile and already at the cap (b1, b2). a2 is TILED on DP-1 and
+    // the compositor has just moved it to DP-2 — focus reports it there.
+    fx.engine->config()->maxWindows = 2;
+
+    fx.engine->windowFocused(QStringLiteral("a2"), QStringLiteral("DP-2"));
+    QCoreApplication::processEvents();
+
+    // The source dropped it, so the destination must own it. Anything else is the
+    // stranding: tracked, keyed to DP-2, present in no state at all.
+    QVERIFY(!fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("a2")));
+    QVERIFY2(fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->containsWindow(QStringLiteral("a2")),
+             "a focus migration onto a full output must be accepted, not stranded");
+
+    // The user-visible half: isWindowTiled() reads a window's OWNING state, so a
+    // stranded window (in no state) reports a phantom tile that never clears.
+    if (!fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->isFloating(QStringLiteral("a2"))) {
+        QVERIFY(fx.engine->isWindowTiled(QStringLiteral("a2")));
+    }
+}
+
+void TestNavigationCrossSurface::crossOutput_focusMigrationOfFloatedWindowToFullOutput_doesNotStrandWindow()
+{
+    TwoOutputFixture fx;
+    // Same full DP-2, but a2 was FLOATED by the user with Meta+F first. A float
+    // consumes no tile slot (tiledWindowCount excludes floats), so the cap should
+    // never have applied to it in the first place.
+    fx.engine->config()->maxWindows = 2;
+    fx.engine->toggleWindowFloat(QStringLiteral("a2"), QStringLiteral("DP-1"));
+    QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->isFloating(QStringLiteral("a2")));
+
+    fx.engine->windowFocused(QStringLiteral("a2"), QStringLiteral("DP-2"));
+    QCoreApplication::processEvents();
+
+    QVERIFY(!fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("a2")));
+    QVERIFY2(fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->containsWindow(QStringLiteral("a2")),
+             "a floated window consumes no tile slot and must never be refused by the cap");
+    // It arrived carrying its live float state, so it must not read as tiled.
+    QVERIFY(!fx.engine->isWindowTiled(QStringLiteral("a2")));
 }
 
 void TestNavigationCrossSurface::inSurfaceMove_doesNotEmitExpectedMove()
@@ -557,8 +640,10 @@ void TestNavigationCrossSurface::crossVirtualScreen_focusRight_crossesToSiblingV
     QVERIFY(manager.effectiveScreenIds().contains(vs1));
     QVERIFY(manager.screenGeometry(vs0).isValid());
 
-    AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     PlasmaZones::CrossSurfaceResolver resolver(&manager, nullptr);
+    AutotileEngine engine(nullptr, nullptr, &manager, PlasmaZones::TestHelpers::testRegistry());
     engine.setCrossSurfaceResolver(&resolver);
     engine.setAutotileScreens({vs0, vs1});
     engine.windowOpened(QStringLiteral("a"), vs0);
@@ -630,6 +715,12 @@ void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAn
     const QList<QVariant> args = moveSpy.takeFirst();
     QCOMPARE(args.at(0).toString(), rightmost);
     QCOMPARE(args.at(1).toInt(), 2);
+
+    // And the source state is untouched — the half the comment above is about.
+    // Without these the test passes just as well against an engine that went
+    // back to proactively shuffling m_states behind the request.
+    QVERIFY(d1->containsWindow(rightmost));
+    QCOMPARE(d1->tiledWindows(), wins);
 }
 
 void TestNavigationCrossSurface::crossDesktop_moveToSnapTargetDesktop_emitsCrossModeMove()

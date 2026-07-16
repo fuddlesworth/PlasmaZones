@@ -22,7 +22,6 @@
             "minimum": 0,
             "description": "Layout-type enum (Grid, Columns, Rows, BSP, ...)."
         },
-        "isBuiltIn": { "type": "boolean" },
         "isSystem": { "type": "boolean" },
         "showZoneNumbers": { "type": "boolean" },
         "defaultOrder": { "type": "integer" },

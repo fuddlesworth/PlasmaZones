@@ -28,10 +28,11 @@ namespace TestHelpers {
  * data/algorithms/ directory, sets XDG env vars, and runs the PhosphorTiles::ScriptedAlgorithmLoader.
  * Restores the original environment on destruction via XdgEnvGuard.
  *
- * Owns its own AlgorithmRegistry instance — replaces the previous use of
- * the AlgorithmRegistry::instance() singleton, which has been removed for
- * plugin-friendly per-process ownership. Tests that need access to the
- * registry call @ref registry().
+ * Loads into the test-process-wide registry returned by
+ * PlasmaZones::TestHelpers::testRegistry(), which @ref registry() exposes.
+ * The loader does not own a registry of its own: AlgorithmRegistry is no
+ * longer a singleton, so an engine built against testRegistry() would not see
+ * algorithms loaded into a separately owned instance.
  *
  * Usage in test class:
  *   ScriptedAlgoTestSetup m_scriptSetup;

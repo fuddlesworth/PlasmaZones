@@ -756,6 +756,41 @@ Window {
         }
     }
 
+    // Screen switches replace the loaded layout, so the controller parks the
+    // request when there are unsaved edits and emits
+    // targetScreenChangeRequiresConfirmation instead of applying it. Every
+    // button here answers the controller, so the parked screen never lingers.
+    Kirigami.PromptDialog {
+        id: confirmScreenSwitchDialog
+
+        // Screen the parked switch is heading for, set by the handler that
+        // opens this dialog. Shown so the user knows what they are switching to.
+        property string screenName: ""
+
+        title: i18nc("@title:window", "Unsaved Changes")
+        subtitle: i18nc("@info", "Switching to %1 will load that screen's layout. What would you like to do with your unsaved changes?", confirmScreenSwitchDialog.screenName)
+        standardButtons: Kirigami.Dialog.Save | Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
+        preferredWidth: Kirigami.Units.gridUnit * 24
+        onAccepted: {
+            if (editorWindow._editorController) {
+                editorWindow._editorController.saveLayout();
+                editorWindow._editorController.confirmPendingTargetScreen();
+            }
+        }
+        onDiscarded: {
+            if (editorWindow._editorController)
+                editorWindow._editorController.confirmPendingTargetScreen();
+        }
+        // Cancel, Esc and click-away all land here without having answered, so
+        // this is where the parked screen gets dropped. Save and Discard answer
+        // in their own handlers, which run before the dialog closes and clear
+        // the parked screen, leaving this call a no-op.
+        onClosed: {
+            if (editorWindow._editorController)
+                editorWindow._editorController.cancelPendingTargetScreen();
+        }
+    }
+
     // File dialogs for import/export
     FileDialog {
         id: importDialog
@@ -877,6 +912,14 @@ Window {
 
         function onTargetScreenChanged() {
             editorWindow.moveToTargetScreen();
+        }
+
+        // The controller parked a screen switch because the current layout has
+        // unsaved edits. Ask, then answer it either way — leaving the prompt
+        // unanswered would strand the parked screen.
+        function onTargetScreenChangeRequiresConfirmation(screenName) {
+            confirmScreenSwitchDialog.screenName = screenName;
+            confirmScreenSwitchDialog.open();
         }
 
         target: editorWindow._editorController

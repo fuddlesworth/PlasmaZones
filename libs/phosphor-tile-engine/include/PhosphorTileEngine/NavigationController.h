@@ -224,15 +224,27 @@ private:
     QRect rectForWindowInState(PhosphorTiles::TilingState* state, const QString& windowId) const;
 
     /**
-     * @brief Helper to apply an operation to all screen states
+     * @brief Helper to apply an operation to EVERY screen state
+     *
+     * Visits every (screen, desktop, activity) state, not just the current
+     * context's. Both callers are absolute global setters whose engine-side entry
+     * point drops the user-tuned flag for every key (AutotileEngine::
+     * setGlobalSplitRatio / setGlobalMasterCount): the write scope has to match
+     * that clear scope, or a state on another desktop keeps a tuned value whose
+     * protecting flag is gone and the next propagateGlobalSplitRatio to run while
+     * that desktop is current silently overwrites it. Contrast
+     * propagateGlobalSplitRatio, which is a passive refresh and so is deliberately
+     * limited to the current context.
      *
      * The callback receives each state's screen id so callers can skip screens
      * carrying a per-screen override of the KEY they write — setGlobalSplitRatio
      * skips a SplitRatio override, setGlobalMasterCount a MasterCount one
      * (mirroring propagateGlobalSplitRatio / propagateGlobalMasterCount). Any
      * other per-screen override on the screen is irrelevant and does not skip it.
+     * It returns whether it wrote the state; a pass that wrote nothing retiles
+     * nothing.
      */
-    void applyToAllStates(const std::function<void(const QString& screenId, PhosphorTiles::TilingState*)>& operation);
+    void applyToAllStates(const std::function<bool(const QString& screenId, PhosphorTiles::TilingState*)>& operation);
 
     AutotileEngine* m_engine = nullptr;
 };

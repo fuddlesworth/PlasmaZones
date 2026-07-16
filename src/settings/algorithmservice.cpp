@@ -53,14 +53,21 @@ constexpr QLatin1String UntranslatedCopyNameSuffix{" (Copy)"};
 /// lands in the copy's `.luau` metadata and is what the algorithm picker shows,
 /// so it is user-facing text and goes through the translation catalog.
 ///
+/// The catalog is external input, so the suffix is sanitized here rather than
+/// at the append below: the strip loop and the append then share one form, and
+/// a translation carrying `"` or `\` cannot break out of the Luau string
+/// literal rewriteMetadataNameId() embeds the name in. sanitizeMetadataString
+/// replaces characters one for one, so it can neither empty a non-empty suffix
+/// nor change its length.
+///
 /// An empty translation would be worse than none: `endsWith(QString())` is true
 /// and `chop(0)` changes nothing, so the strip loop below would spin forever,
 /// and the copy would come out sharing its source's exact name. Fall back to the
 /// untranslated form rather than trust the catalog.
 QString copyNameSuffix()
 {
-    const QString translated =
-        PhosphorI18n::tr(" (Copy)", "Suffix appended to the name of a duplicated algorithm. Keep the leading space.");
+    //: Suffix appended to the name of a duplicated algorithm. Keep the leading space.
+    const QString translated = AlgorithmScaffold::sanitizeMetadataString(PhosphorI18n::tr(" (Copy)"));
     return translated.isEmpty() ? QString(UntranslatedCopyNameSuffix) : translated;
 }
 

@@ -132,6 +132,16 @@ struct LayoutPreview
     /// count / split ratio editors, lock badge, etc.).
     std::optional<AlgorithmMetadata> algorithm;
 
+    /// The master-window count @c zones was actually computed with. This is a
+    /// resolved value, not a capability — the source seeds it from the user's
+    /// configured / saved per-algorithm tuning, which is why it lives here
+    /// rather than in @c AlgorithmMetadata (see that struct's note on tuning
+    /// parameters). Renderers mark this many leading zones as masters, so the
+    /// value must stay in step with the geometry it describes. Only meaningful
+    /// when @c algorithm is set and reports @c supportsMasterCount; manual
+    /// layouts leave the default.
+    int masterCount = 1;
+
     /// True when this preview backs an autotile algorithm (equivalent to
     /// `algorithm.has_value()`). Consumers branch on this to toggle UI
     /// affordances like the system-vs-user badge and algorithm-specific

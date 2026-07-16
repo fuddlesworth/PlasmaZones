@@ -109,7 +109,7 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
     , m_navigation(std::make_unique<NavigationController>(this))
     , m_algorithmId(PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId())
 {
-    // In production (Daemon::start) all three dependencies are non-null.
+    // In production (Daemon::start) all four dependencies are non-null.
     // Headless unit tests deliberately pass nullptr to construct an engine
     // with minimal parents for testing peripheral classes (adaptors, bridges,
     // sub-controllers) — every method that dereferences a dependency guards
@@ -1784,12 +1784,21 @@ void AutotileEngine::setGlobalSplitRatio(qreal ratio)
     // An explicit global set overrides any per-desktop tunings, matching the
     // settings-refresh path — otherwise the next propagate would skip the
     // just-set value on still-tuned current-desktop states.
+    //
+    // This clear spans EVERY key, so the write below must span every state to
+    // match: NavigationController::setGlobalSplitRatio walks all of them. Do not
+    // narrow one scope without the other. A clear that outruns the write leaves a
+    // state holding a tuned value with no flag protecting it, and the next
+    // propagateGlobalSplitRatio to run while that state's desktop is current
+    // overwrites the user's value — a clobber deferred until some unrelated
+    // settings refresh, which is what makes it so hard to trace back here.
     m_userTunedSplitRatio.clear();
     m_navigation->setGlobalSplitRatio(ratio);
 }
 
 void AutotileEngine::setGlobalMasterCount(int count)
 {
+    // Same clear-scope/write-scope pairing as setGlobalSplitRatio above.
     m_userTunedMasterCount.clear();
     m_navigation->setGlobalMasterCount(count);
 }
@@ -2537,11 +2546,15 @@ void AutotileEngine::migrateWindowBetweenKeys(const QString& windowId, const Til
         // on next retile). Mark the re-add as a migration ARRIVAL for the
         // duration of this synchronous call so insertWindow carries the
         // window's live float state across instead of re-deriving it from the
-        // open-time float rule. Cleared unconditionally afterwards: the marker
-        // describes this one re-add and must not leak into a later open.
+        // open-time float rule. Scope-guarded: the marker describes this one
+        // re-add and must not leak into a later open, and onWindowAdded runs the
+        // daemon-injected float predicate and emits into daemon slots inside the
+        // window.
+        QScopeGuard clearArrival([this] {
+            m_migrationArrival.reset();
+        });
         m_migrationArrival = MigrationArrival{windowId, wasFloating};
         onWindowAdded(windowId);
-        m_migrationArrival.reset();
     }
     // Re-adding on a non-autotile destination would route through
     // screenForWindow()'s primary-screen fallback and re-tile a window that
@@ -2603,17 +2616,18 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     // autotile (so the IsFloating match field stays false) nor re-tileable via
     // Meta+F.
     //
-    // The rule is deliberately consulted here even for a migration ARRIVAL, which
-    // insertWindow may then insert TILED (it carries the window's live float state
-    // across — see insertShouldFloat). That combination lands a float-ruled window
-    // the user had tiled onto a cap-full screen, where applyTiling's overflow pass
-    // floats the excess back out. Refusing instead would be worse: the arrival's
-    // source state has already dropped it, so a refusal here strands it. The
-    // proactive cross-output guard in NavigationController::crossOutputMove
-    // therefore applies the BARE cap and refuses BEFORE migrating, which is where
-    // a full destination is turned away without stranding anything.
+    // A migration ARRIVAL bypasses the cap outright, whatever float state it
+    // carries across (see insertShouldFloat). By the time it reaches here its
+    // source state has already dropped it, so refusing would strand it: removed
+    // from the source, keyed to the destination, and present in neither state —
+    // isWindowTiled() would then report a phantom tile forever. Accepting is
+    // safe because applyTiling's overflow pass floats everything past the cap
+    // back out. Screens that must turn a full destination away have to refuse
+    // BEFORE the removal, which is what the proactive bare-cap guard in
+    // NavigationController::crossOutputMove does.
     const bool ruleWillFloat = m_floatPredicate && m_floatPredicate(windowId);
-    if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat) {
+    const bool isMigrationArrival = m_migrationArrival && m_migrationArrival->windowId == windowId;
+    if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat && !isMigrationArrival) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
         // Purge this window from pending initial orders so the order doesn't

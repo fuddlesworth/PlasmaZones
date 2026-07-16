@@ -3,7 +3,6 @@
     "name": "Ultrawide Center Focus",
     "description": "Wide center panel with stacked side columns for 21:9 monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "ultrawide",
     "zones": [

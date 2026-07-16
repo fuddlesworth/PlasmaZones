@@ -81,11 +81,6 @@ SettingsFlickable {
         return null;
     }
 
-    function _getZones(layoutId) {
-        var layout = _findLayout(layoutId);
-        return layout ? (layout.zones || []) : [];
-    }
-
     // Stage the current local state for the selected screen (flushed on Apply).
     // Uses setAssignmentEntry targeting the exact (screen, desktop, activity)
     // context from getScreenStates — most specific context wins.
@@ -256,9 +251,12 @@ SettingsFlickable {
             LayoutThumbnail {
                 Layout.alignment: Qt.AlignHCenter
                 visible: !stateView.isTiling
+                // Fallback stands in for a layout the local list doesn't carry,
+                // so there are no zones to draw. The daemon still reports the
+                // resolved name, so show that rather than nothing.
                 layout: stateView.currentLayout || ({
-                        "displayName": i18n("Default"),
-                        "zones": root._getZones(stateView.localLayoutId)
+                        "displayName": (stateView.screenState && stateView.screenState.layoutName) || i18n("Default"),
+                        "zones": []
                     })
                 isSelected: true
                 baseHeight: Kirigami.Units.gridUnit * 14
@@ -280,8 +278,10 @@ SettingsFlickable {
                     if (found)
                         return found;
 
+                    // getScreenStates reports the algorithm's display name, so
+                    // prefer it over the raw id ("bsp") the local list missed.
                     return {
-                        "displayName": stateView.localAlgorithmId || i18n("Default"),
+                        "displayName": (stateView.screenState && stateView.screenState.algorithmName) || stateView.localAlgorithmId || i18n("Default"),
                         "zones": []
                     };
                 }

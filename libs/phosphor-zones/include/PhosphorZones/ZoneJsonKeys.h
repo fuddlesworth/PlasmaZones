@@ -58,9 +58,6 @@ inline constexpr QLatin1String ZonePadding{"zonePadding"};
 inline constexpr QLatin1String OuterGap{"outerGap"};
 inline constexpr QLatin1String ShowZoneNumbers{"showZoneNumbers"};
 inline constexpr QLatin1String OverlayDisplayMode{"overlayDisplayMode"};
-inline constexpr QLatin1String IsBuiltIn{"isBuiltIn"}; ///< Live wire-format key — still emitted by sibling libraries
-                                                       ///< and src/common/layoutpreviewserialize.cpp when serialising
-                                                       ///< layout previews.
 inline constexpr QLatin1String IsSystem{"isSystem"}; ///< Live wire-format key — system classification derived from
                                                      ///< the layout's source path.
 inline constexpr QLatin1String HasSystemOrigin{"hasSystemOrigin"}; ///< Live wire-format key — set when a user layout

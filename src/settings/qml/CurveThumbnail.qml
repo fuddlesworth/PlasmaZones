@@ -152,9 +152,12 @@ Rectangle {
             }
         }
 
-        // Re-resolve color when Kirigami theme actually becomes available
+        // Re-resolve the cached stroke colour when the palette changes, so a
+        // light/dark switch doesn't leave the curve in the old highlight colour.
+        // Every PlatformTheme colour shares the one `colorsChanged` notify
+        // signal — there is no per-colour signal to connect to.
         Connections {
-            function onHighlightColorChanged() {
+            function onColorsChanged() {
                 canvas.repaintCurve();
             }
 

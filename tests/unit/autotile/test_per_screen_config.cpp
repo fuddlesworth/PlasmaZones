@@ -645,6 +645,11 @@ private Q_SLOTS:
         QVERIFY(engine.perScreenOverrides(QString()).isEmpty());
     }
 
+    // removeOverridesForScreen is not public engine API — it is reached by taking
+    // the screen out of the autotile set, which is the production caller
+    // (AutotileEngine's screen-removal teardown). Driving it through
+    // clearPerScreenConfig instead would test a different function and duplicate
+    // testPerScreen_clearOverrides_restoresGlobalDefaults.
     void testPerScreen_removeOverridesForScreen()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
@@ -659,12 +664,17 @@ private Q_SLOTS:
         QVERIFY(engine.hasPerScreenOverride(screen, QStringLiteral("InnerGap")));
         QVERIFY(engine.hasPerScreenOverride(screen, QStringLiteral("OuterGap")));
 
-        // Remove all overrides for the screen (used during screen removal)
-        // clearPerScreenConfig should remove the overrides
-        engine.clearPerScreenConfig(screen);
+        // Drop the screen from the autotile set: the teardown calls
+        // removeOverridesForScreen for the screen's state.
+        engine.setAutotileScreens({});
 
         QVERIFY(!engine.hasPerScreenOverride(screen, QStringLiteral("InnerGap")));
         QVERIFY(!engine.hasPerScreenOverride(screen, QStringLiteral("OuterGap")));
+        QVERIFY(engine.perScreenOverrides(screen).isEmpty());
+        // The in-memory overrides are gone, so the screen resolves to the global
+        // baseline again if it ever comes back.
+        engine.config()->innerGap = 7;
+        QCOMPARE(engine.effectiveInnerGap(screen), 7);
     }
 };
 
