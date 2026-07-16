@@ -70,6 +70,14 @@ Item {
     property bool highlightAllZones: false
     /// Array of zone IDs to highlight (for navigation OSD zone highlighting)
     property var highlightedZoneIds: []
+    /// Whether specific zones are singled out, by index or by zone ID. The
+    /// card-level `isActive` / `isHovered` states must not light every zone
+    /// while this holds, or the singled-out zone renders identically to its
+    /// siblings and the selection is invisible. Consumers that pass no per-zone
+    /// selection (layout picker, OSD, settings thumbnails) keep the whole-card
+    /// highlight. `highlightAllZones` still lights every zone, via
+    /// `isZoneSelected` below.
+    readonly property bool hasZoneSelection: root.selectedZoneIndex >= 0 || (root.highlightedZoneIds && root.highlightedZoneIds.length > 0)
     /// Zone fill opacity when not active/hovered
     property real inactiveOpacity: 0.25
     /// Zone fill opacity when active/hovered
@@ -106,6 +114,12 @@ Item {
 
         delegate: Rectangle {
             id: zoneRect
+
+            // The zone selector hit-tests the cursor in C++ by reading these
+            // delegates' rendered geometry (selector.cpp::updateSelectorPosition)
+            // rather than replaying the layout math below. Renaming this breaks
+            // per-zone highlighting silently, so it is part of the contract.
+            objectName: "zonePreviewZone"
 
             required property var modelData
             required property int index
@@ -145,6 +159,10 @@ Item {
             }
             // Track per-zone hover state
             property bool isZoneHovered: root.interactive && zoneMouseArea.containsMouse
+            /// Whether this zone renders in the highlighted state. The card-level
+            /// states only apply when no specific zone is singled out — see
+            /// `root.hasZoneSelection`.
+            readonly property bool isZoneHighlighted: isZoneSelected || isZoneHovered || (!root.hasZoneSelection && (root.isActive || root.isHovered))
             // Detect screen boundaries (tolerance 0.01)
             readonly property real edgeTolerance: 0.01
             readonly property real leftGap: relX < edgeTolerance ? root.edgeGap : root.zonePadding / 2
@@ -168,11 +186,10 @@ Item {
             // far more transparent than the configured opacity — mismatching the live
             // shader overlay (overlay_data.cpp sets FillA = activeOpacity).
             color: {
-                var isHighlighted = root.isActive || root.isHovered || isZoneSelected || isZoneHovered;
-                var base = isHighlighted ? root.highlightColor : root.inactiveColor;
+                var base = isZoneHighlighted ? root.highlightColor : root.inactiveColor;
                 return Qt.rgba(base.r, base.g, base.b, 1.0);
             }
-            opacity: (root.isActive || root.isHovered || isZoneSelected || isZoneHovered) ? root.activeOpacity : root.inactiveOpacity
+            opacity: isZoneHighlighted ? root.activeOpacity : root.inactiveOpacity
             // Border - brighter on hover
             border.color: {
                 if (isZoneHovered)
@@ -195,7 +212,7 @@ Item {
                 font.strikeout: root.fontStrikeout
                 font.family: root.fontFamily
                 color: root.labelFontColor
-                opacity: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? 0.9 : 0.6
+                opacity: zoneRect.isZoneHighlighted ? 0.9 : 0.6
                 visible: {
                     if (!root.showZoneNumbers)
                         return false;
@@ -225,7 +242,7 @@ Item {
                         // select state). Reading `opacity` itself would never
                         // pick the fadeOut leg — the binding only moves
                         // between 0.6 and 0.9, both of which are > 0.5.
-                        profile: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? "widget.fadeIn" : "widget.fadeOut"
+                        profile: zoneRect.isZoneHighlighted ? "widget.fadeIn" : "widget.fadeOut"
                         durationOverride: root.animationDuration
                     }
                 }
