@@ -2,23 +2,38 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
 /**
- * Thumbnail preview of a layout showing zone geometries
- * Renders at the layout's intended aspect ratio (16:9, 21:9, 32:9, 9:16)
- * so previews accurately represent how zones will look on the target monitor type.
- * Falls back to the primary screen's aspect ratio for user-created layouts.
- * Uses shared ZonePreview component for consistent rendering across the application.
+ * Thumbnail preview of a layout — thin wrapper around the shared
+ * QFZCommon.LayoutCard so the settings app renders the exact same stack
+ * (face color, zone fills, selection state, label/badge row) as the
+ * daemon's layout-picker and zone-selector popups.
+ *
+ * This component only owns the sizing policy: it computes a preview box
+ * at the layout's intended aspect ratio (16:9, 21:9, 32:9, 9:16, or the
+ * target screen's ratio) and reserves the same chrome budget around it
+ * as the popup cards (LayoutPickerContent metrics: 1 gridUnit side
+ * padding, 3 gridUnits vertical chrome). Everything visual is LayoutCard.
+ *
+ * Zone colors and opacities are NOT passed explicitly — LayoutCard's
+ * ZoneColorDefaults preview* defaults resolve through the injected
+ * `settingsSource` (Main.qml) to the same effective settings-pipeline
+ * values the daemon pushes into the popup slots. Only the opacities and
+ * the card-state highlight need the explicit settingsSource read because
+ * LayoutCard has no singleton default for them.
  */
-Rectangle {
+Item {
     id: root
 
     required property var layout
     property bool isSelected: false
+    property bool isHovered: false
+    // Mirrors the global "Auto-assign for all layouts" master toggle so the
+    // built-in CategoryBadge shows effective state (same as the popups).
+    property bool globalAutoAssign: false
     // Font properties for zone number labels
     property string fontFamily: ""
     property real fontSizeScale: 1
@@ -26,10 +41,6 @@ Rectangle {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
-    readonly property real previewOpacity: 0.2 // Increased for better background contrast
-    readonly property real borderOpacity: 0.9 // Increased for better border visibility
-    readonly property int normalBorderWidth: 1
-    readonly property int selectedBorderWidth: 3 // Thicker when selected
     // Override: set to a positive value to force the aspect ratio for the target screen
     // (e.g., a virtual screen that is portrait even though the primary display is landscape).
     property real screenAspectRatio: 0
@@ -38,7 +49,8 @@ Rectangle {
     readonly property real fallbackAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : ((Screen.width > 0 && Screen.height > 0) ? (Screen.width / Screen.height) : (16 / 9))
     readonly property real layoutAspectRatio: {
         // If a specific screen aspect ratio was provided, use it — the preview
-        // should match the physical monitor shape regardless of layout class.
+        // box matches the physical monitor shape; LayoutCard letterboxes
+        // class layouts inside it exactly like the popups do.
         if (root.screenAspectRatio > 0)
             return root.screenAspectRatio;
 
@@ -59,68 +71,68 @@ Rectangle {
             return refAR > 0 ? refAR : fallbackAspectRatio;
         }
     }
-    // Calculate dimensions based on the layout's aspect ratio. Height is the
-    // fixed side for every class, so a portrait ratio (< 1) simply yields a
-    // narrower width, which the min/max clamp below keeps usable.
+    // Preview-box sizing. Height is the fixed side for every class, so a
+    // portrait ratio (< 1) simply yields a narrower width, which the
+    // min/max clamp below keeps usable.
     property real baseHeight: Kirigami.Units.gridUnit * 9
     readonly property real calculatedWidth: baseHeight * layoutAspectRatio
     property real minThumbnailWidth: Kirigami.Units.gridUnit * 5 // Narrower min for portrait
     property real maxThumbnailWidth: Kirigami.Units.gridUnit * 26 // Wider max for super-ultrawide
+    readonly property real previewBoxWidth: Math.max(minThumbnailWidth, Math.min(calculatedWidth, maxThumbnailWidth))
+    // Chrome budget around the preview box — matches the popup card cell
+    // (LayoutPickerContent: cardWidth = preview + paddingSide*2,
+    // cardHeight = preview + containerPadding + paddingSide).
+    readonly property real _sidePadding: Kirigami.Units.gridUnit
+    readonly property real _verticalChrome: Kirigami.Units.gridUnit * 3
+    // Layout data with the legacy "Unnamed" fallback the old thumbnail label
+    // showed — LayoutCard renders layoutData.displayName verbatim.
+    readonly property var _cardData: {
+        var l = root.layout || {};
+        if (l.displayName)
+            return l;
 
-    // Use calculated width but ensure minimum size for usability
-    implicitWidth: Math.max(minThumbnailWidth, Math.min(calculatedWidth, maxThumbnailWidth))
-    implicitHeight: baseHeight
-    // Maintain aspect ratio when resized
+        return Object.assign({}, l, {
+            "displayName": i18n("Unnamed")
+        });
+    }
+
+    implicitWidth: previewBoxWidth + _sidePadding * 2
+    implicitHeight: baseHeight + _verticalChrome
     width: implicitWidth
     height: implicitHeight
-    radius: Kirigami.Units.smallSpacing
-    // Use a neutral background with better contrast for zone visibility
-    // Slightly darker background helps zones stand out better
-    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, previewOpacity)
-    // Strong border colors for clear boundaries
-    border.color: isSelected ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, borderOpacity)
-    border.width: isSelected ? selectedBorderWidth : normalBorderWidth
 
-    // Use shared ZonePreview component for consistent zone rendering
-    QFZCommon.ZonePreview {
-        id: zonePreview
-
+    QFZCommon.LayoutCard {
         anchors.fill: parent
-        anchors.margins: Kirigami.Units.smallSpacing * 1.5
-        anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5 + Kirigami.Units.smallSpacing // Space for label
-        zones: root.layout && root.layout.zones ? root.layout.zones : []
-        isActive: root.isSelected
-        producesOverlappingZones: root.layout && root.layout.producesOverlappingZones === true
-        zonePadding: 1 // Minimal padding for thumbnail
-        edgeGap: 1 // Minimal edge gap for thumbnail
+        layoutData: root._cardData
+        isSelected: root.isSelected
+        isHovered: root.isHovered
+        globalAutoAssign: root.globalAutoAssign
+        previewWidth: root.previewBoxWidth
+        previewHeight: root.baseHeight
+        // Same feature configuration as the popup cards
+        showCardBackground: true
+        interactive: false
+        zonePadding: 1
+        edgeGap: 1
         minZoneSize: 8
-        showZoneNumbers: true
         zoneNumberDisplay: root.layout ? (root.layout.zoneNumberDisplay || "all") : "all"
+        producesOverlappingZones: root.layout && root.layout.producesOverlappingZones === true
+        showMasterDot: root.layout && root.layout.isAutotile === true && root.layout.supportsMasterCount === true
+        masterCount: root.layout && root.layout.masterCount !== undefined ? root.layout.masterCount : 1
+        // Effective settings-pipeline values — the daemon pushes the same
+        // settings->activeOpacity()/inactiveOpacity()/highlightColor() into
+        // the popup slots (internal.h writeColorSettings); here they come
+        // from the injected settingsSource. Zone fill/border colors need no
+        // override: LayoutCard's ZoneColorDefaults preview* defaults already
+        // resolve through the same source.
+        activeOpacity: QFZCommon.ZoneColorDefaults.settingsSource ? QFZCommon.ZoneColorDefaults.settingsSource.activeOpacity : 0.5
+        inactiveOpacity: QFZCommon.ZoneColorDefaults.settingsSource ? QFZCommon.ZoneColorDefaults.settingsSource.inactiveOpacity : 0.3
+        highlightColor: QFZCommon.ZoneColorDefaults.settingsSource ? QFZCommon.ZoneColorDefaults.settingsSource.highlightColor : Kirigami.Theme.highlightColor
         fontFamily: root.fontFamily
         fontSizeScale: root.fontSizeScale
         fontWeight: root.fontWeight
         fontItalic: root.fontItalic
         fontUnderline: root.fontUnderline
-        showMasterDot: root.layout && root.layout.isAutotile === true && root.layout.supportsMasterCount === true
-        masterCount: root.layout && root.layout.masterCount !== undefined ? root.layout.masterCount : 1
         fontStrikeout: root.fontStrikeout
-    }
-
-    // Layout name label
-    Label {
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.margins: Kirigami.Units.smallSpacing
-        text: root.layout ? (root.layout.displayName || i18n("Unnamed")) : ""
-        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-        font.weight: isSelected ? Font.DemiBold : Font.Normal
-        elide: Text.ElideRight
-        horizontalAlignment: Text.AlignHCenter
-
-        background: Rectangle {
-            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
-            radius: Kirigami.Units.smallSpacing * 0.5
-        }
     }
 }

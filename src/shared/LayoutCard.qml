@@ -18,6 +18,10 @@ import org.phosphor.animation
 Item {
     id: root
 
+    // Card grid is embedded in settings pages — use View roles for surfaces
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
+
     // Data
     property var layoutData: ({})
     property bool isActive: false
@@ -44,12 +48,16 @@ Item {
     property bool showZoneNumbers: true
     property string zoneNumberDisplay: "all"
     property bool producesOverlappingZones: false
-    property color zoneHighlightColor: Kirigami.Theme.highlightColor
-    property color zoneInactiveColor: Kirigami.Theme.textColor
-    property color zoneBorderColor: Kirigami.Theme.textColor
+    property color zoneHighlightColor: ZoneColorDefaults.previewActiveZoneColor
+    property color zoneInactiveColor: ZoneColorDefaults.previewInactiveZoneColor
+    property color zoneBorderColor: ZoneColorDefaults.previewZoneBorderColor
     property real hoverScale: 1
     // Autotile algorithm metadata
     property bool showMasterDot: false
+    /// Number of master zones to mark with indicator dots (ZonePreview
+    /// passthrough — the settings thumbnails show N dots for multi-master
+    /// algorithms; the popups keep the default of 1).
+    property int masterCount: 1
     // Theme colors
     property color highlightColor: Kirigami.Theme.highlightColor
     property color textColor: Kirigami.Theme.textColor
@@ -79,7 +87,7 @@ Item {
             return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.fillSelected);
 
         if (root.isHovered)
-            return Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.fillHovered);
+            return Qt.alpha(Kirigami.Theme.hoverColor, 0.2);
 
         return "transparent";
     }
@@ -197,7 +205,7 @@ Item {
             width: previewArea.fittedWidth
             height: previewArea.fittedHeight
             radius: style.previewRadius
-            color: root.showCardBackground ? Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.fillNeutral) : root.stateHighlightFill
+            color: root.showCardBackground ? Kirigami.Theme.alternateBackgroundColor : root.stateHighlightFill
             border.color: root.showCardBackground ? "transparent" : root.stateBorderColor
             border.width: root.showCardBackground ? 0 : root.stateBorderWidth
 
@@ -304,6 +312,7 @@ Item {
             fontUnderline: root.fontUnderline
             fontStrikeout: root.fontStrikeout
             showMasterDot: root.showMasterDot
+            masterCount: root.masterCount
             animationDuration: root.animationDuration
             onZoneHovered: function (index) {
                 root.zoneHovered(index);
@@ -351,7 +360,7 @@ Item {
                 if (root.isSelected || root.isHovered)
                     return root.textColor;
 
-                return Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.labelDimAlpha);
+                return Kirigami.Theme.disabledTextColor;
             }
             opacity: (root.isSelected || root.isHovered || root.isActive) ? 1 : style.labelDimOpacity
             elide: Text.ElideRight

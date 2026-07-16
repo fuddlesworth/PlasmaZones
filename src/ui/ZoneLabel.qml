@@ -55,8 +55,7 @@ Item {
             var c = root.labelFontColor || Qt.rgba(1, 1, 1, 1);
             var luminance = c.r * 0.299 + c.g * 0.587 + c.b * 0.114;
             // Dark outline for light text, light outline for dark text
-            return luminance > 0.5 ? Qt.rgba(Kirigami.Theme.backgroundColor.r * 0.2, Kirigami.Theme.backgroundColor.g * 0.2, Kirigami.Theme.backgroundColor.b * 0.2, 0.8) : Qt.rgba(1 - Kirigami.Theme.backgroundColor.r * 0.2, 1 - Kirigami.Theme.backgroundColor.g * 0.2, 1 - Kirigami.Theme.backgroundColor.b * 0.2, 0.8);
+            return luminance > 0.5 ? Qt.rgba(0, 0, 0, 0.8) : Qt.rgba(1, 1, 1, 0.8);
         }
     }
-
 }

@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
+import org.plasmazones.common as QFZCommon
 
 /**
  * Snap Assist content body — Aero-Snap-style window picker rendered as
@@ -36,9 +37,9 @@ Item {
     property int screenWidth: 1920
     property int screenHeight: 1080
     // Zone appearance defaults — C++ side overwrites from settings.
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
     property int borderWidth: Kirigami.Units.smallSpacing
@@ -180,7 +181,7 @@ Item {
                             anchors.fill: parent
                             radius: Math.max(2, candidateFlow.zoneSize * 0.01)
                             color: candidateCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.35) : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.75)
-                            border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
+                            border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                             border.width: candidateCard.hovered ? Kirigami.Units.smallSpacing : Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
                         }
 

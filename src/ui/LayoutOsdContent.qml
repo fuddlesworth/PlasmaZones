@@ -74,7 +74,9 @@ Item {
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
-    property color highlightColor: Kirigami.Theme.highlightColor
+    property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
     // Font properties for zone number labels
     property string fontFamily: ""
     property real fontSizeScale: 1
@@ -148,7 +150,7 @@ Item {
             // Background for preview area
             Rectangle {
                 anchors.fill: parent
-                color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.08)
+                color: Kirigami.Theme.alternateBackgroundColor
                 radius: Kirigami.Units.smallSpacing
             }
 
@@ -159,6 +161,9 @@ Item {
                 anchors.fill: parent
                 anchors.margins: Kirigami.Units.smallSpacing
                 zones: root.zones
+                highlightColor: root.highlightColor
+                inactiveColor: root.inactiveColor
+                borderColor: root.borderColor
                 isHovered: false
                 isActive: true
                 zonePadding: Math.round(Kirigami.Units.smallSpacing / 2)
@@ -193,7 +198,7 @@ Item {
                 source: "object-locked"
                 width: Kirigami.Units.iconSizes.large
                 height: Kirigami.Units.iconSizes.large
-                color: Kirigami.Theme.highlightedTextColor
+                color: Kirigami.Theme.textColor
             }
         }
 
@@ -209,7 +214,7 @@ Item {
                 source: "dialog-cancel"
                 width: Kirigami.Units.iconSizes.large
                 height: Kirigami.Units.iconSizes.large
-                color: Kirigami.Theme.neutralTextColor
+                color: Kirigami.Theme.disabledTextColor
             }
         }
 

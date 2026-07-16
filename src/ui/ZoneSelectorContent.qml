@@ -99,12 +99,9 @@ Item {
     property int scaledBorderWidth: 1
     property int scaledBorderRadius: 2
     property bool locked: false
-    readonly property real _fallbackHighlightAlpha: 0.7
-    readonly property real _fallbackInactiveAlpha: 0.4
-    readonly property real _fallbackBorderAlpha: 0.9
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, _fallbackHighlightAlpha)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, _fallbackInactiveAlpha)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, _fallbackBorderAlpha)
+    property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
     property string fontFamily: ""
     property real fontSizeScale: 1
     property int fontWeight: Font.Bold
@@ -487,7 +484,7 @@ Item {
                                 source: "object-locked"
                                 width: Math.min(parent.width, parent.height) * 0.3
                                 height: width
-                                color: Kirigami.Theme.highlightedTextColor
+                                color: Kirigami.Theme.textColor
                             }
 
                             MouseArea {

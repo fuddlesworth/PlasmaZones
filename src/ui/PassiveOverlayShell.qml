@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 /**
  * Passive overlay shell — single per-screen wlr-layer-shell host that
@@ -247,6 +248,8 @@ Window {
                 backgroundColor: osdSlot.backgroundColor
                 textColor: osdSlot.textColor
                 highlightColor: osdSlot.highlightColor
+                inactiveColor: osdSlot.inactiveColor
+                borderColor: osdSlot.borderColor
                 layoutId: osdSlot.layoutId
                 layoutName: osdSlot.layoutName
                 category: osdSlot.category
@@ -312,9 +315,9 @@ Window {
         property var candidates: []
         property int screenWidth: 1920
         property int screenHeight: 1080
-        property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-        property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-        property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+        property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
         property real activeOpacity: 0.5
         property real inactiveOpacity: 0.3
         property int borderWidth: Kirigami.Units.smallSpacing
@@ -420,7 +423,7 @@ Window {
         property color textColor: Kirigami.Theme.textColor
         property color highlightColor: Kirigami.Theme.highlightColor
         property color inactiveColor: Kirigami.Theme.disabledTextColor
-        property color borderColor: Kirigami.Theme.textColor
+        property color borderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
         property real activeOpacity: 0.5
         property real inactiveOpacity: 0.3
         property int borderWidth: Kirigami.Units.smallSpacing
@@ -598,9 +601,9 @@ Window {
         property int scaledBorderWidth: 1
         property int scaledBorderRadius: 2
         property bool locked: false
-        property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-        property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-        property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+        property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
         property string fontFamily: ""
         property real fontSizeScale: 1
         property int fontWeight: Font.Bold
@@ -767,9 +770,9 @@ Window {
         property var highlightedZoneIds: []
         property bool showNumbers: true
         property var previewZones: []
-        property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-        property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-        property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+        property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
         property color labelFontColor: Kirigami.Theme.textColor
         property string fontFamily: ""
         property real fontSizeScale: 1

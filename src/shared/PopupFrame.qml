@@ -127,10 +127,8 @@ Item {
             anchors.margins: root.glowMargin
             color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, style.backgroundAlpha)
             radius: root.containerRadius
-            border.color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.borderAlpha)
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: 1
         }
-
     }
-
 }

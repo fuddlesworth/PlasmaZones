@@ -35,6 +35,10 @@ Item {
 
     id: root
 
+    // Settings-embedded preview — resolve theme roles against the View set
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
+
     /// Array of zone objects with relativeGeometry: { x, y, width, height }
     required property var zones
     /// Whether this preview is in "active/selected" state (affects coloring)
@@ -82,12 +86,12 @@ Item {
     property real inactiveOpacity: 0.25
     /// Zone fill opacity when active/hovered
     property real activeOpacity: 0.45
-    /// Highlight color for selected zones (default: theme highlight)
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    /// Inactive color for non-selected zones (default: theme text)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    /// Border color (default: theme text)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    /// Highlight color for selected zones (default: shared View-set highlight)
+    property color highlightColor: ZoneColorDefaults.previewActiveZoneColor
+    /// Inactive color for non-selected zones (default: shared View-set surface)
+    property color inactiveColor: ZoneColorDefaults.previewInactiveZoneColor
+    /// Border color (default: shared View-set separator)
+    property color borderColor: ZoneColorDefaults.previewZoneBorderColor
     /// Label font color for zone numbers (default: theme text)
     property color labelFontColor: Kirigami.Theme.textColor
     /// Scale factor when zone is hovered (1.0 = no scale, set > 1.0 to enable)
@@ -193,7 +197,7 @@ Item {
             // Border - brighter on hover
             border.color: {
                 if (isZoneHovered)
-                    return Qt.rgba(Math.min(1, root.highlightColor.r * 1.2), Math.min(1, root.highlightColor.g * 1.2), Math.min(1, root.highlightColor.b * 1.2), 1);
+                    return Qt.alpha(Qt.lighter(root.highlightColor, 1.2), 1.0);
 
                 return root.borderColor;
             }
@@ -324,7 +328,7 @@ Item {
             width: Kirigami.Units.smallSpacing * 2
             height: Kirigami.Units.smallSpacing * 2
             radius: Kirigami.Units.smallSpacing
-            color: Kirigami.Theme.positiveTextColor
+            color: Kirigami.Theme.highlightColor
         }
     }
 }

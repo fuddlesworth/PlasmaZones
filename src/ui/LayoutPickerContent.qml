@@ -65,8 +65,8 @@ Item {
     property color textColor: Kirigami.Theme.textColor
     property color highlightColor: Kirigami.Theme.highlightColor
     // Zone appearance (set from C++ settings for consistency with zone selector)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
     // Font properties for zone number labels
@@ -349,7 +349,7 @@ Item {
                             source: "object-locked"
                             width: Math.min(parent.width, parent.height) * 0.3
                             height: width
-                            color: Kirigami.Theme.highlightedTextColor
+                            color: Kirigami.Theme.textColor
                         }
 
                         MouseArea {

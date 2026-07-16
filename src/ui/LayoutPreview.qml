@@ -37,7 +37,7 @@ Rectangle {
     // Theme colors
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5)
     property color activeColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
+    property color borderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     property real inactiveOpacity: 0.2
     property real hoverOpacity: 0.4
     // Font properties for zone number labels
@@ -52,9 +52,9 @@ Rectangle {
     readonly property real hoverScale: 1.05
 
     // Signals
-    signal clicked()
-    signal hovered()
-    signal unhovered()
+    signal clicked
+    signal hovered
+    signal unhovered
 
     // Size
     width: previewWidth
@@ -67,10 +67,10 @@ Rectangle {
         if (isActive)
             return activeColor;
 
-        return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, inactiveOpacity);
+        return Qt.alpha(Kirigami.Theme.backgroundColor, 0.4);
     }
     radius: Kirigami.Units.gridUnit // 8px
-    border.color: isHovered || isActive ? Kirigami.Theme.textColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, hoverOpacity)
+    border.color: isHovered || isActive ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     border.width: isHovered || isActive ? constants.standardBorderWidth : constants.thinBorderWidth
     scale: isHovered ? hoverScale : 1
     // Accessibility
@@ -159,9 +159,7 @@ Rectangle {
                 elide: Text.ElideRight
                 width: Math.min(implicitWidth, labelContainer.width - categoryBadge.width - Kirigami.Units.gridUnit * 1.5)
             }
-
         }
-
     }
 
     // Active indicator badge
@@ -193,9 +191,7 @@ Rectangle {
                 profile: "widget.zoneHighlight"
                 durationOverride: constants.animationDuration
             }
-
         }
-
     }
 
     // Lock overlay (shown on non-active layouts when screen is locked)
@@ -203,7 +199,7 @@ Rectangle {
         anchors.fill: parent
         visible: root.locked
         z: 100
-        color: Qt.rgba(0, 0, 0, 0.5)
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
         radius: parent.radius
 
         Kirigami.Icon {
@@ -211,21 +207,20 @@ Rectangle {
             source: "object-locked"
             width: Math.min(parent.width, parent.height) * 0.3
             height: width
-            color: "white"
+            color: Kirigami.Theme.textColor
         }
 
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.ForbiddenCursor
-            onClicked: function(mouse) {
+            onClicked: function (mouse) {
                 mouse.accepted = true;
             }
-            onPressed: function(mouse) {
+            onPressed: function (mouse) {
                 mouse.accepted = true;
             }
         }
-
     }
 
     // Mouse interaction
@@ -260,7 +255,6 @@ Rectangle {
             profile: "widget.zoneHighlight"
             durationOverride: constants.animationDuration
         }
-
     }
 
     // Border animation — half-duration profile for snappier border feedback
@@ -270,7 +264,6 @@ Rectangle {
             profile: "widget.zoneHighlight.border"
             durationOverride: Math.round(constants.animationDuration / 2)
         }
-
     }
 
     // Scale uses widget.zoneHighlight.pop for the OutBack overshoot=1.20 feel.
@@ -279,7 +272,5 @@ Rectangle {
             profile: "widget.zoneHighlight.pop"
             durationOverride: constants.animationDuration
         }
-
     }
-
 }

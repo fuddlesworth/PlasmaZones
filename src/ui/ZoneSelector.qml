@@ -28,7 +28,7 @@ Rectangle {
     readonly property real activeOpacity: 0.7
     property color backgroundColor: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, backgroundOpacity)
     readonly property real backgroundOpacity: 0.95
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, borderOpacity)
+    property color borderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     // Theme colors with opacity constants
     readonly property real borderOpacity: 0.6
     property int containerPadding: Kirigami.Units.gridUnit * 1.5 // 12px
@@ -220,7 +220,7 @@ Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: Kirigami.Units.smallSpacing
-        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, textSecondaryOpacity)
+        color: Kirigami.Theme.disabledTextColor
         font.pixelSize: Kirigami.Theme.smallFont.pixelSize
         font.weight: Font.Medium
         opacity: root.selectorState === "expanded" ? 1 : 0
@@ -341,7 +341,7 @@ Rectangle {
     // Empty state message
     Label {
         anchors.centerIn: parent
-        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, textSecondaryOpacity)
+        color: Kirigami.Theme.disabledTextColor
         font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
         text: i18n("No layouts available")
         visible: root.layouts.length === 0 && root.selectorState !== "hidden"

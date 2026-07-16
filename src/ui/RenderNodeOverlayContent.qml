@@ -49,9 +49,9 @@ Item {
     property var bufferWraps: []
     property string bufferFilter: "linear"
     property var bufferFilters: []
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    property color highlightColor: ZoneColorDefaults.activeZoneColor
+    property color inactiveColor: ZoneColorDefaults.inactiveZoneColor
+    property color borderColor: ZoneColorDefaults.zoneBorderColor
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
     property int borderWidth: Kirigami.Units.smallSpacing
