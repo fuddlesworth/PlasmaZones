@@ -92,19 +92,19 @@ void LayoutRegistry::loadLayouts()
     // is not what keeps them safe. The invariant every holder must satisfy is:
     // hold the layout as a QPointer, or connect to its destroyed signal and
     // null the cached pointer there. destroyed fires when the deferred delete
-    // runs, i.e. before the memory goes away, so both forms self-null.
-    // Current holders: OverlayService::m_layout / m_observedLayouts and
-    // LayoutComputeService::m_trackedLayouts are QPointers;
-    // ZoneDetector::m_layout is a raw pointer with a destroyed guard
-    // (see ZoneDetector::setLayout); SnappingShadersPageController::
-    // m_wiredLayouts is a QSet of raw pointers with a destroyed guard
-    // (onWiredLayoutDestroyed). A new raw-pointer holder without one of
-    // those two is a use-after-free — this function does not protect it.
+    // runs, i.e. before the memory goes away, so both forms self-null. A
+    // raw-pointer holder in the daemon or the settings app must connect the
+    // layout's destroyed signal and null its cache the same way the QPointer
+    // holders in this library do. Same-library holders show both forms:
+    // LayoutComputeService::m_trackedLayouts is a QPointer set, while
+    // ZoneDetector::m_layout is a raw pointer with a destroyed guard (see
+    // ZoneDetector::setLayout). A new raw-pointer holder without one of those
+    // two is a use-after-free — this function does not protect it.
     //
-    // Grep for the type alone and you will miss holders: m_wiredLayouts is
-    // typed QSet<QObject*>, not QSet<Layout*>, so it matches neither "Layout*"
-    // nor "QPointer<Layout>". Anything that keeps a Layout as a base-class
-    // pointer belongs on this list too.
+    // Grep for the type alone and you will miss holders: a set typed
+    // QSet<QObject*> rather than QSet<Layout*> matches neither "Layout*" nor
+    // "QPointer<Layout>". Anything that keeps a Layout as a base-class pointer
+    // belongs on this list too.
     //
     // Self-nulling only gets a holder to null, not to the replacement object,
     // which is why the activeLayoutChanged emit at the end of this function is

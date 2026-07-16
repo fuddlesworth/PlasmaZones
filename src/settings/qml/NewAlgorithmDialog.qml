@@ -301,12 +301,17 @@ Kirigami.Dialog {
                             Layout.fillWidth: true
                             placeholderText: i18n("My Algorithm")
                             Accessible.name: i18n("Algorithm name")
-                            Keys.onReturnPressed: {
-                                if (wizardFooter.createEnabled)
+                            // A failed create releases the `_creating` guard so the
+                            // user can retry, which leaves a held Return free to
+                            // re-fire the D-Bus + .luau write on every repeat. Ignore
+                            // auto-repeat so one press is one attempt. Same contract
+                            // as NewLayoutDialog.
+                            Keys.onReturnPressed: event => {
+                                if (!event.isAutoRepeat && wizardFooter.createEnabled)
                                     wizardFooter.createClicked();
                             }
-                            Keys.onEnterPressed: {
-                                if (wizardFooter.createEnabled)
+                            Keys.onEnterPressed: event => {
+                                if (!event.isAutoRepeat && wizardFooter.createEnabled)
                                     wizardFooter.createClicked();
                             }
                         }

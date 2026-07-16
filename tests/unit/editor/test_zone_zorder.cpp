@@ -583,6 +583,69 @@ private Q_SLOTS:
         verifyNumbersUnique(manager, "after duplicating into a gapped layout");
     }
 
+    /**
+     * @brief A degenerate incoming zone number is reassigned to a valid unique one.
+     *
+     * A hand-crafted clipboard map can carry a number outside 1..99 (0 from a
+     * missing key, or a value > 99). addZoneFromMap must not stamp it verbatim
+     * the way a valid unique number is kept; it routes through the same
+     * range+uniqueness scrub as any fresh number and lands in 1..99.
+     */
+    void testAddZoneFromMap_degenerateNumberIsReassigned()
+    {
+        ZoneManager manager;
+        addThreeZones(manager); // numbers 1, 2, 3
+
+        QVariantMap degenerate;
+        degenerate[::PhosphorZones::ZoneJsonKeys::Id] = QUuid::createUuid().toString();
+        degenerate[::PhosphorZones::ZoneJsonKeys::X] = 0.0;
+        degenerate[::PhosphorZones::ZoneJsonKeys::Y] = 0.5;
+        degenerate[::PhosphorZones::ZoneJsonKeys::Width] = 0.2;
+        degenerate[::PhosphorZones::ZoneJsonKeys::Height] = 0.2;
+        // Out of the 1..99 range — the pre-scrub verbatim path would produce a
+        // "Zone 0" or "Zone 500".
+        degenerate[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = 0;
+
+        const QString newId = manager.addZoneFromMap(degenerate);
+        QVERIFY(!newId.isEmpty());
+
+        const int assigned = manager.getZoneById(newId).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt();
+        QVERIFY2(
+            assigned >= 1 && assigned <= 99,
+            qPrintable(
+                QStringLiteral("degenerate ZoneNumber 0 was kept as %1, expected a valid 1..99 number").arg(assigned)));
+        verifyNumbersUnique(manager, "after inserting a zone with a degenerate number");
+    }
+
+    /**
+     * @brief Inserting three colliding numbers in a row yields three distinct numbers.
+     *
+     * Each insert must reassign against LIVE state, so nextAvailableZoneNumber
+     * reads m_zones on every call rather than a value cached before the loop.
+     * Three maps all carrying number 1 must end on three distinct numbers.
+     */
+    void testMultiPaste_eachZoneGetsADistinctNumber()
+    {
+        ZoneManager manager;
+        const QStringList ids = addThreeZones(manager); // numbers 1, 2, 3
+
+        QVariantMap source = manager.getZoneById(ids[0]); // zoneNumber 1
+        QSet<int> assigned;
+        for (int i = 0; i < 3; ++i) {
+            QVariantMap paste = source;
+            paste[::PhosphorZones::ZoneJsonKeys::Y] = 0.4 + 0.1 * i; // keep geometry valid + distinct
+            paste[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = 1; // all collide with the live "1"
+            const QString pastedId = manager.addZoneFromMap(paste);
+            QVERIFY(!pastedId.isEmpty());
+            assigned.insert(manager.getZoneById(pastedId).value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt());
+        }
+
+        // Three colliding pastes must produce three distinct numbers, not the
+        // same one three times.
+        QCOMPARE(assigned.size(), 3);
+        verifyNumbersUnique(manager, "after three colliding pastes");
+    }
+
     /// Same contract for a zone deleted from the middle of the stack.
     void testUndoDelete_restoresAMiddleZoneToItsOriginalPosition()
     {

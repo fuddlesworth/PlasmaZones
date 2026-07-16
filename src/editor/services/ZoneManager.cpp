@@ -555,8 +555,12 @@ int ZoneManager::nextAvailableZoneNumber() const
     }
 
     // All 99 numbers are in use: there is no unique number left to hand out.
-    // Return the natural overflow and let validateZoneNumber reject it, matching
-    // the pre-existing ceiling behaviour.
+    // The fresh-number call sites (addZone / duplicateZone / splitZone /
+    // addZoneFromMap) take this as a best-effort unique value and stamp it
+    // as-is; none of them re-run validateZoneNumber. That range check runs only
+    // on the Properties spinbox path (user input), so a saturated layout keeps
+    // the natural overflow here rather than being blocked, matching the
+    // pre-existing ceiling behaviour.
     return candidate;
 }
 
