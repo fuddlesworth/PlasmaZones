@@ -66,6 +66,20 @@ private Q_SLOTS:
 
         QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
 
+        // There is no SettingsController unit-test target, so the controller
+        // side of the phantom-dirty fix (onSettingsPropertyChanged early-
+        // returns while the flag is up) is covered here by pinning the flag
+        // contract it depends on: isApplyingSystemPalette() must be TRUE
+        // inside every zone-color NOTIFY the palette re-derive emits, and
+        // false again once the event is handled.
+        bool flagUpDuringNotify = false;
+        bool notifySeen = false;
+        connect(&settings, &Settings::highlightColorChanged, &settings, [&]() {
+            notifySeen = true;
+            flagUpDuringNotify = settings.isApplyingSystemPalette();
+        });
+        QVERIFY(!settings.isApplyingSystemPalette());
+
         QPalette pal = qGuiApp->palette();
         pal.setColor(QPalette::Active, QPalette::Highlight, QColor(0x77, 0x11, 0x99));
         pal.setColor(QPalette::Active, QPalette::AlternateBase, QColor(0x10, 0x20, 0x30));
@@ -74,6 +88,9 @@ private Q_SLOTS:
         qGuiApp->setPalette(pal);
 
         QTRY_VERIFY(highlightSpy.count() >= 1);
+        QVERIFY(notifySeen);
+        QVERIFY(flagUpDuringNotify);
+        QVERIFY(!settings.isApplyingSystemPalette());
 
         // The re-derive is a palette-driven refresh of DERIVED values, not a
         // user edit — none of the four zone-color keys may count as modified,

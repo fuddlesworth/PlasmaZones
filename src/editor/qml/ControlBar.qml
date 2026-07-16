@@ -461,9 +461,13 @@ ToolBar {
                 enabled: editorController ? (editorController.hasUnsavedChanges || false) : false
                 Accessible.name: text
                 Accessible.description: i18nc("@info", "Save layout and close editor")
+                // Close only once the save has actually landed, mirroring the
+                // unsaved-changes dialogs: a refused save leaves the layout
+                // dirty and emits layoutSaveFailed, and closing anyway would
+                // throw away the work the user pressed Save to keep.
                 onClicked: {
-                    if (editorController)
-                        editorController.saveLayout();
+                    if (editorController && !editorController.saveLayout())
+                        return;
 
                     editorWindow.close();
                 }

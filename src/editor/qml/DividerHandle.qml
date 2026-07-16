@@ -29,6 +29,8 @@ Rectangle {
     // What makes it grabbable at a zero gap is DividerManager raising the whole
     // subtree over the zones, not this floor.
     readonly property real handleThickness: Math.max(spacing, Kirigami.Units.smallSpacing)
+    // Near-background frame-contrast tone shared by the resting border and centre line
+    readonly property color frameContrastColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     // Derived properties from dividerInfo
     property bool isVertical: dividerInfo ? dividerInfo.isVertical : false
     property real dividerPosition: dividerInfo ? dividerInfo.position : 0
@@ -82,7 +84,7 @@ Rectangle {
     height: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.height - spacing : handleThickness) : 0 // Horizontal divider height = floored spacing
     // Background - subtle base color, more visible on hover/drag
     color: (dividerMouseArea.containsMouse || isDragging) ? Qt.alpha(Kirigami.Theme.highlightColor, isDragging ? 0.4 : 0.25) : Qt.alpha(Kirigami.Theme.backgroundColor, 0.3)
-    border.color: (dividerMouseArea.containsMouse || isDragging) ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+    border.color: (dividerMouseArea.containsMouse || isDragging) ? Kirigami.Theme.highlightColor : frameContrastColor
     border.width: isDragging ? 2 : (dividerMouseArea.containsMouse ? 1 : 0)
     radius: isVertical ? (width / 2) : (height / 2)
     // Orders this handle against the OTHER handles only: every divider shares
@@ -160,7 +162,7 @@ Rectangle {
         width: dividerHandle.isVertical ? 2 : parent.width * 0.6
         height: dividerHandle.isVertical ? parent.height * 0.6 : 2
         radius: Math.round(Kirigami.Units.smallSpacing / 4)
-        color: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+        color: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? Kirigami.Theme.highlightColor : dividerHandle.frameContrastColor
         opacity: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? 0.8 : 0.4
 
         Behavior on opacity {

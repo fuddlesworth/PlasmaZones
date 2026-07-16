@@ -97,12 +97,6 @@ ComboBox {
     popup: T.Popup {
         id: pop
 
-        // View color set on the popup itself (not just the background) so the
-        // delegates' idle fill and text colors resolve against the same View
-        // background the popup draws.
-        Kirigami.Theme.colorSet: Kirigami.Theme.View
-        Kirigami.Theme.inherit: false
-
         // Re-parent to the application Overlay so the popup escapes any
         // hosting popup (e.g. Kirigami.OverlaySheet) that would otherwise
         // out-z-order it. Position is mapped from the ComboBox's local
@@ -153,6 +147,15 @@ ComboBox {
         contentItem: ListView {
             id: popupList
 
+            // A colorSet pinned on the Popup NODE itself is inert: theme
+            // attachment walks parentItem, and the contentItem/background
+            // parent to the popup item (→ Overlay), not the Popup node. Per
+            // the upstream qqc2 ToolTip pattern, pin View on BOTH the
+            // contentItem root (delegates are its visual children) and the
+            // background Rectangle so delegate fills, text colors, and the
+            // popup surface all resolve against the same View set.
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             clip: true
             implicitHeight: contentHeight
             model: root.delegateModel
@@ -165,6 +168,11 @@ ComboBox {
         }
 
         background: Rectangle {
+            // View set pinned here too (see contentItem note): the background
+            // parents to the popup item, so it cannot inherit a set from the
+            // Popup node and must carry its own.
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             color: Kirigami.Theme.backgroundColor
             border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: 1

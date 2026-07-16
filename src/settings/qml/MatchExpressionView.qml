@@ -420,10 +420,6 @@ ColumnLayout {
                         treeCanvas.requestPaint();
                     }
 
-                    function onIsLastChildChanged() {
-                        treeCanvas.requestPaint();
-                    }
-
                     function onHasChildrenRowChanged() {
                         treeCanvas.requestPaint();
                     }

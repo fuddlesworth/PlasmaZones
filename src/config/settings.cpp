@@ -23,6 +23,7 @@
 
 #include <QEvent>
 #include <QGuiApplication>
+#include <QScopedValueRollback>
 #include <QMetaMethod>
 #include <QMetaProperty>
 #include <QPalette>
@@ -768,8 +769,16 @@ void Settings::rebaselineDerivedColorKeys()
     // — without this refresh, isKeyModified() reports a phantom unsaved edit
     // and Discard reverts to the stale pre-switch colors.
     //
-    // Callable ONLY from the ApplicationPaletteChange path (eventFilter).
-    // The other two applySystemColorScheme() call sites must not rebaseline:
+    // Callable ONLY from the ApplicationPaletteChange path (eventFilter) —
+    // and even there only when the useSystemColors toggle is COMMITTED
+    // (!isKeyModified on the useSystem key). If the toggle is a pending
+    // unsaved edit, the toggle and the colors it derived are ONE user edit
+    // and must stay discardable together; rebaselining mid-edit would let
+    // Discard revert the toggle to off while pinning the palette-derived
+    // colors as the new baseline.
+    //
+    // applySystemColorScheme() is not Q_INVOKABLE (no QML caller), so its
+    // call sites are exactly three; the other two must not rebaseline:
     // - setUseSystemColors(true) is a USER edit; the toggle and the colors it
     //   derives must stay discardable together. Rebaselining there would let
     //   Discard revert the toggle to off while pinning the system-derived
@@ -3480,11 +3489,24 @@ void Settings::trackSystemPaletteChanges()
 bool Settings::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == qGuiApp && event->type() == QEvent::ApplicationPaletteChange && useSystemColors()) {
+        // Derived values, not user edits. TWO mechanisms keep a runtime theme
+        // switch from reading as unsaved changes:
+        //  1. m_applyingSystemPalette (RAII, restored even if a setter throws)
+        //     is up for the whole synchronous re-derive, so
+        //     SettingsController::onSettingsPropertyChanged() — wired to every
+        //     color NOTIFY — sees isApplyingSystemPalette() and skips
+        //     setNeedsSave(true), keeping the global footer quiet.
+        //  2. rebaselineDerivedColorKeys() refreshes the committed baseline so
+        //     value-based isKeyModified() checks stay false afterwards. See
+        //     that function for why ONLY this path rebaselines — and it is
+        //     further gated here: when the useSystemColors toggle itself is a
+        //     PENDING unsaved edit, the toggle and the colors it derived must
+        //     stay discardable together, so the baseline is left alone.
+        QScopedValueRollback<bool> applying(m_applyingSystemPalette, true);
         applySystemColorScheme();
-        // Derived values, not user edits — keep the dirty-tracking baseline in
-        // step so the theme switch does not read as unsaved changes. See
-        // rebaselineDerivedColorKeys() for why ONLY this path rebaselines.
-        rebaselineDerivedColorKeys();
+        if (!isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey())) {
+            rebaselineDerivedColorKeys();
+        }
     }
     return ISettings::eventFilter(watched, event);
 }

@@ -72,7 +72,10 @@ tertiary accent — which is exactly why the misuses above render in
 
 ¹ Counting rule: the OK count covers the app trees only. phosphor-control's
 OK rows (see [phosphor libs](color-map/phosphor-libs.md)) are not included
-in the 287.
+in the 287. The "HACK — other" bucket (16), by contrast, does include
+phosphor-control's 7 fabricated-color expressions (`ThemeHelpers.js` and its
+SidebarRow / SidebarBackButton / UnsavedChangesFooter call sites), all of
+which were resolved on the `fix/theme-color-pipeline` branch.
 
 ## Ranked fix plan (leverage first)
 
@@ -106,7 +109,7 @@ in the 287.
 - `EasingPreview.qml:335` / `SpringPreview.qml:106` — correct `View` colorSet
 - `ShaderBrowserCard.qml:103`, `ParameterRow.qml:343` — correct `focusColor`
 - `DimensionTooltip.qml:56` — correct `Tooltip` colorSet
-- `UnsavedChangesFooter.qml:45` — correct `Window` pin with `inherit: false`
+- `UnsavedChangesFooter.qml:44-45` — correct `Window` pin with `inherit: false`
 - `ParameterSection.qml:184` — the one correct `hoverColor`
 
 ## Post-fix findings (discovered after the QML pass)

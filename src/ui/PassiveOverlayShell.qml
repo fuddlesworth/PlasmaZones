@@ -138,7 +138,7 @@ Window {
         property var zones: []
         property color backgroundColor: Kirigami.Theme.backgroundColor
         property color textColor: Kirigami.Theme.textColor
-        property color highlightColor: Kirigami.Theme.highlightColor
+        property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
         // MUST be declared: the daemon pushes these with setProperty
         // (osd.cpp pushLayoutOsdContent) and the layoutOsdComp bindings
         // below forward them — an undeclared name silently becomes a
@@ -429,18 +429,16 @@ Window {
         property color textColor: Kirigami.Theme.textColor
         property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
         property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
-        property color borderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+        property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
         property real activeOpacity: 0.5
         property real inactiveOpacity: 0.3
-        property int borderWidth: Kirigami.Units.smallSpacing
-        property int borderRadius: Kirigami.Units.gridUnit
         property string fontFamily: ""
         property real fontSizeScale: 1
         property int fontWeight: Font.Bold
         property bool fontItalic: false
         property bool fontUnderline: false
         property bool fontStrikeout: false
-        property color labelFontColor: Kirigami.Theme.textColor
+        // No labelFontColor here: picker previews deliberately don't wire label color, consistent with the selector and OSD slots.
         // OSD-style content lifecycle gate. C++ toggles false→true around
         // each show so LayoutPickerContent is re-instantiated.
         property bool loaded: false
@@ -499,13 +497,6 @@ Window {
                 if (layoutPickerLoader.item) {
                     layoutPickerLoader.item.layoutSelected.connect(root.layoutPickerSelected);
                     layoutPickerLoader.item.dismissRequested.connect(root.layoutPickerDismissRequested);
-                    // Seed _shortcutsActive so the LayoutPickerContent's
-                    // backdrop dismiss + selection bindings are live (the
-                    // content uses this to gate side-effects). The QML
-                    // Shortcuts inside LayoutPickerContent stay defined
-                    // but never fire (shell is kbd-None) — global accels
-                    // drive the picker instead.
-                    layoutPickerLoader.item._shortcutsActive = true;
                 }
             }
         }

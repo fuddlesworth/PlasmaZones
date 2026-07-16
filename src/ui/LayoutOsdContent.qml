@@ -226,7 +226,7 @@ Item {
             anchors.top: previewContainer.bottom
             anchors.topMargin: Kirigami.Units.gridUnit
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
+            // Vertical padding budget lives in the container height sum (3 gu total): 1.5 gu top, 1.0 gu gap above this row, 0.5 gu below it.
             spacing: Kirigami.Units.smallSpacing
 
             // Category badge (layout type) — hidden when disabled

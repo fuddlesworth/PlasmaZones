@@ -167,10 +167,6 @@ Item {
     Popup {
         id: popup
 
-        // On the Popup node (not just its background) so the contentItem —
-        // DisplayMap, the Reset button — resolves the View set too.
-        Kirigami.Theme.colorSet: Kirigami.Theme.View
-        Kirigami.Theme.inherit: false
         y: pill.height + Kirigami.Units.smallSpacing
         padding: Kirigami.Units.largeSpacing
         modal: false
@@ -178,6 +174,15 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
         contentItem: ColumnLayout {
+            // A colorSet pinned on the Popup node itself is inert: the theme
+            // attachment resolves through the *item* parent chain, and both
+            // contentItem and background reparent to the popup item (under
+            // Overlay), never to the Popup object. So — matching upstream
+            // qqc2 ToolTip.qml — the View set is pinned here and on the
+            // background Rectangle so DisplayMap, the Reset button, and the
+            // frame all resolve content-surface colours.
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             spacing: Kirigami.Units.smallSpacing
 
             DisplayMap {
@@ -203,6 +208,11 @@ Item {
         }
 
         background: Rectangle {
+            // Same pin as the contentItem root (see comment there): the
+            // background parents to the popup item, not the Popup object, so
+            // it needs its own View pin to escape the Overlay's palette.
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             radius: Kirigami.Units.smallSpacing * 1.5
             color: Kirigami.Theme.backgroundColor
             border.width: 1

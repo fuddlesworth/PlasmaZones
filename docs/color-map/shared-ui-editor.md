@@ -20,6 +20,9 @@ Line numbers as of 2026-07-16.
 > ruleset in the parent map, `../kirigami-color-map.md`). This banner
 > supersedes the affected table cells and they have deliberately not
 > been rewritten one by one.
+> Additionally, `src/ui/ZoneSelector.qml` and `src/ui/LayoutPreview.qml`
+> were DELETED on this branch (runtime-dead: nothing instantiated them),
+> so their rows below are historical.
 
 Verdict tokens:
 - **OK** — correct KDE semantic use.

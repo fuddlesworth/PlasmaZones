@@ -132,10 +132,28 @@ Item {
         width: field.width
         padding: Kirigami.Units.smallSpacing
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        Kirigami.Theme.colorSet: Kirigami.Theme.View
-        Kirigami.Theme.inherit: false
+
+        // The View colorSet is pinned on the contentItem and background
+        // individually, NOT on the Popup node: Kirigami's theme attachment
+        // resolves through parentItem(), and a QQuickPopup's background /
+        // contentItem parent to the internal popup item (→ Overlay.overlay),
+        // so a pin on the Popup node never reaches them. Upstream
+        // qqc2-desktop-style's ToolTip.qml uses this same per-item pattern.
+        // The explicit background (mirroring the LayoutComboBox popup frame)
+        // exists so the pin has a themed Rectangle to land on — the style's
+        // default background can't carry attached properties from here.
+        background: Rectangle {
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
+            color: Kirigami.Theme.backgroundColor
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+            border.width: 1
+            radius: Kirigami.Units.smallSpacing
+        }
 
         contentItem: ColumnLayout {
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             spacing: Kirigami.Units.smallSpacing
 
             ListView {

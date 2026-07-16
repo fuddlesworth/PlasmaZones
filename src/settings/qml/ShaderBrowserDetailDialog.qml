@@ -185,7 +185,11 @@ Kirigami.Dialog {
                     icon.name: "document-open"
                     Accessible.name: text
                     onClicked: {
-                        shaderPresetLoadDialog.currentFolder = Qt.resolvedUrl("file://" + root.previewController.shaderPresetDirectory());
+                        // `encodeURI` percent-encodes spaces and unicode while
+                        // preserving path separators, which a raw `"file://" + path`
+                        // concat would silently break on (e.g. a home directory
+                        // containing spaces or non-ASCII characters).
+                        shaderPresetLoadDialog.currentFolder = Qt.resolvedUrl("file://" + encodeURI(root.previewController.shaderPresetDirectory()));
                         shaderPresetLoadDialog.open();
                     }
                 }
@@ -195,7 +199,8 @@ Kirigami.Dialog {
                     icon.name: "document-save"
                     Accessible.name: text
                     onClicked: {
-                        shaderPresetSaveDialog.currentFolder = Qt.resolvedUrl("file://" + root.previewController.shaderPresetDirectory());
+                        // Same encodeURI rationale as the Load button above.
+                        shaderPresetSaveDialog.currentFolder = Qt.resolvedUrl("file://" + encodeURI(root.previewController.shaderPresetDirectory()));
                         shaderPresetSaveDialog.open();
                     }
                 }

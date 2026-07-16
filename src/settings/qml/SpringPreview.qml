@@ -227,7 +227,11 @@ Item {
                     }
                     // Axis labels
                     ctx.fillStyle = Kirigami.Theme.disabledTextColor.toString();
-                    ctx.font = Kirigami.Theme.smallFont.pointSize + "pt sans-serif";
+                    // Themes may define fonts in pixels only, in which case
+                    // pointSize is -1 and "-1pt sans-serif" would be rejected,
+                    // silently keeping the canvas's previous font. Fall back
+                    // to a pixel spec built from pixelSize in that case.
+                    ctx.font = Kirigami.Theme.smallFont.pointSize > 0 ? Kirigami.Theme.smallFont.pointSize + "pt sans-serif" : Kirigami.Theme.smallFont.pixelSize + "px sans-serif";
                     ctx.textAlign = "right";
                     ctx.fillText("1", pad - 4, targetPy + 4);
                     ctx.fillText("0", pad - 4, yToPixel(0, pad, gh, yOffset, yRange) + 4);

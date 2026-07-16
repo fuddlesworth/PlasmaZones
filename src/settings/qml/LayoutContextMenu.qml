@@ -52,38 +52,49 @@ Menu {
     // header comment warns about. The bindings still react to
     // `settingsController.screensChanged` so multi-monitor
     // hotplug is handled.
-    // Named-key object form so the Repeater delegate below can refer
+    // Named-key object form so the Instantiator delegate below can refer
     // to `modelData.key` / `modelData.label` / `modelData.index`
     // instead of positional `modelData[0]` / `[1]` / `[2]` — a future
     // edit that adds a field to one entry won't silently shift index
     // meanings on the others.
-    readonly property var _aspectRatioOptions: [
-        {
-            "key": "any",
-            "label": layoutContextMenu.aspectRatioLabels["any"],
-            "index": 0
-        },
-        {
-            "key": "standard",
-            "label": layoutContextMenu.aspectRatioLabels["standard"],
-            "index": 1
-        },
-        {
-            "key": "ultrawide",
-            "label": layoutContextMenu.aspectRatioLabels["ultrawide"],
-            "index": 2
-        },
-        {
-            "key": "super-ultrawide",
-            "label": layoutContextMenu.aspectRatioLabels["super-ultrawide"],
-            "index": 3
-        },
-        {
-            "key": "portrait",
-            "label": layoutContextMenu.aspectRatioLabels["portrait"],
-            "index": 4
-        }
-    ]
+    // The `aspectRatioLabels` read is guarded: during creation this
+    // binding can evaluate before Main.qml assigns the required
+    // property, and a plain member read throws a TypeError on that
+    // first pass (same failure mode documented on
+    // KeyboardShortcutOverlay.qml's shortcutsModel and
+    // EasingSettings.qml's appSettings resolution). The empty-object
+    // fallback keeps the model sane until the property lands and the
+    // binding re-runs.
+    readonly property var _aspectRatioOptions: {
+        const labels = layoutContextMenu.aspectRatioLabels || {};
+        return [
+            {
+                "key": "any",
+                "label": labels["any"],
+                "index": 0
+            },
+            {
+                "key": "standard",
+                "label": labels["standard"],
+                "index": 1
+            },
+            {
+                "key": "ultrawide",
+                "label": labels["ultrawide"],
+                "index": 2
+            },
+            {
+                "key": "super-ultrawide",
+                "label": labels["super-ultrawide"],
+                "index": 3
+            },
+            {
+                "key": "portrait",
+                "label": labels["portrait"],
+                "index": 4
+            }
+        ];
+    }
     // Memoise the screen list result. The getter still re-runs on
     // `settingsController.screensChanged`, but doesn't re-run on
     // each popup() / every `_screenItemsModel.length` read.
@@ -95,8 +106,12 @@ Menu {
     // seed. Previously Component.onCompleted seeded once and missed
     // any value that arrived between settingsController construction
     // and Main.qml mount.
+    // The `settingsController` deref is guarded for the same
+    // creation-time reason as `_aspectRatioOptions` above: the binding
+    // can run before Main.qml assigns the required property (precedent:
+    // KeyboardShortcutOverlay.qml, EasingSettings.qml).
     readonly property var _cachedScreens: {
-        const s = settingsController.screens || [];
+        const s = settingsController ? (settingsController.screens || []) : [];
         return s.length > 1 ? s : [];
     }
     readonly property var _screenItemsModel: _cachedScreens

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "ColorUtils.js" as ColorUtils
 import QtQuick
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
@@ -395,17 +396,17 @@ Item {
         property color customHighlightColor: {
             var _ = _highlightColorTracker; // Dependency on tracker
             var _zone = zoneData; // Dependency on zoneData
-            return _zone && _zone.highlightColor ? parseColor(_zone.highlightColor) : Qt.transparent;
+            return _zone && _zone.highlightColor ? ColorUtils.parseArgbHex(_zone.highlightColor) : Qt.transparent;
         }
         property color customInactiveColor: {
             var _ = _inactiveColorTracker; // Dependency on tracker
             var _zone = zoneData; // Dependency on zoneData
-            return _zone && _zone.inactiveColor ? parseColor(_zone.inactiveColor) : Qt.transparent;
+            return _zone && _zone.inactiveColor ? ColorUtils.parseArgbHex(_zone.inactiveColor) : Qt.transparent;
         }
         property color customBorderColor: {
             var _ = _borderColorTracker; // Dependency on tracker
             var _zone = zoneData; // Dependency on zoneData
-            return _zone && _zone.borderColor ? parseColor(_zone.borderColor) : Qt.transparent;
+            return _zone && _zone.borderColor ? ColorUtils.parseArgbHex(_zone.borderColor) : Qt.transparent;
         }
         property real customActiveOpacity: {
             var _ = _activeOpacityTracker; // Dependency on tracker
@@ -426,37 +427,6 @@ Item {
             var _ = _borderRadiusTracker; // Dependency on tracker
             var _zone = zoneData; // Dependency on zoneData
             return _zone && _zone.borderRadius !== undefined ? _zone.borderRadius : (Kirigami.Units.smallSpacing * 1.5);
-        }
-
-        // Helper function to parse color (handles both hex strings and QColor objects)
-        // Handles ARGB hex format from QColor::HexArgb
-        function parseColor(colorValue) {
-            if (!colorValue)
-                return Qt.transparent;
-
-            if (typeof colorValue === 'string') {
-                // Check if it's ARGB format (starts with # and has 8 or 4 hex chars)
-                var hex = colorValue.replace('#', '');
-                if (hex.length === 8) {
-                    // Parse ARGB: AARRGGBB
-                    var a = parseInt(hex.substring(0, 2), 16) / 255;
-                    var r = parseInt(hex.substring(2, 4), 16) / 255;
-                    var g = parseInt(hex.substring(4, 6), 16) / 255;
-                    var b = parseInt(hex.substring(6, 8), 16) / 255;
-                    return Qt.rgba(r, g, b, a);
-                } else if (hex.length === 4) {
-                    // Parse ARGB shorthand: ARGB
-                    var a = parseInt(hex.substring(0, 1), 16) / 15;
-                    var r = parseInt(hex.substring(1, 2), 16) / 15;
-                    var g = parseInt(hex.substring(2, 3), 16) / 15;
-                    var b = parseInt(hex.substring(3, 4), 16) / 15;
-                    return Qt.rgba(r, g, b, a);
-                } else {
-                    // Try Qt.color() as fallback (might be RGB format)
-                    return Qt.color(colorValue);
-                }
-            }
-            return colorValue;
         }
 
         anchors.fill: parent

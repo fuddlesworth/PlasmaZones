@@ -73,7 +73,7 @@ Item {
     // file's Behavior animations (see usages below). The profile registry
     // supplies the curve shape; these supply the theme-scaled timing so
     // Plasma's system animation-speed preference still applies. Consumers
-    // (`AlgorithmPreview.qml`, `GeneralPage.qml`) override per-instance.
+    // (`LayoutPickerContent.qml`, `ZoneSelectorContent.qml`) override per-instance.
     property int animationDuration: Kirigami.Units.longDuration
     property int shortAnimationDuration: Kirigami.Units.shortDuration
     // Label

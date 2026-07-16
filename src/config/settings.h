@@ -1311,13 +1311,29 @@ public:
 
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
-    Q_INVOKABLE void applySystemColorScheme();
+    /// Derives the four zone-color keys from the current application palette.
+    /// Deliberately NOT Q_INVOKABLE: there is no QML caller, and an ad-hoc
+    /// QML invocation would write the derived keys without the baseline /
+    /// dirty-tracking bookkeeping its three C++ call sites provide (see the
+    /// ownership rule at rebaselineDerivedColorKeys()).
+    void applySystemColorScheme();
 
     /// Re-derives the system-scheme zone colors when the application palette
     /// changes at runtime (theme switch). Without this, every long-running
     /// process (daemon, settings app) keeps the palette SNAPSHOT taken at
     /// load() and serves stale zone colors until restart.
     bool eventFilter(QObject* watched, QEvent* event) override;
+
+    /// True while eventFilter() is re-deriving the zone colors from a runtime
+    /// ApplicationPaletteChange. The re-derive is palette-driven, not a user
+    /// edit — SettingsController::onSettingsPropertyChanged() checks this to
+    /// avoid flipping the global unsaved-changes footer on a theme switch
+    /// (the baseline rebaseline alone keeps isKeyModified() honest, but the
+    /// controller's NOTIFY-driven dirty flag fires before any value check).
+    bool isApplyingSystemPalette() const
+    {
+        return m_applyingSystemPalette;
+    }
 
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via
@@ -1480,6 +1496,12 @@ private:
     // end of load() and save(). Backs per-page Discard (revert to baseline)
     // and value-based per-page dirty checks (isKeyModified).
     QHash<QString, QVariantMap> m_baseline;
+
+    // Raised (RAII, via QScopedValueRollback) around eventFilter()'s runtime
+    // palette re-derive; surfaced through isApplyingSystemPalette() so
+    // NOTIFY-driven dirty tracking can tell a palette-driven refresh from a
+    // user edit. Never true outside that synchronous window.
+    bool m_applyingSystemPalette = false;
 
     static QString normalizeUuidString(const QString& uuidStr);
 

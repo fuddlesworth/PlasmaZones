@@ -700,8 +700,8 @@ SettingsFlickable {
                                     spacing: Kirigami.Units.largeSpacing
 
                                     // Preview thumbnail (left): fixed 16:9 box using the
-                                    // shared ZonePreview, drawn as an inset well
-                                    // (backgroundColor on the card's altBg body) with an
+                                    // shared ZonePreview, drawn as an inset well (thumbnail
+                                    // altBg on presetCard bg on SettingsCard altBg) with an
                                     // accent border that thickens when active. Zone
                                     // numbers off — the split shape is what matters here.
                                     Rectangle {
@@ -709,7 +709,7 @@ SettingsFlickable {
                                         Layout.preferredWidth: Kirigami.Units.gridUnit * 3 * 16 / 9
                                         Layout.alignment: Qt.AlignVCenter
                                         radius: Kirigami.Units.smallSpacing
-                                        color: Kirigami.Theme.backgroundColor
+                                        color: Kirigami.Theme.alternateBackgroundColor
                                         border.width: presetCard.active ? 3 : 1
                                         border.color: presetCard.active ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 

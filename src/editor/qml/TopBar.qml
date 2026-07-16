@@ -158,7 +158,7 @@ ToolBar {
             // Preview mode badge
             Rectangle {
                 visible: topBar.previewMode
-                color: Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, 0.15)
+                color: Theme.withAlpha(Kirigami.Theme.neutralTextColor, 0.15)
                 radius: height / 2
                 implicitWidth: previewLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
                 implicitHeight: previewLabel.implicitHeight + Kirigami.Units.smallSpacing

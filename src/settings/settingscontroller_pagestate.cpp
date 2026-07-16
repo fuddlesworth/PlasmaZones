@@ -196,7 +196,12 @@ void SettingsController::setActivePage(const QString& page)
 
 void SettingsController::onSettingsPropertyChanged()
 {
-    if (!m_saving && !m_loading) {
+    // isApplyingSystemPalette(): a runtime ApplicationPaletteChange re-derive
+    // (Settings::eventFilter) fires the zone-color NOTIFYs, but it is
+    // palette-driven, not a user edit — Settings rebaselines the derived keys
+    // itself, so flipping needsSave here would show a phantom unsaved-changes
+    // footer on every theme switch.
+    if (!m_saving && !m_loading && !m_settings.isApplyingSystemPalette()) {
         setNeedsSave(true);
     }
 }

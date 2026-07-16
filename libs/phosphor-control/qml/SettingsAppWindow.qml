@@ -368,7 +368,17 @@ Kirigami.ApplicationWindow {
                 Kirigami.Theme.inherit: false
 
                 Layout.fillWidth: true
-                implicitHeight: headerExtrasRow.implicitHeight + Kirigami.Units.largeSpacing * 2
+                // Collapse to zero height when both slots are filled but
+                // their items are currently hidden (e.g. a consumer binds
+                // the slot content's `visible` to some mode). Reading the
+                // loaded items' `visible` here returns their EFFECTIVE
+                // visibility, which is safe in this direction: the band
+                // itself stays `visible` (the gate below checks item
+                // presence, not visibility), so the children's effective
+                // visibility tracks their own bindings and cannot latch —
+                // unlike routing the *visible* gate through a child, which
+                // would (see the comment on `visible` below).
+                implicitHeight: (headerExtrasLoader.item !== null && headerExtrasLoader.item.visible) || (headerTrailingLoader.item !== null && headerTrailingLoader.item.visible) ? headerExtrasRow.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
                 // Gate on the Loaders directly, NOT on headerExtrasRow.visible:
                 // reading a child's `visible` returns its EFFECTIVE visibility,
                 // so routing the condition through the row would latch the band
@@ -428,15 +438,17 @@ Kirigami.ApplicationWindow {
                 spacing: 0
 
                 Sidebar {
-                    // `sidebarItem` (not `sidebar`) — the root has a
-                    // `readonly property QtObject sidebar` façade above,
-                    // and JS scope chain would resolve a bare `sidebar`
-                    // identifier inside the façade's methods to the root
-                    // property (returning the façade itself) before
-                    // resolving it as a QML id. Naming the underlying
-                    // Sidebar item `sidebarItem` removes the collision so
-                    // the façade's `sidebarItem.drillInto(...)` etc. land
-                    // on the actual Sidebar.
+                    // `sidebarItem` (not `sidebar`) — the root exposes
+                    // this item through `property alias sidebar:
+                    // sidebarItem` (see lines ~44-50; the typed QtObject
+                    // façade attempted in audit pass 45 was reverted
+                    // because it broke grouped-property assignment).
+                    // The alias name and the id share the root's name
+                    // scope, so the id cannot also be `sidebar`: the
+                    // alias would then read `sidebar: sidebar`, a
+                    // self-referential declaration QML rejects. Naming
+                    // the underlying item `sidebarItem` keeps the alias
+                    // target unambiguous.
                     id: sidebarItem
 
                     // Single intermediate property drives all three Layout

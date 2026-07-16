@@ -30,7 +30,7 @@ Item {
     property bool fontStrikeout: false
     property real activeOpacity: 0.5 // Match Settings default
     property real inactiveOpacity: 0.3 // Match Settings default
-    property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
+    property int borderWidth: Kirigami.Units.smallSpacing
     property int borderRadius: Kirigami.Units.gridUnit
 
     signal clicked

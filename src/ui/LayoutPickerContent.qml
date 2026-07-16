@@ -7,13 +7,11 @@ import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
 /**
- * Layout picker content — Item-rooted body for use inside the standalone
- * LayoutPickerOverlay Window. The picker uses CenteredModal layer-shell
- * role (exclusive keyboard, distinct anchors), so it can't share a
- * wl_surface with the OSDs in NotificationOverlay; the extraction is
- * still worthwhile for code-shape consistency with the OSD content
- * components and to keep future "lazy-create on shortcut" refactors
- * clean.
+ * Layout picker content — Item-rooted body hosted in PassiveOverlayShell's
+ * layoutPickerSlot. The slot's Loader re-instantiates this component on
+ * every show (the `loaded` toggle), and the slot forwards all data
+ * properties written by C++ (snapassist.cpp showLayoutPicker) onto the
+ * instance via bindings.
  *
  * Phase 5: surface lifecycle + show/hide animations are driven entirely
  * by PhosphorAnimationLayer::SurfaceAnimator (registered for
@@ -25,21 +23,18 @@ import org.plasmazones.common as QFZCommon
  *
  * This Item only owns:
  *   - Data properties written by C++ (layouts, activeLayoutId, locked, …)
- *   - Keyboard navigation state (selectedIndex + Shortcuts)
+ *   - Keyboard navigation state (selectedIndex; moveSelection /
+ *     confirmSelection are invoked from C++, see below)
  *   - The visible content tree (backdrop + popup frame + grid of cards)
  *   - The `_dismissed` latch + `dismissRequested` signal that C++ wires
  *     to Surface::hide() (via the host Window's signal forwarding)
  */
 Item {
-    // Keyboard handling. All Shortcuts gate on root._shortcutsActive — see
-    // the property doc for why this matters under keepMappedOnHide=true.
-    // Escape originally relied on a C++ QObject::eventFilter on the picker
-    // QQuickWindow. That works reliably for SnapAssist (which destroys on
-    // hide) but on the keep-mapped picker the wl_surface lifecycle + the
-    // Qt.WindowTransparentForInput flip during hide leaves the eventFilter
-    // path inconsistent — KeyPress events don't always reach the QWindow
-    // on the warm path. SnapAssistOverlay uses a QML Shortcut and that
-    // path is robust against the same lifecycle, so use it here too.
+    // Keyboard handling. The shell surface is kbd-None, so QML Shortcuts
+    // can never fire here — arrow / Return navigation arrives from C++
+    // instead: snapassist.cpp's pickerMoveSelection / pickerConfirmSelection
+    // call moveSelection() / confirmSelection() on the host slot via
+    // QMetaObject::invokeMethod, driven by KGlobalAccel registrations.
     // Escape is dismissed via the daemon's KGlobalAccel cancel-overlay
     // shortcut — KWin's wlr-layer-shell does not deliver keyboard events
     // to this layer surface in our Qt/KWin combination, so a QML
@@ -79,20 +74,14 @@ Item {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
-    /// Logically-shown gate for keyboard Shortcuts. Written by C++ alongside
-    /// `Surface::show()` / `Surface::hide()` so a logically-hidden picker
-    /// (still Qt-visible under keepMappedOnHide=true) doesn't silently
-    /// respond to stray accelerator deliveries. See LayoutPickerOverlay.qml's
-    /// alias forwarding and snapassist.cpp's matching writes.
-    property bool _shortcutsActive: false
     /// Idempotency latch for `dismissRequested`. Multiple rapid backdrop
     /// clicks during the keepMappedOnHide=true fade-out window can fire
     /// `dismissRequested` more than once before `Qt.WindowTransparentForInput`
     /// lands at the QWindow level. Without this, C++ runs Surface::hide()
     /// on an already-Hidden surface and the library logs a qCWarning per
-    /// spurious click. Reset by C++ explicitly on every show (QML's
-    /// `on<Name>Changed` handler form does not work for underscore-
-    /// prefixed properties).
+    /// spurious click. No writer resets it: the host slot's Loader
+    /// re-instantiates this component on every show, so the latch starts
+    /// false each cycle.
     ///
     /// Sibling latch — OsdDismissable.qml: same at-most-once-per-show
     /// idempotency, but driven by a Timer (auto-dismiss) and reset on
@@ -175,42 +164,6 @@ Item {
         readonly property int indicatorSpacing: Kirigami.Units.gridUnit
         // Card preview
         readonly property int previewWidth: Kirigami.Units.gridUnit * 10
-    }
-
-    Shortcut {
-        sequence: "Return"
-        enabled: root._shortcutsActive
-        onActivated: confirmSelection()
-    }
-
-    Shortcut {
-        sequence: "Enter"
-        enabled: root._shortcutsActive
-        onActivated: confirmSelection()
-    }
-
-    Shortcut {
-        sequence: "Left"
-        enabled: root._shortcutsActive
-        onActivated: moveSelection(-1, 0)
-    }
-
-    Shortcut {
-        sequence: "Right"
-        enabled: root._shortcutsActive
-        onActivated: moveSelection(1, 0)
-    }
-
-    Shortcut {
-        sequence: "Up"
-        enabled: root._shortcutsActive
-        onActivated: moveSelection(0, -1)
-    }
-
-    Shortcut {
-        sequence: "Down"
-        enabled: root._shortcutsActive
-        onActivated: moveSelection(0, 1)
     }
 
     // Backdrop — click outside to dismiss. _requestDismiss collapses

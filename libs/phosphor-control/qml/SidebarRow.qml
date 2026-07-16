@@ -280,6 +280,8 @@ QQC2.ItemDelegate {
             rotation: rowItem._isCollapsibleHeader && rowItem._isExpanded ? 90 : 0
 
             Behavior on rotation {
+                enabled: delegateBackground._behaviorReady
+
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                     durationOverride: Kirigami.Units.shortDuration * 1.5

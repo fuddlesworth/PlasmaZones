@@ -16,8 +16,10 @@ import org.kde.kirigami as Kirigami
  * Replaces the copy-pasted trio (`highlightColor@0.7` active fill,
  * `textColor@0.4` inactive fill, `textColor@0.9` border) that was
  * duplicated across the compositor overlays and the settings previews.
- * Inactive fills and borders derive from background-family roles, not
- * textColor, so the wallpaper-generated scheme reaches them.
+ * Inactive fills stay in the background-family roles so the
+ * wallpaper-generated scheme reaches them; the naked border starts from
+ * the same family but blends toward textColor at 0.5 for contrast over
+ * arbitrary desktop content.
  *
  * Two flavors are provided. The split is panel-hosted vs naked, NOT
  * settings vs overlay process:

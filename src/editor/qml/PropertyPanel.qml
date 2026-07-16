@@ -439,7 +439,7 @@ Rectangle {
                     }
 
                     background: Rectangle {
-                        color: zoneNameField.hasError ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.15) : zoneNameField.palette.base
+                        color: zoneNameField.hasError ? Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.15) : zoneNameField.palette.base
                         radius: Kirigami.Units.smallSpacing
                         border.color: zoneNameField.hasError ? Kirigami.Theme.negativeTextColor : zoneNameField.palette.shadow
                         border.width: zoneNameField.hasError ? 2 : 1
@@ -823,7 +823,7 @@ Rectangle {
                         highlighted: zoneOverlayModeCombo.highlightedIndex === index
 
                         background: Rectangle {
-                            color: parent.highlighted ? Kirigami.Theme.highlightColor : parent.isCurrentSelection ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : Kirigami.Theme.backgroundColor
+                            color: parent.highlighted ? Kirigami.Theme.highlightColor : parent.isCurrentSelection ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : Kirigami.Theme.backgroundColor
                         }
 
                         contentItem: Label {

@@ -31,10 +31,7 @@ Rectangle {
     implicitHeight: Kirigami.Units.gridUnit * heightScale
     radius: Kirigami.Units.smallSpacing / 2
     color: {
-        if (root.isDynamic)
-            return Qt.alpha(Kirigami.Theme.highlightColor, backgroundOpacity);
-
-        if (root.effectiveAutoAssign)
+        if (root.isDynamic || root.effectiveAutoAssign)
             return Qt.alpha(Kirigami.Theme.highlightColor, backgroundOpacity);
 
         return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, backgroundOpacity);

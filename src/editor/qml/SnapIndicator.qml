@@ -22,6 +22,8 @@ Item {
     // Lightened highlight variants shared by the snap line bodies and dash gradients
     readonly property color brightHighlight: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
     readonly property color mediumHighlight: Qt.lighter(Kirigami.Theme.highlightColor, 1.3)
+    // Near-background frame-contrast halo that separates the lines from busy content
+    readonly property color haloColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
     // Clear snap lines
     function clearSnapLines() {
@@ -96,8 +98,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: -1
                 z: parent.z - 1
-                // Near-background frame-contrast halo that separates the line from busy content
-                color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                color: snapIndicator.haloColor
                 opacity: 0.8
             }
 
@@ -187,8 +188,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: -1
                 z: parent.z - 1
-                // Near-background frame-contrast halo that separates the line from busy content
-                color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                color: snapIndicator.haloColor
                 opacity: 0.8
             }
 

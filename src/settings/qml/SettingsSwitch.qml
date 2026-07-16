@@ -57,10 +57,18 @@ Item {
         color: root.checked ? Kirigami.Theme.highlightColor : Kirigami.Theme.alternateBackgroundColor
         // Hairline on the unchecked track: altBg-on-altBg is invisible when
         // the switch sits on a SettingsCard's alternate-background body. The
-        // checked track is solid highlight and needs no outline, so the
-        // border melts to transparent there.
-        border.width: 1
-        border.color: root.checked ? "transparent" : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+        // checked track is solid highlight and needs no outline — width goes
+        // to 0 (a transparent 1px border would still inset the fill by a
+        // pixel), while the hairline colour stays unconditional so the
+        // border can fade rather than pop when the width animates back.
+        border.width: root.checked ? 0 : 1
+        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+
+        Behavior on border.color {
+            PhosphorMotionAnimation {
+                profile: "widget.tint"
+            }
+        }
 
         // Knob
         Rectangle {

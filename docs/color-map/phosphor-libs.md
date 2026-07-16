@@ -26,6 +26,16 @@ mixed in one component).
 > totals were RESOLVED on this branch. `ThemeHelpers.js` is deleted and
 > its call sites (SidebarRow, SidebarBackButton, UnsavedChangesFooter)
 > now use the real scheme roles.
+>
+> Also superseded by this branch: `SettingsAppWindow.qml` now declares
+> `Kirigami.Theme.colorSet: Kirigami.Theme.Header` on its full-width
+> header band and paints the band's background with
+> `Kirigami.Theme.backgroundColor`. Two claims below are therefore
+> stale. The §2 row calling SettingsAppWindow free of color expressions
+> ("Clean") no longer holds, and §3's statement that the footer pin is
+> the library's only `colorSet` occurrence is no longer true. The
+> footer mount point cited in §3 also moved: `SettingsAppWindow.qml:553`
+> is now around line 588.
 
 ---
 

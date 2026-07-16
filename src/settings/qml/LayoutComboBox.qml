@@ -377,8 +377,6 @@ ComboBox {
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
         padding: 1
-        Kirigami.Theme.colorSet: Kirigami.Theme.View
-        Kirigami.Theme.inherit: false
         onClosed: {
             if (root._rebuildPending) {
                 root._rebuildPending = false;
@@ -386,9 +384,17 @@ ComboBox {
             }
         }
 
+        // The View colorSet is pinned on the contentItem and background
+        // individually, NOT on the Popup node: Kirigami's theme attachment
+        // resolves through parentItem(), and a QQuickPopup's background /
+        // contentItem parent to the internal popup item (→ Overlay.overlay),
+        // so a pin on the Popup node never reaches them. Upstream
+        // qqc2-desktop-style's ToolTip.qml uses this same per-item pattern.
         contentItem: ListView {
             id: popupList
 
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             clip: true
             implicitHeight: contentHeight
             model: root.delegateModel
@@ -401,6 +407,8 @@ ComboBox {
         }
 
         background: Rectangle {
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             color: Kirigami.Theme.backgroundColor
             border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: 1
