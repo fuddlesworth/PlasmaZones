@@ -56,7 +56,7 @@ AbstractButton {
             if (actionButton.useNegativeColor && actionButton.hovered)
                 return Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
 
-            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
+            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.hoverColor, 0.4) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         }
 
         Behavior on border.width {

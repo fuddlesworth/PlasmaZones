@@ -63,11 +63,22 @@ ColumnLayout {
 
     // ── Persistent accent line ──────────────────────────────────────
     Rectangle {
+        id: accentLine
+
+        // Default Rectangle color is white; gate the tint Behavior on
+        // Component.completed so the first paint lands without an
+        // animated white→target flash. Same first-paint gate idiom as
+        // SidebarRow.qml / SidebarBackButton.qml.
+        property bool _behaviorReady: false
+
+        Component.onCompleted: _behaviorReady = true
         Layout.fillWidth: true
         height: 1
         color: root.controller.dirty ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
         Behavior on color {
+            enabled: accentLine._behaviorReady
+
             PhosphorMotionAnimation {
                 profile: "widget.tint"
             }

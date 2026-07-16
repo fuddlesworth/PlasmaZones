@@ -177,6 +177,26 @@ Window {
         sharedContextMenu.popup();
     }
 
+    // Push the theme-derived default zone colors to C++ (so new zones use theme
+    // colors). Highlight/inactive alphas come from ThemeHelpers, the same
+    // definitions PropertyPanel's multi-select previews and single-select
+    // dialogs open on; the border default is an opaque frame-contrast
+    // interpolation with no alpha applied. Called on startup and again on live
+    // theme changes so the C++ defaults track the current theme.
+    function pushDefaultZoneColors() {
+        if (!editorWindow._editorController)
+            return;
+
+        var highlightColor = Theme.withAlpha(Kirigami.Theme.highlightColor, Theme.zoneHighlightAlpha);
+        var inactiveColor = Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneInactiveAlpha);
+        var borderColor = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
+        // Convert QML colors to ARGB hex strings
+        var highlightHex = "#" + Math.round(highlightColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
+        var inactiveHex = "#" + Math.round(inactiveColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
+        var borderHex = "#" + Math.round(borderColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
+        editorWindow._editorController.setDefaultZoneColors(highlightHex, inactiveHex, borderHex);
+    }
+
     // Window flags - fullscreen editor window on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowFullScreenButtonHint
     // Transparent window clear color — the semi-transparent visual effect is
@@ -194,17 +214,7 @@ Window {
         // Initialize selectedZoneId from editorController context property
         if (editorWindow._editorController) {
             editorWindow.selectedZoneId = editorWindow._editorController.selectedZoneId || "";
-            // Set default zone colors from theme (so new zones use theme colors).
-            // The alphas come from ThemeHelpers, the same definitions PropertyPanel's
-            // multi-select previews and single-select dialogs open on.
-            var highlightColor = Theme.withAlpha(Kirigami.Theme.highlightColor, Theme.zoneHighlightAlpha);
-            var inactiveColor = Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneInactiveAlpha);
-            var borderColor = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
-            // Convert QML colors to ARGB hex strings
-            var highlightHex = "#" + Math.round(highlightColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
-            var inactiveHex = "#" + Math.round(inactiveColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
-            var borderHex = "#" + Math.round(borderColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
-            editorWindow._editorController.setDefaultZoneColors(highlightHex, inactiveHex, borderHex);
+            editorWindow.pushDefaultZoneColors();
             // If no layout loaded and not in preview mode, create new
             if (editorWindow._editorController.layoutId === "" && !editorWindow.previewMode)
                 editorWindow._editorController.createNewLayout();
@@ -240,6 +250,16 @@ Window {
 
     ZoneOperations {
         id: zoneOps
+    }
+
+    // Re-push the theme-derived defaults when the theme changes at runtime, so
+    // zones created after a live color-scheme switch pick up the new theme.
+    Connections {
+        function onColorsChanged() {
+            editorWindow.pushDefaultZoneColors();
+        }
+
+        target: Kirigami.Theme
     }
 
     // ═══════════════════════════════════════════════════════════════════

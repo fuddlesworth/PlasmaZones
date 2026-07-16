@@ -140,7 +140,9 @@ Rectangle {
                 width: colDragArea.containsMouse || colDragArea.pressed ? 3 : 1
                 height: parent.height - 4
                 radius: 1
-                color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                // Functional divider (drag affordance), needs more presence
+                // than a decorative separator.
+                color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.Theme.disabledTextColor
 
                 Behavior on width {
                     PhosphorMotionAnimation {
@@ -163,7 +165,7 @@ Rectangle {
                 width: Math.round(Kirigami.Units.gridUnit * 0.75)
                 height: Math.round(Kirigami.Units.gridUnit * 1.5)
                 radius: 4
-                color: colDragArea.containsMouse || colDragArea.pressed ? Qt.alpha(Kirigami.Theme.hoverColor, 0.3) : Kirigami.Theme.alternateBackgroundColor
+                color: colDragArea.containsMouse || colDragArea.pressed ? Qt.alpha(Kirigami.Theme.hoverColor, 0.3) : Kirigami.Theme.backgroundColor
                 border.width: 1
                 border.color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 visible: previewRoot.height > Math.round(Kirigami.Units.gridUnit * 2.5)
@@ -249,7 +251,9 @@ Rectangle {
                 width: parent.width - 4
                 height: rowDragArea.containsMouse || rowDragArea.pressed ? 3 : 1
                 radius: 1
-                color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                // Functional divider (drag affordance), needs more presence
+                // than a decorative separator.
+                color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.Theme.disabledTextColor
 
                 Behavior on height {
                     PhosphorMotionAnimation {
@@ -272,7 +276,7 @@ Rectangle {
                 width: Math.round(Kirigami.Units.gridUnit * 1.5)
                 height: Math.round(Kirigami.Units.gridUnit * 0.75)
                 radius: 4
-                color: rowDragArea.containsMouse || rowDragArea.pressed ? Qt.alpha(Kirigami.Theme.hoverColor, 0.3) : Kirigami.Theme.alternateBackgroundColor
+                color: rowDragArea.containsMouse || rowDragArea.pressed ? Qt.alpha(Kirigami.Theme.hoverColor, 0.3) : Kirigami.Theme.backgroundColor
                 border.width: 1
                 border.color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 visible: previewRoot.width > Math.round(Kirigami.Units.gridUnit * 2.5)

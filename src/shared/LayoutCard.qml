@@ -87,7 +87,7 @@ Item {
             return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.fillSelected);
 
         if (root.isHovered)
-            return Qt.alpha(Kirigami.Theme.hoverColor, 0.2);
+            return Qt.alpha(Kirigami.Theme.hoverColor, style.hoverTint);
 
         return "transparent";
     }
@@ -118,8 +118,7 @@ Item {
         // Unified state-based fill alphas (same palette for both modes)
         readonly property real fillActive: 0.12
         readonly property real fillSelected: 0.1
-        readonly property real fillHovered: 0.06
-        readonly property real fillNeutral: 0.08
+        readonly property real hoverTint: 0.2
         // Unified state-based border alphas
         readonly property real borderActive: 0.5
         readonly property real borderSelected: 0.4
@@ -127,7 +126,6 @@ Item {
         readonly property int borderWide: 2
         readonly property int borderNarrow: 1
         // Label
-        readonly property real labelDimAlpha: 0.6
         readonly property real labelDimOpacity: 0.8
         // Badge ratios
         readonly property real checkmarkFontRatio: 0.6
@@ -354,8 +352,10 @@ Item {
             font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
             font.weight: root.isActive ? Font.Bold : Font.Normal
             color: {
+                // Strip the pipeline colour's carried alpha — a 50%-alpha
+                // highlight must not render a 50%-opacity title.
                 if (root.isActive)
-                    return root.highlightColor;
+                    return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, 1);
 
                 if (root.isSelected || root.isHovered)
                     return root.textColor;

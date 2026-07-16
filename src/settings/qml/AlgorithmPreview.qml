@@ -29,11 +29,12 @@ Item {
     // input, on equal footing with windowCount / splitRatio / masterCount: a
     // change re-runs the C++ preview through the same recalc path.
     property var customParams: ({})
-    // Color customization (passed through to ZonePreview)
-    // windowBorder deliberately mirrors the live overlay's default border color
-    // (preview fidelity) — do not swap it for a separator/chrome role.
-    property color windowColor: Kirigami.Theme.highlightColor
-    property color windowBorder: Kirigami.Theme.textColor
+    // Color customization (passed through to ZonePreview). The defaults track
+    // the shared zone-color pipeline (ZoneColorDefaults resolves the user's
+    // effective zone colors, the same values the daemon pushes into its live
+    // overlays), so previews stay faithful without per-consumer overrides.
+    property color windowColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+    property color windowBorder: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
     // Computed zones, rendered by ZonePreview. Recomputed by recalcTimer, which
     // throttles to ~60fps so several input changes in one frame coalesce into a
     // single C++ call.

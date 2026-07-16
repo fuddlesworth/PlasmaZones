@@ -357,7 +357,7 @@ ColumnLayout {
                                         width: (parent.width - 2) / 3
                                         height: parent.height
                                         radius: 2
-                                        color: Kirigami.Theme.alternateBackgroundColor
+                                        color: Kirigami.Theme.backgroundColor
                                         border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                                         border.width: 1
 

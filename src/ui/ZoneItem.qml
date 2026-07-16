@@ -31,7 +31,7 @@ Item {
     property real activeOpacity: 0.5 // Match Settings default
     property real inactiveOpacity: 0.3 // Match Settings default
     property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
-    property int borderRadius: Kirigami.Units.gridUnit // 8px - use theme spacing
+    property int borderRadius: Kirigami.Units.gridUnit
 
     signal clicked
     signal hovered

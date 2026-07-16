@@ -276,6 +276,7 @@ QQC2.TextField {
         height: parent.height - Kirigami.Units.smallSpacing * 2
         visible: !root.capturing && root.keySequence !== root.defaultKeySequence
         icon.name: "edit-clear"
+        Accessible.name: i18n("Clear shortcut")
         flat: true
         z: 1
         onClicked: {

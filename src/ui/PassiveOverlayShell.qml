@@ -30,10 +30,9 @@ import org.plasmazones.common as QFZCommon
  * (snap-assist, layout picker) historically lived in their own per-show
  * wl_surfaces because layer-shell binds keyboard interactivity at first
  * commit and KWin doesn't re-evaluate it on already-mapped surfaces.
- * The unified-shell migration pulls them into THIS same shell with kbd
- * routed via global accelerators (KGlobalAccel) instead — see the
- * matching `snap-assist` / `layout-picker` slots below (added in
- * subsequent migration steps).
+ * The unified shell hosts them in THIS same shell with kbd routed via
+ * global accelerators (KGlobalAccel) instead — see the matching
+ * `snapAssistSlot` / `layoutPickerSlot` Items below.
  *
  * C++ side accesses each slot Item via the `osdSlotItem` (etc.) alias
  * exposed on this Window root; property writes target the slot Item
@@ -45,10 +44,10 @@ Window {
     // the per-mode Component below) carries `property bool shaderAnchor:
     // true` so vertex shaders bind to the visible OSD body rather than
     // the fullscreen slot Item.
-    // Future slots (subsequent migration steps): zoneSelector,
-    // mainOverlay, snapAssist, layoutPicker. Each is a sibling Item with
-    // its own properties + Loader, animated independently via the
-    // SurfaceAnimator's per-(Surface, target) keying.
+    // Sibling slots below: snapAssistSlot (z=2), layoutPickerSlot (z=2),
+    // zoneSelectorSlot (z=1), mainOverlaySlot (z=0). Each is a sibling
+    // Item with its own properties + Loader, animated independently via
+    // the SurfaceAnimator's per-(Surface, target) keying.
 
     id: root
 
@@ -140,6 +139,13 @@ Window {
         property color backgroundColor: Kirigami.Theme.backgroundColor
         property color textColor: Kirigami.Theme.textColor
         property color highlightColor: Kirigami.Theme.highlightColor
+        // MUST be declared: the daemon pushes these with setProperty
+        // (osd.cpp pushLayoutOsdContent) and the layoutOsdComp bindings
+        // below forward them — an undeclared name silently becomes a
+        // dynamic property no binding observes, so the forwarding would
+        // bind undefined and the OSD preview would never recolor.
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
         property string layoutId: ""
         property string layoutName: ""
         property int category: 0
@@ -315,9 +321,9 @@ Window {
         property var candidates: []
         property int screenWidth: 1920
         property int screenHeight: 1080
-        property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
-        property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
-        property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
+        property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor
         property real activeOpacity: 0.5
         property real inactiveOpacity: 0.3
         property int borderWidth: Kirigami.Units.smallSpacing
@@ -421,8 +427,8 @@ Window {
         property bool locked: false
         property color backgroundColor: Kirigami.Theme.backgroundColor
         property color textColor: Kirigami.Theme.textColor
-        property color highlightColor: Kirigami.Theme.highlightColor
-        property color inactiveColor: Kirigami.Theme.disabledTextColor
+        property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
         property color borderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
         property real activeOpacity: 0.5
         property real inactiveOpacity: 0.3
@@ -770,9 +776,9 @@ Window {
         property var highlightedZoneIds: []
         property bool showNumbers: true
         property var previewZones: []
-        property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
-        property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
-        property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
+        property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor
         property color labelFontColor: Kirigami.Theme.textColor
         property string fontFamily: ""
         property real fontSizeScale: 1

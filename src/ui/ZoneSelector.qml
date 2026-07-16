@@ -29,8 +29,6 @@ Rectangle {
     property color backgroundColor: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, backgroundOpacity)
     readonly property real backgroundOpacity: 0.95
     property color borderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-    // Theme colors with opacity constants
-    readonly property real borderOpacity: 0.6
     property int containerPadding: Kirigami.Units.gridUnit * 1.5 // 12px
     // "hidden", "near", "expanded"
     property real cursorProximity: 1
@@ -62,7 +60,6 @@ Rectangle {
     property int previewWidth: 130
     // State management
     property string selectorState: "hidden"
-    readonly property real textSecondaryOpacity: 0.6
     // 0.0 = at edge, 1.0 = far away
     property int triggerDistance: 100
 

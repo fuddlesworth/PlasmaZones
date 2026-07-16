@@ -25,6 +25,9 @@ Canvas {
     readonly property int previewWidth: Kirigami.Units.gridUnit * 7.5
     // 60px (3:2 aspect ratio)
     readonly property int previewHeight: Kirigami.Units.gridUnit * 5
+    // Theme-derived paint colors, hoisted so theme changes trigger a repaint
+    readonly property color zoneColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6)
+    readonly property color borderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
     implicitWidth: previewWidth
     implicitHeight: previewHeight
@@ -35,10 +38,8 @@ Canvas {
         var ctx = getContext("2d");
         ctx.clearRect(0, 0, width, height);
         // Colors using theme
-        var zoneColor = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6);
-        var borderColor = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
-        ctx.fillStyle = zoneColor;
-        ctx.strokeStyle = borderColor;
+        ctx.fillStyle = root.zoneColor;
+        ctx.strokeStyle = root.borderColor;
         ctx.lineWidth = 1;
         var padding = previewPadding;
         var w = width - padding * 2;
@@ -104,6 +105,9 @@ Canvas {
         }
         ctx.stroke();
     }
+    // Repaint when the theme-derived colors change
+    onZoneColorChanged: requestPaint()
+    onBorderColorChanged: requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
     Component.onCompleted: requestPaint()

@@ -17,22 +17,6 @@ import org.phosphor.animation
  * Renders zones with consistent styling, gaps, numbers, and theming.
  */
 Item {
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Required Properties
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Optional Properties
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Color Properties (with sensible defaults)
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Signals
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Zone Rendering
-    // ═══════════════════════════════════════════════════════════════════════════
-
     id: root
 
     // Settings-embedded preview — resolve theme roles against the View set
@@ -112,8 +96,6 @@ Item {
     signal zoneHovered(int index)
 
     Repeater {
-        // Brighter border when hovered
-
         model: root.zones || []
 
         delegate: Rectangle {
@@ -189,13 +171,16 @@ Item {
             // otherwise the two multiply (colour.a × opacity) and the zone previews
             // far more transparent than the configured opacity — mismatching the live
             // shader overlay (overlay_data.cpp sets FillA = activeOpacity).
+            // The plain border below is the exception: it keeps its colour's
+            // carried alpha deliberately (pipeline border alpha ≈0.78 matches
+            // the live overlay), while the fill and hover border strip.
             color: {
                 var base = isZoneHighlighted ? root.highlightColor : root.inactiveColor;
                 return Qt.rgba(base.r, base.g, base.b, 1.0);
             }
             opacity: isZoneHighlighted ? root.activeOpacity : root.inactiveOpacity
-            // Border - brighter on hover
             border.color: {
+                // Brighter border when hovered
                 if (isZoneHovered)
                     return Qt.alpha(Qt.lighter(root.highlightColor, 1.2), 1.0);
 
@@ -315,11 +300,14 @@ Item {
         Rectangle {
             required property var modelData
             required property int index
+            // Mirror the zone rect's geometry handling above: [0,1]-clamped
+            // relative coordinates, and gap offsets skipped for overlapping
+            // layouts so the dot tracks the zone's actual rendered origin.
             readonly property var relGeo: modelData.relativeGeometry || ({})
-            readonly property real relX: modelData.x !== undefined ? modelData.x : (relGeo.x || 0)
-            readonly property real relY: modelData.y !== undefined ? modelData.y : (relGeo.y || 0)
-            readonly property real leftOffset: relX < 0.01 ? root.edgeGap : root.zonePadding / 2
-            readonly property real topOffset: relY < 0.01 ? root.edgeGap : root.zonePadding / 2
+            readonly property real relX: Math.max(0, Math.min((modelData.x !== undefined ? modelData.x : (relGeo.x || 0)), 1))
+            readonly property real relY: Math.max(0, Math.min((modelData.y !== undefined ? modelData.y : (relGeo.y || 0)), 1))
+            readonly property real leftOffset: root.producesOverlappingZones ? 0 : (relX < 0.01 ? root.edgeGap : root.zonePadding / 2)
+            readonly property real topOffset: root.producesOverlappingZones ? 0 : (relY < 0.01 ? root.edgeGap : root.zonePadding / 2)
 
             visible: index < root.masterCount
             Accessible.ignored: true

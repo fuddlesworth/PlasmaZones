@@ -8,6 +8,25 @@ Verdicts: **OK** (correct token use), **HACK** (fabricated color that should be 
 token), **MISUSE** (semantically wrong token), **BOUNDARY** (Kirigami and Phosphor tokens
 mixed in one component).
 
+> **ERRATUM (read before using the tables below).**
+> These tables are a PRE-REMEDIATION snapshot. Line numbers and every
+> "current state" expression describe the tree BEFORE the fixes on the
+> `fix/theme-color-pipeline` branch landed, so they no longer match the
+> code. In addition, any Replacement cell that prescribes
+> `Kirigami.Theme.separatorColor` is WRONG. That property does not exist
+> in Kirigami and evaluates to `undefined` at runtime. The correct
+> replacement is
+> `Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor,
+> Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)` (see the
+> ruleset in the parent map, `../kirigami-color-map.md`). This banner
+> supersedes the affected table cells and they have deliberately not
+> been rewritten one by one.
+>
+> Status update: the §2 phosphor-control HACK findings and the §4 HACK
+> totals were RESOLVED on this branch. `ThemeHelpers.js` is deleted and
+> its call sites (SidebarRow, SidebarBackButton, UnsavedChangesFooter)
+> now use the real scheme roles.
+
 ---
 
 ## 1. Where Phosphor.Theme gets its tokens from

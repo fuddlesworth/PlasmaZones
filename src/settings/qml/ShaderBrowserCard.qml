@@ -41,6 +41,11 @@ import org.phosphor.animation
 ItemDelegate {
     id: root
 
+    // On the delegate root (not just the background Rectangle) so the fill,
+    // the content chrome, and the labels all resolve the same View set.
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
+
     // ItemDelegate defaults to Qt.NoFocus, which left every shader card out of the
     // tab chain: opening a pack's details was mouse-only, and the focus-border
     // branch below could never fire. AbstractButton gives Space to clicked() for
@@ -87,12 +92,10 @@ ItemDelegate {
     }
 
     background: Rectangle {
-        Kirigami.Theme.colorSet: Kirigami.Theme.View
-        Kirigami.Theme.inherit: false
         radius: Kirigami.Units.smallSpacing
-        // Match the SettingsCard standard: keep the fill subtle and signal
-        // hover through the hover border, with only a faint hover tint on
-        // the fill itself.
+        // Subtle altBg fill; hover signals through the hover border plus a
+        // faint hover tint on the fill itself (this card tints its fill on
+        // hover, unlike SettingsCard's border-only hover).
         color: root.hovered ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.1)) : Kirigami.Theme.alternateBackgroundColor
         border.width: 1
         border.color: {

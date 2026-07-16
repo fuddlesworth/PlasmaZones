@@ -37,20 +37,8 @@ Rectangle {
             return "";
         }
     }
-    readonly property color badgeColor: {
-        switch (aspectRatioClass) {
-        case "standard":
-            return Kirigami.Theme.textColor;
-        case "ultrawide":
-            return Kirigami.Theme.textColor;
-        case "super-ultrawide":
-            return Kirigami.Theme.textColor;
-        case "portrait":
-            return Kirigami.Theme.textColor;
-        default:
-            return Kirigami.Theme.textColor;
-        }
-    }
+    // Per-category hues were deliberately retired — every class uses the plain text color.
+    readonly property color badgeColor: Kirigami.Theme.textColor
 
     // Hide badge for universal layouts — no point labelling "works everywhere"
     visible: aspectRatioClass !== "any" && aspectRatioClass !== ""

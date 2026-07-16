@@ -334,8 +334,9 @@ Kirigami.Dialog {
                     QFZCommon.ZonePreview {
                         anchors.fill: parent
                         anchors.margins: Kirigami.Units.largeSpacing
-                        // Space for the bottom name bar, same reservation as
-                        // LayoutThumbnail makes for its label.
+                        // Space for the bottom name bar (LayoutThumbnail's
+                        // wrapper reserves 3 gridUnits of `_verticalChrome`
+                        // instead; this frame only needs to clear the badge).
                         anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5 + Kirigami.Units.smallSpacing
                         zones: root.selectedTemplate.zones
                         showZoneNumbers: true

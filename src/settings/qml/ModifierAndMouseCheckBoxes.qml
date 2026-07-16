@@ -210,6 +210,10 @@ Item {
     Rectangle {
         id: multiContainer
 
+        // Pin the View set so the container frame's fill and border resolve
+        // against the content-surface palette wherever the control is hosted.
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.inherit: false
         visible: root.allowMultiple
         anchors.fill: parent
         color: Kirigami.Theme.backgroundColor

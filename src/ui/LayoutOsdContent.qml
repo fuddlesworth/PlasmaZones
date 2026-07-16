@@ -134,7 +134,6 @@ Item {
         width: Math.max(previewContainer.width, nameLabelRow.width) + Kirigami.Units.gridUnit * 3
         height: previewContainer.height + nameLabelRow.height + Kirigami.Units.gridUnit * 3
         backgroundColor: root.backgroundColor
-        textColor: root.textColor
         containerRadius: Kirigami.Units.gridUnit * 1.5
 
         // Layout preview
@@ -147,10 +146,12 @@ Item {
             width: Kirigami.Units.gridUnit * 11
             height: Math.round(Kirigami.Units.gridUnit * 11 / root.previewAspectRatio)
 
-            // Background for preview area
+            // Background for preview area. backgroundColor (not the
+            // alternate role) so inactive zone fills stay readable
+            // against the backdrop.
             Rectangle {
                 anchors.fill: parent
-                color: Kirigami.Theme.alternateBackgroundColor
+                color: Kirigami.Theme.backgroundColor
                 radius: Kirigami.Units.smallSpacing
             }
 

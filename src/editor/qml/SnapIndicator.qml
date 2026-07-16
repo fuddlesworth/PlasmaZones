@@ -19,6 +19,9 @@ Item {
     property var horizontalSnapLines: []
     // Array of y positions
     property bool showSnapLines: true
+    // Lightened highlight variants shared by the snap line bodies and dash gradients
+    readonly property color brightHighlight: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+    readonly property color mediumHighlight: Qt.lighter(Kirigami.Theme.highlightColor, 1.3)
 
     // Clear snap lines
     function clearSnapLines() {
@@ -85,7 +88,7 @@ Item {
             y: 0
             width: Kirigami.Units.smallSpacing
             height: snapIndicator.height
-            color: Qt.lighter(Kirigami.Theme.highlightColor, 1.3)
+            color: snapIndicator.mediumHighlight
             opacity: 1
 
             // Subtle shadow for contrast
@@ -93,7 +96,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: -1
                 z: parent.z - 1
-                // Use theme text color for contrast (works in both light and dark themes)
+                // Near-background frame-contrast halo that separates the line from busy content
                 color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 opacity: 0.8
             }
@@ -107,7 +110,7 @@ Item {
 
                     GradientStop {
                         position: 0
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -117,7 +120,7 @@ Item {
 
                     GradientStop {
                         position: 0.2
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -127,7 +130,7 @@ Item {
 
                     GradientStop {
                         position: 0.4
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -137,7 +140,7 @@ Item {
 
                     GradientStop {
                         position: 0.6
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -147,7 +150,7 @@ Item {
 
                     GradientStop {
                         position: 0.8
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -157,7 +160,7 @@ Item {
 
                     GradientStop {
                         position: 1
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
                 }
             }
@@ -176,7 +179,7 @@ Item {
             y: visible ? (modelData * snapIndicator.height - Kirigami.Units.smallSpacing / 2) : 0 // Center 4px line
             width: snapIndicator.width
             height: Kirigami.Units.smallSpacing
-            color: Qt.lighter(Kirigami.Theme.highlightColor, 1.3)
+            color: snapIndicator.mediumHighlight
             opacity: 1
 
             // Subtle shadow for contrast
@@ -184,7 +187,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: -1
                 z: parent.z - 1
-                // Use theme text color for contrast (works in both light and dark themes)
+                // Near-background frame-contrast halo that separates the line from busy content
                 color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 opacity: 0.8
             }
@@ -198,7 +201,7 @@ Item {
 
                     GradientStop {
                         position: 0
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -208,7 +211,7 @@ Item {
 
                     GradientStop {
                         position: 0.2
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -218,7 +221,7 @@ Item {
 
                     GradientStop {
                         position: 0.4
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -228,7 +231,7 @@ Item {
 
                     GradientStop {
                         position: 0.6
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -238,7 +241,7 @@ Item {
 
                     GradientStop {
                         position: 0.8
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -248,7 +251,7 @@ Item {
 
                     GradientStop {
                         position: 1
-                        color: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+                        color: snapIndicator.brightHighlight
                     }
                 }
             }

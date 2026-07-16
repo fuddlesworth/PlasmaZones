@@ -37,6 +37,8 @@ Item {
     property int screenWidth: 1920
     property int screenHeight: 1080
     // Zone appearance defaults — C++ side overwrites from settings.
+    // highlightColor is unused in-file but declared for the
+    // writeColorSettings push contract symmetry (all slots receive the trio).
     property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
     property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
     property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor

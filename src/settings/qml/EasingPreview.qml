@@ -478,9 +478,10 @@ Item {
                 }
             }
 
-            // onPaint samples highlight, text, separator and disabled-text
-            // colours. Every PlatformTheme colour shares the one `colorsChanged`
-            // notify signal, so this one handler covers all of them.
+            // onPaint samples highlight, highlighted-text, text, separator and
+            // disabled-text colours. Every PlatformTheme colour shares the one
+            // `colorsChanged` notify signal, so this one handler covers all of
+            // them.
             Connections {
                 function onColorsChanged() {
                     curveCanvas.requestPaint();

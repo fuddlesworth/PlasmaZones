@@ -683,7 +683,7 @@ SettingsFlickable {
                             // border, not a full-opacity fill.
                             background: Rectangle {
                                 radius: Kirigami.Units.smallSpacing * 1.5
-                                color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (presetCard.hovered ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.1)) : Kirigami.Theme.alternateBackgroundColor)
+                                color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (presetCard.hovered ? Qt.tint(Kirigami.Theme.backgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.1)) : Kirigami.Theme.backgroundColor)
                                 border.width: 1
                                 border.color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : (presetCard.hovered ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast))
                             }
@@ -700,16 +700,16 @@ SettingsFlickable {
                                     spacing: Kirigami.Units.largeSpacing
 
                                     // Preview thumbnail (left): fixed 16:9 box using the
-                                    // shared ZonePreview + the same box treatment as
-                                    // LayoutThumbnail (0.08 fill, accent border that
-                                    // thickens when active). Zone numbers off — the split
-                                    // shape is what matters here.
+                                    // shared ZonePreview, drawn as an inset well
+                                    // (backgroundColor on the card's altBg body) with an
+                                    // accent border that thickens when active. Zone
+                                    // numbers off — the split shape is what matters here.
                                     Rectangle {
                                         Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                                         Layout.preferredWidth: Kirigami.Units.gridUnit * 3 * 16 / 9
                                         Layout.alignment: Qt.AlignVCenter
                                         radius: Kirigami.Units.smallSpacing
-                                        color: Kirigami.Theme.alternateBackgroundColor
+                                        color: Kirigami.Theme.backgroundColor
                                         border.width: presetCard.active ? 3 : 1
                                         border.color: presetCard.active ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 

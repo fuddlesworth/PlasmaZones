@@ -16,6 +16,9 @@ Canvas {
     // Required references
     required property var editorController
 
+    // Hoisted so the binding re-evaluates on theme changes and can trigger a repaint
+    readonly property color gridLineColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+
     anchors.fill: parent
     visible: editorController ? (editorController.gridOverlayVisible && editorController.gridSnappingEnabled) : false
     opacity: 0.25
@@ -26,7 +29,7 @@ Canvas {
 
         var ctx = getContext("2d");
         ctx.clearRect(0, 0, width, height);
-        ctx.strokeStyle = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
+        ctx.strokeStyle = gridOverlay.gridLineColor;
         ctx.lineWidth = 1;
         var intervalX = editorController ? editorController.snapIntervalX : 0.1;
         var intervalY = editorController ? editorController.snapIntervalY : 0.1;
@@ -64,6 +67,8 @@ Canvas {
         }
         ctx.stroke();
     }
+    // Repaint when the theme-derived line color changes
+    onGridLineColorChanged: requestPaint()
     // Repaint when canvas size changes
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()

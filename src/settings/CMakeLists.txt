@@ -309,6 +309,7 @@ qt_add_qml_module(plasmazones-settings
         qml/QuickLayoutSlotsCard.qml
         qml/WindowPickerDialog.qml
         qml/LayoutComboBox.qml
+        qml/LayoutContextMenu.qml
         qml/WideComboBox.qml
         qml/FontPickerDialog.qml
         qml/ColorButton.qml
@@ -438,11 +439,6 @@ qt_add_resources(plasmazones-settings "whatsnew_data"
         ${CMAKE_SOURCE_DIR}/data/whatsnew.json
         ${CMAKE_SOURCE_DIR}/data/schemas/whatsnew.schema.json
 )
-
-# main.cpp carries Q_IMPORT_QML_PLUGIN, whose extern symbol declaration must
-# not be wrapped in the unity build's anonymous namespace (same reason the
-# daemon's main.cpp is excluded — undefined reference at link otherwise).
-set_source_files_properties(main.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 target_link_libraries(plasmazones-settings
     PRIVATE

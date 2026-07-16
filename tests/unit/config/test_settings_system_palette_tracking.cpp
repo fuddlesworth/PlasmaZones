@@ -9,6 +9,7 @@
 #include <PhosphorZones/ZoneDefaults.h>
 
 #include "../helpers/IsolatedConfigGuard.h"
+#include "config/configdefaults.h"
 #include "config/settings.h"
 
 using namespace PlasmaZones;
@@ -52,6 +53,36 @@ private Q_SLOTS:
         QColor expectedInactive(0x22, 0x33, 0x44);
         expectedInactive.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
         QCOMPARE(settings.inactiveColor(), expectedInactive);
+    }
+
+    void paletteChangeDoesNotDirtyColorKeys()
+    {
+        TestHelpers::IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setUseSystemColors(true);
+        // Commit the toggle: save() re-captures the baseline, putting the
+        // settings app in its steady state (system colors on, nothing dirty).
+        settings.save();
+
+        QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
+
+        QPalette pal = qGuiApp->palette();
+        pal.setColor(QPalette::Active, QPalette::Highlight, QColor(0x77, 0x11, 0x99));
+        pal.setColor(QPalette::Active, QPalette::AlternateBase, QColor(0x10, 0x20, 0x30));
+        pal.setColor(QPalette::Active, QPalette::Mid, QColor(0x40, 0x50, 0x60));
+        pal.setColor(QPalette::Active, QPalette::Text, QColor(0xE0, 0xE0, 0xE0));
+        qGuiApp->setPalette(pal);
+
+        QTRY_VERIFY(highlightSpy.count() >= 1);
+
+        // The re-derive is a palette-driven refresh of DERIVED values, not a
+        // user edit — none of the four zone-color keys may count as modified,
+        // or the settings app shows a phantom unsaved-changes footer and
+        // Discard reverts to the stale pre-switch colors.
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::highlightKey()));
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::inactiveKey()));
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::borderKey()));
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesLabelsGroup(), ConfigDefaults::fontColorKey()));
     }
 
     void customColorsIgnorePaletteChange()

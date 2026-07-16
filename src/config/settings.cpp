@@ -760,6 +760,33 @@ void Settings::captureBaseline()
     }
 }
 
+void Settings::rebaselineDerivedColorKeys()
+{
+    // System-colors mode owns the four zone-color keys: applySystemColorScheme()
+    // DERIVES them from the application palette, so a runtime palette change
+    // writes them through m_store AFTER the settings app captured its baseline
+    // — without this refresh, isKeyModified() reports a phantom unsaved edit
+    // and Discard reverts to the stale pre-switch colors.
+    //
+    // Callable ONLY from the ApplicationPaletteChange path (eventFilter).
+    // The other two applySystemColorScheme() call sites must not rebaseline:
+    // - setUseSystemColors(true) is a USER edit; the toggle and the colors it
+    //   derives must stay discardable together. Rebaselining there would let
+    //   Discard revert the toggle to off while pinning the system-derived
+    //   colors as the new baseline.
+    // - load() derives BEFORE captureBaseline(), so the full baseline already
+    //   carries the derived values.
+    const ConfigKeyList derivedKeys{
+        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::highlightKey()},
+        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::inactiveKey()},
+        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::borderKey()},
+        {ConfigDefaults::snappingZonesLabelsGroup(), ConfigDefaults::fontColorKey()},
+    };
+    for (const ConfigKey& gk : derivedKeys) {
+        m_baseline[gk.first].insert(gk.second, m_store->readVariant(gk.first, gk.second));
+    }
+}
+
 bool Settings::isKeyModified(const QString& group, const QString& key) const
 {
     return m_store->readVariant(group, key) != m_baseline.value(group).value(key);
@@ -3439,6 +3466,12 @@ void Settings::trackSystemPaletteChanges()
     // QEvent::ApplicationPaletteChange to the application object; there is
     // no signal for it, hence the event filter. Guarded: the config
     // library is also used by non-GUI tools where qGuiApp is null.
+    //
+    // Cost note: the filter is installed on the application object, so it
+    // sees EVERY event delivered in the process; the leading guard in
+    // eventFilter() keeps the per-event cost to two compares (watched
+    // pointer + event type). That per-event tax also scales with instance
+    // count — Settings must remain a per-process near-singleton.
     if (qGuiApp) {
         qGuiApp->installEventFilter(this);
     }
@@ -3448,6 +3481,10 @@ bool Settings::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == qGuiApp && event->type() == QEvent::ApplicationPaletteChange && useSystemColors()) {
         applySystemColorScheme();
+        // Derived values, not user edits — keep the dirty-tracking baseline in
+        // step so the theme switch does not read as unsaved changes. See
+        // rebaselineDerivedColorKeys() for why ONLY this path rebaselines.
+        rebaselineDerivedColorKeys();
     }
     return ISettings::eventFilter(watched, event);
 }

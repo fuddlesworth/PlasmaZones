@@ -51,7 +51,7 @@ Row {
             radius: Kirigami.Units.smallSpacing
             color: {
                 if (isActive)
-                    return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2);
+                    return Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.highlightColor, 0.2));
 
                 if (optionMouse.containsMouse)
                     return Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.1));

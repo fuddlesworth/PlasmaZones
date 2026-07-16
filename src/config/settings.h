@@ -1319,10 +1319,6 @@ public:
     /// load() and serves stale zone colors until restart.
     bool eventFilter(QObject* watched, QEvent* event) override;
 
-private:
-    void trackSystemPaletteChanges();
-
-public:
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via
     /// `setAnimationProfile`. Fires alongside every per-field *Changed
@@ -1342,6 +1338,10 @@ Q_SIGNALS:
     // here — see src/core/isettings.h.
 
 private:
+    /// Installs the QEvent::ApplicationPaletteChange filter on the application
+    /// object (see eventFilter above). Called once per constructor, after load().
+    void trackSystemPaletteChanges();
+
     /// Member-function-pointer alias used by the indexed shortcut setters
     /// (quickLayoutShortcut / snapToZoneShortcut) when fanning out to the
     /// per-index NOTIFY signal.
@@ -1408,6 +1408,15 @@ private:
     // this baseline and isKeyModified() compares against it. Private: mutating
     // the baseline anywhere but a load/save commit point desyncs dirty tracking.
     void captureBaseline();
+
+    // Refresh the baseline for ONLY the four palette-derived zone-color keys
+    // after a runtime re-derive. System-colors mode owns these keys: they
+    // follow the palette and are never user edits, so a theme switch must not
+    // flip isKeyModified() (phantom unsaved-changes footer) or arm Discard
+    // with the stale pre-switch colors. The one legitimate caller is the
+    // ApplicationPaletteChange path in eventFilter(); see the definition for
+    // why the setUseSystemColors() and load() paths must NOT call it.
+    void rebaselineDerivedColorKeys();
 
     // Groups that reset() deletes exhaustively (excludes unmanaged groups like
     // Updates). NOT used by save() — save() iterates the schema and lets

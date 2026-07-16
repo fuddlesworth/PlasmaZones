@@ -97,6 +97,12 @@ ComboBox {
     popup: T.Popup {
         id: pop
 
+        // View color set on the popup itself (not just the background) so the
+        // delegates' idle fill and text colors resolve against the same View
+        // background the popup draws.
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.inherit: false
+
         // Re-parent to the application Overlay so the popup escapes any
         // hosting popup (e.g. Kirigami.OverlaySheet) that would otherwise
         // out-z-order it. Position is mapped from the ComboBox's local
@@ -159,8 +165,6 @@ ComboBox {
         }
 
         background: Rectangle {
-            Kirigami.Theme.colorSet: Kirigami.Theme.View
-            Kirigami.Theme.inherit: false
             color: Kirigami.Theme.backgroundColor
             border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: 1

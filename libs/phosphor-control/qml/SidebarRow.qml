@@ -188,6 +188,8 @@ QQC2.ItemDelegate {
             opacity: rowItem.isCurrent ? 1 : 0.7
 
             Behavior on opacity {
+                enabled: delegateBackground._behaviorReady
+
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                     durationOverride: Kirigami.Units.shortDuration * 1.2
@@ -212,6 +214,8 @@ QQC2.ItemDelegate {
             opacity: rowItem.isCurrent ? 1 : 0.7
 
             Behavior on opacity {
+                enabled: delegateBackground._behaviorReady
+
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                     durationOverride: Kirigami.Units.shortDuration * 1.2

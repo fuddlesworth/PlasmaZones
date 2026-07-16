@@ -54,6 +54,10 @@ Item {
         Rectangle {
             id: screenFrame
 
+            // Pin the View set so the frame's fill and border resolve against
+            // the content-surface palette wherever the picker is hosted.
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             Layout.fillWidth: true
             Layout.fillHeight: true
             color: Kirigami.Theme.backgroundColor

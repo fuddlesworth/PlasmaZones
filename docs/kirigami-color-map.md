@@ -57,7 +57,7 @@ tertiary accent — which is exactly why the misuses above render in
 
 | Verdict | Count |
 |---|---|
-| OK (semantically correct) | 287 |
+| OK (semantically correct)¹ | 287 |
 | OK-OVERLAY (sanctioned compositor-overlay scrims) | 33 |
 | HACK — fabricated surface | 56 |
 | HACK — fabricated border | 83 |
@@ -69,6 +69,10 @@ tertiary accent — which is exactly why the misuses above render in
 | LITERAL (`"white"` lock icon, LayoutPreview.qml:214) | 1 |
 | **Total classified expressions** | **553** |
 | MISSING `colorSet` declarations (structural) | 22 |
+
+¹ Counting rule: the OK count covers the app trees only. phosphor-control's
+OK rows (see [phosphor libs](color-map/phosphor-libs.md)) are not included
+in the 287.
 
 ## Ranked fix plan (leverage first)
 
@@ -93,12 +97,14 @@ tertiary accent — which is exactly why the misuses above render in
    DisplayMap "Primary", ZonePreview master dot) — status colors →
    neutral chrome tints.
 8. **Toast.qml** → `colorSet: Tooltip` instead of hand-inverted colors.
-9. Remaining fabricated borders → `separatorColor` (bulk, low risk).
+9. Remaining fabricated borders →
+   `Kirigami.ColorUtils.linearInterpolation(backgroundColor, textColor, frameContrast)`
+   (bulk, low risk).
 
 ## In-tree exemplars (copy these)
 
 - `EasingPreview.qml:335` / `SpringPreview.qml:106` — correct `View` colorSet
-- `ShaderBrowserCard.qml:98`, `ParameterRow.qml:343` — correct `focusColor`
+- `ShaderBrowserCard.qml:103`, `ParameterRow.qml:343` — correct `focusColor`
 - `DimensionTooltip.qml:56` — correct `Tooltip` colorSet
 - `UnsavedChangesFooter.qml:45` — correct `Window` pin with `inherit: false`
 - `ParameterSection.qml:184` — the one correct `hoverColor`

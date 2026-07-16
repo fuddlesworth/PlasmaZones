@@ -311,6 +311,18 @@ ColumnLayout {
 
                     target: actionDelegate
                 }
+
+                // onPaint samples the theme-derived guide colour. Every
+                // PlatformTheme colour shares the one `colorsChanged` notify
+                // signal, so this one handler repaints on any palette change
+                // (same pattern as CurveThumbnail).
+                Connections {
+                    function onColorsChanged() {
+                        treeCanvas.requestPaint();
+                    }
+
+                    target: Kirigami.Theme
+                }
             }
 
             RowLayout {

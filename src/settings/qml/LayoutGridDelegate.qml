@@ -70,7 +70,7 @@ Item {
     }
 
     Accessible.name: modelData.displayName || i18n("Unnamed Layout")
-    Accessible.description: i18n("Layout with %1 zones", modelData.zoneCount || 0)
+    Accessible.description: i18np("Layout with %1 zone", "Layout with %1 zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
     Accessible.focusable: true
     // Keyboard reachability for the Keys handlers below (matches
@@ -376,7 +376,7 @@ Item {
                     elide: Text.ElideRight
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
-                    text: i18n("%1 zones", root.modelData.zoneCount || 0)
+                    text: i18np("%1 zone", "%1 zones", root.modelData.zoneCount || 0)
                 }
             }
         }

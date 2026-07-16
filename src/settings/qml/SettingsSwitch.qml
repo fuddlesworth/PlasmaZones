@@ -55,6 +55,12 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         radius: height / 2
         color: root.checked ? Kirigami.Theme.highlightColor : Kirigami.Theme.alternateBackgroundColor
+        // Hairline on the unchecked track: altBg-on-altBg is invisible when
+        // the switch sits on a SettingsCard's alternate-background body. The
+        // checked track is solid highlight and needs no outline, so the
+        // border melts to transparent there.
+        border.width: 1
+        border.color: root.checked ? "transparent" : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
         // Knob
         Rectangle {

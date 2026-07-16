@@ -127,7 +127,7 @@ Rectangle {
     Layout.fillHeight: true
     color: Theme.withAlpha(Kirigami.Theme.backgroundColor, Theme.panelAlpha)
     border.width: 1
-    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+    border.color: propertyPanel.themeBorderDefault
     // Drive opacity/width from panelMode and derive visibility from the
     // animated values, so the outgoing legs are actually rendered. Binding
     // `visible` to panelMode directly unrendered the panel in the same pass
@@ -808,7 +808,7 @@ Rectangle {
 
                         background: Rectangle {
                             color: Kirigami.Theme.backgroundColor
-                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                            border.color: propertyPanel.themeBorderDefault
                             border.width: 1
                             radius: Kirigami.Units.smallSpacing
                         }

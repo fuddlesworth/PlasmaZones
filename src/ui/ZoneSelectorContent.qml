@@ -194,7 +194,6 @@ Item {
         width: root.containerWidth
         height: root.containerHeight
         backgroundColor: root.backgroundColor
-        textColor: root.textColor
         containerRadius: root.containerRadius
         state: {
             switch (root.selectorPosition) {

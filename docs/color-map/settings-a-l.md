@@ -2,6 +2,20 @@
 
 Scope: every `Kirigami.Theme.*Color` / `colorSet`, `Qt.rgba()`, `Qt.lighter/darker/tint/alpha`, and color literal in QML files whose basename starts with A–L. Phosphor.Theme token usages: **0 found** (nothing skipped). `Qt.rgba(c.r, c.g, c.b, a)` is abbreviated `c@a` in expressions (e.g. `textColor@0.2`).
 
+> **ERRATUM (read before using the tables below).**
+> These tables are a PRE-REMEDIATION snapshot. Line numbers and every
+> "current state" expression describe the tree BEFORE the fixes on the
+> `fix/theme-color-pipeline` branch landed, so they no longer match the
+> code. In addition, every Replacement cell that prescribes
+> `Kirigami.Theme.separatorColor` is WRONG. That property does not exist
+> in Kirigami and evaluates to `undefined` at runtime. The correct
+> replacement is
+> `Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor,
+> Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)` (see the
+> ruleset in the parent map, `../kirigami-color-map.md`). This banner
+> supersedes the affected table cells and they have deliberately not
+> been rewritten one by one.
+
 ## AboutPage.qml
 
 | Line | Expression | Role | Verdict | Replacement |

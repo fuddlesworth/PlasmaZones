@@ -25,6 +25,8 @@ Item {
     // deliver the old handle's onExited after the new one's onEntered, and a
     // boolean latches false there while the cursor is still over a handle.
     property int activeHandleCount: 0
+    // Near-background frame-contrast border shared by all resting (non-hovered) handles
+    readonly property color restingBorderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     // Get actual canvas dimensions dynamically with fallback to root
     readonly property real actualCanvasWidth: {
         // Try passed property first
@@ -143,9 +145,9 @@ Item {
             y: modelData.ay * parent.height - height / 2
             // Corner handles: fully circular, Edge handles: pill-shaped
             radius: isCornerHandle ? cornerSize / 2 : edgeThickness / 2
-            // Clean white fill with subtle border
+            // Theme background fill with subtle frame-contrast border, highlight when hovered/pressed
             color: handleMouse.containsMouse || handleMouse.pressed ? Kirigami.Theme.highlightColor : Kirigami.Theme.backgroundColor
-            border.color: handleMouse.containsMouse || handleMouse.pressed ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+            border.color: handleMouse.containsMouse || handleMouse.pressed ? Kirigami.Theme.highlightColor : resizeHandles.restingBorderColor
             border.width: constants.handleBorderWidth
             // Handles are always present for mouse detection, only visible when hovered/selected
             visible: parent.width > 0 && parent.height > 0
@@ -163,8 +165,8 @@ Item {
                 z: -1
                 radius: parent.radius + 1
                 color: "transparent"
-                // Use theme text color for contrast (works in both light and dark themes)
-                border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                // Near-background frame-contrast halo that separates the handle from the zone beneath
+                border.color: resizeHandles.restingBorderColor
                 border.width: constants.shadowBorderWidth
                 visible: parent.visible
             }

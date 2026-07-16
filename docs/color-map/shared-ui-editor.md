@@ -7,6 +7,20 @@ Scope: every QML line using `Kirigami.Theme.*Color`, `Kirigami.Theme.colorSet`, 
 Notation: `K.T` = `Kirigami.Theme`; `rgba(X, a)` = `Qt.rgba(X.r, X.g, X.b, a)` (per-channel spread elided).
 Line numbers as of 2026-07-16.
 
+> **ERRATUM (read before using the tables below).**
+> These tables are a PRE-REMEDIATION snapshot. Line numbers and every
+> "current state" expression describe the tree BEFORE the fixes on the
+> `fix/theme-color-pipeline` branch landed, so they no longer match the
+> code. In addition, every Replacement cell that prescribes
+> `Kirigami.Theme.separatorColor` (including the HACK-BORDER verdict
+> definition above) is WRONG. That property does not exist in Kirigami
+> and evaluates to `undefined` at runtime. The correct replacement is
+> `Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor,
+> Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)` (see the
+> ruleset in the parent map, `../kirigami-color-map.md`). This banner
+> supersedes the affected table cells and they have deliberately not
+> been rewritten one by one.
+
 Verdict tokens:
 - **OK** — correct KDE semantic use.
 - **OK-OVERLAY** — self-contained contrast scrim/chrome on a compositor overlay rendered over arbitrary desktop content; legitimate there, not a pattern to copy into settings UI.

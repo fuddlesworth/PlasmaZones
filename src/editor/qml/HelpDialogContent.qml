@@ -318,7 +318,6 @@ ScrollView {
         Label {
             text: shortcut
             font.family: Kirigami.Theme.fixedWidthFont.family
-            color: Kirigami.Theme.textColor
         }
     }
 

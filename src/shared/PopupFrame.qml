@@ -34,7 +34,6 @@ Item {
     id: root
 
     property color backgroundColor: Kirigami.Theme.backgroundColor
-    property color textColor: Kirigami.Theme.textColor
     property real containerRadius: Kirigami.Units.smallSpacing * 3
     /// Outward extent of `captureItem` past the visible card on every
     /// side, in logical pixels. The capture margin is internal to
@@ -55,7 +54,6 @@ Item {
         id: style
 
         readonly property real backgroundAlpha: 0.95
-        readonly property real borderAlpha: 0.2
         readonly property real shadowAlpha: 0.5
         // Math.ceil rounds the gridUnit-derived value up to an integer
         // pixel on fractional-DPI outputs (e.g. 1.25 * 18 = 22.5 →

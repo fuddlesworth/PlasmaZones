@@ -81,7 +81,7 @@ Rectangle {
     width: dividerInfo ? (dividerInfo.isVertical ? handleThickness : dividerInfo.width - spacing) : 0 // Horizontal: span minus margins
     height: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.height - spacing : handleThickness) : 0 // Horizontal divider height = floored spacing
     // Background - subtle base color, more visible on hover/drag
-    color: (dividerMouseArea.containsMouse || isDragging) ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, isDragging ? 0.4 : 0.25) : Qt.alpha(Kirigami.Theme.backgroundColor, 0.3)
+    color: (dividerMouseArea.containsMouse || isDragging) ? Qt.alpha(Kirigami.Theme.highlightColor, isDragging ? 0.4 : 0.25) : Qt.alpha(Kirigami.Theme.backgroundColor, 0.3)
     border.color: (dividerMouseArea.containsMouse || isDragging) ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     border.width: isDragging ? 2 : (dividerMouseArea.containsMouse ? 1 : 0)
     radius: isVertical ? (width / 2) : (height / 2)

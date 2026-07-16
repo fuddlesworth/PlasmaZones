@@ -234,7 +234,7 @@ Item {
                 }
             }
 
-            // onPaint samples highlight, text, background and positive-text
+            // onPaint samples highlight, text, background and disabled-text
             // colours. Every PlatformTheme colour shares the one `colorsChanged`
             // notify signal, so this one handler covers all of them.
             Connections {

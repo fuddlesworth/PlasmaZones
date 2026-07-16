@@ -69,7 +69,7 @@ Rectangle {
 
         return Qt.alpha(Kirigami.Theme.backgroundColor, 0.4);
     }
-    radius: Kirigami.Units.gridUnit // 8px
+    radius: Kirigami.Units.gridUnit
     border.color: isHovered || isActive ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     border.width: isHovered || isActive ? constants.standardBorderWidth : constants.thinBorderWidth
     scale: isHovered ? hoverScale : 1
@@ -122,7 +122,7 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        height: Kirigami.Units.gridUnit * 2.25 // 18px
+        height: Kirigami.Units.gridUnit * 2.25
         color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
         radius: Kirigami.Units.smallSpacing
 

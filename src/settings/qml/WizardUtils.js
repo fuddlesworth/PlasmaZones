@@ -22,22 +22,22 @@ function clampedScreenAspectRatio(screenWidth, screenHeight) {
 /**
  * Wizard color palette built from the proper Kirigami semantic tokens.
  * Centralizes the palette shared across wizard dialogs: surfaces use
- * alternateBackgroundColor, borders use separatorColor, hover uses
- * hoverColor — only the accent selection tints are derived from
- * highlightColor.
+ * alternateBackgroundColor, borders use the frameContrast-interpolated
+ * border color, hover uses hoverColor — only the accent selection tints
+ * are derived from highlightColor.
  *
  * @param {color} altBg          - Kirigami.Theme.alternateBackgroundColor
- * @param {color} separatorColor - Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+ * @param {color} borderColor    - Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
  * @param {color} highlightColor - Kirigami.Theme.highlightColor
  * @param {color} hoverColor     - Kirigami.Theme.hoverColor
  * @returns {Object} palette with the frame colors (subtleBg, subtleBorder,
  *          accentBorder) and the WizardTemplateCard state colors (highlightBg,
  *          hoverBg, defaultBg, selectedBorder, hoverBorder, defaultBorder)
  */
-function wizardColors(altBg, separatorColor, highlightColor, hoverColor) {
+function wizardColors(altBg, borderColor, highlightColor, hoverColor) {
     return {
         "subtleBg":        altBg,
-        "subtleBorder":    separatorColor,
+        "subtleBorder":    borderColor,
         "accentBorder":    Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.3),
         // Card-specific colors (WizardTemplateCard)
         "highlightBg":    Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.15),
@@ -45,6 +45,6 @@ function wizardColors(altBg, separatorColor, highlightColor, hoverColor) {
         "defaultBg":      altBg,
         "selectedBorder": Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.6),
         "hoverBorder":    hoverColor,
-        "defaultBorder":  separatorColor
+        "defaultBorder":  borderColor
     };
 }

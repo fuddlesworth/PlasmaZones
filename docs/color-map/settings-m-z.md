@@ -4,6 +4,28 @@ Scope: `/home/nlavender/Projects/PlasmaZones/src/settings/qml/*.qml` with basena
 (case-insensitive; no files start with digits or underscore). 74 QML files scanned; 39 files have
 findings. No QML was modified.
 
+> **ERRATUM (read before using the tables below).**
+> These tables are a PRE-REMEDIATION snapshot. Line numbers and every
+> "current state" expression describe the tree BEFORE the fixes on the
+> `fix/theme-color-pipeline` branch landed, so they no longer match the
+> code. In addition, every Replacement cell that prescribes
+> `K.T.separatorColor` is WRONG. That property does not exist in
+> Kirigami and evaluates to `undefined` at runtime. The correct
+> replacement is
+> `Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor,
+> Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)` (see the
+> ruleset in the parent map, `../kirigami-color-map.md`). This banner
+> supersedes the affected table cells and they have deliberately not
+> been rewritten one by one.
+>
+> **Recorded decision (do not re-litigate the "under View" rows).**
+> WizardConfigCard, WizardPreviewFrame, WhatsNewPage, and
+> WizardStepIndicator deliberately resolve `alternateBackgroundColor`
+> in their Window/dialog context WITHOUT a `View` colorSet declaration.
+> The result is visually sound in that context, so the rows below that
+> ask for the alternate role to resolve "under View" are superseded for
+> these four files.
+
 **Shorthand** (expressions are exact modulo this legend):
 `K.T` = `Kirigami.Theme`; `hl` = `K.T.highlightColor`; `txt` = `K.T.textColor`;
 `bg` = `K.T.backgroundColor`; `altBg` = `K.T.alternateBackgroundColor`;

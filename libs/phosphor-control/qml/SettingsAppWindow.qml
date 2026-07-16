@@ -351,51 +351,74 @@ Kirigami.ApplicationWindow {
             // Full-width header bar spanning the ENTIRE window, ABOVE both the
             // sidebar and the content panel: the headerExtras slot (e.g. global
             // search) centered across the whole window, with the optional
-            // headerTrailing slot (e.g. a status toggle) pinned right. The row
+            // headerTrailing slot (e.g. a status toggle) pinned right. The band
             // collapses when neither slot is filled. A left phantom the width of
             // the trailing keeps the centered slot window-centered (not biased
             // left by the trailing's width).
-            RowLayout {
-                id: headerExtrasRow
+            //
+            // The band declares the Header color set and paints its own
+            // backgroundColor so the chrome is truthful: slot content resolves
+            // Header roles, and schemes with a distinct Header hue (e.g.
+            // wallpaper-generated schemes carry the wallpaper's second hue
+            // there) actually show it instead of silently inheriting Window.
+            Item {
+                id: headerBand
+
+                Kirigami.Theme.colorSet: Kirigami.Theme.Header
+                Kirigami.Theme.inherit: false
 
                 Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.largeSpacing
-                Layout.topMargin: Kirigami.Units.largeSpacing
-                Layout.bottomMargin: Kirigami.Units.largeSpacing
-                spacing: 0
+                implicitHeight: headerExtrasRow.implicitHeight + Kirigami.Units.largeSpacing * 2
+                // Gate on the Loaders directly, NOT on headerExtrasRow.visible:
+                // reading a child's `visible` returns its EFFECTIVE visibility,
+                // so routing the condition through the row would latch the band
+                // hidden forever once it first collapsed (same trap as the
+                // breadcrumb trailing slot below).
                 visible: headerExtrasLoader.item !== null || headerTrailingLoader.item !== null
 
-                Item {
-                    Layout.preferredWidth: headerTrailingLoader.width
+                Rectangle {
+                    anchors.fill: parent
+                    color: Kirigami.Theme.backgroundColor
                 }
 
-                Item {
-                    Layout.fillWidth: true
-                }
+                RowLayout {
+                    id: headerExtrasRow
 
-                // The Loaders adopt their loaded item's implicit size (slot
-                // contract: the consumer Component declares implicitWidth/Height).
-                Loader {
-                    id: headerExtrasLoader
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.largeSpacing
+                    spacing: 0
 
-                    Layout.alignment: Qt.AlignVCenter
-                }
+                    Item {
+                        Layout.preferredWidth: headerTrailingLoader.width
+                    }
 
-                Item {
-                    Layout.fillWidth: true
-                }
+                    Item {
+                        Layout.fillWidth: true
+                    }
 
-                Loader {
-                    id: headerTrailingLoader
+                    // The Loaders adopt their loaded item's implicit size (slot
+                    // contract: the consumer Component declares implicitWidth/Height).
+                    Loader {
+                        id: headerExtrasLoader
 
-                    Layout.alignment: Qt.AlignVCenter
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Loader {
+                        id: headerTrailingLoader
+
+                        Layout.alignment: Qt.AlignVCenter
+                    }
                 }
             }
 
             Kirigami.Separator {
                 Layout.fillWidth: true
-                visible: headerExtrasRow.visible
+                visible: headerBand.visible
             }
 
             // Sidebar + content panel sit BELOW the full-width header bar.

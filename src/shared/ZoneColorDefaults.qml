@@ -30,6 +30,9 @@ import org.kde.kirigami as Kirigami
  *   opaquely against the View color set so the same card renders
  *   identically in every context. Translucent fills on a panel
  *   composited differently per host and read as a different theme.
+ *   The two FILL colors are therefore alpha-stripped at this boundary;
+ *   the BORDER deliberately carries the pipeline's alpha to match the
+ *   live overlay.
  *
  * All consumers keep their own `property color` hooks; this singleton
  * only supplies the default expressions.
@@ -37,10 +40,19 @@ import org.kde.kirigami as Kirigami
 QtObject {
     id: root
 
+    /// Strip a pipeline colour's carried alpha — preview FILLS are opaque
+    /// by contract (consumers control transparency via `opacity`).
+    function _opaque(c) {
+        return Qt.rgba(c.r, c.g, c.b, 1);
+    }
+
     // Compositor-overlay defaults (over arbitrary desktop content)
     readonly property color activeZoneColor: Qt.alpha(Kirigami.Theme.highlightColor, 0.7)
     readonly property color inactiveZoneColor: Qt.alpha(Kirigami.Theme.backgroundColor, 0.4)
-    readonly property color zoneBorderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+    // Naked overlays need mid-contrast borders — frameContrast (~0.2) is too
+    // faint over arbitrary desktop content where the fill is a same-family
+    // film; panel-hosted previews keep the softer separator recipe.
+    readonly property color zoneBorderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.5)
 
     // Non-visual scope pinned to the View color set so the preview
     // defaults resolve against View roles regardless of the caller.
@@ -65,11 +77,15 @@ QtObject {
     // with useSystemColors on, the pipeline follows the theme anyway; with
     // custom colors it shows the user's picks. The theme-role expressions
     // below are the fallback for engines with no injection and no push.
+    // Lifetime: the injected object must outlive the engine; if it is
+    // deleted externally QML nulls this property and the previews fall
+    // back to the theme defaults (or go stale), without crashing.
     property QtObject settingsSource: null
 
     // Settings-embedded preview defaults (effective settings colors,
-    // falling back to View color set roles)
-    readonly property color previewActiveZoneColor: root.settingsSource ? root.settingsSource.highlightColor : Qt.alpha(root._viewScope.highlight, 0.5)
-    readonly property color previewInactiveZoneColor: root.settingsSource ? root.settingsSource.inactiveColor : root._viewScope.alternateBackground
+    // falling back to View color set roles). Fills are opaque; the border
+    // deliberately carries the pipeline's alpha to match the live overlay.
+    readonly property color previewActiveZoneColor: root._opaque(root.settingsSource ? root.settingsSource.highlightColor : root._viewScope.highlight)
+    readonly property color previewInactiveZoneColor: root._opaque(root.settingsSource ? root.settingsSource.inactiveColor : root._viewScope.alternateBackground)
     readonly property color previewZoneBorderColor: root.settingsSource ? root.settingsSource.borderColor : root._viewScope.separator
 }

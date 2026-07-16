@@ -34,6 +34,9 @@ ToolBar {
     required property bool fullscreenMode
     required property bool previewMode
 
+    // Shared frame-contrast border used by chrome elements across the bar
+    readonly property color frameBorderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+
     signal fullscreenToggled
 
     height: Kirigami.Units.gridUnit * 5
@@ -96,9 +99,9 @@ ToolBar {
 
                     background: Rectangle {
                         radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
-                        color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Qt.alpha(Kirigami.Theme.hoverColor, 0.2) : "transparent")
+                        color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.hoverColor, 0.2) : "transparent")
                         border.width: 1
-                        border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast) : "transparent")
+                        border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? topBar.frameBorderColor : "transparent")
 
                         Behavior on color {
                             PhosphorMotionAnimation {
@@ -215,7 +218,7 @@ ToolBar {
                     color: Kirigami.Theme.alternateBackgroundColor
                     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
                     border.width: 1
-                    border.color: layoutNameField.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                    border.color: layoutNameField.activeFocus ? Kirigami.Theme.focusColor : topBar.frameBorderColor
 
                     // Character counter overlay (right-aligned inside field)
                     Label {
@@ -505,7 +508,7 @@ ToolBar {
             anchors.bottom: parent.bottom
             width: parent.width
             height: 1
-            color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+            color: topBar.frameBorderColor
         }
     }
 }

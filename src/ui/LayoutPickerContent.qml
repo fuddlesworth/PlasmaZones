@@ -63,8 +63,10 @@ Item {
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
-    property color highlightColor: Kirigami.Theme.highlightColor
-    // Zone appearance (set from C++ settings for consistency with zone selector)
+    property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+    // Zone appearance — effective values arrive via the host slot's
+    // bindings: snapassist.cpp's writeColorSettings pushes onto
+    // layoutPickerSlot, which forwards them here. No picker-direct push.
     property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
     property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
     property real activeOpacity: 0.5
@@ -234,7 +236,6 @@ Item {
         // top padding + title + gap below title + grid + bottom padding
         height: titleLabel.height + gridView.height + metrics.paddingSide * 3
         backgroundColor: root.backgroundColor
-        textColor: root.textColor
         containerRadius: metrics.containerRadius
 
         // Absorb clicks inside container so they do not reach the

@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <QtQml/qqmlextensionplugin.h>
 #include "../core/animationbootstrap.h"
 #include "../core/logging.h"
 #include "../core/single_instance_service.h"
@@ -36,6 +35,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QScopeGuard>
+#include <QtQml/qqmlextensionplugin.h>
 
 #include <memory>
 #include <vector>

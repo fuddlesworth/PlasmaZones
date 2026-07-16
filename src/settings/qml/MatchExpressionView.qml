@@ -300,16 +300,19 @@ ColumnLayout {
             /// of trailing a dangling line down the left of every deeper row.
             readonly property var _effectiveAncestors: [true].concat(delegate.ancestorIsLastChild || [])
             readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
-            /// Tree connector color: the theme's separator token, the
-            /// semantic color for exactly this kind of chrome line.
+            /// Tree connector color: the separator shade Kirigami.Separator
+            /// computes, the semantic color for exactly this kind of chrome
+            /// line.
             readonly property color _guideColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-            /// Hairline: 1 device-independent px, matching the rest of the
-            /// chrome's hairline conventions — borders, separators, hover
-            /// strokes. Widths here are DPR-scaled at render time, so a
-            /// plain 1 already stays crisp on high-DPR screens; the earlier
-            /// devicePixelRatio-based shapes double-scaled into thicker,
-            /// not crisper, connectors.
-            readonly property int _guideThickness: 1
+            /// 2 device-independent px, deliberately thicker than the
+            /// chrome's usual 1px hairline: prior user testing found that
+            /// fainter/thinner guides vanished into the dark expansion
+            /// surface, so the connectors keep the heavier stroke to stay
+            /// legible against it. Widths here are DPR-scaled at render
+            /// time, so a plain integer stays crisp on high-DPR screens;
+            /// the earlier devicePixelRatio-based shapes double-scaled
+            /// into thicker, not crisper, connectors.
+            readonly property int _guideThickness: 2
 
             // Size delegate to the tree's available width so the
             // rightmost spacer pushes content into a clean column.
@@ -437,6 +440,18 @@ ColumnLayout {
                     }
 
                     target: contentRow
+                }
+
+                // _guideColor is sampled imperatively inside onPaint, so a
+                // palette change doesn't rebind anything the Canvas watches.
+                // Every PlatformTheme colour shares the one `colorsChanged`
+                // notify signal (same wiring as SpringPreview).
+                Connections {
+                    function onColorsChanged() {
+                        treeCanvas.requestPaint();
+                    }
+
+                    target: Kirigami.Theme
                 }
             }
 
@@ -575,6 +590,11 @@ ColumnLayout {
                     }
 
                     Rectangle {
+                        // Pin the View set so the pill's altBg / border resolve
+                        // against the content-surface palette regardless of
+                        // which colorSet the hosting expansion area inherits.
+                        Kirigami.Theme.colorSet: Kirigami.Theme.View
+                        Kirigami.Theme.inherit: false
                         Layout.alignment: Qt.AlignVCenter
                         implicitWidth: valueLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
                         implicitHeight: valueLabel.implicitHeight + Kirigami.Units.smallSpacing

@@ -52,15 +52,8 @@ Rectangle {
         }
         font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
         font.weight: Font.Medium
-        color: {
-            if (root.isDynamic)
-                return Kirigami.Theme.textColor;
-
-            if (root.effectiveAutoAssign)
-                return Kirigami.Theme.textColor;
-
-            return Kirigami.Theme.textColor;
-        }
+        // Per-category label hues were deliberately retired — all states use the plain text color.
+        color: Kirigami.Theme.textColor
         opacity: (root.isDynamic || root.effectiveAutoAssign) ? 0.8 : root.textOpacity
     }
 }

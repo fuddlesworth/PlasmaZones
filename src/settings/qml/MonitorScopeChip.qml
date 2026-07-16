@@ -167,6 +167,10 @@ Item {
     Popup {
         id: popup
 
+        // On the Popup node (not just its background) so the contentItem —
+        // DisplayMap, the Reset button — resolves the View set too.
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.inherit: false
         y: pill.height + Kirigami.Units.smallSpacing
         padding: Kirigami.Units.largeSpacing
         modal: false
@@ -199,8 +203,6 @@ Item {
         }
 
         background: Rectangle {
-            Kirigami.Theme.colorSet: Kirigami.Theme.View
-            Kirigami.Theme.inherit: false
             radius: Kirigami.Units.smallSpacing * 1.5
             color: Kirigami.Theme.backgroundColor
             border.width: 1
