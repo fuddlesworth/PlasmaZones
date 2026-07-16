@@ -21,6 +21,7 @@
 #include <PhosphorRules/Rule.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
+#include <QEvent>
 #include <QGuiApplication>
 #include <QMetaMethod>
 #include <QMetaProperty>
@@ -182,6 +183,7 @@ Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRe
     // which performs the migration itself for standalone tools and tests.)
     load();
     connectRuleStoreGapReactivity();
+    trackSystemPaletteChanges();
 }
 
 Settings::Settings(QObject* parent)
@@ -205,6 +207,7 @@ Settings::Settings(QObject* parent)
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
     connectRuleStoreGapReactivity();
+    trackSystemPaletteChanges();
 }
 
 Settings::Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent)
@@ -226,6 +229,7 @@ Settings::Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent)
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
     connectRuleStoreGapReactivity();
+    trackSystemPaletteChanges();
 }
 
 // ── Helper Methods ───────────────────────────────────────────────────────────
@@ -3422,6 +3426,32 @@ QString Settings::loadColorsFromFile(const QString& filePath)
     return QString(); // Success - no error
 }
 
+void Settings::trackSystemPaletteChanges()
+{
+    // Track system palette changes at runtime. load() derives the zone
+    // colors from the CURRENT QGuiApplication palette when useSystemColors
+    // is on — a one-time snapshot. The palette changes underneath every
+    // long-running process whenever the desktop color scheme changes
+    // (wallpaper-driven schemes switch often), so without re-deriving, the
+    // daemon's overlays and the settings app's previews render colors from
+    // whichever scheme was active when the process started — they only
+    // matched again after a daemon restart. Qt 6 delivers
+    // QEvent::ApplicationPaletteChange to the application object; there is
+    // no signal for it, hence the event filter. Guarded: the config
+    // library is also used by non-GUI tools where qGuiApp is null.
+    if (qGuiApp) {
+        qGuiApp->installEventFilter(this);
+    }
+}
+
+bool Settings::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == qGuiApp && event->type() == QEvent::ApplicationPaletteChange && useSystemColors()) {
+        applySystemColorScheme();
+    }
+    return ISettings::eventFilter(watched, event);
+}
+
 void Settings::applySystemColorScheme()
 {
     // QPalette respects QT_QPA_PLATFORMTHEME — on non-KDE desktops, Qt reads
@@ -3432,11 +3462,16 @@ void Settings::applySystemColorScheme()
     highlight.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
     setHighlightColor(highlight);
 
-    QColor inactive = pal.color(QPalette::Active, QPalette::Text);
+    // Inactive fill and border derive from the background family, not Text.
+    // Text-at-alpha renders as a washed grey film on every dark scheme (the
+    // same fabrication the QML side eliminated); AlternateBase is the View
+    // alternate surface, and Mid is the palette's separator-grade shade, so
+    // both follow the active color scheme with the intended emphasis.
+    QColor inactive = pal.color(QPalette::Active, QPalette::AlternateBase);
     inactive.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
     setInactiveColor(inactive);
 
-    QColor border = pal.color(QPalette::Active, QPalette::Text);
+    QColor border = pal.color(QPalette::Active, QPalette::Mid);
     border.setAlpha(::PhosphorZones::ZoneDefaults::BorderAlpha);
     setBorderColor(border);
 

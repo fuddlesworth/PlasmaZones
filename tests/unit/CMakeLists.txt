@@ -299,6 +299,12 @@ p_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 # (the decoration analogue of test_settings_shader_tree). PhosphorSurface
 # symbols resolve transitively via plasmazones_core (which links
 # PhosphorSurface PUBLIC for Settings::decorationProfileTree()).
+# Pins runtime palette tracking for system-colors mode (needs Qt6::Gui for
+# QGuiApplication palette events; p_add_test links Core only).
+add_executable(test_settings_system_palette_tracking config/test_settings_system_palette_tracking.cpp)
+target_link_libraries(test_settings_system_palette_tracking PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_system_palette_tracking COMMAND test_settings_system_palette_tracking)
+
 p_add_test(test_settings_decoration_tree config/test_settings_decoration_tree.cpp)
 
 # Companion test executable: per-page Discard/Reset primitives — committed
@@ -576,6 +582,12 @@ add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
 # singled-out zone renders differently from its siblings, while the picker / OSD
 # consumers rely on card-level state lighting every zone. Both halves live in
 # one expression, so a regression in either is silent at runtime.
+# Component-load canary for the shared QML module: "X is not a type" at app
+# runtime hides the nested cause; this fails with the real error instead.
+add_executable(test_shared_module_load ui/test_shared_module_load.cpp)
+target_link_libraries(test_shared_module_load PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
+add_test(NAME test_shared_module_load COMMAND test_shared_module_load)
+
 add_executable(test_zone_preview_highlight ui/test_zone_preview_highlight.cpp)
 target_link_libraries(test_zone_preview_highlight PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
 add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)

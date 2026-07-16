@@ -1313,6 +1313,16 @@ public:
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     Q_INVOKABLE void applySystemColorScheme();
 
+    /// Re-derives the system-scheme zone colors when the application palette
+    /// changes at runtime (theme switch). Without this, every long-running
+    /// process (daemon, settings app) keeps the palette SNAPSHOT taken at
+    /// load() and serves stale zone colors until restart.
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
+private:
+    void trackSystemPaletteChanges();
+
+public:
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via
     /// `setAnimationProfile`. Fires alongside every per-field *Changed
