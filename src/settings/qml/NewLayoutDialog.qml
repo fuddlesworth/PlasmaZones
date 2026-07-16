@@ -334,7 +334,9 @@ Kirigami.Dialog {
                     QFZCommon.ZonePreview {
                         anchors.fill: parent
                         anchors.margins: Kirigami.Units.largeSpacing
-                        anchors.bottomMargin: Kirigami.Units.largeSpacing * 2
+                        // Space for the bottom name bar, same reservation as
+                        // LayoutThumbnail makes for its label.
+                        anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5 + Kirigami.Units.smallSpacing
                         zones: root.selectedTemplate.zones
                         showZoneNumbers: true
                         isHovered: true

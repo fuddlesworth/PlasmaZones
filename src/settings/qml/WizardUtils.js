@@ -25,15 +25,13 @@ function clampedScreenAspectRatio(screenWidth, screenHeight) {
  *
  * @param {color} textColor      - Kirigami.Theme.textColor
  * @param {color} highlightColor - Kirigami.Theme.highlightColor
- * @returns {Object} palette with subtleBg, subtleBorder, accentBorder, badgeBg, badgeBorder
+ * @returns {Object} palette with subtleBg, subtleBorder, accentBorder
  */
 function wizardColors(textColor, highlightColor) {
     return {
         "subtleBg":        Qt.rgba(textColor.r, textColor.g, textColor.b, 0.03),
         "subtleBorder":    Qt.rgba(textColor.r, textColor.g, textColor.b, 0.08),
         "accentBorder":    Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.3),
-        "badgeBg":         Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.2),
-        "badgeBorder":     Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.4),
         // Card-specific colors (WizardTemplateCard)
         "highlightBg":    Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.15),
         "hoverBg":        Qt.rgba(textColor.r, textColor.g, textColor.b, 0.06),
