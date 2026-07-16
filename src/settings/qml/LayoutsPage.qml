@@ -27,6 +27,10 @@ SettingsFlickable {
 
     // Capture the context property so child components can access it via root.settingsBridge
     readonly property var settingsBridge: appSettings
+    // Capture the settingsController context property so it can be passed
+    // explicitly to LayoutGridDelegate (whose own `settingsController` property
+    // would otherwise shadow the context name inside the delegate's bindings).
+    readonly property var controllerBridge: settingsController
     readonly property real cardHeight: Kirigami.Units.gridUnit * 12
     readonly property real minCardWidth: Kirigami.Units.gridUnit * 14
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
@@ -441,6 +445,7 @@ SettingsFlickable {
 
                             LayoutGridDelegate {
                                 appSettings: root.settingsBridge
+                                settingsController: root.controllerBridge
                                 cellWidth: cardFlow._cardWidth
                                 cellHeight: root.cardHeight
                                 viewMode: root.viewMode

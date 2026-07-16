@@ -61,6 +61,11 @@ Item {
     }
 
     function isZoneHighlighted(zoneData) {
+        // isHighlighted is C++-guaranteed bool: overlay_data.cpp writes
+        // zone->isHighlighted() and patchZonesWithHighlight() re-stamps it
+        // as a real bool on every slot push, so raw truthiness (unlike the
+        // strict useCustomColors contract) is safe here. Mirrored in
+        // RenderNodeOverlayContent.isZoneHighlighted().
         if (zoneData.isHighlighted)
             return true;
 

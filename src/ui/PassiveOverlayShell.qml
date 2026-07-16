@@ -45,9 +45,11 @@ Window {
     // true` so vertex shaders bind to the visible OSD body rather than
     // the fullscreen slot Item.
     // Sibling slots below: snapAssistSlot (z=2), layoutPickerSlot (z=2),
-    // zoneSelectorSlot (z=1), mainOverlaySlot (z=0). Each is a sibling
-    // Item with its own properties + Loader, animated independently via
-    // the SurfaceAnimator's per-(Surface, target) keying.
+    // zoneSelectorSlot (z=1), mainOverlaySlot (z=0). The osdSlot's z is
+    // dynamic (3 normally, 1.5 while a modal slot is visible — see the
+    // binding on osdSlot). Each is a sibling Item with its own
+    // properties + Loader, animated independently via the
+    // SurfaceAnimator's per-(Surface, target) keying.
 
     id: root
 
@@ -205,10 +207,23 @@ Window {
         }
 
         anchors.fill: parent
-        // Topmost slot: notifications/OSDs paint above every other content
-        // type so a layout-OSD or nav-OSD reads cleanly even when stacked
-        // over an active zone overlay or open snap-assist.
-        z: 3
+        // Topmost slot while no modal is up: notifications/OSDs paint
+        // above the passive content types (main overlay z=0, zone
+        // selector z=1) so a layout-OSD or nav-OSD reads cleanly over an
+        // active zone overlay or drag-time selector. While a MODAL slot
+        // (snap-assist / layout picker, both z=2) is visible the OSD
+        // drops to 1.5 — still above the passive tiers, but below the
+        // modal — so a concurrently-fired OSD card neither occludes
+        // modal content for its ~1.5s display nor lets its
+        // click-to-dismiss MouseArea eat clicks meant for the modal
+        // (the shell grabs input only while a modal is up, so an
+        // OSD-above-modal card would otherwise sit first in hit-test
+        // order over its rect). `visible` is the right predicate: it
+        // flips true at modal show and back to false only when the
+        // hide animation completes (onSnapAssistSlotHideCompleted /
+        // the picker equivalent), covering the modal's full on-screen
+        // span; `loaded` blips false→true on every re-show.
+        z: (snapAssistSlot.visible || layoutPickerSlot.visible) ? 1.5 : 3
         // SurfaceAnimator drives this Item's opacity. Start at 0 so the
         // first paint pre-show doesn't flash the OSD at full opacity.
         opacity: 0
@@ -356,7 +371,8 @@ Window {
 
         anchors.fill: parent
         // Popup tier — modal pickers paint above the zone selector and
-        // main overlay but below notifications/OSDs (z=3).
+        // main overlay, and above OSDs too while visible (the osdSlot
+        // drops from z=3 to 1.5 whenever a modal slot is visible).
         z: 2
         opacity: 0
         visible: false
@@ -478,7 +494,9 @@ Window {
 
         anchors.fill: parent
         // Popup tier — same z as snap-assist (the two are mutually
-        // exclusive at any given moment) and below OSDs (z=3).
+        // exclusive at any given moment); above OSDs while visible
+        // (the osdSlot drops from z=3 to 1.5 whenever a modal slot is
+        // visible).
         z: 2
         opacity: 0
         visible: false
@@ -545,6 +563,21 @@ Window {
         // Selector data properties — C++ writes these per-show. The
         // ZoneSelectorContent inside the Loader picks them up via QML
         // lexical scope.
+        //
+        // Declared-but-unforwarded contract: 16 of these properties are
+        // written by C++ (selector.cpp / selector_update.cpp) but NOT
+        // forwarded to ZoneSelectorContent below, whose consumers were
+        // removed when the content derives those values itself:
+        //   screenAspectRatio, screenWidth, selectorLayoutMode,
+        //   selectorGridColumns, previewWidth, previewHeight,
+        //   previewLockAspect, positionIsVertical, layoutRows, barHeight,
+        //   barWidth, totalRows, previewScale, zonePadding,
+        //   zoneBorderWidth, zoneBorderRadius
+        // They MUST stay declared: C++ pushes them with setProperty, and
+        // deleting a declaration would silently demote the write to a
+        // dynamic property (masking the contract) while C++-side reads of
+        // the slot's current values would break. Do not remove them
+        // without also removing the corresponding C++ writes.
         property var layouts: []
         property string activeLayoutId: ""
         property string hoveredLayoutId: ""
@@ -647,7 +680,8 @@ Window {
 
         anchors.fill: parent
         // Mid tier — paints above the main zone overlay (z=0) and below
-        // popups (z=2) / OSDs (z=3). Drag-time selector card sits in
+        // popups (z=2) / OSDs (z=3, or 1.5 while a modal is visible —
+        // still above this slot). Drag-time selector card sits in
         // front of the zone-overlay layer the user sees during the drag.
         z: 1
         opacity: 0
@@ -820,7 +854,7 @@ Window {
         anchors.fill: parent
         // Bottom tier — zone overlay during a window drag is the
         // backdrop content; selector (z=1), popups (z=2), and OSDs
-        // (z=3) all paint over it.
+        // (z=3, or 1.5 under a visible modal) all paint over it.
         z: 0
         opacity: 0
         visible: false

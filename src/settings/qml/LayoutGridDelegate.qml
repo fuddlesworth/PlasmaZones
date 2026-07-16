@@ -19,6 +19,11 @@ Item {
     required property var modelData
     required property int index
     required property var appSettings
+    // Controller exposing the per-layout mutation invokables
+    // (setLayoutAutoAssign, setLayoutHidden). Required explicitly rather than
+    // read from the implicit context property, matching this file's
+    // explicit-dependency policy for everything the delegate touches.
+    required property var settingsController
     required property real cellWidth
     required property real cellHeight
     property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile
@@ -341,7 +346,7 @@ Item {
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: effectiveAuto ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
-                        onClicked: settingsController.setLayoutAutoAssign(root.modelData.id, !perLayoutAuto)
+                        onClicked: root.settingsController.setLayoutAutoAssign(root.modelData.id, !perLayoutAuto)
                         Accessible.name: i18n("Auto-assign layout")
                         ToolTip.visible: hovered
                         ToolTip.text: tooltipText()
@@ -357,7 +362,7 @@ Item {
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.hiddenFromSelector ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
-                        onClicked: settingsController.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
+                        onClicked: root.settingsController.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
                         Accessible.name: i18n("Toggle layout visibility")
                         ToolTip.visible: hovered
                         ToolTip.text: root.modelData.hiddenFromSelector ? i18n("Hidden from zone selector. Click to show.") : i18n("Visible in zone selector. Click to hide.")

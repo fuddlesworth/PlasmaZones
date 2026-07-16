@@ -79,6 +79,35 @@ Item {
         zoneShaderRenderer.reloadShader();
     }
 
+    // Mirrors ZoneOverlayContent.isZoneHighlighted() so the ZoneItem
+    // fallback below (shown while the shader is missing, still compiling,
+    // or errored) renders the same single- AND multi-zone highlights as
+    // the rectangle path. C++ bakes highlight state into
+    // modelData.isHighlighted (patchZonesWithHighlight) only when zone
+    // data is re-pushed; the live highlightedZoneId / highlightedZoneIds
+    // checks keep the fallback responsive between pushes.
+    function isZoneHighlighted(zoneData) {
+        // isHighlighted is C++-guaranteed bool: overlay_data.cpp writes
+        // zone->isHighlighted() and patchZonesWithHighlight() re-stamps it
+        // as a real bool on every slot push, so raw truthiness (unlike the
+        // strict useCustomColors contract) is safe here. Mirrored in
+        // ZoneOverlayContent.isZoneHighlighted().
+        if (zoneData.isHighlighted)
+            return true;
+
+        if (!zoneData.id)
+            return false;
+
+        if (zoneData.id === highlightedZoneId)
+            return true;
+
+        for (var i = 0; i < highlightedZoneIds.length; i++) {
+            if (highlightedZoneIds[i] === zoneData.id)
+                return true;
+        }
+        return false;
+    }
+
     anchors.fill: parent
 
     Item {
@@ -139,6 +168,13 @@ Item {
             }
         }
 
+        // Unlike ZoneOverlayContent there is deliberately NO layout-preview
+        // (overlayDisplayMode === 1) branch here: this content can never
+        // receive preview-mode zones. useShaderForScreen() (shader.cpp)
+        // returns false whenever ANY zone on the screen resolves to
+        // LayoutPreview, so C++ mounts ZoneOverlayContent instead, and
+        // overlayDisplayModeChanged re-syncs a live overlay via
+        // recreateOverlayWindowsOnTypeMismatch().
         Repeater {
             model: root.zones
 
@@ -161,7 +197,23 @@ Item {
                 height: modelData.height !== undefined ? modelData.height : 0
                 zoneNumber: modelData.zoneNumber || (index + 1)
                 zoneName: modelData.name || ""
-                isHighlighted: modelData.isHighlighted || (root.hoveredZoneIndex === index)
+                isHighlighted: root.isZoneHighlighted(modelData) || (root.hoveredZoneIndex === index)
+                // Mirrors ZoneOverlayContent's zoneRectComponent so a
+                // multi-zone highlight keeps its thicker/tinted border
+                // when the fallback rectangles are what's on screen.
+                isMultiZone: {
+                    if (root.highlightedZoneIds.length <= 1)
+                        return false;
+
+                    if (!modelData.id)
+                        return false;
+
+                    for (var i = 0; i < root.highlightedZoneIds.length; i++) {
+                        if (root.highlightedZoneIds[i] === modelData.id)
+                            return true;
+                    }
+                    return false;
+                }
                 showNumber: root.showNumbers
                 highlightColor: (useCustom && modelData.highlightColor) ? modelData.highlightColor : root.highlightColor
                 inactiveColor: (useCustom && modelData.inactiveColor) ? modelData.inactiveColor : root.inactiveColor

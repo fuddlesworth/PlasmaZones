@@ -145,8 +145,11 @@ ItemDelegate {
                     // `encodeURI` percent-encodes spaces and unicode while
                     // preserving path separators, which a raw `"file://" + path`
                     // concat would silently break on (e.g. user-installed packs
-                    // under `~/My Shaders/`).
-                    source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath) : ""
+                    // under `~/My Shaders/`). It leaves `#` and `?` untouched,
+                    // so those two are escaped explicitly or they would be
+                    // parsed as fragment/query delimiters in the file:// URL.
+                    // Twin site: ShaderBrowserDetailDialog.qml preset dialogs.
+                    source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath).replace(/#/g, "%23").replace(/\?/g, "%3F") : ""
                     fillMode: Image.PreserveAspectCrop
                     sourceSize.width: width * 2
                     sourceSize.height: height * 2

@@ -42,6 +42,11 @@ Item {
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
+    // Unread by this content body, but part of the OSD slot forwarding
+    // contract: PassiveOverlayShell's navigationOsdComp binds it from
+    // osdSlot.highlightColor, which C++ writes (osd.cpp
+    // pushLayoutOsdContent) on the shared OSD slot. Deleting it would
+    // break the shell binding, so it stays declared.
     property color highlightColor: Kirigami.Theme.highlightColor
     property color errorColor: Kirigami.Theme.negativeTextColor
     // Get target zone number (first highlighted zone)

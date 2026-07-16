@@ -294,7 +294,13 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     //     inside the OSD content is the accepted casualty - the
     //     alternative is the daemon eating every click on the screen
     //     for the OSD's full lifetime, which the user reported as worse
-    //     than losing click-dismiss.
+    //     than losing click-dismiss. The OSD-card-over-modal variant of
+    //     that casualty (an OSD firing while a modal is up would occlude
+    //     modal content AND, since the modal grabs input, the card's
+    //     MouseArea would eat clicks on its rect) no longer exists: the
+    //     osdSlot's z binding in PassiveOverlayShell.qml drops the OSD
+    //     below the modal slots (3 -> 1.5) whenever one is visible, so
+    //     the modal both paints over and hit-tests before the card.
     //   - Main overlay during drag is driven by KWin's drag stream
     //     (cursor pushes via OverlayService::updateMousePosition);
     //     it never needs Qt-level input on its own.

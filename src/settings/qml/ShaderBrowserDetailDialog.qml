@@ -56,6 +56,15 @@ Kirigami.Dialog {
     }
     readonly property bool _hasParameters: effect && effect.parameters && effect.parameters.length > 0
 
+    // Percent-encode a local file path for use in a file:// URL. `encodeURI`
+    // handles spaces and unicode while preserving path separators, but leaves
+    // `#` and `?` untouched, so those two are escaped explicitly or they would
+    // be parsed as fragment/query delimiters.
+    // Twin site: ShaderBrowserCard.qml preview Image source.
+    function _encodeFilePath(path) {
+        return encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F");
+    }
+
     // ── T3.1 live preview (zone/overlay browser only) ──────────────────
     // The zone-shader bridge exposes a shared ShaderPreviewController; the
     // animation bridge does not. So the right pane is a live render + the left
@@ -185,11 +194,8 @@ Kirigami.Dialog {
                     icon.name: "document-open"
                     Accessible.name: text
                     onClicked: {
-                        // `encodeURI` percent-encodes spaces and unicode while
-                        // preserving path separators, which a raw `"file://" + path`
-                        // concat would silently break on (e.g. a home directory
-                        // containing spaces or non-ASCII characters).
-                        shaderPresetLoadDialog.currentFolder = Qt.resolvedUrl("file://" + encodeURI(root.previewController.shaderPresetDirectory()));
+                        // See root._encodeFilePath for the encoding rationale.
+                        shaderPresetLoadDialog.currentFolder = Qt.resolvedUrl("file://" + root._encodeFilePath(root.previewController.shaderPresetDirectory()));
                         shaderPresetLoadDialog.open();
                     }
                 }
@@ -199,8 +205,8 @@ Kirigami.Dialog {
                     icon.name: "document-save"
                     Accessible.name: text
                     onClicked: {
-                        // Same encodeURI rationale as the Load button above.
-                        shaderPresetSaveDialog.currentFolder = Qt.resolvedUrl("file://" + encodeURI(root.previewController.shaderPresetDirectory()));
+                        // See root._encodeFilePath for the encoding rationale.
+                        shaderPresetSaveDialog.currentFolder = Qt.resolvedUrl("file://" + root._encodeFilePath(root.previewController.shaderPresetDirectory()));
                         shaderPresetSaveDialog.open();
                     }
                 }

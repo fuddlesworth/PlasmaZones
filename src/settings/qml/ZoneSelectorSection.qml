@@ -464,6 +464,59 @@ ColumnLayout {
                     Layout.alignment: Qt.AlignHCenter
                     spacing: 0
 
+                    // Drop the explicit Custom selection when the newly resolved
+                    // size no longer warrants it: a scope switch or an external
+                    // width change can land on a preset width (or Auto mode), and
+                    // a stale Custom highlight would otherwise persist. A size
+                    // that is genuinely custom keeps the Custom chip highlighted.
+                    // Suppresses the reevaluation queued by our own Custom click:
+                    // switching Auto → Custom changes effectivePreviewWidth (Auto's
+                    // derived width gives way to the stored one), and without the
+                    // flag that self-inflicted change would instantly clear the
+                    // selection the user just made.
+                    property bool _selfWrite: false
+
+                    function reevaluateCustomMode() {
+                        if (!customModeActive)
+                            return;
+
+                        if (_selfWrite)
+                            return;
+
+                        if (customSizeSlider.pressed || customSizeSlider.activeFocus)
+                            return;
+
+                        if (root.effectiveSizeMode !== 1) {
+                            customModeActive = false;
+                            return;
+                        }
+                        var w = root.effectivePreviewWidth;
+                        if (Math.abs(w - root.constants.zoneSelectorPreviewSmall) <= presetMatchTolerance || Math.abs(w - root.constants.zoneSelectorPreviewMedium) <= presetMatchTolerance || Math.abs(w - root.constants.zoneSelectorPreviewLarge) <= presetMatchTolerance)
+                            customModeActive = false;
+                    }
+
+                    // Monitor scope switch: the effective* properties re-resolve
+                    // against the new scope's overrides. Deferred via callLater so
+                    // the re-resolved values are in place before the check runs
+                    // (signal-handler vs binding-refresh order is not guaranteed).
+                    Connections {
+                        target: psHelper
+                        function onSelectedScreenNameChanged() {
+                            Qt.callLater(sizeButtonRow.reevaluateCustomMode);
+                        }
+                    }
+
+                    // External width change (override cleared, another client
+                    // writing the setting). The slider-pressed guard inside
+                    // reevaluateCustomMode keeps a live Custom drag that passes
+                    // through a preset width from yanking the slider away.
+                    Connections {
+                        target: root
+                        function onEffectivePreviewWidthChanged() {
+                            Qt.callLater(sizeButtonRow.reevaluateCustomMode);
+                        }
+                    }
+
                     Button {
                         text: i18n("Auto")
                         flat: parent.selectedSize !== 0
@@ -532,9 +585,16 @@ ColumnLayout {
                         flat: parent.selectedSize !== 4
                         highlighted: parent.selectedSize === 4
                         onClicked: {
+                            // The flag outlives the width-changed reevaluation this
+                            // write can queue (callLater runs in FIFO order), then
+                            // clears itself.
+                            sizeButtonRow._selfWrite = true;
                             sizeButtonRow.customModeActive = true;
                             root.writeSetting("SizeMode", 1, function (v) {
                                 appSettings.zoneSelectorSizeMode = v;
+                            });
+                            Qt.callLater(function () {
+                                sizeButtonRow._selfWrite = false;
                             });
                         }
                         ToolTip.visible: hovered
