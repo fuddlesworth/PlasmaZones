@@ -175,6 +175,12 @@ ComboBox {
                     "group": (s.categoryGroup || "")
                 };
 
+            // The bucket creator may lack a categoryGroup while a later item
+            // in the same top category carries one — backfill so the group is
+            // captured regardless of name-sort order.
+            if (tree[top].group === "" && s.categoryGroup)
+                tree[top].group = s.categoryGroup;
+
             // Track the smallest explicit `categoryOrder` seen for this top
             // category — hosts that supply it (the rule editor's field/action
             // pickers) get that order; hosts that don't (shaders) fall back to

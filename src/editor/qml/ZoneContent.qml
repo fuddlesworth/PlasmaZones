@@ -42,7 +42,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: (zoneContent.zoneData && zoneContent.zoneData.zoneNumber) || 1
             // Guard against negative or zero dimensions causing invalid font size
-            font.pixelSize: Math.max(8, Math.min(zoneContent.width || 0, zoneContent.height || 0) * 0.25) * zoneContent.fontSizeScale
+            font.pixelSize: Math.max(8, Math.min(zoneContent.width || 0, zoneContent.height || 0) * 0.25 * zoneContent.fontSizeScale)
             font.weight: zoneContent.fontWeight
             font.italic: zoneContent.fontItalic
             font.underline: zoneContent.fontUnderline

@@ -177,6 +177,11 @@ ComboBox {
             if ((old.layout && old.layout.aspectRatioClass) !== (nw.layout && nw.layout.aspectRatioClass))
                 return false;
 
+            // Zone count is shown in the popup subtitle and drives the zone
+            // preview, so zone add/remove edits must invalidate the model.
+            if ((old.layout && old.layout.zoneCount) !== (nw.layout && nw.layout.zoneCount))
+                return false;
+
             // For "Default" entry, also check which layout it resolves to
             if (old.isDefaultOption && ((old.layout ? old.layout.id : "") !== (nw.layout ? nw.layout.id : "")))
                 return false;

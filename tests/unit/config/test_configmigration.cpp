@@ -767,6 +767,10 @@ private Q_SLOTS:
                                     "\n"
                                     "[Display]\n"
                                     "ShowOnAllMonitors=true\n"
+                                    // Retired blur toggle: migrateV1ToV2 intentionally drops it, so
+                                    // the schema-coverage assertion pins that this stray v1 key never
+                                    // leaks into the v2 tree as an undeclared destination key.
+                                    "EnableBlur=true\n"
                                     "DisabledMonitors=a\n"
                                     "DisabledDesktops=b\n"
                                     "DisabledActivities=c\n"

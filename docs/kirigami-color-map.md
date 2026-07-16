@@ -108,11 +108,11 @@ which were resolved on the `fix/theme-color-pipeline` branch.
 
 ## In-tree exemplars (copy these)
 
-- `EasingPreview.qml:335` / `SpringPreview.qml:106` — correct `View` colorSet
-- `ShaderBrowserCard.qml:103`, `ParameterRow.qml:343` — correct `focusColor`
-- `DimensionTooltip.qml:56` — correct `Tooltip` colorSet
-- `UnsavedChangesFooter.qml:44-45` — correct `Window` pin with `inherit: false`
-- `ParameterSection.qml:184` — the one correct `hoverColor`
+- `EasingPreview.qml` / `SpringPreview.qml` — correct `View` colorSet
+- `ShaderBrowserCard.qml`, `ParameterRow.qml` — correct `focusColor`
+- `DimensionTooltip.qml` — correct `Tooltip` colorSet
+- `UnsavedChangesFooter.qml` — correct `Window` pin with `inherit: false`
+- `ParameterSection.qml` — the one correct `hoverColor`
 
 ## Post-fix findings (discovered after the QML pass)
 

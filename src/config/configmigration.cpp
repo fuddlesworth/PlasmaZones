@@ -935,15 +935,19 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // orthogonal bool. Preserve v1 users' customisation by composing the
     // Profile blob inline here rather than dropping the fields.
     //
-    // Both sides go through accessors: v2 via ConfigDefaults / Profile
-    // constants (per CLAUDE.md rule: no inline QStringLiteral for config
-    // keys) so a schema rename touches one accessor, and v1 via
+    // Both sides go through frozen ConfigKeys::Legacy accessors (per CLAUDE.md
+    // rule: no inline QStringLiteral for config keys): the destination via
+    // v2AnimationsGroup / v2AnimationsEnabledKey / v2AnimationProfileKey —
+    // frozen at the v2 on-disk spellings, like every sibling destination in
+    // this step, so a future rename of the live ConfigDefaults accessors
+    // cannot silently retarget the migration — and the source via
     // ConfigKeys::Legacy::v1Animation*Key() so the migration is unambiguous about
     // "reading legacy field" — the v1 shape is stable by definition but
     // having a single source of truth keeps `grep "AnimationDuration"`
     // returning one accessor declaration instead of N call-sites.
     QJsonObject animations;
-    moveKey(v1Animations, ConfigKeys::Legacy::v1AnimationsEnabledKey(), animations, ConfigDefaults::enabledKey());
+    moveKey(v1Animations, ConfigKeys::Legacy::v1AnimationsEnabledKey(), animations,
+            ConfigKeys::Legacy::v2AnimationsEnabledKey());
 
     // Assemble Profile fields from the v1 keys (if present). We build
     // the JSON shape directly using Profile's public field-name
@@ -1033,11 +1037,11 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         // The Settings layer's `Store::read<QVariantMap>` legacy-string
         // fallback parses this on first load and the next save normalises
         // it to a nested object.
-        animations[ConfigDefaults::animationProfileKey()] =
+        animations[ConfigKeys::Legacy::v2AnimationProfileKey()] =
             QString::fromUtf8(QJsonDocument(profile).toJson(QJsonDocument::Compact));
     }
     if (!animations.isEmpty())
-        root[ConfigDefaults::animationsGroup()] = animations;
+        root[ConfigKeys::Legacy::v2AnimationsGroup()] = animations;
 
     // ── Shortcuts.Global (drop "Shortcut" suffix from some keys) ────────────
     QJsonObject globalShortcuts;

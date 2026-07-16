@@ -17,6 +17,10 @@ Rectangle {
 
     id: dimensionTooltip
 
+    // Stacking order among drawingArea siblings. Zones stack unbounded
+    // (zoneBaseZ + zOrder), so the instantiation site passes canvasOverlayZ + 1
+    // to keep the tooltip above the zones and the snap lines.
+    required property int overlayZ
     property real zoneX: 0
     property real zoneY: 0
     property real zoneWidth: 0
@@ -57,7 +61,7 @@ Rectangle {
     color: Kirigami.Theme.backgroundColor
     border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     border.width: constants.tooltipBorderWidth
-    z: 250
+    z: dimensionTooltip.overlayZ
     Accessible.name: i18nc("@info:accessibility", "Zone dimensions")
     Accessible.description: isFixedMode ? i18nc("@info:accessibility", "Position: %1px, %2px  Size: %3px × %4px", fixedPosX, fixedPosY, fixedSizeW, fixedSizeH) : i18nc("@info:accessibility", "Position: %1%, %2%  Size: %3% × %4%", xPercent, yPercent, widthPercent, heightPercent)
 

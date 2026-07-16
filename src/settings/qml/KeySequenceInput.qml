@@ -21,29 +21,6 @@ QQC2.TextField {
 
     signal keySequenceModified(string sequence)
 
-    function formatKeySequence(seq) {
-        if (!seq || seq.length === 0)
-            return "";
-
-        // Convert to KDE standard format if needed
-        return seq;
-    }
-
-    function parseKeySequence(seq) {
-        // Parse key sequence string and extract modifiers and keys
-        if (!seq || seq.length === 0)
-            return {
-                "modifiers": 0,
-                "key": 0
-            };
-
-        // Basic parsing - would need more sophisticated implementation
-        return {
-            "modifiers": 0,
-            "key": 0
-        };
-    }
-
     text: capturing ? i18n("Press keys...") : (keySequence || "")
     placeholderText: i18n("Click to set shortcut")
     // Always read-only - we handle all input via key capture

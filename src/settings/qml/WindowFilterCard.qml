@@ -109,7 +109,7 @@ SettingsCard {
                 // suppress SettingsSpinBox's default "px" Label so the value
                 // reads "100 px" rather than "100 px px" (and "Off" not "Off px").
                 unitText: ""
-                Accessible.name: card.minWidthAccessibleName
+                accessibleName: card.minWidthAccessibleName
                 onValueModified: value => {
                     card.minWidthModified(value);
                 }
@@ -140,7 +140,7 @@ SettingsCard {
                     restoreMode: Binding.RestoreNone
                 }
                 unitText: ""
-                Accessible.name: card.minHeightAccessibleName
+                accessibleName: card.minHeightAccessibleName
                 onValueModified: value => {
                     card.minHeightModified(value);
                 }

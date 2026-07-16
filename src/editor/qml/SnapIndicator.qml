@@ -13,6 +13,10 @@ import org.kde.kirigami as Kirigami
 Item {
     id: snapIndicator
 
+    // Stacking order among drawingArea siblings. Zones stack unbounded
+    // (zoneBaseZ + zOrder), so the instantiation site passes the window's
+    // canvasOverlayZ to keep snap lines above every zone.
+    required property int overlayZ
     // Active snap positions (0-1 relative coordinates)
     property var verticalSnapLines: []
     // Array of x positions
@@ -76,7 +80,7 @@ Item {
     }
 
     anchors.fill: parent
-    z: 200 // Above everything except dialogs
+    z: snapIndicator.overlayZ // Above all zones, whatever the zone count
 
     // Vertical snap lines
     Repeater {

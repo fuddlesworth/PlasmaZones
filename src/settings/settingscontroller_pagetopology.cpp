@@ -254,7 +254,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::shadersAudioGroup(), CD::inputSourceKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::suppressDefaultLayoutAssignmentKey()},
              // The OSD card also lives on General; its five settings share the
-             // snappingEffectsGroup with the appearance page's blur/showNumbers/
+             // snappingEffectsGroup with the appearance page's showNumbers/
              // flashOnSwitch keys but are distinct keys, so the one-owner
              // invariant holds.
              {CD::snappingEffectsGroup(), CD::osdOnLayoutSwitchKey()},

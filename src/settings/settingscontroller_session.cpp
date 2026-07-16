@@ -83,6 +83,12 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int vir
     setNeedsSave(true);
 }
 
+void SettingsController::stageAssignmentClear(const QString& screenName, int virtualDesktop, const QString& activityId)
+{
+    m_staging.stageFullClear(screenName, virtualDesktop, activityId);
+    setNeedsSave(true);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Path helpers exposed to QML
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -803,6 +809,14 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
     if (!s)
         return {};
     QVariantMap map;
+    // A staged full clear carries no mode/layout fields (stageFullClear
+    // resets them), so surface it explicitly — otherwise QML restore code
+    // would see an empty map and fall back to the daemon's still-resolved
+    // explicit values, hiding the pending clear.
+    if (s->fullCleared) {
+        map[QStringLiteral("fullCleared")] = true;
+        return map;
+    }
     if (s->snappingLayoutId.has_value())
         map[QStringLiteral("layoutId")] = *s->snappingLayoutId;
     if (s->tilingAlgorithmId.has_value()) {

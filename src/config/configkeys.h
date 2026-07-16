@@ -599,7 +599,6 @@ public:
 
     P_CONFIG_KEY(gridEnabledKey, "GridEnabled")
     P_CONFIG_KEY(edgeEnabledKey, "EdgeEnabled")
-    P_CONFIG_KEY(intervalKey, "Interval")
     P_CONFIG_KEY(intervalXKey, "IntervalX")
     P_CONFIG_KEY(intervalYKey, "IntervalY")
     P_CONFIG_KEY(overrideModifierKey, "OverrideModifier")
@@ -727,6 +726,15 @@ public:
         P_CONFIG_GROUP(v2ShortcutsGroup, "Shortcuts")
         P_CONFIG_GROUP(v2EditorGroup, "Editor")
         P_CONFIG_GROUP(v2OrderingGroup, "Ordering")
+        // v2 Animations destination — group plus the two leaf keys migrateV1ToV2
+        // writes ("Enabled" bool and the stringified "Profile" blob). Frozen at
+        // their v2 literals for the same reason as the sibling groups above: a
+        // future rename of the live `animationsGroup()` / `enabledKey()` /
+        // `animationProfileKey()` accessors must not silently retarget the
+        // v1→v2 step to a path no v2 config ever had on disk.
+        P_CONFIG_GROUP(v2AnimationsGroup, "Animations")
+        P_CONFIG_KEY(v2AnimationsEnabledKey, "Enabled")
+        P_CONFIG_KEY(v2AnimationProfileKey, "Profile")
         // Parameterised v2 destinations: v1→v2 renames v1's
         // `QuickLayout%1Shortcut` to v2's `QuickLayout%1` and preserves
         // v1's `SnapToZone%1` verbatim. Frozen accessors pin the v2

@@ -113,6 +113,11 @@ Rectangle {
         inactiveOpacitySlider.syncOpacity(zone.inactiveOpacity !== undefined ? zone.inactiveOpacity : defaultInactiveOpacity);
         borderWidthSpinBox.syncValue(zone.borderWidth !== undefined ? zone.borderWidth : defaultBorderWidth);
         borderRadiusSpinBox.syncValue(zone.borderRadius !== undefined ? zone.borderRadius : defaultBorderRadius);
+        // The combo's declarative currentIndex binding severs on the first user
+        // activation, so re-derive it from the fresh zone map here (same
+        // -1 -> 0 / 0 -> 1 / 1 -> 2 mapping as the binding).
+        const mode = zone.overlayDisplayMode !== undefined ? zone.overlayDisplayMode : -1;
+        zoneOverlayModeCombo.currentIndex = Math.max(0, Math.min(mode + 1, 2));
     }
 
     // Same imperative-sync idiom for the name field and number spinbox: their

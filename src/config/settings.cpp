@@ -1786,7 +1786,7 @@ P_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, a
 
 // ── Display (PhosphorConfig::Store-backed) ──────────────────────────────────
 // Display.* keys live in snappingBehaviorDisplayGroup; OSD + Effects keys
-// share snappingEffectsGroup with the already-migrated Appearance.Blur.
+// live in snappingEffectsGroup.
 // QStringList keys go over the wire as comma-joined strings; the getters
 // parse back via parseCommaList (defined above in the Ordering section).
 
@@ -2119,7 +2119,16 @@ QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode
     for (auto& name : entries) {
         name = resolveScreenId(name);
     }
-    return entries;
+    // Order-preserving dedup: a connector-name entry and an id-form entry can
+    // resolve to the same screen id, and consumers expect one entry per screen.
+    QStringList deduped;
+    deduped.reserve(entries.size());
+    for (const QString& entry : std::as_const(entries)) {
+        if (!deduped.contains(entry)) {
+            deduped.append(entry);
+        }
+    }
+    return deduped;
 }
 
 void Settings::setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames)
@@ -2534,6 +2543,11 @@ void Settings::setZoneSpanModifier(DragModifier modifier)
     // baked in because the synthesis below ran with the raw input.
     const int before =
         m_store->read<int>(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey());
+    // Snapshot the trigger list BEFORE writing the modifier: on configs with no
+    // stored trigger list, zoneSpanTriggers() synthesizes its result from the
+    // modifier key, so a post-write snapshot would already reflect the new
+    // modifier and the trigger-change comparison below could never fire.
+    const QVariantList beforeTriggers = zoneSpanTriggers();
     m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey(),
                    static_cast<int>(modifier));
     const int after =
@@ -2546,7 +2560,6 @@ void Settings::setZoneSpanModifier(DragModifier modifier)
     // the validator-coerced `after` value, not the raw input, so an invalid
     // request that was snapped to the default doesn't smuggle a
     // {modifier: 99} phantom into the trigger list.
-    const QVariantList beforeTriggers = zoneSpanTriggers();
     QVariantList triggers = beforeTriggers;
     if (!triggers.isEmpty()) {
         QVariantMap first = triggers.first().toMap();
@@ -3132,10 +3145,14 @@ void Settings::reset()
     QHash<Mode, QStringList> resetMonitorsBefore;
     QHash<Mode, QStringList> resetDesktopsBefore;
     QHash<Mode, QStringList> resetActivitiesBefore;
+    // Snapshot in canonical form — the same canonicalDisableEntries mechanism
+    // load() uses — so entries that canonicalize away (unresolvable connector
+    // names, formatting variants) don't produce spurious change signals when
+    // the raw pre-clear list differs only cosmetically from the post-load one.
     for (const Mode mode : PhosphorZones::allModes()) {
-        resetMonitorsBefore.insert(mode, disabledMonitors(mode));
-        resetDesktopsBefore.insert(mode, disabledDesktops(mode));
-        resetActivitiesBefore.insert(mode, disabledActivities(mode));
+        resetMonitorsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)));
+        resetDesktopsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)));
+        resetActivitiesBefore.insert(mode, canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)));
     }
     {
         namespace CRB = PhosphorRules::ContextRuleBridge;
@@ -3184,15 +3201,16 @@ void Settings::reset()
     // aggregate.
     bool anyDisableChanged = false;
     for (const Mode mode : PhosphorZones::allModes()) {
-        if (disabledMonitors(mode) != resetMonitorsBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)) != resetMonitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);
             anyDisableChanged = true;
         }
-        if (disabledDesktops(mode) != resetDesktopsBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)) != resetDesktopsBefore.value(mode)) {
             Q_EMIT disabledDesktopsChanged(mode);
             anyDisableChanged = true;
         }
-        if (disabledActivities(mode) != resetActivitiesBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode))
+            != resetActivitiesBefore.value(mode)) {
             Q_EMIT disabledActivitiesChanged(mode);
             anyDisableChanged = true;
         }

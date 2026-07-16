@@ -261,12 +261,23 @@ SettingsFlickable {
                     description: page.appSettings.animationMinDistance === 0 ? i18n("Currently: always animate, no threshold") : i18n("Skip animation when geometry changes less than this")
 
                     SettingsSpinBox {
-                        Accessible.name: i18n("Minimum distance")
+                        id: minDistanceSpin
+
+                        accessibleName: i18n("Minimum distance")
                         enabled: animationsCard.toggleChecked
                         from: settingsController.generalPage.animationMinDistanceMin
                         to: settingsController.generalPage.animationMinDistanceMax
                         stepSize: 5
-                        value: page.appSettings.animationMinDistance
+                        // Feed value through a guarded Binding so a config change
+                        // keeps refreshing the control: a plain `value:` binding is
+                        // destroyed by SettingsSpinBox's own edit echo after the
+                        // first edit. RestoreNone + the focus gate keeps a live edit
+                        // from being clobbered.
+                        Binding on value {
+                            value: page.appSettings.animationMinDistance
+                            when: !minDistanceSpin.editing
+                            restoreMode: Binding.RestoreNone
+                        }
                         // Match the "zero = disabled, otherwise px" treatment used
                         // by the Minimum window width / height spinboxes below so
                         // the user sees a consistent "Off" / "%1 px" rendering

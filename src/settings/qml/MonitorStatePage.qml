@@ -98,34 +98,50 @@ SettingsFlickable {
         var tiling = "";
         if (stateView.localMode === 1) {
             if (stateView.localAlgorithmCleared) {
-                // The user explicitly picked "Default". The controller exposes
-                // no invokable that stages an assignment clear
-                // (StagingService::stageFullClear is not surfaced to QML), so
-                // stage nothing rather than pinning the currently-resolved
-                // algorithm as an explicit assignment via the fallback below.
+                // The user explicitly picked "Default": stage an assignment
+                // clear so an earlier explicit pick in this session and any
+                // daemon-side explicit assignment are reverted on Apply,
+                // instead of pinning the currently-resolved algorithm via
+                // the fallback below.
+                settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
                 return;
             }
             // The || fallback serves the mode-toggle path, which stages the
             // currently-resolved algorithm when the user has not picked one.
             var algoId = stateView.localAlgorithmId || state.algorithmId;
-            if (!algoId)
+            if (!algoId) {
+                // Nothing resolved to pin. Clear any stale staged entry for
+                // this context (e.g. an opposite-mode pick from earlier in
+                // the session) so Apply cannot commit it while the UI shows
+                // Default.
+                if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
+                    settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
                 return;
+            }
 
             tiling = "autotile:" + algoId;
         } else {
             if (stateView.localLayoutCleared) {
-                // The user explicitly picked "Default". The controller exposes
-                // no invokable that stages an assignment clear
-                // (StagingService::stageFullClear is not surfaced to QML), so
-                // stage nothing rather than pinning the currently-resolved
-                // layout as an explicit assignment via the fallback below.
+                // The user explicitly picked "Default": stage an assignment
+                // clear so an earlier explicit pick in this session and any
+                // daemon-side explicit assignment are reverted on Apply,
+                // instead of pinning the currently-resolved layout via the
+                // fallback below.
+                settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
                 return;
             }
             // The || fallback serves the mode-toggle path, which stages the
             // currently-resolved layout when the user has not picked one.
             var layoutId = stateView.localLayoutId || state.layoutId;
-            if (!layoutId)
+            if (!layoutId) {
+                // Nothing resolved to pin. Clear any stale staged entry for
+                // this context (e.g. an opposite-mode pick from earlier in
+                // the session) so Apply cannot commit it while the UI shows
+                // Default.
+                if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
+                    settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
                 return;
+            }
 
             snapping = layoutId;
         }
@@ -268,7 +284,16 @@ SettingsFlickable {
                 localLayoutCleared = false;
                 localAlgorithmCleared = false;
                 var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
-                if (Object.keys(staged).length > 0) {
+                if (staged.fullCleared) {
+                    // A staged full clear means "Default" is pending for this
+                    // context: show Default rather than re-reading the
+                    // daemon's still-resolved explicit values.
+                    localMode = screenState.mode || 0;
+                    localLayoutId = "";
+                    localAlgorithmId = "";
+                    localLayoutCleared = true;
+                    localAlgorithmCleared = true;
+                } else if (Object.keys(staged).length > 0) {
                     // Restore from staged state
                     localMode = staged.mode !== undefined ? staged.mode : (screenState.mode || 0);
                     localLayoutId = staged.layoutId !== undefined ? staged.layoutId : (screenState.layoutId || "");

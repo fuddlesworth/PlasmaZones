@@ -279,10 +279,13 @@ Item {
         }
     }
 
-    // Click to dismiss. dismiss.fire() collapses timer-fire + click into
-    // a single dismissRequested per show cycle via the shared latch.
+    // Click the card to dismiss. Anchored to the card (not the whole OSD
+    // slot) so a concurrent modal slot (snap assist, picker) keeps receiving
+    // its own clicks instead of hitting a screen-wide input shield.
+    // dismiss.fire() collapses timer-fire + click into a single
+    // dismissRequested per show cycle via the shared latch.
     MouseArea {
-        anchors.fill: parent
+        anchors.fill: container
         onClicked: dismiss.fire()
         Accessible.name: i18n("Dismiss notification")
     }

@@ -206,6 +206,7 @@ SettingsFlickable {
                     SettingsSpinBox {
                         id: borderWidthSpin
 
+                        accessibleName: i18n("Border width")
                         from: root.ctl.borderWidthMin
                         to: root.ctl.borderWidthMax
                         onValueModified: value => root.ctl.windowBorderWidth = value
@@ -235,6 +236,7 @@ SettingsFlickable {
                     SettingsSpinBox {
                         id: borderRadiusSpin
 
+                        accessibleName: i18n("Corner radius")
                         from: root.ctl.borderRadiusMin
                         to: root.ctl.borderRadiusMax
                         onValueModified: value => root.ctl.windowBorderRadius = value

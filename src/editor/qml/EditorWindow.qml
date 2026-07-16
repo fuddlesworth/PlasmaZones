@@ -582,6 +582,7 @@ Window {
                     id: snapIndicator
 
                     // anchors.fill is set in SnapIndicator.qml to fill parent (drawingArea)
+                    overlayZ: editorWindow.canvasOverlayZ
                     showSnapLines: true
                 }
 
@@ -589,6 +590,7 @@ Window {
                 DimensionTooltip {
                     id: dimensionTooltip
 
+                    overlayZ: editorWindow.canvasOverlayZ + 1
                     zoneX: activeZoneOperation.x
                     zoneY: activeZoneOperation.y
                     zoneWidth: activeZoneOperation.width

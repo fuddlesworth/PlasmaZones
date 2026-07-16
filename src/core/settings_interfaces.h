@@ -142,7 +142,7 @@ public:
 };
 
 /**
- * @brief Settings related to zone visualization (colors, opacity, blur)
+ * @brief Settings related to zone visualization (colors, opacity)
  *
  * Used by: KWin Effect, KCM, Overlay Service
  */

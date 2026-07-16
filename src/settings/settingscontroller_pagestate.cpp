@@ -61,7 +61,6 @@ const Settings::ConfigKeyList& animationConfigKeys()
 {
     using CD = ConfigDefaults;
     static const Settings::ConfigKeyList keys{
-        {CD::animationsGroup(), CD::backendKey()},
         {CD::animationsGroup(), CD::enabledKey()},
         {CD::animationsGroup(), CD::animationProfileKey()},
         {CD::animationsGroup(), CD::shaderProfileTreeKey()},

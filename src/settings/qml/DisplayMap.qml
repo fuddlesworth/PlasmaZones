@@ -255,7 +255,7 @@ ColumnLayout {
                 Kirigami.Theme.inherit: false
                 color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : allMouse.containsMouse ? Kirigami.Theme.alternateBackgroundColor : "transparent"
                 border.width: 1
-                border.color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : allMouse.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                border.color: allMouse.activeFocus ? Kirigami.Theme.focusColor : !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 ColumnLayout {
                     id: allContent
 
@@ -344,8 +344,8 @@ ColumnLayout {
                         Kirigami.Theme.colorSet: Kirigami.Theme.View
                         Kirigami.Theme.inherit: false
                         color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18) : tileMouse.containsMouse ? Kirigami.Theme.alternateBackgroundColor : Kirigami.Theme.backgroundColor
-                        border.width: isSelected ? 2 : 1
-                        border.color: isSelected ? Kirigami.Theme.highlightColor : tileMouse.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                        border.width: (isSelected || tileMouse.activeFocus) ? 2 : 1
+                        border.color: tileMouse.activeFocus ? Kirigami.Theme.focusColor : isSelected ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                         // Connector-first label (DP-2); vendor + resolution in tooltip.
                         Label {

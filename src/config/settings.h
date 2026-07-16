@@ -1565,8 +1565,8 @@ private:
     // Display is stored in m_store; no cached members here.
 
     // Appearance
-    // Appearance + Labels + Opacity + Border + Effects.Blur are stored in
-    // m_store; no cached members here.
+    // Appearance + Labels + Opacity + Border are stored in m_store; no
+    // cached members here.
 
     // PhosphorZones::Zone settings
     // PhosphorZones::Zone geometry is stored in m_store; no cached members here.

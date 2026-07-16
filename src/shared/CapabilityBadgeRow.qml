@@ -23,10 +23,14 @@ Row {
 
     property var layoutData: ({})
 
+    // Null-safe view of layoutData — hosts may bind null/undefined before the
+    // layout payload arrives, so every capability read goes through this.
+    readonly property var _d: layoutData || ({})
+
     spacing: Kirigami.Units.smallSpacing
     // Hidden (and space-free in the enclosing positioner) when the layout
     // advertises no capabilities — i.e. every manual layout.
-    visible: layoutData.supportsMemory === true || layoutData.reflowsOnResize === true || layoutData.supportsScriptState === true || layoutData.supportsSingleWindow === true || layoutData.reflowsOnFocus === true
+    visible: _d.supportsMemory === true || _d.reflowsOnResize === true || _d.supportsScriptState === true || _d.supportsSingleWindow === true || _d.reflowsOnFocus === true
 
     // Shared icon-badge primitive: a small masked symbolic icon with a hover
     // tooltip. Each instance sets only visible/source/color/text.
@@ -54,7 +58,7 @@ Row {
 
     // Memory indicator for algorithms that persist split state.
     CapabilityBadge {
-        visible: root.layoutData.supportsMemory === true
+        visible: root._d.supportsMemory === true
         source: "document-save-symbolic"
         color: Kirigami.Theme.textColor
         Accessible.name: i18n("Persistent algorithm")
@@ -64,7 +68,7 @@ Row {
     // Reflow indicator for algorithms that adjust the layout when a tiled
     // window is interactively resized.
     CapabilityBadge {
-        visible: root.layoutData.reflowsOnResize === true
+        visible: root._d.reflowsOnResize === true
         source: "transform-scale-symbolic"
         color: Kirigami.Theme.highlightColor
         Accessible.name: i18n("Reflows")
@@ -75,7 +79,7 @@ Row {
     // per-screen state bag across retiles. Distinct colour from the reflow
     // badge so the two are tellable apart when both show.
     CapabilityBadge {
-        visible: root.layoutData.supportsScriptState === true
+        visible: root._d.supportsScriptState === true
         source: "code-context-symbolic"
         color: Kirigami.Theme.textColor
         Accessible.name: i18n("Persistent script state")
@@ -85,7 +89,7 @@ Row {
     // Single-window indicator for algorithms that lay out a lone window
     // themselves (centering or sizing it) instead of letting it fill the screen.
     CapabilityBadge {
-        visible: root.layoutData.supportsSingleWindow === true
+        visible: root._d.supportsSingleWindow === true
         source: "view-restore-symbolic"
         color: Kirigami.Theme.textColor
         Accessible.name: i18n("Single-window layout")
@@ -96,7 +100,7 @@ Row {
     // between tiled windows (e.g. a spotlight that brings the focused window
     // to the center).
     CapabilityBadge {
-        visible: root.layoutData.reflowsOnFocus === true
+        visible: root._d.reflowsOnFocus === true
         source: "find-location-symbolic"
         color: Kirigami.Theme.textColor
         Accessible.name: i18n("Follows focus")

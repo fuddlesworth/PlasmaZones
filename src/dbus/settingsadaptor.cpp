@@ -18,6 +18,7 @@
 #include <QJsonObject>
 #include <QColor>
 #include <QDBusVariant>
+#include <QMetaProperty>
 #include <QStandardPaths>
 #include <functional>
 #include <optional>
@@ -547,6 +548,9 @@ void SettingsAdaptor::initializeRegistry()
 
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
+
+    // Layout filtering
+    REGISTER_BOOL_SETTING("filterLayoutsByAspectRatio", filterLayoutsByAspectRatio, setFilterLayoutsByAspectRatio)
 
     // Window filtering — the per-app / per-class exclusion lists
     // (excludedApplications, excludedWindowClasses) retired in v4 along
@@ -1140,14 +1144,26 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
     // Stop any pending debounced save — we will save synchronously below
     m_saveTimer->stop();
 
-    // Block settingsChanged during the batch — each setter emits it individually,
-    // which would trigger N daemon handler invocations (autotile transitions, KWin
-    // effect reloads) mid-batch with partially-applied state. Block all signals
-    // during iteration and save once, so the change reaches consumers as a single
-    // committed settingsChanged rather than N partial ones. (This used to say the
+    // Block all m_settings signals during the batch — each setter emits its own
+    // NOTIFY plus the aggregate settingsChanged, which would trigger N daemon
+    // handler invocations (autotile transitions, KWin effect reloads) mid-batch
+    // with partially-applied state. QSignalBlocker suppresses emissions outright
+    // (it does not queue them), so everything the batch changed must be re-emitted
+    // explicitly after the blocker scope closes — see below. (This used to say the
     // KCM's notifyReload() drives the reload; it does not — the KCM writes config
     // in-process. Nothing in this tree calls setSettings at all; it is a published
     // D-Bus surface for external clients.)
+    //
+    // Snapshot every registered getter first so the post-batch re-emit can fire
+    // only for values that actually changed (emit-on-change rule), including
+    // cross-property side effects (e.g. setZoneSpanModifier rewrites the trigger
+    // list). setSettings is a rare external batch entry point, so reading all
+    // getters twice is acceptable.
+    QVariantMap beforeValues;
+    for (auto it = m_getters.constBegin(); it != m_getters.constEnd(); ++it) {
+        beforeValues.insert(it.key(), it.value()());
+    }
+
     bool allOk = true;
     {
         QSignalBlocker blocker(m_settings);
@@ -1181,6 +1197,41 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
 
     // Save once with all values applied
     m_settings->save();
+
+    // Re-emit what the blocker suppressed, now that the whole batch is committed.
+    //
+    // Per-property NOTIFYs are needed, not just the aggregate: the adaptor runs
+    // in the daemon process, and daemon components connect to individual NOTIFY
+    // signals (e.g. OverlayService wires audio*Changed / shaderFrameRateChanged
+    // to syncCavaState and overlayDisplayModeChanged to overlay recreation), so
+    // a lone settingsChanged would leave those consumers stale. Registry keys
+    // mirror Q_PROPERTY names, so resolve each changed key to its property's
+    // NOTIFY signal via the metaobject. Parameterless signals only — every
+    // Q_PROPERTY NOTIFY on Settings is parameterless; keys without a matching
+    // property (compound registry-only keys) are covered by the aggregate.
+    const QMetaObject* metaObject = m_settings->metaObject();
+    bool anyChanged = false;
+    for (auto it = m_getters.constBegin(); it != m_getters.constEnd(); ++it) {
+        if (it.value()() == beforeValues.value(it.key())) {
+            continue;
+        }
+        anyChanged = true;
+        const int propertyIndex = metaObject->indexOfProperty(it.key().toUtf8().constData());
+        if (propertyIndex < 0) {
+            continue;
+        }
+        const QMetaMethod notify = metaObject->property(propertyIndex).notifySignal();
+        if (notify.isValid() && notify.parameterCount() == 0) {
+            notify.invoke(m_settings, Qt::DirectConnection);
+        }
+    }
+    // One committed settingsChanged for the whole batch. Emitting on m_settings
+    // (not on the adaptor) reaches BOTH in-process listeners and the D-Bus bus:
+    // the constructor relays ISettings::settingsChanged to the adaptor's own
+    // D-Bus settingsChanged signal.
+    if (anyChanged) {
+        QMetaObject::invokeMethod(m_settings, &ISettings::settingsChanged);
+    }
     qCInfo(lcDbusSettings) << "setSettings: batch applied" << settings.size() << "keys, allOk:" << allOk;
 
     return allOk;

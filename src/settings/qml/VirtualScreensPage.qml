@@ -415,8 +415,9 @@ SettingsFlickable {
             _autoSelectScreen();
     }
     on_SelectedScreenChanged: {
-        // Config first: geometry reconstruction's uniform-grid fallback reads
-        // the _rows/_columns that _refreshConfig just loaded for this screen.
+        // Config first: geometry reconstruction's uniform-grid fallback derives
+        // its grid via _detectGridOf(_savedScreens), which _refreshConfig just
+        // loaded for this screen.
         _refreshConfig();
         _updateScreenGeometry();
     }

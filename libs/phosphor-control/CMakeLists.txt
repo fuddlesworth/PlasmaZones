@@ -60,8 +60,11 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
 
 # phosphor-animation -- PhosphorControlQml links the QML plugin so the
 # chrome's org.phosphor.animation imports resolve for consumers. In the
-# superbuild the target already exists; standalone configures resolve it
-# from an installed package.
+# superbuild the target already exists. A standalone configure additionally
+# requires phosphor-animation vendored via add_subdirectory: the installed
+# PhosphorAnimation package exports only the C++ target (the STATIC
+# PhosphorAnimationQml target is never installed/exported), so find_package
+# alone cannot provide it.
 if(NOT TARGET PhosphorAnimation::PhosphorAnimationQml)
     find_package(PhosphorAnimation CONFIG REQUIRED)
 endif()

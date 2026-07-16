@@ -280,17 +280,17 @@ MouseArea {
             // Only update geometry if actual drag movement occurred
             if (hasDragged) {
                 var relX, relY, relW, relH;
-                // Use committed fill region if available (even if modifier key was released)
-                if (committedFillRegion) {
-                    relX = committedFillRegion.x;
-                    relY = committedFillRegion.y;
-                    relW = committedFillRegion.width;
-                    relH = committedFillRegion.height;
-                } else if (fillRegion) {
-                    relX = fillRegion.x;
-                    relY = fillRegion.y;
-                    relW = fillRegion.width;
-                    relH = fillRegion.height;
+                // Use committed fill region if available (even if modifier key was released).
+                // The visual already holds the fill geometry at release, so commit through
+                // the same converters as a plain drag: for fixed zones they produce screen
+                // pixels (raw normalized region coords would be rejected by C++ as sub-
+                // minimum pixel sizes), and for relative zones they are identity-equivalent
+                // to the region's normalized coords.
+                if (committedFillRegion || fillRegion) {
+                    relX = zoneRoot.toRelativeX(zoneRoot.visualX);
+                    relY = zoneRoot.toRelativeY(zoneRoot.visualY);
+                    relW = zoneRoot.toRelativeW(zoneRoot.visualWidth);
+                    relH = zoneRoot.toRelativeH(zoneRoot.visualHeight);
                 } else {
                     relX = zoneRoot.toRelativeX(zoneRoot.visualX);
                     relY = zoneRoot.toRelativeY(zoneRoot.visualY);

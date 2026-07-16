@@ -122,7 +122,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // All settings methods are inherited from the segregated interfaces:
     //   - IZoneActivationSettings: drag modifiers, activation triggers
-    //   - IZoneVisualizationSettings: colors, opacity, blur, shader effects
+    //   - IZoneVisualizationSettings: colors, opacity, shader effects
     //   - IZoneGeometrySettings: padding, gaps, thresholds, performance
     //   - IWindowExclusionSettings: excluded apps/classes, size filters
     //   - IZoneSelectorSettings: zone selector UI configuration

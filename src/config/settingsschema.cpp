@@ -255,8 +255,7 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 // Declares four zone-overlay sub-groups under Snapping.Zones.*: Colors (system
 // toggle + 3 zone colors), Labels (font family/color/scale/weight + italic/
 // underline/strikeout toggles), Opacity (active + inactive), Border (width +
-// radius). (Effects.Blur is a zone-overlay setting too but shares the Effects
-// container declared in appendDisplaySchema.) The per-mode snapped-window
+// radius). The per-mode snapped-window
 // decoration groups that used to live here are gone — window border and title-bar
 // appearance moved to the top-level mode-neutral Windows config group (see
 // appendWindowsSchema).
@@ -311,9 +310,9 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
          {},
          clampInt(CD::borderRadiusMin(), CD::borderRadiusMax())},
     };
-    // Effects.Blur lives in the Effects group alongside the display-OSD keys;
-    // the whole Effects group is declared in one shot by appendDisplaySchema
-    // below to avoid split-across-two-call-sites ordering bugs.
+    // The Effects group (display-OSD keys) is declared in one shot by
+    // appendDisplaySchema below to avoid split-across-two-call-sites
+    // ordering bugs.
 }
 
 // ─── Ordering ───────────────────────────────────────────────────────────────
@@ -649,8 +648,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Display ────────────────────────────────────────────────────────────────
-// Snapping.Behavior.Display plus the Effects sub-group entries that aren't
-// the blur toggle (already migrated via Appearance). Enum ints (OsdStyle,
+// Snapping.Behavior.Display plus the Effects sub-group. Enum ints (OsdStyle,
 // OverlayDisplayMode) get clamp validators; lists use canonicalCommaList.
 //
 // Per-mode disable lists (formerly Display.{Snapping,Autotile}Disabled*)

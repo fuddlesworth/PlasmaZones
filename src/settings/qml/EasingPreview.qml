@@ -580,8 +580,14 @@ Item {
                         root.cp2y = Math.round(root.cp2y * 100) / 100;
                         activeHandle = 0;
                         root.replay();
-                        // Emit the update only once at the end of the drag to ensure stability
-                        root.curveEdited(root.formatCurve());
+                        // Emit the update only once at the end of the drag to ensure
+                        // stability, and only if the curve actually changed — a plain
+                        // click on a handle must not rewrite/dirty the value.
+                        if (dragStarted) {
+                            var formatted = root.formatCurve();
+                            if (formatted !== root.curve)
+                                root.curveEdited(formatted);
+                        }
                     }
                 }
                 onCanceled: {

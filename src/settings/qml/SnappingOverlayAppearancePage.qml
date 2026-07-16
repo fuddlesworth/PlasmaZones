@@ -9,7 +9,7 @@ import org.kde.kirigami as Kirigami
 
 // Snapping → Overlay → Appearance. How the drag-time zone overlay LOOKS: zone
 // colours, opacity, borders and labels (the former "Zones" page) merged with
-// the overlay effects (blur, numbers, flash — the former "Effects" page). Binds
+// the overlay effects (numbers, flash — the former "Effects" page). Binds
 // snappingZonesPage (colour import + border/label bounds). The shader frame rate
 // + audio spectrum controls moved to General, since they drive every shader
 // category (overlay, animation, surface decoration), not just this overlay.
@@ -18,6 +18,15 @@ SettingsFlickable {
 
     readonly property var zonesBridge: settingsController.snappingZonesPage
     readonly property int opacitySliderMax: 100
+    // The ISettings object (the `appSettings` context property), captured at
+    // page scope. FontPickerDialog declares its own `appSettings:
+    // settingsController` (the controller carries the QFontDatabase helper
+    // invokables it needs), which SHADOWS the context property inside the
+    // dialog's onAccepted — writing `appSettings.labelFontFamily` there hit a
+    // nonexistent property on the controller and threw, so font picks never
+    // persisted. Write the label font settings through this reference so they
+    // always target ISettings (mirrors TilingAlgorithmPage's m-13 capture).
+    readonly property var appSettingsObj: appSettings
 
     contentHeight: content.implicitHeight
     clip: true
@@ -189,6 +198,7 @@ SettingsFlickable {
                         description: i18n("Opacity of the zone under the cursor")
 
                         SettingsSlider {
+                            accessibleName: i18n("Active opacity")
                             from: 0
                             to: root.opacitySliderMax
                             value: appSettings.activeOpacity * root.opacitySliderMax
@@ -206,6 +216,7 @@ SettingsFlickable {
                         description: i18n("Opacity of zones not under the cursor")
 
                         SettingsSlider {
+                            accessibleName: i18n("Inactive opacity")
                             from: 0
                             to: root.opacitySliderMax
                             value: appSettings.inactiveOpacity * root.opacitySliderMax
@@ -242,11 +253,23 @@ SettingsFlickable {
                         description: i18n("Thickness of zone borders in pixels")
 
                         SettingsSpinBox {
+                            id: zoneBorderWidthSpin
+
+                            accessibleName: i18n("Border width")
                             from: root.zonesBridge.borderWidthMin
                             to: root.zonesBridge.borderWidthMax
-                            value: appSettings.borderWidth
                             onValueModified: value => {
                                 return appSettings.borderWidth = value;
+                            }
+                            // Feed value through a guarded Binding so a config change
+                            // keeps refreshing the control: a plain `value:` binding is
+                            // destroyed by SettingsSpinBox's own edit echo after the
+                            // first edit. RestoreNone + the focus gate keeps a live edit
+                            // from being clobbered.
+                            Binding on value {
+                                value: appSettings.borderWidth
+                                when: !zoneBorderWidthSpin.editing
+                                restoreMode: Binding.RestoreNone
                             }
                         }
                     }
@@ -259,11 +282,21 @@ SettingsFlickable {
                         description: i18n("Corner rounding of zone borders in pixels")
 
                         SettingsSpinBox {
+                            id: zoneBorderRadiusSpin
+
+                            accessibleName: i18n("Border radius")
                             from: root.zonesBridge.borderRadiusMin
                             to: root.zonesBridge.borderRadiusMax
-                            value: appSettings.borderRadius
                             onValueModified: value => {
                                 return appSettings.borderRadius = value;
+                            }
+                            // See the border width spinbox: guarded Binding so a config
+                            // change keeps refreshing after the first edit destroys a
+                            // plain binding.
+                            Binding on value {
+                                value: appSettings.borderRadius
+                                when: !zoneBorderRadiusSpin.editing
+                                restoreMode: Binding.RestoreNone
                             }
                         }
                     }
@@ -356,6 +389,7 @@ SettingsFlickable {
                         description: i18n("Size multiplier for zone label text")
 
                         SettingsSlider {
+                            accessibleName: i18n("Label scale")
                             from: root.zonesBridge.labelFontScaleMin * 100
                             to: root.zonesBridge.labelFontScaleMax * 100
                             stepSize: 5
@@ -459,13 +493,19 @@ SettingsFlickable {
     FontPickerDialog {
         id: fontPickerDialog
 
+        // The controller on purpose: it carries the QFontDatabase helper
+        // invokables (fontStylesForFamily / fontStyleWeight / fontStyleItalic)
+        // the dialog calls. It does NOT carry the labelFont* settings, so the
+        // writes below go through root.appSettingsObj — NOT the bare
+        // `appSettings`, which this declaration shadows in the dialog's scope
+        // (see appSettingsObj above).
         appSettings: settingsController
         onAccepted: {
-            appSettings.labelFontFamily = selectedFamily;
-            appSettings.labelFontWeight = selectedWeight;
-            appSettings.labelFontItalic = selectedItalic;
-            appSettings.labelFontUnderline = selectedUnderline;
-            appSettings.labelFontStrikeout = selectedStrikeout;
+            root.appSettingsObj.labelFontFamily = selectedFamily;
+            root.appSettingsObj.labelFontWeight = selectedWeight;
+            root.appSettingsObj.labelFontItalic = selectedItalic;
+            root.appSettingsObj.labelFontUnderline = selectedUnderline;
+            root.appSettingsObj.labelFontStrikeout = selectedStrikeout;
         }
     }
 

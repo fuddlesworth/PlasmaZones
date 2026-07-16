@@ -60,12 +60,17 @@ Control {
         // GLSL errors can span several lines — keep them scrollable rather than
         // letting the card grow unbounded over the preview.
         ScrollView {
+            id: errorScroll
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
 
             Label {
-                width: root.availableWidth
+                // The ScrollView's own availableWidth, not the Control's —
+                // a non-overlay vertical scrollbar narrows the viewport and
+                // the full Control width would overflow past it.
+                width: errorScroll.availableWidth
                 text: root.errorLog
                 wrapMode: Text.Wrap
                 font.family: Kirigami.Theme.fixedWidthFont.family

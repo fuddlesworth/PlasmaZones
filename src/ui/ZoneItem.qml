@@ -33,9 +33,6 @@ Item {
     property int borderWidth: Kirigami.Units.smallSpacing
     property int borderRadius: Kirigami.Units.gridUnit
 
-    signal clicked
-    signal hovered
-
     // Zone background
     Rectangle {
         id: background
@@ -133,13 +130,5 @@ Item {
                 }
             }
         }
-    }
-
-    // Mouse interaction
-    MouseArea {
-        anchors.fill: parent
-        hoverEnabled: true
-        onClicked: zoneItem.clicked()
-        onEntered: zoneItem.hovered()
     }
 }

@@ -261,6 +261,7 @@ ColumnLayout {
                     SettingsSpinBox {
                         id: gridColumnsSpin
 
+                        accessibleName: i18n("Grid columns")
                         from: root.constants.zoneSelectorGridColumnsMin
                         to: root.constants.zoneSelectorGridColumnsMax
                         unitText: ""
@@ -295,6 +296,7 @@ ColumnLayout {
                     SettingsSpinBox {
                         id: maxRowsSpin
 
+                        accessibleName: i18n("Max visible rows")
                         from: root.constants.zoneSelectorMaxRowsMin
                         to: root.constants.zoneSelectorMaxRowsMax
                         unitText: ""
