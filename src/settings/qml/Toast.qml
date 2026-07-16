@@ -32,11 +32,11 @@ Rectangle {
         root.message = msg;
         // AT-SPI Notification announcements — Orca / other screen
         // readers don't announce StaticText surfaces that aren't
-        // focused, so use Accessible.announcement to push the toast
-        // text into the AT consumer's speech queue regardless of
-        // focus state. Pairs with the Accessible.role: Notification
-        // below (Qt 6.6+).
-        root.Accessible.announcement = msg;
+        // focused, so call the attached Accessible.announce() method
+        // (Qt 6.8+) to push the toast text into the AT consumer's
+        // speech queue regardless of focus state. Pairs with the
+        // Accessible.role: Notification below.
+        root.Accessible.announce(msg);
         // Single SequentialAnimation — back-to-back show() calls
         // restart() the same animation cleanly, vs. the previous
         // shape where two concurrent animations could overlap if a
@@ -58,9 +58,10 @@ Rectangle {
     visible: opacity > 0
     z: 100
     // Toast is a status-message surface — announce to AT consumers.
-    // Accessible.Notification (Qt 6.6+) is announced by Orca even
-    // when the toast doesn't have focus; StaticText was silent for
-    // screen-reader users because the toast never receives focus.
+    // The Notification role, plus the Accessible.announce() call in
+    // show(), gets the text spoken by Orca even though the toast
+    // never has focus; StaticText was silent for screen-reader users
+    // because unfocused static surfaces aren't announced.
     Accessible.role: Accessible.Notification
     Accessible.name: root.message
     Accessible.description: i18n("Toast notification")

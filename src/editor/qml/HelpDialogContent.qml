@@ -102,7 +102,7 @@ ScrollView {
 
                 ShortcutLabel {
                     action: i18n("Duplicate")
-                    shortcut: editorController ? editorController.editorDuplicateShortcut : "Ctrl+D"
+                    shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorDuplicateShortcut : "Ctrl+D")
                 }
 
                 ShortcutLabel {
@@ -134,17 +134,17 @@ ScrollView {
 
                 ShortcutLabel {
                     action: i18n("Split horizontal")
-                    shortcut: editorController ? editorController.editorSplitHorizontalShortcut : "Ctrl+Shift+H"
+                    shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorSplitHorizontalShortcut : "Ctrl+Shift+H")
                 }
 
                 ShortcutLabel {
                     action: i18n("Split vertical")
-                    shortcut: editorController ? editorController.editorSplitVerticalShortcut : "Ctrl+Alt+V"
+                    shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorSplitVerticalShortcut : "Ctrl+Alt+V")
                 }
 
                 ShortcutLabel {
                     action: i18n("Fill space")
-                    shortcut: editorController ? editorController.editorFillShortcut : "Ctrl+Shift+F"
+                    shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorFillShortcut : "Ctrl+Shift+F")
                 }
 
                 // Navigation

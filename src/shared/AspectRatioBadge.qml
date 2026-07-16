@@ -40,8 +40,10 @@ Rectangle {
     // Per-category hues were deliberately retired — every class uses the plain text color.
     readonly property color badgeColor: Kirigami.Theme.textColor
 
-    // Hide badge for universal layouts — no point labelling "works everywhere"
-    visible: aspectRatioClass !== "any" && aspectRatioClass !== ""
+    // Hide badge whenever there is no shorthand to show: universal ("any")
+    // layouts, empty strings, and unknown class strings all map to an
+    // empty badgeText, and an empty pill must not render.
+    visible: badgeText !== ""
     implicitWidth: badgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 1.5
     implicitHeight: Kirigami.Units.gridUnit * heightScale
     radius: Kirigami.Units.smallSpacing / 2

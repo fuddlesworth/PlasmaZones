@@ -338,6 +338,10 @@ Kirigami.Dialog {
         previewAllowed = true;
         presetErrorMessage = "";
         initializePendingState();
+        // Re-sync imperatively: the checkbox's `checked` binding is severed
+        // by the first user toggle (QQC2 interactive-property behavior), so
+        // reopening the dialog must push the actual state back in.
+        enableEffectCheck.checked = root.hasShaderEffect;
     }
     onAppActiveChanged: {
         if (!root.visible || !root.hasShaderEffect)
@@ -368,6 +372,11 @@ Kirigami.Dialog {
 
         lockedParams = {};
         debouncePreviewUpdate.restart();
+        // Re-sync imperatively: the checkbox's `checked` binding is severed
+        // by the first user toggle (QQC2 interactive-property behavior), so
+        // programmatic shader changes (e.g. loading a preset that crosses the
+        // none/effect boundary) must push the actual state back in.
+        enableEffectCheck.checked = root.hasShaderEffect;
     }
     onPendingParamsChanged: debouncePreviewUpdate.restart()
     standardButtons: Kirigami.Dialog.NoButton

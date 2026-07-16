@@ -27,7 +27,7 @@ Item {
     property bool isActive: false
     property bool isSelected: false
     property bool isHovered: false
-    property bool isRecommended: layoutData.recommended !== undefined ? layoutData.recommended : true
+    property bool isRecommended: (layoutData && layoutData.recommended !== undefined) ? layoutData.recommended : true
     // When the global "Auto-assign for all layouts" master toggle is on (#370),
     // every layout effectively auto-assigns. Parents pass it down so the badge
     // reflects actual snap behavior even when the per-layout flag is off.
@@ -109,7 +109,7 @@ Item {
     opacity: root.isRecommended ? 1 : 0.65
     // Accessibility
     Accessible.role: Accessible.Pane
-    Accessible.name: root.layoutData.displayName || ""
+    Accessible.name: root.layoutData ? (root.layoutData.displayName || "") : ""
 
     // Visual constants
     QtObject {
@@ -285,7 +285,7 @@ Item {
 
             anchors.fill: previewBackground
             anchors.margins: root.showCardBackground ? Kirigami.Units.smallSpacing : 0
-            zones: root.layoutData.zones || []
+            zones: root.layoutData ? (root.layoutData.zones || []) : []
             interactive: root.interactive
             showZoneNumbers: root.showZoneNumbers
             zoneNumberDisplay: root.zoneNumberDisplay
@@ -328,27 +328,33 @@ Item {
         spacing: Kirigami.Units.smallSpacing
 
         CategoryBadge {
+            id: categoryBadge
+
             anchors.verticalCenter: parent.verticalCenter
-            category: root.layoutData.category !== undefined ? root.layoutData.category : 0
-            autoAssign: root.layoutData.autoAssign === true
+            category: (root.layoutData && root.layoutData.category !== undefined) ? root.layoutData.category : 0
+            autoAssign: root.layoutData ? root.layoutData.autoAssign === true : false
             globalAutoAssign: root.globalAutoAssign
         }
 
         CapabilityBadgeRow {
+            id: capabilityBadges
+
             anchors.verticalCenter: parent.verticalCenter
-            layoutData: root.layoutData
+            layoutData: root.layoutData || ({})
         }
 
         AspectRatioBadge {
+            id: aspectRatioBadge
+
             anchors.verticalCenter: parent.verticalCenter
-            aspectRatioClass: root.layoutData.aspectRatioClass || "any"
+            aspectRatioClass: root.layoutData ? (root.layoutData.aspectRatioClass || "any") : "any"
         }
 
         Label {
             id: nameLabel
 
             anchors.verticalCenter: parent.verticalCenter
-            text: root.layoutData.displayName || ""
+            text: root.layoutData ? (root.layoutData.displayName || "") : ""
             font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
             font.weight: root.isActive ? Font.Bold : Font.Normal
             color: {
@@ -362,10 +368,27 @@ Item {
 
                 return Kirigami.Theme.disabledTextColor;
             }
+            // Width the visible badge siblings occupy in the Row, including
+            // the Row spacing each contributes before the label. Row only
+            // spaces VISIBLE items, so hidden badges cost nothing here either.
+            readonly property real badgesWidth: {
+                var w = 0;
+                if (categoryBadge.visible)
+                    w += categoryBadge.width + nameLabelRow.spacing;
+                if (capabilityBadges.visible)
+                    w += capabilityBadges.width + nameLabelRow.spacing;
+                if (aspectRatioBadge.visible)
+                    w += aspectRatioBadge.width + nameLabelRow.spacing;
+                return w;
+            }
+
             opacity: (root.isSelected || root.isHovered || root.isActive) ? 1 : style.labelDimOpacity
             elide: Text.ElideRight
             maximumLineCount: 1
-            width: Math.min(implicitWidth, root.previewWidth - Kirigami.Units.gridUnit)
+            // Cap against the preview width minus the badges sharing the Row,
+            // so the horizontalCenter-anchored row can't spill past the card
+            // edges when badges are visible.
+            width: Math.min(implicitWidth, Math.max(0, root.previewWidth - Kirigami.Units.gridUnit - badgesWidth))
 
             Behavior on color {
                 PhosphorMotionAnimation {

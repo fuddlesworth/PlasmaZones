@@ -142,6 +142,11 @@ ComboBox {
         height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (root.Window.window ? root.Window.window.height : 600) - topMargin - bottomMargin)
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
+        // Horizontal margins so QQuickPopup clamps x as well as y: without
+        // them left/rightMargin stay at the default -1 (no clamping) and a
+        // combo near the window's right edge overflows and gets cut off.
+        leftMargin: Kirigami.Units.smallSpacing
+        rightMargin: Kirigami.Units.smallSpacing
         padding: 1
 
         contentItem: ListView {

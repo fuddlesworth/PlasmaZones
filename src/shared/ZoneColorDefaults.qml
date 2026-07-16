@@ -43,7 +43,8 @@ QtObject {
     id: root
 
     /// Strip a pipeline colour's carried alpha — preview FILLS are opaque
-    /// by contract (consumers control transparency via `opacity`).
+    /// by contract (consumers bake their configured fill opacity into the
+    /// fill colour's alpha themselves, see ZonePreview's delegate `color`).
     function _opaque(c) {
         return Qt.rgba(c.r, c.g, c.b, 1);
     }

@@ -165,6 +165,11 @@ Item {
                 model: searchController.results
                 visible: count > 0
                 keyNavigationEnabled: true
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
+
                 Keys.onReturnPressed: root.activate(currentIndex)
                 Keys.onEnterPressed: root.activate(currentIndex)
                 Keys.onEscapePressed: function (event) {
@@ -203,7 +208,10 @@ Item {
                     required property int index
                     required property var modelData
 
-                    width: ListView.view ? ListView.view.width : implicitWidth
+                    // Reserve the scrollbar's gutter so the row content ends
+                    // at the scrollbar's left edge instead of running
+                    // underneath it (mirrors the LayoutComboBox popup list).
+                    width: ListView.view ? ListView.view.width - (resultsList.ScrollBar.vertical.visible ? resultsList.ScrollBar.vertical.width : 0) : implicitWidth
                     highlighted: ListView.isCurrentItem
                     topPadding: Kirigami.Units.smallSpacing
                     bottomPadding: Kirigami.Units.smallSpacing

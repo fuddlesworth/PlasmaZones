@@ -35,20 +35,11 @@ Item {
     property int minZoneSize: 8
     property int cursorX: -1
     property int cursorY: -1
-    property real screenAspectRatio: 16 / 9
-    property int screenWidth: 1920
     property int selectorPosition: 0
-    property int selectorLayoutMode: 1
-    property int selectorGridColumns: 5
-    property int previewWidth: 180
-    property int previewHeight: 101
-    property bool previewLockAspect: true
-    property bool positionIsVertical: false
     property int indicatorWidth: 180
     property int indicatorHeight: 101
     property int indicatorSpacing: 18
     property int layoutColumns: 1
-    property int layoutRows: 1
     property int contentWidth: 180
     property int contentHeight: 129
     property int containerPadding: 36
@@ -84,17 +75,10 @@ Item {
     property int cardSidePadding: 18
     property int containerWidth: 216
     property int containerHeight: 165
-    property int barHeight: 175
-    property int barWidth: 216
-    property int totalRows: 1
     property int scrollContentHeight: 129
     property int scrollContentWidth: 180
     property bool needsScrolling: false
     property bool needsHorizontalScrolling: false
-    property real previewScale: 0.09375
-    property int zonePadding: 0
-    property int zoneBorderWidth: 2
-    property int zoneBorderRadius: 8
     property int scaledPadding: 1
     property int scaledBorderWidth: 1
     property int scaledBorderRadius: 2

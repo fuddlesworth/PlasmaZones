@@ -21,8 +21,10 @@ import org.phosphor.control
  *      animates open when controller.dirty flips true. Contains an
  *      icon + "Unsaved changes" label and two action buttons:
  *      Discard (flat — opens a confirm prompt before throwing away
- *      edits) and Save (highlighted — calls controller.applyAll()).
- *      Matches the legacy Phosphor footer 1:1.
+ *      edits) and Save (highlighted — dispatches
+ *      controller.applyAllAsync(); see the saveRequested doc below
+ *      for the dispatch/complete split). Matches the legacy Phosphor
+ *      footer 1:1.
  */
 ColumnLayout {
     id: root
@@ -105,7 +107,10 @@ ColumnLayout {
             id: barContent
 
             width: parent.width
-            implicitHeight: barRow.implicitHeight + Kirigami.Units.smallSpacing * 3
+            // Mirror barRow's two rounded vertical margins exactly —
+            // a plain smallSpacing * 3 diverges when smallSpacing is
+            // odd and squeezes the row by 1px.
+            implicitHeight: barRow.implicitHeight + 2 * Math.round(Kirigami.Units.smallSpacing * 1.5)
             anchors.bottom: parent.bottom
             color: Kirigami.Theme.neutralBackgroundColor
 

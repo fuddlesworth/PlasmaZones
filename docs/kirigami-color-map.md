@@ -55,6 +55,8 @@ tertiary accent — which is exactly why the misuses above render in
 
 ## Grand totals
 
+Note: the totals and the ranked fix plan below are the pre-remediation snapshot. Some items have since been superseded on this branch.
+
 | Verdict | Count |
 |---|---|
 | OK (semantically correct)¹ | 287 |
@@ -66,7 +68,7 @@ tertiary accent — which is exactly why the misuses above render in
 | MISUSE — status color as decoration | 30 |
 | MISUSE — per-channel math | 17 |
 | MISUSE — wrong foreground on (non-)highlight fill | 6 |
-| LITERAL (`"white"` lock icon, LayoutPreview.qml:214) | 1 |
+| LITERAL (`"white"` lock icon, LayoutPreview.qml:214) (file since deleted on this branch — see color-map/shared-ui-editor.md erratum) | 1 |
 | **Total classified expressions** | **553** |
 | MISSING `colorSet` declarations (structural) | 22 |
 

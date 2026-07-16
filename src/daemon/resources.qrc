@@ -5,7 +5,6 @@
         <file alias="RenderNodeOverlayContent.qml">../ui/RenderNodeOverlayContent.qml</file>
         <file alias="RenderNodeOverlay.qml">../ui/RenderNodeOverlay.qml</file>
         <file alias="ZoneItem.qml">../ui/ZoneItem.qml</file>
-        <file alias="ZoneLabel.qml">../ui/ZoneLabel.qml</file>
         <file alias="ZoneSelectorContent.qml">../ui/ZoneSelectorContent.qml</file>
         <file alias="OsdDismissable.qml">../ui/OsdDismissable.qml</file>
         <file alias="LayoutOsdContent.qml">../ui/LayoutOsdContent.qml</file>

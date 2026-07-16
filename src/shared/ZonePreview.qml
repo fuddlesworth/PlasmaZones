@@ -167,18 +167,20 @@ Item {
             z: isZoneHovered ? 10 : 1
             transformOrigin: Item.Center
             // Zone fill color - use highlight color when selected/hovered, inactive color otherwise.
-            // Discard the colour's own alpha so `opacity` is the SOLE alpha control;
-            // otherwise the two multiply (colour.a × opacity) and the zone previews
-            // far more transparent than the configured opacity — mismatching the live
-            // shader overlay (overlay_data.cpp sets FillA = activeOpacity).
-            // The plain border below is the exception: it keeps its colour's
-            // carried alpha deliberately (pipeline border alpha ≈0.78 matches
-            // the live overlay), while the fill and hover border strip.
+            // The configured fill opacity is baked into the FILL colour's alpha
+            // (discarding the colour's own carried alpha so the two don't
+            // multiply), matching the live shader overlay where only FillA
+            // carries the opacity (overlay_data.cpp sets FillA = activeOpacity
+            // and leaves border alpha untouched). Delegate `opacity` must stay
+            // 1 — it would multiply into the border AND the zone-number label,
+            // dimming both far below the pipeline values.
+            // The plain border below keeps its colour's carried alpha
+            // deliberately (pipeline border alpha ≈0.78 matches the live
+            // overlay), while the fill and hover border strip theirs.
             color: {
                 var base = isZoneHighlighted ? root.highlightColor : root.inactiveColor;
-                return Qt.rgba(base.r, base.g, base.b, 1.0);
+                return Qt.rgba(base.r, base.g, base.b, isZoneHighlighted ? root.activeOpacity : root.inactiveOpacity);
             }
-            opacity: isZoneHighlighted ? root.activeOpacity : root.inactiveOpacity
             border.color: {
                 // Brighter border when hovered
                 if (isZoneHovered)
@@ -258,13 +260,6 @@ Item {
                 }
             }
 
-            Behavior on opacity {
-                PhosphorMotionAnimation {
-                    profile: "widget.zoneHighlight"
-                    durationOverride: root.animationDuration
-                }
-            }
-
             Behavior on scale {
                 // OutBack overshoot=1.20 feel — restored faithfully via the
                 // osd-pop curve referenced through widget.zoneHighlight.pop.
@@ -316,7 +311,7 @@ Item {
             width: Kirigami.Units.smallSpacing * 2
             height: Kirigami.Units.smallSpacing * 2
             radius: Kirigami.Units.smallSpacing
-            color: Kirigami.Theme.highlightColor
+            color: Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, 1)
         }
     }
 }

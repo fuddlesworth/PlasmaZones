@@ -24,7 +24,9 @@ Rectangle {
     readonly property bool isDynamic: category === 1
     readonly property real heightScale: 0.9
     readonly property real backgroundOpacity: 0.15
-    readonly property real textOpacity: 0.6
+    // 0.7 matches the sibling badge recipe (AspectRatioBadge) and keeps the
+    // "Manual" label above the 4.5:1 contrast threshold; 0.6 fell to ~3.7:1.
+    readonly property real textOpacity: 0.7
     readonly property real fontScale: 0.75
 
     implicitWidth: categoryLabel.implicitWidth + Kirigami.Units.smallSpacing * 1.5

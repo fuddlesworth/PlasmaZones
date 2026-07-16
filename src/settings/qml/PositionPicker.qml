@@ -230,6 +230,13 @@ Item {
                                     durationOverride: Kirigami.Units.shortDuration
                                 }
                             }
+
+                            Behavior on border.width {
+                                PhosphorMotionAnimation {
+                                    profile: "widget.hover"
+                                    durationOverride: Kirigami.Units.shortDuration
+                                }
+                            }
                         }
                     }
                 }

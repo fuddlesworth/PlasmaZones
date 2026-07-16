@@ -83,8 +83,8 @@ QQC2.ItemDelegate {
     // overrides (slow-motion mode, high-feedback profiles) flow
     // through. Held off for divider rows because they have no label.
     // `QtQuick.Controls` is imported as QQC2 so the attached property
-    // has to be namespaced too — unqualified `ToolTip.x` reads as a
-    // non-existent attached object.
+    // has to be namespaced too — unqualified `ToolTip.*` attached
+    // properties resolve against a non-existent attached object.
     QQC2.ToolTip.visible: rowItem.compact && rowItem.hovered && !rowItem._isDivider
     QQC2.ToolTip.text: rowItem.title
     QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay

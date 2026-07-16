@@ -59,12 +59,15 @@ Item {
     }
 
     function replay() {
+        // Repaint before the previewEnabled gate: the graph must track
+        // parameter changes even while the animated preview is disabled,
+        // otherwise it shows a stale curve when the box animation is off.
+        springCanvas.requestPaint();
         if (!root.previewEnabled)
             return;
 
         springAnimTimer.stop();
         boxTrack.animBox.x = 0;
-        springCanvas.requestPaint();
         springReplayDelay.restart();
     }
 

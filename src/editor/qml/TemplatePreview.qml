@@ -11,8 +11,6 @@ import org.kde.kirigami as Kirigami
  * Used in ComboBox dropdowns to show what each template looks like.
  */
 Canvas {
-    // 40px
-
     id: root
 
     // Template type: "grid", "columns", "rows", "priority", "focus"
@@ -21,9 +19,8 @@ Canvas {
     property int rows: 2
     // Dimensions using Kirigami.Units for consistency
     readonly property int previewPadding: Kirigami.Units.smallSpacing / 2
-    // 2px padding
+    // 3:2 aspect ratio (gridUnit * 7.5 by gridUnit * 5)
     readonly property int previewWidth: Kirigami.Units.gridUnit * 7.5
-    // 60px (3:2 aspect ratio)
     readonly property int previewHeight: Kirigami.Units.gridUnit * 5
     // Theme-derived paint colors, hoisted so theme changes trigger a repaint
     readonly property color zoneColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6)
@@ -103,7 +100,6 @@ Canvas {
             ctx.fillRect(offsetX + leftWidth + centerWidth, offsetY, rightWidth, h);
             ctx.strokeRect(offsetX + leftWidth + centerWidth, offsetY, rightWidth, h);
         }
-        ctx.stroke();
     }
     // Repaint when the theme-derived colors change
     onZoneColorChanged: requestPaint()

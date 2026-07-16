@@ -59,10 +59,17 @@ Item {
         // the switch sits on a SettingsCard's alternate-background body. The
         // checked track is solid highlight and needs no outline — width goes
         // to 0 (a transparent 1px border would still inset the fill by a
-        // pixel), while the hairline colour stays unconditional so the
-        // border can fade rather than pop when the width animates back.
+        // pixel). The Behaviors below animate the width in and out, and the
+        // hairline colour stays unconditional so the border keeps the right
+        // hue throughout that width transition.
         border.width: root.checked ? 0 : 1
         border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+
+        Behavior on border.width {
+            PhosphorMotionAnimation {
+                profile: "widget.tint"
+            }
+        }
 
         Behavior on border.color {
             PhosphorMotionAnimation {

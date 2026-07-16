@@ -682,20 +682,11 @@ Window {
                 minZoneSize: zoneSelectorSlot.minZoneSize
                 cursorX: zoneSelectorSlot.cursorX
                 cursorY: zoneSelectorSlot.cursorY
-                screenAspectRatio: zoneSelectorSlot.screenAspectRatio
-                screenWidth: zoneSelectorSlot.screenWidth
                 selectorPosition: zoneSelectorSlot.selectorPosition
-                selectorLayoutMode: zoneSelectorSlot.selectorLayoutMode
-                selectorGridColumns: zoneSelectorSlot.selectorGridColumns
-                previewWidth: zoneSelectorSlot.previewWidth
-                previewHeight: zoneSelectorSlot.previewHeight
-                previewLockAspect: zoneSelectorSlot.previewLockAspect
-                positionIsVertical: zoneSelectorSlot.positionIsVertical
                 indicatorWidth: zoneSelectorSlot.indicatorWidth
                 indicatorHeight: zoneSelectorSlot.indicatorHeight
                 indicatorSpacing: zoneSelectorSlot.indicatorSpacing
                 layoutColumns: zoneSelectorSlot.layoutColumns
-                layoutRows: zoneSelectorSlot.layoutRows
                 contentWidth: zoneSelectorSlot.contentWidth
                 contentHeight: zoneSelectorSlot.contentHeight
                 containerPadding: zoneSelectorSlot.containerPadding
@@ -710,17 +701,10 @@ Window {
                 cardSidePadding: zoneSelectorSlot.cardSidePadding
                 containerWidth: zoneSelectorSlot.containerWidth
                 containerHeight: zoneSelectorSlot.containerHeight
-                barHeight: zoneSelectorSlot.barHeight
-                barWidth: zoneSelectorSlot.barWidth
-                totalRows: zoneSelectorSlot.totalRows
                 scrollContentHeight: zoneSelectorSlot.scrollContentHeight
                 scrollContentWidth: zoneSelectorSlot.scrollContentWidth
                 needsScrolling: zoneSelectorSlot.needsScrolling
                 needsHorizontalScrolling: zoneSelectorSlot.needsHorizontalScrolling
-                previewScale: zoneSelectorSlot.previewScale
-                zonePadding: zoneSelectorSlot.zonePadding
-                zoneBorderWidth: zoneSelectorSlot.zoneBorderWidth
-                zoneBorderRadius: zoneSelectorSlot.zoneBorderRadius
                 scaledPadding: zoneSelectorSlot.scaledPadding
                 scaledBorderWidth: zoneSelectorSlot.scaledBorderWidth
                 scaledBorderRadius: zoneSelectorSlot.scaledBorderRadius

@@ -202,8 +202,8 @@ Item {
         // MouseAreas) and grabs presses there so they never reach the
         // backdrop. `Accessible.ignored: true` keeps this transparent
         // absorber out of the a11y tree — only the backdrop's
-        // "Dismiss layout picker" button (line 218-223) should be
-        // announced as the dismiss control.
+        // "Dismiss layout picker" MouseArea above should be announced
+        // as the dismiss control.
         MouseArea {
             anchors.fill: parent
             Accessible.ignored: true

@@ -60,13 +60,6 @@ SettingsFlickable {
         _movingLocally = false;
     }
 
-    function commitOrder() {
-        let ids = [];
-        for (let i = 0; i < orderModel.count; i++)
-            ids.push(orderModel.get(i).id);
-        return ids;
-    }
-
     contentHeight: mainCol.implicitHeight
     clip: true
     Component.onCompleted: rebuildModel()

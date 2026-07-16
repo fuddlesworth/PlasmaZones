@@ -239,24 +239,20 @@ QQC2.TextField {
     }
     // Visual feedback
     color: capturing ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
-    // Sync keySequence property changes
-    onKeySequenceChanged: {
-        if (!capturing && text !== (capturing ? i18n("Press keys...") : (keySequence || "")))
-            text = capturing ? i18n("Press keys...") : (keySequence || "");
-    }
 
-    // Handle click to start capturing
+    // Handle click to start capturing. Ends at the clear button's left
+    // edge so the Button handles its own clicks (an anchor to an item is
+    // valid even while it's invisible; when hidden the button sits at the
+    // same right-edge spot, so the uncovered sliver is negligible).
     MouseArea {
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: clearButton.visible ? clearButton.left : parent.right
         acceptedButtons: Qt.LeftButton
         cursorShape: Qt.PointingHandCursor
         z: 10
-        onClicked: mouse => {
-            if (clearButton.visible && mouse.x >= root.width - clearButton.width - Kirigami.Units.smallSpacing * 2) {
-                root.keySequence = root.defaultKeySequence;
-                root.keySequenceModified(root.defaultKeySequence);
-                return;
-            }
+        onClicked: {
             if (!root.capturing) {
                 root.capturing = true;
                 root.focus = true;

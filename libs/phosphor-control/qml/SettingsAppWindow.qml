@@ -12,6 +12,7 @@ import org.phosphor.control
  * Top-level settings application window.
  *
  * Wires the ApplicationController to the standard chrome layout:
+ *   headerBand (full-width, optional)
  *   sidebar | (breadcrumbs / pageHost / footer)
  *
  * Consumers create one of these per app, set `controller`, and optionally
@@ -44,8 +45,8 @@ Kirigami.ApplicationWindow {
      *  Underscore-prefixed members on the underlying Sidebar
      *  (`_isExpanded`, `_refreshModel`, `_suppressAccordion`, …) are
      *  private by convention — do not read or assign them from
-     *  outside. A typed QtObject façade was attempted in audit pass
-     *  45 but breaks the grouped-property assignment syntax
+     *  outside. A typed QtObject façade was attempted for audit
+     *  finding 45 but breaks the grouped-property assignment syntax
      *  (`sidebar.trailingDelegate: Component { ... }`) that consumers
      *  rely on, so the alias was kept as the contract surface. */
     property alias sidebar: sidebarItem
@@ -407,11 +408,16 @@ Kirigami.ApplicationWindow {
                     }
 
                     // The Loaders adopt their loaded item's implicit size (slot
-                    // contract: the consumer Component declares implicitWidth/Height).
+                    // contract: the consumer Component declares implicitWidth/Height)
+                    // and collapse to zero width when the loaded item hides itself.
+                    // Same Layout.preferredWidth gating as the breadcrumb trailing
+                    // slot below — see the comment there for why the gate must not
+                    // route through the Loader's own `visible`.
                     Loader {
                         id: headerExtrasLoader
 
                         Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: (item !== null && item.visible) ? item.implicitWidth : 0
                     }
 
                     Item {
@@ -422,13 +428,17 @@ Kirigami.ApplicationWindow {
                         id: headerTrailingLoader
 
                         Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: (item !== null && item.visible) ? item.implicitWidth : 0
                     }
                 }
             }
 
             Kirigami.Separator {
                 Layout.fillWidth: true
-                visible: headerBand.visible
+                // Also gate on implicitHeight: the band stays visible:true while
+                // collapsing to 0 height when both slot items self-hide, and the
+                // 1-px separator would otherwise render as a stray line.
+                visible: headerBand.visible && headerBand.implicitHeight > 0
             }
 
             // Sidebar + content panel sit BELOW the full-width header bar.
@@ -441,7 +451,7 @@ Kirigami.ApplicationWindow {
                     // `sidebarItem` (not `sidebar`) — the root exposes
                     // this item through `property alias sidebar:
                     // sidebarItem` (see lines ~44-50; the typed QtObject
-                    // façade attempted in audit pass 45 was reverted
+                    // façade attempted for audit finding 45 was reverted
                     // because it broke grouped-property assignment).
                     // The alias name and the id share the root's name
                     // scope, so the id cannot also be `sidebar`: the

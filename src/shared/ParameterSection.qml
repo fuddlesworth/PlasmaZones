@@ -143,6 +143,7 @@ ColumnLayout {
                     QQC.ToolTip.text: root.allLocked ? i18nc("@info:tooltip", "Unlock all in %1", root.title) : i18nc("@info:tooltip", "Lock all in %1", root.title)
                     QQC.ToolTip.visible: hovered
                     QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    Accessible.name: root.allLocked ? i18nc("@action:button", "Unlock all in %1", root.title) : i18nc("@action:button", "Lock all in %1", root.title)
                     onClicked: root.groupLockToggled(!root.allLocked)
                 }
 

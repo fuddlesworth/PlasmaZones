@@ -355,6 +355,13 @@ Item {
 
         visible: !root.allowMultiple
         anchors.fill: parent
+        // Pin the View set on the control itself so the foreground (text and
+        // placeholder colours below) resolves the same content-surface palette
+        // as the fill and border, which the background Rectangle pins
+        // separately — otherwise the foreground follows the inherited set of
+        // whatever surface hosts the control.
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.inherit: false
         readOnly: true
         text: root.displayText()
         placeholderText: i18n("Click to set shortcut")

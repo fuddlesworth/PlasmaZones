@@ -171,7 +171,12 @@ Item {
         padding: Kirigami.Units.largeSpacing
         modal: false
         focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // CloseOnPressOutsideParent, NOT CloseOnPressOutside: a press on the
+        // chip itself must not auto-close the popup, or the chip's own
+        // click-toggle races it (policy closes on press, then the release's
+        // click sees a closed popup and reopens it). Presses on the chip are
+        // inside the parent, so only the toggle handler acts on them.
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
         contentItem: ColumnLayout {
             // A colorSet pinned on the Popup node itself is inert: the theme

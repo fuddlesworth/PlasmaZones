@@ -377,9 +377,11 @@ Item {
                         ctx.lineTo(pad + gw, py);
                         ctx.stroke();
                     }
-                    // Vertical grid lines at 0.2 increments
-                    for (var gx = 0; gx <= 1; gx += 0.2) {
-                        var px = pad + gx * gw;
+                    // Vertical grid lines at 0.2 increments. Integer loop —
+                    // adding 0.2 accumulates float error so gx overshoots 1.0
+                    // and the x=1.0 line never draws.
+                    for (var gi = 0; gi <= 5; gi++) {
+                        var px = pad + (gi / 5) * gw;
                         ctx.beginPath();
                         ctx.moveTo(px, pad);
                         ctx.lineTo(px, pad + gh);

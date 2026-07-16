@@ -51,13 +51,11 @@ AbstractButton {
         border.width: actionButton.activeFocus ? Theme.focusBorderWidth : 1
         // On hover only the fill changes; the border keeps the resting
         // frame-contrast colour so the button stays visibly outlined (a border
-        // matching the hover fill would blend into it and vanish).
+        // matching the hover fill would blend into it and vanish). This holds
+        // for both variants, including the negative (delete) hover fill.
         border.color: {
             if (actionButton.activeFocus)
                 return Kirigami.Theme.focusColor;
-
-            if (actionButton.useNegativeColor && actionButton.hovered)
-                return Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
 
             return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         }

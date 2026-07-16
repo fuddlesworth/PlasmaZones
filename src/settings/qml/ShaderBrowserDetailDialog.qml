@@ -377,13 +377,29 @@ Kirigami.Dialog {
                     }
 
                     Kirigami.InlineMessage {
+                        id: presetErrorMessage
+
                         Layout.fillWidth: true
-                        visible: root._presetError.length > 0
+                        // Visibility is driven imperatively in one direction
+                        // only: the Connections below shows the message when a
+                        // new error lands, and the close button hides it. A
+                        // declarative `visible: _presetError.length > 0`
+                        // binding would be severed the first time the close
+                        // button imperatively wrote visible = false, so later
+                        // preset errors would never show again.
+                        visible: false
                         type: Kirigami.MessageType.Error
                         text: root._presetError
                         showCloseButton: true
                         onVisibleChanged: if (!visible)
                             root._presetError = ""
+
+                        Connections {
+                            target: root
+                            function on_PresetErrorChanged() {
+                                presetErrorMessage.visible = root._presetError.length > 0;
+                            }
+                        }
                     }
 
                     // ── Parameters ────────────────────────────────────────

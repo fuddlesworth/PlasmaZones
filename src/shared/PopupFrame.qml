@@ -49,7 +49,11 @@ Item {
         // Capture margin around the visible frame. The drop-shadow glow
         // blurs roughly this far past the frame; captureItem extends the
         // same distance on every side so the SurfaceAnimator FBO grab
-        // includes the glow. Matches the OSD cards' osdCard margin.
+        // includes the glow. The OSD cards (LayoutOsdContent.qml,
+        // NavigationOsdContent.qml) get this margin by embedding PopupFrame
+        // itself, so there is no separate value to keep in sync there —
+        // but src/ui/ZoneSelectorContent.qml:76 clones the glowMargin
+        // expression for its corner anchor insets and must track changes.
 
         id: style
 
@@ -71,8 +75,9 @@ Item {
     // and generative effects (fire, incinerate) stay confined to the
     // card instead of spilling into the transparent margin.
     Item {
-        // Soft theme-tinted glow — same MultiEffect parameters as the
-        // layout and navigation OSD cards (see LayoutOsdContent.qml) so
+        // Soft theme-tinted glow. PopupFrame is the single source of this
+        // chrome — the layout and navigation OSD cards get it by embedding
+        // PopupFrame (LayoutOsdContent.qml / NavigationOsdContent.qml), so
         // every popup overlay reads as the same surface family. The
         // "shadow" is tinted with the theme background rather than
         // black: a pale halo on light themes, a soft dark one on dark.
@@ -87,26 +92,57 @@ Item {
         width: root.width + root.glowMargin * 2
         height: root.height + root.glowMargin * 2
 
-        // Sizing: `anchors.fill: frame` keeps the effect rect matched to
-        // the source's natural geometry so the card chrome (background,
-        // rounded corners, 1px border) is rendered 1:1 with no scaling
-        // ghost. Anchoring to `parent` (= captureItem) would stretch the
-        // source texture to fill the larger glow-padded rect, producing
-        // a fuzzy stretched-corner-radius copy underneath the real frame.
+        // Card chrome (background, rounded corners, 1px border). This is
+        // the MultiEffect source and is hidden (`visible: false`): the
+        // effect paints it exactly once together with its shadow. Feeding
+        // a VISIBLE item (or worse, one containing the injected content)
+        // into the effect paints it twice — once in the offscreen effect
+        // texture and once live — compounding the 0.95-alpha background
+        // to ~0.9975 and paying an extra offscreen pass per popup. The
+        // injected content lives in `frame` below and is painted live
+        // exactly once, on top of the effect output.
+        Rectangle {
+            id: frameChrome
+
+            anchors.fill: parent
+            anchors.margins: root.glowMargin
+            visible: false
+            color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, style.backgroundAlpha)
+            radius: root.containerRadius
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+            border.width: 1
+        }
+
+        // Sizing: `anchors.fill: frameChrome` keeps the effect rect
+        // matched to the source's natural geometry so the card chrome is
+        // rendered 1:1 with no scaling ghost. Anchoring to `parent`
+        // (= captureItem) would stretch the source texture to fill the
+        // larger glow-padded rect, producing a fuzzy
+        // stretched-corner-radius copy underneath the real frame.
         // To extend the drawn SHADOW past the frame edges (the original
         // reason captureItem exists), set explicit `paddingRect`: the
         // four components are the per-side padding amounts (x = left,
         // y = top, width = right, height = bottom) added to the effect's
         // own bounds for shadow draw purposes. Adding glowMargin on each
         // side lets the shadow's blur and offset extend fully into the
-        // captureItem ring without scaling the source. The +4 vertical
-        // shadow offset stays comfortably within the bottom padding.
+        // captureItem ring without scaling the source.
         // `autoPaddingEnabled: false` opts out of Qt's blur-derived
         // padding heuristic so the padding is exactly what we declare,
         // regardless of how shadowBlur / shadowVerticalOffset are tuned.
+        //
+        // Shadow budget — keep these four values in sync:
+        //   glowMargin >= blurMax * shadowBlur + shadowVerticalOffset
+        // The blur tail hard-truncates at the captureItem edge if the
+        // extent exceeds glowMargin (the artifact the margin exists to
+        // prevent). Qt's default blurMax of 32 with shadowBlur 1 and
+        // offset 4 gives a 36px extent against a ~23px margin, so blurMax
+        // is pinned to glowMargin - shadowVerticalOffset (≈19) and the
+        // falloff reaches zero smoothly inside the budget instead.
+        // src/ui/ZoneSelectorContent.qml:76 clones the glowMargin
+        // expression; keep it in sync when changing the budget.
         MultiEffect {
-            source: frame
-            anchors.fill: frame
+            source: frameChrome
+            anchors.fill: frameChrome
             autoPaddingEnabled: false
             paddingRect: Qt.rect(root.glowMargin, root.glowMargin, root.glowMargin, root.glowMargin)
             shadowEnabled: true
@@ -114,19 +150,20 @@ Item {
             shadowBlur: 1
             shadowVerticalOffset: 4
             shadowHorizontalOffset: 0
+            blurMax: Math.max(0, Math.floor(root.glowMargin - shadowVerticalOffset))
         }
 
-        Rectangle {
+        // Content container for injected children (via the default
+        // property alias). Transparent and painted live exactly once, on
+        // top of the effect output — it deliberately holds no chrome so
+        // nothing here is double-composited by the MultiEffect above.
+        Item {
             id: frame
 
             // Inset by glowMargin so the frame is exactly the
             // consumer-set PopupFrame root size, centred in captureItem.
             anchors.fill: parent
             anchors.margins: root.glowMargin
-            color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, style.backgroundAlpha)
-            radius: root.containerRadius
-            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-            border.width: 1
         }
     }
 }

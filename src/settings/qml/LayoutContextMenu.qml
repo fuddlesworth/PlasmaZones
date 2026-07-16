@@ -36,11 +36,13 @@ Menu {
     /// Tracks the kind (`"snap"` / `"autotile"` / `"none"`) the
     /// aspect-ratio submenu was last reconciled to. showForLayout
     /// only mutates the menu when the current layout's kind
-    /// differs from this state — Qt 6's auto-generated MenuItem
-    /// placeholder is deleteLater'd on removeMenu and the inline
-    /// submenu's reparenting back to its declared parent is
-    /// unreliable enough that doing the dance on every show can
-    /// lose the QML object after many cycles.
+    /// differs from this state — Qt 6's removeMenu() DESTROYS the
+    /// Menu itself (docs: "Removes and destroys the specified
+    /// menu"), not just its auto-generated MenuItem placeholder,
+    /// which is why the autotile branch uses takeMenu() (transfers
+    /// ownership to the caller, keeping aspectRatioSubMenu alive
+    /// for the next snap-layout show). Doing the dance on every
+    /// show would also churn the popup chain needlessly.
     property string _aspectRatioMenuKind: "none"
     readonly property bool isAutotile: layout && layout.isAutotile === true
     readonly property string layoutId: layout ? (layout.id || "") : ""
@@ -198,7 +200,16 @@ Menu {
                 else
                     layoutContextMenu.addMenu(aspectRatioSubMenu);
             } else {
-                layoutContextMenu.removeMenu(aspectRatioSubMenu);
+                // takeMenu(), NOT removeMenu(): removeMenu destroys the
+                // Menu, so the next snap-layout show would insert null and
+                // the submenu would be gone for good. takeMenu transfers
+                // ownership back to us and keeps aspectRatioSubMenu alive.
+                for (var m = 0; m < layoutContextMenu.count; m++) {
+                    if (layoutContextMenu.menuAt(m) === aspectRatioSubMenu) {
+                        layoutContextMenu.takeMenu(m);
+                        break;
+                    }
+                }
             }
             layoutContextMenu._aspectRatioMenuKind = wantKind;
         }
@@ -311,7 +322,7 @@ Menu {
 
     MenuItem {
         readonly property bool perLayoutAuto: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true
-        readonly property bool globalAuto: layoutContextMenu.appSettings.autoAssignAllLayouts === true
+        readonly property bool globalAuto: layoutContextMenu.appSettings && layoutContextMenu.appSettings.autoAssignAllLayouts === true
 
         text: globalAuto ? i18n("Auto-assign forced on (global setting)") : (perLayoutAuto ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign"))
         icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"

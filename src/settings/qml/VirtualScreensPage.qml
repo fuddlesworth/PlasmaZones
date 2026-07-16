@@ -789,9 +789,13 @@ SettingsFlickable {
                                 var newRows = Math.min(root._rows, maxRows);
                                 if (newCols * newRows <= 1) {
                                     settingsController.stageVirtualScreenRemoval(root._selectedScreen);
-                                    root._pendingScreens = [];
-                                    root._columns = 1;
-                                    root._rows = 1;
+                                    // Read the staged state back through the single
+                                    // reconciliation path. Not left to the
+                                    // onDirtyPagesChanged connection: staging emits
+                                    // dirtyPagesChanged only on the clean→dirty
+                                    // transition, so it stays silent when the page
+                                    // is already dirty.
+                                    root._refreshConfig();
                                 } else {
                                     root._redistributeGrid(newCols, newRows);
                                 }
@@ -821,9 +825,10 @@ SettingsFlickable {
                                 var newCols = Math.min(root._columns, maxCols);
                                 if (newCols * newRows <= 1) {
                                     settingsController.stageVirtualScreenRemoval(root._selectedScreen);
-                                    root._pendingScreens = [];
-                                    root._columns = 1;
-                                    root._rows = 1;
+                                    // Same as the columns spinbox above: refresh
+                                    // explicitly — the dirtyPagesChanged connection
+                                    // only fires on the clean→dirty transition.
+                                    root._refreshConfig();
                                 } else {
                                     root._redistributeGrid(newCols, newRows);
                                 }
@@ -938,10 +943,13 @@ SettingsFlickable {
                     enabled: root._selectedScreen !== "" && (root._pendingScreens.length > 0 || root._savedScreens.length > 0)
                     onClicked: {
                         settingsController.stageVirtualScreenRemoval(root._selectedScreen);
-                        root._pendingScreens = [];
-                        root._savedScreens = [];
-                        root._columns = 1;
-                        root._rows = 1;
+                        // Read the staged removal back through the single
+                        // reconciliation path (pending/saved/grid all come from
+                        // _refreshConfig). Explicit call, not the
+                        // onDirtyPagesChanged connection: staging emits
+                        // dirtyPagesChanged only on the clean→dirty transition,
+                        // so it stays silent when the page is already dirty.
+                        root._refreshConfig();
                     }
                     ToolTip.text: i18n("Remove all virtual screen subdivisions from this monitor")
                     ToolTip.visible: hovered
