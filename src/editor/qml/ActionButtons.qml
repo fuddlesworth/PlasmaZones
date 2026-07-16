@@ -15,6 +15,7 @@ Row {
     id: actionButtons
 
     required property var root // Parent zone component
+    required property bool previewMode
     property bool anyButtonHovered: false
     // Button dimensions
     readonly property real buttonSize: Kirigami.Units.gridUnit * 2.5
@@ -33,7 +34,10 @@ Row {
     anchors.right: parent.right
     anchors.margins: Kirigami.Units.smallSpacing
     spacing: Kirigami.Units.smallSpacing
-    visible: (root.mouseOverZone || root.isSelected) && buttonsFit
+    // previewMode gates visibility here instead of at the call site: an
+    // instance `visible:` binding would replace this hover/selected/fit
+    // predicate entirely and leave the buttons permanently shown in edit mode.
+    visible: !previewMode && (root.mouseOverZone || root.isSelected) && buttonsFit
     z: 100
 
     ZoneActionButton {
@@ -96,5 +100,4 @@ Row {
         onHoveredChanged: actionButtons.updateHoverState()
         onClicked: actionButtons.root.deleteRequested()
     }
-
 }

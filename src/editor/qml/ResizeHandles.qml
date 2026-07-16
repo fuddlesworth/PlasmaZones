@@ -189,6 +189,10 @@ Item {
                 // Store actual canvas dimensions for use during resize
                 property real actualCanvasWidth: resizeHandles.canvasWidth
                 property real actualCanvasHeight: resizeHandles.canvasHeight
+                // True once the pointer actually moved during this resize; a
+                // zero-movement press/release must not commit (and re-snap)
+                // the unchanged geometry.
+                property bool didResize: false
                 // A dragged handle counts as active even once the cursor leaves
                 // its hit area, so the handles stay visible for the whole resize.
                 readonly property bool handleActive: containsMouse || pressed
@@ -248,7 +252,13 @@ Item {
                     mouse.accepted = true;
                     // State values: 0=Idle, 1=Dragging, 2=Resizing
                     if (resizeHandles.root.operationState === 0) {
+                        // Abort any running fill animation before capturing start
+                        // geometry: it writes visualX/Y/Width/Height directly
+                        // (bypassing the Behavior gate) and its onFinished would
+                        // commit underneath this resize.
+                        resizeHandles.root.stopFillAnimation();
                         resizeHandles.root.operationState = 2; // Resizing
+                        handleMouse.didResize = false;
                         // Store initial zone state in canvas coordinates
                         // Use visualX/Y/Width/Height (actual zone geometry) NOT root.x/y/width/height
                         // (which have spacing offsets applied)
@@ -295,6 +305,7 @@ Item {
                         return;
 
                     mouse.accepted = true;
+                    handleMouse.didResize = true;
                     // Map current mouse position to canvas coordinates
                     var canvasItem = resizeHandles.root.parent;
                     if (!canvasItem)
@@ -458,10 +469,11 @@ Item {
                                 // Right edge moved - adjust width only (X stays same)
                                 let rightEdge = snappedX + snappedW;
                                 newW = rightEdge - newX;
-                                if (newW < resizeHandles.minSize) {
+                                // Min-size fallback clamps width only: the left
+                                // edge is anchored on an east resize and must
+                                // not move to honor the snapped right edge.
+                                if (newW < resizeHandles.minSize)
                                     newW = resizeHandles.minSize;
-                                    newX = rightEdge - newW;
-                                }
                             }
                             if (snapTop) {
                                 // Top edge moved - adjust both Y and height to maintain bottom edge
@@ -477,10 +489,11 @@ Item {
                                 // Bottom edge moved - adjust height only (Y stays same)
                                 let bottomEdge = snappedY + snappedH;
                                 newH = bottomEdge - newY;
-                                if (newH < resizeHandles.minSize) {
+                                // Min-size fallback clamps height only: the top
+                                // edge is anchored on a south resize and must
+                                // not move to honor the snapped bottom edge.
+                                if (newH < resizeHandles.minSize)
                                     newH = resizeHandles.minSize;
-                                    newY = bottomEdge - newH;
-                                }
                             }
                             // Show snap lines for visual feedback
                             if (resizeHandles.snapIndicator && actualW > 0 && actualH > 0) {
@@ -561,6 +574,13 @@ Item {
                     if (resizeHandles.snapIndicator)
                         resizeHandles.snapIndicator.clearSnapLines();
 
+                    // Zero-movement click on a handle: nothing to commit, and
+                    // committing anyway would re-snap the unchanged geometry.
+                    if (!handleMouse.didResize) {
+                        rootItem.operationState = 0;
+                        rootItem.operationEnded(rootItem.zoneId);
+                        return;
+                    }
                     // Set state to Idle first so onZoneGeometryChanged can process
                     var actualW = handleMouse.actualCanvasWidth > 0 ? handleMouse.actualCanvasWidth : (rootItem && rootItem.canvasWidth > 0 ? rootItem.canvasWidth : resizeHandles.canvasWidth);
                     var actualH = handleMouse.actualCanvasHeight > 0 ? handleMouse.actualCanvasHeight : (rootItem && rootItem.canvasHeight > 0 ? rootItem.canvasHeight : resizeHandles.canvasHeight);

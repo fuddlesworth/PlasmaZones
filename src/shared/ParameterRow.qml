@@ -275,21 +275,32 @@ Item {
                     paramDelegate.valueChanged(paramDelegate.paramData.id, currentText);
             }
 
+            // Index of the stored value in the enum vocabulary. -1 (not 0)
+            // when the value is out of vocabulary (e.g. the schema changed
+            // and dropped an option) so the combo doesn't silently display a
+            // different option than the value holds.
+            function _enumIndex() {
+                if (!paramDelegate.paramData)
+                    return -1;
+
+                var opts = paramDelegate.paramData.enumOptions || [];
+                var fallback = paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : (opts.length > 0 ? opts[0] : "");
+                return opts.indexOf(paramDelegate._value(fallback));
+            }
+
+            // A model rebind internally resets currentIndex, and the guarded
+            // Binding below won't re-assert when the recomputed index is
+            // unchanged — re-apply explicitly after a model reset.
+            onCountChanged: {
+                if (!popup.visible)
+                    currentIndex = _enumIndex();
+            }
+
             // Guarded Binding (matching the sibling controls) so a user
             // activation can't sever the binding and host resets keep
-            // reflecting. -1 (not 0) when the stored value is out of
-            // vocabulary (e.g. the schema changed and dropped an option) so
-            // the combo doesn't silently display a different option than the
-            // value holds.
+            // reflecting.
             Binding on currentIndex {
-                value: {
-                    if (!paramDelegate.paramData)
-                        return -1;
-
-                    var opts = paramDelegate.paramData.enumOptions || [];
-                    var fallback = paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : (opts.length > 0 ? opts[0] : "");
-                    return opts.indexOf(paramDelegate._value(fallback));
-                }
+                value: enumCombo._enumIndex()
                 when: !enumCombo.popup.visible
                 restoreMode: Binding.RestoreNone
             }

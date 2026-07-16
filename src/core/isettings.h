@@ -102,10 +102,10 @@ public:
     /// zoneSelectorEnabled() unless you need the raw child flag value.
     ///
     /// Test-stub note: `StubSettings` (tests/unit/helpers/StubSettings.h)
-    /// defaults `snappingEnabled() == true` and `zoneSelectorEnabled() == true`,
-    /// so this returns true unless a test explicitly overrides one of the
-    /// two flags. The same applies to `isSnapAssistActive` (defaults
-    /// `snapAssistEnabled() == false` so it returns false until overridden).
+    /// seeds `snappingEnabled()`, `zoneSelectorEnabled()`, and
+    /// `snapAssistEnabled()` from their `ConfigDefaults` accessors (all
+    /// true), so both this method and `isSnapAssistActive` return true
+    /// unless a test explicitly overrides one of the flags involved.
     bool isZoneSelectorActive() const
     {
         return snappingEnabled() && zoneSelectorEnabled();

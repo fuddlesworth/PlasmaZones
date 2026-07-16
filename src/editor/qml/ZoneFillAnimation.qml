@@ -42,6 +42,22 @@ Item {
         fillAnimation.start();
     }
 
+    // Abort a running fill animation without committing its target geometry.
+    // Drag/resize handlers call this before capturing start geometry so a
+    // press mid-animation neither races the animation's property writes nor
+    // gets a stale commit from onFinished underneath the new operation.
+    function stopFillAnimation() {
+        if (!fillAnimation.running && !zoneRoot.isAnimatingFill)
+            return;
+
+        // Mark as external before stopping: should stop() ever deliver
+        // onFinished, the commit branch (expandToFillWithCoords) must not run.
+        externalAnimation = true;
+        fillAnimation.stop();
+        zoneRoot.isAnimatingFill = false;
+        externalAnimation = false;
+    }
+
     // Trigger animated fill operation
     function animatedExpandToFill() {
         if (!controller || !zoneRoot.zoneId)

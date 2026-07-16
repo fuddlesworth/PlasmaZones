@@ -63,6 +63,21 @@ ColumnLayout {
         psHelper.writeSetting(key, value, globalSetter);
     }
 
+    // Write a preview width plus its aspect-derived height, clamping the
+    // height to its min/max bounds. Shared by the Small/Medium/Large preset
+    // buttons and the custom size slider so portrait monitors (aspect ratio
+    // below 1) cannot push the stored height past its maximum.
+    function _writePreviewSize(presetWidth) {
+        writeSetting("PreviewWidth", presetWidth, function (v) {
+            appSettings.zoneSelectorPreviewWidth = v;
+        });
+        var newHeight = Math.round(presetWidth / safeAspectRatio);
+        newHeight = Math.max(constants.zoneSelectorPreviewHeightMin, Math.min(constants.zoneSelectorPreviewHeightMax, newHeight));
+        writeSetting("PreviewHeight", newHeight, function (v) {
+            appSettings.zoneSelectorPreviewHeight = v;
+        });
+    }
+
     spacing: Kirigami.Units.largeSpacing
 
     PerScreenOverrideHelper {
@@ -473,12 +488,7 @@ ColumnLayout {
                             root.writeSetting("SizeMode", 1, function (v) {
                                 appSettings.zoneSelectorSizeMode = v;
                             });
-                            root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewSmall, function (v) {
-                                appSettings.zoneSelectorPreviewWidth = v;
-                            });
-                            root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewSmall / root.safeAspectRatio), function (v) {
-                                appSettings.zoneSelectorPreviewHeight = v;
-                            });
+                            root._writePreviewSize(root.constants.zoneSelectorPreviewSmall);
                         }
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -494,12 +504,7 @@ ColumnLayout {
                             root.writeSetting("SizeMode", 1, function (v) {
                                 appSettings.zoneSelectorSizeMode = v;
                             });
-                            root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewMedium, function (v) {
-                                appSettings.zoneSelectorPreviewWidth = v;
-                            });
-                            root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewMedium / root.safeAspectRatio), function (v) {
-                                appSettings.zoneSelectorPreviewHeight = v;
-                            });
+                            root._writePreviewSize(root.constants.zoneSelectorPreviewMedium);
                         }
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -515,12 +520,7 @@ ColumnLayout {
                             root.writeSetting("SizeMode", 1, function (v) {
                                 appSettings.zoneSelectorSizeMode = v;
                             });
-                            root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewLarge, function (v) {
-                                appSettings.zoneSelectorPreviewWidth = v;
-                            });
-                            root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewLarge / root.safeAspectRatio), function (v) {
-                                appSettings.zoneSelectorPreviewHeight = v;
-                            });
+                            root._writePreviewSize(root.constants.zoneSelectorPreviewLarge);
                         }
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -563,17 +563,7 @@ ColumnLayout {
                         to: root.constants.zoneSelectorPreviewWidthMax
                         stepSize: 10
                         Accessible.name: i18n("Preview size")
-                        onMoved: {
-                            root.writeSetting("PreviewWidth", value, function (v) {
-                                appSettings.zoneSelectorPreviewWidth = v;
-                            });
-                            // Always maintain aspect ratio
-                            var newHeight = Math.round(value / root.safeAspectRatio);
-                            newHeight = Math.max(root.constants.zoneSelectorPreviewHeightMin, Math.min(root.constants.zoneSelectorPreviewHeightMax, newHeight));
-                            root.writeSetting("PreviewHeight", newHeight, function (v) {
-                                appSettings.zoneSelectorPreviewHeight = v;
-                            });
-                        }
+                        onMoved: root._writePreviewSize(value)
 
                         Binding on value {
                             value: root.effectivePreviewWidth

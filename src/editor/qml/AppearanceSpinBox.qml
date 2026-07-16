@@ -16,7 +16,7 @@ SpinBox {
     /**
      * @brief Current value
      */
-    property int spinValue: 0
+    property var spinValue: 0
     /**
      * @brief Default value used when spinValue is undefined
      */

@@ -81,7 +81,10 @@ Control {
                 font.family: Kirigami.Theme.fixedWidthFont.family
                 font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                 color: Kirigami.Theme.textColor
-                Accessible.name: i18nc("@info:whatsthis", "Shader error details")
+                // No Accessible.name override — the Label's own text (the
+                // error log) is the default accessible name, and replacing it
+                // would hide the actual error from assistive technology.
+                Accessible.description: i18nc("@info:whatsthis", "Shader error details")
             }
         }
     }

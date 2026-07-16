@@ -58,7 +58,6 @@ RowLayout {
         border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
         border.width: 1
         color: Qt.rgba(colorPickerRow.baseColor.r, colorPickerRow.baseColor.g, colorPickerRow.baseColor.b, colorPickerRow.baseColor.a * colorPickerRow.opacityMultiplier)
-        Accessible.name: colorPickerRow.accessibleName
         ToolTip.text: colorPickerRow.toolTipText
         ToolTip.visible: colorPreviewMouseArea.containsMouse && colorPickerRow.toolTipText !== ""
 
@@ -68,6 +67,10 @@ RowLayout {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: colorPickerRow.accessibleName
+            Accessible.onPressAction: colorPickerRow.colorButtonClicked()
             onClicked: colorPickerRow.colorButtonClicked()
         }
     }

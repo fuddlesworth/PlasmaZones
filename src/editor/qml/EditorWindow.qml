@@ -91,13 +91,16 @@ Window {
         editorWindow._editorController.showFullScreenOnTargetScreen(editorWindow);
     }
 
-    // Helper to check if a zone is currently selected
-    // Uses C++ Q_INVOKABLE method - faster than JavaScript loop due to no JS engine overhead
+    // Helper to check if a zone is currently selected.
+    // Reads the NOTIFYable selectedZoneIds property (the controller keeps it in
+    // sync with single selection too) instead of the Q_INVOKABLE isSelected():
+    // an invokable carries no change notification, so bindings calling this
+    // helper would never re-evaluate when the selection changes.
     function isZoneSelected(zoneId) {
         if (!zoneId || !editorWindow._editorController)
             return false;
 
-        return editorWindow._editorController.isSelected(zoneId);
+        return editorWindow._editorController.selectedZoneIds.indexOf(zoneId) !== -1;
     }
 
     // Handle zone click with modifier keys for multi-selection
@@ -297,7 +300,7 @@ Window {
         onDeleteWithFillRequested: {
             let id = zoneId;
             if (editorWindow._editorController && id)
-                Qt.callLater(zoneOps.deleteWithFillAnimation, id, editorWindow._editorController, editorWindow._zonesRepeater, drawingArea.width, drawingArea.height);
+                Qt.callLater(zoneOps.deleteWithFillAnimation, id, editorWindow._editorController, editorWindow._zonesRepeater);
         }
         onFillRequested: {
             let id = zoneId;
@@ -342,7 +345,6 @@ Window {
         id: keyboardNav
 
         editorController: editorWindow._editorController
-        drawingArea: drawingArea
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -522,7 +524,7 @@ Window {
                         }
                         onDeleteWithFillRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
-                                zoneOps.deleteWithFillAnimation(modelData.id, editorWindow._editorController, editorWindow._zonesRepeater, drawingArea.width, drawingArea.height);
+                                zoneOps.deleteWithFillAnimation(modelData.id, editorWindow._editorController, editorWindow._zonesRepeater);
                         }
                         onBringToFrontRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
@@ -722,6 +724,9 @@ Window {
         z: 200
         // Fade in/out animation
         opacity: editorWindow.fullscreenMode ? 1 : 0
+        Accessible.role: Accessible.Button
+        Accessible.name: i18nc("@action:button", "Exit fullscreen")
+        Accessible.onPressAction: editorWindow.toggleFullscreenMode()
 
         anchors {
             top: parent.top

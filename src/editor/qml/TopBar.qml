@@ -200,7 +200,7 @@ ToolBar {
                 Accessible.name: i18nc("@label", "Layout name")
                 Accessible.description: i18nc("@info", "Enter name for the layout")
                 // Add right padding when counter is visible to prevent text overlap
-                rightPadding: (showCounter || activeFocus) ? Kirigami.Units.gridUnit * 3 : 0
+                rightPadding: (showCounter || activeFocus) ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.smallSpacing
                 // textEdited fires only on user input, never on a programmatic write.
                 onTextEdited: {
                     layoutNameField.userEdited = true;
@@ -228,7 +228,7 @@ ToolBar {
                         visible: layoutNameField.showCounter || layoutNameField.activeFocus
                         text: i18nc("@info", "%1/%2", layoutNameField.currentLength, layoutNameField.maxLength)
                         color: Kirigami.Theme.disabledTextColor
-                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        font: Kirigami.Theme.smallFont
                         opacity: layoutNameField.activeFocus ? 1 : 0.6
                         Accessible.name: i18nc("@info", "Character count: %1 of %2", layoutNameField.currentLength, layoutNameField.maxLength)
                         Accessible.description: i18nc("@info", "Shows how many characters are used in the layout name")

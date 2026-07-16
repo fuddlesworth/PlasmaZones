@@ -14,7 +14,6 @@ Item {
 
     // Required properties
     required property var editorController
-    required property Item drawingArea
 
     // Handle keyboard events - call this from parent's Keys.onPressed
     function handleKeyPress(event) {

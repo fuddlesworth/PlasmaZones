@@ -65,7 +65,8 @@ Rectangle {
         if (!editorController || selectionCount < 2)
             return false;
 
-        var _ = editorController.zonesVersion; // Dependency tracking
+        var _ = editorController.zonesVersion; // Dependency tracking (zone edits)
+        var _2 = editorController.selectedZoneIds; // Dependency tracking (selection composition changes at equal count)
         return editorController.allSelectedUseCustomColors();
     }
     // Appearance constants

@@ -191,6 +191,10 @@ PhosphorUi.SettingsAppWindow {
                 SequentialAnimation on opacity {
                     loops: Animation.Infinite
                     running: settingsController.daemonRunning
+                    // The pulse can stop mid-cycle (daemon toggled off), which
+                    // would freeze the dot at a partial opacity.
+                    onRunningChanged: if (!running)
+                        daemonDot.opacity = 1
 
                     PhosphorMotionAnimation {
                         from: 1

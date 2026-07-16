@@ -31,8 +31,8 @@ Item {
         // Scale spacing proportionally with zone size for better positioning when small
         spacing: {
             var zoneSize = Math.min(zoneContent.width || 0, zoneContent.height || 0);
-            // Scale spacing from 2px (small zones) to 8px (large zones)
-            return Math.max(2, Math.min(8, zoneSize * 0.04));
+            // Scale spacing from half smallSpacing (small zones) to double smallSpacing (large zones)
+            return Math.max(Kirigami.Units.smallSpacing / 2, Math.min(Kirigami.Units.smallSpacing * 2, zoneSize * 0.04));
         }
 
         // Zone number label
@@ -42,7 +42,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: (zoneContent.zoneData && zoneContent.zoneData.zoneNumber) || 1
             // Guard against negative or zero dimensions causing invalid font size
-            font.pixelSize: Math.max(8, Math.min(zoneContent.width || 0, zoneContent.height || 0) * 0.25 * zoneContent.fontSizeScale)
+            font.pixelSize: Math.max(Kirigami.Units.smallSpacing * 2, Math.min(zoneContent.width || 0, zoneContent.height || 0) * 0.25 * zoneContent.fontSizeScale)
             font.weight: zoneContent.fontWeight
             font.italic: zoneContent.fontItalic
             font.underline: zoneContent.fontUnderline
@@ -62,7 +62,7 @@ Item {
                 var zoneSize = Math.min(zoneContent.width || 0, zoneContent.height || 0);
                 var scaleFactor = zoneSize / 200; // Normalize to ~200px reference
                 var scaledSize = baseSize * Math.max(0.4, Math.min(1, scaleFactor)) * zoneContent.fontSizeScale; // Scale between 40% and 100% of base
-                return Math.max(8, Math.round(scaledSize)); // Minimum 8px for readability
+                return Math.max(Kirigami.Units.smallSpacing * 2, Math.round(scaledSize)); // Unit-derived minimum for readability
             }
             font.weight: zoneContent.fontWeight
             font.italic: zoneContent.fontItalic

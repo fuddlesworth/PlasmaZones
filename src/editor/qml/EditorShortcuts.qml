@@ -26,7 +26,7 @@ Item {
     property bool canUndo: undoController ? undoController.canUndo : false
     property bool canRedo: undoController ? undoController.canRedo : false
 
-    signal fullscreenToggled()
+    signal fullscreenToggled
 
     // Helper function to format shortcut for display
     function formatShortcut(shortcut) {
@@ -57,7 +57,7 @@ Item {
             // If in fullscreen mode, exit it first
             if (shortcuts.fullscreenMode) {
                 shortcuts.fullscreenToggled();
-                return ;
+                return;
             }
             // Normal close behavior
             if (editorController && editorController.hasUnsavedChanges)
@@ -76,7 +76,6 @@ Item {
         onActivated: {
             if (editorController)
                 editorController.saveLayout();
-
         }
     }
 
@@ -90,7 +89,6 @@ Item {
         onActivated: {
             if (editorController)
                 editorController.deleteSelectedZones();
-
         }
     }
 
@@ -103,7 +101,6 @@ Item {
         onActivated: {
             if (editorController)
                 editorController.selectAll();
-
         }
     }
 
@@ -116,7 +113,6 @@ Item {
         onActivated: {
             if (editorController)
                 editorController.duplicateSelectedZones();
-
         }
     }
 
@@ -130,7 +126,6 @@ Item {
         onActivated: {
             if (editorController)
                 editorController.copyZones(editorController.selectedZoneIds);
-
         }
     }
 
@@ -144,7 +139,6 @@ Item {
         onActivated: {
             if (editorController)
                 editorController.cutZones(editorController.selectedZoneIds);
-
         }
     }
 
@@ -158,7 +152,6 @@ Item {
         onActivated: {
             if (editorController)
                 editorController.pasteZones(false);
-
         }
     }
 
@@ -166,13 +159,15 @@ Item {
     Shortcut {
         id: pasteOffsetShortcut
 
-        sequences: ["Ctrl+Shift+V", "Shift+Insert"]
+        // No "Shift+Insert" here: on Linux StandardKey.Paste expands to both
+        // Ctrl+V and Shift+Insert, so listing it again in this shortcut makes
+        // the sequence ambiguous and Qt then fires neither shortcut.
+        sequences: ["Ctrl+Shift+V"]
         context: Qt.ApplicationShortcut
         enabled: !shortcuts.previewMode && editorController && editorController.canPaste
         onActivated: {
             if (editorController)
                 editorController.pasteZones(true);
-
         }
     }
 
@@ -185,7 +180,6 @@ Item {
         onActivated: {
             if (editorController && editorWindow.selectedZoneId)
                 editorController.splitZone(editorWindow.selectedZoneId, true);
-
         }
     }
 
@@ -199,7 +193,6 @@ Item {
         onActivated: {
             if (editorController && editorWindow.selectedZoneId)
                 editorController.splitZone(editorWindow.selectedZoneId, false);
-
         }
     }
 
@@ -246,7 +239,6 @@ Item {
         onActivated: {
             if (shortcuts.undoController)
                 shortcuts.undoController.undo();
-
         }
     }
 
@@ -259,7 +251,6 @@ Item {
         onActivated: {
             if (shortcuts.undoController)
                 shortcuts.undoController.redo();
-
         }
     }
 
@@ -284,30 +275,24 @@ Item {
             function onEditorDuplicateShortcutChanged() {
                 if (editorController)
                     duplicateShortcut.sequence = editorController.editorDuplicateShortcut;
-
             }
 
             function onEditorSplitHorizontalShortcutChanged() {
                 if (editorController)
                     splitHorizontalShortcut.sequence = editorController.editorSplitHorizontalShortcut;
-
             }
 
             function onEditorSplitVerticalShortcutChanged() {
                 if (editorController)
                     splitVerticalShortcut.sequence = editorController.editorSplitVerticalShortcut;
-
             }
 
             function onEditorFillShortcutChanged() {
                 if (editorController)
                     fillShortcut.sequence = editorController.editorFillShortcut;
-
             }
 
             target: editorController
         }
-
     }
-
 }

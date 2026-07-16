@@ -146,7 +146,11 @@ ColumnLayout {
             return "#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b);
         }
         onAccepted: {
-            if (paramId === "" || effectId === "")
+            // Only paramId is mandatory — effectId is optional (an empty
+            // value simply means the host doesn't use effect scoping), and
+            // guarding on it would silently swallow color picks for such
+            // hosts while the slider/spinbox path forwards unconditionally.
+            if (paramId === "")
                 return;
 
             root.valueChanged(effectId, paramId, colorDialog._toHexArgb(selectedColor));

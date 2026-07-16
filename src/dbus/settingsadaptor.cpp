@@ -1244,6 +1244,44 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
             notify.invoke(m_settings, Qt::DirectConnection);
         }
     }
+    // Per-mode disable lists are the other registry-only surface with dedicated
+    // NOTIFYs: their six keys have no Q_PROPERTY (the signals carry a Mode
+    // argument, so the parameterless metaobject replay above can never reach
+    // them), yet daemon consumers filter on disabledMonitorsChanged(mode) etc.
+    // and do NOT refresh from the aggregate. Mirror Settings::load()'s
+    // post-reload replay (settings.cpp): one signal per (axis, mode) pair
+    // whose list changed, resolved from the same beforeValues snapshot the
+    // property loop uses.
+    struct PerModeDisableReplay
+    {
+        QString key;
+        void (ISettings::*signal)(PhosphorZones::AssignmentEntry::Mode);
+        PhosphorZones::AssignmentEntry::Mode mode;
+    };
+    static const PerModeDisableReplay disableReplays[] = {
+        {QStringLiteral("snappingDisabledMonitors"), &ISettings::disabledMonitorsChanged,
+         PhosphorZones::AssignmentEntry::Snapping},
+        {QStringLiteral("autotileDisabledMonitors"), &ISettings::disabledMonitorsChanged,
+         PhosphorZones::AssignmentEntry::Autotile},
+        {QStringLiteral("snappingDisabledDesktops"), &ISettings::disabledDesktopsChanged,
+         PhosphorZones::AssignmentEntry::Snapping},
+        {QStringLiteral("autotileDisabledDesktops"), &ISettings::disabledDesktopsChanged,
+         PhosphorZones::AssignmentEntry::Autotile},
+        {QStringLiteral("snappingDisabledActivities"), &ISettings::disabledActivitiesChanged,
+         PhosphorZones::AssignmentEntry::Snapping},
+        {QStringLiteral("autotileDisabledActivities"), &ISettings::disabledActivitiesChanged,
+         PhosphorZones::AssignmentEntry::Autotile},
+    };
+    for (const auto& replay : disableReplays) {
+        const auto getter = m_getters.constFind(replay.key);
+        if (getter == m_getters.constEnd()) {
+            continue;
+        }
+        if (getter.value()() != beforeValues.value(replay.key)) {
+            anyChanged = true;
+            Q_EMIT(m_settings->*replay.signal)(replay.mode);
+        }
+    }
     // One committed settingsChanged for the whole batch. Emitting on m_settings
     // (not on the adaptor) reaches BOTH in-process listeners and the D-Bus bus:
     // the constructor relays ISettings::settingsChanged to the adaptor's own

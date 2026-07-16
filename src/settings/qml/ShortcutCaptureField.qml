@@ -25,6 +25,8 @@ TextField {
     property string keySequence
     property string tooltipText
     property bool capturing: false
+    //* Name announced to assistive technology; falls back to the field text.
+    property string accessibleName: ""
 
     signal keySequenceModified(string sequence)
 
@@ -172,6 +174,7 @@ TextField {
         return "";
     }
 
+    Accessible.name: accessibleName !== "" ? accessibleName : text
     Layout.fillWidth: true
     text: capturing ? i18n("Press keys...") : (keySequence || "")
     placeholderText: "Ctrl+Shift+X"

@@ -48,10 +48,12 @@ import org.kde.kirigami as Kirigami
  *
  * Required:
  *   - `items`: var — list of `{ id, name, category?, categoryOrder?,
- *     dimmed?, dimReason? }` maps. A `dimmed` item renders greyed with a
- *     warning icon + `dimReason` tooltip (still selectable — the host
- *     surfaces the consequence). `categoryOrder` (int) sorts top-level
- *     categories; uncategorised items sort by name.
+ *     categoryGroup?, dimmed?, dimReason? }` maps. A `dimmed` item renders
+ *     greyed with a warning icon + `dimReason` tooltip (still selectable —
+ *     the host surfaces the consequence). `categoryOrder` (int) sorts
+ *     top-level categories; uncategorised items sort by name.
+ *     `categoryGroup` (string) is used for group separators between
+ *     top-level categories.
  *
  * Optional:
  *   - `currentId`: string — drives the checkmark and button label

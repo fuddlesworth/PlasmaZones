@@ -289,6 +289,12 @@ Item {
         fillAnimator.animatedExpandToFill();
     }
 
+    // Abort a running fill animation without committing its target geometry.
+    // Called by drag/resize handlers before they capture start geometry.
+    function stopFillAnimation() {
+        fillAnimator.stopFillAnimation();
+    }
+
     focus: false
     // Position with differentiated gaps
     x: visualX + leftGap
@@ -578,7 +584,7 @@ Item {
     ActionButtons {
         id: hoverButtons
 
-        visible: !root.previewMode
+        previewMode: root.previewMode
         root: root
     }
 

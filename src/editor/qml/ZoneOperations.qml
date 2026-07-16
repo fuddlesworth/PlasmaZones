@@ -18,10 +18,8 @@ QtObject {
      * @param zoneIdToDelete The ID of zone to delete
      * @param controller The EditorController instance
      * @param zonesRepeater The zones Repeater instance
-     * @param canvasWidth Canvas width for coordinate conversion
-     * @param canvasHeight Canvas height for coordinate conversion
      */
-    function deleteWithFillAnimation(zoneIdToDelete, controller, zonesRepeater, canvasWidth, canvasHeight) {
+    function deleteWithFillAnimation(zoneIdToDelete, controller, zonesRepeater) {
         if (!controller || !zoneIdToDelete)
             return;
 
@@ -60,7 +58,7 @@ QtObject {
         // Animate the adjacent zones - use Qt.callLater to ensure model is updated
         if (adjacentIds.length > 0)
             Qt.callLater(function () {
-                animateAdjacentZones(adjacentIds, oldGeometries, controller, zonesRepeater, canvasWidth, canvasHeight);
+                animateAdjacentZones(adjacentIds, oldGeometries, controller, zonesRepeater);
             });
     }
 
@@ -82,7 +80,7 @@ QtObject {
     /**
      * @brief Animate adjacent zones after delete
      */
-    function animateAdjacentZones(adjacentIds, oldGeometries, controller, zonesRepeater, canvasW, canvasH) {
+    function animateAdjacentZones(adjacentIds, oldGeometries, controller, zonesRepeater) {
         for (var k = 0; k < adjacentIds.length; k++) {
             var targetId = adjacentIds[k];
             var oldGeom = oldGeometries[targetId];

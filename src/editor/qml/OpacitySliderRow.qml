@@ -74,8 +74,8 @@ RowLayout {
     }
 
     Label {
-        text: Math.round(slider.value) + "%"
-        Layout.preferredWidth: 40
+        text: i18nc("@label opacity percentage", "%1%", Math.round(slider.value))
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 2
         horizontalAlignment: Text.AlignRight
         font: Kirigami.Theme.fixedWidthFont
     }

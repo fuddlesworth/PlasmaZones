@@ -242,6 +242,11 @@ Item {
                 model: root.allowMultiple ? root.triggers : []
 
                 RowLayout {
+                    id: triggerRow
+
+                    required property int index
+                    required property var modelData
+
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
 
@@ -249,7 +254,7 @@ Item {
                         Layout.fillWidth: true
                         implicitHeight: triggerLabel.implicitHeight + Kirigami.Units.smallSpacing
                         onClicked: {
-                            root.editingTriggerIndex = index;
+                            root.editingTriggerIndex = triggerRow.index;
                             multiInputCapture.startCapture();
                         }
                         QQC2.ToolTip.visible: hoverHandler.hovered && root.tooltipEnabled
@@ -263,7 +268,7 @@ Item {
                         contentItem: QQC2.Label {
                             id: triggerLabel
 
-                            text: root.triggerDisplayText(modelData.modifier || 0, modelData.mouseButton || 0)
+                            text: root.triggerDisplayText(triggerRow.modelData.modifier || 0, triggerRow.modelData.mouseButton || 0)
                             elide: Text.ElideRight
                             color: hoverHandler.hovered ? Kirigami.Theme.hoverColor : Kirigami.Theme.textColor
                         }
@@ -278,7 +283,7 @@ Item {
                         onClicked: {
                             var newTriggers = [];
                             for (var i = 0; i < root.triggers.length; i++) {
-                                if (i !== index)
+                                if (i !== triggerRow.index)
                                     newTriggers.push(root.triggers[i]);
                             }
                             root.triggersModified(newTriggers);

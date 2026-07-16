@@ -32,6 +32,13 @@ Item {
         springAnimTimer.stop();
         springReplayDelay.stop();
     }
+    // Disabling the preview mid-animation must stop the running box animation,
+    // mirroring the hide branch above, and park the box at its start position.
+    onPreviewEnabledChanged: if (!previewEnabled) {
+        springAnimTimer.stop();
+        springReplayDelay.stop();
+        boxTrack.animBox.x = 0;
+    }
     // Match EasingPreview dimensions exactly
     readonly property int canvasHeight: Kirigami.Units.gridUnit * 15
     readonly property int boxTrackHeight: Kirigami.Units.gridUnit * 2

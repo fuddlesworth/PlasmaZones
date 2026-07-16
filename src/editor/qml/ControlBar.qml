@@ -75,7 +75,7 @@ ToolBar {
                 // Template model with preview information
                 property var templateModel: [
                     {
-                        "text": i18nc("@item:inmenu", "Apply Template..."),
+                        "text": i18nc("@item:inmenu", "Apply Template…"),
                         "value": "",
                         "templateType": "",
                         "columns": 0,
@@ -253,7 +253,7 @@ ToolBar {
                 // Bind checked state directly to gridSnappingEnabled property
                 checked: editorController ? (editorController.gridSnappingEnabled || false) : false
                 Accessible.name: text
-                Accessible.description: i18nc("@info", "Toggle grid snapping. Zones will align to a grid when enabled. Use the dropdowns to change horizontal and vertical grid sizes.")
+                Accessible.description: i18nc("@info", "Toggle grid snapping. Zones will align to a grid when enabled. Use the sliders to change horizontal and vertical grid sizes.")
                 ToolTip.visible: hovered
                 ToolTip.text: checked ? i18nc("@tooltip", "Grid snapping enabled (H:%1% V:%2%). Zones align to grid lines. Click to disable.", editorController ? Math.round((editorController.snapIntervalX || 0.1) * 100) : 10, editorController ? Math.round((editorController.snapIntervalY || 0.1) * 100) : 10) : i18nc("@tooltip", "Grid snapping disabled. Click to enable. Zones will align to grid lines.")
                 onToggled: {
@@ -420,8 +420,8 @@ ToolBar {
                 id: unsavedIcon
 
                 source: "document-save"
-                width: Kirigami.Units.iconSizes.smallMedium
-                height: Kirigami.Units.iconSizes.smallMedium
+                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
                 color: Kirigami.Theme.neutralTextColor
             }
 

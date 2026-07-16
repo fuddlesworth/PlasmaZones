@@ -80,6 +80,10 @@ MouseArea {
         if (mouse.button === Qt.LeftButton && zoneRoot.operationState === 0) {
             // EditorZone.State.Idle = 0
             mouse.accepted = true;
+            // Abort any running fill animation before capturing start geometry:
+            // it writes visualX/Y/Width/Height directly (bypassing the Behavior
+            // gate) and its onFinished would commit underneath this drag.
+            zoneRoot.stopFillAnimation();
             zoneRoot.operationState = 1; // EditorZone.State.Dragging = 1
             dragStart = Qt.point(zoneRoot.visualX, zoneRoot.visualY);
             originalSize = Qt.size(zoneRoot.visualWidth, zoneRoot.visualHeight);
@@ -272,10 +276,12 @@ MouseArea {
                 }
             }
             zoneRoot.operationUpdated(zoneRoot.zoneId, zoneRoot.visualX, zoneRoot.visualY, zoneRoot.visualWidth, zoneRoot.visualHeight);
-            // Update multi-zone drag if active (move other selected zones by the same delta)
+            // Update multi-zone drag if active (move other selected zones by the same delta).
+            // Feed the last snapped/clamped drag position, not visualX/visualY: the visual
+            // properties have Behaviors and may hold interpolated mid-animation values.
             if (controller && controller.isMultiZoneDragActive() && zoneRoot.canvasWidth > 0 && zoneRoot.canvasHeight > 0) {
-                var relX = zoneRoot.visualX / zoneRoot.canvasWidth;
-                var relY = zoneRoot.visualY / zoneRoot.canvasHeight;
+                var relX = lastFinalX / zoneRoot.canvasWidth;
+                var relY = lastFinalY / zoneRoot.canvasHeight;
                 controller.updateMultiZoneDrag(zoneRoot.zoneId, relX, relY);
             }
         }

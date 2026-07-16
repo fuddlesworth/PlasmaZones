@@ -2063,6 +2063,17 @@ public:
         Q_EMIT perScreenAutotileSettingsChanged();
         Q_EMIT settingsChanged();
     }
+    bool hasPerScreenAutotileSettings(const QString& screenIdOrName) const override
+    {
+        return !m_perScreenAutotile.value(screenIdOrName).isEmpty();
+    }
+    void clearPerScreenAutotileSettings(const QString& screenIdOrName) override
+    {
+        if (m_perScreenAutotile.remove(screenIdOrName) > 0) {
+            Q_EMIT perScreenAutotileSettingsChanged();
+            Q_EMIT settingsChanged();
+        }
+    }
     QVariantMap perScreenGapOverrides(const QString& screenIdOrName) const override
     {
         // This set must mirror the 7 PerScreenSnappingKey gap dimensions and

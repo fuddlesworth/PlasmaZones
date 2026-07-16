@@ -49,6 +49,7 @@ SettingsFlickable {
                         ShortcutCaptureField {
                             id: editorDuplicateShortcutField
 
+                            accessibleName: i18n("Duplicate zone")
                             keySequence: root.settingsBridge.duplicateShortcut
                             placeholderText: "Ctrl+D"
                             onKeySequenceModified: seq => {
@@ -66,6 +67,7 @@ SettingsFlickable {
                         ShortcutCaptureField {
                             id: editorSplitHorizontalShortcutField
 
+                            accessibleName: i18n("Split horizontally")
                             keySequence: root.settingsBridge.splitHorizontalShortcut
                             placeholderText: "Ctrl+Shift+H"
                             onKeySequenceModified: seq => {
@@ -83,6 +85,7 @@ SettingsFlickable {
                         ShortcutCaptureField {
                             id: editorSplitVerticalShortcutField
 
+                            accessibleName: i18n("Split vertically")
                             keySequence: root.settingsBridge.splitVerticalShortcut
                             placeholderText: "Ctrl+Alt+V"
                             onKeySequenceModified: seq => {
@@ -100,6 +103,7 @@ SettingsFlickable {
                         ShortcutCaptureField {
                             id: editorFillShortcutField
 
+                            accessibleName: i18n("Fill space")
                             keySequence: root.settingsBridge.fillShortcut
                             placeholderText: "Ctrl+Shift+F"
                             onKeySequenceModified: seq => {
@@ -180,6 +184,7 @@ SettingsFlickable {
                         SettingsSlider {
                             id: snapIntervalXSlider
 
+                            accessibleName: i18n("Grid interval X")
                             from: 0.01
                             to: 0.5
                             stepSize: 0.01
@@ -202,6 +207,7 @@ SettingsFlickable {
                         SettingsSlider {
                             id: snapIntervalYSlider
 
+                            accessibleName: i18n("Grid interval Y")
                             from: 0.01
                             to: 0.5
                             stepSize: 0.01

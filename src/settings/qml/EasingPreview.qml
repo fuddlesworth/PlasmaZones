@@ -24,6 +24,10 @@ Item {
     onVisibleChanged: if (!visible) {
         animTimer.stop();
         replayDelay.stop();
+    } else if (root.previewEnabled) {
+        // Restart on re-show so the preview box is not left frozen mid-track
+        // by the hide-branch stop above.
+        replay();
     }
     readonly property int canvasHeight: Kirigami.Units.gridUnit * 15
     readonly property int boxTrackHeight: Kirigami.Units.gridUnit * 2

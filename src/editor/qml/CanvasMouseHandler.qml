@@ -118,7 +118,13 @@ Item {
         // a large layout could overtake.
         z: canvasHandler.editorWindow.canvasOverlayZ
         hoverEnabled: false
+        Accessible.role: Accessible.Canvas
+        Accessible.name: i18nc("@info:accessibility", "Zone selection overlay, hold Alt and drag to select zones")
         onPressed: function (mouse) {
+            if (canvasHandler.previewMode) {
+                mouse.accepted = false;
+                return;
+            }
             // Only capture if Alt is held - otherwise let zones handle it
             if (mouse.modifiers & Qt.AltModifier) {
                 mouse.accepted = true;
@@ -137,6 +143,10 @@ Item {
             }
         }
         onPositionChanged: function (mouse) {
+            if (canvasHandler.previewMode) {
+                mouse.accepted = false;
+                return;
+            }
             if (!altDragActive || !pressed) {
                 mouse.accepted = false;
                 return;
@@ -182,11 +192,17 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
         propagateComposedEvents: false
+        Accessible.role: Accessible.Canvas
+        Accessible.name: i18nc("@info:accessibility", "Canvas background, drag to select zones, double-click to create a zone")
         // Ensure drawingArea maintains focus when clicking empty space
         onClicked: function (mouse) {
             canvasHandler.drawingArea.forceActiveFocus();
         }
         onPressed: function (mouse) {
+            if (canvasHandler.previewMode) {
+                mouse.accepted = false;
+                return;
+            }
             // Start potential rectangle selection
             canvasHandler.selectionStart = Qt.point(mouse.x, mouse.y);
             canvasHandler.isSelecting = false; // Will become true if dragged past threshold
@@ -194,7 +210,7 @@ Item {
             mouse.accepted = true;
         }
         onPositionChanged: function (mouse) {
-            if (!pressed) {
+            if (canvasHandler.previewMode || !pressed) {
                 mouse.accepted = false;
                 return;
             }
@@ -217,6 +233,10 @@ Item {
             mouse.accepted = true;
         }
         onReleased: function (mouse) {
+            if (canvasHandler.previewMode) {
+                mouse.accepted = false;
+                return;
+            }
             if (canvasHandler.isSelecting) {
                 // Select all zones within the rectangle
                 canvasHandler.selectZonesInRect(canvasHandler.selectionRect, mouse.modifiers & Qt.ControlModifier);
