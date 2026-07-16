@@ -75,6 +75,31 @@ Item {
     // invalidate the map; reassigned whole on each publish so bindings re-run.
     property var delegateHeights: ({})
 
+    // Prune cache entries whose id no longer appears in `items`, so the map
+    // doesn't grow across deletions (every publish copies the whole map).
+    // Rebuilding here rather than deleting in Component.onDestruction is
+    // deliberate: the Repeater treats an `items` reassignment as a full model
+    // reset (destroy all, recreate all), so a destruction-time delete would
+    // also drop heights of rows that are merely being recreated, collapsing
+    // expanded rows to the fallback height until they republish.
+    onItemsChanged: {
+        var next = {};
+        var kept = 0;
+        for (var i = 0; i < items.length; ++i) {
+            var item = items[i];
+            if (item === undefined || item === null)
+                continue;
+            var itemId = root.idOf(item);
+            var h = delegateHeights[itemId];
+            if (h !== undefined) {
+                next[itemId] = h;
+                kept++;
+            }
+        }
+        if (kept !== Object.keys(delegateHeights).length)
+            delegateHeights = next;
+    }
+
     function setDelegateHeight(itemId, h) {
         if (!itemId || h <= 0 || delegateHeights[itemId] === h)
             return;

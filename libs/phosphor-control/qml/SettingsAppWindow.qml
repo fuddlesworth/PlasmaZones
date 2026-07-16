@@ -418,6 +418,7 @@ Kirigami.ApplicationWindow {
 
                         Layout.alignment: Qt.AlignVCenter
                         Layout.preferredWidth: (item !== null && item.visible) ? item.implicitWidth : 0
+                        Layout.preferredHeight: (item !== null && item.visible) ? item.implicitHeight : 0
                     }
 
                     Item {
@@ -429,6 +430,7 @@ Kirigami.ApplicationWindow {
 
                         Layout.alignment: Qt.AlignVCenter
                         Layout.preferredWidth: (item !== null && item.visible) ? item.implicitWidth : 0
+                        Layout.preferredHeight: (item !== null && item.visible) ? item.implicitHeight : 0
                     }
                 }
             }
@@ -449,8 +451,8 @@ Kirigami.ApplicationWindow {
 
                 Sidebar {
                     // `sidebarItem` (not `sidebar`) — the root exposes
-                    // this item through `property alias sidebar:
-                    // sidebarItem` (see lines ~44-50; the typed QtObject
+                    // this item through the `property alias sidebar`
+                    // declaration on root (the typed QtObject
                     // façade attempted for audit finding 45 was reverted
                     // because it broke grouped-property assignment).
                     // The alias name and the id share the root's name

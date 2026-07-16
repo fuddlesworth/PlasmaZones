@@ -68,7 +68,7 @@ Control {
                 width: root.availableWidth
                 text: root.errorLog
                 wrapMode: Text.Wrap
-                font.family: "monospace"
+                font.family: Kirigami.Theme.fixedWidthFont.family
                 font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                 color: Kirigami.Theme.textColor
                 Accessible.name: i18nc("@info:whatsthis", "Shader error details")

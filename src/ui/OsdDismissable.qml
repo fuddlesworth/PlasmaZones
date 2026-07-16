@@ -18,8 +18,8 @@ import QtQuick
  * Sibling latch — LayoutPickerContent.qml's `_dismissed` property + its
  * private `_requestDismiss()`: same idempotency idea, but its dismiss
  * source is user actions (Escape, backdrop click) rather than a timer.
- * The reset is driven by an explicit C++ property write on every show,
- * not by a `runningChanged` transition. The two latches are deliberately
+ * The reset happens by Loader re-instantiation per show, not by a
+ * `runningChanged` transition. The two latches are deliberately
  * separate components — they share a contract (at most one dismiss per
  * show cycle) but the trigger surface and reset mechanism differ enough
  * that pulling them into a common base would obscure both. If a third
@@ -56,7 +56,7 @@ Item {
     /// re-emits that as its own `dismissRequested` so
     /// OverlayService::createWarmedOsdSurface's connect to Surface::hide()
     /// drives the library animator's beginHide.
-    signal request()
+    signal request
 
     /// Restart the auto-dismiss timer. Resets the idempotency latch via
     /// the dismissTimer.runningChanged Connections block below.
@@ -68,7 +68,7 @@ Item {
     /// caller). Idempotent within a single show cycle.
     function fire() {
         if (helper._dismissed)
-            return ;
+            return;
 
         helper._dismissed = true;
         helper.request();
@@ -85,10 +85,8 @@ Item {
         function onRunningChanged() {
             if (dismissTimer.running)
                 helper._dismissed = false;
-
         }
 
         target: dismissTimer
     }
-
 }

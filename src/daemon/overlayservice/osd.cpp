@@ -296,7 +296,7 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     writeQmlProperty(osdSlot, QStringLiteral("globalAutoAssign"), p.globalAutoAssign);
     writeAutotileMetadata(osdSlot, p.showMasterDot, p.producesOverlappingZones, p.zoneNumberDisplay, p.masterCount);
     writeQmlProperty(osdSlot, QStringLiteral("zones"), p.zones);
-    writeFontProperties(osdSlot, m_settings);
+    writeFontProperties(osdSlot, m_settings, /*includeLabelFontColor=*/false);
     // Zone preview colors follow the same settings pipeline as the live
     // overlays and the picker/selector slots (per-zone custom colors ride
     // inside p.zones; these are the layout-wide effective defaults). Without

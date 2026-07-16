@@ -748,13 +748,12 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
                          overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
         writeQmlProperty(slot, QStringLiteral("borderRadius"),
                          overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
-        writeQmlProperty(slot, QStringLiteral("enableBlur"), m_settings->enableBlur());
         // The rule overrides the global show-numbers setting; the per-layout
         // gate still wins (a layout that hides numbers keeps them hidden).
         bool showNumbers = overlayOverride.showZoneNumbers.value_or(m_settings->showZoneNumbers())
             && (!screenLayout || screenLayout->showZoneNumbers());
         writeQmlProperty(slot, QStringLiteral("showNumbers"), showNumbers);
-        writeFontProperties(slot, m_settings);
+        writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/true);
     }
 
     const bool windowIsShader = slot->property("useShader").toBool();

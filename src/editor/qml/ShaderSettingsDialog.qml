@@ -451,6 +451,8 @@ Kirigami.Dialog {
                         } else {
                             root.pendingShaderId = root.noneShaderId;
                         }
+                        // Re-derive from the model: with no effect shaders registered the assignments above are a no-op and the box must not latch checked.
+                        checked = root.hasShaderEffect;
                     }
                 }
 

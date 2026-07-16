@@ -309,7 +309,8 @@ Kirigami.Dialog {
                                 zones: templateDelegate.modelData.zones
                                 showZoneNumbers: true
                                 isHovered: templateDelegate.isHovered || templateDelegate.selected
-                                highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, templateDelegate.selected ? 0.8 : 0.5)
+                                highlightColor: Kirigami.Theme.highlightColor
+                                activeOpacity: templateDelegate.selected ? 0.6 : 0.45
                             }
                         }
                     }

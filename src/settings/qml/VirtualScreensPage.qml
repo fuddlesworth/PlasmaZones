@@ -251,9 +251,7 @@ SettingsFlickable {
         var total = cols * rows;
         if (total <= 1) {
             settingsController.stageVirtualScreenRemoval(_selectedScreen);
-            _pendingScreens = [];
-            _columns = 1;
-            _rows = 1;
+            root._refreshConfig();
             return;
         }
         if (total > _maxVirtualScreens)
@@ -404,8 +402,10 @@ SettingsFlickable {
             _autoSelectScreen();
     }
     on_SelectedScreenChanged: {
-        _updateScreenGeometry();
+        // Config first: geometry reconstruction's uniform-grid fallback reads
+        // the _rows/_columns that _refreshConfig just loaded for this screen.
         _refreshConfig();
+        _updateScreenGeometry();
     }
 
     Connections {
@@ -421,8 +421,10 @@ SettingsFlickable {
             if (root._selectedScreen === "" && settingsController.screens.length > 0)
                 root._autoSelectScreen();
             if (root._selectedScreen === before) {
-                root._updateScreenGeometry();
+                // Config first: geometry reconstruction reads the grid
+                // _refreshConfig just loaded (uniform-grid fallback).
                 root._refreshConfig();
+                root._updateScreenGeometry();
             }
         }
 

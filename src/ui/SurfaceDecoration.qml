@@ -293,10 +293,18 @@ Item {
                 // delegate fills the host, so its coordinates coincide). The
                 // anchor lives deep inside the loaded content; mapToItem walks
                 // the transform chain so the decoration lands exactly over the
-                // card regardless of nesting. mapToItem is not reactive to an
-                // ancestor transform change, so this binding re-resolves only
-                // on decorationActive / shaderAnchorItem change.
-                readonly property point anchorOrigin: (root.decorationActive && root.shaderAnchorItem) ? root.shaderAnchorItem.mapToItem(root, 0, 0) : Qt.point(0, 0)
+                // card regardless of nesting. mapToItem registers no QML
+                // dependencies, so the anchor/host sizes are read explicitly
+                // first: a centerIn-driven move of the anchor is always
+                // accompanied by a size change (of the anchor or the host),
+                // and touching those values makes a resize-driven recenter
+                // re-resolve the mapped origin.
+                readonly property point anchorOrigin: {
+                    if (!root.decorationActive || !root.shaderAnchorItem)
+                        return Qt.point(0, 0);
+                    void (root.shaderAnchorItem.width + root.shaderAnchorItem.height + root.width + root.height);
+                    return root.shaderAnchorItem.mapToItem(root, 0, 0);
+                }
 
                 // SurfaceAnimator anchor (compose — see _applyAnchorRouting).
                 // Only the LAST stage carries the tags: it IS the fully

@@ -103,6 +103,16 @@ SettingsFlickable {
 
             tiling = "autotile:" + algoId;
         } else {
+            if (stateView.localLayoutCleared) {
+                // The user explicitly picked "Default". The controller exposes
+                // no invokable that stages an assignment clear
+                // (StagingService::stageFullClear is not surfaced to QML), so
+                // stage nothing rather than pinning the currently-resolved
+                // layout as an explicit assignment via the fallback below.
+                return;
+            }
+            // The || fallback serves the mode-toggle path, which stages the
+            // currently-resolved layout when the user has not picked one.
             var layoutId = stateView.localLayoutId || state.layoutId;
             if (!layoutId)
                 return;
@@ -220,6 +230,11 @@ SettingsFlickable {
             property int localMode: 0
             property string localLayoutId: ""
             property string localAlgorithmId: ""
+            // True after the user explicitly picks "Default" in the layout
+            // selector. Tracked separately from localLayoutId because the
+            // combo reports Default as an empty value, which is otherwise
+            // indistinguishable from the not-yet-touched state.
+            property bool localLayoutCleared: false
             property bool isTiling: localMode === 1
             // Resolved layout object for LayoutThumbnail
             property var currentLayout: root._findLayout(localLayoutId)
@@ -233,6 +248,10 @@ SettingsFlickable {
 
                 var desktop = screenState.virtualDesktop || 0;
                 var activity = screenState.activity || "";
+                // Selection context changed — drop any pending explicit
+                // "Default" pick; the state below re-initializes from
+                // staged or daemon values.
+                localLayoutCleared = false;
                 var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
                 if (Object.keys(staged).length > 0) {
                     // Restore from staged state
@@ -318,7 +337,9 @@ SettingsFlickable {
                 showPreview: true
                 onActivated: function (idx) {
                     var entry = model[idx];
-                    stateView.localLayoutId = entry ? (entry.value || "") : "";
+                    var id = entry ? (entry.value || "") : "";
+                    stateView.localLayoutId = id;
+                    stateView.localLayoutCleared = (id === "");
                     root._stageCurrentState();
                 }
             }

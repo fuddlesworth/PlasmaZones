@@ -353,6 +353,14 @@ void Settings::load()
     const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged;
 
     if (useSystemColors()) {
+        // The derive routes through the public color setters. Squelch their
+        // per-setter NOTIFY + settingsChanged emissions for this call only:
+        // emitChangedNotifyProperties() below compares the post-derive values
+        // against the pre-reparse snapshot and fires each changed NOTIFY
+        // exactly once, and the aggregate settingsChanged fires once at the
+        // end of load(). Outside load() (eventFilter's palette re-derive,
+        // setUseSystemColors) the setters must keep emitting normally.
+        QScopedValueRollback<bool> squelch(m_suppressDerivedColorEmissions, true);
         applySystemColorScheme();
     }
 
@@ -947,6 +955,13 @@ void Settings::setAudioSpectrumBarCount(int count)
         m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
         const QColor after = m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key());                    \
         if (after == before) {                                                                                         \
+            return;                                                                                                    \
+        }                                                                                                              \
+        /* load()'s applySystemColorScheme() derive: the value is persisted                                            \
+           above, but load() announces once via emitChangedNotifyProperties +                                          \
+           its single settingsChanged — a setter-level emission here would                                           \
+           duplicate both. */                                                                                          \
+        if (m_suppressDerivedColorEmissions) {                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
         Q_EMIT signal();                                                                                               \
@@ -2371,7 +2386,7 @@ void Settings::setZoneSelectorPosition(ZoneSelectorPosition value)
 }
 void Settings::setZoneSelectorPositionInt(int value)
 {
-    if (value >= 0 && value <= 8) {
+    if (value >= 0 && value <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
         setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
     }
 }

@@ -52,7 +52,7 @@ Item {
         // includes the glow. The OSD cards (LayoutOsdContent.qml,
         // NavigationOsdContent.qml) get this margin by embedding PopupFrame
         // itself, so there is no separate value to keep in sync there —
-        // but src/ui/ZoneSelectorContent.qml:76 clones the glowMargin
+        // but ZoneSelectorContent.qml's `_glowMargin` clones the glowMargin
         // expression for its corner anchor insets and must track changes.
 
         id: style
@@ -138,7 +138,7 @@ Item {
         // offset 4 gives a 36px extent against a ~23px margin, so blurMax
         // is pinned to glowMargin - shadowVerticalOffset (≈19) and the
         // falloff reaches zero smoothly inside the budget instead.
-        // src/ui/ZoneSelectorContent.qml:76 clones the glowMargin
+        // ZoneSelectorContent.qml's `_glowMargin` clones the glowMargin
         // expression; keep it in sync when changing the budget.
         MultiEffect {
             source: frameChrome

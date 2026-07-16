@@ -40,6 +40,16 @@ SpinBox {
      */
     signal spinValueModified(int newValue)
 
+    /**
+     * @brief Imperatively re-sync the spinbox from a model value
+     *
+     * A user edit severs the declarative value binding, so selection changes
+     * and undo/redo must call this to keep the spinbox on the model.
+     */
+    function syncValue(newValue) {
+        value = (newValue !== undefined) ? newValue : defaultValue;
+    }
+
     value: (spinValue !== undefined) ? spinValue : defaultValue
     enabled: spinEnabled
     Accessible.name: accessibleName

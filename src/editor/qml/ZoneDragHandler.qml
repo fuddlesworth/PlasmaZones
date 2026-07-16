@@ -34,10 +34,10 @@ MouseArea {
     acceptedButtons: Qt.LeftButton | Qt.RightButton
     z: 1 // Below handles and buttons
     focus: false
-    onClicked: function(mouse) {
+    onClicked: function (mouse) {
         // Don't handle clicks if over buttons or handles
         if (zoneRoot.anyButtonHovered || zoneRoot.anyHandleHovered)
-            return ;
+            return;
 
         if (mouse.button === Qt.RightButton)
             zoneRoot.contextMenuRequested();
@@ -46,22 +46,21 @@ MouseArea {
         // Ensure parent drawingArea maintains focus for keyboard navigation
         var parentItem = zoneRoot.parent;
         while (parentItem) {
-            if (parentItem.objectName === "drawingArea" || parentItem.id === "drawingArea") {
-                Qt.callLater(function() {
+            if (parentItem.objectName === "drawingArea") {
+                Qt.callLater(function () {
                     if (parentItem)
                         parentItem.forceActiveFocus();
-
                 });
                 break;
             }
             parentItem = parentItem.parent;
         }
     }
-    onPressed: function(mouse) {
+    onPressed: function (mouse) {
         // Check hover state first
         if (zoneRoot.anyButtonHovered || zoneRoot.anyHandleHovered) {
             mouse.accepted = false;
-            return ;
+            return;
         }
         var mx = mouse.x, my = mouse.y;
         var zw = zoneRoot.width, zh = zoneRoot.height;
@@ -71,7 +70,7 @@ MouseArea {
         var nearCornerOrEdge = ((mx < handleHitSize && my < handleHitSize) || (mx > zw - handleHitSize && my < handleHitSize) || (mx < handleHitSize && my > zh - handleHitSize) || (mx > zw - handleHitSize && my > zh - handleHitSize) || (mx > zw / 2 - edgeHandleHalfSize && mx < zw / 2 + edgeHandleHalfSize && my < handleHitSize) || (mx > zw / 2 - edgeHandleHalfSize && mx < zw / 2 + edgeHandleHalfSize && my > zh - handleHitSize) || (my > zh / 2 - edgeHandleHalfSize && my < zh / 2 + edgeHandleHalfSize && mx < handleHitSize) || (my > zh / 2 - edgeHandleHalfSize && my < zh / 2 + edgeHandleHalfSize && mx > zw - handleHitSize));
         if (nearCornerOrEdge) {
             mouse.accepted = false;
-            return ;
+            return;
         }
         if (mouse.button === Qt.LeftButton && zoneRoot.operationState === 0) {
             // EditorZone.State.Idle = 0
@@ -97,22 +96,22 @@ MouseArea {
             }
         }
     }
-    onPositionChanged: function(mouse) {
+    onPositionChanged: function (mouse) {
         if (pressed && zoneRoot.operationState === 1) {
             // Dragging
             mouse.accepted = true;
             if (zoneRoot.operationState !== 1)
-                return ;
+                return;
 
             // Validate canvas dimensions
             if (zoneRoot.canvasWidth <= 0 || zoneRoot.canvasHeight <= 0 || !isFinite(zoneRoot.canvasWidth) || !isFinite(zoneRoot.canvasHeight))
-                return ;
+                return;
 
             var canvasItem = zoneRoot.parent;
             var currentMouseInCanvas = dragHandler.mapToItem(canvasItem, mouse.x, mouse.y);
             // Validate mouse coordinates
             if (!isFinite(currentMouseInCanvas.x) || isNaN(currentMouseInCanvas.x) || !isFinite(currentMouseInCanvas.y) || isNaN(currentMouseInCanvas.y))
-                return ;
+                return;
 
             var dx = currentMouseInCanvas.x - mouseStart.x;
             var dy = currentMouseInCanvas.y - mouseStart.y;
@@ -201,12 +200,10 @@ MouseArea {
                 } else {
                     if (snapIndicator)
                         snapIndicator.clearSnapLines();
-
                 }
             } else {
                 if (snapIndicator)
                     snapIndicator.clearSnapLines();
-
             }
             // Fill preview (reuse variables already computed above)
             var ctrlHeld = fillModifierHeld;
@@ -271,7 +268,7 @@ MouseArea {
             }
         }
     }
-    onReleased: function(mouse) {
+    onReleased: function (mouse) {
         if (zoneRoot.operationState === 1) {
             // Dragging
             if (snapIndicator)
@@ -308,12 +305,10 @@ MouseArea {
                 // End multi-zone drag with commit
                 if (controller && controller.isMultiZoneDragActive())
                     controller.endMultiZoneDrag(true);
-
             } else {
                 // No actual drag movement - cancel multi-zone drag without commit
                 if (controller && controller.isMultiZoneDragActive())
                     controller.endMultiZoneDrag(false);
-
             }
             fillRegion = null;
             committedFillRegion = null; // Clear after commit
@@ -354,5 +349,4 @@ MouseArea {
         interval: 200
         onTriggered: zoneRoot.animateFillPreview = false
     }
-
 }

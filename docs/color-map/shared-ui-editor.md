@@ -283,6 +283,8 @@ MISSING colorSet: add `Kirigami.Theme.colorSet: Kirigami.Theme.View` when embedd
 | 62 | `Qt.rgba(Math.min(1, baseColor.r*0.7 + highlightColor.r*0.3), …, baseColor.a)` | multi-zone border brighten | MISUSE-MATH | `Qt.tint(zoneItem.borderColor, Qt.alpha(zoneItem.highlightColor, 0.3))` |
 
 ### ZoneLabel.qml  (hot spot)
+> **Erratum:** `ZoneLabel.qml` was DELETED on this branch (orphaned component: nothing instantiated it), so the rows below are historical.
+
 | Line | Expression | Role | Verdict | Replacement |
 |---|---|---|---|---|
 | 24 | `labelFontColor: K.T.textColor` | zone label text | OK | — |

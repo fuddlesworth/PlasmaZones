@@ -82,6 +82,10 @@ Kirigami.Dialog {
         // and `editorBody.workingRule` will converge to the same JSON
         // once the binding settles.
         root._initialSnapshot = JSON.stringify(ruleJson);
+        // Clear any "Pick a starting point first." error left over from a
+        // Next click with nothing picked — it would otherwise linger in the
+        // step-2 footer.
+        wizardFooter.errorText = "";
         root.currentStep = 1;
     }
 
@@ -150,9 +154,11 @@ Kirigami.Dialog {
     // `Kirigami.Dialog` defaults to `CloseOnEscape | CloseOnReleaseOutside`;
     // a stray Esc or click outside the dialog would wipe the staged rule
     // without a prompt. Disable the auto-close paths so every close routes
-    // through `_requestClose()` (Cancel button, X close button via
-    // `onClosed`, our own Shortcut for Esc).
+    // through `_requestClose()` (Cancel button, our own Shortcut for Esc).
+    // The title-bar X button calls `reject()` directly and bypasses
+    // `closePolicy`, so hide it entirely — same pattern as RuleEditorSheet.
     closePolicy: Popup.NoAutoClose
+    showCloseButton: false
     onOpened: {
         // Reset state on every open so a previously-cancelled wizard doesn't
         // carry stale picker selection / draft rule into the next session.

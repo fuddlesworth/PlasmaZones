@@ -569,7 +569,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     writeQmlProperty(slot, QStringLiteral("activeLayoutId"), activeId);
     writeQmlProperty(slot, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(slot, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
-    writeFontProperties(slot, m_settings);
+    writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     bool locked = false;
     if (m_settings && m_layoutManager) {

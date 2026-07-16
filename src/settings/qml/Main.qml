@@ -449,7 +449,7 @@ PhosphorUi.SettingsAppWindow {
 
     // ── Ctrl+PgUp / Ctrl+PgDown — step through navigable pages ──────
     // Guarded: page navigation must not fire while any of the inline
-    // confirm dialogs (whatsNewDialog, resetConfirmDialog,
+    // confirm dialogs (whatsNewDialog,
     // defaultsConfirmDialog, sectionToggleDiscardConfirm, daemonStopConfirm,
     // resetPageConfirmDialog, discardPageConfirmDialog),
     // the shortcut
@@ -485,7 +485,7 @@ PhosphorUi.SettingsAppWindow {
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
 
     Shortcut {
         sequence: "Ctrl+PgUp"
@@ -543,30 +543,6 @@ PhosphorUi.SettingsAppWindow {
         appSettings: appSettings
         aspectRatioLabels: window.aspectRatioLabels
     }
-    // ── Reset / Restore-defaults dialogs (used by Tools menu in pages) ──
-    Kirigami.PromptDialog {
-        id: resetConfirmDialog
-
-        title: i18n("Discard Changes")
-        subtitle: i18n("Are you sure you want to discard all unsaved changes?")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Discard")
-                icon.name: "edit-undo"
-                onTriggered: {
-                    resetConfirmDialog.close();
-                    settingsController.load();
-                }
-            },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: resetConfirmDialog.close()
-            }
-        ]
-    }
-
     Kirigami.PromptDialog {
         id: defaultsConfirmDialog
 

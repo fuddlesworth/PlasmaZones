@@ -64,11 +64,14 @@ Item {
                 var scaledSize = baseSize * Math.max(0.4, Math.min(1, scaleFactor)); // Scale between 40% and 100% of base
                 return Math.max(8, Math.round(scaledSize)); // Minimum 8px for readability
             }
+            font.weight: zoneContent.fontWeight
+            font.italic: zoneContent.fontItalic
+            font.underline: zoneContent.fontUnderline
+            font.strikeout: zoneContent.fontStrikeout
+            font.family: zoneContent.fontFamily
             color: Kirigami.Theme.textColor
             opacity: 0.6
             visible: text !== ""
         }
-
     }
-
 }

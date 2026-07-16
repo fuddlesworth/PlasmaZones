@@ -172,7 +172,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"),
                          overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
         // Font settings for zone number labels
-        writeFontProperties(window, m_settings);
+        writeFontProperties(window, m_settings, /*includeLabelFontColor=*/false);
     }
     // Pass resolved per-screen config values to QML
     writeQmlProperty(window, QStringLiteral("selectorPosition"), config.position);

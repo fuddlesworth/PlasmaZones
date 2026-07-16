@@ -34,8 +34,8 @@ mixed in one component).
 > stale. The §2 row calling SettingsAppWindow free of color expressions
 > ("Clean") no longer holds, and §3's statement that the footer pin is
 > the library's only `colorSet` occurrence is no longer true. The
-> footer mount point cited in §3 also moved: `SettingsAppWindow.qml:553`
-> is now around line 588.
+> footer mount point cited in §3 also moved: the footer now mounts at
+> the end of the chrome ColumnLayout in `SettingsAppWindow.qml`.
 
 ---
 

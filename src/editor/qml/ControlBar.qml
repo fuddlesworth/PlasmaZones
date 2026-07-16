@@ -229,6 +229,17 @@ ToolBar {
                     if (editorController)
                         editorController.edgeSnappingEnabled = checked;
                 }
+
+                // Update when edgeSnappingEnabled changes externally (a click
+                // severs the declarative checked binding)
+                Connections {
+                    function onEdgeSnappingEnabledChanged() {
+                        edgeSnapButton.checked = editorController.edgeSnappingEnabled || false;
+                    }
+
+                    target: editorController
+                    enabled: editorController !== null
+                }
             }
 
             // Grid snapping toggle
@@ -248,6 +259,17 @@ ToolBar {
                 onToggled: {
                     if (editorController)
                         editorController.gridSnappingEnabled = checked;
+                }
+
+                // Update when gridSnappingEnabled changes externally (a click
+                // severs the declarative checked binding)
+                Connections {
+                    function onGridSnappingEnabledChanged() {
+                        gridSnapButton.checked = editorController.gridSnappingEnabled || false;
+                    }
+
+                    target: editorController
+                    enabled: editorController !== null
                 }
             }
 
@@ -358,6 +380,17 @@ ToolBar {
                 onToggled: {
                     if (editorController)
                         editorController.gridOverlayVisible = checked;
+                }
+
+                // Update when gridOverlayVisible changes externally (a click
+                // severs the declarative checked binding)
+                Connections {
+                    function onGridOverlayVisibleChanged() {
+                        gridOverlayButton.checked = editorController.gridOverlayVisible || false;
+                    }
+
+                    target: editorController
+                    enabled: editorController !== null
                 }
             }
         }

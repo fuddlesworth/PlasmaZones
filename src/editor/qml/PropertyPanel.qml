@@ -97,6 +97,24 @@ Rectangle {
         fixedHeightSpin.value = zone.fixedHeight !== undefined ? zone.fixedHeight : 50;
     }
 
+    // Same imperative-sync idiom for the appearance controls: QQC2 severs their
+    // declarative bindings on the first user interaction (and the writes below
+    // finish the job), so without this re-sync a selection change would keep
+    // showing the previous zone's values and the next edit would stamp them
+    // onto the new zone. The sliders and spinboxes expose sync functions
+    // because the severed binding lives on their internal control.
+    function syncAppearanceControls(freshZone) {
+        const zone = (freshZone && freshZone.id) ? freshZone : selectedZone;
+        if (!zone)
+            return;
+
+        useCustomColorsCheck.checked = zone.useCustomColors === true;
+        activeOpacitySlider.syncOpacity(zone.activeOpacity !== undefined ? zone.activeOpacity : defaultOpacity);
+        inactiveOpacitySlider.syncOpacity(zone.inactiveOpacity !== undefined ? zone.inactiveOpacity : defaultInactiveOpacity);
+        borderWidthSpinBox.syncValue(zone.borderWidth !== undefined ? zone.borderWidth : defaultBorderWidth);
+        borderRadiusSpinBox.syncValue(zone.borderRadius !== undefined ? zone.borderRadius : defaultBorderRadius);
+    }
+
     // Same imperative-sync idiom for the name field and number spinbox: their
     // bindings die on the first imperative write (selection change), so an
     // undo/redo of a rename/renumber with the same zone still selected must be
@@ -227,6 +245,13 @@ Rectangle {
                     onToggled: {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("useCustomColors", checked);
+                        // The click severed the declarative binding; restore it
+                        // so later zone or selection changes keep the box on the
+                        // model (same idiom as the multi color swatches in
+                        // onPanelModeChanged).
+                        checked = Qt.binding(function () {
+                            return propertyPanel.allSelectedUseCustomColors;
+                        });
                     }
                 }
 
@@ -607,6 +632,7 @@ Rectangle {
                         // references let it coalesce bursts of zonesChanged into one sync.
                         Qt.callLater(propertyPanel.syncGeometryControls);
                         Qt.callLater(propertyPanel.syncNameAndNumber);
+                        Qt.callLater(propertyPanel.syncAppearanceControls);
                     }
 
                     target: editorController
@@ -727,6 +753,8 @@ Rectangle {
 
                 // Single zone spinboxes
                 AppearanceSpinBox {
+                    id: borderWidthSpinBox
+
                     Kirigami.FormData.label: i18nc("@label", "Border width:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     from: 0
@@ -743,6 +771,8 @@ Rectangle {
                 }
 
                 AppearanceSpinBox {
+                    id: borderRadiusSpinBox
+
                     Kirigami.FormData.label: i18nc("@label", "Border radius:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     from: 0
@@ -888,6 +918,7 @@ Rectangle {
                         zoneNameField.text = zone.name || "";
                         zoneNumberSpinBox.value = zone.zoneNumber || 1;
                         propertyPanel.syncGeometryControls(zone);
+                        propertyPanel.syncAppearanceControls(zone);
                         zoneNameField.updateTimer.stop();
                         zoneNameField.validationError = "";
                         zoneNumberSpinBox.validationError = "";
@@ -973,10 +1004,11 @@ Rectangle {
             id: multiHighlightColorDialog
 
             title: i18nc("@title:window", "Highlight Color for All Selected Zones")
+            editorController: propertyPanel.editorController
             isMultiMode: true
             onMultiColorAccepted: function (hexColor, selectedColor) {
-                if (editorController) {
-                    editorController.updateSelectedZonesColor("highlightColor", hexColor);
+                if (propertyPanel.editorController) {
+                    propertyPanel.editorController.updateSelectedZonesColor("highlightColor", hexColor);
                     propertyPanel.multiHighlightColor = selectedColor;
                 }
             }
@@ -986,10 +1018,11 @@ Rectangle {
             id: multiInactiveColorDialog
 
             title: i18nc("@title:window", "Inactive Color for All Selected Zones")
+            editorController: propertyPanel.editorController
             isMultiMode: true
             onMultiColorAccepted: function (hexColor, selectedColor) {
-                if (editorController) {
-                    editorController.updateSelectedZonesColor("inactiveColor", hexColor);
+                if (propertyPanel.editorController) {
+                    propertyPanel.editorController.updateSelectedZonesColor("inactiveColor", hexColor);
                     propertyPanel.multiInactiveColor = selectedColor;
                 }
             }
@@ -999,10 +1032,11 @@ Rectangle {
             id: multiBorderColorDialog
 
             title: i18nc("@title:window", "Border Color for All Selected Zones")
+            editorController: propertyPanel.editorController
             isMultiMode: true
             onMultiColorAccepted: function (hexColor, selectedColor) {
-                if (editorController) {
-                    editorController.updateSelectedZonesColor("borderColor", hexColor);
+                if (propertyPanel.editorController) {
+                    propertyPanel.editorController.updateSelectedZonesColor("borderColor", hexColor);
                     propertyPanel.multiBorderColor = selectedColor;
                 }
             }

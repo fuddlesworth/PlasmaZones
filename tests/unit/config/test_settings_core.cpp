@@ -281,19 +281,52 @@ private Q_SLOTS:
     // =========================================================================
 
     /**
-     * load() must emit settingsChanged() so that listeners can re-read all values.
+     * load() must emit settingsChanged() exactly once when reloading actually
+     * changes values, so listeners re-read them. Exercised via the discard
+     * flow: an unsaved in-memory edit is reverted by load()'s reparse, which
+     * must announce the change through the single aggregate emission.
      */
     void testLoad_emitsSettingsChanged()
     {
         IsolatedConfigGuard guard;
 
         Settings settings;
+        const int committed = settings.adjacentThreshold();
+        settings.setAdjacentThreshold(committed == 15 ? 20 : 15);
+
         QSignalSpy spy(&settings, &Settings::settingsChanged);
         QVERIFY(spy.isValid());
 
         settings.load();
 
-        QVERIFY2(spy.count() >= 1, "load() must emit settingsChanged() at least once");
+        QCOMPARE(settings.adjacentThreshold(), committed);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    /**
+     * A reload that changes nothing must stay silent. Pins the system-colors
+     * regression where load()'s palette re-derive routed through the public
+     * color setters, firing each color NOTIFY twice and settingsChanged
+     * several times per themed reload even when no value changed.
+     */
+    void testLoad_noSignal_whenUnchanged()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QVERIFY(settings.useSystemColors()); // default: themed reload path
+        settings.save(); // commit the constructor-derived state to disk
+
+        QSignalSpy spy(&settings, &Settings::settingsChanged);
+        QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
+        QSignalSpy fontColorSpy(&settings, &Settings::labelFontColorChanged);
+        QVERIFY(spy.isValid());
+
+        settings.load();
+
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(highlightSpy.count(), 0);
+        QCOMPARE(fontColorSpy.count(), 0);
     }
 
     /**

@@ -24,9 +24,6 @@ Window {
     property bool hasMultipleSelection: editorWindow._editorController ? editorWindow._editorController.hasMultipleSelection : false
     property string selectionAnchorId: "" // For Shift+click range selection
     readonly property bool previewMode: editorWindow._editorController ? editorWindow._editorController.previewMode : false
-    property bool isDrawingZone: false
-    property point drawStart: Qt.point(0, 0)
-    property rect drawRect: Qt.rect(0, 0, 0, 0)
     // Fullscreen editing mode - hides all panels for distraction-free editing
     property bool fullscreenMode: false
     // Zone spacing (between zones) matches zone padding (per-layout override or global setting)

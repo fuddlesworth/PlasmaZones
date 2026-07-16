@@ -1503,6 +1503,17 @@ private:
     // user edit. Never true outside that synchronous window.
     bool m_applyingSystemPalette = false;
 
+    // Raised (RAII, via QScopedValueRollback) around load()'s
+    // applySystemColorScheme() call ONLY. The derive routes through the
+    // public color setters, whose per-setter NOTIFY + settingsChanged
+    // emissions would duplicate load()'s own snapshot-based announcement
+    // (emitChangedNotifyProperties + the single trailing settingsChanged).
+    // While true, the color setters persist silently and load() remains the
+    // sole announcer. Never true outside that synchronous window — the
+    // eventFilter / setUseSystemColors paths rely on setters emitting
+    // normally.
+    bool m_suppressDerivedColorEmissions = false;
+
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Per-mode disable lists are stored as `DisableEngine` context rules in

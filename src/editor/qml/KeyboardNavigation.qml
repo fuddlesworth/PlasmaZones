@@ -29,7 +29,7 @@ Item {
             return false;
         }
         // Ctrl+Tab/Ctrl+Shift+Tab: Navigate between zones
-        var tabKeyPressed = (event.key === 1.67772e+07 || event.key === Qt.Key_Tab);
+        var tabKeyPressed = (event.key === Qt.Key_Backtab || event.key === Qt.Key_Tab);
         var ctrlModifier = !!(event.modifiers & Qt.ControlModifier);
         var shiftModifier = !!(event.modifiers & Qt.ShiftModifier);
         // Only intercept Ctrl+Tab combinations (not plain Tab)
@@ -112,5 +112,4 @@ Item {
         event.accepted = false;
         return false;
     }
-
 }

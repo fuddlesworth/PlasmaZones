@@ -87,12 +87,6 @@ Item {
     property bool locked: false
     property bool disabled: false
     property string disabledReason: ""
-    // Content-driven desired size, exposed for the unified host (which binds
-    // its Window width/height to these readonly properties; C++ also reads
-    // them after every property write to compute matching layer-shell margins).
-    readonly property int contentDesiredWidth: Math.round(container.width) + Math.round(Kirigami.Units.gridUnit * 2.5)
-    readonly property int contentDesiredHeight: Math.round(container.height) + Math.round(Kirigami.Units.gridUnit * 2.5)
-
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
     /// The unified NotificationOverlay host re-emits this as its own
     /// `dismissRequested` so OverlayService::createWarmedOsdSurface's

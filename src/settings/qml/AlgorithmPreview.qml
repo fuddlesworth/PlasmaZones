@@ -115,7 +115,7 @@ Item {
         showZoneNumbers: true
         zoneNumberDisplay: root.zoneNumberDisplay
         producesOverlappingZones: root._currentAlgoProducesOverlappingZones
-        highlightColor: Qt.rgba(root.windowColor.r, root.windowColor.g, root.windowColor.b, 0.7)
+        highlightColor: root.windowColor
         borderColor: Qt.rgba(root.windowBorder.r, root.windowBorder.g, root.windowBorder.b, 0.9)
         zonePadding: 1
         edgeGap: 0

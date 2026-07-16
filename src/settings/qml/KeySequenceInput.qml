@@ -147,9 +147,6 @@ QQC2.TextField {
             case Qt.Key_Delete:
                 keyStr = "Delete";
                 break;
-            case Qt.Key_Escape:
-                keyStr = "Escape";
-                break;
             case Qt.Key_Left:
                 keyStr = "Left";
                 break;
