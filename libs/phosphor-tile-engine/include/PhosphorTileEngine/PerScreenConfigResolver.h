@@ -133,6 +133,13 @@ public:
 private:
     std::optional<QVariant> perScreenOverride(const QString& screenId, const QString& key) const;
 
+    /// Wipe the per-algorithm state bags (script state, and split tree when the
+    /// incoming algorithm lacks memory) on every (desktop, activity) state of
+    /// `screenId` when its effective algorithm changed. State bags never cross
+    /// algorithms; see the implementation comment for why this lives here.
+    void wipeStateBagsOnEffectiveAlgorithmChange(const QString& screenId, const QString& oldEffectiveId,
+                                                 const QString& newEffectiveId);
+
     /// Clamped per-context override for a single gap key (InnerGap / OuterGap),
     /// or nullopt when no provider is wired or the context map lacks the key.
     std::optional<int> contextGap(const QString& screenId, QLatin1String key) const;

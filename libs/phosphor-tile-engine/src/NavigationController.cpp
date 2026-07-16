@@ -449,7 +449,7 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     if (m_engine->m_layoutManager
         && m_engine->m_layoutManager->modeForScreen(sourceScreenId, targetDesktop,
                                                     m_engine->m_context.currentActivity())
-            == PhosphorZones::AssignmentEntry::Snapping) {
+            == PhosphorZones::AssignmentEntry::Mode::Snapping) {
         // Only a MOVE reaches here (swap doesn't cross desktops), so this is
         // always the one-way cross-mode move into the equivalent snap zone.
         Q_EMIT m_engine->crossModeMoveRequested(focused, sourceScreenId, targetDesktop, direction);

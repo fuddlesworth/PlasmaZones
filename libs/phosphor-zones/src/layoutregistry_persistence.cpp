@@ -210,6 +210,14 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
                     // deletion runs. No layoutRemoved is emitted: bulk load is
                     // deliberately signal-silent per layout, loadLayouts()
                     // emits a single layoutsChanged at the end.
+                    // Continuity: same UUID, so redirect any live active/previous
+                    // pointers to the replacing layout before the deferred delete.
+                    if (m_activeLayout == existing) {
+                        m_activeLayout = layout;
+                    }
+                    if (m_previousLayout == existing) {
+                        m_previousLayout = layout;
+                    }
                     existing->deleteLater();
                     qCInfo(lcZonesLib) << "User layout overrides system layout name=" << layout->name()
                                        << "from=" << filePath;
@@ -480,7 +488,8 @@ PhosphorZones::Layout* LayoutRegistry::importLayout(const QString& filePath)
     if (layoutById(parsed->id())) {
         qCInfo(lcZonesLib) << "importLayout: UUID collision, regenerating IDs";
         layout = new PhosphorZones::Layout(*parsed);
-        delete parsed;
+        // deleteLater, not delete — see the override branch in loadLayouts().
+        parsed->deleteLater();
     }
 
     // Reset visibility restrictions since screen/desktop/activity names are machine-specific
@@ -568,7 +577,10 @@ PhosphorZones::Layout* LayoutRegistry::restoreSystemLayout(const QUuid& id, cons
 
     auto* layout = PhosphorZones::Layout::fromJson(doc.object(), this);
     if (!layout || layout->id() != id) {
-        delete layout;
+        if (layout) {
+            // deleteLater, not delete — see the override branch in loadLayouts().
+            layout->deleteLater();
+        }
         return nullptr;
     }
 

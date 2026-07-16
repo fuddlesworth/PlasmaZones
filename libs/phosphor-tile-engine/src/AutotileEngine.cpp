@@ -884,12 +884,26 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         return;
     }
 
+    // A per-screen Algorithm override pins that screen's effective algorithm, so
+    // this global switch does not touch it. Shared by the tuning drop here, the
+    // re-seed loop, and the split-tree/script-state clear loop below.
+    const auto hasAlgoOverride = [this](const QString& screenId) {
+        return hasPerScreenOverride(screenId, PerScreenKeys::Algorithm);
+    };
+
     // Switching algorithms resets ratios/counts to the new algorithm's saved or
-    // default values, so per-desktop user tunings no longer apply — drop them all.
-    // The propagate calls below re-seed the current-context states synchronously;
-    // other desktops re-seed on their own next propagate.
-    m_userTunedSplitRatio.clear();
-    m_userTunedMasterCount.clear();
+    // default values, so per-desktop user tunings no longer apply — drop them.
+    // Only for states whose screen follows the global algorithm, though: an
+    // Algorithm-overridden screen keeps its effective algorithm across this
+    // switch, so its tunings are still live and must survive (same gate as the
+    // state-clear loop below). The re-seed loop below refreshes current-context
+    // states synchronously; other desktops re-seed on their own next propagate.
+    m_userTunedSplitRatio.removeIf([&](const auto& key) {
+        return !hasAlgoOverride(key.screenId);
+    });
+    m_userTunedMasterCount.removeIf([&](const auto& key) {
+        return !hasAlgoOverride(key.screenId);
+    });
 
     PhosphorTiles::TilingAlgorithm* oldAlgo = registry->algorithm(m_algorithmId);
     PhosphorTiles::TilingAlgorithm* newAlgo = registry->algorithm(newId);
@@ -932,8 +946,27 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         // initializing on the first-ever call (oldAlgo null): the save block
         // above already persisted the outgoing algorithm's values when present.
         restorePerAlgoSettings(newAlgo, savedIt);
-        propagateGlobalSplitRatio();
-        propagateGlobalMasterCount();
+        // Re-seed the restored ratio/count onto current-context states. Mirrors
+        // propagateGlobalSplitRatio()/propagateGlobalMasterCount() with one
+        // extra skip: Algorithm-overridden screens keep their effective
+        // algorithm across this switch, so their live ratios/counts must
+        // survive. That skip stays out of the shared propagate helpers because
+        // the settings-refresh path must keep reaching those screens. No
+        // m_userTuned* check needed: the selective drop above pruned the tuned
+        // sets to exactly the Algorithm-overridden states skipped here.
+        for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
+            const auto& key = it.key();
+            if (!it.value() || key.desktop != currentKeyForScreen(key.screenId).desktop
+                || key.activity != m_context.currentActivity() || hasAlgoOverride(key.screenId)) {
+                continue;
+            }
+            if (!hasPerScreenOverride(key.screenId, PerScreenKeys::SplitRatio)) {
+                it.value()->setSplitRatio(m_config->splitRatio);
+            }
+            if (!hasPerScreenOverride(key.screenId, PerScreenKeys::MasterCount)) {
+                it.value()->setMasterCount(m_config->masterCount);
+            }
+        }
     }
 
     // Commit the new algorithm id BEFORE the write-back block so that any
@@ -999,7 +1032,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // above), so every non-overridden state's effective algorithm changed.
     const bool clearSplitTrees = newAlgo && !newAlgo->supportsMemory();
     for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
-        if (!it.value() || hasPerScreenOverride(it.key().screenId, PerScreenKeys::Algorithm)) {
+        if (!it.value() || hasAlgoOverride(it.key().screenId)) {
             continue;
         }
         if (clearSplitTrees) {

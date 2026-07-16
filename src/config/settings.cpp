@@ -1764,15 +1764,23 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
                 if (slash <= 0 || slash == value.size() - 1) {
                     continue;
                 }
+                const QString screen = resolveScreen(value.left(slash));
                 if (axis == DisableAxis::Desktop) {
                     bool ok = false;
                     const int desktop = value.mid(slash + 1).toInt(&ok);
                     if (!ok || desktop <= 0) {
                         continue;
                     }
+                    // Rebuild the desktop segment via QString::number so the
+                    // canonical form matches the getter's serialization
+                    // (disableEntriesFor) — otherwise numeric aliases like
+                    // "+3" or "03" survive as distinct entries, defeat the
+                    // no-op guard below, and produce a second disable rule
+                    // with the same deterministic UUID.
+                    value = screen + QLatin1Char('/') + QString::number(desktop);
+                } else {
+                    value = screen + QLatin1Char('/') + value.mid(slash + 1);
                 }
-                const QString screen = resolveScreen(value.left(slash));
-                value = screen + QLatin1Char('/') + value.mid(slash + 1);
             }
             if (!value.isEmpty() && !c.contains(value)) {
                 c.append(value);

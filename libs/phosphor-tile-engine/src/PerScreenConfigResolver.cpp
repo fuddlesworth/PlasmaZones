@@ -103,6 +103,18 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
         }
     }
 
+    // Wipe stale per-algorithm state when this override change moved the
+    // screen's effective algorithm (Algorithm key added, swapped, or removed).
+    // The new effective id falls back to the engine's global algorithm when the
+    // key is absent, so an Algorithm-override REMOVAL that lands the screen on a
+    // different global algorithm wipes too — setAlgorithm()'s own clear loop
+    // deliberately skips overridden screens, and in the applyEntry transaction
+    // it runs while the stale override is still stored, so this is the only
+    // place that sees the removal.
+    wipeStateBagsOnEffectiveAlgorithmChange(
+        screenId, previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString(),
+        overrides.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString());
+
     // The remaining overrides are NOT written to the state here — they are
     // resolved at retile time via effective*() helpers in recalculateLayout():
     // gaps (InnerGap, OuterGap, SmartGaps), RespectMinimumSize, MaxWindows,
@@ -126,7 +138,11 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
 
 void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenId)
 {
-    if (!m_perScreenOverrides.remove(screenId)) {
+    // take() instead of remove(): the outgoing map is needed below to detect a
+    // removed Algorithm override. An empty map means the screen had no
+    // overrides (applyPerScreenConfig never stores an empty map).
+    const QVariantMap previous = m_perScreenOverrides.take(screenId);
+    if (previous.isEmpty()) {
         return;
     }
     // Restore global defaults on PhosphorTiles::TilingState
@@ -135,6 +151,13 @@ void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenId)
         state->setSplitRatio(m_engine->config()->splitRatio);
         state->setMasterCount(m_engine->config()->masterCount);
     }
+
+    // Removing an Algorithm override lands the screen back on the global
+    // algorithm; if that differs from the overridden one, the old algorithm's
+    // state bags are stale (same rationale as in applyPerScreenConfig).
+    wipeStateBagsOnEffectiveAlgorithmChange(
+        screenId, previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString(),
+        m_engine->m_algorithmId);
 
     // Schedule deferred retile (same rationale as applyPerScreenConfig)
     if (m_engine->isAutotileScreen(screenId)) {
@@ -170,6 +193,37 @@ void PerScreenConfigResolver::updatePerScreenOverride(const QString& screenId, c
 void PerScreenConfigResolver::removeOverridesForScreen(const QString& screenId)
 {
     m_perScreenOverrides.remove(screenId);
+}
+
+void PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange(const QString& screenId,
+                                                                      const QString& oldEffectiveId,
+                                                                      const QString& newEffectiveId)
+{
+    // Invariant: state bags never cross algorithms. Script state is opaque
+    // state private to the algorithm that wrote it (e.g. an aligned grid's
+    // column fractions) with no meaning to any other; split trees only carry
+    // over between memory algorithms. AutotileEngine::setAlgorithm() enforces
+    // this for global switches but deliberately skips Algorithm-overridden
+    // screens, so per-screen effective changes — an override added, swapped, or
+    // removed — are enforced here, on every (desktop, activity) state of the
+    // screen (they all followed the old effective algorithm). The deferred
+    // retile the callers schedule does NOT rebuild these bags; it reads them.
+    if (oldEffectiveId == newEffectiveId) {
+        return;
+    }
+    auto* registry = m_engine->algorithmRegistry();
+    PhosphorTiles::TilingAlgorithm* newAlgo = registry ? registry->algorithm(newEffectiveId) : nullptr;
+    const bool clearSplitTrees = newAlgo && !newAlgo->supportsMemory();
+    const auto& states = m_engine->m_states.states();
+    for (auto it = states.constBegin(); it != states.constEnd(); ++it) {
+        if (!it.value() || it.key().screenId != screenId) {
+            continue;
+        }
+        if (clearSplitTrees) {
+            it.value()->clearSplitTree();
+        }
+        it.value()->setScriptState({});
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

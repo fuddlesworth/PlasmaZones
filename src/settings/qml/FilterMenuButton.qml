@@ -101,6 +101,27 @@ ToolButton {
         excluded = next;
     }
 
+    // Prune stale keys when the option set changes: an excluded key whose
+    // option no longer exists in `groups` would keep the button stuck in the
+    // active state with no visible row left to re-check. Reassign only when
+    // something was actually pruned (same no-spurious-notify idiom as
+    // _setIncluded).
+    onGroupsChanged: {
+        var live = [];
+        for (var g = 0; g < groups.length; ++g) {
+            var grp = groups[g];
+            if (!grp)
+                continue;
+            for (var i = 0; i < grp.length; ++i)
+                live.push(grp[i].key);
+        }
+        var next = excluded.filter(function (key) {
+            return live.indexOf(key) >= 0;
+        });
+        if (next.length !== excluded.length)
+            excluded = next;
+    }
+
     icon.name: "view-filter"
     // Active state is binding-driven, not a user toggle — checkable omitted.
     checked: root.hasActiveFilters
