@@ -6,6 +6,7 @@
 #include <QSignalSpy>
 
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include "../helpers/AutotileFakes.h"
 #include "../helpers/AutotileTestHelpers.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingState.h>
@@ -318,6 +319,113 @@ private Q_SLOTS:
         engine.refreshConfigFromSettings();
 
         QVERIFY(qFuzzyCompare(d2->splitRatio(), 0.35));
+    }
+
+    // The settings-refresh twin of the two tests above. Editing the global split
+    // ratio in Settings drops every per-desktop tuned flag, exactly as the D-Bus
+    // setter does — so, exactly as there, it must also write every state it just
+    // unprotected. Leaving desktop 2 holding its tuned value with no flag means
+    // the next refresh that happens to run while desktop 2 is current rewrites it
+    // under the user, long after the change they made.
+    void testRefreshConfigFromSettings_globalSplitRatioChange_reachesTunedStateOnAnotherDesktop()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        PlasmaZones::TestHelpers::FakeAutotileSettings settings;
+        engine.setEngineSettings(&settings);
+        const QString screen1 = QStringLiteral("Screen1");
+
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d2"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(screen1);
+        engine.windowFocused(QStringLiteral("win-d2"), screen1);
+        d2->setSplitRatio(0.6);
+        engine.increaseMasterRatio(0.1); // → 0.7, and marks desktop 2 user-tuned
+
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(screen1);
+        QVERIFY(d1 != d2);
+
+        // The user changes the global ratio in Settings, from desktop 1.
+        settings.splitRatio = 0.35;
+        engine.refreshConfigFromSettings();
+
+        QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.35));
+        QVERIFY(qFuzzyCompare(d1->splitRatio(), 0.35));
+        QVERIFY2(qFuzzyCompare(d2->splitRatio(), 0.35),
+                 "a settings change that drops every tuned flag must write every state it unprotected");
+    }
+
+    void testRefreshConfigFromSettings_globalMasterCountChange_reachesTunedStateOnAnotherDesktop()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        PlasmaZones::TestHelpers::FakeAutotileSettings settings;
+        engine.setEngineSettings(&settings);
+        const QString screen1 = QStringLiteral("Screen1");
+
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d2"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(screen1);
+        engine.windowFocused(QStringLiteral("win-d2"), screen1);
+        d2->setMasterCount(1);
+        engine.increaseMasterCount(); // → 2, and marks desktop 2 user-tuned
+        QCOMPARE(d2->masterCount(), 2);
+
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d1 = engine.tilingStateForScreen(screen1);
+        QVERIFY(d1 != d2);
+
+        settings.masterCount = 3;
+        engine.refreshConfigFromSettings();
+
+        QCOMPARE(engine.config()->masterCount, 3);
+        QCOMPARE(d1->masterCount(), 3);
+        QCOMPARE(d2->masterCount(), 3);
+    }
+
+    // The narrow half of the same contract: a refresh that does NOT change the
+    // global value drops no flag, so it must not reach a tuned state on another
+    // desktop either. Without this, widening the propagate would silently turn
+    // every passive refresh into a per-desktop-tuning clobber.
+    void testRefreshConfigFromSettings_unchangedGlobals_leaveTunedStateOnAnotherDesktopAlone()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        PlasmaZones::TestHelpers::FakeAutotileSettings settings;
+        engine.setEngineSettings(&settings);
+        const QString screen1 = QStringLiteral("Screen1");
+
+        engine.setCurrentDesktop(2);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d2"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+        PhosphorTiles::TilingState* d2 = engine.tilingStateForScreen(screen1);
+        engine.windowFocused(QStringLiteral("win-d2"), screen1);
+        d2->setSplitRatio(0.6);
+        engine.increaseMasterRatio(0.1); // → 0.7, and marks desktop 2 user-tuned
+        d2->setMasterCount(1);
+        engine.increaseMasterCount(); // → 2, and marks desktop 2 user-tuned
+
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen1});
+        engine.windowOpened(QStringLiteral("win-d1"), screen1, 0, 0);
+        QCoreApplication::processEvents();
+
+        // An unrelated settings refresh: the globals are untouched.
+        settings.splitRatio = engine.config()->splitRatio;
+        settings.masterCount = engine.config()->masterCount;
+        engine.refreshConfigFromSettings();
+
+        QVERIFY2(qFuzzyCompare(d2->splitRatio(), 0.7), "a passive refresh must not clobber another desktop's tuning");
+        QCOMPARE(d2->masterCount(), 2);
     }
 
     // =========================================================================

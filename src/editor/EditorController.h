@@ -21,6 +21,7 @@
 #include "../shaderpreview/ishaderpreviewbackend.h"
 
 #include <memory>
+#include <optional>
 
 namespace PhosphorZones {
 class Layout;
@@ -380,6 +381,33 @@ public:
     Q_INVOKABLE void cancelPendingTargetScreen();
 
     /**
+     * @brief Request that the editor show what a set of launch arguments names.
+     *
+     * REQUEST, not command, for the same reason setTargetScreen() is one: the
+     * `--new` and `--layout <id>` paths both REPLACE the loaded layout, so with
+     * unsaved edits in hand they would destroy them. A second
+     * `plasmazones-editor --layout Y` is forwarded to the running instance
+     * rather than opening a window of its own, so this is reachable from any
+     * launcher, shortcut or settings button while the user has work in flight.
+     *
+     * With unsaved edits this parks the request, emits
+     * launchRequestRequiresConfirmation() and changes nothing. The UI answers
+     * with confirmPendingLaunch() (after saveLayout(), or to discard) or
+     * cancelPendingLaunch(). With a clean editor — every initial launch, since
+     * a freshly constructed controller has nothing unsaved — it applies at once.
+     */
+    void requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+
+    /// Apply the launch parked by requestLaunch(). No-op when nothing is
+    /// pending. The caller decides whether the outgoing edits were saved
+    /// first — this always applies, discarding whatever is still unsaved.
+    Q_INVOKABLE void confirmPendingLaunch();
+
+    /// Drop the launch parked by requestLaunch(), keeping the loaded layout and
+    /// its unsaved edits. No-op when nothing is pending.
+    Q_INVOKABLE void cancelPendingLaunch();
+
+    /**
      * @brief Show a QML Window fullscreen on the target screen from C++
      *
      * On Wayland, QWindow::setScreen() has no effect on xdg-shell surfaces
@@ -508,7 +536,14 @@ public Q_SLOTS:
     // PhosphorZones::Layout operations
     void createNewLayout();
     void loadLayout(const QString& layoutId);
-    void saveLayout();
+    /// Persist the current layout. Returns false when the save did not land —
+    /// the daemon refused the payload, or the services are not up — in which
+    /// case layoutSaveFailed carries the reason and the unsaved-changes flag
+    /// stays set. Callers that follow a save with an action that REPLACES the
+    /// loaded layout (a screen switch, closing the window) must gate that
+    /// action on the return value or they discard the work the user just
+    /// pressed Save to keep.
+    bool saveLayout();
     void discardChanges();
 
     // D-Bus subscriber slot — wired in the ctor to all of the daemon's
@@ -767,6 +802,12 @@ Q_SIGNALS:
     /// confirmPendingTargetScreen() or cancelPendingTargetScreen().
     void targetScreenChangeRequiresConfirmation(const QString& screenName);
 
+    /// A forwarded launch (`plasmazones-editor --new` / `--layout <id>`) wants
+    /// to replace the loaded layout while it has unsaved edits. The UI must
+    /// answer with confirmPendingLaunch() or cancelPendingLaunch(), or the
+    /// parked request lingers.
+    void launchRequestRequiresConfirmation();
+
     void usableAreaInsetsChanged();
     void zonePaddingChanged();
     void outerGapChanged();
@@ -906,7 +947,19 @@ private:
     /**
      * @brief Saves editor settings to KConfig
      */
+    /// Queue an editor-settings write. Coalesced behind
+    /// m_editorSettingsSaveTimer — see flushEditorSettings for the real work.
     void saveEditorSettings();
+    /// Write the editor settings to config.json and tell the daemon to reparse.
+    /// Runs off m_editorSettingsSaveTimer.
+    void flushEditorSettings();
+    /// flushEditorSettings for teardown: same write, but the daemon reload is
+    /// blocking so it is actually delivered before the process goes away. Only
+    /// ~EditorController calls this — see the note there.
+    void flushEditorSettingsBlocking();
+    /// The config write both flush paths share. Returns false when nothing
+    /// reached disk, in which case there is nothing for the daemon to reload.
+    bool writeEditorSettingsToDisk();
 
     /**
      * @brief Handles clipboard content changes
@@ -961,6 +1014,13 @@ private:
     /// layoutChanged + layoutListChanged back-to-back — only hits the
     /// PhosphorZones::LayoutRegistry once.
     QTimer m_layoutReloadTimer;
+    /// Coalesces saveEditorSettings() bursts. Every snapping/fill-on-drop
+    /// setter calls saveEditorSettings, and ControlBar drives snapIntervalX
+    /// from Slider.onMoved — one call per mouse-move step. Each one rewrites
+    /// the whole config document, fsyncs it, and makes the daemon reparse its
+    /// entire config, so running that per tick is a drag-long stutter. Batch
+    /// the burst into one write once the value settles.
+    QTimer m_editorSettingsSaveTimer;
 
     /// Recompute zone geometry for every manual layout against the primary
     /// screen so a layout opened through the in-process registry carries its
@@ -985,9 +1045,25 @@ private:
 
     // Screen
     QString m_targetScreen;
+    /// Launch arguments parked by requestLaunch() while unsaved edits are
+    /// pending. nullopt when nothing is awaiting confirmation.
+    struct PendingLaunch
+    {
+        QString screenId;
+        QString layoutId;
+        bool createNew = false;
+        bool preview = false;
+    };
+    std::optional<PendingLaunch> m_pendingLaunch;
+    /// Apply a launch request outright, replacing whatever is loaded.
+    void applyLaunch(const PendingLaunch& launch);
+
     /// Screen parked by setTargetScreen() while unsaved edits are pending.
-    /// Empty when nothing is awaiting confirmation.
-    QString m_pendingTargetScreen;
+    /// nullopt when nothing is awaiting confirmation. Optional rather than an
+    /// empty string because "" is a legitimate parked value (it is what
+    /// targetScreen() reports before a screen is resolved), so the two states
+    /// need to stay distinguishable even though no caller parks one today.
+    std::optional<QString> m_pendingTargetScreen;
     QSize m_virtualScreenSize; ///< Cached VS geometry size (valid when m_targetScreen is virtual)
     QRect m_virtualScreenRect; ///< Cached VS absolute geometry (position within physical monitor)
     /// Layout-derived reference-size override. When valid, takes precedence

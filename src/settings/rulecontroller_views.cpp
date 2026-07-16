@@ -197,18 +197,23 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         // (isMonitorDisabled → contextDisabledReason), and that list is built by
         // `Settings::disableEntriesFor`, which admits a rule only when it is a
         // MONITOR-AXIS disable rule: exactly one DisableEngine action carrying a
-        // non-empty mode token (ContextRuleBridge::disableRuleMode), a
-        // context-only match pinning the screen and nothing else, and no
-        // non-dimension context leaf — which is precisely
-        // `matchIsExactContextBase`. Anything else is honoured on a narrower
-        // axis or not at all:
+        // non-empty mode token (ContextRuleBridge::disableRuleMode) plus a match
+        // whose `contextAxisFor` is Monitor. That second half is exactly what
+        // `matchIsExactContextBase` computes — both sides call the same bridge
+        // helper, so the tile and the daemon's gate admit the same rule set by
+        // construction rather than by two predicates that have to be kept in
+        // step. Anything else is honoured on a narrower axis or not at all:
         //   - screen + desktop / screen + activity feed disabledDesktops /
         //     disabledActivities, which gate one desktop or activity, not the
         //     monitor. The tile is a monitor-level surface, so labelling the
         //     whole screen "Engine off" from one of those overstates it.
-        //   - a rule pinning TiledWindowCount, or carrying two DisableEngine
-        //     actions, is not a managed disable entry at all and the daemon
-        //     never gates on it.
+        //   - a match carrying a window-property leaf, or pinning a non-dimension
+        //     context field (Mode / TiledWindowCount / ScreenOrientation /
+        //     ActiveLayout), is not a bare monitor pin — contextAxisFor reports
+        //     CatchAll for it and the daemon never gates the monitor on it.
+        //   - a rule carrying two DisableEngine actions is ambiguous
+        //     (disableRuleMode returns nullopt) and is not a managed disable
+        //     entry at all.
         // Accumulating any DisableEngine action regardless of shape put "Engine
         // off" on tiles for rules the daemon does not honour that way.
         const auto disableMode = PhosphorRules::ContextRuleBridge::disableRuleMode(rule);
@@ -261,10 +266,14 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
     QVariantList out;
     for (const QVariant& sv : screens) {
         const QVariantMap screen = sv.toMap();
-        // SettingsController::screens maps (screenInfoListToVariantList) key
-        // the connector under "name" (always present) with "screenId" (EDID id)
-        // as the alternate; fall back to it so the overview never silently
-        // drops a tile whose name happens to be empty.
+        // Rule matches pin an EDID screen id, so the tile has to be keyed by the
+        // same thing. On the daemon-served path "name" IS that id:
+        // ScreenProvider::fetchScreens fills ScreenInfo::name from the daemon's
+        // `getScreens`, which returns effective screen identifiers (see
+        // dbus/org.plasmazones.Screen.xml), and parks the real connector under a
+        // separate "connectorName" key this lookup never reads. "screenId" is the
+        // alternate; fall back to it so the overview never silently drops a tile
+        // whose name happens to be empty.
         QString screenId = screen.value(QStringLiteral("name")).toString();
         if (screenId.isEmpty()) {
             screenId = screen.value(QStringLiteral("screenId")).toString();

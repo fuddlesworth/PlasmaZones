@@ -9282,6 +9282,12 @@ Seitenverhältnis: %3</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="70"/>
+        <source> (Copy)</source>
+        <extracomment>Suffix appended to the name of a duplicated algorithm. Keep the leading space.</extracomment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/settings/algorithmservice.cpp" line="323"/>
         <source>Only Luau algorithm files (.luau) can be imported.</source>
         <translation type="unfinished"></translation>

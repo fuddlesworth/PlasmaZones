@@ -211,11 +211,62 @@ void EditorController::loadEditorSettings()
 
 void EditorController::saveEditorSettings()
 {
+    // Queue, don't write. Every caller is a property setter, and QML drives some
+    // of them per mouse-move step (ControlBar binds snapIntervalX to
+    // Slider.onMoved), so writing here put a whole-document rewrite, an fsync
+    // and a full daemon config reparse on every tick of a drag. Restarting the
+    // timer on each call collapses the burst into one write once the value
+    // settles. setSnapInterval calls two setters for one logical change, which
+    // now costs one write instead of two.
+    m_editorSettingsSaveTimer.start();
+}
+
+void EditorController::flushEditorSettings()
+{
+    if (!writeEditorSettingsToDisk()) {
+        return;
+    }
+
+    // Hand the daemon the new on-disk state. Async, and the reply is logged
+    // rather than dropped: if the daemon is up but the reload errors, the editor
+    // would otherwise proceed believing the two agree, and writeEditorSettings-
+    // ToDisk's comment says what happens next — the daemon's following flush
+    // silently reverts the user's settings. A missing daemon is a legitimate
+    // no-op, so the failure is a log line and not a user-facing error.
+    //
+    // Not synchronous. The reason that used to be given here does not hold: the
+    // notification's only consumer is the daemon and nothing in this process is
+    // ordered against the reply (unlike the KCM, which clears a guard on it —
+    // see reloadDaemonSettingsBlocking). Blocking never closed the clobber
+    // window either, since the daemon can flush between the write and the
+    // reparse whether or not this call waits. All it bought was up to 500 ms of
+    // frozen UI on the settings path.
+    PhosphorProtocol::ClientHelpers::reloadDaemonSettings(this, QStringLiteral("editor settings reload"));
+}
+
+void EditorController::flushEditorSettingsBlocking()
+{
+    if (!writeEditorSettingsToDisk()) {
+        return;
+    }
+
+    // Teardown takes the blocking form. reloadDaemonSettings parents its reply
+    // watcher to `this`, and the only caller here is ~EditorController — the
+    // watcher would be a child of a half-destroyed object whose connection dies
+    // with it, and the process may exit before the message is even written to
+    // the bus. The reload would be silently lost, and the daemon would then
+    // revert the settings the user changed on their way out. One bounded call
+    // at exit buys delivery.
+    PhosphorProtocol::ClientHelpers::reloadDaemonSettingsBlocking();
+}
+
+bool EditorController::writeEditorSettingsToDisk()
+{
     // Write-in-process-then-reload, the same contract the settings app follows
     // (see src/settings/dbusutils.h — nothing in the tree writes a setting over
     // D-Bus). The ephemeral backend reads config.json fresh off disk, applies
-    // the Editor.* groups below and flushes; the reloadSettings call at the
-    // bottom then makes the daemon reparse.
+    // the Editor.* groups below and flushes; the reload at the bottom then makes
+    // the daemon reparse.
     //
     // The reload is load-bearing, not a courtesy. JsonBackend::sync rewrites the
     // WHOLE document from its in-memory root, and the daemon's root is only
@@ -255,18 +306,12 @@ void EditorController::saveEditorSettings()
 
     if (!backend->sync()) {
         // Nothing reached disk, so there is nothing for the daemon to pick up
-        // and its snapshot is still the truth. Skipping the reload here keeps
-        // the two in agreement instead of asking the daemon to reparse a file
-        // that never changed.
+        // and its snapshot is still the truth. Reporting failure keeps the
+        // callers from asking the daemon to reparse a file that never changed.
         qCWarning(lcEditor) << "Failed to write editor settings to" << ConfigDefaults::configFilePath();
-        return;
+        return false;
     }
-
-    // Hand the daemon the new on-disk state. Synchronous so the reparse has
-    // happened before this returns — an async call would leave a window in
-    // which a daemon flush still carries the pre-write Editor.* values.
-    PhosphorProtocol::ClientHelpers::syncCall(PhosphorProtocol::Service::Interface::Settings,
-                                              QStringLiteral("reloadSettings"));
+    return true;
 }
 
 } // namespace PlasmaZones

@@ -1758,10 +1758,23 @@ P_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOn
 
 namespace {
 
-// Classify a context rule's pinned-dimension shape into a disable axis.
-// Returns nullopt for a shape no disable axis can represent — those are not
-// managed disable entries. Delegates to the bridge so the cascade-axis formula
-// lives in one place.
+// Classify a disable rule's MATCH into a disable axis. Returns nullopt for a
+// shape no disable axis can represent — those are not managed disable entries,
+// so the getter must not report them and the write path's kept-walk must not
+// rewrite them. Routed through `ContextRuleBridge::contextAxisFor` so the
+// cascade-axis formula lives in one place, and so the three admission gates that
+// formula folds in apply here identically to the assignment side:
+//   - `isContextOnly()` — a rule carrying a window-property leaf is not a
+//     context rule at all. Rebuilding it from the decoded dims would drop that
+//     leaf, and `disableEntryFor` has nowhere to put it.
+//   - `pinsNonDimensionContextField()` — a rule pinning Mode /
+//     TiledWindowCount / ScreenOrientation / ActiveLayout is more specific than
+//     the (screen, desktop, activity) shape the entry strings can key. Taking it
+//     as a bare axis rule would BOTH over-report the gate (an
+//     `All{ScreenId==A, ScreenOrientation=="portrait"}` disable would switch the
+//     engine off on screen A in every orientation) and destroy the extra leaf on
+//     the next rebuild of the family.
+//   - the axis decode itself, below.
 //
 // STRICT, like the assignment side's `matchIsExactContextActivityStrict`: a
 // Combined (screen+desktop+activity) tuple is NOT the Activity axis. The three
@@ -1784,10 +1797,10 @@ namespace {
 // desktop-only and activity-only disables — so this is only reachable for a
 // rule hand-built in the rule editor, which is precisely the rule the disable
 // lists must not rewrite.
-std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, const QString& activity)
+std::optional<DisableAxis> axisOf(const PhosphorRules::MatchExpression& match)
 {
     namespace CRB = PhosphorRules::ContextRuleBridge;
-    switch (CRB::contextAxisOf(screenId, virtualDesktop, activity)) {
+    switch (CRB::contextAxisFor(match)) {
     case CRB::ContextAxis::Monitor:
         return DisableAxis::Monitor;
     case CRB::ContextAxis::Desktop:
@@ -1842,20 +1855,17 @@ QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mod
         if (!ruleToken || *ruleToken != wantToken) {
             continue; // not a disable rule, or scoped to a different mode
         }
-        if (CRB::pinsNonDimensionContextField(rule.match)) {
-            continue; // a rule that also pins a non-dimension context field (e.g.
-                      // TiledWindowCount) is more specific than a pure (screen,
-                      // desktop, activity) disable; it cannot be represented by
-                      // the disable-axis key, so it is not a managed disable entry.
+        // axisOf() is the single admission gate — see its comment for the three
+        // shapes it refuses (window-property leaves, a pinned non-dimension
+        // context field, an axis the entry strings cannot key).
+        const auto ruleAxis = axisOf(rule.match);
+        if (!ruleAxis || *ruleAxis != axis) {
+            continue;
         }
         QString screenId;
         int desktop = 0;
         QString activity;
         CRB::contextDimsOf(rule.match, screenId, desktop, activity);
-        const auto ruleAxis = axisOf(screenId, desktop, activity);
-        if (!ruleAxis || *ruleAxis != axis) {
-            continue;
-        }
         out.append(disableEntryFor(axis, screenId, desktop, activity));
     }
     return out;
@@ -1893,16 +1903,22 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     QList<PhosphorRules::Rule> kept;
     for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
         const auto ruleToken = CRB::disableRuleMode(rule);
-        // Keep a disable rule that also pins a non-dimension context field (e.g.
-        // TiledWindowCount): it is not the pure (screen, desktop, activity) shape
-        // this (axis, mode) rewrite owns, so dropping it would lose that leaf.
-        if (ruleToken && *ruleToken == modeToken && !CRB::pinsNonDimensionContextField(rule.match)) {
-            QString screenId;
-            int desktop = 0;
-            QString activity;
-            CRB::contextDimsOf(rule.match, screenId, desktop, activity);
-            const auto ruleAxis = axisOf(screenId, desktop, activity);
+        // axisOf() gates admission with exactly the shapes disableEntriesFor
+        // reports, so this walk drops only rules the append loop below rebuilds.
+        // Anything it refuses — a window-property leaf, a pinned non-dimension
+        // context field (Mode / TiledWindowCount / ScreenOrientation /
+        // ActiveLayout), a Combined tuple — is NOT the pure (screen, desktop,
+        // activity) shape this (axis, mode) rewrite owns, so it falls through to
+        // `kept` untouched. Dropping it would destroy the rule outright: the
+        // append loop rebuilds only the bare tuple, so the extra leaf would be
+        // gone and the rule's derived UUID with it.
+        if (ruleToken && *ruleToken == modeToken) {
+            const auto ruleAxis = axisOf(rule.match);
             if (ruleAxis && *ruleAxis == axis) {
+                QString screenId;
+                int desktop = 0;
+                QString activity;
+                CRB::contextDimsOf(rule.match, screenId, desktop, activity);
                 // A DISABLED rule of this family is invisible to
                 // disableEntriesFor, so it is in neither `before` nor `after` and
                 // the append loop below will not recreate it. Dropping it here
@@ -1938,21 +1954,15 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             screenId = canonicalEntry;
             break;
         case DisableAxis::Desktop: {
+            // No shape check: `after` came out of canonicalDisableEntries, which
+            // already dropped every entry this loop could reject and rebuilt the
+            // survivors as `<non-empty screen>/<QString::number(desktop > 0)>`.
+            // The screen segment is non-empty (resolveScreenId returns its input
+            // unchanged when it doesn't resolve) and the desktop segment never
+            // contains '/', so lastIndexOf always lands on the separator we put
+            // there and the tail always parses back to the same positive int.
             const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
-            if (slash <= 0 || slash == canonicalEntry.size() - 1) {
-                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
-                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
-                qCDebug(lcConfig) << "Skipping malformed desktop disable entry";
-                continue;
-            }
-            bool ok = false;
-            desktop = canonicalEntry.mid(slash + 1).toInt(&ok);
-            if (!ok || desktop <= 0) {
-                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
-                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
-                qCDebug(lcConfig) << "Skipping malformed desktop disable entry";
-                continue;
-            }
+            desktop = canonicalEntry.mid(slash + 1).toInt();
             screenId = canonicalEntry.left(slash);
             break;
         }
@@ -1963,14 +1973,9 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             // splits at the activity boundary, not at the connector
             // boundary inside the screen ID. Activity UUIDs are
             // canonical and never contain `/`, so the trailing segment
-            // is unambiguous. Mirrors the Desktop axis above.
+            // is unambiguous. Mirrors the Desktop axis above, including
+            // the shape guarantee canonicalDisableEntries provides.
             const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
-            if (slash <= 0 || slash == canonicalEntry.size() - 1) {
-                // DEBUG: the entry is an element of the caller's list, arriving over D-Bus.
-                // Same reasoning as setAnimationEasingCurve above. It is dropped either way.
-                qCDebug(lcConfig) << "Skipping malformed activity disable entry";
-                continue;
-            }
             screenId = canonicalEntry.left(slash);
             activity = canonicalEntry.mid(slash + 1);
             break;

@@ -169,10 +169,18 @@ void ZoneManager::emitZoneSignal(SignalType type, const QString& zoneId, bool in
         case SignalType::GeometryChanged:
             m_pendingGeometryChanges.insert(zoneId);
             break;
+        case SignalType::NameChanged:
+            m_pendingNameChanges.insert(zoneId);
+            break;
+        case SignalType::NumberChanged:
+            m_pendingNumberChanges.insert(zoneId);
+            break;
         case SignalType::ColorChanged:
             m_pendingColorChanges.insert(zoneId);
             break;
-        default:
+        case SignalType::ZOrderChanged:
+            // No per-zone signal — see the immediate branch below. The
+            // aggregate flags set after this switch are the whole notification.
             break;
         }
         m_pendingZonesChanged = true;
@@ -233,6 +241,10 @@ ZoneManager::ZoneManager(QObject* parent)
     , m_autoFiller(std::make_unique<ZoneAutoFiller>(this))
 {
 }
+
+// Out-of-line so ~unique_ptr<ZoneAutoFiller> is instantiated here, where
+// ZoneAutoFiller is complete, rather than in every includer of ZoneManager.h.
+ZoneManager::~ZoneManager() = default;
 
 QVariantMap ZoneManager::createZone(const QString& name, int number, qreal x, qreal y, qreal width, qreal height)
 {
@@ -513,6 +525,13 @@ int ZoneManager::findZoneIndex(const QString& zoneId) const
 
 void ZoneManager::renumberZones()
 {
+    // A renumber can touch every zone in the list, and each caller emits its own
+    // aggregate once it returns. Run the loop inside a batch so the per-zone
+    // zoneNumberChanged signals collect behind a single aggregate instead of one
+    // per zone. Called from inside a caller's batch (a paste wraps its
+    // addZoneFromMap calls in one) the depth never reaches zero here, so the
+    // signals defer to that batch rather than firing mid-update.
+    beginBatchUpdate();
     for (int i = 0; i < m_zones.size(); ++i) {
         QVariantMap zone = m_zones[i].toMap();
         QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
@@ -522,9 +541,10 @@ void ZoneManager::renumberZones()
         if (oldNumber != newNumber) {
             zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = newNumber;
             m_zones[i] = zone;
-            Q_EMIT zoneNumberChanged(zoneId);
+            emitZoneSignal(SignalType::NumberChanged, zoneId);
         }
     }
+    endBatchUpdate();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -589,6 +609,18 @@ void ZoneManager::emitDeferredSignals()
         Q_EMIT zoneGeometryChanged(zoneId);
     }
     m_pendingGeometryChanges.clear();
+
+    // Emit name change signals for each affected zone
+    for (const QString& zoneId : std::as_const(m_pendingNameChanges)) {
+        Q_EMIT zoneNameChanged(zoneId);
+    }
+    m_pendingNameChanges.clear();
+
+    // Emit number change signals for each affected zone
+    for (const QString& zoneId : std::as_const(m_pendingNumberChanges)) {
+        Q_EMIT zoneNumberChanged(zoneId);
+    }
+    m_pendingNumberChanges.clear();
 
     // Emit color change signals for each affected zone
     for (const QString& zoneId : std::as_const(m_pendingColorChanges)) {

@@ -45,9 +45,17 @@ using Mode = PhosphorZones::AssignmentEntry::Mode;
 // Under QT_QPA_PLATFORM=offscreen no connector matches and the name falls
 // through untouched, which is why such a test can pass ctest and fail a bare run.
 //
-// Tests that only round-trip a name through isMonitorDisabled() are immune (it
-// resolves both sides via ScreenIdentity::variantsFor), but they use these
-// constants too rather than leave the distinction to the next reader.
+// Tests that only round-trip a name through isMonitorDisabled() are immune, and
+// several below still write a plain "DP-1" for that reason. isMonitorDisabled
+// resolves BOTH sides through ScreenIdentity::variantsFor, so whatever the write
+// path canonicalised the name to, the read path canonicalises the query the same
+// way and the two meet — the assertion never names the stored form. Adding one of
+// these constants to such a test would buy nothing.
+//
+// The rule for a new test: use a constant here the moment the test asserts on a
+// screen name the code STORED or RETURNED (a QCOMPARE against a disable-list
+// entry) or on a rule's derived UUID. A bare isMonitorDisabled() round-trip can
+// keep using a connector name.
 static const QString kScreenA = QStringLiteral("TestVendor:PanelA:0001");
 static const QString kScreenB = QStringLiteral("TestVendor:PanelB:0002");
 static const QString kScreenC = QStringLiteral("TestVendor:PanelC:0003");
@@ -459,6 +467,96 @@ private Q_SLOTS:
         // Clearing it round-trips back through the same store.
         settings.setDisabledMonitors(Mode::Snapping, {});
         QCOMPARE(store.count(), 0);
+    }
+
+    // =========================================================================
+    // Non-bare-screen DisableEngine rules
+    //
+    // The disable lists key entries by (screen), (screen/desktop) or
+    // (screen/activity) and nothing else. A DisableEngine rule whose match pins
+    // a FOURTH thing — a non-dimension context field such as ScreenOrientation —
+    // is authorable in the rule editor with no hand-editing (the match is
+    // context-only, so the editor's context-action compatibility check passes),
+    // and it is not a shape the lists can represent. Both halves of the disable
+    // path must therefore refuse it: the getter must not report it (or the gate
+    // would fire in every orientation), and the write path's kept-walk must not
+    // rewrite it (or the orientation leaf is destroyed on the next unrelated
+    // write to the same family).
+    // =========================================================================
+
+    /// Build `All{ScreenId == screen, ScreenOrientation == "portrait"}` with a
+    /// single DisableEngine action for @p modeToken — the shape the rule editor
+    /// produces for "turn snapping off on this screen, but only in portrait".
+    static PhosphorRules::Rule makeOrientationDisableRule(const QString& screen, const QString& modeToken)
+    {
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("Snapping off · portrait only");
+        rule.enabled = true;
+        rule.priority = ContextRuleBridge::kContextBandBase;
+        rule.match = MatchExpression::makeAll(
+            {MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, screen),
+             MatchExpression::makeLeaf(Field::ScreenOrientation, Operator::Equals, QStringLiteral("portrait"))});
+        RuleAction action;
+        action.type = QString(ActionType::DisableEngine);
+        action.params.insert(ActionParam::Mode, modeToken);
+        rule.actions.append(action);
+        return rule;
+    }
+
+    /// A DisableEngine rule that ALSO pins ScreenOrientation gates the engine
+    /// only while that orientation holds, so it is not a monitor-axis disable
+    /// entry. Reporting it as one would switch the engine off on that screen in
+    /// EVERY orientation — the exact opposite of what the rule says.
+    void testOrientationQualifiedDisable_isNotAMonitorEntry()
+    {
+        IsolatedConfigGuard guard;
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath());
+        Settings settings(&store, nullptr);
+
+        QVERIFY(store.setAllRules({makeOrientationDisableRule(kScreenA, QStringLiteral("snapping"))}));
+        QCOMPARE(store.count(), 1);
+
+        // The rule pins more than the screen, so it cannot be keyed by the
+        // monitor disable list and must not appear in it.
+        QVERIFY2(!settings.disabledMonitors(Mode::Snapping).contains(kScreenA),
+                 "an orientation-qualified DisableEngine rule is not a bare monitor disable entry");
+        QVERIFY2(!settings.isMonitorDisabled(Mode::Snapping, kScreenA),
+                 "the monitor gate must not fire for a rule that only disables the engine in portrait");
+    }
+
+    /// An unrelated write to the same (Monitor, Snapping) family must leave an
+    /// orientation-qualified disable rule byte-for-byte intact. The write path
+    /// rebuilds the family from the entry strings, and the entry strings carry
+    /// only the screen — so a rule wrongly admitted into the family comes back
+    /// as a bare screen pin with a different UUID, i.e. the user's rule is gone.
+    void testOrientationQualifiedDisable_survivesUnrelatedFamilyWrite()
+    {
+        IsolatedConfigGuard guard;
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath());
+        Settings settings(&store, nullptr);
+
+        const PhosphorRules::Rule orientationRule = makeOrientationDisableRule(kScreenA, QStringLiteral("snapping"));
+        QVERIFY(store.setAllRules({orientationRule}));
+
+        // Disable snapping on a DIFFERENT screen — a write to the same
+        // (Monitor, Snapping) family that has nothing to do with the rule above.
+        settings.setDisabledMonitors(Mode::Snapping, {kScreenB});
+
+        // The new bare disable landed.
+        QCOMPARE(settings.disabledMonitors(Mode::Snapping), QStringList{kScreenB});
+
+        // And the orientation rule is still there, unchanged — same id, same
+        // match. Locating it by id is the point: a rebuilt bare-screen rule
+        // would carry disableRuleIdFor's derived UUID instead.
+        const std::optional<PhosphorRules::Rule> survivor = store.ruleSet().ruleById(orientationRule.id);
+        QVERIFY2(survivor.has_value(), "the unrelated write destroyed the orientation-qualified disable rule");
+        QVERIFY2(
+            survivor->match.referencesAnyField(QSet<PhosphorRules::Field>{PhosphorRules::Field::ScreenOrientation}),
+            "the orientation leaf was stripped — the rule was rebuilt from a bare screen entry");
+        QCOMPARE(survivor->name, orientationRule.name);
+        QVERIFY(survivor->enabled);
     }
 
     /// A null store argument degrades to owning one (defensive parity with the

@@ -213,6 +213,10 @@ p_add_test(test_autotile_engine_core autotile/test_autotile_engine_core.cpp)
 target_compile_definitions(test_autotile_engine_core PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 p_add_test(test_autotile_engine_master autotile/test_autotile_engine_master.cpp)
 target_compile_definitions(test_autotile_engine_master PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+# helpers/AutotileFakes.h declares a Q_OBJECT fake — listing it as a source is
+# what makes AUTOMOC generate its metaobject (a merely #included header is not
+# scanned), and the IAutotileSettings qobject_cast needs it.
+target_sources(test_autotile_engine_master PRIVATE helpers/AutotileFakes.h)
 p_add_test(test_autotile_engine_minsize autotile/test_autotile_engine_minsize.cpp)
 p_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow.cpp)
 p_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
@@ -526,6 +530,8 @@ p_add_test(test_snap_state_class_mutation snap/test_snap_state_class_mutation.cp
 # output geometry — compile in the FakeScreenProvider (like the WTA tests).
 add_executable(test_navigation_cross_surface
                autotile/test_navigation_cross_surface.cpp
+               # Q_OBJECT fake — listed so AUTOMOC generates its metaobject.
+               helpers/AutotileFakes.h
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_navigation_cross_surface
                PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)

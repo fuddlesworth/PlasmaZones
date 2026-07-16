@@ -111,14 +111,15 @@ QJsonObject Layout::toJson() const
     // relativeGeometry every zone carries. fixedZoneReferenceGeometry() is the
     // same helper layoutToVariantMap and the preview projection already use, so
     // the persisted rect matches what those consumers compute from the same
-    // zones. m_lastRecalcGeometry alone is the wrong reference whenever the
-    // fixed zones overflow it: a full-height zone authored against a 2160px
-    // screen, recalculated against the 2126px available area the daemon uses by
-    // default, normalizes to a height of 1.016 — outside the 0–1 range the key
-    // is defined over, so the schema gate drops the whole layout on the next
-    // read. fixedZoneReferenceGeometry() falls back to the fixed-zone bounding
-    // box in exactly that case, which keeps every fixed zone at or under 1 by
-    // construction and loses nothing: fixedGeometry below carries the pixels.
+    // zones. It resolves to the screen the layout was last laid out against,
+    // which is the frame the relative coords are defined over and therefore the
+    // reference that makes the emitted value MEAN the zone's position on that
+    // screen. Only a genuine overflow (or a layout no screen is known for)
+    // falls back to the fixed-zone bounding box.
+    //
+    // The reference alone does not bound the result — a negative fixed offset
+    // normalizes below 0 against either reference, and an overflow above 1
+    // against the screen. Zone::toJson clamps for that; see the note there.
     // An all-relative layout gets an empty rect here, which normalizedGeometry
     // ignores because it returns the stored relative rect for those zones.
     const QRectF zoneReference = fixedZoneReferenceGeometry();

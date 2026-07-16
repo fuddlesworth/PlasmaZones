@@ -1281,6 +1281,11 @@ void AutotileEngine::refreshConfigFromSettings()
     bool configChanged = false;
     const int oldMaxWindows = m_config->maxWindows;
     const auto oldOverflow = m_config->overflowBehavior;
+    // Set when an explicit global change below drops every per-key user-tuned
+    // flag. The propagates at the end of this method then have to span every
+    // state, matching that clear — see PropagateScope.
+    bool masterCountDroppedTunings = false;
+    bool splitRatioDroppedTunings = false;
 
 #define SYNC_FIELD(field, getter)                                                                                      \
     do {                                                                                                               \
@@ -1297,8 +1302,11 @@ void AutotileEngine::refreshConfigFromSettings()
             m_config->masterCount = newMasterCount;
             configChanged = true;
             // An explicit global master-count change (settings) overrides any
-            // per-desktop tunings, which the propagate below then re-applies.
+            // per-desktop tuning, on every desktop and activity — the same
+            // meaning setGlobalMasterCount gives the D-Bus setter. This clear
+            // spans every key, so the propagate below is widened to match it.
             m_userTunedMasterCount.clear();
+            masterCountDroppedTunings = true;
         }
     }
     SYNC_FIELD(innerGap, autotileInnerGap);
@@ -1327,8 +1335,11 @@ void AutotileEngine::refreshConfigFromSettings()
             m_config->splitRatio = newRatio;
             configChanged = true;
             // An explicit global split-ratio change (settings) overrides any
-            // per-desktop tunings, which the propagate below then re-applies.
+            // per-desktop tuning, on every desktop and activity — the same
+            // meaning setGlobalSplitRatio gives the D-Bus setter. This clear
+            // spans every key, so the propagate below is widened to match it.
             m_userTunedSplitRatio.clear();
+            splitRatioDroppedTunings = true;
         }
     }
     {
@@ -1379,8 +1390,9 @@ void AutotileEngine::refreshConfigFromSettings()
         }
     }
 
-    propagateGlobalSplitRatio();
-    propagateGlobalMasterCount();
+    propagateGlobalSplitRatio(splitRatioDroppedTunings ? PropagateScope::AllContexts : PropagateScope::CurrentContext);
+    propagateGlobalMasterCount(masterCountDroppedTunings ? PropagateScope::AllContexts
+                                                         : PropagateScope::CurrentContext);
 
     // Float→Unlimited: backfill previously-overflowed floating windows
     const bool overflowBackfilled = oldOverflow == PhosphorTiles::AutotileOverflowBehavior::Float
@@ -2601,7 +2613,34 @@ void AutotileEngine::revalidateWindowContext(const QString& windowId, const QStr
 void AutotileEngine::onWindowAdded(const QString& windowId)
 {
     const QString screenId = screenForWindow(windowId);
-    if (!isAutotileScreen(screenId) || !shouldTileWindow(windowId)) {
+    // Computed before the first gate: BOTH gates below need it, and hoisting it
+    // also keeps the daemon-injected float predicate out of an arrival's path
+    // entirely (see ruleWillFloat) rather than running it inside the marker's
+    // window on a path the marker says it has no say over.
+    const bool isMigrationArrival = m_migrationArrival && m_migrationArrival->windowId == windowId;
+    // The two disjuncts are NOT symmetric for an arrival, so they are not
+    // exempted together:
+    //
+    // isAutotileScreen stays unconditional. It asks whether the DESTINATION can
+    // hold a tile at all, which an arrival can never make true by itself — and
+    // migrateWindowBetweenKeys only re-adds under its own isAutotileScreen check
+    // on the same screen id (the reverse map is re-pointed at the destination
+    // before the re-add, so screenForWindow returns it here), so an arrival
+    // cannot reach this line with a non-autotile screen. Exempting it would buy
+    // nothing and would drop the guard against ever tiling onto a snap screen.
+    //
+    // shouldTileWindow IS exempted for an arrival, for the reason the cap gate
+    // below is: the source state has already dropped the window, so refusing here
+    // strands it — removed from the source, keyed to the destination, present in
+    // neither, and isWindowTiled() then reports a phantom tile forever. An
+    // arrival's tileability was already settled on the source (a sticky window
+    // tiled there under TreatAsNormal, or before the user made it sticky, stays
+    // tiled here), its float half is carried across by insertShouldFloat, and
+    // applyTiling's overflow pass floats out whatever the destination cannot
+    // hold. Screens that must turn an arrival away have to refuse BEFORE the
+    // removal, which is what NavigationController::crossOutputMove's
+    // pre-mutation shouldTileWindow check does on the proactive path.
+    if (!isAutotileScreen(screenId) || (!isMigrationArrival && !shouldTileWindow(windowId))) {
         qCDebug(PhosphorTileEngine::lcTileEngine) << "onWindowAdded: skipping" << windowId << "screen=" << screenId
                                                   << "isAutotile=" << isAutotileScreen(screenId);
         return;
@@ -2625,8 +2664,13 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     // back out. Screens that must turn a full destination away have to refuse
     // BEFORE the removal, which is what the proactive bare-cap guard in
     // NavigationController::crossOutputMove does.
-    const bool ruleWillFloat = m_floatPredicate && m_floatPredicate(windowId);
-    const bool isMigrationArrival = m_migrationArrival && m_migrationArrival->windowId == windowId;
+    //
+    // The predicate is skipped outright for an arrival: it is dead there (the
+    // arrival exemption already carries the gate) and it is a daemon-injected
+    // callback, so not running it keeps an arrival's marker window free of
+    // foreign code — matching insertShouldFloat, which short-circuits it for the
+    // same reason.
+    const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId);
     if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat && !isMigrationArrival) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";
@@ -4168,16 +4212,19 @@ bool AutotileEngine::isKnownScreen(const QString& screenId) const
     return PhosphorScreens::ScreenIdentity::findByIdOrName(screenId) != nullptr;
 }
 
-void AutotileEngine::propagateGlobalSplitRatio()
+void AutotileEngine::propagateGlobalSplitRatio(PropagateScope scope)
 {
-    // Only propagate to current desktop/activity states — per-desktop split
-    // ratio adjustments (via increaseMasterRatio) are preserved on other desktops.
-    // States the user explicitly tuned (m_userTunedSplitRatio) and screens with a
-    // per-screen override are skipped, so a local ratio tweak is never clobbered
-    // by a settings refresh.
+    // A passive refresh (CurrentContext) propagates only to current
+    // desktop/activity states — per-desktop split ratio adjustments (via
+    // increaseMasterRatio) are preserved on other desktops. States the user
+    // explicitly tuned (m_userTunedSplitRatio) and screens with a per-screen
+    // override are skipped, so a local ratio tweak is never clobbered by a
+    // settings refresh. AllContexts is the caller saying it has just dropped
+    // every tuned flag for this value (see PropagateScope).
     for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
-        if (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
-            || it.key().activity != m_context.currentActivity()) {
+        if (scope == PropagateScope::CurrentContext
+            && (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
+                || it.key().activity != m_context.currentActivity())) {
             continue;
         }
         if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::SplitRatio)
@@ -4187,15 +4234,19 @@ void AutotileEngine::propagateGlobalSplitRatio()
     }
 }
 
-void AutotileEngine::propagateGlobalMasterCount()
+void AutotileEngine::propagateGlobalMasterCount(PropagateScope scope)
 {
-    // Only propagate to current desktop/activity states — per-desktop master
-    // count adjustments are preserved on other desktops. States the user
-    // explicitly tuned (m_userTunedMasterCount) and per-screen-override screens
-    // are skipped, so a local master-count tweak is never clobbered by a refresh.
+    // A passive refresh (CurrentContext) propagates only to current
+    // desktop/activity states — per-desktop master count adjustments are
+    // preserved on other desktops. States the user explicitly tuned
+    // (m_userTunedMasterCount) and per-screen-override screens are skipped, so a
+    // local master-count tweak is never clobbered by a refresh. AllContexts is
+    // the caller saying it has just dropped every tuned flag for this value (see
+    // PropagateScope).
     for (auto it = m_states.states().constBegin(); it != m_states.states().constEnd(); ++it) {
-        if (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
-            || it.key().activity != m_context.currentActivity()) {
+        if (scope == PropagateScope::CurrentContext
+            && (it.key().desktop != currentKeyForScreen(it.key().screenId).desktop
+                || it.key().activity != m_context.currentActivity())) {
             continue;
         }
         if (it.value() && !hasPerScreenOverride(it.key().screenId, PerScreenKeys::MasterCount)

@@ -369,8 +369,8 @@ public:
     void setDefaultAssignmentSuppressedProvider(std::function<bool()> provider);
 
     /// True when the snapping-preferred provider is wired AND reports true — i.e.
-    /// snapping is globally enabled (the daemon wires the provider to
-    /// `ISettings::snappingEnabled`). Mirrors the internal default-assignment
+    /// snapping is globally enabled (the consumer wires the provider to its
+    /// global snapping-enabled setting). Mirrors the internal default-assignment
     /// branch's `m_snappingPreferredProvider && m_snappingPreferredProvider()`
     /// test, exposed so other engines can gate cross-engine coordination on the
     /// global snap toggle. When unset, returns false (no provider ⇒ not preferred).
@@ -633,8 +633,8 @@ public:
 
     /// quicklayouts.json top-level keys: one nested slot object per tiling
     /// mode. This is the ONLY on-disk shape — there is no flat legacy variant.
-    /// Shared with the v3→v4 schema migration (configmigration.cpp), which
-    /// writes the same nested format, so reader and migration cannot drift.
+    /// Shared with a consumer's v3→v4 schema migration, which writes the same
+    /// nested format, so reader and migration cannot drift.
     static constexpr QLatin1String QuickSlotsSnappingKey{"snapping"};
     static constexpr QLatin1String QuickSlotsAutotileKey{"autotile"};
 

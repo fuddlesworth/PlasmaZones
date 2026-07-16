@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 

@@ -289,12 +289,29 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
 
         // Per-zone geometry mode
         zone->setGeometryModeInt(zoneObj[::PhosphorZones::ZoneJsonKeys::GeometryMode].toInt(0));
+        // fixedGeometry is the one geometry key the schema gate above does not
+        // cover — the schema describes relativeGeometry and never mentions it.
+        // This is also the more exposed of the two ingresses that accept it
+        // (any session process can reach the bus, where a file has to be
+        // imported), so it takes the same normalization Zone::fromJson applies
+        // to the file side. Without it a negative width or a NaN lands verbatim
+        // and the daemon then persists a layout it will refuse to load.
         if (zoneObj.contains(::PhosphorZones::ZoneJsonKeys::FixedGeometry)) {
             QJsonObject fixedGeo = zoneObj[::PhosphorZones::ZoneJsonKeys::FixedGeometry].toObject();
-            zone->setFixedGeometry(QRectF(fixedGeo[::PhosphorZones::ZoneJsonKeys::X].toDouble(),
-                                          fixedGeo[::PhosphorZones::ZoneJsonKeys::Y].toDouble(),
-                                          fixedGeo[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
-                                          fixedGeo[::PhosphorZones::ZoneJsonKeys::Height].toDouble()));
+            zone->setFixedGeometry(PhosphorZones::Zone::sanitizeFixedGeometry(
+                QRectF(fixedGeo[::PhosphorZones::ZoneJsonKeys::X].toDouble(),
+                       fixedGeo[::PhosphorZones::ZoneJsonKeys::Y].toDouble(),
+                       fixedGeo[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
+                       fixedGeo[::PhosphorZones::ZoneJsonKeys::Height].toDouble())));
+        }
+        // Same fallback the file ingress applies: a Fixed zone with no usable
+        // pixel payload renders from its authored relativeGeometry instead of
+        // becoming an invisible snap-target sink.
+        if (zone->isFixedGeometry() && zone->fixedGeometry().isEmpty()) {
+            qCWarning(lcDbusLayout) << "updateLayout: zone" << zone->name()
+                                    << "declares Fixed geometry with no usable fixedGeometry payload"
+                                    << "— downgrading to Relative";
+            zone->setGeometryMode(PhosphorZones::ZoneGeometryMode::Relative);
         }
 
         QJsonObject appearance = zoneObj[::PhosphorZones::ZoneJsonKeys::Appearance].toObject();

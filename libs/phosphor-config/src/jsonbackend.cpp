@@ -275,8 +275,8 @@ void JsonGroup::setGroupObject(const QJsonObject& obj)
         return;
     }
     // Walk the path once, share the chain between the equality-skip and the
-    // write-back. The flush loop in Settings::save() can hit this hundreds of
-    // times per save and a redundant traversal is pure waste.
+    // write-back. A consumer's flush loop can hit this hundreds of times per
+    // save and a redundant traversal is pure waste.
     const auto chain = buildDotPathChain(m_root, segments);
     if (chain.last() == obj) {
         return;
@@ -891,9 +891,9 @@ void JsonBackend::removeRootKey(const QString& key)
 
 namespace {
 /// Depth-limited recursive enumerator for @c JsonBackend::groupList(). Kept
-/// as a plain free function (not a @c std::function lambda) so the hot
-/// @c Settings::save() → @c purgeStaleKeys() → @c groupList() path doesn't
-/// pay a heap allocation per call.
+/// as a plain free function (not a @c std::function lambda) so the hot path of
+/// a consumer's save that purges stale keys before rewriting doesn't pay a
+/// heap allocation per call.
 void enumerateDotPathGroups(const QJsonObject& obj, const QString& prefix, int depth, const QSet<QString>& skipRoots,
                             QStringList& out)
 {

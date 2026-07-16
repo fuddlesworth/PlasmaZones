@@ -10,6 +10,8 @@
 #include <QString>
 #include <QUuid>
 
+#include <algorithm>
+#include <iterator>
 #include <optional>
 
 #include "IdentityKey.h"
@@ -460,10 +462,12 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
         }
         // Any leaf that is not a ScreenId / VirtualDesktop / Activity equality
         // leaf is ignored here — a flat mixed rule still yields its context
-        // projection, per the contract above. This includes the Mode and
-        // TiledWindowCount leaves: both ARE context fields, but neither is one of
-        // the three decomposed dimensions, so they are deliberately projected out
-        // of contextDimsOf.
+        // projection, per the contract above. This includes the Mode,
+        // TiledWindowCount, ScreenOrientation and ActiveLayout leaves: all four
+        // ARE context fields, but none is one of the three decomposed dimensions,
+        // so they are deliberately projected out of contextDimsOf. Callers that
+        // must not lose them gate on pinsNonDimensionContextField first —
+        // contextAxisFor already does.
     }
     // If no context-equality leaf was matched, the input was either a
     // context-axis-empty mixed rule (e.g. `ScreenId NotEquals "DP-1"`) or
@@ -479,18 +483,40 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
     return true;
 }
 
+/// The three cascade dimensions @ref makeContextMatch can emit — the only
+/// context fields @ref contextDimsOf decodes back out of a match.
+inline constexpr Field kContextDimensionFields[] = {Field::ScreenId, Field::VirtualDesktop, Field::Activity};
+
 /// True if @p match pins a context field that is NOT one of the three cascade
-/// dimensions (currently only @c TiledWindowCount). Such a match is more
-/// specific than the (screen, desktop, activity) shape @c makeContextMatch
-/// emits, so it must not be treated as an exact-context assignment: the batch
-/// reader/writers and exact-rule upsert rebuild the context base from the decoded
-/// dims alone, which would silently drop the extra leaf (the same hazard
-/// @c matchIsExactContextActivityStrict guards against for Combined rules). The
-/// field set is a function-local static so the per-rule batch classifiers do not
-/// reconstruct it on every call.
+/// dimensions — today @c Mode, @c TiledWindowCount, @c ScreenOrientation and
+/// @c ActiveLayout. Such a match is more specific than the
+/// (screen, desktop, activity) shape @c makeContextMatch emits, so it must not
+/// be treated as an exact-context assignment: the batch reader/writers and
+/// exact-rule upsert rebuild the context base from the decoded dims alone, which
+/// would silently drop the extra leaf (the same hazard
+/// @c matchIsExactContextActivityStrict guards against for Combined rules).
+///
+/// The set is derived from @ref kFieldTable — every @c FieldSource::Context row
+/// that is not one of @ref kContextDimensionFields — so a context field added to
+/// the table is guarded here without a second edit. It is built once into a
+/// function-local static, so the per-rule batch classifiers do not reconstruct it
+/// on every call.
 inline bool pinsNonDimensionContextField(const MatchExpression& match)
 {
-    static const QSet<Field> kNonDimensionContextFields{Field::TiledWindowCount};
+    static const QSet<Field> kNonDimensionContextFields = [] {
+        QSet<Field> fields;
+        for (const FieldDescriptor& descriptor : kFieldTable) {
+            if (descriptor.source != FieldSource::Context) {
+                continue;
+            }
+            if (std::find(std::begin(kContextDimensionFields), std::end(kContextDimensionFields), descriptor.field)
+                != std::end(kContextDimensionFields)) {
+                continue;
+            }
+            fields.insert(descriptor.field);
+        }
+        return fields;
+    }();
     return match.referencesAnyField(kNonDimensionContextFields);
 }
 
@@ -508,11 +534,12 @@ inline ContextAxis contextAxisFor(const MatchExpression& match)
     if (!match.isContextOnly()) {
         return ContextAxis::CatchAll;
     }
-    // A match that ALSO pins a non-dimension context field (TiledWindowCount) is
-    // not the (screen, desktop, activity) shape makeContextMatch emits, so it is
-    // not an exact-context assignment; treat it as CatchAll-axis so the batch
+    // A match that ALSO pins a non-dimension context field (Mode /
+    // TiledWindowCount / ScreenOrientation / ActiveLayout) is not the
+    // (screen, desktop, activity) shape makeContextMatch emits, so it is not an
+    // exact-context assignment; treat it as CatchAll-axis so the batch
     // projections skip it. It still resolves normally through the evaluator,
-    // which sees the count via the WindowQuery.
+    // which sees those fields via the WindowQuery.
     if (pinsNonDimensionContextField(match)) {
         return ContextAxis::CatchAll;
     }
@@ -587,10 +614,10 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
     if (!match.isContextOnly()) {
         return false;
     }
-    // A pinned non-dimension context leaf (TiledWindowCount) means the match is
-    // more specific than the bare (screen, desktop, activity) shape, so it is NOT
-    // exact — see contextAxisFor for why dropping it here would lose the leaf on
-    // rebuild.
+    // A pinned non-dimension context leaf (Mode / TiledWindowCount /
+    // ScreenOrientation / ActiveLayout) means the match is more specific than the
+    // bare (screen, desktop, activity) shape, so it is NOT exact — see
+    // contextAxisFor for why dropping it here would lose the leaf on rebuild.
     if (pinsNonDimensionContextField(match)) {
         return false;
     }

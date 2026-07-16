@@ -23,7 +23,6 @@ Rectangle {
     required property int dismissTimeout
     property bool showCloseButton: false
     property string accessibleRoleName: ""
-    readonly property alias text: bannerLabel.text
 
     function show(message) {
         bannerLabel.text = message;

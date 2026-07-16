@@ -296,10 +296,13 @@ void ZoneManager::restoreZones(const QVariantList& zones)
         }
         zoneIds.insert(zoneId);
 
-        // Check for duplicate numbers (warn but don't fail - numbers can be renumbered)
+        // Check for duplicate numbers. A restore replays a snapshot verbatim, so
+        // it never renumbers: the duplicate is kept as-is and both zones carry
+        // the same number. Warn only, since a duplicate number is not grounds to
+        // reject an otherwise valid snapshot.
         int zoneNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
         if (zoneNumber > 0 && zoneNumbers.contains(zoneNumber)) {
-            qCWarning(lcEditorZone) << "Duplicate zone number in restoreZones:" << zoneNumber << "(will be renumbered)";
+            qCWarning(lcEditorZone) << "Duplicate zone number in restoreZones, kept as-is:" << zoneNumber;
         }
         if (zoneNumber > 0) {
             zoneNumbers.insert(zoneNumber);

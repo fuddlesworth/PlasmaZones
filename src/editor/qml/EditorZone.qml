@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
@@ -109,7 +108,6 @@ Item {
     signal duplicateRequested
     signal splitHorizontalRequested
     signal splitVerticalRequested
-    signal expandToFillRequested
     signal expandToFillWithCoords(real mouseX, real mouseY) // Pass zone center for consistent algorithm
     signal deleteWithFillRequested
     signal bringToFrontRequested

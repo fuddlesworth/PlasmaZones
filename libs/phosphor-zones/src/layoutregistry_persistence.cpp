@@ -96,8 +96,15 @@ void LayoutRegistry::loadLayouts()
     // Current holders: OverlayService::m_layout / m_observedLayouts and
     // LayoutComputeService::m_trackedLayouts are QPointers;
     // ZoneDetector::m_layout is a raw pointer with a destroyed guard
-    // (see ZoneDetector::setLayout). A new raw-pointer holder without one of
+    // (see ZoneDetector::setLayout); SnappingShadersPageController::
+    // m_wiredLayouts is a QSet of raw pointers with a destroyed guard
+    // (onWiredLayoutDestroyed). A new raw-pointer holder without one of
     // those two is a use-after-free — this function does not protect it.
+    //
+    // Grep for the type alone and you will miss holders: m_wiredLayouts is
+    // typed QSet<QObject*>, not QSet<Layout*>, so it matches neither "Layout*"
+    // nor "QPointer<Layout>". Anything that keeps a Layout as a base-class
+    // pointer belongs on this list too.
     //
     // Self-nulling only gets a holder to null, not to the replacement object,
     // which is why the activeLayoutChanged emit at the end of this function is
@@ -257,12 +264,25 @@ void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
         // reaches fromJson through this path, and while mergeSettings restricts
         // itself to the settings key set (so it can no longer overwrite the id
         // or any other structural key), the VALUES it inserts under those keys
-        // are still whatever a corrupt or hand-edited sidecar entry holds. The
-        // merged shape is just the full (pre-split) layout format, which is
-        // what the schema describes and what importLayout already validates,
-        // so this is the same gate rather than a second one. The structural
-        // check stays: it runs first so a fault in the layout file is reported
-        // against the layout file.
+        // are still whatever a corrupt or hand-edited sidecar entry holds.
+        //
+        // Be precise about what this catches, because it is narrow. The schema
+        // declares only the structural keys plus showZoneNumbers, and leaves
+        // additionalProperties open — so of everything mergeSettings injects,
+        // only showZoneNumbers is type-checked here. The rest (the gap/padding
+        // values, overlayDisplayMode, autoAssign, hiddenFromSelector,
+        // useFullScreenGeometry, shaderId/shaderParams, the zoneAppearance
+        // block) passes unexamined and is left to fromJson's own per-key
+        // coercion. What this gate is really for is the structural surface the
+        // sidecar can no longer reach: mergeSettings re-emits the zones array
+        // when it applies zoneAppearance, so a merge that damaged a zone object
+        // is caught here rather than becoming broken geometry. Tightening the
+        // schema over the settings keys would widen it, but every producer of
+        // each key has to be enumerated first — a declared type narrower than
+        // what some writer emits rejects the user's whole layout.
+        //
+        // The structural check stays: it runs first so a fault in the layout
+        // file is reported against the layout file.
         if (!isLayoutJsonValid(merged, filePath + QStringLiteral(" (merged with layout-settings sidecar)"))) {
             continue;
         }

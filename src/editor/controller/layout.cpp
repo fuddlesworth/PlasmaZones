@@ -182,14 +182,14 @@ void EditorController::setTargetScreen(const QString& screenName)
 
 void EditorController::confirmPendingTargetScreen()
 {
-    if (m_pendingTargetScreen.isEmpty()) {
+    if (!m_pendingTargetScreen) {
         return;
     }
 
     // Clear before applying: applyTargetScreen loads a layout, which re-enters
     // enough of the controller that leaving the pending screen set would let a
     // second confirm apply it twice.
-    const QString screenName = std::exchange(m_pendingTargetScreen, QString());
+    const QString screenName = *std::exchange(m_pendingTargetScreen, std::nullopt);
     if (screenName == m_targetScreen) {
         return;
     }
@@ -198,7 +198,87 @@ void EditorController::confirmPendingTargetScreen()
 
 void EditorController::cancelPendingTargetScreen()
 {
-    m_pendingTargetScreen.clear();
+    m_pendingTargetScreen.reset();
+}
+
+void EditorController::applyLaunch(const PendingLaunch& launch)
+{
+    // The screen is applied with setTargetScreenDirect on the two paths that
+    // name a layout themselves: setTargetScreen would load the SCREEN's
+    // assigned layout, and the caller is about to load its own over the top.
+    // Preview mode is set unconditionally so state from a previous forwarded
+    // launch cannot leak into a later non-preview launch on the same instance.
+    auto switchScreen = [this](const QString& id, bool loadAssignedLayout) {
+        if (id.isEmpty() || m_targetScreen == id) {
+            return;
+        }
+        if (loadAssignedLayout) {
+            setTargetScreen(id);
+        } else {
+            setTargetScreenDirect(id);
+        }
+    };
+
+    if (launch.createNew) {
+        setPreviewMode(false);
+        switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
+        createNewLayout();
+    } else if (!launch.layoutId.isEmpty()) {
+        // Switch screen first (direct, no auto-load) so loadLayout resolves
+        // per-screen geometry and virtual-screen context against the target
+        // screen rather than whatever was current before the forward.
+        switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
+        setPreviewMode(launch.preview || PhosphorLayout::LayoutId::isAutotile(launch.layoutId));
+        loadLayout(launch.layoutId);
+    } else {
+        setPreviewMode(false);
+        // No layout named, so follow the screen's assigned layout. This is the
+        // one path that routes through setTargetScreen, and setTargetScreen
+        // runs its own unsaved-changes confirmation — which is why requestLaunch
+        // deliberately does NOT park this shape as well. See the note there.
+        switchScreen(launch.screenId, /*loadAssignedLayout*/ true);
+    }
+}
+
+void EditorController::requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
+{
+    const PendingLaunch launch{screenId, layoutId, createNew, preview};
+
+    // createNewLayout() and loadLayout() replace what is loaded outright, with
+    // no confirmation of their own, so with edits in flight they silently
+    // destroy the user's work. Those two shapes get parked and the UI asks.
+    //
+    // The remaining shape (a screen with no layout named) is deliberately NOT
+    // parked here. It defers to setTargetScreen, which already parks on its own
+    // for the same reason, and double-gating it would prompt twice: the answer
+    // to this prompt reaches applyLaunch with the edits still unsaved — Discard
+    // here means "go anyway", not "revert the layout" — so setTargetScreen
+    // would see a dirty controller and park a second time.
+    const bool replacesLayoutOutright = createNew || !layoutId.isEmpty();
+    if (m_hasUnsavedChanges && replacesLayoutOutright) {
+        m_pendingLaunch = launch;
+        Q_EMIT launchRequestRequiresConfirmation();
+        return;
+    }
+
+    applyLaunch(launch);
+}
+
+void EditorController::confirmPendingLaunch()
+{
+    if (!m_pendingLaunch) {
+        return;
+    }
+
+    // Clear before applying, for the same re-entrancy reason as
+    // confirmPendingTargetScreen: applyLaunch loads a layout.
+    const PendingLaunch launch = *std::exchange(m_pendingLaunch, std::nullopt);
+    applyLaunch(launch);
+}
+
+void EditorController::cancelPendingLaunch()
+{
+    m_pendingLaunch.reset();
 }
 
 namespace {
@@ -751,12 +831,17 @@ void EditorController::loadLayout(const QString& layoutId)
  * Serializes the layout to JSON and sends it to the daemon via D-Bus.
  * Creates a new layout if isNewLayout is true, otherwise updates existing layout.
  * Emits layoutSaveFailed signal on error, layoutSaved on success.
+ *
+ * Returns whether the save landed. Every false return has already emitted
+ * layoutSaveFailed and left m_hasUnsavedChanges set, so a caller that chains a
+ * layout-replacing action onto a save can gate it on this and leave the user's
+ * work in place when the daemon refuses the payload.
  */
-void EditorController::saveLayout()
+bool EditorController::saveLayout()
 {
     if (!m_layoutService || !m_zoneManager) {
         Q_EMIT layoutSaveFailed(PhosphorI18n::tr("Services not initialized"));
-        return;
+        return false;
     }
 
     // Build JSON from current state
@@ -901,7 +986,7 @@ void EditorController::saveLayout()
         QString newLayoutId = m_layoutService->createLayout(jsonStr);
         if (newLayoutId.isEmpty()) {
             // Error signal already emitted by service
-            return;
+            return false;
         }
         if (m_layoutId != newLayoutId) {
             m_layoutId = newLayoutId;
@@ -912,7 +997,7 @@ void EditorController::saveLayout()
         bool success = m_layoutService->updateLayout(jsonStr);
         if (!success) {
             // Error signal already emitted by service
-            return;
+            return false;
         }
     }
 
@@ -929,6 +1014,7 @@ void EditorController::saveLayout()
 
     Q_EMIT hasUnsavedChangesChanged();
     Q_EMIT layoutSaved();
+    return true;
 }
 
 /**

@@ -272,12 +272,8 @@ ToolBar {
                     Accessible.name: i18nc("@label", "Horizontal grid interval")
                     Accessible.description: i18nc("@info", "Adjust horizontal grid interval (1% to 50%)")
                     onMoved: {
-                        if (editorController) {
+                        if (editorController)
                             editorController.snapIntervalX = value;
-                            // Ensure grid snapping is enabled when changing interval
-                            if (!editorController.gridSnappingEnabled)
-                                editorController.gridSnappingEnabled = true;
-                        }
                     }
 
                     // Update when snapIntervalX changes externally
@@ -317,12 +313,8 @@ ToolBar {
                     Accessible.name: i18nc("@label", "Vertical grid interval")
                     Accessible.description: i18nc("@info", "Adjust vertical grid interval (1% to 50%)")
                     onMoved: {
-                        if (editorController) {
+                        if (editorController)
                             editorController.snapIntervalY = value;
-                            // Ensure grid snapping is enabled when changing interval
-                            if (!editorController.gridSnappingEnabled)
-                                editorController.gridSnappingEnabled = true;
-                        }
                     }
 
                     // Update when snapIntervalY changes externally

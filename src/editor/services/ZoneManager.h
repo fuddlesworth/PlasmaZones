@@ -33,7 +33,11 @@ class ZoneManager : public QObject
 
 public:
     explicit ZoneManager(QObject* parent = nullptr);
-    ~ZoneManager() override = default;
+    // Defined in ZoneManager.cpp, where ZoneAutoFiller is complete: m_autoFiller
+    // is a unique_ptr to a type only forward-declared here, so a defaulted
+    // in-class destructor would instantiate default_delete against an incomplete
+    // type in every TU that includes this header without ZoneAutoFiller.h.
+    ~ZoneManager() override;
 
     // PhosphorZones::Zone CRUD operations
     QString addZone(qreal x, qreal y, qreal width, qreal height);
@@ -333,6 +337,8 @@ private:
     bool m_pendingZonesModified = false;
     QSet<QString> m_pendingColorChanges;
     QSet<QString> m_pendingGeometryChanges;
+    QSet<QString> m_pendingNameChanges;
+    QSet<QString> m_pendingNumberChanges;
     QSet<QString> m_pendingZoneAdded;
     QSet<QString> m_pendingZoneRemoved;
 

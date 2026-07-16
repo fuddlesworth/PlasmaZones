@@ -75,11 +75,12 @@ Rectangle {
         return ColorUtils.extractZoneColor(selectedZone, propertyName, Qt.transparent);
     }
 
-    // Imperative sync for the geometry controls. Their declarative bindings
-    // die on the first user edit (QQC2) or imperative write, so both the
-    // selection-change and zonesChanged paths re-apply the model state here.
-    // Callers that observe the controller's signal directly can pass a fresh
-    // zone map, since the panel's own selectedZone property lags that signal.
+    // Imperative sync for the geometry controls. The writes below sever these
+    // controls' declarative bindings, so from the first call onward this is the
+    // only thing that keeps them on the model, and both the selection-change and
+    // zonesChanged paths have to re-apply it. Callers that observe the
+    // controller's signal directly can pass a fresh zone map, since the panel's
+    // own selectedZone property lags that signal.
     function syncGeometryControls(freshZone) {
         const zone = (freshZone && freshZone.id) ? freshZone : selectedZone;
         if (!zone)
@@ -230,8 +231,7 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Highlight:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     baseColor: propertyPanel.multiHighlightColor
-                    // Safe reference - multiActiveOpacitySlider is defined later in file
-                    opacityMultiplier: multiActiveOpacitySlider ? multiActiveOpacitySlider.opacityValue : propertyPanel.defaultOpacity
+                    opacityMultiplier: multiActiveOpacitySlider.opacityValue
                     isMultiMode: true
                     accessibleName: i18nc("@label", "Highlight color picker for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Choose highlight color for all selected zones")
@@ -245,8 +245,7 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Inactive:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     baseColor: propertyPanel.multiInactiveColor
-                    // Safe reference - multiInactiveOpacitySlider is defined later in file
-                    opacityMultiplier: multiInactiveOpacitySlider ? multiInactiveOpacitySlider.opacityValue : propertyPanel.defaultInactiveOpacity
+                    opacityMultiplier: multiInactiveOpacitySlider.opacityValue
                     isMultiMode: true
                     accessibleName: i18nc("@label", "Inactive color picker for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Choose inactive color for all selected zones")
@@ -592,10 +591,12 @@ Rectangle {
                 }
 
                 // Sync geometry, name, and number controls when zone data changes
-                // (undo/redo, external updates). Includes the mode checkbox: its
-                // `checked` binding dies on the first manual toggle, so an undone/
-                // redone mode toggle must be reflected imperatively. Not gated on
-                // fixedGeometryCheck.checked for the same reason.
+                // (undo/redo, external updates). A user click does not sever a
+                // binding (the control writes its value from C++), but this
+                // function's own imperative writes do, so once it has run these
+                // controls have no bindings left and it is the only thing keeping
+                // them current. Includes the mode checkbox, and is not gated on
+                // fixedGeometryCheck.checked, for that reason.
                 Connections {
                     function onZonesChanged() {
                         // Qt.callLater avoids binding loops, and the stable function
@@ -638,8 +639,7 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Highlight:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     baseColor: getZoneColor("highlightColor")
-                    // Safe reference - activeOpacitySlider is defined later in file
-                    opacityMultiplier: activeOpacitySlider ? activeOpacitySlider.opacityValue : propertyPanel.defaultOpacity
+                    opacityMultiplier: activeOpacitySlider.opacityValue
                     isMultiMode: false
                     accessibleName: i18nc("@label", "Highlight color picker")
                     toolTipText: i18nc("@info:tooltip", "Choose color for highlighted/active zones")
@@ -657,8 +657,7 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Inactive:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     baseColor: getZoneColor("inactiveColor")
-                    // Safe reference - inactiveOpacitySlider is defined later in file
-                    opacityMultiplier: inactiveOpacitySlider ? inactiveOpacitySlider.opacityValue : propertyPanel.defaultInactiveOpacity
+                    opacityMultiplier: inactiveOpacitySlider.opacityValue
                     isMultiMode: false
                     accessibleName: i18nc("@label", "Inactive color picker")
                     toolTipText: i18nc("@info:tooltip", "Choose color for non-selected zones")

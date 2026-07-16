@@ -113,6 +113,13 @@ EditorController::EditorController(QObject* parent)
     m_layoutReloadTimer.setInterval(50);
     connect(&m_layoutReloadTimer, &QTimer::timeout, this, &EditorController::reloadLocalLayouts);
 
+    // Same coalescing shape for editor-settings writes. 250 ms: long enough to
+    // swallow a slider drag's mouse-move burst, short enough that the write
+    // still feels immediate once the user lets go.
+    m_editorSettingsSaveTimer.setSingleShot(true);
+    m_editorSettingsSaveTimer.setInterval(250);
+    connect(&m_editorSettingsSaveTimer, &QTimer::timeout, this, &EditorController::flushEditorSettings);
+
     auto bus = QDBusConnection::sessionBus();
     const QString svc = QString(PhosphorProtocol::Service::Name);
     const QString path = QString(PhosphorProtocol::Service::ObjectPath);
@@ -193,8 +200,13 @@ EditorController::EditorController(QObject* parent)
 
 EditorController::~EditorController()
 {
-    // Save editor settings to KConfig
-    saveEditorSettings();
+    // Flush a queued settings write rather than queueing another: the timer
+    // will never fire again from here, so a still-pending edit (the user closed
+    // the editor within the debounce window of their last change) would be lost.
+    if (m_editorSettingsSaveTimer.isActive()) {
+        m_editorSettingsSaveTimer.stop();
+        flushEditorSettingsBlocking();
+    }
 
     // Services are QObjects with this as parent, so they'll be deleted automatically.
 }

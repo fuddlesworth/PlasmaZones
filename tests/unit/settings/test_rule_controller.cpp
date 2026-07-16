@@ -138,7 +138,6 @@ void TestRuleController::dirtyTrackingAndRevert()
 
     // Adding a rule flips the dirty bit.
     QVERIFY(controller.isDirty());
-    QVERIFY(controller.hasPendingChanges());
     QVERIFY(dirtySpy.count() >= 1);
 
     // revert() re-fetches the daemon's authoritative set asynchronously and
@@ -146,10 +145,22 @@ void TestRuleController::dirtyTrackingAndRevert()
     // test guards is the linkage between the async outcome and the dirty-state
     // transition: a successful revert (rulesLoaded fires) MUST clear dirty, a
     // failed revert MUST preserve it. The earlier bug was a failed revert
-    // silently dropping staged edits while reporting success. The check is
-    // symmetric so it passes both in a fully headless run (daemon absent →
-    // revert fails → dirty stays) and on a dev machine with a live daemon
-    // (revert succeeds → dirty clears).
+    // silently dropping staged edits while reporting success.
+    //
+    // The check is symmetric, so it passes whether or not a daemon answers —
+    // but only one arm is ever a real assertion on a given run, and CI runs the
+    // failure arm exclusively: there is no daemon on the session bus, so
+    // `reverted` is always false there and only "a failed revert preserves
+    // dirty" is exercised. The success arm runs only on a dev box with the
+    // daemon up. That asymmetry is accepted rather than mocked away: the
+    // controller reaches the bus directly through `QDBusConnection::sessionBus()`
+    // (see rulecontroller.cpp's fetchAndLoad), so making the success arm
+    // hermetic means standing up a real `org.plasmazones.Rules` service on a
+    // private bus — a fixture no other test in this file needs, for one
+    // transition the daemon-side rule tests already cover from the other end.
+    // Do NOT read a green CI run as evidence that a successful revert clears
+    // dirty; that leg is covered on demand by running this test under
+    // `dbus-run-session` with the daemon started.
     QSignalSpy loadedSpy(&controller, &RuleController::rulesLoaded);
     controller.revert();
     // Pump the event loop briefly so the QDBusPendingCall reply (success or
@@ -1450,6 +1461,13 @@ void TestRuleController::curveLabelResolverBridgesQmlNaming()
     QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
 
     // A non-callable value clears the resolver — the summary falls back to raw.
+    // Re-install the working resolver first: the empty-resolver step above
+    // already left the summary at the raw value, so clearing straight from there
+    // asserted a no-op transition and stayed green even when the clear did
+    // nothing at all. Going labelled → raw is the transition the contract is
+    // about.
+    controller.setCurveLabelResolver(resolver);
+    QCOMPARE(summary(), QStringLiteral("Curve: Standard (Cubic)"));
     controller.setCurveLabelResolver(QJSValue());
     QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
 }

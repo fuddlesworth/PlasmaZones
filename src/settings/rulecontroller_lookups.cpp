@@ -65,6 +65,14 @@ void RuleController::setOverlayShaderLookup(RuleModel::LabelLookup fn)
 
 void RuleController::setCurveLabelResolver(const QJSValue& resolver)
 {
+    // `m_curveResolver` is the whole of the resolver state — the lookup below
+    // reads it live on every call and never captures it. So this assignment IS
+    // the install, the swap AND the clear: passing a non-callable value leaves
+    // the lookup wired but makes it return the raw wire string, which is the
+    // documented "raw value shown" behaviour. There is deliberately no
+    // `else { setCurveLabelLookup({}); }` branch — clearing the lookup would be
+    // a second way to spell the same outcome, and one the live re-read below
+    // already covers.
     m_curveResolver = resolver;
     if (resolver.isCallable()) {
         m_model.setCurveLabelLookup([this](const QString& wire) -> QString {
@@ -80,8 +88,6 @@ void RuleController::setCurveLabelResolver(const QJSValue& resolver)
             const QString label = result.toString();
             return label.isEmpty() ? wire : label;
         });
-    } else {
-        m_model.setCurveLabelLookup({});
     }
     // The resolver arrives from QML page init, which can run after the rule
     // set is already loaded — refresh so visible Curve labels pick it up.

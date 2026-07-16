@@ -27,10 +27,16 @@
 // preview from any other producer gets `undefined`, not `false`.
 //
 // Canonical shape (all keys always present unless marked optional):
-//   id, displayName, description?, zoneCount, zones[], isAutotile, isSystem,
-//   recommended, autoAssign, aspectRatioClass (string tag: "any" /
+//   id, displayName, description?, zoneCount, zones[], isAutotile, category,
+//   isSystem, recommended, autoAssign, aspectRatioClass (string tag: "any" /
 //   "standard" / "ultrawide" / "super-ultrawide" / "portrait"),
 //   referenceAspectRatio?, sectionKey?, sectionLabel?, sectionOrder?
+//
+// `category` is the numeric PhosphorZones::LayoutCategory mirror of the
+// `isAutotile` boolean (0 = Manual, 1 = Autotile). Both are emitted
+// unconditionally because QML consumers are split: LayoutCard / CategoryBadge
+// read the enum, LayoutComboBox reads `category` first and only falls back to
+// `isAutotile` for objects from other producers.
 //
 // When the preview backs an autotile algorithm (@c isAutotile == true)
 // the algorithm metadata fields are flattened into the SAME top-level

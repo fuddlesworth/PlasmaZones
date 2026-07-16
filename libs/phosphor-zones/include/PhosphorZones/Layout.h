@@ -493,8 +493,19 @@ private:
     QList<int> m_allowedDesktops; // empty = all desktops
     QStringList m_allowedActivities; // empty = all activities
 
-    // Cache last geometry used for recalculation to avoid redundant work
+    // Screen rect the zone geometries were last recalculated against. Empty
+    // means "no screen known yet". Doubles as the reference frame the derived
+    // relativeGeometry is defined over — see fixedZoneReferenceGeometry.
     mutable QRectF m_lastRecalcGeometry;
+
+    // Set when the zone SET changes (add / remove / clear). Editing the zone
+    // list leaves the recalculated absolute geometries stale, but it does not
+    // move the layout to another screen, so the rect above stays valid as a
+    // reference and only the recompute is owed. Keeping these two facts apart
+    // is what lets a serialization that follows a zone swap still normalize
+    // against the screen instead of silently falling back to the fixed-zone
+    // bounding box.
+    bool m_zoneGeometryDirty = false;
 
     // Cached classification derived from m_sourcePath. Recomputed in
     // setSourcePath so isSystemLayout() is O(1) — QStandardPaths lookups add

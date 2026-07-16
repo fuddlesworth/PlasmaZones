@@ -8,6 +8,7 @@
 #include <QDBusMetaType>
 #include <QDBusPendingCall>
 #include "../core/constants.h"
+#include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
 namespace PlasmaZones::DaemonDBus {
@@ -34,12 +35,14 @@ inline QDBusMessage callDaemon(const QString& interface, const QString& method, 
 /// m_saving guard.  An async call here races: the settingsChanged
 /// signal can arrive after m_saving is false, triggering a spurious
 /// load() that reverts just-saved assignments.
+///
+/// The call itself lives in PhosphorProtocol::ClientHelpers so the editor —
+/// a separate app that cannot include this GPL settings-app header — spells
+/// the same wire contract without a second hand-rolled copy. It picks the
+/// async form there: it has no guard to order against the reply.
 inline void notifyReload()
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("reloadSettings"));
-    QDBusConnection::sessionBus().call(msg, QDBus::Block, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    PhosphorProtocol::ClientHelpers::reloadDaemonSettingsBlocking();
 }
 
 // The three settings-WRITE helpers that used to live here (setDaemonSettings,

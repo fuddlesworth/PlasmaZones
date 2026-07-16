@@ -154,6 +154,23 @@ Window {
         return editorShortcuts.formatShortcut(shortcut);
     }
 
+    // Resolve a screen id to the label the user actually sees. The controller
+    // identifies screens by id ("DP-1", or a virtual-screen id), but every
+    // screen button in TopBar renders displayName with the id only as a
+    // fallback, so anything naming a screen back to the user has to resolve it
+    // the same way or it names a screen the user cannot match to a button.
+    function displayNameForScreen(screenId) {
+        if (!editorWindow._editorController)
+            return screenId;
+
+        var screens = editorWindow._editorController.screenModel;
+        for (var i = 0; i < screens.length; i++) {
+            if (screens[i].name === screenId)
+                return screens[i].displayName || screens[i].name || screenId;
+        }
+        return screenId;
+    }
+
     // Open the shared context menu for a specific zone
     function openContextMenu(zoneId) {
         sharedContextMenu.zoneId = zoneId;
@@ -745,9 +762,13 @@ Window {
         subtitle: i18nc("@info", "You have unsaved changes. What would you like to do?")
         standardButtons: Kirigami.Dialog.Save | Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
         preferredWidth: Kirigami.Units.gridUnit * 24
+        // Close only once the save has actually landed. A refused save leaves
+        // the layout dirty and emits layoutSaveFailed, and closing anyway would
+        // throw away the work the user pressed Save to keep. Staying open keeps
+        // the editor on screen with the edits intact and the error visible.
         onAccepted: {
-            if (editorWindow._editorController)
-                editorWindow._editorController.saveLayout();
+            if (editorWindow._editorController && !editorWindow._editorController.saveLayout())
+                return;
 
             editorWindow.close();
         }
@@ -763,31 +784,79 @@ Window {
     Kirigami.PromptDialog {
         id: confirmScreenSwitchDialog
 
-        // Screen the parked switch is heading for, set by the handler that
-        // opens this dialog. Shown so the user knows what they are switching to.
+        // Label of the screen the parked switch is heading for, set by the
+        // handler that opens this dialog. It carries the display label rather
+        // than the screen id so the prompt names the screen the same way the
+        // button the user just clicked does.
         property string screenName: ""
 
         title: i18nc("@title:window", "Unsaved Changes")
         subtitle: i18nc("@info", "Switching to %1 will load that screen's layout. What would you like to do with your unsaved changes?", confirmScreenSwitchDialog.screenName)
         standardButtons: Kirigami.Dialog.Save | Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
         preferredWidth: Kirigami.Units.gridUnit * 24
+        // Apply the parked switch only once the save has landed. The switch
+        // loads the target screen's layout OVER the current one, so confirming
+        // it after a refused save destroys the very edits the user pressed Save
+        // to keep. Leaving the switch unconfirmed degrades correctly: onClosed
+        // drops the parked screen, so the editor simply stays where it is with
+        // the edits intact and layoutSaveFailed showing why.
         onAccepted: {
-            if (editorWindow._editorController) {
-                editorWindow._editorController.saveLayout();
+            if (editorWindow._editorController && editorWindow._editorController.saveLayout())
                 editorWindow._editorController.confirmPendingTargetScreen();
-            }
         }
+        // Kirigami's Dialog re-emits discarded() and leaves itself open — only
+        // the Save path routes through accept(), which closes. Answer the
+        // controller first, then close by hand, or the prompt would stay up over
+        // the layout the switch has already loaded underneath it.
         onDiscarded: {
             if (editorWindow._editorController)
                 editorWindow._editorController.confirmPendingTargetScreen();
+
+            confirmScreenSwitchDialog.close();
         }
         // Cancel, Esc and click-away all land here without having answered, so
-        // this is where the parked screen gets dropped. Save and Discard answer
-        // in their own handlers, which run before the dialog closes and clear
-        // the parked screen, leaving this call a no-op.
+        // this is where the parked screen gets dropped. A save that FAILED
+        // lands here unanswered too, which is exactly the wanted outcome: the
+        // switch is abandoned and the unsaved layout stays loaded.
+        // A successful Save and a Discard have already answered the controller
+        // by the time this runs — Save from onAccepted before Kirigami closes
+        // the dialog, Discard from the close call in onDiscarded above — and
+        // answering clears the parked screen, so the call below is a no-op on
+        // those paths.
         onClosed: {
             if (editorWindow._editorController)
                 editorWindow._editorController.cancelPendingTargetScreen();
+        }
+    }
+
+    // A forwarded launch (a second `plasmazones-editor --new` / `--layout <id>`,
+    // or a settings/KCM button) wants to replace the loaded layout while there
+    // are unsaved edits. The controller parks it and asks rather than applying,
+    // so every button here answers it and the parked request never lingers.
+    Kirigami.PromptDialog {
+        id: confirmLaunchDialog
+
+        title: i18nc("@title:window", "Unsaved Changes")
+        subtitle: i18nc("@info", "Opening another layout will replace the one you are editing. What would you like to do with your unsaved changes?")
+        standardButtons: Kirigami.Dialog.Save | Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
+        preferredWidth: Kirigami.Units.gridUnit * 24
+        // Same rule as the screen-switch prompt: apply the parked request only
+        // once the save has landed, or a refused save loses the work anyway.
+        onAccepted: {
+            if (editorWindow._editorController && editorWindow._editorController.saveLayout())
+                editorWindow._editorController.confirmPendingLaunch();
+        }
+        onDiscarded: {
+            if (editorWindow._editorController)
+                editorWindow._editorController.confirmPendingLaunch();
+
+            confirmLaunchDialog.close();
+        }
+        // Cancel, Esc, click-away and a failed save all land here without
+        // having answered, which is where the parked request gets dropped.
+        onClosed: {
+            if (editorWindow._editorController)
+                editorWindow._editorController.cancelPendingLaunch();
         }
     }
 
@@ -918,8 +987,15 @@ Window {
         // unsaved edits. Ask, then answer it either way — leaving the prompt
         // unanswered would strand the parked screen.
         function onTargetScreenChangeRequiresConfirmation(screenName) {
-            confirmScreenSwitchDialog.screenName = screenName;
+            confirmScreenSwitchDialog.screenName = editorWindow.displayNameForScreen(screenName);
             confirmScreenSwitchDialog.open();
+        }
+
+        // The controller parked a forwarded launch because the current layout
+        // has unsaved edits. Same contract as the screen switch above: ask,
+        // then answer it either way so the parked request never strands.
+        function onLaunchRequestRequiresConfirmation() {
+            confirmLaunchDialog.open();
         }
 
         target: editorWindow._editorController

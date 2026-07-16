@@ -79,9 +79,9 @@ public:
     /// invalidate the cached label cells — re-installing the lookups would
     /// just churn the closures without changing behaviour.
     ///
-    /// All lookups (screen, activity, zone, snappingLayout, tilingAlgorithm,
-    /// shaderEffect, overlayShader, decorationPack, curve) must be wired for the
-    /// model to render rich
+    /// All lookups (screen, activity, zone, virtualDesktop, snappingLayout,
+    /// tilingAlgorithm, shaderEffect, overlayShader, decorationPack, curve) must
+    /// be wired for the model to render rich
     /// `matchSummary` / `actionSummary` cells — a missing lookup falls
     /// back to printing the raw id/UUID. SettingsController is the
     /// single intended caller and installs all of them during page
@@ -176,13 +176,6 @@ public:
     /// revertFinished re-marking in SettingsController is wired off the
     /// signal, so it fires regardless of whether QML or load() calls this.
     Q_INVOKABLE void revert();
-
-    /// True iff there are unsaved staged edits. Mirror of `isDirty()` for the
-    /// `SettingsController` pending-changes gate.
-    bool hasPendingChanges() const
-    {
-        return m_dirty;
-    }
 
     // ── User-rule dirty check (the Rules page) ───────────────────────────────
     //
@@ -371,9 +364,12 @@ public:
     /// drive the check.
     Q_INVOKABLE QVariantList validationIssuesForJson(const QVariantMap& ruleJson) const;
 
-    /// True iff the @p matchJson sub-tree references only context fields
-    /// (ScreenId / VirtualDesktop / Activity) — i.e. it is compatible with
-    /// every action's domain. The picker uses this to flag context-domain
+    /// True iff the @p matchJson sub-tree references only context fields — i.e.
+    /// it is compatible with every action's domain. "Context field" is whatever
+    /// `PhosphorRules::fieldIsContext` reports, which is every
+    /// `FieldSource::Context` row of the field table: today ScreenId,
+    /// VirtualDesktop, Activity, Mode, TiledWindowCount, ScreenOrientation and
+    /// ActiveLayout. The picker uses this to flag context-domain
     /// action types as incompatible when the current match has a
     /// window-property leaf. An empty / catch-all match counts as
     /// context-only.

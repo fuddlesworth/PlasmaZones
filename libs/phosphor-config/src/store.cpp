@@ -244,8 +244,8 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
 #endif
 
     // Path resolver: install via the backend's polymorphic hook. Backends
-    // without a resolver concept (QSettingsBackend) inherit the no-op
-    // default, so the call is cheap and safe.
+    // without a resolver concept inherit the no-op default, so the call is
+    // cheap and safe.
     //
     // Shared-backend safety: refuse to clobber an existing resolver since
     // multiple Stores can share one backend (see class docs). The first
@@ -281,8 +281,8 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
 
     // Migration chain: route through IBackend::applyMigration. Backends that
     // support it (JsonBackend) take a snapshot, run the chain, and commit
-    // atomically on a version bump. Backends that don't (QSettingsBackend,
-    // in-memory mocks without a JSON root) inherit the no-op default that
+    // atomically on a version bump. Backends that don't (in-memory mocks
+    // without a JSON root) inherit the no-op default that
     // returns false — surfaced here as a qWarning so a silently-dropped
     // migration chain doesn't become a runtime surprise.
     if (!d->schema.migrations.isEmpty()) {
@@ -358,9 +358,9 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
         // validator on both sides agreeing on the same canonical form.
         //
         // Unlike reset() / resetGroup(), this path does NOT skip writing on
-        // (absent && coerced == default) — Settings::save() relies on
-        // write() materialising every declared key onto disk so the
-        // stale-key purge can run from a fully-populated baseline.
+        // (absent && coerced == default) — a consumer's save path that purges
+        // stale keys relies on write() materialising every declared key onto
+        // disk so the purge can run from a fully-populated baseline.
         if (g->hasKey(key)) {
             const QVariant current = readVariantAs(*g, key, def->defaultValue, def->expectedType);
             if (current == coerced) {

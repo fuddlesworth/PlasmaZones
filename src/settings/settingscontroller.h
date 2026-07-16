@@ -734,19 +734,25 @@ private:
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
     WindowAppearanceController* m_windowAppearancePage = nullptr;
     GeneralPageController* m_generalPage = nullptr;
-    /// Parented to `this` so Qt manages lifetime; the raw pointer is fine
-    /// because every consumer is also a child of this controller and Qt's
-    /// child cleanup walks in reverse-insertion order. Constructed before
-    /// m_animationsPage so the page controller's non-owned pointer
-    /// outlives the page through child-destruction order.
+    /// Parented to `this` so Qt manages lifetime. Every consumer is also a child
+    /// of this controller, and `~QObject` deletes children in INSERTION order
+    /// (QObjectPrivate::deleteChildren walks the child list front to back — it
+    /// is not a reverse walk). This registry is constructed before
+    /// m_animationsPage, so it is destroyed BEFORE the page, and the page's
+    /// non-owned pointer to it dangles for the remainder of the teardown. That
+    /// is safe only because ~AnimationsPageController is `= default` and touches
+    /// nothing through the pointer. Anything added to that dtor which reaches
+    /// this registry is a use-after-free — construct the registry AFTER the page
+    /// (or reparent it) before writing such a dtor.
     PhosphorAnimationShaders::AnimationShaderRegistry* m_animationShaderRegistry = nullptr;
     AnimationsPageController* m_animationsPage = nullptr;
     /// Settings-side mirror of the daemon's/compositor's surface-shader
     /// registry — drives the Decoration page's per-surface pack chains. Same
-    /// parent / declaration-order rationale as `m_animationShaderRegistry`
-    /// above: a QObject child of `this`, constructed before
-    /// `m_decorationPage` so the page controller's non-owned registry
-    /// pointer outlives the page through child-destruction order.
+    /// parent / construction-order situation as `m_animationShaderRegistry`
+    /// above: a QObject child of `this` constructed before `m_decorationPage`,
+    /// so insertion-order child deletion tears the registry down FIRST and the
+    /// page's non-owned registry pointer dangles through its own destruction.
+    /// Safe only while `~DecorationPageController` stays `= default`.
     PhosphorSurfaceShaders::SurfaceShaderRegistry* m_surfaceShaderRegistry = nullptr;
     DecorationPageController* m_decorationPage = nullptr;
     /// Rules page sub-controller. Parented to `this`; owns its
@@ -755,7 +761,7 @@ private:
     RuleController* m_rulesPage = nullptr;
     /// Settings-side mirror of the daemon's overlay-shader registry —
     /// drives the read-only Snapping → Shaders browser. Same parent /
-    /// declaration-order rationale as `m_animationShaderRegistry` above.
+    /// construction-order situation as `m_animationShaderRegistry` above.
     /// The companion `m_snappingShadersPage` is declared further down as
     /// a `std::unique_ptr<>` (after `m_localLayoutManager`) because that
     /// page borrows the layout registry — see the declaration-order

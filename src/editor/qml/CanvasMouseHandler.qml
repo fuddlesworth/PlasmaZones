@@ -35,21 +35,17 @@ Item {
      * @param mouseY Current mouse Y position
      */
     function updateSelectionRect(mouseX, mouseY) {
-        // Calculate selection rectangle (handle negative dimensions)
-        var x = Math.min(selectionStart.x, mouseX);
-        var y = Math.min(selectionStart.y, mouseY);
-        var w = Math.abs(mouseX - selectionStart.x);
-        var h = Math.abs(mouseY - selectionStart.y);
-        // Clamp to canvas bounds
-        x = Math.max(0, x);
-        y = Math.max(0, y);
-        if (x + w > drawingArea.width)
-            w = drawingArea.width - x;
-
-        if (y + h > drawingArea.height)
-            h = drawingArea.height - y;
-
-        selectionRect = Qt.rect(x, y, w, h);
+        // Clamp both edges of the rectangle, then derive the extent from the
+        // clamped pair. MouseArea reports coordinates outside the item during a
+        // grabbed drag, so deriving the extent from the raw origin and clamping
+        // only the origin afterwards would keep the off-canvas overshoot in the
+        // width: dragging left from x=100 to x=-50 gave 0..150 rather than
+        // 0..100 and selected zones the user never dragged over.
+        const left = Math.max(0, Math.min(selectionStart.x, mouseX));
+        const right = Math.min(drawingArea.width, Math.max(selectionStart.x, mouseX));
+        const top = Math.max(0, Math.min(selectionStart.y, mouseY));
+        const bottom = Math.min(drawingArea.height, Math.max(selectionStart.y, mouseY));
+        selectionRect = Qt.rect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
     }
 
     /**
@@ -185,7 +181,6 @@ Item {
 
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
-        z: -1 // Below zones so zone clicks work
         propagateComposedEvents: false
         // Ensure drawingArea maintains focus when clicking empty space
         onClicked: function (mouse) {

@@ -24,6 +24,8 @@
  * the thing under test and nothing below the bus can exercise it.
  */
 
+#include <memory>
+
 #include <QCoreApplication>
 #include <QDBusAbstractAdaptor>
 #include <QDBusConnection>
@@ -90,10 +92,12 @@ private Q_SLOTS:
                 "Run this test under dbus-run-session.");
         }
 
-        m_owner = new QObject();
-        m_stub = new StubLayoutRegistry(m_owner);
-        QVERIFY2(m_bus.registerObject(PhosphorProtocol::Service::ObjectPath, m_owner, QDBusConnection::ExportAdaptors),
-                 qPrintable(m_bus.lastError().message()));
+        m_owner = std::make_unique<QObject>();
+        // Parented to m_owner, so the unique_ptr's reset below takes it too.
+        m_stub = new StubLayoutRegistry(m_owner.get());
+        QVERIFY2(
+            m_bus.registerObject(PhosphorProtocol::Service::ObjectPath, m_owner.get(), QDBusConnection::ExportAdaptors),
+            qPrintable(m_bus.lastError().message()));
     }
 
     void cleanupTestCase()
@@ -102,8 +106,7 @@ private Q_SLOTS:
             m_bus.unregisterObject(PhosphorProtocol::Service::ObjectPath);
             m_bus.unregisterService(PhosphorProtocol::Service::Name);
         }
-        delete m_owner;
-        m_owner = nullptr;
+        m_owner.reset();
         m_stub = nullptr;
     }
 
@@ -163,8 +166,8 @@ private Q_SLOTS:
 
 private:
     QDBusConnection m_bus = QDBusConnection::sessionBus();
-    QObject* m_owner = nullptr;
-    StubLayoutRegistry* m_stub = nullptr;
+    std::unique_ptr<QObject> m_owner;
+    StubLayoutRegistry* m_stub = nullptr; ///< Owned by m_owner via QObject parenting.
 };
 
 QTEST_MAIN(TestDBusLayoutServiceReplies)

@@ -1245,14 +1245,33 @@ private:
     PhosphorTiles::TilingState* stateForKey(const PhosphorEngine::TilingStateKey& key);
 
     /**
+     * @brief Which states a global propagate writes.
+     *
+     * CurrentContext is the passive refresh: only the current desktop/activity's
+     * states are written, so a per-desktop tuning on another desktop survives.
+     *
+     * AllContexts is for a refresh that has just DROPPED the per-key user-tuned
+     * flags because the user changed the global value in Settings. The clear
+     * spans every key, so the write must too — a clear that outruns the write
+     * leaves a state holding a tuned value with no flag protecting it, and the
+     * next CurrentContext propagate to run while that state's desktop is current
+     * overwrites the user's value out of nowhere. Same clear-scope/write-scope
+     * pairing as AutotileEngine::setGlobalSplitRatio and its master-count twin.
+     */
+    enum class PropagateScope {
+        CurrentContext,
+        AllContexts,
+    };
+
+    /**
      * @brief Propagate global split ratio to screens without per-screen overrides
      */
-    void propagateGlobalSplitRatio();
+    void propagateGlobalSplitRatio(PropagateScope scope = PropagateScope::CurrentContext);
 
     /**
      * @brief Propagate global master count to screens without per-screen overrides
      */
-    void propagateGlobalMasterCount();
+    void propagateGlobalMasterCount(PropagateScope scope = PropagateScope::CurrentContext);
 
     /**
      * @brief Backfill windows on screens where tiledWindowCount < maxWindows

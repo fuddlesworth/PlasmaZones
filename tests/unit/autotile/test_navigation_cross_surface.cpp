@@ -27,6 +27,7 @@
 #include "FakeScreenProvider.h"
 #include "core/crosssurfaceresolver.h"
 
+#include "../helpers/AutotileFakes.h"
 #include "../helpers/AutotileTestHelpers.h"
 #include "../helpers/VirtualScreenTestHelpers.h"
 #include "../helpers/LayoutRegistryTestHelpers.h"
@@ -108,6 +109,7 @@ private Q_SLOTS:
     void crossOutput_moveFloatRuledTiledWindow_keepsItTiled();
     void crossOutput_focusMigrationToFullOutput_doesNotStrandWindow();
     void crossOutput_focusMigrationOfFloatedWindowToFullOutput_doesNotStrandWindow();
+    void crossOutput_focusMigrationOfStickyIgnoredWindow_doesNotStrandWindow();
     void inSurfaceMove_doesNotEmitExpectedMove();
     void crossVirtualScreen_focusRight_crossesToSiblingVirtualScreen();
 
@@ -195,6 +197,13 @@ namespace {
 struct TwoOutputFixture
 {
     PhosphorScreens::FakeScreenProvider provider;
+    // Only reachable by the engine when the fixture is built with
+    // withStickyPolicy — the sticky arm of shouldTileWindow() needs BOTH a
+    // window tracker (to answer isWindowSticky) and an IAutotileSettings (to
+    // answer the handling mode), and the default fixture deliberately keeps the
+    // engine's null-tracker/null-settings shape the other tests rely on.
+    PlasmaZones::TestHelpers::FakeStickyWindowTracking tracker;
+    PlasmaZones::TestHelpers::FakeAutotileSettings settings;
     std::unique_ptr<PhosphorScreens::ScreenManager> manager;
     // Declared BEFORE engine: the engine holds the resolver as a raw
     // m_crossSurfaceResolver, so it must not outlive it. Members destroy in
@@ -202,15 +211,18 @@ struct TwoOutputFixture
     std::unique_ptr<PlasmaZones::CrossSurfaceResolver> resolver;
     std::unique_ptr<AutotileEngine> engine;
 
-    TwoOutputFixture()
+    explicit TwoOutputFixture(bool withStickyPolicy = false)
     {
         provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
         provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
         manager = std::make_unique<PhosphorScreens::ScreenManager>(
             PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
         manager->start();
-        engine =
-            std::make_unique<AutotileEngine>(nullptr, nullptr, manager.get(), PlasmaZones::TestHelpers::testRegistry());
+        engine = std::make_unique<AutotileEngine>(nullptr, withStickyPolicy ? &tracker : nullptr, manager.get(),
+                                                  PlasmaZones::TestHelpers::testRegistry());
+        if (withStickyPolicy) {
+            engine->setEngineSettings(&settings);
+        }
         resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
         engine->setCrossSurfaceResolver(resolver.get());
         engine->setAutotileScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
@@ -596,6 +608,55 @@ void TestNavigationCrossSurface::crossOutput_focusMigrationOfFloatedWindowToFull
              "a floated window consumes no tile slot and must never be refused by the cap");
     // It arrived carrying its live float state, so it must not read as tiled.
     QVERIFY(!fx.engine->isWindowTiled(QStringLiteral("a2")));
+}
+
+void TestNavigationCrossSurface::crossOutput_focusMigrationOfStickyIgnoredWindow_doesNotStrandWindow()
+{
+    // The other disjunct of onWindowAdded's opening gate, and the same stranding.
+    // shouldTileWindow() answers false for a sticky window while the sticky
+    // handling is IgnoreAll (or RestoreOnly) — and a window can become sticky
+    // AFTER it was tiled: updateStickyScreenPins only pins, nothing retroactively
+    // untiles it. So a2 is tiled on DP-1, the user marks it "on all desktops",
+    // and the compositor then moves it to DP-2.
+    //
+    // DP-2 has room here (default cap), so the cap gate cannot fire: this pins the
+    // sticky arm alone. The reactive path has already removed a2 from DP-1 by the
+    // time onWindowAdded runs, so refusing on the open-time sticky policy would
+    // strand it exactly as a cap refusal would.
+    TwoOutputFixture fx(/*withStickyPolicy=*/true);
+    fx.tracker.stickyWindows.insert(QStringLiteral("a2"));
+    fx.settings.stickyHandling = PhosphorEngine::StickyWindowHandling::IgnoreAll;
+    QVERIFY(fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->tiledWindows().contains(QStringLiteral("a2")));
+
+    // windowsBatchFloated is the OVERFLOW channel and applyTiling feeds it from
+    // state->tiledWindows(), so a2 can only appear there if it was inserted
+    // TILED — the same positive proof crossOutput_moveFloatRuledTiledWindow_
+    // keepsItTiled relies on, and needed for the same reason: this harness's
+    // destination zone count is stale, so the arrival is overflow-floated back
+    // out once the insert has landed.
+    QSignalSpy batchFloatSpy(fx.engine.get(), &AutotileEngine::windowsBatchFloated);
+
+    fx.engine->windowFocused(QStringLiteral("a2"), QStringLiteral("DP-2"));
+    QCoreApplication::processEvents();
+
+    // The source dropped it, so the destination must own it. Anything else is the
+    // stranding: tracked, keyed to DP-2, present in no state at all — and
+    // isWindowTiled() reads a window's OWNING state, so it would report a phantom
+    // tile that never clears.
+    QVERIFY(!fx.engine->tilingStateForScreen(QStringLiteral("DP-1"))->containsWindow(QStringLiteral("a2")));
+    QVERIFY2(fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->containsWindow(QStringLiteral("a2")),
+             "a sticky window the policy ignores was still tiled on the source, and its migration must not be "
+             "refused after the source has already let it go");
+
+    // And it arrived TILED, not quietly re-floated by the open-time sticky policy.
+    bool overflowFloatedA2 = false;
+    for (const QList<QVariant>& call : batchFloatSpy) {
+        if (call.at(0).toStringList().contains(QStringLiteral("a2"))
+            && call.at(1).toString() == QLatin1String("DP-2")) {
+            overflowFloatedA2 = true;
+        }
+    }
+    QVERIFY2(overflowFloatedA2, "the arrival must reach the destination's tiled set, not be inserted floating");
 }
 
 void TestNavigationCrossSurface::inSurfaceMove_doesNotEmitExpectedMove()

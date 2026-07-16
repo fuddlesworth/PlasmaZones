@@ -46,6 +46,7 @@
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorFsLoader/SchemaValidator.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -327,10 +328,36 @@ SettingsController::SettingsController(QObject* parent)
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
         Q_EMIT daemonRunningChanged();
         if (m_daemonController.isRunning()) {
-            // Daemon just came online — reload all D-Bus-dependent data
+            // Daemon just came online — reload all D-Bus-dependent data.
+            // scheduleLayoutLoad() and ScreenHelper::refreshScreens() emit their
+            // own NOTIFY (layoutsChanged / screensChanged). refreshVirtualDesktops
+            // and refreshActivities do NOT: they are plain fetch helpers and the
+            // emit lives in their callers (onVirtualDesktopsChanged /
+            // onActivitiesChanged in settingscontroller_session.cpp). Without the
+            // emits below, everything the daemon just told us about desktops and
+            // activities sat in the members while QML kept rendering the
+            // daemon-down view — virtualDesktopCount / virtualDesktopNames and
+            // activitiesAvailable / activities / currentActivity all stayed stale
+            // until some unrelated signal happened along.
+            //
+            // Snapshot and compare rather than emitting flat: this fires on every
+            // daemon start, and the common case (a daemon restart that enumerates
+            // the same desktops and activities) must not churn every bound view.
             scheduleLayoutLoad();
+            const int desktopCountBefore = m_virtualDesktopCount;
+            const QStringList desktopNamesBefore = m_virtualDesktopNames;
             refreshVirtualDesktops();
+            if (m_virtualDesktopCount != desktopCountBefore || m_virtualDesktopNames != desktopNamesBefore) {
+                Q_EMIT virtualDesktopsChanged();
+            }
+            const bool activitiesAvailableBefore = m_activitiesAvailable;
+            const QVariantList activitiesBefore = m_activities;
+            const QString currentActivityBefore = m_currentActivity;
             refreshActivities();
+            if (m_activitiesAvailable != activitiesAvailableBefore || m_activities != activitiesBefore
+                || m_currentActivity != currentActivityBefore) {
+                Q_EMIT activitiesChanged();
+            }
             m_screenHelper.refreshScreens();
         }
     });
@@ -667,7 +694,7 @@ SettingsController::SettingsController(QObject* parent)
     // the prefixed form first, then fall back to the bare token (covering the
     // bare-keyed shape PhosphorTiles can also ship, and already-prefixed data).
     auto resolveTilingAlgorithmLookup = [resolveByLayoutsLookup](const QString& algorithmToken) -> QString {
-        const QString prefixed = QStringLiteral("autotile:") + algorithmToken;
+        const QString prefixed = PhosphorLayout::LayoutId::makeAutotileId(algorithmToken);
         const QString label = resolveByLayoutsLookup(prefixed);
         return label == prefixed ? resolveByLayoutsLookup(algorithmToken) : label;
     };

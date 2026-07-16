@@ -288,9 +288,14 @@ Q_SIGNALS:
     /**
      * @brief Full-layout change notification.
      *
-     * Emitted by structural mutations — editor save, createLayoutFromJson,
-     * updateLayout — where the client genuinely needs the whole serialized
-     * layout. Carries the complete JSON payload (5–20 KB in prod).
+     * Emitted by @c updateLayout (the editor's save path) and by active-layout
+     * switches, where the client genuinely needs the whole serialized layout.
+     * Carries the complete JSON payload (5–20 KB in prod).
+     *
+     * @c createLayoutFromJson does NOT emit this — a new layout announces
+     * itself with @c layoutCreated(id) instead. An active-layout switch is not
+     * a structural mutation but does emit this, alongside the cheaper
+     * @c activeLayoutChanged(id) documented below.
      *
      * Compact property-level mutations (setLayoutHidden / setLayoutAutoAssign /
      * setLayoutAspectRatioClass) do NOT emit this signal any more — they
