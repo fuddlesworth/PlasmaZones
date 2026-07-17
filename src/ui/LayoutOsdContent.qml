@@ -135,7 +135,6 @@ Item {
         width: Math.max(previewContainer.width, nameLabelRow.width) + Kirigami.Units.gridUnit * 3
         height: previewContainer.height + nameLabelRow.height + Kirigami.Units.gridUnit * 3
         backgroundColor: root.backgroundColor
-        containerRadius: Kirigami.Units.gridUnit * 1.5
 
         // Layout preview
         Item {

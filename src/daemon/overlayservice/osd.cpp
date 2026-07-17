@@ -15,6 +15,8 @@
 #include <QSet>
 #include <QQmlEngine>
 #include <QGuiApplication>
+#include <QColor>
+#include <QPalette>
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
@@ -341,6 +343,41 @@ void OverlayService::setSurfaceShaderRegistry(PhosphorSurfaceShaders::SurfaceSha
     m_surfaceShaderRegistry = registry;
 }
 
+namespace {
+
+/// Linear interpolation between two colours in [0,1] RGB, opaque result.
+/// Mirrors the Kirigami.ColorUtils.linearInterpolation PopupFrame uses.
+QColor lerpColor(const QColor& a, const QColor& b, qreal t)
+{
+    return QColor::fromRgbF(a.redF() + (b.redF() - a.redF()) * t, a.greenF() + (b.greenF() - a.greenF()) * t,
+                            a.blueF() + (b.blueF() - a.blueF()) * t, 1.0);
+}
+
+/// Neutral frame-contrast border colour: the theme background lerped toward the
+/// foreground by @p contrast (the border pack's frameContrast parameter,
+/// Kirigami's Theme.frameContrast default is 0.2). The daemon equivalent of
+/// PopupFrame's linearInterpolation(background, text, frameContrast) border, for
+/// overlay surfaces that have no live Kirigami theme.
+QColor themeNeutralBorderColor(qreal contrast)
+{
+    const QPalette pal = QGuiApplication::palette();
+    return lerpColor(pal.color(QPalette::Active, QPalette::Window), pal.color(QPalette::Active, QPalette::WindowText),
+                     contrast);
+}
+
+/// Theme background colour at @p alpha — the tint PopupFrame's glow/shadow used
+/// (Kirigami.Theme.backgroundColor at ~0.5). Low-chroma by construction, so a
+/// halo tinted with it reads as a soft theme-matched shadow that tracks light /
+/// dark, not the muddy additive smear a saturated accent tint produced.
+QColor themeBackgroundColor(qreal alpha)
+{
+    QColor c = QGuiApplication::palette().color(QPalette::Active, QPalette::Window);
+    c.setAlphaF(alpha);
+    return c;
+}
+
+} // namespace
+
 void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
 {
     if (!slot) {
@@ -445,6 +482,100 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             outerPadding = qMax(outerPadding, request);
         }
 
+        // Daemon colour pipeline: the overlay path has no live Kirigami theme,
+        // so packs that opt into theme-derived colours must have them
+        // synthesised here from the daemon's palette / palette-tracking settings
+        // — the compositor does the equivalent for the window path
+        // (shader_resolve.cpp's accent resolution). Resolved on every show, so a
+        // colour-scheme change is picked up the next time the transient OSD
+        // appears. A flag left at its default (or off) leaves the user's
+        // explicit colours untouched.
+        QVariantMap resolvedParams = friendlyParams;
+        if (m_settings) {
+            // Effective value of a bool param: the per-surface override, else
+            // the pack's declared default; nullopt when the pack has no such
+            // param.
+            const auto effectiveFlag = [&](QLatin1String id) -> std::optional<bool> {
+                for (const auto& param : effect.parameters) {
+                    if (param.id == id) {
+                        return resolvedParams.contains(QString(id)) ? resolvedParams.value(QString(id)).toBool()
+                                                                    : param.defaultValue.toBool();
+                    }
+                }
+                return std::nullopt;
+            };
+            // Effective value of a real-valued param: the per-surface override,
+            // else the pack's declared default, else @p fallback.
+            const auto effectiveReal = [&](QLatin1String id, double fallback) -> double {
+                for (const auto& param : effect.parameters) {
+                    if (param.id == id) {
+                        return resolvedParams.contains(QString(id)) ? resolvedParams.value(QString(id)).toDouble()
+                                                                    : param.defaultValue.toDouble();
+                    }
+                }
+                return fallback;
+            };
+
+            // Border colours. A neutral frame-contrast line (PopupFrame's
+            // built-in border look) wins over the system accent when both are
+            // engaged.
+            if (effectiveFlag(QLatin1String("useThemeNeutral")).value_or(false)) {
+                const QColor neutral =
+                    themeNeutralBorderColor(qBound(0.0, effectiveReal(QLatin1String("frameContrast"), 0.2), 1.0));
+                resolvedParams.insert(QStringLiteral("activeColor"), neutral);
+                resolvedParams.insert(QStringLiteral("inactiveColor"), neutral);
+            } else if (effectiveFlag(QLatin1String("useSystemAccent")).value_or(false)) {
+                QColor accent = m_settings->highlightColor();
+                accent.setAlphaF(1.0);
+                QColor inactive = m_settings->inactiveColor();
+                inactive.setAlphaF(1.0);
+                resolvedParams.insert(QStringLiteral("activeColor"), accent);
+                resolvedParams.insert(QStringLiteral("inactiveColor"), inactive);
+            }
+
+            // Halo (glow / shadow) tint: colour the halo with the theme
+            // background — PopupFrame's original theme-tinted glow — so it
+            // tracks light / dark instead of a fixed colour. The background is
+            // low-chroma, so this reads as a soft theme-matched shadow rather
+            // than the additive colour smear a saturated accent tint produced.
+            // The pack's own colour alpha (its intensity knob) is preserved.
+            if (effectiveFlag(QLatin1String("useThemeTint")).value_or(false)) {
+                for (const QLatin1String haloId : {QLatin1String("shadowColor"), QLatin1String("glowColor")}) {
+                    bool packHasHalo = false;
+                    QVariant current;
+                    for (const auto& param : effect.parameters) {
+                        if (param.id == haloId) {
+                            packHasHalo = true;
+                            current = resolvedParams.contains(QString(haloId)) ? resolvedParams.value(QString(haloId))
+                                                                               : param.defaultValue;
+                            break;
+                        }
+                    }
+                    if (packHasHalo) {
+                        QColor cur = current.value<QColor>();
+                        if (!cur.isValid()) {
+                            cur = QColor(current.toString());
+                        }
+                        const qreal alpha = cur.isValid() ? cur.alphaF() : 0.5;
+                        resolvedParams.insert(QString(haloId), themeBackgroundColor(alpha));
+                    }
+                }
+            }
+        }
+
+        // Card corner radius: the popup slot publishes its card's design radius
+        // (cardCornerRadius, a Kirigami-derived logical-px value). The decoration
+        // rounds to the CARD, not a per-pack value, so every pack that declares a
+        // cornerRadius (border, shadow, glow) is injected the same radius here and
+        // their corners coincide. translateSurfaceParams only emits a lane for
+        // packs whose metadata declares cornerRadius, so this is a no-op for any
+        // pack without it. Slots that publish no cardCornerRadius (or a non-card
+        // surface) fall back to the pack's own default.
+        const QVariant cardRadius = slot->property("cardCornerRadius");
+        if (cardRadius.isValid() && cardRadius.toReal() > 0.0) {
+            resolvedParams.insert(QStringLiteral("cornerRadius"), cardRadius.toReal());
+        }
+
         QVariantMap stageMap;
         stageMap.insert(QStringLiteral("source"), QUrl::fromLocalFile(effect.fragmentShaderPath));
         stageMap.insert(QStringLiteral("vertexSource"),
@@ -452,7 +583,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         stageMap.insert(QStringLiteral("preamble"),
                         PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(effect));
         stageMap.insert(QStringLiteral("params"),
-                        m_surfaceShaderRegistry->translateSurfaceParams(packId, friendlyParams));
+                        m_surfaceShaderRegistry->translateSurfaceParams(packId, resolvedParams));
         // Animated packs declare it in metadata; the QML host gates that
         // stage's per-frame iTime tick (playing) on this so static packs pay
         // nothing.

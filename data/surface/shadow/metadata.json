@@ -59,6 +59,13 @@
             "type": "color",
             "default": "#99000000",
             "description": "Colour of the shadow, translucent black by default"
+        },
+        {
+            "id": "useThemeTint",
+            "name": "Tint with theme background",
+            "type": "bool",
+            "default": false,
+            "description": "Tint the shadow with the system background colour (keeping its alpha) so it tracks the theme like a soft ambient glow. Honoured on overlay surfaces (OSD / popup)"
         }
     ]
 }

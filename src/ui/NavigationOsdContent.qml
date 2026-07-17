@@ -268,7 +268,6 @@ Item {
         width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, Kirigami.Units.gridUnit * 10)
         height: messageLabel.implicitHeight + Kirigami.Units.gridUnit * 2.5
         backgroundColor: root.backgroundColor
-        containerRadius: Kirigami.Units.gridUnit * 1.5
 
         // Message label - informative text-based feedback
         Label {

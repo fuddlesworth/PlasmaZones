@@ -2,86 +2,65 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Effects
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Shared popup frame providing a consistent soft glow, background, and border.
+ * @brief Shared popup card body and shader-transition anchor.
  *
- * Used by ZoneSelectorWindow and LayoutPickerOverlay to share container chrome.
- * Children are injected via the default property alias into the internal frame.
+ * Supplies the opaque card body and the SurfaceAnimator shader anchor for the
+ * OSD and popup cards. Children are injected via the default property alias
+ * into the internal frame.
  *
- * The frame and its glow live inside `captureItem`, which is the
- * SurfaceAnimator shader anchor (tagged `shaderAnchor: true` /
- * `objectName: "shaderAnchor"`). captureItem is larger than the visible
- * frame by `glowMargin` on every side, so a show / hide transition
- * captures the glow along with the card and animates them together —
- * without that margin the glow is clipped at the frame edge for the leg
- * and snaps back when the leg ends. Consumers size and position the
- * PopupFrame root as the bare card; the capture margin is internal, so
- * no consumer has to resize or re-anchor anything or tag the frame
- * itself.
+ * Chrome (border, rounded corners, glow, shadow) is NOT drawn here — it is
+ * owned entirely by the surface-decoration pipeline (SurfaceDecoration.qml +
+ * the data/surface/* packs), which captures this card and re-renders it with
+ * the resolved decoration. PopupFrame just supplies a square-cornered opaque
+ * body for that capture: the border pack clips it to the resolved corner
+ * radius and draws the border, the shadow pack draws the halo. A card whose
+ * decoration was cleared shows the bare opaque body with no chrome.
+ *
+ * The body lives inside `captureItem`, the SurfaceAnimator shader anchor
+ * (tagged `shaderAnchor: true` / `objectName: "shaderAnchor"`, which
+ * selector_update.cpp also looks up by objectName). captureItem is larger than
+ * the visible card by `captureMargin` on every side, giving show / hide shader
+ * transitions capture runway around the card. Consumers size and position the
+ * PopupFrame root as the bare card; the capture margin is internal, so no
+ * consumer has to resize or re-anchor anything.
  *
  * MouseArea is NOT included — each parent provides its own dismiss/absorb logic.
  */
 Item {
-    // Shader-transition capture target. SurfaceAnimator walks the visual
-    // tree for `shaderAnchor: true`; selector_update.cpp looks the same
-    // Item up by objectName. Centred on root and larger than it by
-    // glowMargin, so it owns the card AND its glow while the consumer
-    // still treats the PopupFrame root as the bare card.
-
     id: root
 
     property color backgroundColor: Kirigami.Theme.backgroundColor
-    property real containerRadius: Kirigami.Units.smallSpacing * 3
-    /// Outward extent of `captureItem` past the visible card on every
-    /// side, in logical pixels. The capture margin is internal to
-    /// PopupFrame, but consumers anchored against their own parent's
-    /// edges (e.g. ZoneSelectorContent's corner positions) MUST inset
-    /// their anchor margins by at least this amount so `captureItem`'s
-    /// glow ring is not pushed past the screen edge and clipped. Use
-    /// `Math.max(consumerMargin, glowMargin)` at edge-anchored positions.
-    readonly property real glowMargin: style.glowMargin
+    /// Outward extent of `captureItem` past the visible card on every side, in
+    /// logical pixels — capture runway for show / hide shader transitions. The
+    /// margin is internal to PopupFrame, but consumers anchored against their
+    /// own parent's edges (e.g. ZoneSelectorContent's corner positions) MUST
+    /// inset their anchor margins by at least this amount so the capture ring
+    /// (and any decoration halo drawn into it) is not pushed past the screen
+    /// edge and clipped. Use `Math.max(consumerMargin, captureMargin)`.
+    readonly property real captureMargin: style.captureMargin
     default property alias contentData: frame.data
 
     QtObject {
-        // Capture margin around the visible frame. The drop-shadow glow
-        // blurs roughly this far past the frame; captureItem extends the
-        // same distance on every side so the SurfaceAnimator FBO grab
-        // includes the glow. The OSD cards (LayoutOsdContent.qml,
-        // NavigationOsdContent.qml) get this margin by embedding PopupFrame
-        // itself, so there is no separate value to keep in sync there —
-        // but ZoneSelectorContent.qml's `_glowMargin` clones the glowMargin
-        // expression for its corner anchor insets and must track changes.
-
         id: style
 
-        readonly property real backgroundAlpha: 0.95
-        readonly property real shadowAlpha: 0.5
-        // Math.ceil rounds the gridUnit-derived value up to an integer
-        // pixel on fractional-DPI outputs (e.g. 1.25 * 18 = 22.5 →
-        // 23 px), so a consumer that pipes the published `root.glowMargin`
-        // through Math.floor for an `int` property doesn't lose half a
-        // pixel of clearance and silently re-introduce the corner-anchor
-        // glow-clip artifact. The published value is integral by design.
-        readonly property real glowMargin: Math.ceil(Kirigami.Units.gridUnit * 1.25)
+        // Math.ceil rounds the gridUnit-derived value up to an integer pixel on
+        // fractional-DPI outputs (e.g. 1.25 * 18 = 22.5 → 23 px), so a consumer
+        // that pipes the published `root.captureMargin` through Math.floor for
+        // an `int` property doesn't lose half a pixel of clearance. The
+        // published value is integral by design. ZoneSelectorContent.qml's
+        // `_captureMargin` clones this expression for its corner anchor insets.
+        readonly property real captureMargin: Math.ceil(Kirigami.Units.gridUnit * 1.25)
     }
 
-    // `shaderContentRect` tells SurfaceAnimator where the visible card
-    // sits inside this oversized capture item (anchor-local coords). The
-    // animator folds it into iAnchorRectInTexture so animation shaders
-    // operate in card space — the glow margin lands outside their [0,1]
-    // and generative effects (fire, incinerate) stay confined to the
-    // card instead of spilling into the transparent margin.
+    // `shaderContentRect` tells SurfaceAnimator where the visible card sits
+    // inside this oversized capture item (anchor-local coords). The animator
+    // folds it into iAnchorRectInTexture so animation shaders operate in card
+    // space — the capture margin lands outside their [0,1] and generative
+    // effects (fire, incinerate) stay confined to the card.
     Item {
-        // Soft theme-tinted glow. PopupFrame is the single source of this
-        // chrome — the layout and navigation OSD cards get it by embedding
-        // PopupFrame (LayoutOsdContent.qml / NavigationOsdContent.qml), so
-        // every popup overlay reads as the same surface family. The
-        // "shadow" is tinted with the theme background rather than
-        // black: a pale halo on light themes, a soft dark one on dark.
-
         id: captureItem
 
         property bool shaderAnchor: true
@@ -89,81 +68,34 @@ Item {
 
         objectName: "shaderAnchor"
         anchors.centerIn: parent
-        width: root.width + root.glowMargin * 2
-        height: root.height + root.glowMargin * 2
+        width: root.width + root.captureMargin * 2
+        height: root.height + root.captureMargin * 2
 
-        // Card chrome (background, rounded corners, 1px border). This is
-        // the MultiEffect source and is hidden (`visible: false`): the
-        // effect paints it exactly once together with its shadow. Feeding
-        // a VISIBLE item (or worse, one containing the injected content)
-        // into the effect paints it twice — once in the offscreen effect
-        // texture and once live — compounding the 0.95-alpha background
-        // to ~0.9975 and paying an extra offscreen pass per popup. The
-        // injected content lives in `frame` below and is painted live
-        // exactly once, on top of the effect output.
+        // Opaque, square-cornered card body. The body must be fully opaque — it
+        // is drawn onto a transparent layer-shell surface (surface.cpp clears to
+        // Qt::transparent), so any alpha below 1.0 lets the desktop bleed
+        // through. It is left square so the decoration's border pack, which
+        // clips the captured card to its own rounded rect, is the sole owner of
+        // the corner radius — a rounded body under a tighter pack clip leaves a
+        // transparent notch at the corners.
         Rectangle {
             id: frameChrome
 
             anchors.fill: parent
-            anchors.margins: root.glowMargin
-            visible: false
-            color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, style.backgroundAlpha)
-            radius: root.containerRadius
-            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-            border.width: 1
+            anchors.margins: root.captureMargin
+            color: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, 1.0)
         }
 
-        // Sizing: `anchors.fill: frameChrome` keeps the effect rect
-        // matched to the source's natural geometry so the card chrome is
-        // rendered 1:1 with no scaling ghost. Anchoring to `parent`
-        // (= captureItem) would stretch the source texture to fill the
-        // larger glow-padded rect, producing a fuzzy
-        // stretched-corner-radius copy underneath the real frame.
-        // To extend the drawn SHADOW past the frame edges (the original
-        // reason captureItem exists), set explicit `paddingRect`: the
-        // four components are the per-side padding amounts (x = left,
-        // y = top, width = right, height = bottom) added to the effect's
-        // own bounds for shadow draw purposes. Adding glowMargin on each
-        // side lets the shadow's blur and offset extend fully into the
-        // captureItem ring without scaling the source.
-        // `autoPaddingEnabled: false` opts out of Qt's blur-derived
-        // padding heuristic so the padding is exactly what we declare,
-        // regardless of how shadowBlur / shadowVerticalOffset are tuned.
-        //
-        // Shadow budget — keep these four values in sync:
-        //   glowMargin >= blurMax * shadowBlur + shadowVerticalOffset
-        // The blur tail hard-truncates at the captureItem edge if the
-        // extent exceeds glowMargin (the artifact the margin exists to
-        // prevent). Qt's default blurMax of 32 with shadowBlur 1 and
-        // offset 4 gives a 36px extent against a ~23px margin, so blurMax
-        // is pinned to glowMargin - shadowVerticalOffset (≈19) and the
-        // falloff reaches zero smoothly inside the budget instead.
-        // ZoneSelectorContent.qml's `_glowMargin` clones the glowMargin
-        // expression; keep it in sync when changing the budget.
-        MultiEffect {
-            source: frameChrome
-            anchors.fill: frameChrome
-            autoPaddingEnabled: false
-            paddingRect: Qt.rect(root.glowMargin, root.glowMargin, root.glowMargin, root.glowMargin)
-            shadowEnabled: true
-            shadowColor: Qt.rgba(root.backgroundColor.r, root.backgroundColor.g, root.backgroundColor.b, style.shadowAlpha)
-            shadowBlur: 1
-            shadowVerticalOffset: 4
-            shadowHorizontalOffset: 0
-            blurMax: Math.max(0, Math.floor(root.glowMargin - shadowVerticalOffset))
-        }
-
-        // Content container for injected children (via the default
-        // property alias). Transparent and painted live exactly once, on
-        // top of the effect output — it deliberately holds no chrome so
-        // nothing here is double-composited by the MultiEffect above.
+        // Content container for injected children (via the default property
+        // alias). Transparent; drawn on top of the body and captured together
+        // with it by the surface decoration.
         Item {
             id: frame
 
-            // Inset by glowMargin so the frame is exactly the
-            // consumer-set PopupFrame root size, centred in captureItem.
+            // Inset by captureMargin so the frame is exactly the consumer-set
+            // PopupFrame root size, centred in captureItem.
             anchors.fill: parent
-            anchors.margins: root.glowMargin
+            anchors.margins: root.captureMargin
         }
     }
 }

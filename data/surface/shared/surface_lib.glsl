@@ -91,15 +91,21 @@ vec4 marginComposite(vec4 base, vec3 col, float a) {
 // uSurfaceScale), the content-clip mask, and the band edge. `p` is the
 // device-px fragment (surfacePixel); `borderWidth` / `cornerRadius` are the
 // pack's logical-px params (pack macros the shared code can't name, so they are
-// passed in). The aa feather is the family's fixed 0.7 px. Packs whose band
-// geometry differs (border-double's three-width stack) build their own.
+// passed in). Packs whose band geometry differs (border-double's three-width
+// stack) build their own.
+//
+// The `aa` feather is the SDF edge softness in DEVICE px (kept unscaled so the
+// anti-alias width stays ~constant across output scales). The historical
+// family value is 0.7 px — a soft, sub-pixel band. The three-arg form keeps
+// that default so every existing caller (window border included) is unchanged;
+// the four-arg form lets a pack expose it as a parameter and pass a smaller
+// value (~0.5) for a crisper, more grid-hinted 1px hairline.
 struct BorderBand {
     FrameSDF fs;
     float insideMask;
     float edge;
 };
-BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius) {
-    const float aa = 0.7;
+BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, float aa) {
     float width = borderWidth * uSurfaceScale;
     float radius = (cornerRadius + borderWidth) * uSurfaceScale;
     BorderBand b;
@@ -107,6 +113,9 @@ BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius) {
     b.insideMask = 1.0 - smoothstep(-aa, aa, b.fs.d);
     b.edge = smoothstep(-width - aa, -width + aa, b.fs.d);
     return b;
+}
+BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius) {
+    return standardBorderBand(p, borderWidth, cornerRadius, 0.7);
 }
 
 // Backdrop-slab family shared open (blur / duotone / frosted-glass / glass /

@@ -144,6 +144,11 @@ Window {
         // "navigation-osd"  → NavigationOsdContent (text-label keyboard-nav toast)
         // ""                → no content (Loader unloaded)
         property string mode: ""
+        // Card corner radius the surface decoration rounds to. Read by
+        // OverlayService::applyDecoration and injected as the border/shadow
+        // cornerRadius, so the card silhouette follows the card rather than a
+        // per-pack value. gridUnit * 1.5 is the OSD card's design radius.
+        property real cardCornerRadius: Kirigami.Units.gridUnit * 1.5
         property var zones: []
         property color backgroundColor: Kirigami.Theme.backgroundColor
         property color textColor: Kirigami.Theme.textColor
@@ -454,6 +459,8 @@ Window {
         property var layouts: []
         property string activeLayoutId: ""
         property real screenAspectRatio: 16 / 9
+        // Card corner radius the surface decoration rounds to (see osdSlot).
+        property real cardCornerRadius: Kirigami.Units.largeSpacing * 2
         property bool globalAutoAssign: false
         property bool locked: false
         property color backgroundColor: Kirigami.Theme.backgroundColor
@@ -622,7 +629,8 @@ Window {
         property int containerPaddingSide: 18
         property int containerTopMargin: 10
         property int containerSideMargin: 10
-        property int containerRadius: 12
+        // Card corner radius the surface decoration rounds to (see osdSlot).
+        property real cardCornerRadius: 12
         property int labelTopMargin: 8
         property int labelHeight: 20
         property int labelSpace: 28
@@ -742,7 +750,6 @@ Window {
                 containerPaddingSide: zoneSelectorSlot.containerPaddingSide
                 containerTopMargin: zoneSelectorSlot.containerTopMargin
                 containerSideMargin: zoneSelectorSlot.containerSideMargin
-                containerRadius: zoneSelectorSlot.containerRadius
                 labelTopMargin: zoneSelectorSlot.labelTopMargin
                 labelHeight: zoneSelectorSlot.labelHeight
                 labelSpace: zoneSelectorSlot.labelSpace

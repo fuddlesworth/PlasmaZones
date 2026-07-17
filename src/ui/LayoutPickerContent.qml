@@ -169,7 +169,6 @@ Item {
         // Container chrome
         readonly property int containerPadding: Kirigami.Units.gridUnit * 2
         readonly property int paddingSide: Kirigami.Units.gridUnit
-        readonly property int containerRadius: Kirigami.Units.largeSpacing * 2
         readonly property int indicatorSpacing: Kirigami.Units.gridUnit
         // Card preview
         readonly property int previewWidth: Kirigami.Units.gridUnit * 10
@@ -198,7 +197,6 @@ Item {
         // top padding + title + gap below title + grid + bottom padding
         height: titleLabel.height + gridView.height + metrics.paddingSide * 3
         backgroundColor: root.backgroundColor
-        containerRadius: metrics.containerRadius
 
         // Absorb clicks inside container so they do not reach the
         // backdrop MouseArea (which would dismiss the picker). QML
