@@ -490,75 +490,73 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // colour-scheme change is picked up the next time the transient OSD
         // appears. A flag left at its default (or off) leaves the user's
         // explicit colours untouched.
+        // m_settings is guaranteed non-null here — applyDecoration early-returns
+        // above when it (or the registry) is null.
         QVariantMap resolvedParams = friendlyParams;
-        if (m_settings) {
-            // Effective value of a bool param: the per-surface override, else
-            // the pack's declared default; nullopt when the pack has no such
-            // param.
-            const auto effectiveFlag = [&](QLatin1String id) -> std::optional<bool> {
-                for (const auto& param : effect.parameters) {
-                    if (param.id == id) {
-                        return resolvedParams.contains(QString(id)) ? resolvedParams.value(QString(id)).toBool()
-                                                                    : param.defaultValue.toBool();
-                    }
+        // Effective value of a bool param: the per-surface override, else the
+        // pack's declared default; nullopt when the pack has no such param.
+        const auto effectiveFlag = [&](QLatin1String id) -> std::optional<bool> {
+            for (const auto& param : effect.parameters) {
+                if (param.id == id) {
+                    return resolvedParams.contains(QString(id)) ? resolvedParams.value(QString(id)).toBool()
+                                                                : param.defaultValue.toBool();
                 }
-                return std::nullopt;
-            };
-            // Effective value of a real-valued param: the per-surface override,
-            // else the pack's declared default, else @p fallback.
-            const auto effectiveReal = [&](QLatin1String id, double fallback) -> double {
-                for (const auto& param : effect.parameters) {
-                    if (param.id == id) {
-                        return resolvedParams.contains(QString(id)) ? resolvedParams.value(QString(id)).toDouble()
-                                                                    : param.defaultValue.toDouble();
-                    }
-                }
-                return fallback;
-            };
-
-            // Border colours. A neutral frame-contrast line (PopupFrame's
-            // built-in border look) wins over the system accent when both are
-            // engaged.
-            if (effectiveFlag(QLatin1String("useThemeNeutral")).value_or(false)) {
-                const QColor neutral =
-                    themeNeutralBorderColor(qBound(0.0, effectiveReal(QLatin1String("frameContrast"), 0.2), 1.0));
-                resolvedParams.insert(QStringLiteral("activeColor"), neutral);
-                resolvedParams.insert(QStringLiteral("inactiveColor"), neutral);
-            } else if (effectiveFlag(QLatin1String("useSystemAccent")).value_or(false)) {
-                QColor accent = m_settings->highlightColor();
-                accent.setAlphaF(1.0);
-                QColor inactive = m_settings->inactiveColor();
-                inactive.setAlphaF(1.0);
-                resolvedParams.insert(QStringLiteral("activeColor"), accent);
-                resolvedParams.insert(QStringLiteral("inactiveColor"), inactive);
             }
+            return std::nullopt;
+        };
+        // Effective value of a real-valued param: the per-surface override, else
+        // the pack's declared default, else @p fallback.
+        const auto effectiveReal = [&](QLatin1String id, double fallback) -> double {
+            for (const auto& param : effect.parameters) {
+                if (param.id == id) {
+                    return resolvedParams.contains(QString(id)) ? resolvedParams.value(QString(id)).toDouble()
+                                                                : param.defaultValue.toDouble();
+                }
+            }
+            return fallback;
+        };
 
-            // Halo (glow / shadow) tint: colour the halo with the theme
-            // background — PopupFrame's original theme-tinted glow — so it
-            // tracks light / dark instead of a fixed colour. The background is
-            // low-chroma, so this reads as a soft theme-matched shadow rather
-            // than the additive colour smear a saturated accent tint produced.
-            // The pack's own colour alpha (its intensity knob) is preserved.
-            if (effectiveFlag(QLatin1String("useThemeTint")).value_or(false)) {
-                for (const QLatin1String haloId : {QLatin1String("shadowColor"), QLatin1String("glowColor")}) {
-                    bool packHasHalo = false;
-                    QVariant current;
-                    for (const auto& param : effect.parameters) {
-                        if (param.id == haloId) {
-                            packHasHalo = true;
-                            current = resolvedParams.contains(QString(haloId)) ? resolvedParams.value(QString(haloId))
-                                                                               : param.defaultValue;
-                            break;
-                        }
+        // Border colours. A neutral frame-contrast line (PopupFrame's built-in
+        // border look) wins over the system accent when both are engaged.
+        if (effectiveFlag(QLatin1String("useThemeNeutral")).value_or(false)) {
+            const QColor neutral =
+                themeNeutralBorderColor(qBound(0.0, effectiveReal(QLatin1String("frameContrast"), 0.2), 1.0));
+            resolvedParams.insert(QStringLiteral("activeColor"), neutral);
+            resolvedParams.insert(QStringLiteral("inactiveColor"), neutral);
+        } else if (effectiveFlag(QLatin1String("useSystemAccent")).value_or(false)) {
+            QColor accent = m_settings->highlightColor();
+            accent.setAlphaF(1.0);
+            QColor inactive = m_settings->inactiveColor();
+            inactive.setAlphaF(1.0);
+            resolvedParams.insert(QStringLiteral("activeColor"), accent);
+            resolvedParams.insert(QStringLiteral("inactiveColor"), inactive);
+        }
+
+        // Halo (glow / shadow) tint: colour the halo with the theme background —
+        // PopupFrame's original theme-tinted glow — so it tracks light / dark
+        // instead of a fixed colour. The background is low-chroma, so this reads
+        // as a soft theme-matched shadow rather than the additive colour smear a
+        // saturated accent tint produced. The pack's own colour alpha (its
+        // intensity knob) is preserved.
+        if (effectiveFlag(QLatin1String("useThemeTint")).value_or(false)) {
+            for (const QLatin1String haloId : {QLatin1String("shadowColor"), QLatin1String("glowColor")}) {
+                bool packHasHalo = false;
+                QVariant current;
+                for (const auto& param : effect.parameters) {
+                    if (param.id == haloId) {
+                        packHasHalo = true;
+                        current = resolvedParams.contains(QString(haloId)) ? resolvedParams.value(QString(haloId))
+                                                                           : param.defaultValue;
+                        break;
                     }
-                    if (packHasHalo) {
-                        QColor cur = current.value<QColor>();
-                        if (!cur.isValid()) {
-                            cur = QColor(current.toString());
-                        }
-                        const qreal alpha = cur.isValid() ? cur.alphaF() : 0.5;
-                        resolvedParams.insert(QString(haloId), themeBackgroundColor(alpha));
+                }
+                if (packHasHalo) {
+                    QColor cur = current.value<QColor>();
+                    if (!cur.isValid()) {
+                        cur = QColor(current.toString());
                     }
+                    const qreal alpha = cur.isValid() ? cur.alphaF() : 0.5;
+                    resolvedParams.insert(QString(haloId), themeBackgroundColor(alpha));
                 }
             }
         }
@@ -571,7 +569,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // packs whose metadata declares cornerRadius, so this is a no-op for any
         // pack without it. Slots that publish no cardCornerRadius (or a non-card
         // surface) fall back to the pack's own default.
-        const QVariant cardRadius = slot->property("cardCornerRadius");
+        const QVariant cardRadius = slot->property(OverlayQmlPropertyNames::CardCornerRadius.data());
         if (cardRadius.isValid() && cardRadius.toReal() > 0.0) {
             resolvedParams.insert(QStringLiteral("cornerRadius"), cardRadius.toReal());
         }

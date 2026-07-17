@@ -3,7 +3,7 @@
     "name": "Drop Shadow",
     "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's rounded corners, softens on the unfocused window and leaves the window content untouched. Size, offset, colour and strength are this pack's own parameters.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Ambience",
     "fragmentShader": "effect.frag",
     "paddingParam": "shadowSize",

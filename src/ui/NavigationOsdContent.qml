@@ -253,11 +253,11 @@ Item {
         onRequest: root.dismissRequested()
     }
 
-    // The OSD card. QFZCommon.PopupFrame owns the background, border,
-    // soft glow, and the SurfaceAnimator shader anchor — the same chrome
-    // the layout-picker and zone-selector popups use. PopupFrame's
-    // internal captureItem extends past the frame so the glow is part of
-    // the captured texture and travels with the card through bounce /
+    // The OSD card. QFZCommon.PopupFrame owns the opaque card body and the
+    // SurfaceAnimator shader anchor; border, glow, and shadow come from the
+    // surface-decoration pipeline. PopupFrame's internal captureItem extends
+    // past the frame by captureMargin so any decoration halo and the show /
+    // hide shader transition are captured with the card through bounce /
     // fly-in / etc. instead of snapping in when the leg ends. Matches
     // LayoutOsdContent; the a11y labels live on the root Item.
     QFZCommon.PopupFrame {

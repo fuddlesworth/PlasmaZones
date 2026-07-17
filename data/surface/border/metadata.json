@@ -3,7 +3,7 @@
     "name": "Border",
     "description": "Rounded corners and a window border. Clips the surface to a rounded rectangle and lays a configurable border band over the desktop, so a translucent border blends with what is behind the surface rather than its own content. Width, corner radius and colour are this pack's own parameters.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Borders",
     "providesBorder": true,
     "fragmentShader": "effect.frag",
@@ -31,9 +31,9 @@
             "name": "Edge softness",
             "type": "float",
             "default": 0.7,
-            "min": 0.0,
+            "min": 0.1,
             "max": 2.0,
-            "description": "Anti-alias feather of the border edge (px). Lower is a crisper hairline; 0.7 is the soft default"
+            "description": "Anti-alias feather of the border edge (px). Lower is a crisper hairline. 0.7 is the soft default."
         },
         {
             "id": "useSystemAccent",

@@ -630,7 +630,7 @@ Window {
         property int containerTopMargin: 10
         property int containerSideMargin: 10
         // Card corner radius the surface decoration rounds to (see osdSlot).
-        property real cardCornerRadius: 12
+        property real cardCornerRadius: Kirigami.Units.largeSpacing * 1.5
         property int labelTopMargin: 8
         property int labelHeight: 20
         property int labelSpace: 28

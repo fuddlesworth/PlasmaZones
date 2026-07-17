@@ -189,9 +189,9 @@ Item {
         id: container
 
         // The SurfaceAnimator shader anchor lives inside PopupFrame (on
-        // its captureItem), scoped to the card plus a glow margin, so
-        // the card's glow is captured into show / hide transitions
-        // instead of being clipped — see PopupFrame.qml.
+        // its captureItem), scoped to the card plus a capture margin, so
+        // any decoration halo and the show / hide transition are captured
+        // instead of being clipped. See PopupFrame.qml.
         anchors.centerIn: parent
         width: gridView.width + metrics.containerPadding
         // top padding + title + gap below title + grid + bottom padding

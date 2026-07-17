@@ -108,10 +108,15 @@ struct BorderBand {
 BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius, float aa) {
     float width = borderWidth * uSurfaceScale;
     float radius = (cornerRadius + borderWidth) * uSurfaceScale;
+    // A zero feather makes both smoothstep() edges equal, which is undefined in
+    // GLSL (NaN / garbage on the boundary fragment). Floor it at a hair so an
+    // aggressively crisp (or hand-edited) value degrades to a near-hard edge
+    // rather than misrendering.
+    float feather = max(aa, 1e-3);
     BorderBand b;
     b.fs = frameSdf(p, radius);
-    b.insideMask = 1.0 - smoothstep(-aa, aa, b.fs.d);
-    b.edge = smoothstep(-width - aa, -width + aa, b.fs.d);
+    b.insideMask = 1.0 - smoothstep(-feather, feather, b.fs.d);
+    b.edge = smoothstep(-width - feather, -width + feather, b.fs.d);
     return b;
 }
 BorderBand standardBorderBand(vec2 p, float borderWidth, float cornerRadius) {
