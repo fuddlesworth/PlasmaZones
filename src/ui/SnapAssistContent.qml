@@ -82,6 +82,8 @@ Item {
         Item {
             id: zoneContainer
 
+            required property var modelData
+
             property var zone: modelData
 
             x: zone ? zone.x : 0
@@ -165,6 +167,8 @@ Item {
 
                     Item {
                         id: candidateCard
+
+                        required property var modelData
 
                         property var candidate: modelData
                         property bool hovered: cardMouse.containsMouse

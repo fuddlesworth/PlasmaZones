@@ -10,8 +10,10 @@ import org.phosphor.animation
 /**
  * @brief Custom exclusive button group with accent-colored active state.
  *
- * A row of options where one is selected at a time, with a sliding
- * accent background indicator. Matches the SettingsSwitch aesthetic.
+ * A row of options where one is selected at a time. The active tile is
+ * marked by an accent-tinted background and border that fade in place
+ * (per-tile color/border transitions — there is no sliding indicator).
+ * Matches the SettingsSwitch aesthetic.
  *
  * The caller owns currentIndex. A click only emits indexChanged, so bind
  * currentIndex to the state the handler writes and the selection follows.

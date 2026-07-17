@@ -57,7 +57,13 @@ RowLayout {
                     font: FontUtils.withProps(Kirigami.Theme.smallFont, {
                         bold: true
                     })
-                    color: stepIndicator.index <= root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                    // Only the current step sits on a solid highlight fill, so
+                    // only it takes highlightedTextColor. Completed steps sit on
+                    // a 0.4-alpha highlight wash over the regular background —
+                    // there highlightedTextColor goes light-on-light in light
+                    // themes, while textColor stays readable against a blend
+                    // still dominated by the background.
+                    color: stepIndicator.index === root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     opacity: stepIndicator.index <= root.currentStep ? 1 : 0.4
                 }
 

@@ -241,6 +241,9 @@ Item {
                 Item {
                     id: layoutCard
 
+                    required property var modelData
+                    required property int index
+
                     property var layoutData: modelData
                     property bool isSelected: index === root.selectedIndex
                     property bool isActive: layoutData.id === root.activeLayoutId
@@ -266,7 +269,6 @@ Item {
                         previewHeight: root.previewHeight
                         // Layout picker features
                         showCardBackground: true
-                        interactive: false
                         // Zone appearance (consistent with zone selector)
                         zonePadding: 1
                         edgeGap: 1

@@ -260,6 +260,10 @@ Item {
             if (!canvasHandler.editorController || !canvasHandler.drawingArea)
                 return;
 
+            // Guard against division by zero before converting to relative coords
+            if (canvasHandler.drawingArea.width <= 0 || canvasHandler.drawingArea.height <= 0)
+                return;
+
             // Quick add zone at click position
             var relX = Math.max(0, (mouse.x / canvasHandler.drawingArea.width) - 0.125);
             var relY = Math.max(0, (mouse.y / canvasHandler.drawingArea.height) - 0.125);

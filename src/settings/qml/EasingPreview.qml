@@ -157,12 +157,11 @@ Item {
             cp2x = parseFloat(def[2]);
             cp2y = parseFloat(def[3]);
         }
-        // Only signal upstream when the formatted curve string actually
-        // diverges from the inbound `curve` — silences the parse-on-load
-        // path that used to feed back its own input.
-        var formatted = root.formatCurve();
-        if (formatted !== root.curve)
-            root.curveEdited(formatted);
+        // Deliberately no curveEdited emit here. Every caller is a
+        // parse/normalize path (empty, unknown name, malformed bezier), so
+        // emitting would silently rewrite stored data just from opening the
+        // editor. The default is only rendered; genuine user edits emit from
+        // the drag-release handler.
     }
 
     // Format control point values back into a curve string

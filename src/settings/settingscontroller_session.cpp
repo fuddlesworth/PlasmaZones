@@ -89,6 +89,21 @@ void SettingsController::stageAssignmentClear(const QString& screenName, int vir
     setNeedsSave(true);
 }
 
+void SettingsController::removeStagedAssignment(const QString& screenName, int virtualDesktop,
+                                                const QString& activityId)
+{
+    m_staging.removeStagedAssignment(screenName, virtualDesktop, activityId);
+    // Same bookkeeping as stageAssignmentClear. Removing a staged entry can
+    // leave the staging map empty, but dirtiness here is page-level, not a
+    // count of staged entries: the user interacted with the page, and Apply
+    // simply flushes whatever remains (possibly nothing) — the flush of an
+    // empty map is a no-op. There is no unstage path in this controller
+    // that flips needsSave back to false short of save()/load(), so
+    // setNeedsSave(true) is the coherent mirror of the other staging
+    // mutators.
+    setNeedsSave(true);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Path helpers exposed to QML
 // ═══════════════════════════════════════════════════════════════════════════════

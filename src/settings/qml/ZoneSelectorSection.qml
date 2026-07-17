@@ -199,7 +199,7 @@ ColumnLayout {
                         }
 
                         Label {
-                            text: root.effectiveTriggerDistance + " px"
+                            text: i18nc("pixel-unit suffix after slider value", "%1 px", root.effectiveTriggerDistance)
                             Layout.preferredWidth: root.constants.sliderValueLabelWidth + Kirigami.Units.largeSpacing
                             horizontalAlignment: Text.AlignRight
                             font: Kirigami.Theme.fixedWidthFont
@@ -416,7 +416,7 @@ ColumnLayout {
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: parent.bottom
                             anchors.topMargin: Kirigami.Units.smallSpacing
-                            text: root.effectivePreviewWidth + " × " + root.effectivePreviewHeight + " px"
+                            text: i18nc("@info preview dimensions in pixels", "%1 × %2 px", root.effectivePreviewWidth, root.effectivePreviewHeight)
                             font: Kirigami.Theme.fixedWidthFont
                             opacity: 0.7
                         }
@@ -476,14 +476,22 @@ ColumnLayout {
                     // selection the user just made.
                     property bool _selfWrite: false
 
-                    function reevaluateCustomMode() {
+                    function reevaluateCustomMode(fromScopeSwitch) {
                         if (!customModeActive)
                             return;
 
                         if (_selfWrite)
                             return;
 
-                        if (customSizeSlider.pressed || customSizeSlider.activeFocus)
+                        if (customSizeSlider.pressed)
+                            return;
+
+                        // The activeFocus guard keeps a keyboard-driven Custom
+                        // edit from being yanked away, but the slider retains
+                        // activeFocus after a finished drag — so it must not
+                        // suppress the scope-switch path, or switching monitors
+                        // would keep a stale Custom chip for the new scope.
+                        if (!fromScopeSwitch && customSizeSlider.activeFocus)
                             return;
 
                         if (root.effectiveSizeMode !== 1) {
@@ -495,21 +503,33 @@ ColumnLayout {
                             customModeActive = false;
                     }
 
+                    // Scope-switch reevaluation. A distinct function (not
+                    // reevaluateCustomMode with an argument) because Qt.callLater
+                    // coalesces by function: the width-change path below queues
+                    // the plain variant, and a shared function would let the
+                    // last-queued call's arguments win, dropping the flag.
+                    function reevaluateAfterScopeSwitch() {
+                        reevaluateCustomMode(true);
+                    }
+
                     // Monitor scope switch: the effective* properties re-resolve
                     // against the new scope's overrides. Deferred via callLater so
                     // the re-resolved values are in place before the check runs
                     // (signal-handler vs binding-refresh order is not guaranteed).
+                    // Runs with the scope-switch flag: only the pressed guard
+                    // applies, not the lingering-activeFocus one.
                     Connections {
                         target: psHelper
                         function onSelectedScreenNameChanged() {
-                            Qt.callLater(sizeButtonRow.reevaluateCustomMode);
+                            Qt.callLater(sizeButtonRow.reevaluateAfterScopeSwitch);
                         }
                     }
 
                     // External width change (override cleared, another client
-                    // writing the setting). The slider-pressed guard inside
-                    // reevaluateCustomMode keeps a live Custom drag that passes
-                    // through a preset width from yanking the slider away.
+                    // writing the setting). The slider pressed/activeFocus guards
+                    // inside reevaluateCustomMode keep a live Custom drag or
+                    // keyboard edit that passes through a preset width from
+                    // yanking the slider away.
                     Connections {
                         target: root
                         function onEffectivePreviewWidthChanged() {
@@ -633,7 +653,7 @@ ColumnLayout {
                     }
 
                     Label {
-                        text: root.effectivePreviewWidth + " px"
+                        text: i18nc("pixel-unit suffix after slider value", "%1 px", root.effectivePreviewWidth)
                         Layout.preferredWidth: root.constants.sliderValueLabelWidth + Kirigami.Units.largeSpacing
                         horizontalAlignment: Text.AlignRight
                         font: Kirigami.Theme.fixedWidthFont

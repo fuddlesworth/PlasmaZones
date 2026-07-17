@@ -358,8 +358,9 @@ void Settings::load()
         // emitChangedNotifyProperties() below compares the post-derive values
         // against the pre-reparse snapshot and fires each changed NOTIFY
         // exactly once, and the aggregate settingsChanged fires once at the
-        // end of load(). Outside load() (eventFilter's palette re-derive,
-        // setUseSystemColors) the setters must keep emitting normally.
+        // end of load(). eventFilter()'s palette re-derive batches with the
+        // same flag; only setUseSystemColors relies on the setters emitting
+        // normally.
         QScopedValueRollback<bool> squelch(m_suppressDerivedColorEmissions, true);
         applySystemColorScheme();
     }
@@ -421,9 +422,10 @@ void Settings::load()
 // ── save() dispatcher ────────────────────────────────────────────────────────
 
 // Groups that reset() deletes exhaustively. NOT used by save() — save()
-// iterates the schema and lets purgeStaleKeys() handle cleanup. Does NOT
-// include unmanaged groups (Updates) which are written independently and
-// must survive a forced default-restore.
+// iterates the schema and lets purgeStaleKeys() handle cleanup. The legacy
+// "Updates" group is deliberately absent: nothing writes it anymore (the
+// dismissed-update-version moved to the settings app's QSettings), so it is
+// swept by reset() as a stale husk rather than managed here.
 QStringList Settings::managedGroupNames()
 {
     return {
@@ -482,9 +484,11 @@ void Settings::purgeStaleKeys()
     // enumeration, so Pass 2 cannot reach it. This holds against the interface
     // and not just the JsonBackend we happen to construct today.
     //
-    // Mixed list of (a) root-level GROUP names that must survive Pass 2's
-    // blanket-delete loop ("Updates")
-    // and (b) root-level KEYS holding stash data — `_v4DisableStash`,
+    // Root-level KEYS holding stash data that must survive Pass 2's
+    // blanket-delete loop. (The legacy "Updates" group used to be carved out
+    // here too; nothing writes or reads it since the dismissed-update-version
+    // moved to the settings app's QSettings, so Pass 2 now sweeps any stale
+    // husk of it like every other unmanaged group.) `_v4DisableStash`,
     // `_v4ExclusionStash` and `_v4AnimationExclusionStash` are JSON
     // OBJECTS and survive Pass 2 via `preservedGroups.contains(topLevel)`
     // membership in the loop body below (without that short-circuit Pass
@@ -495,7 +499,6 @@ void Settings::purgeStaleKeys()
     // against future Pass 2 restructuring. All four stashes feed the v4
     // chain-stall retry path in configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {
-        ConfigDefaults::updatesGroup(),
         ConfigKeys::Legacy::v4DisableStashKey(),
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
         ConfigKeys::Legacy::v4ExclusionStashKey(),
@@ -957,10 +960,10 @@ void Settings::setAudioSpectrumBarCount(int count)
         if (after == before) {                                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
-        /* load()'s applySystemColorScheme() derive: the value is persisted                                            \
-           above, but load() announces once via emitChangedNotifyProperties +                                          \
-           its single settingsChanged — a setter-level emission here would                                           \
-           duplicate both. */                                                                                          \
+        /* applySystemColorScheme() derives under this flag in load() AND in                                           \
+           eventFilter()'s palette re-derive: both announce once themselves                                            \
+           (snapshot/diff + a single settingsChanged) — a setter-level                                               \
+           emission here would duplicate both. */                                                                      \
         if (m_suppressDerivedColorEmissions) {                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
@@ -2121,10 +2124,15 @@ QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode
     }
     // Order-preserving dedup: a connector-name entry and an id-form entry can
     // resolve to the same screen id, and consumers expect one entry per screen.
+    // The QSet carries the membership check so the pass stays O(n) instead of
+    // the O(n^2) list-contains scan; the list preserves first-seen order.
     QStringList deduped;
     deduped.reserve(entries.size());
+    QSet<QString> seen;
+    seen.reserve(entries.size());
     for (const QString& entry : std::as_const(entries)) {
-        if (!deduped.contains(entry)) {
+        if (!seen.contains(entry)) {
+            seen.insert(entry);
             deduped.append(entry);
         }
     }
@@ -3092,7 +3100,10 @@ P_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivat
 
 void Settings::reset()
 {
-    // Delete all managed groups plus unmanaged groups (reset nukes everything)
+    // Delete all managed groups (reset nukes everything). The explicit
+    // "Updates" sweep scrubs the retired legacy group from configs written by
+    // older builds — nothing writes or reads it anymore (dismissed-update-
+    // version lives in the settings app's QSettings).
     for (const QString& groupName : managedGroupNames()) {
         m_configBackend->deleteGroup(groupName);
     }
@@ -3510,7 +3521,19 @@ void Settings::trackSystemPaletteChanges()
     // eventFilter() keeps the per-event cost to two compares (watched
     // pointer + event type). That per-event tax also scales with instance
     // count — Settings must remain a per-process near-singleton.
+    //
+    // Thread note: installEventFilter() requires the filter object and the
+    // filtered object to live on the same thread, and qGuiApp lives on the
+    // main (GUI) thread — so Settings must be constructed on the main thread
+    // for palette tracking to engage. Every current composition root does
+    // that; the guard below turns a future regression into a loud warning
+    // (with palette tracking disabled) instead of a Qt-internal one.
     if (qGuiApp) {
+        if (thread() != qGuiApp->thread()) {
+            qCWarning(lcConfig) << "Settings constructed off the main thread — system palette tracking disabled "
+                                   "(installEventFilter requires same-thread objects)";
+            return;
+        }
         qGuiApp->installEventFilter(this);
     }
 }
@@ -3532,7 +3555,45 @@ bool Settings::eventFilter(QObject* watched, QEvent* event)
         //     PENDING unsaved edit, the toggle and the colors it derived must
         //     stay discardable together, so the baseline is left alone.
         QScopedValueRollback<bool> applying(m_applyingSystemPalette, true);
-        applySystemColorScheme();
+        // Batch the announcement like load(): snapshot the four derived
+        // colors, run the derive with the per-setter NOTIFY + settingsChanged
+        // emissions squelched, then emit each changed NOTIFY exactly once plus
+        // ONE aggregate settingsChanged. Without the squelch a single palette
+        // event fired up to 4 settingsChanged (one per color setter), each of
+        // which re-ran every aggregate consumer (daemon refreshConfigFrom-
+        // Settings, KWin effect reload) mid-derive with partially-applied
+        // colors. The explicit emissions stay INSIDE the m_applyingSystemPalette
+        // scope so NOTIFY-driven dirty tracking still sees the flag up.
+        //
+        // Known (theoretical) misclassification: the derive window is
+        // synchronous, but a NOTIFY handler above could re-enter a color
+        // setter with a genuine user edit; that write lands while the squelch
+        // flag is up, so it is announced by THIS batch (fine) yet also counted
+        // as palette-derived by the rebaseline below (its baseline entry would
+        // absorb the user's value). No in-tree handler writes colors from a
+        // color NOTIFY, so this stays a documented hazard rather than code.
+        const QColor highlightBefore = highlightColor();
+        const QColor inactiveBefore = inactiveColor();
+        const QColor borderBefore = borderColor();
+        const QColor labelFontBefore = labelFontColor();
+        {
+            QScopedValueRollback<bool> squelch(m_suppressDerivedColorEmissions, true);
+            applySystemColorScheme();
+        }
+        const bool highlightChanged = highlightColor() != highlightBefore;
+        const bool inactiveChanged = inactiveColor() != inactiveBefore;
+        const bool borderChanged = borderColor() != borderBefore;
+        const bool labelFontChanged = labelFontColor() != labelFontBefore;
+        if (highlightChanged)
+            Q_EMIT highlightColorChanged();
+        if (inactiveChanged)
+            Q_EMIT inactiveColorChanged();
+        if (borderChanged)
+            Q_EMIT borderColorChanged();
+        if (labelFontChanged)
+            Q_EMIT labelFontColorChanged();
+        if (highlightChanged || inactiveChanged || borderChanged || labelFontChanged)
+            Q_EMIT settingsChanged();
         if (!isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey())) {
             rebaselineDerivedColorKeys();
         }

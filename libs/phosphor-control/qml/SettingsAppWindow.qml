@@ -378,7 +378,8 @@ Kirigami.ApplicationWindow {
                 // presence, not visibility), so the children's effective
                 // visibility tracks their own bindings and cannot latch —
                 // unlike routing the *visible* gate through a child, which
-                // would (see the comment on `visible` below).
+                // would latch the band hidden. See the comment on `visible`
+                // below.
                 implicitHeight: (headerExtrasLoader.item !== null && headerExtrasLoader.item.visible) || (headerTrailingLoader.item !== null && headerTrailingLoader.item.visible) ? headerExtrasRow.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
                 // Gate on the Loaders directly, NOT on headerExtrasRow.visible:
                 // reading a child's `visible` returns its EFFECTIVE visibility,
@@ -400,7 +401,10 @@ Kirigami.ApplicationWindow {
                     spacing: 0
 
                     Item {
-                        Layout.preferredWidth: headerTrailingLoader.width
+                        // Mirror the trailing Loader's gated-width expression
+                        // rather than reading headerTrailingLoader.width, which
+                        // lags one layout-polish cycle behind the binding.
+                        Layout.preferredWidth: (headerTrailingLoader.item !== null && headerTrailingLoader.item.visible) ? headerTrailingLoader.item.implicitWidth : 0
                     }
 
                     Item {

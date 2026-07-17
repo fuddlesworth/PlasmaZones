@@ -588,8 +588,11 @@ add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)
 
 # Component-load canary for the shared QML module: "X is not a type" at app
 # runtime hides the nested cause; this fails with the real error instead.
+# plasmazones_rendering supplies ZoneShaderItem, which the test registers under
+# "PlasmaZones 1.0" (mirroring the daemon/editor composition roots) so
+# ZoneShaderRenderer's `import PlasmaZones` resolves.
 add_executable(test_shared_module_load ui/test_shared_module_load.cpp)
-target_link_libraries(test_shared_module_load PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
+target_link_libraries(test_shared_module_load PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_rendering)
 add_test(NAME test_shared_module_load COMMAND test_shared_module_load)
 
 # Pins the C++/QML contract the zone selector's cursor hit test depends on:

@@ -69,8 +69,10 @@ Item {
 
         // Calculate the fill region using the zone center in normalized canvas
         // coords. Derive it from the visual geometry rather than zoneData:
-        // fixed-mode zones store screen pixels in zoneData.x/y/width/height, so
-        // treating those as normalized would point at a bogus center.
+        // fixed zones carry their authoritative geometry in the pixel-based
+        // fixedX/fixedY/fixedWidth/fixedHeight fields (x/y/width/height keep
+        // relative fallbacks), so the visual geometry is the mode-agnostic
+        // source for the center.
         var centerX = (canvasWidth > 0) ? (zoneRoot.visualX + zoneRoot.visualWidth / 2) / canvasWidth : 0.5;
         var centerY = (canvasHeight > 0) ? (zoneRoot.visualY + zoneRoot.visualHeight / 2) / canvasHeight : 0.5;
         // Store center coords for use in expandToFillWithCoords

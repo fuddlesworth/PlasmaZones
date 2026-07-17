@@ -105,17 +105,12 @@ Item {
                 var newVisualWidth = w * zoneRoot.canvasWidth;
                 var newVisualHeight = h * zoneRoot.canvasHeight;
             }
-            if (zoneRoot.visualWidth === 0 || zoneRoot.visualHeight === 0 || !isFinite(zoneRoot.visualWidth) || !isFinite(zoneRoot.visualHeight)) {
-                zoneRoot.visualX = newVisualX;
-                zoneRoot.visualY = newVisualY;
-                zoneRoot.visualWidth = newVisualWidth;
-                zoneRoot.visualHeight = newVisualHeight;
-            } else if (zoneRoot.operationState === 0 && !zoneRoot.isDividerOperation) {
-                zoneRoot.visualX = newVisualX;
-                zoneRoot.visualY = newVisualY;
-                zoneRoot.visualWidth = newVisualWidth;
-                zoneRoot.visualHeight = newVisualHeight;
-            }
+            // Unconditional: the early return above already guarantees the
+            // zone is idle (operationState 0) and not in a divider operation.
+            zoneRoot.visualX = newVisualX;
+            zoneRoot.visualY = newVisualY;
+            zoneRoot.visualWidth = newVisualWidth;
+            zoneRoot.visualHeight = newVisualHeight;
         }
     }
 

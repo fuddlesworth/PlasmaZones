@@ -40,21 +40,6 @@ Item {
         flashAnimation.start();
     }
 
-    function highlightZone(zoneId) {
-        highlightedZoneId = zoneId || "";
-        highlightedZoneIds = [];
-    }
-
-    function highlightZones(zoneIds) {
-        highlightedZoneIds = zoneIds || [];
-        highlightedZoneId = "";
-    }
-
-    function clearHighlight() {
-        highlightedZoneId = "";
-        highlightedZoneIds = [];
-    }
-
     function hasCustomColors(zoneData) {
         var v = zoneData.useCustomColors;
         return v === true || v === 1 || (typeof v === "string" && v.toLowerCase() === "true");

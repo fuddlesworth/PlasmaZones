@@ -59,15 +59,18 @@ SettingsFlickable {
 
     function _currentState() {
         var target = _selectedScreen;
-        // If no screen selected, use first screen
-        if (!target && _screenStates.length > 0)
-            target = _screenStates[0].screenId || "";
+        // No selection yet — fall back to the first reported state.
+        if (!target)
+            return _screenStates.length > 0 ? _screenStates[0] : null;
 
         for (var i = 0; i < _screenStates.length; i++) {
             if (_screenStates[i].screenId === target)
                 return _screenStates[i];
         }
-        return _screenStates.length > 0 ? _screenStates[0] : null;
+        // The selected screen has no reported state. Return null so the
+        // "Unable to retrieve monitor state" warning shows, rather than
+        // displaying (and staging against) another monitor's context.
+        return null;
     }
 
     function _findLayout(layoutId) {
@@ -110,12 +113,14 @@ SettingsFlickable {
             // currently-resolved algorithm when the user has not picked one.
             var algoId = stateView.localAlgorithmId || state.algorithmId;
             if (!algoId) {
-                // Nothing resolved to pin. Clear any stale staged entry for
-                // this context (e.g. an opposite-mode pick from earlier in
-                // the session) so Apply cannot commit it while the UI shows
-                // Default.
+                // Nothing resolved to pin. Unstage any stale staged entry
+                // for this context (e.g. an opposite-mode pick from earlier
+                // in the session) so Apply cannot commit it while the UI
+                // shows Default. A true unstage, not a staged clear — a
+                // staged clear is pushed on Apply and would wipe a
+                // pre-existing daemon-side assignment the user never touched.
                 if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
-                    settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
+                    settingsController.removeStagedAssignment(_selectedScreen, desktop, activity);
                 return;
             }
 
@@ -134,12 +139,14 @@ SettingsFlickable {
             // currently-resolved layout when the user has not picked one.
             var layoutId = stateView.localLayoutId || state.layoutId;
             if (!layoutId) {
-                // Nothing resolved to pin. Clear any stale staged entry for
-                // this context (e.g. an opposite-mode pick from earlier in
-                // the session) so Apply cannot commit it while the UI shows
-                // Default.
+                // Nothing resolved to pin. Unstage any stale staged entry
+                // for this context (e.g. an opposite-mode pick from earlier
+                // in the session) so Apply cannot commit it while the UI
+                // shows Default. A true unstage, not a staged clear — a
+                // staged clear is pushed on Apply and would wipe a
+                // pre-existing daemon-side assignment the user never touched.
                 if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
-                    settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
+                    settingsController.removeStagedAssignment(_selectedScreen, desktop, activity);
                 return;
             }
 

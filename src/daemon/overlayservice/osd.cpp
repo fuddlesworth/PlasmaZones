@@ -304,14 +304,15 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     writeAutotileMetadata(osdSlot, p.showMasterDot, p.producesOverlappingZones, p.zoneNumberDisplay, p.masterCount);
     writeQmlProperty(osdSlot, QStringLiteral("zones"), p.zones);
     writeFontProperties(osdSlot, m_settings, /*includeLabelFontColor=*/false);
-    // Zone preview colors follow the same settings pipeline as the live
-    // overlays and the picker/selector/snap-assist slots (per-zone custom
-    // colors ride inside p.zones; these are the layout-wide effective
+    // Zone preview colors and opacities follow the same settings pipeline as
+    // the live overlays and the picker/selector/snap-assist slots (per-zone
+    // custom colors ride inside p.zones; these are the layout-wide effective
     // defaults). The context overlay-appearance override is layered on top,
     // exactly like the siblings' writeColorSettings(..., &overlayOverride)
-    // path, so a context rule that recolors the popups recolors this OSD
-    // too. Without this push the OSD fell back to QML-side theme roles and
-    // rendered differently from the picker/selector for the same layout.
+    // path — all five properties, so a context rule that recolors or
+    // re-fades the popups applies to this OSD too. Without this push the
+    // OSD fell back to QML-side theme roles and rendered differently from
+    // the picker/selector for the same layout.
     if (m_settings) {
         const PhosphorZones::ContextOverlayOverride overlayOverride =
             overlayOverrideForScreen(m_layoutManager, p.screenId);
@@ -321,6 +322,10 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
                          overlayOverride.inactiveColor.value_or(m_settings->inactiveColor()));
         writeQmlProperty(osdSlot, QStringLiteral("borderColor"),
                          overlayOverride.borderColor.value_or(m_settings->borderColor()));
+        writeQmlProperty(osdSlot, QStringLiteral("activeOpacity"),
+                         overlayOverride.activeOpacity.value_or(m_settings->activeOpacity()));
+        writeQmlProperty(osdSlot, QStringLiteral("inactiveOpacity"),
+                         overlayOverride.inactiveOpacity.value_or(m_settings->inactiveOpacity()));
     }
     // Stage d: resolve + push the OSD's surface-shader decoration (rounded
     // corners + border) onto the slot. Done here so every layout-OSD show path
@@ -726,7 +731,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
             if (ok && count > 0) {
                 windowCount = count;
             }
-            if (action == QStringLiteral("rotate")) {
+            if (action == QLatin1String("rotate")) {
                 displayReason = parts.at(0); // "clockwise" or "counterclockwise"
             }
             // resnap keeps full reason for displayReason (optional)

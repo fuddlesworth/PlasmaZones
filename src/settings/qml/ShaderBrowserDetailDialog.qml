@@ -771,6 +771,10 @@ Kirigami.Dialog {
                 root._presetError = i18nc("@info", "This preset was saved for a different shader.");
                 return;
             }
+            // The load succeeded — drop any error left from an earlier
+            // failed save/load so the stale message doesn't sit next to a
+            // freshly applied preset.
+            root._presetError = "";
             // Apply the preset's values onto the current shader's parameter set
             // (preset value where present, else the param default), so a preset
             // saved for a slightly different param list still loads cleanly.

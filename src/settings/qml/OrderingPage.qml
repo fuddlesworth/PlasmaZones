@@ -41,7 +41,16 @@ SettingsFlickable {
             let key = root.previewZonesKey;
             if (item[key]) {
                 cache[item.id] = item[key];
-                delete item[key];
+                // Append a shallow copy without the zones payload instead of
+                // deleting the key off the caller's object — resolveOrder may
+                // return references the controller still owns, and mutating
+                // them would strip the zones from the source data.
+                let copy = {};
+                for (let prop in item) {
+                    if (prop !== key)
+                        copy[prop] = item[prop];
+                }
+                item = copy;
             }
             orderModel.append(item);
         }

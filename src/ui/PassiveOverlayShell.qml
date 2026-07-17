@@ -148,6 +148,12 @@ Window {
         // bind undefined and the OSD preview would never recolor.
         property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
         property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
+        // Zone fill opacities for the OSD preview. Same declare-and-forward
+        // contract as the colors above: osd.cpp pushLayoutOsdContent writes
+        // the settings/override-resolved pair; the defaults match
+        // LayoutOsdContent's own.
+        property real activeOpacity: 0.6
+        property real inactiveOpacity: 0.3
         property string layoutId: ""
         property string layoutName: ""
         property int category: 0
@@ -271,6 +277,8 @@ Window {
                 highlightColor: osdSlot.highlightColor
                 inactiveColor: osdSlot.inactiveColor
                 borderColor: osdSlot.borderColor
+                activeOpacity: osdSlot.activeOpacity
+                inactiveOpacity: osdSlot.inactiveOpacity
                 layoutId: osdSlot.layoutId
                 layoutName: osdSlot.layoutName
                 category: osdSlot.category
@@ -580,7 +588,6 @@ Window {
         // without also removing the corresponding C++ writes.
         property var layouts: []
         property string activeLayoutId: ""
-        property string hoveredLayoutId: ""
         property bool globalAutoAssign: false
         property string selectedLayoutId: ""
         property int selectedZoneIndex: -1
@@ -670,10 +677,12 @@ Window {
                 zoneSelectorLoader.item.applyScrollDelta(angleDeltaY);
         }
 
+        // Clears slot-level cursor state only. The content's cursorX /
+        // cursorY are bindings onto these slot properties (forwarded in
+        // zoneSelectorContentComp below), so writing the slot props is
+        // sufficient — assigning on the content item would sever those
+        // bindings for the rest of the content's lifetime.
         function resetCursorState() {
-            if (zoneSelectorLoader.item)
-                zoneSelectorLoader.item.resetCursorState();
-
             zoneSelectorSlot.cursorX = -1;
             zoneSelectorSlot.cursorY = -1;
         }
@@ -698,7 +707,7 @@ Window {
             // intermittently degrades to a static surface + end pop.
             sourceComponent: zoneSelectorContentComp
             // No signal wiring: the zone-selector slot is input-transparent by
-            // design (see ZoneSelectorContent's `interactive: false`). Cursor
+            // design (its zone previews declare no pointer handlers). Cursor
             // tracking and commit both go through C++ (updateSelectorPosition
             // + drop.cpp), so QML never needs to forward a selection event.
         }
@@ -709,7 +718,6 @@ Window {
             ZoneSelectorContent {
                 layouts: zoneSelectorSlot.layouts
                 activeLayoutId: zoneSelectorSlot.activeLayoutId
-                hoveredLayoutId: zoneSelectorSlot.hoveredLayoutId
                 globalAutoAssign: zoneSelectorSlot.globalAutoAssign
                 selectedLayoutId: zoneSelectorSlot.selectedLayoutId
                 selectedZoneIndex: zoneSelectorSlot.selectedZoneIndex
@@ -829,21 +837,6 @@ Window {
         function flash() {
             if (mainOverlayLoader.item && mainOverlayLoader.item.flash)
                 mainOverlayLoader.item.flash();
-        }
-
-        function highlightZone(zoneId) {
-            if (mainOverlayLoader.item && mainOverlayLoader.item.highlightZone)
-                mainOverlayLoader.item.highlightZone(zoneId);
-        }
-
-        function highlightZones(zoneIds) {
-            if (mainOverlayLoader.item && mainOverlayLoader.item.highlightZones)
-                mainOverlayLoader.item.highlightZones(zoneIds);
-        }
-
-        function clearHighlight() {
-            if (mainOverlayLoader.item && mainOverlayLoader.item.clearHighlight)
-                mainOverlayLoader.item.clearHighlight();
         }
 
         function reloadShader() {

@@ -111,7 +111,6 @@ Item {
         previewHeight: root.baseHeight
         // Same feature configuration as the popup cards
         showCardBackground: true
-        interactive: false
         zonePadding: 1
         edgeGap: 1
         minZoneSize: 8

@@ -517,10 +517,6 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
 
 void OverlayService::showLayoutPicker(const QString& screenId)
 {
-    if (m_layoutPickerVisible) {
-        return;
-    }
-
     QScreen* screen = resolveTargetScreen(m_screenManager, screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showLayoutPicker: no screen available";
@@ -528,6 +524,15 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     const QString resolvedId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
+
+    // Same-screen re-request while visible is a no-op; a request for a
+    // DIFFERENT screen migrates the picker there (dismiss + reshow below),
+    // mirroring showSnapAssist's cross-screen singleton handling instead of
+    // silently dropping the request.
+    if (m_layoutPickerVisible && m_layoutPickerScreenId == resolvedId) {
+        return;
+    }
+
     QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
     if (!screenGeom.isValid()) {
         screenGeom = screen->geometry();
@@ -553,6 +558,23 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     if (layoutsList.isEmpty()) {
         qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
         return;
+    }
+
+    // The picker is a singleton across screens: with the new target fully
+    // validated (shell + layouts), dismiss it on the previous screen before
+    // showing here. Animator-driven hideSlot keys only the picker track, so
+    // sibling slots on the previous shell keep animating cleanly. Validation
+    // failures above return BEFORE this point, leaving the picker untouched
+    // on its current screen — same ordering contract as showSnapAssist.
+    if (m_layoutPickerVisible && !m_layoutPickerScreenId.isEmpty() && m_layoutPickerScreenId != resolvedId) {
+        const QString prevScreenId = m_layoutPickerScreenId;
+        auto prevIt = m_screenStates.find(prevScreenId);
+        if (prevIt != m_screenStates.end() && prevIt->shell && prevIt->shell->shellSurface()
+            && prevIt->layoutPickerSlot()) {
+            m_shellHost->hideSlot(prevScreenId, PhosphorSlotKeys::LayoutPicker(), [this, prevScreenId]() {
+                onLayoutPickerSlotHideCompleted(prevScreenId);
+            });
+        }
     }
 
     const QString activeId = activeLayoutIdForScreen(resolvedId);

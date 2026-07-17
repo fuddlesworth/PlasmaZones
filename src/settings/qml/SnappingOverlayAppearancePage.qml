@@ -146,7 +146,7 @@ SettingsFlickable {
                             }
 
                             Button {
-                                text: i18n("From file...")
+                                text: i18n("From file…")
                                 icon.name: "document-open"
                                 onClicked: colorFileDialog.open()
                             }

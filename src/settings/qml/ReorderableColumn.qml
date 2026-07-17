@@ -48,6 +48,11 @@ Item {
     property var reorderableOf: function (item) {
         return true;
     }
+    /// Optional human-readable name resolver for assistive technology: given
+    /// an item, returns the name announced for its focusable row. Falls back
+    /// to `idOf` when unset — set it whenever the model carries a display
+    /// name, so screen readers announce that instead of an opaque id.
+    property var accessibleNameOf: null
     /// Optional deep-link anchor prefix ("rule:", …). Empty disables per-row
     /// anchor registration (the decoration list has no search deep-links).
     property string anchorPrefix: ""
@@ -204,6 +209,7 @@ Item {
             z: dragArea.drag.active ? 100 : 0
             activeFocusOnTab: true
             Accessible.role: Accessible.ListItem
+            Accessible.name: root.accessibleNameOf ? root.accessibleNameOf(modelData) : (root.idOf(modelData) || "")
 
             Keys.onPressed: event => {
                 if (!(event.modifiers & Qt.AltModifier))

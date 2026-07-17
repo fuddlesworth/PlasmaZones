@@ -13,8 +13,6 @@ import org.kde.kirigami as Kirigami
  * Shows percentage-based dimensions for zone sizing feedback.
  */
 Rectangle {
-    // 8px padding from bottom
-
     id: dimensionTooltip
 
     // Stacking order among drawingArea siblings. Zones stack unbounded
@@ -41,7 +39,8 @@ Rectangle {
     property int fixedPosY: (canvasHeight > 0 && screenHeight > 0) ? Math.round((zoneY / canvasHeight) * screenHeight) : 0
     property int fixedSizeW: (canvasWidth > 0 && screenWidth > 0) ? Math.round((zoneWidth / canvasWidth) * screenWidth) : 0
     property int fixedSizeH: (canvasHeight > 0 && screenHeight > 0) ? Math.round((zoneHeight / canvasHeight) * screenHeight) : 0
-    // Position at bottom center of zone, with bounds checking
+    // Padding between the tooltip and the zone's bottom edge (one grid unit);
+    // the tooltip is positioned at the bottom center of the zone
     readonly property real bottomPadding: Kirigami.Units.gridUnit
 
     visible: showDimensions && zoneWidth > 0 && zoneHeight > 0 && canvasWidth > 0 && canvasHeight > 0
@@ -60,17 +59,10 @@ Rectangle {
     Kirigami.Theme.colorSet: Kirigami.Theme.Tooltip
     color: Kirigami.Theme.backgroundColor
     border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-    border.width: constants.tooltipBorderWidth
+    border.width: 1 // Hairline tooltip border
     z: dimensionTooltip.overlayZ
     Accessible.name: i18nc("@info:accessibility", "Zone dimensions")
     Accessible.description: isFixedMode ? i18nc("@info:accessibility", "Position: %1px, %2px  Size: %3px × %4px", fixedPosX, fixedPosY, fixedSizeW, fixedSizeH) : i18nc("@info:accessibility", "Position: %1%, %2%  Size: %3% × %4%", xPercent, yPercent, widthPercent, heightPercent)
-
-    // Constants for visual styling
-    QtObject {
-        id: constants
-
-        readonly property int tooltipBorderWidth: 1 // 1px - tooltip border width
-    }
 
     GridLayout {
         id: contentColumn

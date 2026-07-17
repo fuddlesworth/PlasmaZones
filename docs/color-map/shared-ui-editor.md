@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth
+     SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Color-Usage Inventory & Remediation Map — src/shared, src/ui, src/editor/qml
 
 Scope: every QML line using `Kirigami.Theme.*Color`, `Kirigami.Theme.colorSet`, `Qt.rgba/lighter/darker/tint/alpha`,

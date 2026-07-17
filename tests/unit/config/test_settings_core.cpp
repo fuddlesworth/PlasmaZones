@@ -682,14 +682,16 @@ private Q_SLOTS:
     }
 
     /**
-     * save() must NOT purge groups it doesn't manage (e.g., Updates) — those
-     * are written independently and must survive a settings save.
+     * The legacy "Updates" group is retired: nothing writes or reads it since
+     * the dismissed-update-version moved to the settings app's QSettings, so
+     * save() sweeps any stale husk of it like every other unknown group
+     * (it used to be carved out of the purge as an "unmanaged" group).
      */
-    void testSave_preservesUnmanagedGroups()
+    void testSave_purgesRetiredUpdatesGroup()
     {
         IsolatedConfigGuard guard;
 
-        // Write to an unmanaged group
+        // Simulate a config written by an older build that still carried it
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             {
@@ -703,10 +705,8 @@ private Q_SLOTS:
         settings.save();
 
         auto backend = PlasmaZones::createDefaultConfigBackend();
-        {
-            auto g = backend->group(QStringLiteral("Updates"));
-            QCOMPARE(g->readString(QStringLiteral("DismissedUpdateVersion")), QStringLiteral("2.0.0"));
-        }
+        QVERIFY2(!backend->groupList().contains(QStringLiteral("Updates")),
+                 "Retired group 'Updates' must be purged by save()");
     }
 
     /**
@@ -737,11 +737,10 @@ private Q_SLOTS:
                 auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
                 g->writeString(QStringLiteral("1"), QStringLiteral("layout-id"));
             }
-            // Inject a valid unmanaged group to prove it survives
-            {
-                auto g = backend->group(QStringLiteral("Updates"));
-                g->writeString(QStringLiteral("LastCheck"), QStringLiteral("2026-04-07"));
-            }
+            // The retired Updates group is covered by
+            // testSave_purgesRetiredUpdatesGroup above; no root-level group
+            // outside the schema survives save() anymore (only the v4
+            // migration stash KEYS are carved out — see purgeStaleKeys).
             backend->sync();
         }
 
@@ -766,12 +765,6 @@ private Q_SLOTS:
         QVERIFY2(!hasObsolete, "Unknown root-level group 'ObsoleteFeature' must be purged by save()");
         QVERIFY2(!hasOldGroup, "Unknown root-level group 'OldGroupFromV0' must be purged by save()");
         QVERIFY2(!hasRetiredTilingSlots, "Retired group 'TilingQuickLayoutSlots' must be purged by save()");
-
-        // Unmanaged groups must survive
-        {
-            auto g = backend->group(QStringLiteral("Updates"));
-            QCOMPARE(g->readString(QStringLiteral("LastCheck")), QStringLiteral("2026-04-07"));
-        }
     }
 
     /**

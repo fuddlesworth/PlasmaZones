@@ -314,7 +314,6 @@ qt_add_qml_module(plasmazones-settings
         qml/FontPickerDialog.qml
         qml/ColorButton.qml
         qml/InputCapture.qml
-        qml/KeySequenceInput.qml
         qml/ModifierAndMouseCheckBoxes.qml
         qml/PositionPicker.qml
         qml/AlgorithmPreview.qml

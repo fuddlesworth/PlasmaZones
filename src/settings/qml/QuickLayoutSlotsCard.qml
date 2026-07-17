@@ -133,7 +133,10 @@ SettingsCard {
                                 return root.getSlot(slotDelegate.slotNumber);
                             }
                             onActivated: {
-                                root.setSlot(slotDelegate.slotNumber, model[currentIndex].value);
+                                // Guard against a transient index/model mismatch
+                                // (same pattern as MonitorStatePage's selectors).
+                                var entry = model[currentIndex];
+                                root.setSlot(slotDelegate.slotNumber, entry ? (entry.value || "") : "");
                             }
                         }
 

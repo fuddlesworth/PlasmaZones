@@ -125,7 +125,7 @@ Kirigami.Dialog {
                         return list.length === 0 || list.indexOf(Number(desktop)) >= 0;
                     }
 
-                    text: root.editorController.virtualDesktopNames[index] || (i18nc("@label", "Desktop %1", desktop))
+                    text: (root.editorController && root.editorController.virtualDesktopNames[index]) || (i18nc("@label", "Desktop %1", desktop))
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     checked: isChecked()
                     onClicked: {

@@ -132,11 +132,12 @@ Item {
             // nw, ne, se, sw
             readonly property bool isHorizontalEdge: modelData.id === "n" || modelData.id === "s"
             readonly property bool isVerticalEdge: modelData.id === "e" || modelData.id === "w"
-            // Corner handles: small circles (10px diameter)
-            // Edge handles: thin pills (4px thick, 24px long)
-            readonly property real cornerSize: 10
-            readonly property real edgeThickness: 4
-            readonly property real edgeLength: 24
+            // Corner handles: small circles; edge handles: thin pills.
+            // Metrics live on EditorZone so ZoneDragHandler's handle-proximity
+            // check stays in lockstep with the rendered handles.
+            readonly property real cornerSize: resizeHandles.root.handleCornerSize
+            readonly property real edgeThickness: resizeHandles.root.handleEdgeThickness
+            readonly property real edgeLength: resizeHandles.root.handleEdgeLength
 
             width: isCornerHandle ? cornerSize : (isHorizontalEdge ? edgeLength : edgeThickness)
             height: isCornerHandle ? cornerSize : (isVerticalEdge ? edgeLength : edgeThickness)
@@ -198,7 +199,7 @@ Item {
                 readonly property bool handleActive: containsMouse || pressed
 
                 anchors.fill: parent
-                anchors.margins: -4 // Larger hit area for easier grabbing
+                anchors.margins: -resizeHandles.root.handleHitMargin // Larger hit area for easier grabbing
                 hoverEnabled: true
                 cursorShape: modelData.cursor
                 preventStealing: true

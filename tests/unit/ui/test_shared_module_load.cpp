@@ -9,6 +9,8 @@
 
 #include <QtPlugin>
 
+#include "daemon/rendering/zoneshaderitem.h"
+
 Q_IMPORT_PLUGIN(org_plasmazones_commonPlugin)
 
 /**
@@ -42,6 +44,13 @@ private:
         }
         QVERIFY2(!comp.isError(), qPrintable(name));
         std::unique_ptr<QObject> obj(comp.create());
+        if (!obj) {
+            // Creation-time errors (broken bindings to missing context,
+            // failed sub-component instantiation) only surface on the
+            // component AFTER create() — print them so the canary names
+            // the real nested cause instead of a bare null.
+            qWarning() << name << "creation errors:" << comp.errorString();
+        }
         QVERIFY2(obj != nullptr, qPrintable(name));
     }
 
@@ -52,10 +61,14 @@ private Q_SLOTS:
         // their deployed import path; the test binary lives in build/bin, so
         // ../qml is the build tree's QML module root.
         m_engine.addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/../qml"));
+        // ZoneShaderRenderer wraps ZoneShaderItem, which the daemon/editor
+        // composition roots register imperatively — mirror that here so the
+        // shared component's `import PlasmaZones` resolves.
+        qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
     }
     void loadsLayoutCard()
     {
-        loadType(QStringLiteral("LayoutCard"));
+        loadType(QStringLiteral("LayoutCard"), QStringLiteral("previewWidth: 160; previewHeight: 90"));
     }
     void loadsZonePreview()
     {
@@ -76,6 +89,35 @@ private Q_SLOTS:
     void loadsCapabilityBadgeRow()
     {
         loadType(QStringLiteral("CapabilityBadgeRow"));
+    }
+    void loadsShaderCompileErrorBanner()
+    {
+        loadType(QStringLiteral("ShaderCompileErrorBanner"));
+    }
+    void loadsParameterEditor()
+    {
+        loadType(QStringLiteral("ParameterEditor"), QStringLiteral("parameters: []; currentValues: ({})"));
+    }
+    void loadsShaderParamsEditor()
+    {
+        loadType(QStringLiteral("ShaderParamsEditor"), QStringLiteral("parameters: []; currentValues: ({})"));
+    }
+    void loadsParameterRow()
+    {
+        loadType(QStringLiteral("ParameterRow"), QStringLiteral("paramData: ({}); currentValues: ({})"));
+    }
+    void loadsParameterSection()
+    {
+        loadType(QStringLiteral("ParameterSection"), QStringLiteral("title: \"section\""));
+    }
+    void loadsCategoryMenuButton()
+    {
+        loadType(QStringLiteral("CategoryMenuButton"), QStringLiteral("items: []"));
+    }
+    void loadsZoneShaderRenderer()
+    {
+        // config is nullable by design (safeConfig falls back to {}).
+        loadType(QStringLiteral("ZoneShaderRenderer"), QStringLiteral("config: null"));
     }
     void singletonResolves()
     {

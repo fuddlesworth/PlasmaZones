@@ -35,6 +35,11 @@ SettingsFlickable {
     // Grid dimensions inferred from pending screens
     property int _columns: 1
     property int _rows: 1
+    // True when the pending screens form a strict row-major grid. The divider
+    // math (_moveColumnDivider/_moveRowDivider) indexes cells as r*cols+c, so
+    // dividers are only created/usable when this holds; non-grid configs
+    // (e.g. hand-edited JSON) would otherwise be corrupted by a drag.
+    property bool _isGrid: true
     // Flips true one tick after the first geometry resolution so the preview
     // box doesn't animate the initial fallback(16:9)→real-aspect jump on page
     // open; monitor switches afterwards still animate.
@@ -64,12 +69,17 @@ SettingsFlickable {
     }
 
     // Detect grid dimensions from a flat screens array by extracting unique
-    // x-start and y-start positions. Pure helper: returns {cols, rows}.
+    // x-start and y-start positions. Pure helper: returns {cols, rows, isGrid}
+    // where isGrid reports whether the array really is a row-major cols×rows
+    // grid (cell count matches, and each cell sits at its expected row/column
+    // start in row-major order). Non-grid configs get cols=length, rows=1 so
+    // counts stay meaningful, but isGrid=false gates the divider machinery.
     function _detectGridOf(screensArray) {
         if (screensArray.length <= 1)
             return {
                 "cols": 1,
-                "rows": 1
+                "rows": 1,
+                "isGrid": true
             };
         var tol = 0.01;
         var xStarts = [];
@@ -98,22 +108,44 @@ SettingsFlickable {
         }
         var detectedCols = xStarts.length;
         var detectedRows = yStarts.length;
-        if (detectedCols * detectedRows === screensArray.length)
+        if (detectedCols * detectedRows === screensArray.length) {
+            // Count matches — cheap geometry confirmation: in row-major order
+            // cell i must start at (sorted xStarts[i % cols], yStarts[i / cols]).
+            xStarts.sort(function (a, b) {
+                return a - b;
+            });
+            yStarts.sort(function (a, b) {
+                return a - b;
+            });
+            var rowMajor = true;
+            for (var m = 0; m < screensArray.length; m++) {
+                var expX = xStarts[m % detectedCols];
+                var expY = yStarts[Math.floor(m / detectedCols)];
+                if (Math.abs(screensArray[m].x - expX) >= tol || Math.abs(screensArray[m].y - expY) >= tol) {
+                    rowMajor = false;
+                    break;
+                }
+            }
             return {
                 "cols": detectedCols,
-                "rows": detectedRows
+                "rows": detectedRows,
+                "isGrid": rowMajor
             };
+        }
         return {
             "cols": screensArray.length,
-            "rows": 1
+            "rows": 1,
+            "isGrid": false
         };
     }
 
-    // Detect grid dimensions of the staged (pending) config into _columns/_rows.
+    // Detect grid dimensions of the staged (pending) config into
+    // _columns/_rows, and grid validity into _isGrid.
     function _detectGrid() {
         var grid = _detectGridOf(_pendingScreens);
         _columns = grid.cols;
         _rows = grid.rows;
+        _isGrid = grid.isGrid;
     }
 
     // Build horizontal split regions from percentage ratios.
@@ -230,6 +262,11 @@ SettingsFlickable {
         // height. The /vs: children reflect the APPLIED config, so derive the
         // grid from _savedScreens (which mirrors it) rather than _rows/_columns,
         // which track the staged config and may differ mid-edit.
+        // Accepted transient: between a save and the daemon republishing its
+        // screens, _savedScreens already holds the new config while the /vs:
+        // children still reflect the old one, so the reconstructed geometry can
+        // be briefly wrong. Display-only and self-correcting on the next
+        // screensChanged — deliberately not fixed (audit 2026-07 concurred).
         var appliedGrid = _detectGridOf(_savedScreens);
         if (rowHeights.length === 1 && appliedGrid.rows > 1 && appliedGrid.cols > 0) {
             _screenWidth = Math.round(rowWidths[0] / appliedGrid.rows);
@@ -292,12 +329,17 @@ SettingsFlickable {
         _pendingScreens = screens;
         _columns = cols;
         _rows = rows;
+        // _gridRegions-style output above is row-major by construction.
+        _isGrid = true;
         _stageCurrentConfig();
     }
 
     // Move a column divider (vertical boundary between adjacent columns).
     // Adjusts x/width of all cells straddling that column boundary.
+    // Requires a strict row-major grid (r*cols+c indexing below).
     function _moveColumnDivider(colIndex, newXFraction) {
+        if (!_isGrid)
+            return;
         if (colIndex < 0 || colIndex >= _columns - 1)
             return;
 
@@ -329,7 +371,10 @@ SettingsFlickable {
 
     // Move a row divider (horizontal boundary between adjacent rows).
     // Adjusts y/height of all cells straddling that row boundary.
+    // Requires a strict row-major grid (r*cols+c indexing below).
     function _moveRowDivider(rowIndex, newYFraction) {
+        if (!_isGrid)
+            return;
         if (rowIndex < 0 || rowIndex >= _rows - 1)
             return;
 
@@ -495,7 +540,7 @@ SettingsFlickable {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     text: {
                         let orient = root._screenHeight > root._screenWidth ? i18nc("@label screen orientation", "Portrait") : i18nc("@label screen orientation", "Landscape");
-                        let res = root._screenWidth + " \u00d7 " + root._screenHeight + " \u00b7 " + orient;
+                        let res = i18nc("@info screen resolution in pixels", "%1\u00d7%2 px", root._screenWidth, root._screenHeight) + " \u00b7 " + orient;
                         let count = root._pendingScreens.length;
                         if (count > 1) {
                             if (root._rows > 1)
@@ -536,6 +581,7 @@ SettingsFlickable {
                     screenHeight: root._screenHeight
                     columns: root._columns
                     rows: root._rows
+                    isGrid: root._isGrid
                     onColumnDividerMoved: function (colIndex, newFraction) {
                         root._moveColumnDivider(colIndex, newFraction);
                     }
@@ -893,6 +939,11 @@ SettingsFlickable {
                             placeholderText: i18n("Screen %1", index + 1)
                             Accessible.name: i18n("Display name for virtual screen %1", index + 1)
                             onEditingFinished: {
+                                // editingFinished fires on any focus-out; skip the
+                                // copy/stage when the text didn't actually change so
+                                // merely tabbing through fields can't dirty the page.
+                                if (text === (modelData.displayName || ""))
+                                    return;
                                 var screens = root._deepCopy(root._pendingScreens);
                                 if (index >= 0 && index < screens.length) {
                                     screens[index].displayName = text;
@@ -906,9 +957,9 @@ SettingsFlickable {
                             text: {
                                 var wp = Math.round(modelData.width * 100);
                                 if (root._rows > 1)
-                                    return wp + "% \u00d7 " + Math.round(modelData.height * 100) + "%";
+                                    return i18nc("@info virtual screen size as width by height percentages", "%1% \u00d7 %2%", wp, Math.round(modelData.height * 100));
 
-                                return wp + "%";
+                                return i18nc("@info virtual screen width as a percentage", "%1%", wp);
                             }
                             Layout.preferredWidth: root._rows > 1 ? Kirigami.Units.gridUnit * 5 : Kirigami.Units.gridUnit * 3
                             horizontalAlignment: Text.AlignRight
@@ -920,9 +971,9 @@ SettingsFlickable {
                             text: {
                                 var wpx = Math.round(modelData.width * root._screenWidth);
                                 if (root._rows > 1)
-                                    return wpx + "\u00d7" + Math.round(modelData.height * root._screenHeight) + "px";
+                                    return i18nc("@info screen resolution in pixels", "%1\u00d7%2 px", wpx, Math.round(modelData.height * root._screenHeight));
 
-                                return wpx + "px";
+                                return i18nc("@info width in pixels", "%1 px", wpx);
                             }
                             Layout.preferredWidth: root._rows > 1 ? Kirigami.Units.gridUnit * 5.5 : Kirigami.Units.gridUnit * 4
                             horizontalAlignment: Text.AlignRight

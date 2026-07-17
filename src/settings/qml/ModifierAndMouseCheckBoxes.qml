@@ -115,28 +115,10 @@ Item {
     signal mouseButtonsModified(int mouseButtonValue)
     signal triggersModified(var triggers)
 
-    function displayText() {
-        var parts = [];
-        if (acceptMode !== acceptModeMouseOnly) {
-            for (var i = 0; i < modifierChips.length; i++)
-                if ((modifierValue & modifierChips[i].bit) !== 0) {
-                    parts.push(modifierChips[i].label);
-                }
-        }
-        if (acceptMode !== acceptModeMetaOnly) {
-            for (var j = 0; j < mouseButtonList.length; j++)
-                if ((mouseButtonValue & mouseButtonList[j].bit) !== 0) {
-                    parts.push(mouseButtonList[j].label);
-                }
-        }
-        if (parts.length === 0)
-            return "";
-
-        return parts.join(" + ");
-    }
-
-    //* Display text for a single trigger (modifier bitmask + mouse button bit)
-    function triggerDisplayText(modifier, mouseButton) {
+    //* Scan a modifier bitmask + mouse button bit into a "A + B" label,
+    //* honouring acceptMode. Returns emptyText when nothing is set — the two
+    //* callers only differ in what an empty capture reads as.
+    function _scanText(modifier, mouseButton, emptyText) {
         var parts = [];
         if (acceptMode !== acceptModeMouseOnly) {
             for (var i = 0; i < modifierChips.length; i++)
@@ -151,9 +133,18 @@ Item {
                 }
         }
         if (parts.length === 0)
-            return i18n("(none)");
+            return emptyText;
 
         return parts.join(" + ");
+    }
+
+    function displayText() {
+        return _scanText(modifierValue, mouseButtonValue, "");
+    }
+
+    //* Display text for a single trigger (modifier bitmask + mouse button bit)
+    function triggerDisplayText(modifier, mouseButton) {
+        return _scanText(modifier, mouseButton, i18n("(none)"));
     }
 
     function clearAll() {
@@ -207,7 +198,7 @@ Item {
         triggersModified(deduped);
     }
 
-    // Match PlasmaZonesKeySequenceInput: no fixed width so FormLayout gives same column width as shortcut fields
+    // Match ShortcutCaptureField: no fixed width so FormLayout gives the same column width as shortcut fields
     implicitWidth: allowMultiple ? multiContainer.implicitWidth : field.implicitWidth
     implicitHeight: allowMultiple ? multiContainer.implicitHeight : field.implicitHeight
 

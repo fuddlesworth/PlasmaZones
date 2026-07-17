@@ -176,8 +176,8 @@ TextField {
 
     Accessible.name: accessibleName !== "" ? accessibleName : text
     Layout.fillWidth: true
-    text: capturing ? i18n("Press keys...") : (keySequence || "")
-    placeholderText: "Ctrl+Shift+X"
+    text: capturing ? i18n("Press keys…") : (keySequence || "")
+    placeholderText: i18nc("@info:placeholder example keyboard shortcut", "Ctrl+Shift+X")
     readOnly: true
     color: capturing ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
     Keys.priority: Keys.BeforeItem

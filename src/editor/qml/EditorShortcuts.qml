@@ -105,10 +105,12 @@ Item {
     }
 
     // Duplicate zone(s) shortcut (configurable) - duplicates all selected zones
+    // sequence is set imperatively by shortcutConnectionsLoader (initial value
+    // on load, updates via Connections) — a declarative binding here would be
+    // severed by the first imperative assignment anyway.
     Shortcut {
         id: duplicateShortcut
 
-        sequence: editorController ? editorController.editorDuplicateShortcut : "Ctrl+D"
         enabled: !shortcuts.previewMode && editorController && editorController.selectionCount > 0
         onActivated: {
             if (editorController)
@@ -172,10 +174,10 @@ Item {
     }
 
     // Split zone horizontally shortcut (configurable)
+    // sequence managed by shortcutConnectionsLoader, see duplicateShortcut
     Shortcut {
         id: splitHorizontalShortcut
 
-        sequence: editorController ? editorController.editorSplitHorizontalShortcut : "Ctrl+Shift+H"
         enabled: !shortcuts.previewMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             if (editorController && editorWindow.selectedZoneId)
@@ -185,10 +187,10 @@ Item {
 
     // Split zone vertically shortcut (configurable)
     // Note: Default changed from Ctrl+Shift+V to avoid conflict with Paste with Offset
+    // sequence managed by shortcutConnectionsLoader, see duplicateShortcut
     Shortcut {
         id: splitVerticalShortcut
 
-        sequence: editorController ? editorController.editorSplitVerticalShortcut : "Ctrl+Alt+V"
         enabled: !shortcuts.previewMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             if (editorController && editorWindow.selectedZoneId)
@@ -197,12 +199,12 @@ Item {
     }
 
     // Fill available space shortcut (configurable)
+    // sequence managed by shortcutConnectionsLoader, see duplicateShortcut
     Shortcut {
         // Fallback if zone not found in repeater
 
         id: fillShortcut
 
-        sequence: editorController ? editorController.editorFillShortcut : "Ctrl+Shift+F"
         enabled: !shortcuts.previewMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             if (editorController && editorWindow.selectedZoneId) {
@@ -262,14 +264,25 @@ Item {
         onActivated: helpDialog.open()
     }
 
-    // Update shortcut sequences when they change (app-specific shortcuts only)
-    // Standard shortcuts (Save, Delete, Close, etc.) use StandardKey and don't need updating
+    // Single owner of the configurable shortcut sequences (app-specific
+    // shortcuts only — standard shortcuts use StandardKey and never change):
+    // onLoaded seeds the initial values as soon as editorController is
+    // available (before any shortcut can fire, since all four are disabled
+    // while editorController is null), and the Connections below track
+    // subsequent changes. The Shortcut items deliberately carry no declarative
+    // sequence binding: the first imperative assignment would sever it.
     // Use Loader to conditionally create Connections only when editorController is available
     // This prevents "function in an invalid context" errors during component destruction
     Loader {
         id: shortcutConnectionsLoader
 
         active: editorController !== null
+        onLoaded: {
+            duplicateShortcut.sequence = editorController.editorDuplicateShortcut;
+            splitHorizontalShortcut.sequence = editorController.editorSplitHorizontalShortcut;
+            splitVerticalShortcut.sequence = editorController.editorSplitVerticalShortcut;
+            fillShortcut.sequence = editorController.editorFillShortcut;
+        }
 
         sourceComponent: Connections {
             function onEditorDuplicateShortcutChanged() {

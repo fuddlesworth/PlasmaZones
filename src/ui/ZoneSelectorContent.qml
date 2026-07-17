@@ -28,7 +28,6 @@ Item {
     // Layout data
     property var layouts: []
     property string activeLayoutId: ""
-    property string hoveredLayoutId: ""
     property bool globalAutoAssign: false
     property string selectedLayoutId: ""
     property int selectedZoneIndex: -1
@@ -107,11 +106,6 @@ Item {
             var hBar = scrollView.ScrollBar.horizontal;
             hBar.position = Math.max(0, Math.min(1 - hBar.size, hBar.position - step));
         }
-    }
-
-    function resetCursorState() {
-        root.cursorX = -1;
-        root.cursorY = -1;
     }
 
     anchors.fill: parent
@@ -415,18 +409,13 @@ Item {
                             previewWidth: root.indicatorWidth
                             previewHeight: root.indicatorHeight
                             showCardBackground: true
-                            // The zone-selector slot is supposed to be input-transparent —
+                            // The zone-selector slot is input-transparent by design —
                             // OverlayService::updateSelectorPosition pushes cursor coords from
                             // the D-Bus drag stream and writes `selectedLayoutId` /
                             // `selectedZoneIndex` back; the commit happens at drag-end in
-                            // WindowDragAdaptor's drop path (drop.cpp). The shared shell
-                            // surface only flips to input-grabbing when snap-assist / layout-
-                            // picker is up, and during that window the still-hiding zone-
-                            // selector slot was leaking hover events into these MouseAreas,
-                            // which switched the active layout out from under the user. Hard-
-                            // disabling interactivity here matches the design contract and is
-                            // defense in depth against any future input-grab regression.
-                            interactive: false
+                            // WindowDragAdaptor's drop path (drop.cpp). ZonePreview carries no
+                            // pointer handlers at all (its hover machinery was removed), so
+                            // nothing here can switch the active layout on stray hover events.
                             selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
                             zonePadding: root.scaledPadding
                             edgeGap: root.scaledPadding
@@ -436,7 +425,6 @@ Item {
                             zoneBorderColor: root.borderColor
                             inactiveOpacity: root.inactiveOpacity
                             activeOpacity: root.activeOpacity
-                            hoverScale: 1.05
                             highlightColor: root.highlightColor
                             textColor: root.textColor
                             backgroundColor: root.backgroundColor
@@ -449,10 +437,10 @@ Item {
                             animationDuration: animationConstants.normalDuration
                             shortAnimationDuration: animationConstants.shortDuration
                             labelTopMargin: root.labelTopMargin
-                            // No onZoneHovered: interactive=false above means the inner
-                            // MouseArea never fires. `selectedLayoutId` / `selectedZoneIndex`
-                            // are written from C++ (selector.cpp::updateSelectorPosition) so
-                            // the highlight still tracks the cursor.
+                            // No hover handling: ZonePreview has no MouseAreas.
+                            // `selectedLayoutId` / `selectedZoneIndex` are written from C++
+                            // (selector.cpp::updateSelectorPosition) so the highlight still
+                            // tracks the cursor.
                         }
 
                         Rectangle {

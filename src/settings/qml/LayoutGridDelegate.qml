@@ -64,6 +64,12 @@ Item {
     // RuleSectionList's per-row registration. No-op when hosted outside a
     // SettingsFlickable (pageFor returns null).
     Component.onCompleted: Qt.callLater(function () {
+        // The coalesced callback can fire after this delegate has been
+        // destroyed (model churn during fast filtering/reloads); the dying
+        // context resolves ids to undefined/null. Bail before dereferencing
+        // rather than throwing — same guard as LayoutComboBox._doRebuild.
+        if (typeof root === "undefined" || !root)
+            return;
         var pg = SearchAnchors.pageFor(root);
         if (pg)
             pg.registerSearchAnchor("layout:" + root.modelData.id, root, SearchAnchors.cardFor(root));

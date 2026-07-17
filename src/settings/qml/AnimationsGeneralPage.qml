@@ -222,12 +222,23 @@ SettingsFlickable {
                     description: i18n("How to animate when moving several windows at once")
 
                     WideComboBox {
+                        id: sequenceModeCombo
+
                         Accessible.name: i18n("Multiple windows")
                         enabled: animationsCard.toggleChecked
                         model: [i18n("All at once"), i18n("One by one")]
-                        currentIndex: page.appSettings.animationSequenceMode
                         onActivated: index => {
                             page.appSettings.animationSequenceMode = index;
+                        }
+
+                        // Guarded Binding so a user activation can't sever the
+                        // binding and a config change keeps refreshing the
+                        // control. RestoreNone + the popup gate keeps an open
+                        // dropdown from being clobbered mid-selection.
+                        Binding on currentIndex {
+                            value: page.appSettings.animationSequenceMode
+                            when: !sequenceModeCombo.popup.visible
+                            restoreMode: Binding.RestoreNone
                         }
                     }
                 }
@@ -258,7 +269,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Minimum distance")
                     searchAnchor: "minimumDistance"
-                    description: page.appSettings.animationMinDistance === 0 ? i18n("Currently: always animate, no threshold") : i18n("Skip animation when geometry changes less than this")
+                    description: page.appSettings.animationMinDistance === 0 ? i18n("Always animates with no distance threshold") : i18n("Skip animation when geometry changes less than this")
 
                     SettingsSpinBox {
                         id: minDistanceSpin

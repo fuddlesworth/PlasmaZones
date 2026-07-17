@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth
+     SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Color-Usage Inventory — Phosphor Libraries
 
 Scope: `libs/phosphor-control`, `libs/phosphor-shell*` (shell, shell-widgets, shell-osd,

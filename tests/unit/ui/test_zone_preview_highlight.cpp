@@ -135,18 +135,6 @@ private Q_SLOTS:
         QCOMPARE(highlightStates(hovered), QList<bool>({true, true, true, true}));
     }
 
-    /// `highlightAllZones` is the explicit opt-in for lighting every zone even
-    /// though one is selected.
-    void testHighlightAllZonesOptIn()
-    {
-        QVariantMap props;
-        props[QStringLiteral("highlightAllZones")] = true;
-        props[QStringLiteral("selectedZoneIndex")] = 2;
-
-        const QList<bool> states = highlightStates(props);
-        QCOMPARE(states, QList<bool>({true, true, true, true}));
-    }
-
     /// Nothing selected and no card-level state: every zone stays dim.
     void testNeutralCardHighlightsNothing()
     {

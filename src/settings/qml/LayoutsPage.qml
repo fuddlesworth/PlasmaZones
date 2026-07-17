@@ -497,6 +497,7 @@ SettingsFlickable {
 
         title: i18n("Export Layout")
         nameFilters: [i18n("JSON files (*.json)")]
+        defaultSuffix: "json"
         fileMode: FileDialog.SaveFile
         onAccepted: {
             settingsController.exportLayout(exportDialog.layoutId, root.filePathFromUrl(selectedFile));

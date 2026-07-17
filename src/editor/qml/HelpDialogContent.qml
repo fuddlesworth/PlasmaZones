@@ -36,8 +36,10 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             // KEYBOARD SHORTCUTS
             // ═══════════════════════════════════════════════════════════════
+            // File component (SectionHeader.qml); title-only, no icon
             SectionHeader {
                 title: i18nc("@title:group", "Keyboard Shortcuts")
+                Layout.columnSpan: 2
             }
 
             GridLayout {
@@ -180,6 +182,7 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             SectionHeader {
                 title: i18nc("@title:group", "Mouse Actions")
+                Layout.columnSpan: 2
             }
 
             GridLayout {
@@ -225,6 +228,7 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             SectionHeader {
                 title: i18nc("@title:group", "Tips")
+                Layout.columnSpan: 2
             }
 
             ColumnLayout {
@@ -258,6 +262,7 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             SectionHeader {
                 title: i18nc("@title:group", "Accessibility")
+                Layout.columnSpan: 2
             }
 
             Label {
@@ -271,28 +276,6 @@ ScrollView {
             Item {
                 Layout.fillHeight: true
             }
-        }
-    }
-
-    component SectionHeader: RowLayout {
-        required property string title
-
-        Layout.fillWidth: true
-        Layout.columnSpan: 2
-        spacing: Kirigami.Units.smallSpacing
-
-        Rectangle {
-            width: Math.round(Kirigami.Units.smallSpacing * 0.75)
-            height: sectionLabel.height
-            color: Kirigami.Theme.highlightColor
-            radius: Math.round(Kirigami.Units.smallSpacing / 4)
-        }
-
-        Label {
-            id: sectionLabel
-
-            text: parent.title
-            font.weight: Font.DemiBold
         }
     }
 

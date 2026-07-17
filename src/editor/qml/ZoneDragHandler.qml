@@ -28,6 +28,7 @@ MouseArea {
     property var fillRegion: null
     property var committedFillRegion: null // Preserve fill region even after modifier key released
     property bool hasDragged: false // Track if actual drag movement occurred
+    readonly property int dragThreshold: 5 // Minimum drag distance before a press counts as a drag (mirrors CanvasMouseHandler)
     // Last snapped/clamped drag position computed in onPositionChanged. Committed on
     // release instead of visualX/visualY, because the visual properties have Behaviors
     // and may hold a mid-animation (interpolated) value at release time.
@@ -70,7 +71,7 @@ MouseArea {
         var mx = mouse.x, my = mouse.y;
         var zw = zoneRoot.width, zh = zoneRoot.height;
         // Geometric check: detect if click is near a corner/edge handle
-        var handleHitSize = 24;
+        var handleHitSize = zoneRoot.handleHitSize;
         var edgeHandleHalfSize = zoneRoot.handleSize * 3;
         var nearCornerOrEdge = ((mx < handleHitSize && my < handleHitSize) || (mx > zw - handleHitSize && my < handleHitSize) || (mx < handleHitSize && my > zh - handleHitSize) || (mx > zw - handleHitSize && my > zh - handleHitSize) || (mx > zw / 2 - edgeHandleHalfSize && mx < zw / 2 + edgeHandleHalfSize && my < handleHitSize) || (mx > zw / 2 - edgeHandleHalfSize && mx < zw / 2 + edgeHandleHalfSize && my > zh - handleHitSize) || (my > zh / 2 - edgeHandleHalfSize && my < zh / 2 + edgeHandleHalfSize && mx < handleHitSize) || (my > zh / 2 - edgeHandleHalfSize && my < zh / 2 + edgeHandleHalfSize && mx > zw - handleHitSize));
         if (nearCornerOrEdge) {
@@ -133,8 +134,7 @@ MouseArea {
             if (!isFinite(dy) || isNaN(dy))
                 dy = 0;
 
-            // Only mark as dragged if movement exceeds threshold (5 pixels)
-            var dragThreshold = 5;
+            // Only mark as dragged if movement exceeds dragThreshold
             if (!hasDragged && (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold))
                 hasDragged = true;
 
@@ -373,7 +373,7 @@ MouseArea {
     Timer {
         id: animateOffTimer
 
-        interval: 200
+        interval: Kirigami.Units.longDuration
         onTriggered: zoneRoot.animateFillPreview = false
     }
 }

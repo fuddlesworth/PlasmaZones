@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth
+     SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Color-usage inventory + remediation map — src/settings/qml/ (A–L)
 
 Scope: every `Kirigami.Theme.*Color` / `colorSet`, `Qt.rgba()`, `Qt.lighter/darker/tint/alpha`, and color literal in QML files whose basename starts with A–L. Phosphor.Theme token usages: **0 found** (nothing skipped). `Qt.rgba(c.r, c.g, c.b, a)` is abbreviated `c@a` in expressions (e.g. `textColor@0.2`).

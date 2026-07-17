@@ -60,6 +60,9 @@ Item {
         idOf: function (item) {
             return item.ruleId;
         }
+        accessibleNameOf: function (item) {
+            return item.name || item.ruleId;
+        }
         reorderableOf: function (item) {
             return item.managed !== true;
         }

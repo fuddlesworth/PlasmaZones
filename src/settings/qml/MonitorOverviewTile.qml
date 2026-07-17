@@ -105,6 +105,9 @@ Rectangle {
                 font: Kirigami.Theme.smallFont
                 color: Kirigami.Theme.highlightColor
                 opacity: tile._isPrimary ? 1 : 0
+                // Opacity 0 keeps the badge in the accessibility tree, so
+                // non-primary tiles would still announce "Primary".
+                Accessible.ignored: !tile._isPrimary
             }
         }
 

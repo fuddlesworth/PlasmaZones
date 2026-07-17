@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth
+     SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Kirigami Color Usage — Inventory & Remediation Map
 
 Generated 2026-07-16 from a full scan of the QML tree (`src/settings/qml`,
@@ -55,7 +58,7 @@ tertiary accent — which is exactly why the misuses above render in
 
 ## Grand totals
 
-Note: the totals and the ranked fix plan below are the pre-remediation snapshot. Some items have since been superseded on this branch.
+Note: the totals, the ranked fix plan, and the "In-tree exemplars" section below are the pre-remediation snapshot. Some items have since been superseded on this branch.
 
 | Verdict | Count |
 |---|---|
@@ -112,7 +115,7 @@ which were resolved on the `fix/theme-color-pipeline` branch.
 - `ShaderBrowserCard.qml`, `ParameterRow.qml` — correct `focusColor`
 - `DimensionTooltip.qml` — correct `Tooltip` colorSet
 - `UnsavedChangesFooter.qml` — correct `Window` pin with `inherit: false`
-- `ParameterSection.qml` — the one correct `hoverColor`
+- `ParameterSection.qml` — the first correct `hoverColor` (pre-remediation)
 
 ## Post-fix findings (discovered after the QML pass)
 

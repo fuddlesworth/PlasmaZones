@@ -33,6 +33,8 @@ Kirigami.Dialog {
     id: root
 
     required property var editorController
+    // EditorWindow reference, needed for the shared urlToLocalPath helper
+    required property var editorWindow
     // ═══════════════════════════════════════════════════════════════════════
     // PENDING STATE (buffered until Apply is clicked)
     // ═══════════════════════════════════════════════════════════════════════
@@ -310,13 +312,10 @@ Kirigami.Dialog {
     }
 
     function filePathFromUrl(url) {
-        if (!url)
-            return "";
-
-        // `decodeURIComponent` is required for paths containing spaces or
-        // any other %-encoded character — `selectedFile` from FileDialog
-        // returns e.g. `file:///home/u/My%20Documents/preset.json`.
-        return decodeURIComponent(url.toString().replace(/^file:\/\/+/, "/"));
+        // Single URL→path implementation shared with EditorWindow's
+        // import/export dialogs (handles %-encoded characters and both
+        // file:// and file:/// forms).
+        return root.editorWindow.urlToLocalPath(url);
     }
 
     function preparePresetDialog(dialog) {

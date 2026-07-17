@@ -1420,6 +1420,9 @@ private:
     // points where the in-memory store equals disk); discardKeys() reverts to
     // this baseline and isKeyModified() compares against it. Private: mutating
     // the baseline anywhere but a load/save commit point desyncs dirty tracking.
+    // ONE narrow exception: rebaselineDerivedColorKeys() below refreshes just
+    // the four palette-derived zone-color entries after a runtime palette
+    // re-derive — those keys are palette-owned, never user edits.
     void captureBaseline();
 
     // Refresh the baseline for ONLY the four palette-derived zone-color keys
@@ -1490,8 +1493,12 @@ private:
 
     // Committed baseline: the last-persisted value of every schema-declared
     // key, keyed group → {key → value}. Refreshed by captureBaseline() at the
-    // end of load() and save(). Backs per-page Discard (revert to baseline)
-    // and value-based per-page dirty checks (isKeyModified).
+    // end of load() and save() — plus one targeted exception: eventFilter()'s
+    // ApplicationPaletteChange path calls rebaselineDerivedColorKeys() to
+    // refresh ONLY the four palette-derived zone-color entries, so a runtime
+    // theme switch doesn't read as an unsaved edit. Backs per-page Discard
+    // (revert to baseline) and value-based per-page dirty checks
+    // (isKeyModified).
     QHash<QString, QVariantMap> m_baseline;
 
     // Raised (RAII, via QScopedValueRollback) around eventFilter()'s runtime
@@ -1500,15 +1507,15 @@ private:
     // user edit. Never true outside that synchronous window.
     bool m_applyingSystemPalette = false;
 
-    // Raised (RAII, via QScopedValueRollback) around load()'s
-    // applySystemColorScheme() call ONLY. The derive routes through the
-    // public color setters, whose per-setter NOTIFY + settingsChanged
-    // emissions would duplicate load()'s own snapshot-based announcement
-    // (emitChangedNotifyProperties + the single trailing settingsChanged).
-    // While true, the color setters persist silently and load() remains the
-    // sole announcer. Never true outside that synchronous window — the
-    // eventFilter / setUseSystemColors paths rely on setters emitting
-    // normally.
+    // Raised (RAII, via QScopedValueRollback) around the two batched
+    // applySystemColorScheme() call sites: load() and eventFilter()'s runtime
+    // palette re-derive. The derive routes through the public color setters,
+    // whose per-setter NOTIFY + settingsChanged emissions would duplicate the
+    // caller's own snapshot-based announcement (each changed NOTIFY exactly
+    // once plus a single settingsChanged). While true, the color setters
+    // persist silently and the caller remains the sole announcer. Never true
+    // outside those synchronous windows — setUseSystemColors relies on the
+    // setters emitting normally.
     bool m_suppressDerivedColorEmissions = false;
 
     static QString normalizeUuidString(const QString& uuidStr);

@@ -23,6 +23,14 @@ Rectangle {
     required property int screenHeight
     required property int columns
     required property int rows
+    // True when pendingScreens form a strict row-major columns×rows grid.
+    // The divider handles assume that indexing, so they are only created
+    // when this holds; non-grid configs render regions without dividers.
+    required property bool isGrid
+    // Keyboard nudge per arrow press on a focused divider: 1% of the axis,
+    // matching the granularity of a small mouse drag (the drag path is
+    // continuous; the page-side move handler clamps either way).
+    readonly property real keyboardStepFraction: 0.01
     // ── Font sizing ratios for region labels ────────────────────────────
     // Fraction of region width used to scale the label font (0.125 = 1/8).
     readonly property real titleFontScaleFraction: 0.125
@@ -98,9 +106,9 @@ Rectangle {
                         var hpx = Math.round(modelData.height * previewRoot.screenHeight);
                         var pct = Math.round(modelData.width * 100);
                         if (previewRoot.rows > 1)
-                            return wpx + "\u00d7" + hpx + "px";
+                            return i18nc("@info screen resolution in pixels", "%1\u00d7%2 px", wpx, hpx);
 
-                        return wpx + "px \u00b7 " + pct + "%";
+                        return i18nc("@info region width in pixels and as a percentage of the screen", "%1 px \u00b7 %2%", wpx, pct);
                     }
                     font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, regionRect.width * previewRoot.detailFontScaleFraction))
                     color: Kirigami.Theme.disabledTextColor
@@ -112,7 +120,9 @@ Rectangle {
 
     // ── Column dividers (vertical lines between adjacent columns) ────────
     Repeater {
-        model: previewRoot.columns > 1 ? previewRoot.columns - 1 : 0
+        // Dividers require the strict row-major grid their move handlers
+        // assume; hide them entirely for non-grid configs.
+        model: previewRoot.isGrid && previewRoot.columns > 1 ? previewRoot.columns - 1 : 0
 
         Item {
             id: colDividerHandle
@@ -131,18 +141,27 @@ Rectangle {
             x: dividerX - Math.round(width / 2)
             y: 0
             height: previewRoot.height
+            // Keyboard operation: Tab focuses the handle, Left/Right nudge the
+            // boundary by keyboardStepFraction of the axis (same signal path as
+            // the mouse drag; the page-side handler clamps to minimum widths).
+            activeFocusOnTab: true
+            Keys.onLeftPressed: previewRoot.columnDividerMoved(index, dividerX / previewRoot.width - previewRoot.keyboardStepFraction)
+            Keys.onRightPressed: previewRoot.columnDividerMoved(index, dividerX / previewRoot.width + previewRoot.keyboardStepFraction)
             Accessible.name: i18n("Column divider %1", index + 1)
+            Accessible.description: i18n("Move with the left and right arrow keys")
             Accessible.role: Accessible.Separator
+            Accessible.focusable: true
 
             // Visual divider line
             Rectangle {
                 anchors.centerIn: parent
-                width: colDragArea.containsMouse || colDragArea.pressed ? 3 : 1
+                width: colDragArea.containsMouse || colDragArea.pressed || colDividerHandle.activeFocus ? 3 : 1
                 height: parent.height - 4
                 radius: 1
                 // Functional divider (drag affordance), needs more presence
-                // than a decorative separator.
-                color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.Theme.disabledTextColor
+                // than a decorative separator. Focus turns it focusColor so the
+                // keyboard target is visible.
+                color: colDividerHandle.activeFocus ? Kirigami.Theme.focusColor : (colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.Theme.disabledTextColor)
 
                 Behavior on width {
                     PhosphorMotionAnimation {
@@ -165,9 +184,9 @@ Rectangle {
                 width: Math.round(Kirigami.Units.gridUnit * 0.75)
                 height: Math.round(Kirigami.Units.gridUnit * 1.5)
                 radius: 4
-                color: colDragArea.containsMouse || colDragArea.pressed ? Qt.alpha(Kirigami.Theme.hoverColor, 0.3) : Kirigami.Theme.backgroundColor
+                color: colDividerHandle.activeFocus ? Qt.alpha(Kirigami.Theme.focusColor, 0.3) : (colDragArea.containsMouse || colDragArea.pressed ? Qt.alpha(Kirigami.Theme.hoverColor, 0.3) : Kirigami.Theme.backgroundColor)
                 border.width: 1
-                border.color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                border.color: colDividerHandle.activeFocus ? Kirigami.Theme.focusColor : (colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast))
                 visible: previewRoot.height > Math.round(Kirigami.Units.gridUnit * 2.5)
 
                 // Grip dots (vertical)
@@ -222,7 +241,9 @@ Rectangle {
 
     // ── Row dividers (horizontal lines between adjacent rows) ────────────
     Repeater {
-        model: previewRoot.rows > 1 ? previewRoot.rows - 1 : 0
+        // Dividers require the strict row-major grid their move handlers
+        // assume; hide them entirely for non-grid configs.
+        model: previewRoot.isGrid && previewRoot.rows > 1 ? previewRoot.rows - 1 : 0
 
         Item {
             id: rowDividerHandle
@@ -242,18 +263,27 @@ Rectangle {
             y: dividerY - Math.round(height / 2)
             width: previewRoot.width
             height: Kirigami.Units.smallSpacing * 2
+            // Keyboard operation: Tab focuses the handle, Up/Down nudge the
+            // boundary by keyboardStepFraction of the axis (same signal path as
+            // the mouse drag; the page-side handler clamps to minimum heights).
+            activeFocusOnTab: true
+            Keys.onUpPressed: previewRoot.rowDividerMoved(index, dividerY / previewRoot.height - previewRoot.keyboardStepFraction)
+            Keys.onDownPressed: previewRoot.rowDividerMoved(index, dividerY / previewRoot.height + previewRoot.keyboardStepFraction)
             Accessible.name: i18n("Row divider %1", index + 1)
+            Accessible.description: i18n("Move with the up and down arrow keys")
             Accessible.role: Accessible.Separator
+            Accessible.focusable: true
 
             // Visual divider line
             Rectangle {
                 anchors.centerIn: parent
                 width: parent.width - 4
-                height: rowDragArea.containsMouse || rowDragArea.pressed ? 3 : 1
+                height: rowDragArea.containsMouse || rowDragArea.pressed || rowDividerHandle.activeFocus ? 3 : 1
                 radius: 1
                 // Functional divider (drag affordance), needs more presence
-                // than a decorative separator.
-                color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.Theme.disabledTextColor
+                // than a decorative separator. Focus turns it focusColor so the
+                // keyboard target is visible.
+                color: rowDividerHandle.activeFocus ? Kirigami.Theme.focusColor : (rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.Theme.disabledTextColor)
 
                 Behavior on height {
                     PhosphorMotionAnimation {
@@ -276,9 +306,9 @@ Rectangle {
                 width: Math.round(Kirigami.Units.gridUnit * 1.5)
                 height: Math.round(Kirigami.Units.gridUnit * 0.75)
                 radius: 4
-                color: rowDragArea.containsMouse || rowDragArea.pressed ? Qt.alpha(Kirigami.Theme.hoverColor, 0.3) : Kirigami.Theme.backgroundColor
+                color: rowDividerHandle.activeFocus ? Qt.alpha(Kirigami.Theme.focusColor, 0.3) : (rowDragArea.containsMouse || rowDragArea.pressed ? Qt.alpha(Kirigami.Theme.hoverColor, 0.3) : Kirigami.Theme.backgroundColor)
                 border.width: 1
-                border.color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                border.color: rowDividerHandle.activeFocus ? Kirigami.Theme.focusColor : (rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast))
                 visible: previewRoot.width > Math.round(Kirigami.Units.gridUnit * 2.5)
 
                 // Grip dots (horizontal)

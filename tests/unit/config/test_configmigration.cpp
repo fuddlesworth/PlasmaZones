@@ -767,10 +767,6 @@ private Q_SLOTS:
                                     "\n"
                                     "[Display]\n"
                                     "ShowOnAllMonitors=true\n"
-                                    // Retired blur toggle: migrateV1ToV2 intentionally drops it, so
-                                    // the schema-coverage assertion pins that this stray v1 key never
-                                    // leaks into the v2 tree as an undeclared destination key.
-                                    "EnableBlur=true\n"
                                     "DisabledMonitors=a\n"
                                     "DisabledDesktops=b\n"
                                     "DisabledActivities=c\n"
@@ -791,6 +787,11 @@ private Q_SLOTS:
                                     "DefaultLayoutId=\n"
                                     "\n"
                                     "[Appearance]\n"
+                                    // Retired blur toggle, in its actual v1 home ([Appearance]). The
+                                    // migration never copies it, and the drop is structural — every v1
+                                    // group is removed wholesale — so the schema-coverage assertion
+                                    // pins that it never surfaces as an undeclared v2 destination key.
+                                    "EnableBlur=true\n"
                                     "UseSystemColors=true\n"
                                     "HighlightColor=1,2,3,255\n"
                                     "InactiveColor=4,5,6,255\n"

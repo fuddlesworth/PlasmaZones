@@ -214,6 +214,9 @@ ColumnLayout {
     }
     Component.onCompleted: _refreshOverrides()
     onHasOverridesMethodChanged: _refreshOverrides()
+    // physicalOnly gates the whole dot computation above, so a mode flip must
+    // re-poll (or clear) the map rather than leaving the previous mode's dots.
+    onPhysicalOnlyChanged: _refreshOverrides()
 
     Connections {
         target: root.appSettings

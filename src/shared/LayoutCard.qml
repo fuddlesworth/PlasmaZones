@@ -33,12 +33,11 @@ Item {
     // reflects actual snap behavior even when the per-layout flag is off.
     property bool globalAutoAssign: false
     // Dimensions (set by parent, no defaults)
-    property real previewWidth
-    property real previewHeight
+    required property real previewWidth
+    required property real previewHeight
     // Feature toggles
     property bool showCardBackground: false
     // ZonePreview passthrough
-    property bool interactive: false
     property int selectedZoneIndex: -1
     property int zonePadding: 2
     property int edgeGap: 2
@@ -51,7 +50,6 @@ Item {
     property color zoneHighlightColor: ZoneColorDefaults.previewActiveZoneColor
     property color zoneInactiveColor: ZoneColorDefaults.previewInactiveZoneColor
     property color zoneBorderColor: ZoneColorDefaults.previewZoneBorderColor
-    property real hoverScale: 1
     // Autotile algorithm metadata
     property bool showMasterDot: false
     /// Number of master zones to mark with indicator dots (ZonePreview
@@ -89,7 +87,9 @@ Item {
         if (root.isHovered)
             return Qt.alpha(Kirigami.Theme.hoverColor, style.hoverTint);
 
-        return "transparent";
+        // Alpha-0 version of the adjacent hover tint (not "transparent",
+        // which is alpha-0 BLACK and drags the fade's RGB toward black).
+        return Qt.alpha(Kirigami.Theme.hoverColor, 0);
     }
     readonly property color stateBorderColor: {
         if (root.isActive)
@@ -98,12 +98,11 @@ Item {
         if (root.isSelected)
             return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.borderSelected);
 
-        return "transparent";
+        // Alpha-0 version of the highlight hue both branches above fade
+        // from (not "transparent", which interpolates RGB toward black).
+        return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, 0);
     }
     readonly property int stateBorderWidth: root.isActive ? style.borderWide : (root.isSelected ? style.borderNarrow : 0)
-
-    // Signals
-    signal zoneHovered(int zoneIndex)
 
     // Dim non-recommended layouts (different aspect ratio class than current screen)
     opacity: root.isRecommended ? 1 : 0.65
@@ -286,11 +285,9 @@ Item {
             anchors.fill: previewBackground
             anchors.margins: root.showCardBackground ? Kirigami.Units.smallSpacing : 0
             zones: root.layoutData ? (root.layoutData.zones || []) : []
-            interactive: root.interactive
             showZoneNumbers: root.showZoneNumbers
             zoneNumberDisplay: root.zoneNumberDisplay
             producesOverlappingZones: root.producesOverlappingZones
-            highlightAllZones: false
             selectedZoneIndex: root.selectedZoneIndex
             isHovered: root.isHovered || root.isSelected
             isActive: root.isActive
@@ -302,7 +299,6 @@ Item {
             borderColor: root.zoneBorderColor
             inactiveOpacity: root.inactiveOpacity
             activeOpacity: root.activeOpacity
-            hoverScale: root.hoverScale
             fontFamily: root.fontFamily
             fontSizeScale: root.fontSizeScale
             fontWeight: root.fontWeight
@@ -312,9 +308,6 @@ Item {
             showMasterDot: root.showMasterDot
             masterCount: root.masterCount
             animationDuration: root.animationDuration
-            onZoneHovered: function (index) {
-                root.zoneHovered(index);
-            }
         }
     }
 

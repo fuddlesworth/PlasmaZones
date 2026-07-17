@@ -34,9 +34,9 @@ Item {
         // Only intercept Ctrl+Tab combinations (not plain Tab)
         if (tabKeyPressed && ctrlModifier) {
             event.accepted = true;
+            var currentZoneId = editorController.selectedZoneId || "";
             // Ctrl+Shift+Tab: Previous zone
             if (shiftModifier) {
-                var currentZoneId = editorController.selectedZoneId || "";
                 if (currentZoneId === "" || currentZoneId === null || currentZoneId === undefined) {
                     var zones = editorController.zones;
                     if (zones && zones.length > 0) {
@@ -51,7 +51,6 @@ Item {
                 return true;
             }
             // Ctrl+Tab: Next zone
-            var currentZoneId = editorController.selectedZoneId || "";
             if (currentZoneId === "" || currentZoneId === null || currentZoneId === undefined) {
                 var zones = editorController.zones;
                 if (zones && zones.length > 0 && zones[0] && zones[0].id) {

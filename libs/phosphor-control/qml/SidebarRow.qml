@@ -259,7 +259,7 @@ QQC2.ItemDelegate {
             // icon-only. Consumers that need a compact-mode trailing
             // affordance can express it through the badge slot once
             // that exists.
-            active: rowItem.trailingDelegate !== null && !rowItem.compact
+            active: rowItem.trailingDelegate !== null && !rowItem.compact && !rowItem._isDivider
             visible: active
             Layout.alignment: Qt.AlignVCenter
         }

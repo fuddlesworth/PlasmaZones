@@ -77,6 +77,11 @@ Item {
     property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
     property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
     property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
+    // Zone fill opacities for the preview. Written by C++ (osd.cpp
+    // pushLayoutOsdContent) with the settings/context-override-resolved
+    // values; these literals are the QML-side defaults.
+    property real activeOpacity: 0.6
+    property real inactiveOpacity: 0.3
     // Font properties for zone number labels
     property string fontFamily: ""
     property real fontSizeScale: 1
@@ -167,8 +172,8 @@ Item {
                 showZoneNumbers: true
                 producesOverlappingZones: root.producesOverlappingZones
                 zoneNumberDisplay: root.zoneNumberDisplay
-                inactiveOpacity: 0.3
-                activeOpacity: 0.6
+                inactiveOpacity: root.inactiveOpacity
+                activeOpacity: root.activeOpacity
                 fontFamily: root.fontFamily
                 fontSizeScale: root.fontSizeScale
                 fontWeight: root.fontWeight

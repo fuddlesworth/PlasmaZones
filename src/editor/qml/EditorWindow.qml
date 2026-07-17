@@ -159,16 +159,25 @@ Window {
     // screen button in TopBar renders displayName with the id only as a
     // fallback, so anything naming a screen back to the user has to resolve it
     // the same way or it names a screen the user cannot match to a button.
+    // Delegates to the controller's screenDisplayName() invokable, which owns
+    // that resolution.
     function displayNameForScreen(screenId) {
         if (!editorWindow._editorController)
             return screenId;
 
-        var screens = editorWindow._editorController.screenModel;
-        for (var i = 0; i < screens.length; i++) {
-            if (screens[i].name === screenId)
-                return screens[i].displayName || screens[i].name || screenId;
-        }
-        return screenId;
+        return editorWindow._editorController.screenDisplayName(screenId);
+    }
+
+    // Convert a FileDialog URL to a local filesystem path. Single URL→path
+    // implementation for the editor (import/export dialogs here and
+    // ShaderSettingsDialog's preset/image dialogs). decodeURIComponent is
+    // required for %-encoded characters (spaces etc.); the +-quantified slash
+    // regex normalizes both file:// and file:/// forms to an absolute path.
+    function urlToLocalPath(url) {
+        if (!url)
+            return "";
+
+        return decodeURIComponent(url.toString().replace(/^file:\/\/+/, "/"));
     }
 
     // Open the shared context menu for a specific zone
@@ -522,26 +531,6 @@ Window {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.expandToFillSpace(modelData.id, mouseX, mouseY);
                         }
-                        onDeleteWithFillRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                zoneOps.deleteWithFillAnimation(modelData.id, editorWindow._editorController, editorWindow._zonesRepeater);
-                        }
-                        onBringToFrontRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.bringToFront(modelData.id);
-                        }
-                        onSendToBackRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.sendToBack(modelData.id);
-                        }
-                        onBringForwardRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.bringForward(modelData.id);
-                        }
-                        onSendBackwardRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.sendBackward(modelData.id);
-                        }
                         // Track zone operations for snap/dimension indicators
                         onOperationStarted: function (zoneId, x, y, width, height) {
                             activeZoneOperation.active = true;
@@ -719,11 +708,18 @@ Window {
         // Tracks hover through a binding: assigning the colour from onEntered/
         // onExited would sever this, and the pill would stop following the theme.
         color: exitButtonMouse.containsMouse ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.3) : Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
-        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-        border.width: 1
+        // Focus ring when reached via Tab, frame-contrast hairline otherwise
+        border.color: fullscreenExitButton.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+        border.width: fullscreenExitButton.activeFocus ? 2 : 1
         z: 200
         // Fade in/out animation
         opacity: editorWindow.fullscreenMode ? 1 : 0
+        // Keyboard access: the pill is the only way out of fullscreen besides
+        // the F11/Escape shortcuts, so it must be Tab-reachable and activatable.
+        activeFocusOnTab: true
+        Keys.onReturnPressed: editorWindow.toggleFullscreenMode()
+        Keys.onEnterPressed: editorWindow.toggleFullscreenMode()
+        Keys.onSpacePressed: editorWindow.toggleFullscreenMode()
         Accessible.role: Accessible.Button
         Accessible.name: i18nc("@action:button", "Exit fullscreen")
         Accessible.onPressAction: editorWindow.toggleFullscreenMode()
@@ -886,10 +882,8 @@ Window {
         nameFilters: [i18nc("@item:inlistbox", "JSON files (*.json)"), i18nc("@item:inlistbox", "All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            if (editorWindow._editorController) {
-                var filePath = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));
-                editorWindow._editorController.importLayout(filePath);
-            }
+            if (editorWindow._editorController)
+                editorWindow._editorController.importLayout(editorWindow.urlToLocalPath(selectedFile));
         }
     }
 
@@ -901,10 +895,8 @@ Window {
         fileMode: FileDialog.SaveFile
         defaultSuffix: "json"
         onAccepted: {
-            if (editorWindow._editorController) {
-                var filePath = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));
-                editorWindow._editorController.exportLayout(filePath);
-            }
+            if (editorWindow._editorController)
+                editorWindow._editorController.exportLayout(editorWindow.urlToLocalPath(selectedFile));
         }
     }
 
@@ -943,6 +935,7 @@ Window {
         id: shaderDialog
 
         editorController: editorWindow._editorController
+        editorWindow: editorWindow
     }
 
     // ═══════════════════════════════════════════════════════════════════

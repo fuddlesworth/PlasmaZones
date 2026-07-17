@@ -150,7 +150,30 @@ ComboBox {
 
     // Compare visible fields only — ignore zone preview data which changes
     // every D-Bus round-trip but doesn't affect what the user sees in the
-    // closed combo or the item text/badges.
+    // closed combo or the item text/badges. When showPreview is on the mini
+    // previews do render zone geometry, so a cheap geometry fingerprint is
+    // compared as well — otherwise a geometry-only zone edit would leave the
+    // previews stale.
+    //
+    // Cheap deterministic fingerprint of a layout's zone geometry. Mirrors
+    // ZonePreview's field precedence (flat x/y/width/height preferred, nested
+    // relativeGeometry as fallback); values are relative (0–1) so rounding to
+    // three decimals is stable across D-Bus float round-trips.
+    function _zonesFingerprint(layout) {
+        let zones = (layout && layout.zones) || [];
+        let fp = "";
+        for (let i = 0; i < zones.length; i++) {
+            let z = zones[i];
+            let g = z.relativeGeometry || ({});
+            let x = z.x !== undefined ? z.x : (g.x || 0);
+            let y = z.y !== undefined ? z.y : (g.y || 0);
+            let w = z.width !== undefined ? z.width : (g.width || 0);
+            let h = z.height !== undefined ? z.height : (g.height || 0);
+            fp += Math.round(x * 1000) + "," + Math.round(y * 1000) + "," + Math.round(w * 1000) + "," + Math.round(h * 1000) + ";";
+        }
+        return fp;
+    }
+
     function _modelMatchesItems(newItems) {
         if (model.length !== newItems.length)
             return false;
@@ -180,6 +203,11 @@ ComboBox {
             // Zone count is shown in the popup subtitle and drives the zone
             // preview, so zone add/remove edits must invalidate the model.
             if ((old.layout && old.layout.zoneCount) !== (nw.layout && nw.layout.zoneCount))
+                return false;
+
+            // The mini previews render zone geometry, so with the preview
+            // visible a geometry-only zone edit must invalidate the model.
+            if (root.showPreview && _zonesFingerprint(old.layout) !== _zonesFingerprint(nw.layout))
                 return false;
 
             // For "Default" entry, also check which layout it resolves to

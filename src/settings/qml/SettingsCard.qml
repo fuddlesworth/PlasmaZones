@@ -188,14 +188,30 @@ Item {
             });
         }
     }
+    // The custom header currently reparented under headerLoader, so a
+    // replacement or a return to null can detach it — the loader hosts
+    // exactly one header at a time.
+    property Item _customHeader: null
     // Handle custom header reparenting
     onHeaderChanged: {
+        if (_customHeader && _customHeader !== header) {
+            // Detach the previous custom header. The caller created it, so
+            // unparent (removing it from the scene and the a11y tree) rather
+            // than destroy an item this card does not own.
+            _customHeader.parent = null;
+            _customHeader = null;
+        }
         if (header) {
             header.parent = headerLoader;
             header.width = Qt.binding(function () {
                 return headerLoader.width;
             });
             headerLoader.sourceComponent = null;
+            _customHeader = header;
+        } else {
+            // Header returned to null — restore the default headerText header
+            // the initial declarative binding provided before it was nulled.
+            headerLoader.sourceComponent = defaultHeaderComponent;
         }
     }
 
@@ -263,7 +279,8 @@ Item {
             // names itself rather than announcing an unnamed button.
             Accessible.name: root.headerText.length > 0 ? root.headerText : (root.header && root.header.Accessible.name ? root.header.Accessible.name : "")
             Accessible.description: root.collapsible ? (root.collapsed ? i18n("Collapsed. Activate to expand.") : i18n("Expanded. Activate to collapse.")) : ""
-            Accessible.onPressAction: root.collapsed = !root.collapsed
+            Accessible.onPressAction: if (root.collapsible)
+                root.collapsed = !root.collapsed
             Keys.onSpacePressed: if (root.collapsible)
                 root.collapsed = !root.collapsed
             Keys.onReturnPressed: if (root.collapsible)

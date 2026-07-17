@@ -168,6 +168,14 @@ Item {
         id: popup
 
         y: pill.height + Kirigami.Units.smallSpacing
+        // Non-negative margins opt into QQuickPopup's window-edge clamping
+        // (same mechanism as WideComboBox's popup): without them the
+        // margins stay at the default -1 (no clamping) and a chip near the
+        // window's bottom or right edge pushes the popover off-screen.
+        topMargin: Kirigami.Units.smallSpacing
+        bottomMargin: Kirigami.Units.smallSpacing
+        leftMargin: Kirigami.Units.smallSpacing
+        rightMargin: Kirigami.Units.smallSpacing
         padding: Kirigami.Units.largeSpacing
         modal: false
         focus: true

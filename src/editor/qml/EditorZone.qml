@@ -70,6 +70,19 @@ Item {
     readonly property bool hasValidDimensions: isFinite(visualWidth) && isFinite(visualHeight) && visualWidth > zoneSpacing && visualHeight > zoneSpacing && canvasWidth > 0 && canvasHeight > 0
     // Constants
     readonly property int handleSize: Kirigami.Units.gridUnit * 1.5
+    // Shared resize-handle metrics, referenced by both ResizeHandles (visuals,
+    // hit margins) and ZoneDragHandler (geometric handle-proximity check).
+    // Unit multiples reproduce the previous hardcoded pixel values at default
+    // Kirigami units (smallSpacing = 4).
+    // Corner handles: small circles (10px diameter at default units)
+    readonly property real handleCornerSize: Kirigami.Units.smallSpacing * 2.5
+    // Edge handles: thin pills (4px thick, 24px long at default units)
+    readonly property real handleEdgeThickness: Kirigami.Units.smallSpacing
+    readonly property real handleEdgeLength: Kirigami.Units.smallSpacing * 6
+    // Square hit region around a corner/edge handle (24px at default units)
+    readonly property real handleHitSize: Kirigami.Units.smallSpacing * 6
+    // Extra margin enlarging each handle's mouse hit area (4px at default units)
+    readonly property real handleHitMargin: Kirigami.Units.smallSpacing
     // Minimum zone size in pixels - acceptable as hardcoded
     readonly property int minSize: 50
     // Track if mouse is over zone or any controls
@@ -111,11 +124,6 @@ Item {
     signal splitHorizontalRequested
     signal splitVerticalRequested
     signal expandToFillWithCoords(real mouseX, real mouseY) // Pass zone center for consistent algorithm
-    signal deleteWithFillRequested
-    signal bringToFrontRequested
-    signal sendToBackRequested
-    signal bringForwardRequested
-    signal sendBackwardRequested
     signal operationStarted(string zoneId, real x, real y, real width, real height)
     signal operationUpdated(string zoneId, real x, real y, real width, real height)
     signal operationEnded(string zoneId)
@@ -399,6 +407,13 @@ Item {
         property int _borderWidthTracker: zoneData ? zoneData.borderWidth : 0
         property int _borderRadiusTracker: zoneData ? zoneData.borderRadius : 0
         property bool _useCustomColorsTracker: zoneData ? zoneData.useCustomColors : false
+        // Percentages for the accessibility description, guarded against
+        // zero/invalid canvas dimensions (same guard as DimensionTooltip)
+        // so a zero-sized canvas can't announce "NaN%".
+        readonly property int a11yXPercent: (root.canvasWidth > 0 && !isNaN(root.visualX)) ? Math.round((root.visualX / root.canvasWidth) * 100) : 0
+        readonly property int a11yYPercent: (root.canvasHeight > 0 && !isNaN(root.visualY)) ? Math.round((root.visualY / root.canvasHeight) * 100) : 0
+        readonly property int a11yWidthPercent: (root.canvasWidth > 0 && !isNaN(root.visualWidth)) ? Math.round((root.visualWidth / root.canvasWidth) * 100) : 0
+        readonly property int a11yHeightPercent: (root.canvasHeight > 0 && !isNaN(root.visualHeight)) ? Math.round((root.visualHeight / root.canvasHeight) * 100) : 0
         // Bindings that depend on trackers to force re-evaluation
         property color customHighlightColor: {
             var _ = _highlightColorTracker; // Dependency on tracker
@@ -448,7 +463,7 @@ Item {
         // Accessible.role is optional
         // Removing role to avoid enumeration issues in QML
         Accessible.name: root.zoneData && root.zoneData.name ? i18nc("@info:accessibility", "Zone %1: %2", root.zoneData.zoneNumber || 1, root.zoneData.name) : i18nc("@info:accessibility", "Zone %1", root.zoneData ? (root.zoneData.zoneNumber || 1) : 0)
-        Accessible.description: isSelected ? i18nc("@info:accessibility", "Selected zone. Position: %1% × %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.", Math.round((root.visualX / root.canvasWidth) * 100), Math.round((root.visualY / root.canvasHeight) * 100), Math.round((root.visualWidth / root.canvasWidth) * 100), Math.round((root.visualHeight / root.canvasHeight) * 100)) : i18nc("@info:accessibility", "Zone. Position: %1% × %2%, Size: %3% × %4%. Click to select.", Math.round((root.visualX / root.canvasWidth) * 100), Math.round((root.visualY / root.canvasHeight) * 100), Math.round((root.visualWidth / root.canvasWidth) * 100), Math.round((root.visualHeight / root.canvasHeight) * 100))
+        Accessible.description: isSelected ? i18nc("@info:accessibility", "Selected zone. Position: %1% × %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.", zoneRect.a11yXPercent, zoneRect.a11yYPercent, zoneRect.a11yWidthPercent, zoneRect.a11yHeightPercent) : i18nc("@info:accessibility", "Zone. Position: %1% × %2%, Size: %3% × %4%. Click to select.", zoneRect.a11yXPercent, zoneRect.a11yYPercent, zoneRect.a11yWidthPercent, zoneRect.a11yHeightPercent)
         Accessible.selectable: true
         Accessible.selected: root.isSelected
 

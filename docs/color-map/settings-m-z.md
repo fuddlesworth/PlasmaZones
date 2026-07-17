@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth
+     SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Color-usage inventory & remediation map — src/settings/qml, files M–Z
 
 Scope: `/home/nlavender/Projects/PlasmaZones/src/settings/qml/*.qml` with basenames starting M–Z

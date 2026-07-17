@@ -315,7 +315,7 @@ ToolBar {
                 }
 
                 Label {
-                    text: Math.round(gridIntervalXSlider.value * 100) + "%"
+                    text: i18nc("@info grid interval percentage", "%1%", Math.round(gridIntervalXSlider.value * 100))
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     horizontalAlignment: Text.AlignRight
                     Accessible.name: i18nc("@info", "Horizontal interval: %1%", Math.round(gridIntervalXSlider.value * 100))
@@ -356,7 +356,7 @@ ToolBar {
                 }
 
                 Label {
-                    text: Math.round(gridIntervalYSlider.value * 100) + "%"
+                    text: i18nc("@info grid interval percentage", "%1%", Math.round(gridIntervalYSlider.value * 100))
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     horizontalAlignment: Text.AlignRight
                     Accessible.name: i18nc("@info", "Vertical interval: %1%", Math.round(gridIntervalYSlider.value * 100))

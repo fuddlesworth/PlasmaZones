@@ -2051,6 +2051,15 @@ public:
     // per-monitor gapValue/writeGap and the per-screen gap accessors). Stored in
     // short-key form, mirroring the real Settings normalization so a test can
     // write "AutotileInnerGap" and read back "InnerGap".
+    //
+    // DELIBERATE OMISSION: the real Settings resolves virtual sub-screen ids to
+    // their physical monitor (VirtualScreenId::extractPhysicalId fallback in
+    // perScreenGapOverrides / resolvedZoneSelectorConfig) and matches
+    // connector-name <-> EDID-id key variants (findPerScreenEntry). These stubs
+    // key the hash verbatim: every consumer test drives them with plain physical
+    // ids, and mirroring the resolution would drag PhosphorIdentity /
+    // PhosphorScreens (live QScreen lookups) into the stub. A test that needs
+    // virtual-id fallback semantics must use the real Settings.
     QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const override
     {
         return m_perScreenAutotile.value(screenIdOrName);
@@ -2069,31 +2078,53 @@ public:
     }
     void clearPerScreenAutotileSettings(const QString& screenIdOrName) override
     {
+        // Mirror the real Settings (settings/perscreen.cpp): removing the whole
+        // entry also drops any gap dimensions it held, and a gap change must
+        // fire the gap-resnap trigger (perScreenSnappingSettingsChanged) in
+        // parity with the gap-dimension write path. Note whether the entry
+        // carried a gap dimension BEFORE the erase.
+        const QVariantMap removed = m_perScreenAutotile.value(screenIdOrName);
+        bool hadGaps = false;
+        for (auto it = removed.constBegin(); it != removed.constEnd(); ++it) {
+            if (perScreenGapDimensionKeys().contains(it.key())) {
+                hadGaps = true;
+                break;
+            }
+        }
         if (m_perScreenAutotile.remove(screenIdOrName) > 0) {
             Q_EMIT perScreenAutotileSettingsChanged();
+            if (hadGaps) {
+                Q_EMIT perScreenSnappingSettingsChanged();
+            }
             Q_EMIT settingsChanged();
         }
     }
     QVariantMap perScreenGapOverrides(const QString& screenIdOrName) const override
     {
-        // This set must mirror the 7 PerScreenSnappingKey gap dimensions and
-        // stay in sync with the production predicate isPerScreenGapDimensionKey
-        // (file-local in settings/perscreen.cpp, so not shareable here). A key
-        // added on one side but not the other silently drops (or leaks) a gap
-        // dimension from the stub's gap subset.
+        QVariantMap gaps;
+        const QVariantMap all = m_perScreenAutotile.value(screenIdOrName);
+        for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
+            if (perScreenGapDimensionKeys().contains(it.key())) {
+                gaps.insert(it.key(), it.value());
+            }
+        }
+        return gaps;
+    }
+
+    // This set must mirror the 7 PerScreenSnappingKey gap dimensions and
+    // stay in sync with the production predicate isPerScreenGapDimensionKey
+    // (file-local in settings/perscreen.cpp, so not shareable here). A key
+    // added on one side but not the other silently drops (or leaks) a gap
+    // dimension from the stub's gap subset. Shared by perScreenGapOverrides
+    // and clearPerScreenAutotileSettings' gap-resnap parity check.
+    static const QSet<QString>& perScreenGapDimensionKeys()
+    {
         static const QSet<QString> gapKeys = {
             QStringLiteral("InnerGap"),      QStringLiteral("OuterGap"),       QStringLiteral("UsePerSideOuterGap"),
             QStringLiteral("OuterGapTop"),   QStringLiteral("OuterGapBottom"), QStringLiteral("OuterGapLeft"),
             QStringLiteral("OuterGapRight"),
         };
-        QVariantMap gaps;
-        const QVariantMap all = m_perScreenAutotile.value(screenIdOrName);
-        for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
-            if (gapKeys.contains(it.key())) {
-                gaps.insert(it.key(), it.value());
-            }
-        }
-        return gaps;
+        return gapKeys;
     }
 
     // Persistence (ISettings)

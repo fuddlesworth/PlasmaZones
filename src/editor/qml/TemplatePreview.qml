@@ -101,6 +101,10 @@ Canvas {
             ctx.strokeRect(offsetX + leftWidth + centerWidth, offsetY, rightWidth, h);
         }
     }
+    // Repaint when the layout inputs change
+    onTemplateTypeChanged: requestPaint()
+    onColumnsChanged: requestPaint()
+    onRowsChanged: requestPaint()
     // Repaint when the theme-derived colors change
     onZoneColorChanged: requestPaint()
     onBorderColorChanged: requestPaint()
