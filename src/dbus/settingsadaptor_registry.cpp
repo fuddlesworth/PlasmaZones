@@ -8,8 +8,10 @@
 //   * validProfileTreeBlob — shared wire validation for the two profile-tree
 //     blob setters
 //
-// Same class as settingsadaptor.cpp, separate TU, no API change (mirrors the
-// SettingsController multi-TU split, e.g. settingscontroller_pagestate.cpp).
+// Same class as settingsadaptor.cpp, split into a separate TU without changing
+// the adaptor's public interface (mirrors the SettingsController multi-TU
+// split, e.g. settingscontroller_pagestate.cpp). The registry contents are
+// otherwise unchanged by the split itself.
 
 #include "settingsadaptor.h"
 #include "../core/interfaces.h"
