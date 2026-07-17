@@ -2,7 +2,7 @@
     "releases": [
         {
             "version": "3.2.0",
-            "date": "2026-06-27",
+            "date": "2026-07-17",
             "highlights": [
                 "Window borders, title bars, and gaps are now window rules. A new Windows page (under Appearance) edits the defaults, and you can override them per window or per context on the Rules page (#699)",
                 "New Mode condition: a rule can match snapped or tiled windows, so snapping and tiling can have different gaps or appearance (#699)",
