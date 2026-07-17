@@ -557,17 +557,20 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 }
 
 // hideLayoutOsd / hideNavigationOsd (formerly Q_SLOTS connected to a QML
-// `dismissed()` signal) are intentionally gone. The Phase-5 dismiss path is:
+// `dismissed()` signal) are intentionally gone. The dismiss path is:
 //   QML dismissTimer → loaded content `dismissRequested()` signal
-//     → host PassiveOverlayShell re-emits dismissRequested()
-//     → wired by createWarmedOsdSurface to Surface::hide() (string-based)
-//     → SurfaceAnimator::beginHide drives the visual fade
-//     → Surface::Impl flips Qt::WindowTransparentForInput on the QWindow
-// No C++ slot needs to run on dismiss; the QQuickWindow stays Qt-visible
-// across the keepMappedOnHide=true lifecycle so the warmed Vulkan
-// swapchain survives. Pre-warmed by warmUpNotifications and reused for
-// the daemon's lifetime; destroyPassiveShell only fires on
-// screen-removal / shutdown.
+//     → shell window re-emits it as `osdDismissRequested`
+//     → wirePassiveShellSlots (shellhost_bridge.cpp) string-connects that
+//       to OverlayService::onOsdDismissRequested (below)
+//     → ShellHost::hideSlot runs an animator-driven slot-hide
+//     → onOsdSlotHideCompleted flips slot.visible=false and re-syncs
+//       surface state.
+// keepMappedOnHide is conditional (createWarmedOsdSurface): the shell
+// window stays mapped across hides only while shaders or animations are
+// enabled, keeping the warmed Vulkan swapchain alive; with effects off
+// the next syncSurfaceState unmaps the wl_surface. Pre-warmed by
+// warmUpNotifications and reused for the daemon's lifetime;
+// destroyPassiveShell only fires on screen-removal / shutdown.
 
 // Hot-plug hook installed by warmUpNotifications. The single
 // ensureOsdScreenAddedConnected / ensurePassiveShellFor / wirePassiveShellSlots /

@@ -107,14 +107,16 @@ QtObject {
 
                 continue;
             }
-            // Convert model coords to canvas pixels via the item's mode-aware
-            // converters: relative zones store 0-1 normalized values, but fixed
-            // zones (geometryMode === 1) store screen pixels. Multiplying pixels
-            // by canvas size would send the animation target off-canvas.
-            var newX = item.toCanvasX(foundZone.x);
-            var newY = item.toCanvasY(foundZone.y);
-            var newW = item.toCanvasW(foundZone.width);
-            var newH = item.toCanvasH(foundZone.height);
+            // The zone map's x/y/width/height are relative (0-1) in BOTH
+            // geometry modes: ZoneManager keeps them synced from the fixed
+            // pixel values (fixedX/fixedY/fixedWidth/fixedHeight), which is
+            // where pixels live. Scale by canvas size directly; the item's
+            // mode-aware converters would divide by screen size a second
+            // time for fixed zones and collapse the target to ~0.
+            var newX = foundZone.x * item.canvasWidth;
+            var newY = foundZone.y * item.canvasHeight;
+            var newW = foundZone.width * item.canvasWidth;
+            var newH = foundZone.height * item.canvasHeight;
             // Only animate if geometry changed significantly
             if (Math.abs(newX - oldGeom.x) > 1 || Math.abs(newY - oldGeom.y) > 1 || Math.abs(newW - oldGeom.width) > 1 || Math.abs(newH - oldGeom.height) > 1) {
                 // Ensure visual is at old values (in case item was recreated)

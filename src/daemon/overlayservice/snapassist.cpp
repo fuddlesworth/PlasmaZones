@@ -544,9 +544,6 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    // Hide the zone selector on this VS to avoid overlap.
-    hideZoneSelectorSlotOnScreen(resolvedId);
-
     QSize autotileCanvas;
     if (m_screenManager) {
         const QRect avail = m_screenManager->screenAvailableGeometry(resolvedId);
@@ -559,6 +556,12 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
         return;
     }
+
+    // Hide the zone selector on this VS to avoid overlap. Runs only after
+    // every bail above (shell + layouts validated), so a failed request can
+    // never leave the drag-time zone selector stuck hidden — same
+    // bails-first ordering contract as showSnapAssist.
+    hideZoneSelectorSlotOnScreen(resolvedId);
 
     // The picker is a singleton across screens: with the new target fully
     // validated (shell + layouts), dismiss it on the previous screen before

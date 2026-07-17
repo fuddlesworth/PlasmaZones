@@ -179,7 +179,7 @@ Rectangle {
         property real startDividerPos: 0
 
         anchors.fill: parent
-        anchors.margins: -4 // Extend hit area for easier grabbing
+        anchors.margins: -Kirigami.Units.smallSpacing // Extend hit area for easier grabbing
         hoverEnabled: true
         cursorShape: dividerHandle.isVertical ? Qt.SizeHorCursor : Qt.SizeVerCursor
         acceptedButtons: Qt.LeftButton

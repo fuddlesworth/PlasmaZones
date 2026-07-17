@@ -193,6 +193,7 @@ public:
             return;
         }
         m_disabledMonitors.insert(static_cast<int>(mode), entries);
+        Q_EMIT disabledMonitorsChanged(mode);
         Q_EMIT settingsChanged();
     }
     bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const override
@@ -209,6 +210,7 @@ public:
             return;
         }
         m_disabledDesktops.insert(static_cast<int>(mode), entries);
+        Q_EMIT disabledDesktopsChanged(mode);
         Q_EMIT settingsChanged();
     }
     bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
@@ -234,6 +236,7 @@ public:
             return;
         }
         m_disabledActivities.insert(static_cast<int>(mode), entries);
+        Q_EMIT disabledActivitiesChanged(mode);
         Q_EMIT settingsChanged();
     }
     bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,

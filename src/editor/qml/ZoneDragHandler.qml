@@ -72,7 +72,7 @@ MouseArea {
         var zw = zoneRoot.width, zh = zoneRoot.height;
         // Geometric check: detect if click is near a corner/edge handle
         var handleHitSize = zoneRoot.handleHitSize;
-        var edgeHandleHalfSize = zoneRoot.handleSize * 3;
+        var edgeHandleHalfSize = zoneRoot.handleEdgeLength / 2 + zoneRoot.handleHitMargin;
         var nearCornerOrEdge = ((mx < handleHitSize && my < handleHitSize) || (mx > zw - handleHitSize && my < handleHitSize) || (mx < handleHitSize && my > zh - handleHitSize) || (mx > zw - handleHitSize && my > zh - handleHitSize) || (mx > zw / 2 - edgeHandleHalfSize && mx < zw / 2 + edgeHandleHalfSize && my < handleHitSize) || (mx > zw / 2 - edgeHandleHalfSize && mx < zw / 2 + edgeHandleHalfSize && my > zh - handleHitSize) || (my > zh / 2 - edgeHandleHalfSize && my < zh / 2 + edgeHandleHalfSize && mx < handleHitSize) || (my > zh / 2 - edgeHandleHalfSize && my < zh / 2 + edgeHandleHalfSize && mx > zw - handleHitSize));
         if (nearCornerOrEdge) {
             mouse.accepted = false;

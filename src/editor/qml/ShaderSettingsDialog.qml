@@ -321,8 +321,12 @@ Kirigami.Dialog {
     function preparePresetDialog(dialog) {
         if (editorController) {
             var dir = editorController.shaderPresetDirectory();
+            // `encodeURI` percent-encodes spaces and unicode while preserving
+            // path separators; the residual replaces cover `#` and `?`, which
+            // encodeURI leaves alone but the file:// URL would parse as
+            // fragment/query delimiters (same pattern as ShaderBrowserCard).
             if (dir && dir.length > 0)
-                dialog.currentFolder = Qt.resolvedUrl("file://" + dir);
+                dialog.currentFolder = Qt.resolvedUrl("file://" + encodeURI(dir).replace(/#/g, "%23").replace(/\?/g, "%3F"));
         }
     }
 

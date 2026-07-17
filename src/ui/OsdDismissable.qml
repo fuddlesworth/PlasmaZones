@@ -52,10 +52,11 @@ Item {
 
     /// Emitted at most once per show cycle (timer fire OR explicit
     /// `fire()` call). Forward to the content's own public
-    /// `dismissRequested` signal — the unified NotificationOverlay host
-    /// re-emits that as its own `dismissRequested` so
-    /// OverlayService::createWarmedOsdSurface's connect to Surface::hide()
-    /// drives the library animator's beginHide.
+    /// `dismissRequested` signal — the unified shell host re-emits that
+    /// as its `osdDismissRequested` signal, which C++
+    /// (wirePassiveShellSlots) routes to
+    /// OverlayService::onOsdDismissRequested → ShellHost::hideSlot for
+    /// an animator-driven slot-hide.
     signal request
 
     /// Restart the auto-dismiss timer. Resets the idempotency latch via

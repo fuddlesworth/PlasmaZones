@@ -157,6 +157,13 @@ Item {
                 durationOverride: root.animationDuration
             }
         }
+
+        Behavior on border.width {
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: root.shortAnimationDuration
+            }
+        }
     }
 
     // Preview area — bounding box for the layout preview.

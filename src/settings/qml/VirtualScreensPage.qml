@@ -350,6 +350,11 @@ SettingsFlickable {
         var rightEnd = screens[colIndex + 1].x + screens[colIndex + 1].width;
         var minX = leftStart + minW;
         var maxX = rightEnd - minW;
+        // Degenerate pair: the two columns together are narrower than
+        // 2*minW, so no divider position satisfies both minimums —
+        // clamping to [minX, maxX] would pin to the wrong edge.
+        if (minX > maxX)
+            return;
         var newDivPos = Math.max(minX, Math.min(maxX, newXFraction));
         var newLeftWidth = newDivPos - leftStart;
         var newRightWidth = rightEnd - newDivPos;
@@ -385,6 +390,10 @@ SettingsFlickable {
         var bottomEnd = screens[(rowIndex + 1) * _columns].y + screens[(rowIndex + 1) * _columns].height;
         var minY = topStart + minH;
         var maxY = bottomEnd - minH;
+        // Degenerate pair: see _moveColumnDivider — no valid divider
+        // position when the pair is shorter than 2*minH.
+        if (minY > maxY)
+            return;
         var newDivPos = Math.max(minY, Math.min(maxY, newYFraction));
         var newTopHeight = newDivPos - topStart;
         var newBottomHeight = bottomEnd - newDivPos;

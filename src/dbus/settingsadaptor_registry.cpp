@@ -737,6 +737,7 @@ void SettingsAdaptor::initializeRegistry()
     // Global shortcuts (concrete Settings only)
     if (concrete) {
         REGISTER_CONCRETE_STRING("openEditorShortcut", openEditorShortcut, setOpenEditorShortcut)
+        REGISTER_CONCRETE_STRING("openSettingsShortcut", openSettingsShortcut, setOpenSettingsShortcut)
         REGISTER_CONCRETE_STRING("previousLayoutShortcut", previousLayoutShortcut, setPreviousLayoutShortcut)
         REGISTER_CONCRETE_STRING("nextLayoutShortcut", nextLayoutShortcut, setNextLayoutShortcut)
         REGISTER_CONCRETE_STRING("quickLayout1Shortcut", quickLayout1Shortcut, setQuickLayout1Shortcut)

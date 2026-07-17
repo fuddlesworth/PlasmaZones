@@ -425,8 +425,6 @@ ColumnLayout {
 
                 // Size selection - segmented button style
                 RowLayout {
-                    // Custom (width doesn't match preset)
-
                     id: sizeButtonRow
 
                     // Track explicit Custom mode selection

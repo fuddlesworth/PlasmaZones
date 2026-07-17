@@ -381,15 +381,18 @@ public:
     void refreshOverlayPropertiesIfShown();
 
 public Q_SLOTS:
-    // hideLayoutOsd / hideNavigationOsd intentionally absent. Phase-5
-    // dismiss path: QML auto-dismiss timer → loaded content's
-    // dismissRequested() → host PassiveOverlayShell re-emits → wired by
-    // createWarmedOsdSurface to Surface::hide() → SurfaceAnimator::beginHide
-    // → PhosphorLayer::Surface flips Qt::WindowTransparentForInput on the
-    // still-mapped QWindow. No C++ slot runs on dismiss - destroying the
-    // QQuickWindow would re-introduce the blocking ~QQuickWindow Vulkan
-    // teardown that the warm-surface design is meant to avoid. Pre-warmed
-    // OSD windows are reused for the daemon's entire lifetime.
+    // hideLayoutOsd / hideNavigationOsd intentionally absent. Dismiss
+    // path: QML auto-dismiss timer → loaded content's dismissRequested()
+    // → shell window re-emits it as `osdDismissRequested` → wired by
+    // wirePassiveShellSlots (shellhost_bridge.cpp) to
+    // OverlayService::onOsdDismissRequested → ShellHost::hideSlot runs an
+    // animator-driven slot-hide, then onOsdSlotHideCompleted flips
+    // slot.visible=false and re-syncs surface state. The C++ slot never
+    // destroys the QQuickWindow - that would re-introduce the blocking
+    // ~QQuickWindow Vulkan teardown the warm-surface design avoids.
+    // keepMappedOnHide is conditional (createWarmedOsdSurface): mapped
+    // across hides only while shaders or animations are enabled; with
+    // effects off the next syncSurfaceState unmaps the wl_surface.
     void hideLayoutPicker() override;
 
     // Shader error reporting from QML
@@ -996,11 +999,14 @@ private:
      * Common pattern for ensurePassiveShellFor (and the LayoutPicker
      * surface in snapassist.cpp): (1) caller builds a per-instance
      * scope-prefixed Role via @ref PhosphorRoles::makePerInstanceRole,
-     * (2) this helper calls createLayerSurface with keepMappedOnHide=true,
-     * (3) string-connects the QML-side `dismissRequested()` signal to
-     * `Surface::hide()` so the auto-dismiss timer (or backdrop click for
-     * the picker) can drive the library animator without a C++ slot in
-     * the loop.
+     * (2) this helper calls createLayerSurface with keepMappedOnHide
+     * gated on effects (kept mapped only while shaders or animations
+     * are enabled; with both off the next syncSurfaceState unmaps the
+     * wl_surface). Dismiss wiring is NOT done here: per-content
+     * auto-dismiss flows through the shell window's per-slot signals
+     * (`osdDismissRequested` et al.), which wirePassiveShellSlots
+     * connects to the matching OverlayService slot (e.g.
+     * onOsdDismissRequested) for an animator-driven ShellHost::hideSlot.
      *
      * Returns the warmed Surface on success; nullptr on failure (warning
      * logged inside createLayerSurface). Caller installs the surface +

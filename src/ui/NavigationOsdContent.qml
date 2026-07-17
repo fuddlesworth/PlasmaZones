@@ -20,8 +20,9 @@ import org.plasmazones.common as QFZCommon
  * This Item only owns:
  *   - Data properties written by C++ (action, reason, zones, …)
  *   - Computed messageText + container layout
- *   - The auto-dismiss Timer + dismissRequested signal that C++ wires to
- *     Surface::hide() (via the unified host's signal forwarding)
+ *   - The auto-dismiss Timer + dismissRequested signal, forwarded by the
+ *     shell host as `osdDismissRequested` and routed by C++ to
+ *     OverlayService::onOsdDismissRequested → ShellHost::hideSlot
  */
 Item {
     id: root
@@ -176,9 +177,10 @@ Item {
         }
     }
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
-    /// The unified NotificationOverlay host re-emits this as its own
-    /// `dismissRequested` so OverlayService::createWarmedOsdSurface's
-    /// connect to Surface::hide() drives the library animator's beginHide.
+    /// The unified shell host re-emits this as its `osdDismissRequested`
+    /// signal, which C++ (wirePassiveShellSlots) routes to
+    /// OverlayService::onOsdDismissRequested → ShellHost::hideSlot for an
+    /// animator-driven slot-hide.
     signal dismissRequested
 
     /// Restart the auto-dismiss timer from C++ on every show. Forwards to

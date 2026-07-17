@@ -120,12 +120,6 @@ Kirigami.Dialog {
         _liveParams = next;
         _recompute();
     }
-    // `selectedFile` from FileDialog is a percent-encoded file:// URL.
-    function _filePathFromUrl(url) {
-        if (!url)
-            return "";
-        return decodeURIComponent(url.toString().replace(/^file:\/\/+/, "/"));
-    }
 
     onOpened: {
         // The dialog instance is reused per shader, so clear any preset error
@@ -721,7 +715,7 @@ Kirigami.Dialog {
 
         onAccepted: {
             if (paramId.length > 0)
-                root._setLiveParam(paramId, root._filePathFromUrl(selectedFile));
+                root._setLiveParam(paramId, settingsController.urlToLocalFile(selectedFile));
         }
     }
 
@@ -747,7 +741,7 @@ Kirigami.Dialog {
 
         onAccepted: {
             if (root.previewController && root.effect)
-                root.previewController.saveShaderPreset(root._filePathFromUrl(selectedFile), root.effect.id, root._liveParams, "");
+                root.previewController.saveShaderPreset(settingsController.urlToLocalFile(selectedFile), root.effect.id, root._liveParams, "");
         }
     }
 
@@ -761,7 +755,7 @@ Kirigami.Dialog {
         onAccepted: {
             if (!root.previewController || !root.effect)
                 return;
-            var r = root.previewController.loadShaderPreset(root._filePathFromUrl(selectedFile));
+            var r = root.previewController.loadShaderPreset(settingsController.urlToLocalFile(selectedFile));
             if (!r || !r.shaderParams)
                 return;
             // This detail dialog is bound to a single shader (root.effect) and

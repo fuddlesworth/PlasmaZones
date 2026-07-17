@@ -460,6 +460,10 @@ ComboBox {
                 var sel;
                 if (it.itemId === "")
                     sel = (root.currentId === "" || root.currentId === root.noneId);
+                else if (root.includeNoneEntry && it.itemId === root.noneId)
+                    // The prepended "None" row already represents noneId;
+                    // checking the real item too would show two checkmarks.
+                    sel = false;
                 else
                     sel = (it.itemId === root.currentId);
                 it.isSelected = sel;

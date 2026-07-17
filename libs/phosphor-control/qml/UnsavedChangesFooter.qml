@@ -106,6 +106,12 @@ ColumnLayout {
         Rectangle {
             id: barContent
 
+            // Drop out of the scene entirely when fully collapsed so
+            // the Save/Discard buttons don't linger as invisible tab
+            // stops (phantom AT focus + Enter firing a no-op batch).
+            // The slide animation is unaffected: expansion > 0 for the
+            // whole animated leg, and at 0 the bar height is 0 anyway.
+            visible: dirtyBar.expansion > 0
             width: parent.width
             // Mirror barRow's two rounded vertical margins exactly —
             // a plain smallSpacing * 3 diverges when smallSpacing is

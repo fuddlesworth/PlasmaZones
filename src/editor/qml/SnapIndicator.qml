@@ -86,7 +86,7 @@ Item {
     Repeater {
         model: (snapIndicator.showSnapLines && snapIndicator.width > 0) ? snapIndicator.verticalSnapLines : []
 
-        Rectangle {
+        Item {
             required property real modelData
 
             visible: !isNaN(modelData) && modelData >= 0 && modelData <= 1
@@ -94,16 +94,19 @@ Item {
             y: 0
             width: Kirigami.Units.smallSpacing
             height: snapIndicator.height
-            color: snapIndicator.mediumHighlight
-            opacity: 1
 
-            // Subtle shadow for contrast
+            // Subtle shadow for contrast, declared first so it paints behind the line
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: -1
-                z: parent.z - 1
                 color: snapIndicator.haloColor
                 opacity: 0.8
+            }
+
+            // Line fill
+            Rectangle {
+                anchors.fill: parent
+                color: snapIndicator.mediumHighlight
             }
 
             // Dashed line effect - thicker dashes for better visibility
@@ -176,7 +179,7 @@ Item {
     Repeater {
         model: (snapIndicator.showSnapLines && snapIndicator.height > 0) ? snapIndicator.horizontalSnapLines : []
 
-        Rectangle {
+        Item {
             required property real modelData
 
             visible: !isNaN(modelData) && modelData >= 0 && modelData <= 1
@@ -184,16 +187,19 @@ Item {
             y: visible ? (modelData * snapIndicator.height - Kirigami.Units.smallSpacing / 2) : 0 // Center 4px line
             width: snapIndicator.width
             height: Kirigami.Units.smallSpacing
-            color: snapIndicator.mediumHighlight
-            opacity: 1
 
-            // Subtle shadow for contrast
+            // Subtle shadow for contrast, declared first so it paints behind the line
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: -1
-                z: parent.z - 1
                 color: snapIndicator.haloColor
                 opacity: 0.8
+            }
+
+            // Line fill
+            Rectangle {
+                anchors.fill: parent
+                color: snapIndicator.mediumHighlight
             }
 
             // Dashed line effect - thicker dashes for better visibility
