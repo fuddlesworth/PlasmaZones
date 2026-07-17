@@ -29,14 +29,13 @@ var focusBorderWidth = 2;
 // this one is always on, and it is not about keyboard focus.
 var accentBorderWidth = 2;
 
-// Alpha levels for the theme-derived zone colour defaults. A zone with no
-// custom colours shows the theme colour at these alphas, and the editor seeds
-// new zones with the same values, so every surface needing one of these
-// defaults reads it from here. The base colour comes from the call site: this
-// is a .pragma library and cannot reach Kirigami.Theme itself.
+// Alpha levels for the theme-derived zone highlight/inactive colour defaults.
+// A zone with no custom colours shows the theme colour at these alphas, and
+// the editor seeds new zones with the same values, so every surface needing
+// one of these defaults reads it from here. The base colour comes from the
+// call site: this is a .pragma library and cannot reach Kirigami.Theme itself.
 var zoneHighlightAlpha = 0.5;
 var zoneInactiveAlpha = 0.25;
-var zoneBorderAlpha = 0.8;
 
 function withAlpha(baseColor, alpha) {
     return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, alpha);

@@ -172,7 +172,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"),
                          overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
         // Font settings for zone number labels
-        writeFontProperties(window, m_settings);
+        writeFontProperties(window, m_settings, /*includeLabelFontColor=*/false);
     }
     // Pass resolved per-screen config values to QML
     writeQmlProperty(window, QStringLiteral("selectorPosition"), config.position);
@@ -224,7 +224,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout,
                                          m_layoutManager);
 
-    // Positioning is entirely QML-internal: ZoneSelectorWindow.qml's
+    // Positioning is entirely QML-internal: ZoneSelectorContent.qml's
     // selectorPosition state anchors the inner container to the requested
     // corner of the full-screen transparent surface. Anchors/margins are
     // baked at attach time (AnchorAll) and never mutated afterwards.

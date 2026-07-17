@@ -40,9 +40,9 @@ Rectangle {
     implicitWidth: Kirigami.Units.gridUnit * 10
     implicitHeight: tile.tileHeight
     radius: Kirigami.Units.smallSpacing
-    color: tileMouse.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.25) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+    color: tileMouse.pressed ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.highlightColor, 0.25)) : tileMouse.containsMouse ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.12)) : Kirigami.Theme.alternateBackgroundColor
     border.width: 1
-    border.color: tileMouse.containsMouse || tile.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+    border.color: tile.activeFocus ? Kirigami.Theme.focusColor : tileMouse.containsMouse ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     Keys.onReturnPressed: tile.activated()
     // Numpad Enter alias, matching the sibling card components.
     Keys.onEnterPressed: tile.activated()

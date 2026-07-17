@@ -50,6 +50,9 @@ private:
             zone[QLatin1String("width")] = 0.25;
             zone[QLatin1String("height")] = 1.0;
             zone[QLatin1String("zoneNumber")] = i + 1;
+            // Stable per-zone id for the highlightedZoneIds path; unused by
+            // the index-based tests.
+            zone[QLatin1String("zoneId")] = QStringLiteral("zone-%1").arg(i + 1);
             zones.append(zone);
         }
         return zones;
@@ -135,16 +138,17 @@ private Q_SLOTS:
         QCOMPARE(highlightStates(hovered), QList<bool>({true, true, true, true}));
     }
 
-    /// `highlightAllZones` is the explicit opt-in for lighting every zone even
-    /// though one is selected.
-    void testHighlightAllZonesOptIn()
+    /// The ID-based half of `hasZoneSelection`: a highlightedZoneIds list
+    /// singles out the matching zone and suppresses the card-level
+    /// `isActive` lighting of the other zones.
+    void testHighlightedZoneIdsLightOnlyMatchedZone()
     {
         QVariantMap props;
-        props[QStringLiteral("highlightAllZones")] = true;
-        props[QStringLiteral("selectedZoneIndex")] = 2;
+        props[QStringLiteral("isActive")] = true;
+        props[QStringLiteral("highlightedZoneIds")] = QVariantList{QStringLiteral("zone-3")};
 
         const QList<bool> states = highlightStates(props);
-        QCOMPARE(states, QList<bool>({true, true, true, true}));
+        QCOMPARE(states, QList<bool>({false, false, true, false}));
     }
 
     /// Nothing selected and no card-level state: every zone stays dim.

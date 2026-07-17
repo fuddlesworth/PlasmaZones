@@ -20,26 +20,31 @@ function clampedScreenAspectRatio(screenWidth, screenHeight) {
 }
 
 /**
- * Wizard color palette derived from Kirigami theme colors.
- * Centralizes the Qt.rgba() calls shared across wizard dialogs.
+ * Wizard color palette built from the proper Kirigami semantic tokens.
+ * Centralizes the palette shared across wizard dialogs: surfaces use
+ * alternateBackgroundColor, borders use the frameContrast-interpolated
+ * border color, hover uses hoverColor — only the accent selection tints
+ * are derived from highlightColor.
  *
- * @param {color} textColor      - Kirigami.Theme.textColor
+ * @param {color} altBg          - Kirigami.Theme.alternateBackgroundColor
+ * @param {color} borderColor    - Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
  * @param {color} highlightColor - Kirigami.Theme.highlightColor
+ * @param {color} hoverColor     - Kirigami.Theme.hoverColor
  * @returns {Object} palette with the frame colors (subtleBg, subtleBorder,
  *          accentBorder) and the WizardTemplateCard state colors (highlightBg,
  *          hoverBg, defaultBg, selectedBorder, hoverBorder, defaultBorder)
  */
-function wizardColors(textColor, highlightColor) {
+function wizardColors(altBg, borderColor, highlightColor, hoverColor) {
     return {
-        "subtleBg":        Qt.rgba(textColor.r, textColor.g, textColor.b, 0.03),
-        "subtleBorder":    Qt.rgba(textColor.r, textColor.g, textColor.b, 0.08),
+        "subtleBg":        altBg,
+        "subtleBorder":    borderColor,
         "accentBorder":    Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.3),
         // Card-specific colors (WizardTemplateCard)
         "highlightBg":    Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.15),
-        "hoverBg":        Qt.rgba(textColor.r, textColor.g, textColor.b, 0.06),
-        "defaultBg":      Qt.rgba(textColor.r, textColor.g, textColor.b, 0.03),
+        "hoverBg":        Qt.tint(altBg, Qt.alpha(hoverColor, 0.1)),
+        "defaultBg":      altBg,
         "selectedBorder": Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.6),
-        "hoverBorder":    Qt.rgba(highlightColor.r, highlightColor.g, highlightColor.b, 0.3),
-        "defaultBorder":  Qt.rgba(textColor.r, textColor.g, textColor.b, 0.08)
+        "hoverBorder":    hoverColor,
+        "defaultBorder":  borderColor
     };
 }

@@ -146,6 +146,9 @@ ColumnLayout {
         idOf: function (item) {
             return item;
         }
+        accessibleNameOf: function (item) {
+            return root._displayName(item);
+        }
         onMoveRequested: function (fromIndex, toIndex) {
             var next = (root.chain || []).slice();
             if (fromIndex < 0 || fromIndex >= next.length || toIndex < 0 || toIndex >= next.length)

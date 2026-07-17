@@ -7,39 +7,39 @@ import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
 /**
- * Layout picker content — Item-rooted body for use inside the standalone
- * LayoutPickerOverlay Window. The picker uses CenteredModal layer-shell
- * role (exclusive keyboard, distinct anchors), so it can't share a
- * wl_surface with the OSDs in NotificationOverlay; the extraction is
- * still worthwhile for code-shape consistency with the OSD content
- * components and to keep future "lazy-create on shortcut" refactors
- * clean.
+ * Layout picker content — Item-rooted body hosted in PassiveOverlayShell's
+ * layoutPickerSlot. The slot's Loader re-instantiates this component on
+ * every show (the `loaded` toggle), and the slot forwards all data
+ * properties written by C++ (snapassist.cpp showLayoutPicker) onto the
+ * instance via bindings.
  *
  * Phase 5: surface lifecycle + show/hide animations are driven entirely
  * by PhosphorAnimationLayer::SurfaceAnimator (registered for
  * PhosphorRoles::LayoutPicker with `osd.show` / `osd.pop` / `osd.hide`
  * profiles). PhosphorLayer::Surface handles `Qt.WindowTransparentForInput`
  * on the underlying QWindow during the hide cycle, and OverlayService::
- * showLayoutPicker / hideLayoutPicker drive `Surface::show()` /
- * `Surface::hide()` directly.
+ * showLayoutPicker / hideLayoutPicker drive the picker slot's animated
+ * show/hide (hideLayoutPicker → ShellHost::hideSlot); the shell
+ * wl_surface's map state is managed separately by
+ * syncPassiveShellSurfaceState.
  *
  * This Item only owns:
  *   - Data properties written by C++ (layouts, activeLayoutId, locked, …)
- *   - Keyboard navigation state (selectedIndex + Shortcuts)
+ *   - Keyboard navigation state (selectedIndex; moveSelection /
+ *     confirmSelection are invoked from C++, see below)
  *   - The visible content tree (backdrop + popup frame + grid of cards)
- *   - The `_dismissed` latch + `dismissRequested` signal that C++ wires
- *     to Surface::hide() (via the host Window's signal forwarding)
+ *   - The `_dismissed` latch + `dismissRequested` signal, forwarded by
+ *     the shell host as `layoutPickerDismissRequested` and routed by C++
+ *     (wirePassiveShellSlots, shellhost_bridge.cpp) to OverlayService::
+ *     onLayoutPickerDismissRequested → hideLayoutPicker →
+ *     ShellHost::hideSlot
  */
 Item {
-    // Keyboard handling. All Shortcuts gate on root._shortcutsActive — see
-    // the property doc for why this matters under keepMappedOnHide=true.
-    // Escape originally relied on a C++ QObject::eventFilter on the picker
-    // QQuickWindow. That works reliably for SnapAssist (which destroys on
-    // hide) but on the keep-mapped picker the wl_surface lifecycle + the
-    // Qt.WindowTransparentForInput flip during hide leaves the eventFilter
-    // path inconsistent — KeyPress events don't always reach the QWindow
-    // on the warm path. SnapAssistOverlay uses a QML Shortcut and that
-    // path is robust against the same lifecycle, so use it here too.
+    // Keyboard handling. The shell surface is kbd-None, so QML Shortcuts
+    // can never fire here — arrow / Return navigation arrives from C++
+    // instead: snapassist.cpp's pickerMoveSelection / pickerConfirmSelection
+    // call moveSelection() / confirmSelection() on the host slot via
+    // QMetaObject::invokeMethod, driven by KGlobalAccel registrations.
     // Escape is dismissed via the daemon's KGlobalAccel cancel-overlay
     // shortcut — KWin's wlr-layer-shell does not deliver keyboard events
     // to this layer surface in our Qt/KWin combination, so a QML
@@ -63,10 +63,12 @@ Item {
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
-    property color highlightColor: Kirigami.Theme.highlightColor
-    // Zone appearance (set from C++ settings for consistency with zone selector)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+    // Zone appearance — effective values arrive via the host slot's
+    // bindings: snapassist.cpp's writeColorSettings pushes onto
+    // layoutPickerSlot, which forwards them here. No picker-direct push.
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
     // Font properties for zone number labels
@@ -77,20 +79,16 @@ Item {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
-    /// Logically-shown gate for keyboard Shortcuts. Written by C++ alongside
-    /// `Surface::show()` / `Surface::hide()` so a logically-hidden picker
-    /// (still Qt-visible under keepMappedOnHide=true) doesn't silently
-    /// respond to stray accelerator deliveries. See LayoutPickerOverlay.qml's
-    /// alias forwarding and snapassist.cpp's matching writes.
-    property bool _shortcutsActive: false
     /// Idempotency latch for `dismissRequested`. Multiple rapid backdrop
-    /// clicks during the keepMappedOnHide=true fade-out window can fire
+    /// clicks during the hide-animation fade-out window (the shell stays
+    /// mapped and briefly input-accepting while shaders or animations
+    /// are enabled — effects-gated keepMappedOnHide) can fire
     /// `dismissRequested` more than once before `Qt.WindowTransparentForInput`
-    /// lands at the QWindow level. Without this, C++ runs Surface::hide()
-    /// on an already-Hidden surface and the library logs a qCWarning per
-    /// spurious click. Reset by C++ explicitly on every show (QML's
-    /// `on<Name>Changed` handler form does not work for underscore-
-    /// prefixed properties).
+    /// lands at the QWindow level. Without this, C++ re-runs the dismiss
+    /// path (hideLayoutPicker) for an already-dismissed picker per
+    /// spurious click. No writer resets it: the host slot's Loader
+    /// re-instantiates this component on every show, so the latch starts
+    /// false each cycle.
     ///
     /// Sibling latch — OsdDismissable.qml: same at-most-once-per-show
     /// idempotency, but driven by a Timer (auto-dismiss) and reset on
@@ -121,9 +119,11 @@ Item {
     // Internal signals — host Window re-emits to its public signals.
     signal layoutSelected(string layoutId)
     /// User-initiated dismiss request (backdrop click, Escape, in-flight
-    /// race). C++ event filter and OverlayService::hideLayoutPicker
-    /// translate this into Surface::hide() — which then drives the library
-    /// animator. Same shape as LayoutOsd / NavigationOsd for consistency.
+    /// race). The shell host re-emits it as `layoutPickerDismissRequested`,
+    /// which wirePassiveShellSlots (shellhost_bridge.cpp) connects to
+    /// OverlayService::onLayoutPickerDismissRequested → hideLayoutPicker
+    /// → ShellHost::hideSlot (animator-driven slot-hide). Same shape as
+    /// LayoutOsd / NavigationOsd for consistency.
     signal dismissRequested
 
     /// Internal: emit dismissRequested at most once per show cycle.
@@ -175,42 +175,6 @@ Item {
         readonly property int previewWidth: Kirigami.Units.gridUnit * 10
     }
 
-    Shortcut {
-        sequence: "Return"
-        enabled: root._shortcutsActive
-        onActivated: confirmSelection()
-    }
-
-    Shortcut {
-        sequence: "Enter"
-        enabled: root._shortcutsActive
-        onActivated: confirmSelection()
-    }
-
-    Shortcut {
-        sequence: "Left"
-        enabled: root._shortcutsActive
-        onActivated: moveSelection(-1, 0)
-    }
-
-    Shortcut {
-        sequence: "Right"
-        enabled: root._shortcutsActive
-        onActivated: moveSelection(1, 0)
-    }
-
-    Shortcut {
-        sequence: "Up"
-        enabled: root._shortcutsActive
-        onActivated: moveSelection(0, -1)
-    }
-
-    Shortcut {
-        sequence: "Down"
-        enabled: root._shortcutsActive
-        onActivated: moveSelection(0, 1)
-    }
-
     // Backdrop — click outside to dismiss. _requestDismiss collapses
     // multiple rapid clicks during the fade-out window into a single
     // dismissRequested per show cycle.
@@ -234,7 +198,6 @@ Item {
         // top padding + title + gap below title + grid + bottom padding
         height: titleLabel.height + gridView.height + metrics.paddingSide * 3
         backgroundColor: root.backgroundColor
-        textColor: root.textColor
         containerRadius: metrics.containerRadius
 
         // Absorb clicks inside container so they do not reach the
@@ -248,8 +211,8 @@ Item {
         // MouseAreas) and grabs presses there so they never reach the
         // backdrop. `Accessible.ignored: true` keeps this transparent
         // absorber out of the a11y tree — only the backdrop's
-        // "Dismiss layout picker" button (line 218-223) should be
-        // announced as the dismiss control.
+        // "Dismiss layout picker" MouseArea above should be announced
+        // as the dismiss control.
         MouseArea {
             anchors.fill: parent
             Accessible.ignored: true
@@ -287,6 +250,9 @@ Item {
                 Item {
                     id: layoutCard
 
+                    required property var modelData
+                    required property int index
+
                     property var layoutData: modelData
                     property bool isSelected: index === root.selectedIndex
                     property bool isActive: layoutData.id === root.activeLayoutId
@@ -312,7 +278,6 @@ Item {
                         previewHeight: root.previewHeight
                         // Layout picker features
                         showCardBackground: true
-                        interactive: false
                         // Zone appearance (consistent with zone selector)
                         zonePadding: 1
                         edgeGap: 1
@@ -349,13 +314,15 @@ Item {
                             source: "object-locked"
                             width: Math.min(parent.width, parent.height) * 0.3
                             height: width
-                            color: Kirigami.Theme.highlightedTextColor
+                            color: Kirigami.Theme.textColor
                         }
 
                         MouseArea {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.ForbiddenCursor
+                            Accessible.role: Accessible.Button
+                            Accessible.name: i18nc("@info:whatsthis layout picker lock overlay", "Layout is locked. Unlock the current layout before switching to another one.")
                             onClicked: function (mouse) {
                                 mouse.accepted = true;
                             }

@@ -22,14 +22,14 @@ Item {
     function syncFromZoneData() {
         // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
         if (!zoneRoot || !zoneRoot.parent)
-            return ;
+            return;
 
         // Don't sync during active operations
         if (zoneRoot.operationState !== 0 || zoneRoot.isDividerOperation)
-            return ;
+            return;
 
         if (!zoneRoot.zoneData)
-            return ;
+            return;
 
         if (zoneRoot.canvasWidth > 0 && zoneRoot.canvasHeight > 0 && isFinite(zoneRoot.canvasWidth) && isFinite(zoneRoot.canvasHeight)) {
             var x = 0, y = 0, w = 0.25, h = 0.25;
@@ -105,17 +105,12 @@ Item {
                 var newVisualWidth = w * zoneRoot.canvasWidth;
                 var newVisualHeight = h * zoneRoot.canvasHeight;
             }
-            if (zoneRoot.visualWidth === 0 || zoneRoot.visualHeight === 0 || !isFinite(zoneRoot.visualWidth) || !isFinite(zoneRoot.visualHeight)) {
-                zoneRoot.visualX = newVisualX;
-                zoneRoot.visualY = newVisualY;
-                zoneRoot.visualWidth = newVisualWidth;
-                zoneRoot.visualHeight = newVisualHeight;
-            } else if (zoneRoot.operationState === 0 && !zoneRoot.isDividerOperation) {
-                zoneRoot.visualX = newVisualX;
-                zoneRoot.visualY = newVisualY;
-                zoneRoot.visualWidth = newVisualWidth;
-                zoneRoot.visualHeight = newVisualHeight;
-            }
+            // Unconditional: the early return above already guarantees the
+            // zone is idle (operationState 0) and not in a divider operation.
+            zoneRoot.visualX = newVisualX;
+            zoneRoot.visualY = newVisualY;
+            zoneRoot.visualWidth = newVisualWidth;
+            zoneRoot.visualHeight = newVisualHeight;
         }
     }
 
@@ -123,7 +118,7 @@ Item {
     function ensureDimensionsInitialized() {
         // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
         if (!zoneRoot || !zoneRoot.parent)
-            return ;
+            return;
 
         if (zoneRoot.canvasWidth > 0 && zoneRoot.canvasHeight > 0 && isFinite(zoneRoot.canvasWidth) && isFinite(zoneRoot.canvasHeight)) {
             syncFromZoneData();
@@ -144,7 +139,6 @@ Item {
 
                 if (zoneRoot.visualY === 0 || !isFinite(zoneRoot.visualY))
                     zoneRoot.visualY = y * zoneRoot.canvasHeight;
-
             }
         }
     }
@@ -156,37 +150,42 @@ Item {
 
         function onZoneGeometryChanged(changedZoneId) {
             if (changedZoneId !== zoneRoot.zoneId || !controller)
-                return ;
+                return;
 
             if ((zoneRoot.operationState === 1 || zoneRoot.operationState === 2) && !zoneRoot.isDividerOperation)
-                return ;
+                return;
 
             if (zoneRoot.isDividerOperation)
-                return ;
+                return;
 
             if (zoneRoot.isAnimatingFill)
-                return ;
+                return;
 
             var zoneIdRef = zoneRoot.zoneId;
             var canvasW = zoneRoot.canvasWidth;
             var canvasH = zoneRoot.canvasHeight;
             var controllerRef = controller;
-            Qt.callLater(function() {
+            Qt.callLater(function () {
                 try {
                     if (!zoneRoot || !controllerRef)
-                        return ;
+                        return;
 
                     if (zoneRoot.isAnimatingFill)
-                        return ;
+                        return;
+
+                    // Re-check operation state: a press that lands in the
+                    // callLater gap must not have its visuals overwritten.
+                    if (zoneRoot.operationState !== 0 || zoneRoot.isDividerOperation)
+                        return;
 
                     // Guard: if zoneRoot was removed from the scene (e.g. during Repeater update),
                     // parent may be null; avoid accessing further to prevent "invalid context" crash.
                     if (!zoneRoot.parent)
-                        return ;
+                        return;
 
                     var zones = controllerRef ? controllerRef.zones : null;
                     if (!zones || zones.length === 0)
-                        return ;
+                        return;
 
                     var updatedZone = null;
                     for (var i = 0; i < zones.length; i++) {
@@ -200,10 +199,10 @@ Item {
                         }
                     }
                     if (!updatedZone)
-                        return ;
+                        return;
 
                     if (canvasW <= 0 || canvasH <= 0 || !isFinite(canvasW) || !isFinite(canvasH))
-                        return ;
+                        return;
 
                     var isFixed = updatedZone.geometryMode === 1;
                     var newVisualX, newVisualY, newVisualW, newVisualH;
@@ -243,7 +242,7 @@ Item {
                         newVisualH = (isFinite(h) && h > 0) ? h * canvasH : canvasH * 0.25;
                     }
                     if (!zoneRoot || zoneRoot.visualX === undefined)
-                        return ;
+                        return;
 
                     var threshold = 1;
                     var xDiff = Math.abs(zoneRoot.visualX - newVisualX);
@@ -251,18 +250,16 @@ Item {
                     var wDiff = Math.abs(zoneRoot.visualWidth - newVisualW);
                     var hDiff = Math.abs(zoneRoot.visualHeight - newVisualH);
                     if (xDiff < threshold && yDiff < threshold && wDiff < threshold && hDiff < threshold)
-                        return ;
+                        return;
 
                     zoneRoot.visualX = newVisualX;
                     zoneRoot.visualY = newVisualY;
                     zoneRoot.visualWidth = newVisualW;
                     zoneRoot.visualHeight = newVisualH;
-                } catch (e) {
-                }
+                } catch (e) {}
             });
         }
 
         target: controller
     }
-
 }

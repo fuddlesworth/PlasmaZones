@@ -150,7 +150,30 @@ ComboBox {
 
     // Compare visible fields only — ignore zone preview data which changes
     // every D-Bus round-trip but doesn't affect what the user sees in the
-    // closed combo or the item text/badges.
+    // closed combo or the item text/badges. When showPreview is on the mini
+    // previews do render zone geometry, so a cheap geometry fingerprint is
+    // compared as well — otherwise a geometry-only zone edit would leave the
+    // previews stale.
+    //
+    // Cheap deterministic fingerprint of a layout's zone geometry. Mirrors
+    // ZonePreview's field precedence (flat x/y/width/height preferred, nested
+    // relativeGeometry as fallback); values are relative (0–1) so rounding to
+    // three decimals is stable across D-Bus float round-trips.
+    function _zonesFingerprint(layout) {
+        let zones = (layout && layout.zones) || [];
+        let fp = "";
+        for (let i = 0; i < zones.length; i++) {
+            let z = zones[i];
+            let g = z.relativeGeometry || ({});
+            let x = z.x !== undefined ? z.x : (g.x || 0);
+            let y = z.y !== undefined ? z.y : (g.y || 0);
+            let w = z.width !== undefined ? z.width : (g.width || 0);
+            let h = z.height !== undefined ? z.height : (g.height || 0);
+            fp += Math.round(x * 1000) + "," + Math.round(y * 1000) + "," + Math.round(w * 1000) + "," + Math.round(h * 1000) + ";";
+        }
+        return fp;
+    }
+
     function _modelMatchesItems(newItems) {
         if (model.length !== newItems.length)
             return false;
@@ -175,6 +198,16 @@ ComboBox {
             // stays stale on the live view even though `appSettings.layouts`
             // reflects the new class.
             if ((old.layout && old.layout.aspectRatioClass) !== (nw.layout && nw.layout.aspectRatioClass))
+                return false;
+
+            // Zone count is shown in the popup subtitle and drives the zone
+            // preview, so zone add/remove edits must invalidate the model.
+            if ((old.layout && old.layout.zoneCount) !== (nw.layout && nw.layout.zoneCount))
+                return false;
+
+            // The mini previews render zone geometry, so with the preview
+            // visible a geometry-only zone edit must invalidate the model.
+            if (root.showPreview && _zonesFingerprint(old.layout) !== _zonesFingerprint(nw.layout))
                 return false;
 
             // For "Default" entry, also check which layout it resolves to
@@ -384,9 +417,17 @@ ComboBox {
             }
         }
 
+        // The View colorSet is pinned on the contentItem and background
+        // individually, NOT on the Popup node: Kirigami's theme attachment
+        // resolves through parentItem(), and a QQuickPopup's background /
+        // contentItem parent to the internal popup item (→ Overlay.overlay),
+        // so a pin on the Popup node never reaches them. Upstream
+        // qqc2-desktop-style's ToolTip.qml uses this same per-item pattern.
         contentItem: ListView {
             id: popupList
 
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             clip: true
             implicitHeight: contentHeight
             model: root.delegateModel
@@ -399,8 +440,10 @@ ComboBox {
         }
 
         background: Rectangle {
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             color: Kirigami.Theme.backgroundColor
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: 1
             radius: Kirigami.Units.smallSpacing
         }
@@ -463,8 +506,8 @@ ComboBox {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                 radius: Kirigami.Units.smallSpacing / 2
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                border.color: highlighted ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+                color: Kirigami.Theme.alternateBackgroundColor
+                border.color: highlighted ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 border.width: highlighted ? 2 : 1
                 visible: root.showPreview && hasLayout
 
@@ -483,8 +526,8 @@ ComboBox {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                 radius: Kirigami.Units.smallSpacing / 2
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                border.color: highlighted ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+                color: Kirigami.Theme.alternateBackgroundColor
+                border.color: highlighted ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 border.width: highlighted ? 2 : 1
                 visible: root.showPreview && !hasLayout
 
@@ -543,9 +586,9 @@ ComboBox {
                             return i18n("No default configured");
                         } else if (isDefaultOption) {
                             let layoutName = (modelData.layout && modelData.layout.displayName) || "";
-                            return i18n("→ %1 (%2 zones)", layoutName, (modelData.layout && modelData.layout.zoneCount) || 0);
+                            return i18np("→ %2 (%1 zone)", "→ %2 (%1 zones)", (modelData.layout && modelData.layout.zoneCount) || 0, layoutName);
                         } else {
-                            return i18n("%1 zones", (modelData.layout && modelData.layout.zoneCount) || 0);
+                            return i18np("%1 zone", "%1 zones", (modelData.layout && modelData.layout.zoneCount) || 0);
                         }
                     }
                     font: Kirigami.Theme.smallFont

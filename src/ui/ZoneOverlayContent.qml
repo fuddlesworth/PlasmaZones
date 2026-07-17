@@ -20,9 +20,9 @@ Item {
     property var highlightedZoneIds: []
     property bool showNumbers: true
     property var previewZones: []
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor
     property color labelFontColor: Kirigami.Theme.textColor
     property string fontFamily: ""
     property real fontSizeScale: 1
@@ -40,27 +40,17 @@ Item {
         flashAnimation.start();
     }
 
-    function highlightZone(zoneId) {
-        highlightedZoneId = zoneId || "";
-        highlightedZoneIds = [];
-    }
-
-    function highlightZones(zoneIds) {
-        highlightedZoneIds = zoneIds || [];
-        highlightedZoneId = "";
-    }
-
-    function clearHighlight() {
-        highlightedZoneId = "";
-        highlightedZoneIds = [];
-    }
-
     function hasCustomColors(zoneData) {
         var v = zoneData.useCustomColors;
         return v === true || v === 1 || (typeof v === "string" && v.toLowerCase() === "true");
     }
 
     function isZoneHighlighted(zoneData) {
+        // isHighlighted is C++-guaranteed bool: overlay_data.cpp writes
+        // zone->isHighlighted() and patchZonesWithHighlight() re-stamps it
+        // as a real bool on every slot push, so raw truthiness (unlike the
+        // strict useCustomColors contract) is safe here. Mirrored in
+        // RenderNodeOverlayContent.isZoneHighlighted().
         if (zoneData.isHighlighted)
             return true;
 
@@ -73,7 +63,6 @@ Item {
         for (var i = 0; i < highlightedZoneIds.length; i++) {
             if (highlightedZoneIds[i] === zoneData.id)
                 return true;
-
         }
         return false;
     }
@@ -96,12 +85,11 @@ Item {
             Text {
                 anchors.centerIn: parent
                 text: i18n("PlasmaZones Overlay Active\n(No zones defined)")
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
+                color: Kirigami.Theme.disabledTextColor
                 font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.5
                 horizontalAlignment: Text.AlignHCenter
                 visible: parent.visible
             }
-
         }
 
         Repeater {
@@ -111,21 +99,19 @@ Item {
                 required property var modelData
                 required property int index
 
-                x: modelData.x
-                y: modelData.y
-                width: modelData.width
-                height: modelData.height
+                x: modelData.x !== undefined ? modelData.x : 0
+                y: modelData.y !== undefined ? modelData.y : 0
+                width: modelData.width !== undefined ? modelData.width : 0
+                height: modelData.height !== undefined ? modelData.height : 0
                 sourceComponent: (modelData.overlayDisplayMode === 1) ? layoutPreviewComponent : zoneRectComponent
             }
-
         }
 
         Component {
             id: zoneRectComponent
 
             ZoneItem {
-                property var modelData: parent ? parent.modelData : ({
-                })
+                property var modelData: parent ? parent.modelData : ({})
                 property int zoneIndex: parent ? parent.index : 0
                 property bool useCustom: root.hasCustomColors(modelData)
 
@@ -143,7 +129,6 @@ Item {
                     for (var i = 0; i < root.highlightedZoneIds.length; i++) {
                         if (root.highlightedZoneIds[i] === modelData.id)
                             return true;
-
                     }
                     return false;
                 }
@@ -163,15 +148,13 @@ Item {
                 borderWidth: (useCustom && modelData.borderWidth !== undefined) ? modelData.borderWidth : root.borderWidth
                 borderRadius: (useCustom && modelData.borderRadius !== undefined) ? modelData.borderRadius : root.borderRadius
             }
-
         }
 
         Component {
             id: layoutPreviewComponent
 
             Item {
-                property var modelData: parent ? parent.modelData : ({
-                })
+                property var modelData: parent ? parent.modelData : ({})
                 property int zoneIndex: parent ? parent.index : 0
 
                 anchors.fill: parent
@@ -192,7 +175,7 @@ Item {
                         anchors.margins: -Kirigami.Units.smallSpacing
                         radius: Kirigami.Units.smallSpacing * 1.5
                         color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.85)
-                        border.color: Qt.rgba(root.borderColor.r, root.borderColor.g, root.borderColor.b, 0.15)
+                        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                         border.width: 1
                     }
 
@@ -217,11 +200,8 @@ Item {
                         fontUnderline: root.fontUnderline
                         fontStrikeout: root.fontStrikeout
                     }
-
                 }
-
             }
-
         }
 
         Rectangle {
@@ -242,11 +222,7 @@ Item {
                     to: 0
                     profile: "widget.zoneOverlayFlash"
                 }
-
             }
-
         }
-
     }
-
 }

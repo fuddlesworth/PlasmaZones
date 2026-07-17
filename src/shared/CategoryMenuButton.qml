@@ -48,10 +48,12 @@ import org.kde.kirigami as Kirigami
  *
  * Required:
  *   - `items`: var — list of `{ id, name, category?, categoryOrder?,
- *     dimmed?, dimReason? }` maps. A `dimmed` item renders greyed with a
- *     warning icon + `dimReason` tooltip (still selectable — the host
- *     surfaces the consequence). `categoryOrder` (int) sorts top-level
- *     categories; uncategorised items sort by name.
+ *     categoryGroup?, dimmed?, dimReason? }` maps. A `dimmed` item renders
+ *     greyed with a warning icon + `dimReason` tooltip (still selectable —
+ *     the host surfaces the consequence). `categoryOrder` (int) sorts
+ *     top-level categories; uncategorised items sort by name.
+ *     `categoryGroup` (string) is used for group separators between
+ *     top-level categories.
  *
  * Optional:
  *   - `currentId`: string — drives the checkmark and button label
@@ -174,6 +176,12 @@ ComboBox {
                     "order": Infinity,
                     "group": (s.categoryGroup || "")
                 };
+
+            // The bucket creator may lack a categoryGroup while a later item
+            // in the same top category carries one — backfill so the group is
+            // captured regardless of name-sort order.
+            if (tree[top].group === "" && s.categoryGroup)
+                tree[top].group = s.categoryGroup;
 
             // Track the smallest explicit `categoryOrder` seen for this top
             // category — hosts that supply it (the rule editor's field/action
@@ -452,6 +460,10 @@ ComboBox {
                 var sel;
                 if (it.itemId === "")
                     sel = (root.currentId === "" || root.currentId === root.noneId);
+                else if (root.includeNoneEntry && it.itemId === root.noneId)
+                    // The prepended "None" row already represents noneId;
+                    // checking the real item too would show two checkmarks.
+                    sel = false;
                 else
                     sel = (it.itemId === root.currentId);
                 it.isSelected = sel;

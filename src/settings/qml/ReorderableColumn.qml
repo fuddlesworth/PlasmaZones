@@ -48,6 +48,11 @@ Item {
     property var reorderableOf: function (item) {
         return true;
     }
+    /// Optional human-readable name resolver for assistive technology: given
+    /// an item, returns the name announced for its focusable row. Falls back
+    /// to `idOf` when unset — set it whenever the model carries a display
+    /// name, so screen readers announce that instead of an opaque id.
+    property var accessibleNameOf: null
     /// Optional deep-link anchor prefix ("rule:", …). Empty disables per-row
     /// anchor registration (the decoration list has no search deep-links).
     property string anchorPrefix: ""
@@ -74,6 +79,31 @@ Item {
     // Per-id published height. Keyed by id (not index) so reorders don't
     // invalidate the map; reassigned whole on each publish so bindings re-run.
     property var delegateHeights: ({})
+
+    // Prune cache entries whose id no longer appears in `items`, so the map
+    // doesn't grow across deletions (every publish copies the whole map).
+    // Rebuilding here rather than deleting in Component.onDestruction is
+    // deliberate: the Repeater treats an `items` reassignment as a full model
+    // reset (destroy all, recreate all), so a destruction-time delete would
+    // also drop heights of rows that are merely being recreated, collapsing
+    // expanded rows to the fallback height until they republish.
+    onItemsChanged: {
+        var next = {};
+        var kept = 0;
+        for (var i = 0; i < items.length; ++i) {
+            var item = items[i];
+            if (item === undefined || item === null)
+                continue;
+            var itemId = root.idOf(item);
+            var h = delegateHeights[itemId];
+            if (h !== undefined) {
+                next[itemId] = h;
+                kept++;
+            }
+        }
+        if (kept !== Object.keys(delegateHeights).length)
+            delegateHeights = next;
+    }
 
     function setDelegateHeight(itemId, h) {
         if (!itemId || h <= 0 || delegateHeights[itemId] === h)
@@ -179,6 +209,7 @@ Item {
             z: dragArea.drag.active ? 100 : 0
             activeFocusOnTab: true
             Accessible.role: Accessible.ListItem
+            Accessible.name: root.accessibleNameOf ? root.accessibleNameOf(modelData) : (root.idOf(modelData) || "")
 
             Keys.onPressed: event => {
                 if (!(event.modifiers & Qt.AltModifier))

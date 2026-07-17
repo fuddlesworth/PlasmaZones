@@ -7,8 +7,8 @@ import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
 /**
- * Layout OSD content — Item-rooted body for use inside the unified
- * NotificationOverlay host that swaps OSD modes via Loader.
+ * Layout OSD content — Item-rooted body for use inside the
+ * PassiveOverlayShell host that swaps OSD modes via its osdSlot Loader.
  *
  * Phase 5: surface lifecycle + show/hide animations are driven entirely by
  * PhosphorAnimationLayer::SurfaceAnimator (registered for the notification
@@ -20,8 +20,9 @@ import org.plasmazones.common as QFZCommon
  * This Item only owns:
  *   - Data properties written by C++ (layoutId, zones, locked, …)
  *   - The visible content tree (zone preview + lock/disabled overlays + name row)
- *   - The auto-dismiss Timer + dismissRequested signal that C++ wires to
- *     Surface::hide() (via the unified host's signal forwarding)
+ *   - The auto-dismiss Timer + dismissRequested signal, forwarded by the
+ *     shell host as `osdDismissRequested` and routed by C++ to
+ *     OverlayService::onOsdDismissRequested → ShellHost::hideSlot
  */
 Item {
     id: root
@@ -74,7 +75,14 @@ Item {
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
-    property color highlightColor: Kirigami.Theme.highlightColor
+    property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
+    // Zone fill opacities for the preview. Written by C++ (osd.cpp
+    // pushLayoutOsdContent) with the settings/context-override-resolved
+    // values; these literals are the QML-side defaults.
+    property real activeOpacity: 0.6
+    property real inactiveOpacity: 0.3
     // Font properties for zone number labels
     property string fontFamily: ""
     property real fontSizeScale: 1
@@ -85,16 +93,11 @@ Item {
     property bool locked: false
     property bool disabled: false
     property string disabledReason: ""
-    // Content-driven desired size, exposed for the unified host (which binds
-    // its Window width/height to these readonly properties; C++ also reads
-    // them after every property write to compute matching layer-shell margins).
-    readonly property int contentDesiredWidth: Math.round(container.width) + Math.round(Kirigami.Units.gridUnit * 2.5)
-    readonly property int contentDesiredHeight: Math.round(container.height) + Math.round(Kirigami.Units.gridUnit * 2.5)
-
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
-    /// The unified NotificationOverlay host re-emits this as its own
-    /// `dismissRequested` so OverlayService::createWarmedOsdSurface's
-    /// connect to Surface::hide() drives the library animator's beginHide.
+    /// The unified shell host re-emits this as its `osdDismissRequested`
+    /// signal, which C++ (wirePassiveShellSlots) routes to
+    /// OverlayService::onOsdDismissRequested → ShellHost::hideSlot for an
+    /// animator-driven slot-hide.
     signal dismissRequested
 
     /// Restart the auto-dismiss timer from C++ on every show. Forwards to
@@ -132,7 +135,6 @@ Item {
         width: Math.max(previewContainer.width, nameLabelRow.width) + Kirigami.Units.gridUnit * 3
         height: previewContainer.height + nameLabelRow.height + Kirigami.Units.gridUnit * 3
         backgroundColor: root.backgroundColor
-        textColor: root.textColor
         containerRadius: Kirigami.Units.gridUnit * 1.5
 
         // Layout preview
@@ -145,10 +147,12 @@ Item {
             width: Kirigami.Units.gridUnit * 11
             height: Math.round(Kirigami.Units.gridUnit * 11 / root.previewAspectRatio)
 
-            // Background for preview area
+            // Background for preview area. backgroundColor (not the
+            // alternate role) so inactive zone fills stay readable
+            // against the backdrop.
             Rectangle {
                 anchors.fill: parent
-                color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.08)
+                color: Kirigami.Theme.backgroundColor
                 radius: Kirigami.Units.smallSpacing
             }
 
@@ -159,6 +163,9 @@ Item {
                 anchors.fill: parent
                 anchors.margins: Kirigami.Units.smallSpacing
                 zones: root.zones
+                highlightColor: root.highlightColor
+                inactiveColor: root.inactiveColor
+                borderColor: root.borderColor
                 isHovered: false
                 isActive: true
                 zonePadding: Math.round(Kirigami.Units.smallSpacing / 2)
@@ -167,8 +174,8 @@ Item {
                 showZoneNumbers: true
                 producesOverlappingZones: root.producesOverlappingZones
                 zoneNumberDisplay: root.zoneNumberDisplay
-                inactiveOpacity: 0.3
-                activeOpacity: 0.6
+                inactiveOpacity: root.inactiveOpacity
+                activeOpacity: root.activeOpacity
                 fontFamily: root.fontFamily
                 fontSizeScale: root.fontSizeScale
                 fontWeight: root.fontWeight
@@ -193,7 +200,7 @@ Item {
                 source: "object-locked"
                 width: Kirigami.Units.iconSizes.large
                 height: Kirigami.Units.iconSizes.large
-                color: Kirigami.Theme.highlightedTextColor
+                color: Kirigami.Theme.textColor
             }
         }
 
@@ -209,7 +216,7 @@ Item {
                 source: "dialog-cancel"
                 width: Kirigami.Units.iconSizes.large
                 height: Kirigami.Units.iconSizes.large
-                color: Kirigami.Theme.neutralTextColor
+                color: Kirigami.Theme.disabledTextColor
             }
         }
 
@@ -220,7 +227,7 @@ Item {
             anchors.top: previewContainer.bottom
             anchors.topMargin: Kirigami.Units.gridUnit
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
+            // Vertical padding budget lives in the container height sum (3 gu total): 1.5 gu top, 1.0 gu gap above this row, 0.5 gu below it.
             spacing: Kirigami.Units.smallSpacing
 
             // Category badge (layout type) — hidden when disabled
@@ -254,11 +261,15 @@ Item {
         }
     }
 
-    // Click to dismiss. dismiss.fire() collapses timer-fire + click into
-    // a single dismissRequested per show cycle via the shared latch.
+    // Click the card to dismiss. Anchored to the card (not the whole OSD
+    // slot) so a concurrent modal slot (snap assist, picker) keeps receiving
+    // its own clicks instead of hitting a screen-wide input shield.
+    // dismiss.fire() collapses timer-fire + click into a single
+    // dismissRequested per show cycle via the shared latch.
     MouseArea {
-        anchors.fill: parent
+        anchors.fill: container
         onClicked: dismiss.fire()
+        Accessible.role: Accessible.Button
         Accessible.name: i18n("Dismiss notification")
     }
 }

@@ -46,6 +46,8 @@ Control {
         root.capturing = true;
         root.pendingModifierMask = 0;
         root.nonModifierKeyPressed = false;
+        unsupportedButtonHintTimer.stop();
+        unsupportedButtonHint.visible = false;
         captureOverlay.open();
     }
 
@@ -216,10 +218,13 @@ Control {
                     root.pendingModifierMask = modMask;
                     return;
                 }
+                // Record the non-modifier press before the MetaOnly early
+                // return: releasing a modifier after e.g. Ctrl+A must not
+                // count as a bare-modifier capture.
+                root.nonModifierKeyPressed = true;
                 if (root.acceptMode === root.acceptModeMetaOnly)
                     return;
 
-                root.nonModifierKeyPressed = true;
                 var seq = root.keyToSequenceString(event.key, event.modifiers);
                 if (seq.length > 0) {
                     root.endCapture();
@@ -231,7 +236,16 @@ Control {
                 if (root.acceptMode !== root.acceptModeMetaOnly && root.acceptMode !== root.acceptModeAll)
                     return;
 
-                if (root.isModifierKey(event.key) && !root.nonModifierKeyPressed && root.pendingModifierMask !== 0) {
+                // Releasing the non-modifier key clears the rejection latch so
+                // a later clean modifier press can still capture within the
+                // same session. A modifier released while the non-modifier is
+                // still held falls through to the guard below and stays
+                // rejected.
+                if (!root.isModifierKey(event.key)) {
+                    root.nonModifierKeyPressed = false;
+                    return;
+                }
+                if (!root.nonModifierKeyPressed && root.pendingModifierMask !== 0) {
                     root.endCapture();
                     root.modifierCaptured(root.pendingModifierMask);
                 }
@@ -253,18 +267,48 @@ Control {
                         return;
                     }
                     var bit = mouse.button;
+                    // Deliberate cap at Qt.ExtraButton5 (bit 128): the trigger
+                    // storage and every display surface (mouseButtonList in
+                    // ModifierAndMouseCheckBoxes, the kcfg Extra1/2/3 naming)
+                    // only label buttons up to Extra 5, so a higher capture
+                    // would persist as an unlabelled, un-editable trigger.
+                    // Out-of-range presses show a hint instead of being
+                    // silently swallowed.
                     if (bit >= 2 && bit <= 128) {
                         root.endCapture();
                         root.mouseCaptured(bit);
+                    } else {
+                        unsupportedButtonHint.visible = true;
+                        unsupportedButtonHintTimer.restart();
                     }
                 }
             }
 
             Label {
+                id: captureHintLabel
+
                 anchors.centerIn: parent
                 text: root.acceptMode === root.acceptModeMetaOnly ? i18n("Press modifier(s). Escape to cancel.") : (root.acceptMode === root.acceptModeMouseOnly ? i18n("Press any mouse button (Right, Middle, Back, Forward, etc.). Escape to cancel.") : i18n("Press key, modifier(s), or mouse button. Escape to cancel."))
                 color: Kirigami.Theme.textColor
                 font.italic: true
+            }
+
+            Label {
+                id: unsupportedButtonHint
+
+                anchors.top: captureHintLabel.bottom
+                anchors.topMargin: Kirigami.Units.smallSpacing
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: false
+                text: i18n("That mouse button is not supported. Buttons up to Extra 5 can be captured.")
+                color: Kirigami.Theme.negativeTextColor
+
+                Timer {
+                    id: unsupportedButtonHintTimer
+
+                    interval: 3000
+                    onTriggered: unsupportedButtonHint.visible = false
+                }
             }
         }
     }
@@ -285,7 +329,7 @@ Control {
     }
 
     background: Rectangle {
-        color: root.capturing ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (triggerArea.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05) : "transparent")
+        color: root.capturing ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (triggerArea.containsMouse ? Qt.alpha(Kirigami.Theme.hoverColor, 0.15) : "transparent")
         border.color: root.capturing ? Kirigami.Theme.highlightColor : (triggerArea.containsMouse ? Kirigami.Theme.disabledTextColor : "transparent")
         border.width: 1
         radius: Kirigami.Units.smallSpacing

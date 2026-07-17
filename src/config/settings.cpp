@@ -21,7 +21,9 @@
 #include <PhosphorRules/Rule.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
+#include <QEvent>
 #include <QGuiApplication>
+#include <QScopedValueRollback>
 #include <QMetaMethod>
 #include <QMetaProperty>
 #include <QPalette>
@@ -182,6 +184,7 @@ Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRe
     // which performs the migration itself for standalone tools and tests.)
     load();
     connectRuleStoreGapReactivity();
+    trackSystemPaletteChanges();
 }
 
 Settings::Settings(QObject* parent)
@@ -205,6 +208,7 @@ Settings::Settings(QObject* parent)
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
     connectRuleStoreGapReactivity();
+    trackSystemPaletteChanges();
 }
 
 Settings::Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent)
@@ -226,6 +230,7 @@ Settings::Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent)
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
     connectRuleStoreGapReactivity();
+    trackSystemPaletteChanges();
 }
 
 // ── Helper Methods ───────────────────────────────────────────────────────────
@@ -348,6 +353,15 @@ void Settings::load()
     const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged;
 
     if (useSystemColors()) {
+        // The derive routes through the public color setters. Squelch their
+        // per-setter NOTIFY + settingsChanged emissions for this call only:
+        // emitChangedNotifyProperties() below compares the post-derive values
+        // against the pre-reparse snapshot and fires each changed NOTIFY
+        // exactly once, and the aggregate settingsChanged fires once at the
+        // end of load(). eventFilter()'s palette re-derive batches with the
+        // same flag; only setUseSystemColors relies on the setters emitting
+        // normally.
+        QScopedValueRollback<bool> squelch(m_suppressDerivedColorEmissions, true);
         applySystemColorScheme();
     }
 
@@ -408,9 +422,10 @@ void Settings::load()
 // ── save() dispatcher ────────────────────────────────────────────────────────
 
 // Groups that reset() deletes exhaustively. NOT used by save() — save()
-// iterates the schema and lets purgeStaleKeys() handle cleanup. Does NOT
-// include unmanaged groups (Updates) which are written independently and
-// must survive a forced default-restore.
+// iterates the schema and lets purgeStaleKeys() handle cleanup. The legacy
+// "Updates" group is deliberately absent: nothing writes it anymore (the
+// dismissed-update-version moved to the settings app's QSettings), so it is
+// swept by reset() as a stale husk rather than managed here.
 QStringList Settings::managedGroupNames()
 {
     return {
@@ -469,9 +484,11 @@ void Settings::purgeStaleKeys()
     // enumeration, so Pass 2 cannot reach it. This holds against the interface
     // and not just the JsonBackend we happen to construct today.
     //
-    // Mixed list of (a) root-level GROUP names that must survive Pass 2's
-    // blanket-delete loop ("Updates")
-    // and (b) root-level KEYS holding stash data — `_v4DisableStash`,
+    // Root-level KEYS holding stash data that must survive Pass 2's
+    // blanket-delete loop. (The legacy "Updates" group used to be carved out
+    // here too; nothing writes or reads it since the dismissed-update-version
+    // moved to the settings app's QSettings, so Pass 2 now sweeps any stale
+    // husk of it like every other unmanaged group.) `_v4DisableStash`,
     // `_v4ExclusionStash` and `_v4AnimationExclusionStash` are JSON
     // OBJECTS and survive Pass 2 via `preservedGroups.contains(topLevel)`
     // membership in the loop body below (without that short-circuit Pass
@@ -482,7 +499,6 @@ void Settings::purgeStaleKeys()
     // against future Pass 2 restructuring. All four stashes feed the v4
     // chain-stall retry path in configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {
-        ConfigDefaults::updatesGroup(),
         ConfigKeys::Legacy::v4DisableStashKey(),
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
         ConfigKeys::Legacy::v4ExclusionStashKey(),
@@ -756,6 +772,41 @@ void Settings::captureBaseline()
     }
 }
 
+void Settings::rebaselineDerivedColorKeys()
+{
+    // System-colors mode owns the four zone-color keys: applySystemColorScheme()
+    // DERIVES them from the application palette, so a runtime palette change
+    // writes them through m_store AFTER the settings app captured its baseline
+    // — without this refresh, isKeyModified() reports a phantom unsaved edit
+    // and Discard reverts to the stale pre-switch colors.
+    //
+    // Callable ONLY from the ApplicationPaletteChange path (eventFilter) —
+    // and even there only when the useSystemColors toggle is COMMITTED
+    // (!isKeyModified on the useSystem key). If the toggle is a pending
+    // unsaved edit, the toggle and the colors it derived are ONE user edit
+    // and must stay discardable together; rebaselining mid-edit would let
+    // Discard revert the toggle to off while pinning the palette-derived
+    // colors as the new baseline.
+    //
+    // applySystemColorScheme() is not Q_INVOKABLE (no QML caller), so its
+    // call sites are exactly three; the other two must not rebaseline:
+    // - setUseSystemColors(true) is a USER edit; the toggle and the colors it
+    //   derives must stay discardable together. Rebaselining there would let
+    //   Discard revert the toggle to off while pinning the system-derived
+    //   colors as the new baseline.
+    // - load() derives BEFORE captureBaseline(), so the full baseline already
+    //   carries the derived values.
+    const ConfigKeyList derivedKeys{
+        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::highlightKey()},
+        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::inactiveKey()},
+        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::borderKey()},
+        {ConfigDefaults::snappingZonesLabelsGroup(), ConfigDefaults::fontColorKey()},
+    };
+    for (const ConfigKey& gk : derivedKeys) {
+        m_baseline[gk.first].insert(gk.second, m_store->readVariant(gk.first, gk.second));
+    }
+}
+
 bool Settings::isKeyModified(const QString& group, const QString& key) const
 {
     return m_store->readVariant(group, key) != m_baseline.value(group).value(key);
@@ -909,6 +960,13 @@ void Settings::setAudioSpectrumBarCount(int count)
         if (after == before) {                                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
+        /* applySystemColorScheme() derives under this flag in load() AND in                                           \
+           eventFilter()'s palette re-derive: both announce once themselves                                            \
+           (snapshot/diff + a single settingsChanged) — a setter-level                                               \
+           emission here would duplicate both. */                                                                      \
+        if (m_suppressDerivedColorEmissions) {                                                                         \
+            return;                                                                                                    \
+        }                                                                                                              \
         Q_EMIT signal();                                                                                               \
         Q_EMIT settingsChanged();                                                                                      \
     }
@@ -975,10 +1033,6 @@ P_STORE_GET(int, borderWidth, snappingZonesBorderGroup, widthKey, int)
 P_STORE_SET_INT(setBorderWidth, snappingZonesBorderGroup, widthKey, borderWidthChanged)
 P_STORE_GET(int, borderRadius, snappingZonesBorderGroup, radiusKey, int)
 P_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadiusChanged)
-
-// Effects group (blur lives here for historical reasons)
-P_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
-P_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChanged)
 
 // ── Ordering (PhosphorConfig::Store-backed) ─────────────────────────────────
 // On disk: comma-joined QString. In API: QStringList. The schema validator
@@ -1735,7 +1789,7 @@ P_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, a
 
 // ── Display (PhosphorConfig::Store-backed) ──────────────────────────────────
 // Display.* keys live in snappingBehaviorDisplayGroup; OSD + Effects keys
-// share snappingEffectsGroup with the already-migrated Appearance.Blur.
+// live in snappingEffectsGroup.
 // QStringList keys go over the wire as comma-joined strings; the getters
 // parse back via parseCommaList (defined above in the Ordering section).
 
@@ -2068,7 +2122,21 @@ QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode
     for (auto& name : entries) {
         name = resolveScreenId(name);
     }
-    return entries;
+    // Order-preserving dedup: a connector-name entry and an id-form entry can
+    // resolve to the same screen id, and consumers expect one entry per screen.
+    // The QSet carries the membership check so the pass stays O(n) instead of
+    // the O(n^2) list-contains scan; the list preserves first-seen order.
+    QStringList deduped;
+    deduped.reserve(entries.size());
+    QSet<QString> seen;
+    seen.reserve(entries.size());
+    for (const QString& entry : std::as_const(entries)) {
+        if (!seen.contains(entry)) {
+            seen.insert(entry);
+            deduped.append(entry);
+        }
+    }
+    return deduped;
 }
 
 void Settings::setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames)
@@ -2331,7 +2399,7 @@ void Settings::setZoneSelectorPosition(ZoneSelectorPosition value)
 }
 void Settings::setZoneSelectorPositionInt(int value)
 {
-    if (value >= 0 && value <= 8) {
+    if (value >= 0 && value <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
         setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
     }
 }
@@ -2483,6 +2551,11 @@ void Settings::setZoneSpanModifier(DragModifier modifier)
     // baked in because the synthesis below ran with the raw input.
     const int before =
         m_store->read<int>(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey());
+    // Snapshot the trigger list BEFORE writing the modifier: on configs with no
+    // stored trigger list, zoneSpanTriggers() synthesizes its result from the
+    // modifier key, so a post-write snapshot would already reflect the new
+    // modifier and the trigger-change comparison below could never fire.
+    const QVariantList beforeTriggers = zoneSpanTriggers();
     m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey(),
                    static_cast<int>(modifier));
     const int after =
@@ -2495,7 +2568,6 @@ void Settings::setZoneSpanModifier(DragModifier modifier)
     // the validator-coerced `after` value, not the raw input, so an invalid
     // request that was snapped to the default doesn't smuggle a
     // {modifier: 99} phantom into the trigger list.
-    const QVariantList beforeTriggers = zoneSpanTriggers();
     QVariantList triggers = beforeTriggers;
     if (!triggers.isEmpty()) {
         QVariantMap first = triggers.first().toMap();
@@ -3028,7 +3100,10 @@ P_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivat
 
 void Settings::reset()
 {
-    // Delete all managed groups plus unmanaged groups (reset nukes everything)
+    // Delete all managed groups (reset nukes everything). The explicit
+    // "Updates" sweep scrubs the retired legacy group from configs written by
+    // older builds — nothing writes or reads it anymore (dismissed-update-
+    // version lives in the settings app's QSettings).
     for (const QString& groupName : managedGroupNames()) {
         m_configBackend->deleteGroup(groupName);
     }
@@ -3081,10 +3156,14 @@ void Settings::reset()
     QHash<Mode, QStringList> resetMonitorsBefore;
     QHash<Mode, QStringList> resetDesktopsBefore;
     QHash<Mode, QStringList> resetActivitiesBefore;
+    // Snapshot in canonical form — the same canonicalDisableEntries mechanism
+    // load() uses — so entries that canonicalize away (unresolvable connector
+    // names, formatting variants) don't produce spurious change signals when
+    // the raw pre-clear list differs only cosmetically from the post-load one.
     for (const Mode mode : PhosphorZones::allModes()) {
-        resetMonitorsBefore.insert(mode, disabledMonitors(mode));
-        resetDesktopsBefore.insert(mode, disabledDesktops(mode));
-        resetActivitiesBefore.insert(mode, disabledActivities(mode));
+        resetMonitorsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)));
+        resetDesktopsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)));
+        resetActivitiesBefore.insert(mode, canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)));
     }
     {
         namespace CRB = PhosphorRules::ContextRuleBridge;
@@ -3133,15 +3212,16 @@ void Settings::reset()
     // aggregate.
     bool anyDisableChanged = false;
     for (const Mode mode : PhosphorZones::allModes()) {
-        if (disabledMonitors(mode) != resetMonitorsBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)) != resetMonitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);
             anyDisableChanged = true;
         }
-        if (disabledDesktops(mode) != resetDesktopsBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)) != resetDesktopsBefore.value(mode)) {
             Q_EMIT disabledDesktopsChanged(mode);
             anyDisableChanged = true;
         }
-        if (disabledActivities(mode) != resetActivitiesBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode))
+            != resetActivitiesBefore.value(mode)) {
             Q_EMIT disabledActivitiesChanged(mode);
             anyDisableChanged = true;
         }
@@ -3422,6 +3502,105 @@ QString Settings::loadColorsFromFile(const QString& filePath)
     return QString(); // Success - no error
 }
 
+void Settings::trackSystemPaletteChanges()
+{
+    // Track system palette changes at runtime. load() derives the zone
+    // colors from the CURRENT QGuiApplication palette when useSystemColors
+    // is on — a one-time snapshot. The palette changes underneath every
+    // long-running process whenever the desktop color scheme changes
+    // (wallpaper-driven schemes switch often), so without re-deriving, the
+    // daemon's overlays and the settings app's previews render colors from
+    // whichever scheme was active when the process started — they only
+    // matched again after a daemon restart. Qt 6 delivers
+    // QEvent::ApplicationPaletteChange to the application object; there is
+    // no signal for it, hence the event filter. Guarded: the config
+    // library is also used by non-GUI tools where qGuiApp is null.
+    //
+    // Cost note: the filter is installed on the application object, so it
+    // sees EVERY event delivered in the process; the leading guard in
+    // eventFilter() keeps the per-event cost to two compares (watched
+    // pointer + event type). That per-event tax also scales with instance
+    // count — Settings must remain a per-process near-singleton.
+    //
+    // Thread note: installEventFilter() requires the filter object and the
+    // filtered object to live on the same thread, and qGuiApp lives on the
+    // main (GUI) thread — so Settings must be constructed on the main thread
+    // for palette tracking to engage. Every current composition root does
+    // that; the guard below turns a future regression into a loud warning
+    // (with palette tracking disabled) instead of a Qt-internal one.
+    if (qGuiApp) {
+        if (thread() != qGuiApp->thread()) {
+            qCWarning(lcConfig) << "Settings constructed off the main thread — system palette tracking disabled "
+                                   "(installEventFilter requires same-thread objects)";
+            return;
+        }
+        qGuiApp->installEventFilter(this);
+    }
+}
+
+bool Settings::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == qGuiApp && event->type() == QEvent::ApplicationPaletteChange && useSystemColors()) {
+        // Derived values, not user edits. TWO mechanisms keep a runtime theme
+        // switch from reading as unsaved changes:
+        //  1. m_applyingSystemPalette (RAII, restored even if a setter throws)
+        //     is up for the whole synchronous re-derive, so
+        //     SettingsController::onSettingsPropertyChanged() — wired to every
+        //     color NOTIFY — sees isApplyingSystemPalette() and skips
+        //     setNeedsSave(true), keeping the global footer quiet.
+        //  2. rebaselineDerivedColorKeys() refreshes the committed baseline so
+        //     value-based isKeyModified() checks stay false afterwards. See
+        //     that function for why ONLY this path rebaselines — and it is
+        //     further gated here: when the useSystemColors toggle itself is a
+        //     PENDING unsaved edit, the toggle and the colors it derived must
+        //     stay discardable together, so the baseline is left alone.
+        QScopedValueRollback<bool> applying(m_applyingSystemPalette, true);
+        // Batch the announcement like load(): snapshot the four derived
+        // colors, run the derive with the per-setter NOTIFY + settingsChanged
+        // emissions squelched, then emit each changed NOTIFY exactly once plus
+        // ONE aggregate settingsChanged. Without the squelch a single palette
+        // event fired up to 4 settingsChanged (one per color setter), each of
+        // which re-ran every aggregate consumer (daemon refreshConfigFrom-
+        // Settings, KWin effect reload) mid-derive with partially-applied
+        // colors. The explicit emissions stay INSIDE the m_applyingSystemPalette
+        // scope so NOTIFY-driven dirty tracking still sees the flag up.
+        //
+        // Known (theoretical) misclassification: the derive window is
+        // synchronous, but a NOTIFY handler above could re-enter a color
+        // setter with a genuine user edit; that write lands while the squelch
+        // flag is up, so it is announced by THIS batch (fine) yet also counted
+        // as palette-derived by the rebaseline below (its baseline entry would
+        // absorb the user's value). No in-tree handler writes colors from a
+        // color NOTIFY, so this stays a documented hazard rather than code.
+        const QColor highlightBefore = highlightColor();
+        const QColor inactiveBefore = inactiveColor();
+        const QColor borderBefore = borderColor();
+        const QColor labelFontBefore = labelFontColor();
+        {
+            QScopedValueRollback<bool> squelch(m_suppressDerivedColorEmissions, true);
+            applySystemColorScheme();
+        }
+        const bool highlightChanged = highlightColor() != highlightBefore;
+        const bool inactiveChanged = inactiveColor() != inactiveBefore;
+        const bool borderChanged = borderColor() != borderBefore;
+        const bool labelFontChanged = labelFontColor() != labelFontBefore;
+        if (highlightChanged)
+            Q_EMIT highlightColorChanged();
+        if (inactiveChanged)
+            Q_EMIT inactiveColorChanged();
+        if (borderChanged)
+            Q_EMIT borderColorChanged();
+        if (labelFontChanged)
+            Q_EMIT labelFontColorChanged();
+        if (highlightChanged || inactiveChanged || borderChanged || labelFontChanged)
+            Q_EMIT settingsChanged();
+        if (!isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey())) {
+            rebaselineDerivedColorKeys();
+        }
+    }
+    return ISettings::eventFilter(watched, event);
+}
+
 void Settings::applySystemColorScheme()
 {
     // QPalette respects QT_QPA_PLATFORMTHEME — on non-KDE desktops, Qt reads
@@ -3432,11 +3611,16 @@ void Settings::applySystemColorScheme()
     highlight.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
     setHighlightColor(highlight);
 
-    QColor inactive = pal.color(QPalette::Active, QPalette::Text);
+    // Inactive fill and border derive from the background family, not Text.
+    // Text-at-alpha renders as a washed grey film on every dark scheme (the
+    // same fabrication the QML side eliminated); AlternateBase is the View
+    // alternate surface, and Mid is the palette's separator-grade shade, so
+    // both follow the active color scheme with the intended emphasis.
+    QColor inactive = pal.color(QPalette::Active, QPalette::AlternateBase);
     inactive.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
     setInactiveColor(inactive);
 
-    QColor border = pal.color(QPalette::Active, QPalette::Text);
+    QColor border = pal.color(QPalette::Active, QPalette::Mid);
     border.setAlpha(::PhosphorZones::ZoneDefaults::BorderAlpha);
     setBorderColor(border);
 

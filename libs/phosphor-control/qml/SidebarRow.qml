@@ -6,7 +6,6 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
-import "ThemeHelpers.js" as ThemeHelpers
 
 /**
  * Single row in the Sidebar's ListView delegate.
@@ -84,8 +83,8 @@ QQC2.ItemDelegate {
     // overrides (slow-motion mode, high-feedback profiles) flow
     // through. Held off for divider rows because they have no label.
     // `QtQuick.Controls` is imported as QQC2 so the attached property
-    // has to be namespaced too — unqualified `ToolTip.x` reads as a
-    // non-existent attached object.
+    // has to be namespaced too — unqualified `ToolTip.*` attached
+    // properties resolve against a non-existent attached object.
     QQC2.ToolTip.visible: rowItem.compact && rowItem.hovered && !rowItem._isDivider
     QQC2.ToolTip.text: rowItem.title
     QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -116,10 +115,12 @@ QQC2.ItemDelegate {
         property bool _behaviorReady: false
 
         Component.onCompleted: _behaviorReady = true
-        // Active row: highlightColor background at ACTIVE_TINT_ALPHA (see
-        // ThemeHelpers). Hover: textColor at HOVER_TINT_ALPHA for a subtle
-        // "interactive" cue. Both transitions run through `widget.tint.fast`
-        // so they feel snappy without flicker.
+        // Active row: an opaque background/highlight mix (scheme-correct
+        // selection surface, no alpha fabrication). Hover: the scheme's
+        // DecorationHover role mixed the same way for a subtle
+        // "interactive" cue — kept in visual parity with
+        // SidebarBackButton. Both transitions run through
+        // `widget.tint.fast` so they feel snappy without flicker.
         color: {
             // Dividers paint nothing — the Separator child below
             // provides their only visual.
@@ -127,10 +128,10 @@ QQC2.ItemDelegate {
                 return Qt.rgba(0, 0, 0, 0);
 
             if (rowItem.isCurrent)
-                return ThemeHelpers.activeTint(Kirigami.Theme.highlightColor);
+                return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.highlightColor, 0.18);
 
             if (rowItem.hovered)
-                return ThemeHelpers.hoverTint(Kirigami.Theme.textColor);
+                return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.hoverColor, 0.15);
 
             return Qt.rgba(0, 0, 0, 0);
         }
@@ -187,6 +188,8 @@ QQC2.ItemDelegate {
             opacity: rowItem.isCurrent ? 1 : 0.7
 
             Behavior on opacity {
+                enabled: delegateBackground._behaviorReady
+
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                     durationOverride: Kirigami.Units.shortDuration * 1.2
@@ -211,6 +214,8 @@ QQC2.ItemDelegate {
             opacity: rowItem.isCurrent ? 1 : 0.7
 
             Behavior on opacity {
+                enabled: delegateBackground._behaviorReady
+
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                     durationOverride: Kirigami.Units.shortDuration * 1.2
@@ -254,7 +259,7 @@ QQC2.ItemDelegate {
             // icon-only. Consumers that need a compact-mode trailing
             // affordance can express it through the badge slot once
             // that exists.
-            active: rowItem.trailingDelegate !== null && !rowItem.compact
+            active: rowItem.trailingDelegate !== null && !rowItem.compact && !rowItem._isDivider
             visible: active
             Layout.alignment: Qt.AlignVCenter
         }
@@ -275,6 +280,8 @@ QQC2.ItemDelegate {
             rotation: rowItem._isCollapsibleHeader && rowItem._isExpanded ? 90 : 0
 
             Behavior on rotation {
+                enabled: delegateBackground._behaviorReady
+
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
                     durationOverride: Kirigami.Units.shortDuration * 1.5

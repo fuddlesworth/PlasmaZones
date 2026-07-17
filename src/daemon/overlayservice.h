@@ -20,6 +20,7 @@
 #include <PhosphorOverlay/ShellState.h>
 
 #include "../core/interfaces.h"
+#include "overlayservice_types.h"
 #include <PhosphorZones/Layout.h>
 
 namespace PhosphorLayer {
@@ -101,61 +102,10 @@ class OverlayService : public IOverlayService
     Q_PROPERTY(bool zoneSelectorVisible READ isZoneSelectorVisible NOTIFY zoneSelectorVisibilityChanged)
 
 public:
-    /**
-     * @brief Per-screen overlay state, grouping window pointers, physical screen
-     * references, and geometry that were previously stored in parallel QHash maps.
-     */
-    struct PerScreenOverlayState
-    {
-        // Library-owned shell-host state: borrowed pointer into the
-        // PhosphorOverlay::ShellHost-owned map. Set by the
-        // @c ensurePassiveShellFor shim after @c ShellHost::ensureShell
-        // materializes a lib-side entry; the pointer is stable across
-        // map operations because ShellHost stores entries through
-        // raw owning pointers. nullptr until the first ensure call wires
-        // it up.
-        //
-        // The pointee is the single source of truth for shell mechanism
-        // fields (shellSurface / shellWindow / physScreen / slots);
-        // writes route through @c ShellHost::ensureShell /
-        // @c ShellHost::destroyShell.
-        //
-        // Per-content "is this slot wired up?" sentinels (overlayPhysScreen
-        // / zoneSelectorPhysScreen / ...) live below - they're PZ-content
-        // state, not lib-mechanism state.
-        PhosphorOverlay::ShellState* shell = nullptr;
-
-        /// Convenience accessors that resolve the named PZ slot through
-        /// the shell's generic slot map. Returns nullptr when no shell
-        /// is wired up, or when the QML aliasing in PassiveOverlayShell.qml
-        /// did not expose the requested slot Item.
-        QQuickItem* osdSlot() const;
-        QQuickItem* snapAssistSlot() const;
-        QQuickItem* layoutPickerSlot() const;
-        QQuickItem* zoneSelectorSlot() const;
-        QQuickItem* mainOverlaySlot() const;
-
-        // overlayPhysScreen != nullptr is the sentinel for "main overlay
-        // mode is active on this screen" - set in createOverlayWindow,
-        // cleared in destroyOverlayWindow / by the PreDestroyCallback
-        // registered on m_shellHost (OverlayService::unwirePassiveShellSlots).
-        QScreen* overlayPhysScreen = nullptr;
-        QRect overlayGeometry;
-        QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
-        // Cache key for the last successful labelsTexture rebuild on this window.
-        // Hashes (size, showNumbers, font settings, per-zone {number,x,y,w,h}). When
-        // updateLabelsTextureForWindow is called with the same hash, both the sparse
-        // glyph-tile payload rebuild AND the labelsTexture property write (with its
-        // value compare) are skipped. 0 = never computed / cache invalid.
-        quint64 labelsTextureHash = 0;
-        QScreen* zoneSelectorPhysScreen = nullptr;
-        /// Intended geometry of the zone selector inside its shell. On
-        /// Wayland LayerShell, QWindow::geometry() is unreliable until
-        /// the compositor acknowledges surface position; this field
-        /// stores the geometry we requested so hit-testing in
-        /// updateSelectorPosition() has a stable reference.
-        QRect zoneSelectorGeometry;
-    };
+    /// Per-screen overlay state (window pointers, physical screen references,
+    /// geometry). Defined in overlayservice_types.h; aliased here so existing
+    /// OverlayService::PerScreenOverlayState references keep working.
+    using PerScreenOverlayState = PlasmaZones::PerScreenOverlayState;
 
     /// @param screenManager Borrowed; must outlive this service.
     /// @param shaderRegistry Borrowed; must outlive this service. Used by
@@ -353,9 +303,12 @@ private:
      * This helper does a sacrificial show+hide on the surface so the
      * compositor maps the wl_surface, Vulkan initialises the swapchain,
      * the QSGLayer renders at least one frame, and the surface lands
-     * back in State::Hidden with the QQuickWindow still mapped (every
-     * surface that uses this helper has SurfaceConfig::keepMappedOnHide
-     * = true, so the wl_surface stays alive across the hide).
+     * back in State::Hidden. The post-hide mapped guarantee is
+     * conditional: SurfaceConfig::keepMappedOnHide is effects-gated
+     * (createWarmedOsdSurface), so the wl_surface stays alive across
+     * the prime's hide only while shaders or animations are enabled;
+     * with both off the prime still warms the pipelines but the
+     * wl_surface unmaps after the hide.
      *
      * Surfaces are tracked in m_primingSurfaces so a user-triggered show
      * landing during the prime window can cancel the queued hide via
@@ -431,15 +384,18 @@ public:
     void refreshOverlayPropertiesIfShown();
 
 public Q_SLOTS:
-    // hideLayoutOsd / hideNavigationOsd intentionally absent. Phase-5
-    // dismiss path: QML auto-dismiss timer → loaded content's
-    // dismissRequested() → host PassiveOverlayShell re-emits → wired by
-    // createWarmedOsdSurface to Surface::hide() → SurfaceAnimator::beginHide
-    // → PhosphorLayer::Surface flips Qt::WindowTransparentForInput on the
-    // still-mapped QWindow. No C++ slot runs on dismiss - destroying the
-    // QQuickWindow would re-introduce the blocking ~QQuickWindow Vulkan
-    // teardown that the warm-surface design is meant to avoid. Pre-warmed
-    // OSD windows are reused for the daemon's entire lifetime.
+    // hideLayoutOsd / hideNavigationOsd intentionally absent. Dismiss
+    // path: QML auto-dismiss timer → loaded content's dismissRequested()
+    // → shell window re-emits it as `osdDismissRequested` → wired by
+    // wirePassiveShellSlots (shellhost_bridge.cpp) to
+    // OverlayService::onOsdDismissRequested → ShellHost::hideSlot runs an
+    // animator-driven slot-hide, then onOsdSlotHideCompleted flips
+    // slot.visible=false and re-syncs surface state. The C++ slot never
+    // destroys the QQuickWindow - that would re-introduce the blocking
+    // ~QQuickWindow Vulkan teardown the warm-surface design avoids.
+    // keepMappedOnHide is conditional (createWarmedOsdSurface): mapped
+    // across hides only while shaders or animations are enabled; with
+    // effects off the next syncSurfaceState unmaps the wl_surface.
     void hideLayoutPicker() override;
 
     // Shader error reporting from QML
@@ -452,8 +408,9 @@ private Q_SLOTS:
     /// QML signal. Resolves the emitting shell window via `sender()`,
     /// finds the matching m_screenStates entry, and runs an animated
     /// slot-hide via SurfaceAnimator::beginHide on (shellSurface,
-    /// osdSlotItem) - the shell wl_surface itself stays mapped, only
-    /// the OSD slot Item's opacity animates to 0.
+    /// osdSlotItem) - only the OSD slot Item's opacity animates to 0;
+    /// the shell wl_surface itself stays mapped across the hide while
+    /// shaders or animations are enabled (effects-gated keepMappedOnHide).
     void onOsdDismissRequested();
 
     /// Receiver for the shell's `snapAssistDismissRequested` QML signal
@@ -867,27 +824,10 @@ private:
     /// during the hide leg.
     void onOsdSlotHideCompleted(const QString& effectiveId);
 
-    /// Shared property-push for layout-OSD content. Used by both
-    /// showLayoutOsdImpl (PhosphorZones::Layout* path) and the
-    /// showLayoutOsd(QString,...) overload (autotile / pre-built-zones
-    /// path). The struct lets the two callers diverge only on the values
-    /// they compute, not on the property-write sequence.
-    struct LayoutOsdContentParams
-    {
-        QString id; ///< layoutId - UUID for manual layouts, "autotile:..." for algorithms
-        QString name; ///< layoutName as shown in the OSD label
-        QVariantList zones; ///< pre-built zone variant list (empty for locked-with-no-zones)
-        int category = 0; ///< PhosphorZones::LayoutCategory enum value
-        bool autoAssign = false; ///< per-layout autoAssign flag (raw, pre-OR with global)
-        bool globalAutoAssign = false; ///< master "auto-assign for all layouts" toggle (#370)
-        bool locked = false; ///< draws lock badge + " (Locked)" suffix
-        qreal screenAspectRatio = 16.0 / 9.0;
-        QString aspectRatioClass = QStringLiteral("any");
-        bool showMasterDot = false;
-        bool producesOverlappingZones = false;
-        QString zoneNumberDisplay = QStringLiteral("all");
-        int masterCount = 1;
-    };
+    /// Shared property-push parameters for layout-OSD content. Defined in
+    /// overlayservice_types.h; aliased here so existing nested-name
+    /// references keep working.
+    using LayoutOsdContentParams = PlasmaZones::LayoutOsdContentParams;
     void pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdContentParams& params);
 
     /// Resolve a surface-decoration pack from the settings' DecorationProfileTree
@@ -945,9 +885,11 @@ private:
     void restoreZoneSelectorAfterHide(const QString& effectiveId);
 
     /// Drive the per-screen shell wl_surface map state from slot
-    /// visibility. Shell uses keepMappedOnHide=true; Surface::show()
-    /// /hide() flip Qt::WindowTransparentForInput. The flip only
-    /// happens through Surface's state machine, not through slot-level
+    /// visibility. The shell's keepMappedOnHide is effects-gated
+    /// (createWarmedOsdSurface): the window is kept mapped on hide only
+    /// while shaders or animations are enabled. Surface::show()/hide()
+    /// flip Qt::WindowTransparentForInput. The flip only happens
+    /// through Surface's state machine, not through slot-level
     /// animator hides - without this helper the shell never re-enters
     /// Hidden after first show, and the input region eats every click
     /// for the daemon's lifetime.
@@ -1028,47 +970,21 @@ private:
      * @param outSurface Output: the backing PhosphorLayer::Surface (nullptr on failure)
      * @param screenGeom Output: screen geometry
      * @param aspectRatio Output: calculated aspect ratio
+     * @param outEffectiveScreenId Output: resolved screen id (caller's
+     *        @p screenId, or the target physical screen's identity when the
+     *        caller passed an empty id) — feed this to per-screen context
+     *        lookups such as overlayOverrideForScreen
      * @param screenId Target screen (empty = primary)
      * @return true if window is ready, false on failure
      */
     bool prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer::Surface*& outSurface, QQuickItem*& outOsdSlot,
                                 QScreen*& outPhysScreen, QRect& screenGeom, qreal& aspectRatio,
-                                const QString& screenId = QString());
+                                QString& outEffectiveScreenId, const QString& screenId = QString());
 
-    /**
-     * @brief Parameters for @ref createLayerSurface, kept as a named-member
-     *        aggregate so call sites read top-to-bottom rather than relying
-     *        on positional arg ordering. Required fields up top, optional
-     *        below; Qt6 designated-init form is `LayerSurfaceParams{.qmlUrl=...}`.
-     */
-    struct LayerSurfaceParams
-    {
-        // Required.
-        QUrl qmlUrl = {}; ///< QML file (Window-rooted - PZ's overlay QML convention)
-        QScreen* screen = nullptr; ///< target screen (physical; virtual-screen positioning is the caller's job)
-        PhosphorLayer::Role role = {}; ///< protocol-level preset (see phosphor_roles.h)
-        const char* windowType = ""; ///< debug/telemetry label
-
-        // Optional - explicit `= {}` suppresses GCC's
-        // -Wmissing-field-initializers warning on designated-init call sites
-        // that omit these. (For `QUrl` / `Role` above the same is true; we
-        // just want one consistent style across the struct.)
-        QVariantMap windowProperties = {}; ///< Applied as dynamic properties before QML loads.
-        std::optional<PhosphorLayer::Anchors> anchorsOverride =
-            std::nullopt; ///< Overrides the role's anchors (virtual-screen positioning).
-        std::optional<QMargins> marginsOverride =
-            std::nullopt; ///< Overrides the role's margins (virtual-screen positioning).
-        bool keepMappedOnHide = false; ///< See SurfaceConfig::keepMappedOnHide.
-        /// Initial swapchain size committed during warm-up. Empty (default)
-        /// → screen geometry, which guarantees a non-zero buffer for every
-        /// anchor configuration but allocates a full-screen Vulkan swapchain
-        /// (~25 MB at 4K × triple buffer on NVIDIA). Non-empty → a swapchain
-        /// proportional to the passed size. The eventual visible size is
-        /// still driven by per-show setWidth/setHeight; this only governs
-        /// the warm-up commit. Forwarded verbatim to
-        /// SurfaceConfig::initialSize, including the empty-as-unset sentinel.
-        QSize initialSize = {};
-    };
+    /// Parameters for @ref createLayerSurface. Defined in
+    /// overlayservice_types.h; aliased here so existing nested-name
+    /// references keep working.
+    using LayerSurfaceParams = PlasmaZones::LayerSurfaceParams;
 
     /**
      * @brief Create a PhosphorLayer::Surface for a layer-shell-backed overlay window.
@@ -1089,11 +1005,14 @@ private:
      * Common pattern for ensurePassiveShellFor (and the LayoutPicker
      * surface in snapassist.cpp): (1) caller builds a per-instance
      * scope-prefixed Role via @ref PhosphorRoles::makePerInstanceRole,
-     * (2) this helper calls createLayerSurface with keepMappedOnHide=true,
-     * (3) string-connects the QML-side `dismissRequested()` signal to
-     * `Surface::hide()` so the auto-dismiss timer (or backdrop click for
-     * the picker) can drive the library animator without a C++ slot in
-     * the loop.
+     * (2) this helper calls createLayerSurface with keepMappedOnHide
+     * gated on effects (kept mapped only while shaders or animations
+     * are enabled; with both off the next syncSurfaceState unmaps the
+     * wl_surface). Dismiss wiring is NOT done here: per-content
+     * auto-dismiss flows through the shell window's per-slot signals
+     * (`osdDismissRequested` et al.), which wirePassiveShellSlots
+     * connects to the matching OverlayService slot (e.g.
+     * onOsdDismissRequested) for an animator-driven ShellHost::hideSlot.
      *
      * Returns the warmed Surface on success; nullptr on failure (warning
      * logged inside createLayerSurface). Caller installs the surface +

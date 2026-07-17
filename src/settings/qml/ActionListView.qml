@@ -47,7 +47,7 @@ ColumnLayout {
     /// MatchExpressionView's equivalents so the WHEN and THEN trees
     /// look like one consistent tree visualisation.
     readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
-    readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
+    readonly property color _guideColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     // 1 device-independent px — matches MatchExpressionView's guide
     // thickness. See the rationale comment there.
     readonly property int _guideThickness: 1
@@ -311,6 +311,18 @@ ColumnLayout {
 
                     target: actionDelegate
                 }
+
+                // onPaint samples the theme-derived guide colour. Every
+                // PlatformTheme colour shares the one `colorsChanged` notify
+                // signal, so this one handler repaints on any palette change
+                // (same pattern as CurveThumbnail).
+                Connections {
+                    function onColorsChanged() {
+                        treeCanvas.requestPaint();
+                    }
+
+                    target: Kirigami.Theme
+                }
             }
 
             RowLayout {
@@ -392,9 +404,11 @@ ColumnLayout {
                             implicitWidth: pillContent.implicitWidth + Kirigami.Units.largeSpacing * 2
                             implicitHeight: pillContent.implicitHeight + Kirigami.Units.smallSpacing
                             radius: Kirigami.Units.smallSpacing
+                            Kirigami.Theme.colorSet: Kirigami.Theme.View
+                            Kirigami.Theme.inherit: false
                             color: Kirigami.Theme.alternateBackgroundColor
                             border.width: 1
-                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                             RowLayout {
                                 id: pillContent
@@ -415,7 +429,7 @@ ColumnLayout {
                                     radius: Math.round(Kirigami.Units.smallSpacing / 2)
                                     color: paramRow.modelData.kind !== "color" ? "transparent" : (_rawColor === "accent" ? Kirigami.Theme.highlightColor : (_rawColor === "" ? Kirigami.Theme.backgroundColor : _rawColor))
                                     border.width: 1
-                                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+                                    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                                 }
 
                                 Label {

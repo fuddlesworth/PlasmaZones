@@ -140,7 +140,6 @@ public:
     Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity WRITE setInactiveOpacity NOTIFY inactiveOpacityChanged)
     Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth NOTIFY borderWidthChanged)
     Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
-    Q_PROPERTY(bool enableBlur READ enableBlur WRITE setEnableBlur NOTIFY enableBlurChanged)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily WRITE setLabelFontFamily NOTIFY labelFontFamilyChanged)
     Q_PROPERTY(
         qreal labelFontSizeScale READ labelFontSizeScale WRITE setLabelFontSizeScale NOTIFY labelFontSizeScaleChanged)
@@ -651,8 +650,6 @@ public:
     void setBorderWidth(int width) override;
     int borderRadius() const override;
     void setBorderRadius(int radius) override;
-    bool enableBlur() const override;
-    void setEnableBlur(bool enable) override;
     QString labelFontFamily() const override;
     void setLabelFontFamily(const QString& family) override;
     qreal labelFontSizeScale() const override;
@@ -1311,7 +1308,29 @@ public:
 
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
-    Q_INVOKABLE void applySystemColorScheme();
+    /// Derives the four zone-color keys from the current application palette.
+    /// Deliberately NOT Q_INVOKABLE: there is no QML caller, and an ad-hoc
+    /// QML invocation would write the derived keys without the baseline /
+    /// dirty-tracking bookkeeping its three C++ call sites provide (see the
+    /// ownership rule at rebaselineDerivedColorKeys()).
+    void applySystemColorScheme();
+
+    /// Re-derives the system-scheme zone colors when the application palette
+    /// changes at runtime (theme switch). Without this, every long-running
+    /// process (daemon, settings app) keeps the palette SNAPSHOT taken at
+    /// load() and serves stale zone colors until restart.
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
+    /// True while eventFilter() is re-deriving the zone colors from a runtime
+    /// ApplicationPaletteChange. The re-derive is palette-driven, not a user
+    /// edit — SettingsController::onSettingsPropertyChanged() checks this to
+    /// avoid flipping the global unsaved-changes footer on a theme switch
+    /// (the baseline rebaseline alone keeps isKeyModified() honest, but the
+    /// controller's NOTIFY-driven dirty flag fires before any value check).
+    bool isApplyingSystemPalette() const
+    {
+        return m_applyingSystemPalette;
+    }
 
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via
@@ -1332,6 +1351,10 @@ Q_SIGNALS:
     // here — see src/core/isettings.h.
 
 private:
+    /// Installs the QEvent::ApplicationPaletteChange filter on the application
+    /// object (see eventFilter above). Called once per constructor, after load().
+    void trackSystemPaletteChanges();
+
     /// Member-function-pointer alias used by the indexed shortcut setters
     /// (quickLayoutShortcut / snapToZoneShortcut) when fanning out to the
     /// per-index NOTIFY signal.
@@ -1397,7 +1420,19 @@ private:
     // points where the in-memory store equals disk); discardKeys() reverts to
     // this baseline and isKeyModified() compares against it. Private: mutating
     // the baseline anywhere but a load/save commit point desyncs dirty tracking.
+    // ONE narrow exception: rebaselineDerivedColorKeys() below refreshes just
+    // the four palette-derived zone-color entries after a runtime palette
+    // re-derive — those keys are palette-owned, never user edits.
     void captureBaseline();
+
+    // Refresh the baseline for ONLY the four palette-derived zone-color keys
+    // after a runtime re-derive. System-colors mode owns these keys: they
+    // follow the palette and are never user edits, so a theme switch must not
+    // flip isKeyModified() (phantom unsaved-changes footer) or arm Discard
+    // with the stale pre-switch colors. The one legitimate caller is the
+    // ApplicationPaletteChange path in eventFilter(); see the definition for
+    // why the setUseSystemColors() and load() paths must NOT call it.
+    void rebaselineDerivedColorKeys();
 
     // Groups that reset() deletes exhaustively (excludes unmanaged groups like
     // Updates). NOT used by save() — save() iterates the schema and lets
@@ -1458,9 +1493,30 @@ private:
 
     // Committed baseline: the last-persisted value of every schema-declared
     // key, keyed group → {key → value}. Refreshed by captureBaseline() at the
-    // end of load() and save(). Backs per-page Discard (revert to baseline)
-    // and value-based per-page dirty checks (isKeyModified).
+    // end of load() and save() — plus one targeted exception: eventFilter()'s
+    // ApplicationPaletteChange path calls rebaselineDerivedColorKeys() to
+    // refresh ONLY the four palette-derived zone-color entries, so a runtime
+    // theme switch doesn't read as an unsaved edit. Backs per-page Discard
+    // (revert to baseline) and value-based per-page dirty checks
+    // (isKeyModified).
     QHash<QString, QVariantMap> m_baseline;
+
+    // Raised (RAII, via QScopedValueRollback) around eventFilter()'s runtime
+    // palette re-derive; surfaced through isApplyingSystemPalette() so
+    // NOTIFY-driven dirty tracking can tell a palette-driven refresh from a
+    // user edit. Never true outside that synchronous window.
+    bool m_applyingSystemPalette = false;
+
+    // Raised (RAII, via QScopedValueRollback) around the two batched
+    // applySystemColorScheme() call sites: load() and eventFilter()'s runtime
+    // palette re-derive. The derive routes through the public color setters,
+    // whose per-setter NOTIFY + settingsChanged emissions would duplicate the
+    // caller's own snapshot-based announcement (each changed NOTIFY exactly
+    // once plus a single settingsChanged). While true, the color setters
+    // persist silently and the caller remains the sole announcer. Never true
+    // outside those synchronous windows — setUseSystemColors relies on the
+    // setters emitting normally.
+    bool m_suppressDerivedColorEmissions = false;
 
     static QString normalizeUuidString(const QString& uuidStr);
 
@@ -1516,8 +1572,8 @@ private:
     // Display is stored in m_store; no cached members here.
 
     // Appearance
-    // Appearance + Labels + Opacity + Border + Effects.Blur are stored in
-    // m_store; no cached members here.
+    // Appearance + Labels + Opacity + Border are stored in m_store; no
+    // cached members here.
 
     // PhosphorZones::Zone settings
     // PhosphorZones::Zone geometry is stored in m_store; no cached members here.

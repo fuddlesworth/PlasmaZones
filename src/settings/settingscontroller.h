@@ -488,6 +488,18 @@ public:
     // ── Atomic mode+layout staging (overview page) ──────────────────────────
     Q_INVOKABLE void stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
                                           int mode, const QString& snappingLayoutId, const QString& tilingAlgorithmId);
+    /// Stage a full clear of the (screen × desktop × activity) assignment
+    /// context — replaces any earlier staged entry for the context and, on
+    /// Apply, clears the daemon-side explicit assignment so the context
+    /// falls back to the resolved default.
+    Q_INVOKABLE void stageAssignmentClear(const QString& screenName, int virtualDesktop, const QString& activityId);
+    /// Remove any staged entry for the (screen × desktop × activity)
+    /// assignment context — a true unstage. Unlike `stageAssignmentClear`
+    /// this stages nothing: on Apply the context's daemon-side assignment
+    /// is left untouched. Used by the Monitor State page's mode-toggle
+    /// path to drop a stale opposite-mode pick without clearing an
+    /// explicit assignment the user never touched.
+    Q_INVOKABLE void removeStagedAssignment(const QString& screenName, int virtualDesktop, const QString& activityId);
 
     // ── Ordering helpers (staged — flushed to settings on save) ────────────
     Q_INVOKABLE QVariantList resolvedSnappingOrder() const;

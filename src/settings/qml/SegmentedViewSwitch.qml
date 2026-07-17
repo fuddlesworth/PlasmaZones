@@ -51,12 +51,12 @@ Item {
                 implicitWidth: tileContent.implicitWidth + Kirigami.Units.largeSpacing * 2
                 implicitHeight: tileContent.implicitHeight + Kirigami.Units.largeSpacing
                 radius: Kirigami.Units.smallSpacing
-                color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
+                color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.alpha(Kirigami.Theme.hoverColor, 0.1) : "transparent"
                 // Focus wins over selection: a keyboard user lands on the
                 // selected tile most of the time, so testing `selected` first
                 // would leave that tile with no focus indication at all.
                 border.width: tile.activeFocus ? 2 : 1
-                border.color: tile.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                border.color: tile.activeFocus ? Kirigami.Theme.focusColor : tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 Accessible.role: Accessible.RadioButton
                 Accessible.name: tile.modelData
                 Accessible.checked: tile.selected

@@ -113,6 +113,8 @@ set(plasmazones_core_SRCS
     dbus/layoutadaptor/editor.cpp
     dbus/layoutadaptor.h
     dbus/settingsadaptor.cpp
+    dbus/settingsadaptor_batch.cpp
+    dbus/settingsadaptor_registry.cpp
     dbus/settingsadaptor.h
     dbus/shaderadaptor.cpp
     dbus/shaderadaptor.h
@@ -479,6 +481,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/shader.cpp
     daemon/overlayservice/snapassist.cpp
     daemon/overlayservice.h
+    daemon/overlayservice_types.h
     daemon/overlayservice/internal.h
     daemon/snapassistthumbnailprovider.cpp
     daemon/snapassistthumbnailprovider.h

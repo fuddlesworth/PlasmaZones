@@ -61,7 +61,6 @@ const Settings::ConfigKeyList& animationConfigKeys()
 {
     using CD = ConfigDefaults;
     static const Settings::ConfigKeyList keys{
-        {CD::animationsGroup(), CD::backendKey()},
         {CD::animationsGroup(), CD::enabledKey()},
         {CD::animationsGroup(), CD::animationProfileKey()},
         {CD::animationsGroup(), CD::shaderProfileTreeKey()},
@@ -196,7 +195,13 @@ void SettingsController::setActivePage(const QString& page)
 
 void SettingsController::onSettingsPropertyChanged()
 {
-    if (!m_saving && !m_loading) {
+    // isApplyingSystemPalette(): a runtime ApplicationPaletteChange re-derive
+    // (Settings::eventFilter) fires the zone-color NOTIFYs, but it is
+    // palette-driven, not a user edit. Settings rebaselines the derived keys
+    // itself, though only when the useSystemColors toggle is committed — a
+    // pending (uncommitted) toggle keeps them discardable. Flipping needsSave
+    // here would show a phantom unsaved-changes footer on every theme switch.
+    if (!m_saving && !m_loading && !m_settings.isApplyingSystemPalette()) {
         setNeedsSave(true);
     }
 }
@@ -447,7 +452,7 @@ void SettingsController::resetPage(const QString& page)
 
     // Animation pages (whole tree, shared domain): reset to defaults =
     // clear every per-event override file AND reset the animation config keys
-    // (Profile, ShaderProfileTree, WindowFiltering, Enabled, Backend) to their
+    // (Profile, ShaderProfileTree, WindowFiltering, Enabled) to their
     // schema defaults. Both are STAGED like ordinary animation edits — the
     // cleared files are snapshotted, so a subsequent Discard restores them, and
     // Save commits. User presets / motion-set libraries are left alone (like

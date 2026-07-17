@@ -49,7 +49,10 @@ ColumnLayout {
     property bool enableImage: false
     property bool enableGroups: true
     property bool compact: true
-    property int expandedGroupIndex: 0
+    /// Two-way alias onto the inner editor: the editor self-assigns on
+    /// accordion toggle, and an alias keeps host reads/writes in sync
+    /// instead of severing a one-way forwarding binding.
+    property alias expandedGroupIndex: editor.expandedGroupIndex
 
     /// Fired for a single edit AND for a colour pick (paramId resolved).
     /// @p effectId echoes the effect/pack captured at the time of the edit.
@@ -84,7 +87,6 @@ ColumnLayout {
         enableImage: root.enableImage
         enableGroups: root.enableGroups
         compact: root.compact
-        expandedGroupIndex: root.expandedGroupIndex
         onValueChanged: function (paramId, value) {
             root.valueChanged(root.effectId, paramId, value);
         }
@@ -144,7 +146,11 @@ ColumnLayout {
             return "#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b);
         }
         onAccepted: {
-            if (paramId === "" || effectId === "")
+            // Only paramId is mandatory — effectId is optional (an empty
+            // value simply means the host doesn't use effect scoping), and
+            // guarding on it would silently swallow color picks for such
+            // hosts while the slider/spinbox path forwards unconditionally.
+            if (paramId === "")
                 return;
 
             root.valueChanged(effectId, paramId, colorDialog._toHexArgb(selectedColor));

@@ -18,6 +18,10 @@ import org.phosphor.animation
 ToolBar {
     id: controlBar
 
+    // Toolbar chrome resolves against the Header color set
+    Kirigami.Theme.colorSet: Kirigami.Theme.Header
+    Kirigami.Theme.inherit: false
+
     required property var editorController
     required property var confirmCloseDialog
     required property var editorWindow
@@ -71,7 +75,7 @@ ToolBar {
                 // Template model with preview information
                 property var templateModel: [
                     {
-                        "text": i18nc("@item:inmenu", "Apply Template..."),
+                        "text": i18nc("@item:inmenu", "Apply Template…"),
                         "value": "",
                         "templateType": "",
                         "columns": 0,
@@ -225,6 +229,17 @@ ToolBar {
                     if (editorController)
                         editorController.edgeSnappingEnabled = checked;
                 }
+
+                // Update when edgeSnappingEnabled changes externally (a click
+                // severs the declarative checked binding)
+                Connections {
+                    function onEdgeSnappingEnabledChanged() {
+                        edgeSnapButton.checked = editorController.edgeSnappingEnabled || false;
+                    }
+
+                    target: editorController
+                    enabled: editorController !== null
+                }
             }
 
             // Grid snapping toggle
@@ -238,12 +253,23 @@ ToolBar {
                 // Bind checked state directly to gridSnappingEnabled property
                 checked: editorController ? (editorController.gridSnappingEnabled || false) : false
                 Accessible.name: text
-                Accessible.description: i18nc("@info", "Toggle grid snapping. Zones will align to a grid when enabled. Use the dropdowns to change horizontal and vertical grid sizes.")
+                Accessible.description: i18nc("@info", "Toggle grid snapping. Zones will align to a grid when enabled. Use the sliders to change horizontal and vertical grid sizes.")
                 ToolTip.visible: hovered
                 ToolTip.text: checked ? i18nc("@tooltip", "Grid snapping enabled (H:%1% V:%2%). Zones align to grid lines. Click to disable.", editorController ? Math.round((editorController.snapIntervalX || 0.1) * 100) : 10, editorController ? Math.round((editorController.snapIntervalY || 0.1) * 100) : 10) : i18nc("@tooltip", "Grid snapping disabled. Click to enable. Zones will align to grid lines.")
                 onToggled: {
                     if (editorController)
                         editorController.gridSnappingEnabled = checked;
+                }
+
+                // Update when gridSnappingEnabled changes externally (a click
+                // severs the declarative checked binding)
+                Connections {
+                    function onGridSnappingEnabledChanged() {
+                        gridSnapButton.checked = editorController.gridSnappingEnabled || false;
+                    }
+
+                    target: editorController
+                    enabled: editorController !== null
                 }
             }
 
@@ -289,7 +315,7 @@ ToolBar {
                 }
 
                 Label {
-                    text: Math.round(gridIntervalXSlider.value * 100) + "%"
+                    text: i18nc("@info grid interval percentage", "%1%", Math.round(gridIntervalXSlider.value * 100))
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     horizontalAlignment: Text.AlignRight
                     Accessible.name: i18nc("@info", "Horizontal interval: %1%", Math.round(gridIntervalXSlider.value * 100))
@@ -330,7 +356,7 @@ ToolBar {
                 }
 
                 Label {
-                    text: Math.round(gridIntervalYSlider.value * 100) + "%"
+                    text: i18nc("@info grid interval percentage", "%1%", Math.round(gridIntervalYSlider.value * 100))
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 2
                     horizontalAlignment: Text.AlignRight
                     Accessible.name: i18nc("@info", "Vertical interval: %1%", Math.round(gridIntervalYSlider.value * 100))
@@ -354,6 +380,17 @@ ToolBar {
                 onToggled: {
                     if (editorController)
                         editorController.gridOverlayVisible = checked;
+                }
+
+                // Update when gridOverlayVisible changes externally (a click
+                // severs the declarative checked binding)
+                Connections {
+                    function onGridOverlayVisibleChanged() {
+                        gridOverlayButton.checked = editorController.gridOverlayVisible || false;
+                    }
+
+                    target: editorController
+                    enabled: editorController !== null
                 }
             }
         }
@@ -383,16 +420,16 @@ ToolBar {
                 id: unsavedIcon
 
                 source: "document-save"
-                width: Kirigami.Units.iconSizes.smallMedium
-                height: Kirigami.Units.iconSizes.smallMedium
-                color: Kirigami.Theme.negativeTextColor
+                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                color: Kirigami.Theme.neutralTextColor
             }
 
             Label {
                 id: unsavedIndicator
 
                 text: i18nc("@info", "Unsaved changes")
-                color: Kirigami.Theme.negativeTextColor
+                color: Kirigami.Theme.neutralTextColor
                 font.weight: Font.DemiBold
                 Accessible.name: text
                 Accessible.role: Accessible.AlertMessage
@@ -457,9 +494,13 @@ ToolBar {
                 enabled: editorController ? (editorController.hasUnsavedChanges || false) : false
                 Accessible.name: text
                 Accessible.description: i18nc("@info", "Save layout and close editor")
+                // Close only once the save has actually landed, mirroring the
+                // unsaved-changes dialogs: a refused save leaves the layout
+                // dirty and emits layoutSaveFailed, and closing anyway would
+                // throw away the work the user pressed Save to keep.
                 onClicked: {
-                    if (editorController)
-                        editorController.saveLayout();
+                    if (editorController && !editorController.saveLayout())
+                        return;
 
                     editorWindow.close();
                 }
@@ -475,7 +516,7 @@ ToolBar {
             anchors.top: parent.top
             width: parent.width
             height: 1
-            color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
+            color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
         }
     }
 }

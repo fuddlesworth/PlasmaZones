@@ -23,17 +23,6 @@ class TestConfigDefaults : public QObject
 private Q_SLOTS:
 
     /**
-     * dismissedUpdateVersion() must return an empty QString for fresh installs.
-     * This is hardcoded in ConfigDefaults because KConfigXT does not generate
-     * a defaultDismissedUpdateVersionValue() for empty <default></default> strings.
-     */
-    void testDismissedUpdateVersion_accessor_returnsEmpty()
-    {
-        QVERIFY2(ConfigDefaults::dismissedUpdateVersion().isEmpty(),
-                 "dismissedUpdateVersion default must be empty string");
-    }
-
-    /**
      * labelFontFamily() must return an empty QString (system default font).
      */
     void testLabelFontFamily_accessor_returnsEmpty()

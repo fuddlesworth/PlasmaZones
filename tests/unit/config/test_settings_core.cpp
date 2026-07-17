@@ -281,19 +281,77 @@ private Q_SLOTS:
     // =========================================================================
 
     /**
-     * load() must emit settingsChanged() so that listeners can re-read all values.
+     * load() must emit settingsChanged() exactly once when reloading actually
+     * changes values, so listeners re-read them. Exercised via the discard
+     * flow: an unsaved in-memory edit is reverted by load()'s reparse, which
+     * must announce the change through the single aggregate emission.
      */
     void testLoad_emitsSettingsChanged()
     {
         IsolatedConfigGuard guard;
 
         Settings settings;
+        const int committed = settings.adjacentThreshold();
+        settings.setAdjacentThreshold(committed == 15 ? 20 : 15);
+
         QSignalSpy spy(&settings, &Settings::settingsChanged);
         QVERIFY(spy.isValid());
 
         settings.load();
 
-        QVERIFY2(spy.count() >= 1, "load() must emit settingsChanged() at least once");
+        QCOMPARE(settings.adjacentThreshold(), committed);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    /**
+     * A reload that leaves the effective (palette-derived) values unchanged
+     * must stay silent. Pins the system-colors regression where load()'s
+     * palette re-derive routed through the public color setters, firing each
+     * color NOTIFY twice and settingsChanged several times per themed reload
+     * even when no value changed.
+     *
+     * The on-disk highlight color is deliberately made stale before load():
+     * with useSystemColors on, the mid-load derive silently restores the
+     * palette color, so no signal may fire. Without the load-suppression
+     * guard the derive would route the palette value through the public
+     * setter (disk value != palette value, so the same-value early-return
+     * cannot mask the regression) and emit highlightColorChanged +
+     * settingsChanged mid-load.
+     */
+    void testLoad_noSignal_whenUnchanged()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QVERIFY(settings.useSystemColors()); // default: themed reload path
+        settings.save(); // commit the constructor-derived state to disk
+
+        const QColor derivedHighlight = settings.highlightColor();
+
+        // Hand-write a stale highlight color to disk so load()'s reparse sees
+        // a value that differs from the palette-derived one.
+        const QColor staleHighlight(1, 2, 3);
+        QVERIFY(staleHighlight != derivedHighlight);
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
+            g->writeColor(ConfigDefaults::highlightKey(), staleHighlight);
+            backend->sync();
+        }
+
+        QSignalSpy spy(&settings, &Settings::settingsChanged);
+        QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
+        QSignalSpy fontColorSpy(&settings, &Settings::labelFontColorChanged);
+        QVERIFY(spy.isValid());
+
+        settings.load();
+
+        // The derive restored the palette color over the stale disk value...
+        QCOMPARE(settings.highlightColor(), derivedHighlight);
+        // ...without any signal traffic.
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(highlightSpy.count(), 0);
+        QCOMPARE(fontColorSpy.count(), 0);
     }
 
     /**
@@ -624,14 +682,16 @@ private Q_SLOTS:
     }
 
     /**
-     * save() must NOT purge groups it doesn't manage (e.g., Updates) — those
-     * are written independently and must survive a settings save.
+     * The legacy "Updates" group is retired: nothing writes or reads it since
+     * the dismissed-update-version moved to the settings app's QSettings, so
+     * save() sweeps any stale husk of it like every other unknown group
+     * (it used to be carved out of the purge as an "unmanaged" group).
      */
-    void testSave_preservesUnmanagedGroups()
+    void testSave_purgesRetiredUpdatesGroup()
     {
         IsolatedConfigGuard guard;
 
-        // Write to an unmanaged group
+        // Simulate a config written by an older build that still carried it
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             {
@@ -645,10 +705,8 @@ private Q_SLOTS:
         settings.save();
 
         auto backend = PlasmaZones::createDefaultConfigBackend();
-        {
-            auto g = backend->group(QStringLiteral("Updates"));
-            QCOMPARE(g->readString(QStringLiteral("DismissedUpdateVersion")), QStringLiteral("2.0.0"));
-        }
+        QVERIFY2(!backend->groupList().contains(QStringLiteral("Updates")),
+                 "Retired group 'Updates' must be purged by save()");
     }
 
     /**
@@ -679,11 +737,10 @@ private Q_SLOTS:
                 auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
                 g->writeString(QStringLiteral("1"), QStringLiteral("layout-id"));
             }
-            // Inject a valid unmanaged group to prove it survives
-            {
-                auto g = backend->group(QStringLiteral("Updates"));
-                g->writeString(QStringLiteral("LastCheck"), QStringLiteral("2026-04-07"));
-            }
+            // The retired Updates group is covered by
+            // testSave_purgesRetiredUpdatesGroup above; no root-level group
+            // outside the schema survives save() anymore (only the v4
+            // migration stash KEYS are carved out — see purgeStaleKeys).
             backend->sync();
         }
 
@@ -708,12 +765,6 @@ private Q_SLOTS:
         QVERIFY2(!hasObsolete, "Unknown root-level group 'ObsoleteFeature' must be purged by save()");
         QVERIFY2(!hasOldGroup, "Unknown root-level group 'OldGroupFromV0' must be purged by save()");
         QVERIFY2(!hasRetiredTilingSlots, "Retired group 'TilingQuickLayoutSlots' must be purged by save()");
-
-        // Unmanaged groups must survive
-        {
-            auto g = backend->group(QStringLiteral("Updates"));
-            QCOMPARE(g->readString(QStringLiteral("LastCheck")), QStringLiteral("2026-04-07"));
-        }
     }
 
     /**

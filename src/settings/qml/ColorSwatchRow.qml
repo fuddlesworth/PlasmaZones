@@ -19,6 +19,9 @@ RowLayout {
 
     property string formLabel
     property color color
+    //* Name announced to assistive technology for the swatch button; falls
+    //* back to the ColorButton's own generic name when unset.
+    property string accessibleName: ""
 
     signal clicked
 
@@ -38,6 +41,7 @@ RowLayout {
 
     ColorButton {
         color: root.color
+        Accessible.name: root.accessibleName !== "" ? root.accessibleName : i18n("Color picker")
         onClicked: root.clicked()
     }
 

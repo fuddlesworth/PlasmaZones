@@ -49,9 +49,9 @@ Item {
     property var bufferWraps: []
     property string bufferFilter: "linear"
     property var bufferFilters: []
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    property color highlightColor: ZoneColorDefaults.activeZoneColor
+    property color inactiveColor: ZoneColorDefaults.inactiveZoneColor
+    property color borderColor: ZoneColorDefaults.zoneBorderColor
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
     property int borderWidth: Kirigami.Units.smallSpacing
@@ -77,6 +77,35 @@ Item {
 
     function reloadShader() {
         zoneShaderRenderer.reloadShader();
+    }
+
+    // Mirrors ZoneOverlayContent.isZoneHighlighted() so the ZoneItem
+    // fallback below (shown while the shader is missing, still compiling,
+    // or errored) renders the same single- AND multi-zone highlights as
+    // the rectangle path. C++ bakes highlight state into
+    // modelData.isHighlighted (patchZonesWithHighlight) only when zone
+    // data is re-pushed; the live highlightedZoneId / highlightedZoneIds
+    // checks keep the fallback responsive between pushes.
+    function isZoneHighlighted(zoneData) {
+        // isHighlighted is C++-guaranteed bool: overlay_data.cpp writes
+        // zone->isHighlighted() and patchZonesWithHighlight() re-stamps it
+        // as a real bool on every slot push, so raw truthiness (unlike the
+        // strict useCustomColors contract) is safe here. Mirrored in
+        // ZoneOverlayContent.isZoneHighlighted().
+        if (zoneData.isHighlighted)
+            return true;
+
+        if (!zoneData.id)
+            return false;
+
+        if (zoneData.id === highlightedZoneId)
+            return true;
+
+        for (var i = 0; i < highlightedZoneIds.length; i++) {
+            if (highlightedZoneIds[i] === zoneData.id)
+                return true;
+        }
+        return false;
     }
 
     anchors.fill: parent
@@ -139,12 +168,27 @@ Item {
             }
         }
 
+        // Unlike ZoneOverlayContent there is deliberately NO layout-preview
+        // (overlayDisplayMode === 1) branch here: this content can never
+        // receive preview-mode zones. useShaderForScreen() (shader.cpp)
+        // returns false whenever ANY zone on the screen resolves to
+        // LayoutPreview, so C++ mounts ZoneOverlayContent instead, and
+        // overlayDisplayModeChanged re-syncs a live overlay via
+        // recreateOverlayWindowsOnTypeMismatch().
         Repeater {
             model: root.zones
 
             delegate: ZoneItem {
                 required property var modelData
                 required property int index
+
+                // Shared contract with ZoneOverlayContent.hasCustomColors() and
+                // SnapAssistContent's useCustom: only true, 1, or "true" enable
+                // per-zone colors (raw truthiness would accept "false").
+                readonly property bool useCustom: {
+                    var v = modelData.useCustomColors;
+                    return v === true || v === 1 || (typeof v === "string" && v.toLowerCase() === "true");
+                }
 
                 visible: root.shaderSource.toString() === "" || zoneShaderRenderer.status !== ZoneShaderItem.Ready
                 x: modelData.x !== undefined ? modelData.x : 0
@@ -153,11 +197,27 @@ Item {
                 height: modelData.height !== undefined ? modelData.height : 0
                 zoneNumber: modelData.zoneNumber || (index + 1)
                 zoneName: modelData.name || ""
-                isHighlighted: modelData.isHighlighted || (root.hoveredZoneIndex === index)
+                isHighlighted: root.isZoneHighlighted(modelData) || (root.hoveredZoneIndex === index)
+                // Mirrors ZoneOverlayContent's zoneRectComponent so a
+                // multi-zone highlight keeps its thicker/tinted border
+                // when the fallback rectangles are what's on screen.
+                isMultiZone: {
+                    if (root.highlightedZoneIds.length <= 1)
+                        return false;
+
+                    if (!modelData.id)
+                        return false;
+
+                    for (var i = 0; i < root.highlightedZoneIds.length; i++) {
+                        if (root.highlightedZoneIds[i] === modelData.id)
+                            return true;
+                    }
+                    return false;
+                }
                 showNumber: root.showNumbers
-                highlightColor: (modelData.useCustomColors && modelData.highlightColor) ? modelData.highlightColor : root.highlightColor
-                inactiveColor: (modelData.useCustomColors && modelData.inactiveColor) ? modelData.inactiveColor : root.inactiveColor
-                borderColor: (modelData.useCustomColors && modelData.borderColor) ? modelData.borderColor : root.borderColor
+                highlightColor: (useCustom && modelData.highlightColor) ? modelData.highlightColor : root.highlightColor
+                inactiveColor: (useCustom && modelData.inactiveColor) ? modelData.inactiveColor : root.inactiveColor
+                borderColor: (useCustom && modelData.borderColor) ? modelData.borderColor : root.borderColor
                 labelFontColor: root.labelFontColor
                 fontFamily: root.fontFamily
                 fontSizeScale: root.fontSizeScale
@@ -165,10 +225,10 @@ Item {
                 fontItalic: root.fontItalic
                 fontUnderline: root.fontUnderline
                 fontStrikeout: root.fontStrikeout
-                activeOpacity: (modelData.useCustomColors && modelData.activeOpacity !== undefined) ? modelData.activeOpacity : root.activeOpacity
-                inactiveOpacity: (modelData.useCustomColors && modelData.inactiveOpacity !== undefined) ? modelData.inactiveOpacity : root.inactiveOpacity
-                borderWidth: (modelData.useCustomColors && modelData.borderWidth !== undefined) ? modelData.borderWidth : root.borderWidth
-                borderRadius: (modelData.useCustomColors && modelData.borderRadius !== undefined) ? modelData.borderRadius : root.borderRadius
+                activeOpacity: (useCustom && modelData.activeOpacity !== undefined) ? modelData.activeOpacity : root.activeOpacity
+                inactiveOpacity: (useCustom && modelData.inactiveOpacity !== undefined) ? modelData.inactiveOpacity : root.inactiveOpacity
+                borderWidth: (useCustom && modelData.borderWidth !== undefined) ? modelData.borderWidth : root.borderWidth
+                borderRadius: (useCustom && modelData.borderRadius !== undefined) ? modelData.borderRadius : root.borderRadius
             }
         }
 

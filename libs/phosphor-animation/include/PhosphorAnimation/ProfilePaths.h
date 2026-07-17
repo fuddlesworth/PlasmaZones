@@ -137,7 +137,7 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 150 ms OutCub
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulse; ///< 1000 ms sinusoidal (family root)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulseFast; ///< 500 ms
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulseSlow; ///< 1500 ms
-// Zone-rect widget (used by ZoneItem.qml, LayoutPreview.qml,
+// Zone-rect widget (used by ZoneItem.qml,
 // ZonePreview.qml — i.e. the reusable QML zone-rectangle that gets
 // embedded in the runtime overlay, settings dialogs, layout
 // thumbnails, etc.). The animation lives with the widget; the

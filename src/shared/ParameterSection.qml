@@ -143,6 +143,7 @@ ColumnLayout {
                     QQC.ToolTip.text: root.allLocked ? i18nc("@info:tooltip", "Unlock all in %1", root.title) : i18nc("@info:tooltip", "Lock all in %1", root.title)
                     QQC.ToolTip.visible: hovered
                     QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    Accessible.name: root.allLocked ? i18nc("@action:button", "Unlock all in %1", root.title) : i18nc("@action:button", "Lock all in %1", root.title)
                     onClicked: root.groupLockToggled(!root.allLocked)
                 }
 
@@ -192,7 +193,7 @@ ColumnLayout {
                 // to physical pixels itself; multiplying by devicePixelRatio
                 // here would double-scale into a thicker, not crisper, line.
                 height: 1
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 visible: root.expanded
                 opacity: 0.5
             }

@@ -301,6 +301,12 @@ p_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 # PhosphorSurface PUBLIC for Settings::decorationProfileTree()).
 p_add_test(test_settings_decoration_tree config/test_settings_decoration_tree.cpp)
 
+# Pins runtime palette tracking for system-colors mode (needs Qt6::Gui for
+# QGuiApplication palette events; p_add_test links Core only).
+add_executable(test_settings_system_palette_tracking config/test_settings_system_palette_tracking.cpp)
+target_link_libraries(test_settings_system_palette_tracking PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_system_palette_tracking COMMAND test_settings_system_palette_tracking)
+
 # Companion test executable: per-page Discard/Reset primitives — committed
 # baseline capture, isKeyModified, discardKeys (revert-to-baseline) and
 # resetKeys (revert-to-default) with NOTIFY re-emission.
@@ -579,6 +585,15 @@ add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
 add_executable(test_zone_preview_highlight ui/test_zone_preview_highlight.cpp)
 target_link_libraries(test_zone_preview_highlight PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
 add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)
+
+# Component-load canary for the shared QML module: "X is not a type" at app
+# runtime hides the nested cause; this fails with the real error instead.
+# plasmazones_rendering supplies ZoneShaderItem, which the test registers under
+# "PlasmaZones 1.0" (mirroring the daemon/editor composition roots) so
+# ZoneShaderRenderer's `import PlasmaZones` resolves.
+add_executable(test_shared_module_load ui/test_shared_module_load.cpp)
+target_link_libraries(test_shared_module_load PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_rendering)
+add_test(NAME test_shared_module_load COMMAND test_shared_module_load)
 
 # Pins the C++/QML contract the zone selector's cursor hit test depends on:
 # zone delegates discoverable by objectName, exposing their model index, with

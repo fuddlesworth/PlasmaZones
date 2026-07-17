@@ -14,7 +14,6 @@ Item {
 
     // Required properties
     required property var editorController
-    required property Item drawingArea
 
     // Handle keyboard events - call this from parent's Keys.onPressed
     function handleKeyPress(event) {
@@ -29,15 +28,15 @@ Item {
             return false;
         }
         // Ctrl+Tab/Ctrl+Shift+Tab: Navigate between zones
-        var tabKeyPressed = (event.key === 1.67772e+07 || event.key === Qt.Key_Tab);
+        var tabKeyPressed = (event.key === Qt.Key_Backtab || event.key === Qt.Key_Tab);
         var ctrlModifier = !!(event.modifiers & Qt.ControlModifier);
         var shiftModifier = !!(event.modifiers & Qt.ShiftModifier);
         // Only intercept Ctrl+Tab combinations (not plain Tab)
         if (tabKeyPressed && ctrlModifier) {
             event.accepted = true;
+            var currentZoneId = editorController.selectedZoneId || "";
             // Ctrl+Shift+Tab: Previous zone
             if (shiftModifier) {
-                var currentZoneId = editorController.selectedZoneId || "";
                 if (currentZoneId === "" || currentZoneId === null || currentZoneId === undefined) {
                     var zones = editorController.zones;
                     if (zones && zones.length > 0) {
@@ -52,7 +51,6 @@ Item {
                 return true;
             }
             // Ctrl+Tab: Next zone
-            var currentZoneId = editorController.selectedZoneId || "";
             if (currentZoneId === "" || currentZoneId === null || currentZoneId === undefined) {
                 var zones = editorController.zones;
                 if (zones && zones.length > 0 && zones[0] && zones[0].id) {
@@ -112,5 +110,4 @@ Item {
         event.accepted = false;
         return false;
     }
-
 }

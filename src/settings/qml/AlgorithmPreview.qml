@@ -29,9 +29,15 @@ Item {
     // input, on equal footing with windowCount / splitRatio / masterCount: a
     // change re-runs the C++ preview through the same recalc path.
     property var customParams: ({})
-    // Color customization (passed through to ZonePreview)
-    property color windowColor: Kirigami.Theme.highlightColor
-    property color windowBorder: Kirigami.Theme.textColor
+    // Color customization (passed through to ZonePreview). The defaults track
+    // the shared zone-color pipeline (ZoneColorDefaults resolves the user's
+    // effective zone colors, the same values the daemon pushes into its live
+    // overlays). Fidelity is base-color-only: the binding below re-applies a
+    // fixed 0.9 border alpha, and fill opacity comes from ZonePreview's
+    // activeOpacity, so a custom alpha in the effective colors is not
+    // reproduced here.
+    property color windowColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+    property color windowBorder: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
     // Computed zones, rendered by ZonePreview. Recomputed by recalcTimer, which
     // throttles to ~60fps so several input changes in one frame coalesce into a
     // single C++ call.
@@ -110,7 +116,7 @@ Item {
         showZoneNumbers: true
         zoneNumberDisplay: root.zoneNumberDisplay
         producesOverlappingZones: root._currentAlgoProducesOverlappingZones
-        highlightColor: Qt.rgba(root.windowColor.r, root.windowColor.g, root.windowColor.b, 0.7)
+        highlightColor: root.windowColor
         borderColor: Qt.rgba(root.windowBorder.r, root.windowBorder.g, root.windowBorder.b, 0.9)
         zonePadding: 1
         edgeGap: 0

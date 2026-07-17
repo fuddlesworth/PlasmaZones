@@ -60,18 +60,31 @@ Control {
         // GLSL errors can span several lines — keep them scrollable rather than
         // letting the card grow unbounded over the preview.
         ScrollView {
+            id: errorScroll
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            // The label wraps to availableWidth, but the ScrollView would
+            // otherwise derive contentWidth from the label's unwrapped
+            // implicitWidth, leaving a dead horizontal scroll range on long
+            // single-line GLSL errors.
+            contentWidth: availableWidth
 
             Label {
-                width: root.availableWidth
+                // The ScrollView's own availableWidth, not the Control's —
+                // a non-overlay vertical scrollbar narrows the viewport and
+                // the full Control width would overflow past it.
+                width: errorScroll.availableWidth
                 text: root.errorLog
                 wrapMode: Text.Wrap
-                font.family: "monospace"
+                font.family: Kirigami.Theme.fixedWidthFont.family
                 font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                 color: Kirigami.Theme.textColor
-                Accessible.name: i18nc("@info:whatsthis", "Shader error details")
+                // No Accessible.name override — the Label's own text (the
+                // error log) is the default accessible name, and replacing it
+                // would hide the actual error from assistive technology.
+                Accessible.description: i18nc("@info:whatsthis", "Shader error details")
             }
         }
     }

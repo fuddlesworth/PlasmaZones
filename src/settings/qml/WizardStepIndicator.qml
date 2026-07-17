@@ -45,7 +45,7 @@ RowLayout {
                     if (stepIndicator.index < root.currentStep)
                         return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
 
-                    return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
+                    return Kirigami.Theme.alternateBackgroundColor;
                 }
 
                 Label {
@@ -57,7 +57,13 @@ RowLayout {
                     font: FontUtils.withProps(Kirigami.Theme.smallFont, {
                         bold: true
                     })
-                    color: stepIndicator.index <= root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                    // Only the current step sits on a solid highlight fill, so
+                    // only it takes highlightedTextColor. Completed steps sit on
+                    // a 0.4-alpha highlight wash over the regular background —
+                    // there highlightedTextColor goes light-on-light in light
+                    // themes, while textColor stays readable against a blend
+                    // still dominated by the background.
+                    color: stepIndicator.index === root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     opacity: stepIndicator.index <= root.currentStep ? 1 : 0.4
                 }
 
@@ -87,7 +93,7 @@ RowLayout {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                 Layout.preferredHeight: 2
                 radius: height / 2
-                color: completed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+                color: completed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                 Behavior on color {
                     PhosphorMotionAnimation {

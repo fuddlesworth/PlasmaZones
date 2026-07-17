@@ -35,6 +35,11 @@ SettingsFlickable {
     // Grid dimensions inferred from pending screens
     property int _columns: 1
     property int _rows: 1
+    // True when the pending screens form a strict row-major grid. The divider
+    // math (_moveColumnDivider/_moveRowDivider) indexes cells as r*cols+c, so
+    // dividers are only created/usable when this holds; non-grid configs
+    // (e.g. hand-edited JSON) would otherwise be corrupted by a drag.
+    property bool _isGrid: true
     // Flips true one tick after the first geometry resolution so the preview
     // box doesn't animate the initial fallback(16:9)→real-aspect jump on page
     // open; monitor switches afterwards still animate.
@@ -63,19 +68,24 @@ SettingsFlickable {
         settingsController.stageVirtualScreenConfig(_selectedScreen, _pendingScreens);
     }
 
-    // Detect grid dimensions from the flat pendingScreens array by
-    // extracting unique x-start and y-start positions.
-    function _detectGrid() {
-        if (_pendingScreens.length <= 1) {
-            _columns = 1;
-            _rows = 1;
-            return;
-        }
+    // Detect grid dimensions from a flat screens array by extracting unique
+    // x-start and y-start positions. Pure helper: returns {cols, rows, isGrid}
+    // where isGrid reports whether the array really is a row-major cols×rows
+    // grid (cell count matches, and each cell sits at its expected row/column
+    // start in row-major order). Non-grid configs get cols=length, rows=1 so
+    // counts stay meaningful, but isGrid=false gates the divider machinery.
+    function _detectGridOf(screensArray) {
+        if (screensArray.length <= 1)
+            return {
+                "cols": 1,
+                "rows": 1,
+                "isGrid": true
+            };
         var tol = 0.01;
         var xStarts = [];
         var yStarts = [];
-        for (var i = 0; i < _pendingScreens.length; i++) {
-            var s = _pendingScreens[i];
+        for (var i = 0; i < screensArray.length; i++) {
+            var s = screensArray[i];
             var foundX = false;
             for (var j = 0; j < xStarts.length; j++) {
                 if (Math.abs(xStarts[j] - s.x) < tol) {
@@ -98,13 +108,44 @@ SettingsFlickable {
         }
         var detectedCols = xStarts.length;
         var detectedRows = yStarts.length;
-        if (detectedCols * detectedRows === _pendingScreens.length) {
-            _columns = detectedCols;
-            _rows = detectedRows;
-        } else {
-            _columns = _pendingScreens.length;
-            _rows = 1;
+        if (detectedCols * detectedRows === screensArray.length) {
+            // Count matches — cheap geometry confirmation: in row-major order
+            // cell i must start at (sorted xStarts[i % cols], yStarts[i / cols]).
+            xStarts.sort(function (a, b) {
+                return a - b;
+            });
+            yStarts.sort(function (a, b) {
+                return a - b;
+            });
+            var rowMajor = true;
+            for (var m = 0; m < screensArray.length; m++) {
+                var expX = xStarts[m % detectedCols];
+                var expY = yStarts[Math.floor(m / detectedCols)];
+                if (Math.abs(screensArray[m].x - expX) >= tol || Math.abs(screensArray[m].y - expY) >= tol) {
+                    rowMajor = false;
+                    break;
+                }
+            }
+            return {
+                "cols": detectedCols,
+                "rows": detectedRows,
+                "isGrid": rowMajor
+            };
         }
+        return {
+            "cols": screensArray.length,
+            "rows": 1,
+            "isGrid": false
+        };
+    }
+
+    // Detect grid dimensions of the staged (pending) config into
+    // _columns/_rows, and grid validity into _isGrid.
+    function _detectGrid() {
+        var grid = _detectGridOf(_pendingScreens);
+        _columns = grid.cols;
+        _rows = grid.rows;
+        _isGrid = grid.isGrid;
     }
 
     // Build horizontal split regions from percentage ratios.
@@ -215,12 +256,21 @@ SettingsFlickable {
         }
         // Uniform grid fallback: when all cells share one height (e.g. 2x2),
         // height-grouping collapses every row into a single group, so
-        // rowWidths[0] is the summed width of ALL cells = _rows × (one row's
-        // full width). Dividing by _rows recovers one physical row's width;
-        // multiplying the shared cell height by _rows recovers the full height.
-        if (rowHeights.length === 1 && _rows > 1 && _columns > 0) {
-            _screenWidth = Math.round(rowWidths[0] / _rows);
-            _screenHeight = rowHeights[0] * _rows;
+        // rowWidths[0] is the summed width of ALL cells = rows × (one row's
+        // full width). Dividing by the row count recovers one physical row's
+        // width; multiplying the shared cell height by it recovers the full
+        // height. The /vs: children reflect the APPLIED config, so derive the
+        // grid from _savedScreens (which mirrors it) rather than _rows/_columns,
+        // which track the staged config and may differ mid-edit.
+        // Accepted transient: between a save and the daemon republishing its
+        // screens, _savedScreens already holds the new config while the /vs:
+        // children still reflect the old one, so the reconstructed geometry can
+        // be briefly wrong. Display-only and self-correcting on the next
+        // screensChanged — deliberately not fixed (audit 2026-07 concurred).
+        var appliedGrid = _detectGridOf(_savedScreens);
+        if (rowHeights.length === 1 && appliedGrid.rows > 1 && appliedGrid.cols > 0) {
+            _screenWidth = Math.round(rowWidths[0] / appliedGrid.rows);
+            _screenHeight = rowHeights[0] * appliedGrid.rows;
             return;
         }
         // Physical width: any row's total width (should be the same for all rows)
@@ -251,9 +301,7 @@ SettingsFlickable {
         var total = cols * rows;
         if (total <= 1) {
             settingsController.stageVirtualScreenRemoval(_selectedScreen);
-            _pendingScreens = [];
-            _columns = 1;
-            _rows = 1;
+            root._refreshConfig();
             return;
         }
         if (total > _maxVirtualScreens)
@@ -281,12 +329,17 @@ SettingsFlickable {
         _pendingScreens = screens;
         _columns = cols;
         _rows = rows;
+        // _gridRegions-style output above is row-major by construction.
+        _isGrid = true;
         _stageCurrentConfig();
     }
 
     // Move a column divider (vertical boundary between adjacent columns).
     // Adjusts x/width of all cells straddling that column boundary.
+    // Requires a strict row-major grid (r*cols+c indexing below).
     function _moveColumnDivider(colIndex, newXFraction) {
+        if (!_isGrid)
+            return;
         if (colIndex < 0 || colIndex >= _columns - 1)
             return;
 
@@ -297,6 +350,11 @@ SettingsFlickable {
         var rightEnd = screens[colIndex + 1].x + screens[colIndex + 1].width;
         var minX = leftStart + minW;
         var maxX = rightEnd - minW;
+        // Degenerate pair: the two columns together are narrower than
+        // 2*minW, so no divider position satisfies both minimums —
+        // clamping to [minX, maxX] would pin to the wrong edge.
+        if (minX > maxX)
+            return;
         var newDivPos = Math.max(minX, Math.min(maxX, newXFraction));
         var newLeftWidth = newDivPos - leftStart;
         var newRightWidth = rightEnd - newDivPos;
@@ -318,7 +376,10 @@ SettingsFlickable {
 
     // Move a row divider (horizontal boundary between adjacent rows).
     // Adjusts y/height of all cells straddling that row boundary.
+    // Requires a strict row-major grid (r*cols+c indexing below).
     function _moveRowDivider(rowIndex, newYFraction) {
+        if (!_isGrid)
+            return;
         if (rowIndex < 0 || rowIndex >= _rows - 1)
             return;
 
@@ -329,6 +390,10 @@ SettingsFlickable {
         var bottomEnd = screens[(rowIndex + 1) * _columns].y + screens[(rowIndex + 1) * _columns].height;
         var minY = topStart + minH;
         var maxY = bottomEnd - minH;
+        // Degenerate pair: see _moveColumnDivider — no valid divider
+        // position when the pair is shorter than 2*minH.
+        if (minY > maxY)
+            return;
         var newDivPos = Math.max(minY, Math.min(maxY, newYFraction));
         var newTopHeight = newDivPos - topStart;
         var newBottomHeight = bottomEnd - newDivPos;
@@ -404,8 +469,11 @@ SettingsFlickable {
             _autoSelectScreen();
     }
     on_SelectedScreenChanged: {
-        _updateScreenGeometry();
+        // Config first: geometry reconstruction's uniform-grid fallback derives
+        // its grid via _detectGridOf(_savedScreens), which _refreshConfig just
+        // loaded for this screen.
         _refreshConfig();
+        _updateScreenGeometry();
     }
 
     Connections {
@@ -421,8 +489,10 @@ SettingsFlickable {
             if (root._selectedScreen === "" && settingsController.screens.length > 0)
                 root._autoSelectScreen();
             if (root._selectedScreen === before) {
-                root._updateScreenGeometry();
+                // Config first: geometry reconstruction reads the grid
+                // _refreshConfig just loaded (uniform-grid fallback).
                 root._refreshConfig();
+                root._updateScreenGeometry();
             }
         }
 
@@ -479,7 +549,7 @@ SettingsFlickable {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     text: {
                         let orient = root._screenHeight > root._screenWidth ? i18nc("@label screen orientation", "Portrait") : i18nc("@label screen orientation", "Landscape");
-                        let res = root._screenWidth + " \u00d7 " + root._screenHeight + " \u00b7 " + orient;
+                        let res = i18nc("@info screen resolution in pixels", "%1\u00d7%2 px", root._screenWidth, root._screenHeight) + " \u00b7 " + orient;
                         let count = root._pendingScreens.length;
                         if (count > 1) {
                             if (root._rows > 1)
@@ -520,6 +590,7 @@ SettingsFlickable {
                     screenHeight: root._screenHeight
                     columns: root._columns
                     rows: root._rows
+                    isGrid: root._isGrid
                     onColumnDividerMoved: function (colIndex, newFraction) {
                         root._moveColumnDivider(colIndex, newFraction);
                     }
@@ -683,9 +754,9 @@ SettingsFlickable {
                             // border, not a full-opacity fill.
                             background: Rectangle {
                                 radius: Kirigami.Units.smallSpacing * 1.5
-                                color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (presetCard.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03))
+                                color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : (presetCard.hovered ? Qt.tint(Kirigami.Theme.backgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.1)) : Kirigami.Theme.backgroundColor)
                                 border.width: 1
-                                border.color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : (presetCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08))
+                                border.color: presetCard.active ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : (presetCard.hovered ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast))
                             }
 
                             contentItem: Item {
@@ -700,18 +771,18 @@ SettingsFlickable {
                                     spacing: Kirigami.Units.largeSpacing
 
                                     // Preview thumbnail (left): fixed 16:9 box using the
-                                    // shared ZonePreview + the same box treatment as
-                                    // LayoutThumbnail (0.08 fill, accent border that
-                                    // thickens when active). Zone numbers off — the split
-                                    // shape is what matters here.
+                                    // shared ZonePreview, drawn as an inset well (thumbnail
+                                    // altBg on presetCard bg on SettingsCard altBg) with an
+                                    // accent border that thickens when active. Zone
+                                    // numbers off — the split shape is what matters here.
                                     Rectangle {
                                         Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                                         Layout.preferredWidth: Kirigami.Units.gridUnit * 3 * 16 / 9
                                         Layout.alignment: Qt.AlignVCenter
                                         radius: Kirigami.Units.smallSpacing
-                                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                                        color: Kirigami.Theme.alternateBackgroundColor
                                         border.width: presetCard.active ? 3 : 1
-                                        border.color: presetCard.active ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+                                        border.color: presetCard.active ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                                         QFZCommon.ZonePreview {
                                             anchors.fill: parent
@@ -787,14 +858,9 @@ SettingsFlickable {
                                 var newCols = value;
                                 var maxRows = Math.max(1, Math.floor(root._maxVirtualScreens / newCols));
                                 var newRows = Math.min(root._rows, maxRows);
-                                if (newCols * newRows <= 1) {
-                                    settingsController.stageVirtualScreenRemoval(root._selectedScreen);
-                                    root._pendingScreens = [];
-                                    root._columns = 1;
-                                    root._rows = 1;
-                                } else {
-                                    root._redistributeGrid(newCols, newRows);
-                                }
+                                // _redistributeGrid handles the <=1 case itself
+                                // (stages removal + refreshes).
+                                root._redistributeGrid(newCols, newRows);
                             }
                             Accessible.name: i18n("Number of columns")
                         }
@@ -819,14 +885,9 @@ SettingsFlickable {
                                 var newRows = value;
                                 var maxCols = Math.max(1, Math.floor(root._maxVirtualScreens / newRows));
                                 var newCols = Math.min(root._columns, maxCols);
-                                if (newCols * newRows <= 1) {
-                                    settingsController.stageVirtualScreenRemoval(root._selectedScreen);
-                                    root._pendingScreens = [];
-                                    root._columns = 1;
-                                    root._rows = 1;
-                                } else {
-                                    root._redistributeGrid(newCols, newRows);
-                                }
+                                // _redistributeGrid handles the <=1 case itself
+                                // (stages removal + refreshes).
+                                root._redistributeGrid(newCols, newRows);
                             }
                             Accessible.name: i18n("Number of rows")
                         }
@@ -887,6 +948,11 @@ SettingsFlickable {
                             placeholderText: i18n("Screen %1", index + 1)
                             Accessible.name: i18n("Display name for virtual screen %1", index + 1)
                             onEditingFinished: {
+                                // editingFinished fires on any focus-out; skip the
+                                // copy/stage when the text didn't actually change so
+                                // merely tabbing through fields can't dirty the page.
+                                if (text === (modelData.displayName || ""))
+                                    return;
                                 var screens = root._deepCopy(root._pendingScreens);
                                 if (index >= 0 && index < screens.length) {
                                     screens[index].displayName = text;
@@ -900,9 +966,9 @@ SettingsFlickable {
                             text: {
                                 var wp = Math.round(modelData.width * 100);
                                 if (root._rows > 1)
-                                    return wp + "% \u00d7 " + Math.round(modelData.height * 100) + "%";
+                                    return i18nc("@info virtual screen size as width by height percentages", "%1% \u00d7 %2%", wp, Math.round(modelData.height * 100));
 
-                                return wp + "%";
+                                return i18nc("@info virtual screen width as a percentage", "%1%", wp);
                             }
                             Layout.preferredWidth: root._rows > 1 ? Kirigami.Units.gridUnit * 5 : Kirigami.Units.gridUnit * 3
                             horizontalAlignment: Text.AlignRight
@@ -914,9 +980,9 @@ SettingsFlickable {
                             text: {
                                 var wpx = Math.round(modelData.width * root._screenWidth);
                                 if (root._rows > 1)
-                                    return wpx + "\u00d7" + Math.round(modelData.height * root._screenHeight) + "px";
+                                    return i18nc("@info screen resolution in pixels", "%1\u00d7%2 px", wpx, Math.round(modelData.height * root._screenHeight));
 
-                                return wpx + "px";
+                                return i18nc("@info width in pixels", "%1 px", wpx);
                             }
                             Layout.preferredWidth: root._rows > 1 ? Kirigami.Units.gridUnit * 5.5 : Kirigami.Units.gridUnit * 4
                             horizontalAlignment: Text.AlignRight
@@ -938,10 +1004,13 @@ SettingsFlickable {
                     enabled: root._selectedScreen !== "" && (root._pendingScreens.length > 0 || root._savedScreens.length > 0)
                     onClicked: {
                         settingsController.stageVirtualScreenRemoval(root._selectedScreen);
-                        root._pendingScreens = [];
-                        root._savedScreens = [];
-                        root._columns = 1;
-                        root._rows = 1;
+                        // Read the staged removal back through the single
+                        // reconciliation path (pending/saved/grid all come from
+                        // _refreshConfig). Explicit call, not the
+                        // onDirtyPagesChanged connection: staging emits
+                        // dirtyPagesChanged only on the clean→dirty transition,
+                        // so it stays silent when the page is already dirty.
+                        root._refreshConfig();
                     }
                     ToolTip.text: i18n("Remove all virtual screen subdivisions from this monitor")
                     ToolTip.visible: hovered

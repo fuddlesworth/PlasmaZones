@@ -142,11 +142,25 @@ ComboBox {
         height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (root.Window.window ? root.Window.window.height : 600) - topMargin - bottomMargin)
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
+        // Horizontal margins so QQuickPopup clamps x as well as y: without
+        // them left/rightMargin stay at the default -1 (no clamping) and a
+        // combo near the window's right edge overflows and gets cut off.
+        leftMargin: Kirigami.Units.smallSpacing
+        rightMargin: Kirigami.Units.smallSpacing
         padding: 1
 
         contentItem: ListView {
             id: popupList
 
+            // A colorSet pinned on the Popup NODE itself is inert: theme
+            // attachment walks parentItem, and the contentItem/background
+            // parent to the popup item (→ Overlay), not the Popup node. Per
+            // the upstream qqc2 ToolTip pattern, pin View on BOTH the
+            // contentItem root (delegates are its visual children) and the
+            // background Rectangle so delegate fills, text colors, and the
+            // popup surface all resolve against the same View set.
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             clip: true
             implicitHeight: contentHeight
             model: root.delegateModel
@@ -159,8 +173,13 @@ ComboBox {
         }
 
         background: Rectangle {
+            // View set pinned here too (see contentItem note): the background
+            // parents to the popup item, so it cannot inherit a set from the
+            // Popup node and must carry its own.
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             color: Kirigami.Theme.backgroundColor
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: 1
             radius: Kirigami.Units.smallSpacing
         }

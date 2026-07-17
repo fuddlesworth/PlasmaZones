@@ -18,23 +18,26 @@ import org.phosphor.animation
 Item {
     id: root
 
+    // Card grid is embedded in settings pages — use View roles for surfaces
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
+
     // Data
     property var layoutData: ({})
     property bool isActive: false
     property bool isSelected: false
     property bool isHovered: false
-    property bool isRecommended: layoutData.recommended !== undefined ? layoutData.recommended : true
+    property bool isRecommended: (layoutData && layoutData.recommended !== undefined) ? layoutData.recommended : true
     // When the global "Auto-assign for all layouts" master toggle is on (#370),
     // every layout effectively auto-assigns. Parents pass it down so the badge
     // reflects actual snap behavior even when the per-layout flag is off.
     property bool globalAutoAssign: false
     // Dimensions (set by parent, no defaults)
-    property real previewWidth
-    property real previewHeight
+    required property real previewWidth
+    required property real previewHeight
     // Feature toggles
     property bool showCardBackground: false
     // ZonePreview passthrough
-    property bool interactive: false
     property int selectedZoneIndex: -1
     property int zonePadding: 2
     property int edgeGap: 2
@@ -44,12 +47,15 @@ Item {
     property bool showZoneNumbers: true
     property string zoneNumberDisplay: "all"
     property bool producesOverlappingZones: false
-    property color zoneHighlightColor: Kirigami.Theme.highlightColor
-    property color zoneInactiveColor: Kirigami.Theme.textColor
-    property color zoneBorderColor: Kirigami.Theme.textColor
-    property real hoverScale: 1
+    property color zoneHighlightColor: ZoneColorDefaults.previewActiveZoneColor
+    property color zoneInactiveColor: ZoneColorDefaults.previewInactiveZoneColor
+    property color zoneBorderColor: ZoneColorDefaults.previewZoneBorderColor
     // Autotile algorithm metadata
     property bool showMasterDot: false
+    /// Number of master zones to mark with indicator dots (ZonePreview
+    /// passthrough — the settings thumbnails show N dots for multi-master
+    /// algorithms; the popups keep the default of 1).
+    property int masterCount: 1
     // Theme colors
     property color highlightColor: Kirigami.Theme.highlightColor
     property color textColor: Kirigami.Theme.textColor
@@ -65,7 +71,7 @@ Item {
     // file's Behavior animations (see usages below). The profile registry
     // supplies the curve shape; these supply the theme-scaled timing so
     // Plasma's system animation-speed preference still applies. Consumers
-    // (`AlgorithmPreview.qml`, `GeneralPage.qml`) override per-instance.
+    // (`LayoutPickerContent.qml`, `ZoneSelectorContent.qml`) override per-instance.
     property int animationDuration: Kirigami.Units.longDuration
     property int shortAnimationDuration: Kirigami.Units.shortDuration
     // Label
@@ -79,9 +85,11 @@ Item {
             return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.fillSelected);
 
         if (root.isHovered)
-            return Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.fillHovered);
+            return Qt.alpha(Kirigami.Theme.hoverColor, style.hoverTint);
 
-        return "transparent";
+        // Alpha-0 version of the adjacent hover tint (not "transparent",
+        // which is alpha-0 BLACK and drags the fade's RGB toward black).
+        return Qt.alpha(Kirigami.Theme.hoverColor, 0);
     }
     readonly property color stateBorderColor: {
         if (root.isActive)
@@ -90,18 +98,17 @@ Item {
         if (root.isSelected)
             return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, style.borderSelected);
 
-        return "transparent";
+        // Alpha-0 version of the highlight hue both branches above fade
+        // from (not "transparent", which interpolates RGB toward black).
+        return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, 0);
     }
     readonly property int stateBorderWidth: root.isActive ? style.borderWide : (root.isSelected ? style.borderNarrow : 0)
-
-    // Signals
-    signal zoneHovered(int zoneIndex)
 
     // Dim non-recommended layouts (different aspect ratio class than current screen)
     opacity: root.isRecommended ? 1 : 0.65
     // Accessibility
     Accessible.role: Accessible.Pane
-    Accessible.name: root.layoutData.displayName || ""
+    Accessible.name: root.layoutData ? (root.layoutData.displayName || "") : ""
 
     // Visual constants
     QtObject {
@@ -110,8 +117,7 @@ Item {
         // Unified state-based fill alphas (same palette for both modes)
         readonly property real fillActive: 0.12
         readonly property real fillSelected: 0.1
-        readonly property real fillHovered: 0.06
-        readonly property real fillNeutral: 0.08
+        readonly property real hoverTint: 0.2
         // Unified state-based border alphas
         readonly property real borderActive: 0.5
         readonly property real borderSelected: 0.4
@@ -119,7 +125,6 @@ Item {
         readonly property int borderWide: 2
         readonly property int borderNarrow: 1
         // Label
-        readonly property real labelDimAlpha: 0.6
         readonly property real labelDimOpacity: 0.8
         // Badge ratios
         readonly property real checkmarkFontRatio: 0.6
@@ -150,6 +155,13 @@ Item {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
                 durationOverride: root.animationDuration
+            }
+        }
+
+        Behavior on border.width {
+            PhosphorMotionAnimation {
+                profile: "widget.hover"
+                durationOverride: root.shortAnimationDuration
             }
         }
     }
@@ -197,7 +209,7 @@ Item {
             width: previewArea.fittedWidth
             height: previewArea.fittedHeight
             radius: style.previewRadius
-            color: root.showCardBackground ? Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.fillNeutral) : root.stateHighlightFill
+            color: root.showCardBackground ? Kirigami.Theme.alternateBackgroundColor : root.stateHighlightFill
             border.color: root.showCardBackground ? "transparent" : root.stateBorderColor
             border.width: root.showCardBackground ? 0 : root.stateBorderWidth
 
@@ -279,12 +291,10 @@ Item {
 
             anchors.fill: previewBackground
             anchors.margins: root.showCardBackground ? Kirigami.Units.smallSpacing : 0
-            zones: root.layoutData.zones || []
-            interactive: root.interactive
+            zones: root.layoutData ? (root.layoutData.zones || []) : []
             showZoneNumbers: root.showZoneNumbers
             zoneNumberDisplay: root.zoneNumberDisplay
             producesOverlappingZones: root.producesOverlappingZones
-            highlightAllZones: false
             selectedZoneIndex: root.selectedZoneIndex
             isHovered: root.isHovered || root.isSelected
             isActive: root.isActive
@@ -296,7 +306,6 @@ Item {
             borderColor: root.zoneBorderColor
             inactiveOpacity: root.inactiveOpacity
             activeOpacity: root.activeOpacity
-            hoverScale: root.hoverScale
             fontFamily: root.fontFamily
             fontSizeScale: root.fontSizeScale
             fontWeight: root.fontWeight
@@ -304,10 +313,8 @@ Item {
             fontUnderline: root.fontUnderline
             fontStrikeout: root.fontStrikeout
             showMasterDot: root.showMasterDot
+            masterCount: root.masterCount
             animationDuration: root.animationDuration
-            onZoneHovered: function (index) {
-                root.zoneHovered(index);
-            }
         }
     }
 
@@ -321,42 +328,67 @@ Item {
         spacing: Kirigami.Units.smallSpacing
 
         CategoryBadge {
+            id: categoryBadge
+
             anchors.verticalCenter: parent.verticalCenter
-            category: root.layoutData.category !== undefined ? root.layoutData.category : 0
-            autoAssign: root.layoutData.autoAssign === true
+            category: (root.layoutData && root.layoutData.category !== undefined) ? root.layoutData.category : 0
+            autoAssign: root.layoutData ? root.layoutData.autoAssign === true : false
             globalAutoAssign: root.globalAutoAssign
         }
 
         CapabilityBadgeRow {
+            id: capabilityBadges
+
             anchors.verticalCenter: parent.verticalCenter
-            layoutData: root.layoutData
+            layoutData: root.layoutData || ({})
         }
 
         AspectRatioBadge {
+            id: aspectRatioBadge
+
             anchors.verticalCenter: parent.verticalCenter
-            aspectRatioClass: root.layoutData.aspectRatioClass || "any"
+            aspectRatioClass: root.layoutData ? (root.layoutData.aspectRatioClass || "any") : "any"
         }
 
         Label {
             id: nameLabel
 
             anchors.verticalCenter: parent.verticalCenter
-            text: root.layoutData.displayName || ""
+            text: root.layoutData ? (root.layoutData.displayName || "") : ""
             font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
             font.weight: root.isActive ? Font.Bold : Font.Normal
             color: {
+                // Strip the pipeline colour's carried alpha — a 50%-alpha
+                // highlight must not render a 50%-opacity title.
                 if (root.isActive)
-                    return root.highlightColor;
+                    return Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, 1);
 
                 if (root.isSelected || root.isHovered)
                     return root.textColor;
 
-                return Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.labelDimAlpha);
+                return Kirigami.Theme.disabledTextColor;
             }
+            // Width the visible badge siblings occupy in the Row, including
+            // the Row spacing each contributes before the label. Row only
+            // spaces VISIBLE items, so hidden badges cost nothing here either.
+            readonly property real badgesWidth: {
+                var w = 0;
+                if (categoryBadge.visible)
+                    w += categoryBadge.width + nameLabelRow.spacing;
+                if (capabilityBadges.visible)
+                    w += capabilityBadges.width + nameLabelRow.spacing;
+                if (aspectRatioBadge.visible)
+                    w += aspectRatioBadge.width + nameLabelRow.spacing;
+                return w;
+            }
+
             opacity: (root.isSelected || root.isHovered || root.isActive) ? 1 : style.labelDimOpacity
             elide: Text.ElideRight
             maximumLineCount: 1
-            width: Math.min(implicitWidth, root.previewWidth - Kirigami.Units.gridUnit)
+            // Cap against the preview width minus the badges sharing the Row,
+            // so the horizontalCenter-anchored row can't spill past the card
+            // edges when badges are visible.
+            width: Math.min(implicitWidth, Math.max(0, root.previewWidth - Kirigami.Units.gridUnit - badgesWidth))
 
             Behavior on color {
                 PhosphorMotionAnimation {

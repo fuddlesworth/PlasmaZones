@@ -193,7 +193,7 @@ SettingsFlickable {
                         Rectangle {
                             anchors.fill: parent
                             color: Kirigami.Theme.backgroundColor
-                            border.color: Kirigami.Theme.disabledTextColor
+                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                             border.width: 1
                             radius: Kirigami.Units.smallSpacing
 
@@ -294,7 +294,7 @@ SettingsFlickable {
                     SettingsSlider {
                         id: previewWindowSlider
 
-                        Accessible.name: i18n("Maximum windows")
+                        accessibleName: i18n("Maximum windows")
                         from: root.settingsBridge.autotileMaxWindowsMin
                         to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
@@ -325,7 +325,7 @@ SettingsFlickable {
                     SettingsSlider {
                         id: masterRatioSlider
 
-                        Accessible.name: root.algoCenterLayout ? i18n("Center ratio") : i18n("Master ratio")
+                        accessibleName: root.algoCenterLayout ? i18n("Center ratio") : i18n("Master ratio")
                         from: root.settingsBridge.autotileSplitRatioMin
                         to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
@@ -349,7 +349,7 @@ SettingsFlickable {
                     description: i18n("Amount the ratio changes per keyboard shortcut press")
 
                     SettingsSlider {
-                        Accessible.name: i18n("Ratio step size")
+                        accessibleName: i18n("Ratio step size")
                         from: root.settingsBridge.autotileSplitRatioStepMin
                         to: root.settingsBridge.autotileSplitRatioStepMax
                         stepSize: 0.01
@@ -378,7 +378,7 @@ SettingsFlickable {
                     SettingsSlider {
                         id: masterCountSlider
 
-                        Accessible.name: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
+                        accessibleName: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
                         from: root.settingsBridge.autotileMasterCountMin
                         to: root.settingsBridge.autotileMasterCountMax
                         stepSize: 1
@@ -447,7 +447,7 @@ SettingsFlickable {
                             // Number parameter: rendered as a SettingsSlider
                             SettingsSlider {
                                 visible: modelData.type === "number"
-                                Accessible.name: paramLabel
+                                accessibleName: paramLabel
                                 from: paramMin
                                 to: paramMax
                                 stepSize: {

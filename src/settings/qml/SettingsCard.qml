@@ -188,14 +188,30 @@ Item {
             });
         }
     }
+    // The custom header currently reparented under headerLoader, so a
+    // replacement or a return to null can detach it — the loader hosts
+    // exactly one header at a time.
+    property Item _customHeader: null
     // Handle custom header reparenting
     onHeaderChanged: {
+        if (_customHeader && _customHeader !== header) {
+            // Detach the previous custom header. The caller created it, so
+            // unparent (removing it from the scene and the a11y tree) rather
+            // than destroy an item this card does not own.
+            _customHeader.parent = null;
+            _customHeader = null;
+        }
         if (header) {
             header.parent = headerLoader;
             header.width = Qt.binding(function () {
                 return headerLoader.width;
             });
             headerLoader.sourceComponent = null;
+            _customHeader = header;
+        } else {
+            // Header returned to null — restore the default headerText header
+            // the initial declarative binding provided before it was nulled.
+            headerLoader.sourceComponent = defaultHeaderComponent;
         }
     }
 
@@ -209,17 +225,20 @@ Item {
         width: root.width
         height: headerArea.height + contentClip.height
         radius: Kirigami.Units.smallSpacing * 1.5
-        // Slightly elevated from page background
-        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+        // Cards are View-family surfaces: the alternate background reads as
+        // slightly elevated from the page background in every color scheme.
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.inherit: false
+        color: Kirigami.Theme.alternateBackgroundColor
         border.width: 1
         border.color: {
             if (!root.enabled)
-                return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04);
+                return Qt.alpha(Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast), 0.5);
 
             if (hoverHandler.hovered)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
+                return Kirigami.Theme.hoverColor;
 
-            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08);
+            return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         }
 
         // ── Header ─────────────────────────────────────────────────────
@@ -237,14 +256,13 @@ Item {
             // has to measure the custom header itself or the body draws over it.
             height: visible ? Math.max(headerLoader.height, root.header ? root.header.implicitHeight : 0) : 0
             visible: root.headerText.length > 0 || root.header !== null
-            // Single uniform header fill: the whole header row is one proper
-            // header color, distinct from the content rows below. Only the TOP
-            // corners are rounded (to match the card); the bottom stays square so
-            // the header sits flush against the content. Using per-corner radius
-            // on one fill — instead of a rounded rect plus a semi-transparent
-            // corner overlay — avoids doubling the alpha into a darker band along
-            // the bottom of the header. Tune the alpha to taste.
-            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+            // Single uniform header fill: the whole header row paints with the
+            // Header color set, distinct from the View-set content rows below.
+            // Only the TOP corners are rounded (to match the card); the bottom
+            // stays square so the header sits flush against the content.
+            Kirigami.Theme.colorSet: Kirigami.Theme.Header
+            Kirigami.Theme.inherit: false
+            color: Kirigami.Theme.backgroundColor
             corners {
                 topLeftRadius: cardBg.radius
                 topRightRadius: cardBg.radius
@@ -261,7 +279,8 @@ Item {
             // names itself rather than announcing an unnamed button.
             Accessible.name: root.headerText.length > 0 ? root.headerText : (root.header && root.header.Accessible.name ? root.header.Accessible.name : "")
             Accessible.description: root.collapsible ? (root.collapsed ? i18n("Collapsed. Activate to expand.") : i18n("Expanded. Activate to collapse.")) : ""
-            Accessible.onPressAction: root.collapsed = !root.collapsed
+            Accessible.onPressAction: if (root.collapsible)
+                root.collapsed = !root.collapsed
             Keys.onSpacePressed: if (root.collapsible)
                 root.collapsed = !root.collapsed
             Keys.onReturnPressed: if (root.collapsible)
@@ -286,7 +305,7 @@ Item {
                 radius: cardBg.radius
                 visible: headerArea.activeFocus
                 border.width: 1
-                border.color: Kirigami.Theme.highlightColor
+                border.color: Kirigami.Theme.focusColor
             }
 
             // Default header (Heading from headerText)

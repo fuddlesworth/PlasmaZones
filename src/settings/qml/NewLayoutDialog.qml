@@ -309,7 +309,8 @@ Kirigami.Dialog {
                                 zones: templateDelegate.modelData.zones
                                 showZoneNumbers: true
                                 isHovered: templateDelegate.isHovered || templateDelegate.selected
-                                highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, templateDelegate.selected ? 0.8 : 0.5)
+                                highlightColor: Kirigami.Theme.highlightColor
+                                activeOpacity: templateDelegate.selected ? 0.6 : 0.45
                             }
                         }
                     }
@@ -334,13 +335,15 @@ Kirigami.Dialog {
                     QFZCommon.ZonePreview {
                         anchors.fill: parent
                         anchors.margins: Kirigami.Units.largeSpacing
-                        // Space for the bottom name bar, same reservation as
-                        // LayoutThumbnail makes for its label.
+                        // Space for the bottom name bar (LayoutThumbnail's
+                        // wrapper reserves 3 gridUnits of `_verticalChrome`
+                        // instead; this frame only needs to clear the badge).
                         anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5 + Kirigami.Units.smallSpacing
                         zones: root.selectedTemplate.zones
                         showZoneNumbers: true
                         isHovered: true
-                        highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
+                        highlightColor: Kirigami.Theme.highlightColor
+                        activeOpacity: 0.7
                     }
 
                     WizardPreviewBadge {

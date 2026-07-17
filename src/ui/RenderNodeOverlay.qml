@@ -5,6 +5,7 @@ import PlasmaZones 1.0
 import QtQuick
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 /**
  * Window wrapper for the shader preview surface (editor's Shader Settings
@@ -62,9 +63,9 @@ Window {
     property var bufferWraps: []
     property string bufferFilter: "linear"
     property var bufferFilters: []
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
     property int borderWidth: Kirigami.Units.smallSpacing
@@ -77,7 +78,7 @@ Window {
     /// Forward to the hosted content's reloadShader() — invoked by the
     /// hot-reload path via QMetaObject::invokeMethod on the window root.
     function reloadShader() {
-        contentItem.reloadShader();
+        hostedContent.reloadShader();
     }
 
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
@@ -87,7 +88,7 @@ Window {
     visible: false
 
     RenderNodeOverlayContent {
-        id: contentItem
+        id: hostedContent
 
         anchors.fill: parent
         shaderSource: root.shaderSource

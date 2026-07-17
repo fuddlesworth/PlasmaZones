@@ -7,8 +7,8 @@ import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
 /**
- * Navigation OSD content — Item-rooted body for use inside the unified
- * NotificationOverlay host that swaps OSD modes via Loader.
+ * Navigation OSD content — Item-rooted body for use inside the
+ * PassiveOverlayShell host that swaps OSD modes via its osdSlot Loader.
  *
  * Phase 5: surface lifecycle + show/hide animations are driven entirely by
  * PhosphorAnimationLayer::SurfaceAnimator (registered for the notification
@@ -20,8 +20,9 @@ import org.plasmazones.common as QFZCommon
  * This Item only owns:
  *   - Data properties written by C++ (action, reason, zones, …)
  *   - Computed messageText + container layout
- *   - The auto-dismiss Timer + dismissRequested signal that C++ wires to
- *     Surface::hide() (via the unified host's signal forwarding)
+ *   - The auto-dismiss Timer + dismissRequested signal, forwarded by the
+ *     shell host as `osdDismissRequested` and routed by C++ to
+ *     OverlayService::onOsdDismissRequested → ShellHost::hideSlot
  */
 Item {
     id: root
@@ -42,6 +43,11 @@ Item {
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
+    // Unread by this content body, but part of the OSD slot forwarding
+    // contract: PassiveOverlayShell's navigationOsdComp binds it from
+    // osdSlot.highlightColor, which C++ writes (osd.cpp
+    // pushLayoutOsdContent) on the shared OSD slot. Deleting it would
+    // break the shell binding, so it stays declared.
     property color highlightColor: Kirigami.Theme.highlightColor
     property color errorColor: Kirigami.Theme.negativeTextColor
     // Get target zone number (first highlighted zone)
@@ -170,16 +176,11 @@ Item {
             return i18n("Action completed");
         }
     }
-    // Content-driven desired size, exposed for the unified host (which binds
-    // its Window width/height to these readonly properties; C++ also reads
-    // them after every property write to compute matching layer-shell margins).
-    readonly property int contentDesiredWidth: Math.round(container.width) + Math.round(Kirigami.Units.gridUnit * 2.5)
-    readonly property int contentDesiredHeight: Math.round(container.height) + Math.round(Kirigami.Units.gridUnit * 2.5)
-
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
-    /// The unified NotificationOverlay host re-emits this as its own
-    /// `dismissRequested` so OverlayService::createWarmedOsdSurface's
-    /// connect to Surface::hide() drives the library animator's beginHide.
+    /// The unified shell host re-emits this as its `osdDismissRequested`
+    /// signal, which C++ (wirePassiveShellSlots) routes to
+    /// OverlayService::onOsdDismissRequested → ShellHost::hideSlot for an
+    /// animator-driven slot-hide.
     signal dismissRequested
 
     /// Restart the auto-dismiss timer from C++ on every show. Forwards to
@@ -267,7 +268,6 @@ Item {
         width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, Kirigami.Units.gridUnit * 10)
         height: messageLabel.implicitHeight + Kirigami.Units.gridUnit * 2.5
         backgroundColor: root.backgroundColor
-        textColor: root.textColor
         containerRadius: Kirigami.Units.gridUnit * 1.5
 
         // Message label - informative text-based feedback
@@ -278,7 +278,6 @@ Item {
             anchors.top: parent.top
             anchors.topMargin: Kirigami.Units.gridUnit * 1.5
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
             text: root.messageText
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.3
             font.weight: Font.Medium
@@ -287,11 +286,15 @@ Item {
         }
     }
 
-    // Click to dismiss. dismiss.fire() collapses timer-fire + click into
-    // a single dismissRequested per show cycle via the shared latch.
+    // Click the card to dismiss. Anchored to the card (not the whole OSD
+    // slot) so a concurrent modal slot (snap assist, picker) keeps receiving
+    // its own clicks instead of hitting a screen-wide input shield.
+    // dismiss.fire() collapses timer-fire + click into a single
+    // dismissRequested per show cycle via the shared latch.
     MouseArea {
-        anchors.fill: parent
+        anchors.fill: container
         onClicked: dismiss.fire()
+        Accessible.role: Accessible.Button
         Accessible.name: i18n("Dismiss notification")
     }
 }

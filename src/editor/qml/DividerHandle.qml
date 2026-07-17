@@ -29,6 +29,8 @@ Rectangle {
     // What makes it grabbable at a zero gap is DividerManager raising the whole
     // subtree over the zones, not this floor.
     readonly property real handleThickness: Math.max(spacing, Kirigami.Units.smallSpacing)
+    // Near-background frame-contrast tone shared by the resting border and centre line
+    readonly property color frameContrastColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     // Derived properties from dividerInfo
     property bool isVertical: dividerInfo ? dividerInfo.isVertical : false
     property real dividerPosition: dividerInfo ? dividerInfo.position : 0
@@ -81,8 +83,8 @@ Rectangle {
     width: dividerInfo ? (dividerInfo.isVertical ? handleThickness : dividerInfo.width - spacing) : 0 // Horizontal: span minus margins
     height: dividerInfo ? (dividerInfo.isVertical ? dividerInfo.height - spacing : handleThickness) : 0 // Horizontal divider height = floored spacing
     // Background - subtle base color, more visible on hover/drag
-    color: (dividerMouseArea.containsMouse || isDragging) ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, isDragging ? 0.4 : 0.25) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-    border.color: (dividerMouseArea.containsMouse || isDragging) ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+    color: (dividerMouseArea.containsMouse || isDragging) ? Qt.alpha(Kirigami.Theme.highlightColor, isDragging ? 0.4 : 0.25) : Qt.alpha(Kirigami.Theme.backgroundColor, 0.3)
+    border.color: (dividerMouseArea.containsMouse || isDragging) ? Kirigami.Theme.highlightColor : frameContrastColor
     border.width: isDragging ? 2 : (dividerMouseArea.containsMouse ? 1 : 0)
     radius: isVertical ? (width / 2) : (height / 2)
     // Orders this handle against the OTHER handles only: every divider shares
@@ -135,7 +137,7 @@ Rectangle {
                 height: dotSize
                 radius: dotSize / 2 // Perfect circles
                 // Color based on hover/drag state
-                color: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
+                color: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
                 // More visible when hovered/dragging
                 opacity: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? 0.9 : 0.5
 
@@ -160,7 +162,7 @@ Rectangle {
         width: dividerHandle.isVertical ? 2 : parent.width * 0.6
         height: dividerHandle.isVertical ? parent.height * 0.6 : 2
         radius: Math.round(Kirigami.Units.smallSpacing / 4)
-        color: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+        color: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? Kirigami.Theme.highlightColor : dividerHandle.frameContrastColor
         opacity: (dividerMouseArea.containsMouse || dividerHandle.isDragging) ? 0.8 : 0.4
 
         Behavior on opacity {
@@ -177,7 +179,7 @@ Rectangle {
         property real startDividerPos: 0
 
         anchors.fill: parent
-        anchors.margins: -4 // Extend hit area for easier grabbing
+        anchors.margins: -Kirigami.Units.smallSpacing // Extend hit area for easier grabbing
         hoverEnabled: true
         cursorShape: dividerHandle.isVertical ? Qt.SizeHorCursor : Qt.SizeVerCursor
         acceptedButtons: Qt.LeftButton

@@ -139,6 +139,13 @@ void StagingService::stageFullClear(const QString& screen, int desktop, const QS
     e.tilingAlgorithmId = std::nullopt;
 }
 
+void StagingService::removeStagedAssignment(const QString& screen, int desktop, const QString& activity)
+{
+    // Erase the map entry entirely (keyed the same way assignmentEntry
+    // keys it) so the flush never sees this context at all.
+    m_assignments.remove(assignmentCacheKey(screen, desktop, activity));
+}
+
 void StagingService::stageTilingClear(const QString& screen, int desktop, const QString& activity)
 {
     auto& e = assignmentEntry(screen, desktop, activity);

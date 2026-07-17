@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "ColorUtils.js" as ColorUtils
+import "ThemeHelpers.js" as Theme
 import QtQuick
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
@@ -68,6 +70,19 @@ Item {
     readonly property bool hasValidDimensions: isFinite(visualWidth) && isFinite(visualHeight) && visualWidth > zoneSpacing && visualHeight > zoneSpacing && canvasWidth > 0 && canvasHeight > 0
     // Constants
     readonly property int handleSize: Kirigami.Units.gridUnit * 1.5
+    // Shared resize-handle metrics, referenced by both ResizeHandles (visuals,
+    // hit margins) and ZoneDragHandler (geometric handle-proximity check).
+    // Unit multiples reproduce the previous hardcoded pixel values at default
+    // Kirigami units (smallSpacing = 4).
+    // Corner handles: small circles (10px diameter at default units)
+    readonly property real handleCornerSize: Kirigami.Units.smallSpacing * 2.5
+    // Edge handles: thin pills (4px thick, 24px long at default units)
+    readonly property real handleEdgeThickness: Kirigami.Units.smallSpacing
+    readonly property real handleEdgeLength: Kirigami.Units.smallSpacing * 6
+    // Square hit region around a corner/edge handle (24px at default units)
+    readonly property real handleHitSize: Kirigami.Units.smallSpacing * 6
+    // Extra margin enlarging each handle's mouse hit area (4px at default units)
+    readonly property real handleHitMargin: Kirigami.Units.smallSpacing
     // Minimum zone size in pixels - acceptable as hardcoded
     readonly property int minSize: 50
     // Track if mouse is over zone or any controls
@@ -109,11 +124,6 @@ Item {
     signal splitHorizontalRequested
     signal splitVerticalRequested
     signal expandToFillWithCoords(real mouseX, real mouseY) // Pass zone center for consistent algorithm
-    signal deleteWithFillRequested
-    signal bringToFrontRequested
-    signal sendToBackRequested
-    signal bringForwardRequested
-    signal sendBackwardRequested
     signal operationStarted(string zoneId, real x, real y, real width, real height)
     signal operationUpdated(string zoneId, real x, real y, real width, real height)
     signal operationEnded(string zoneId)
@@ -287,6 +297,12 @@ Item {
         fillAnimator.animatedExpandToFill();
     }
 
+    // Abort a running fill animation without committing its target geometry.
+    // Called by drag/resize handlers before they capture start geometry.
+    function stopFillAnimation() {
+        fillAnimator.stopFillAnimation();
+    }
+
     focus: false
     // Position with differentiated gaps
     x: visualX + leftGap
@@ -391,21 +407,28 @@ Item {
         property int _borderWidthTracker: zoneData ? zoneData.borderWidth : 0
         property int _borderRadiusTracker: zoneData ? zoneData.borderRadius : 0
         property bool _useCustomColorsTracker: zoneData ? zoneData.useCustomColors : false
+        // Percentages for the accessibility description, guarded against
+        // zero/invalid canvas dimensions (same guard as DimensionTooltip)
+        // so a zero-sized canvas can't announce "NaN%".
+        readonly property int a11yXPercent: (root.canvasWidth > 0 && !isNaN(root.visualX)) ? Math.round((root.visualX / root.canvasWidth) * 100) : 0
+        readonly property int a11yYPercent: (root.canvasHeight > 0 && !isNaN(root.visualY)) ? Math.round((root.visualY / root.canvasHeight) * 100) : 0
+        readonly property int a11yWidthPercent: (root.canvasWidth > 0 && !isNaN(root.visualWidth)) ? Math.round((root.visualWidth / root.canvasWidth) * 100) : 0
+        readonly property int a11yHeightPercent: (root.canvasHeight > 0 && !isNaN(root.visualHeight)) ? Math.round((root.visualHeight / root.canvasHeight) * 100) : 0
         // Bindings that depend on trackers to force re-evaluation
         property color customHighlightColor: {
             var _ = _highlightColorTracker; // Dependency on tracker
             var _zone = zoneData; // Dependency on zoneData
-            return _zone && _zone.highlightColor ? parseColor(_zone.highlightColor) : Qt.transparent;
+            return _zone && _zone.highlightColor ? ColorUtils.parseArgbHex(_zone.highlightColor) : Qt.transparent;
         }
         property color customInactiveColor: {
             var _ = _inactiveColorTracker; // Dependency on tracker
             var _zone = zoneData; // Dependency on zoneData
-            return _zone && _zone.inactiveColor ? parseColor(_zone.inactiveColor) : Qt.transparent;
+            return _zone && _zone.inactiveColor ? ColorUtils.parseArgbHex(_zone.inactiveColor) : Qt.transparent;
         }
         property color customBorderColor: {
             var _ = _borderColorTracker; // Dependency on tracker
             var _zone = zoneData; // Dependency on zoneData
-            return _zone && _zone.borderColor ? parseColor(_zone.borderColor) : Qt.transparent;
+            return _zone && _zone.borderColor ? ColorUtils.parseArgbHex(_zone.borderColor) : Qt.transparent;
         }
         property real customActiveOpacity: {
             var _ = _activeOpacityTracker; // Dependency on tracker
@@ -428,50 +451,19 @@ Item {
             return _zone && _zone.borderRadius !== undefined ? _zone.borderRadius : (Kirigami.Units.smallSpacing * 1.5);
         }
 
-        // Helper function to parse color (handles both hex strings and QColor objects)
-        // Handles ARGB hex format from QColor::HexArgb
-        function parseColor(colorValue) {
-            if (!colorValue)
-                return Qt.transparent;
-
-            if (typeof colorValue === 'string') {
-                // Check if it's ARGB format (starts with # and has 8 or 4 hex chars)
-                var hex = colorValue.replace('#', '');
-                if (hex.length === 8) {
-                    // Parse ARGB: AARRGGBB
-                    var a = parseInt(hex.substring(0, 2), 16) / 255;
-                    var r = parseInt(hex.substring(2, 4), 16) / 255;
-                    var g = parseInt(hex.substring(4, 6), 16) / 255;
-                    var b = parseInt(hex.substring(6, 8), 16) / 255;
-                    return Qt.rgba(r, g, b, a);
-                } else if (hex.length === 4) {
-                    // Parse ARGB shorthand: ARGB
-                    var a = parseInt(hex.substring(0, 1), 16) / 15;
-                    var r = parseInt(hex.substring(1, 2), 16) / 15;
-                    var g = parseInt(hex.substring(2, 3), 16) / 15;
-                    var b = parseInt(hex.substring(3, 4), 16) / 15;
-                    return Qt.rgba(r, g, b, a);
-                } else {
-                    // Try Qt.color() as fallback (might be RGB format)
-                    return Qt.color(colorValue);
-                }
-            }
-            return colorValue;
-        }
-
         anchors.fill: parent
         // Combine color's alpha channel with opacity slider: final alpha = color.a * opacity
         // This allows both color picker alpha AND opacity slider to affect the result
         // Uses separate active/inactive opacity values
-        color: useCustom ? (isSelected ? Qt.rgba(customHighlightColor.r, customHighlightColor.g, customHighlightColor.b, customHighlightColor.a * customActiveOpacity) : Qt.rgba(customInactiveColor.r, customInactiveColor.g, customInactiveColor.b, customInactiveColor.a * customInactiveOpacity)) : (isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15))
-        border.color: useCustom ? customBorderColor : (isSelected ? Kirigami.Theme.highlightColor : (hoverArea.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)))
+        color: useCustom ? (isSelected ? Qt.rgba(customHighlightColor.r, customHighlightColor.g, customHighlightColor.b, customHighlightColor.a * customActiveOpacity) : Qt.rgba(customInactiveColor.r, customInactiveColor.g, customInactiveColor.b, customInactiveColor.a * customInactiveOpacity)) : (isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, Theme.zoneHighlightAlpha) : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, Theme.zoneInactiveAlpha))
+        border.color: useCustom ? customBorderColor : (isSelected ? Kirigami.Theme.highlightColor : (hoverArea.containsMouse ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)))
         border.width: useCustom ? customBorderWidth : (isSelected ? 3 : 2)
         radius: useCustom ? customBorderRadius : (Kirigami.Units.smallSpacing * 1.5)
         // Accessibility: Screen reader announcements
         // Accessible.role is optional
         // Removing role to avoid enumeration issues in QML
         Accessible.name: root.zoneData && root.zoneData.name ? i18nc("@info:accessibility", "Zone %1: %2", root.zoneData.zoneNumber || 1, root.zoneData.name) : i18nc("@info:accessibility", "Zone %1", root.zoneData ? (root.zoneData.zoneNumber || 1) : 0)
-        Accessible.description: isSelected ? i18nc("@info:accessibility", "Selected zone. Position: %1% × %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.", Math.round((root.visualX / root.canvasWidth) * 100), Math.round((root.visualY / root.canvasHeight) * 100), Math.round((root.visualWidth / root.canvasWidth) * 100), Math.round((root.visualHeight / root.canvasHeight) * 100)) : i18nc("@info:accessibility", "Zone. Position: %1% × %2%, Size: %3% × %4%. Click to select.", Math.round((root.visualX / root.canvasWidth) * 100), Math.round((root.visualY / root.canvasHeight) * 100), Math.round((root.visualWidth / root.canvasWidth) * 100), Math.round((root.visualHeight / root.canvasHeight) * 100))
+        Accessible.description: isSelected ? i18nc("@info:accessibility", "Selected zone. Position: %1%, %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.", zoneRect.a11yXPercent, zoneRect.a11yYPercent, zoneRect.a11yWidthPercent, zoneRect.a11yHeightPercent) : i18nc("@info:accessibility", "Zone. Position: %1%, %2%, Size: %3% × %4%. Click to select.", zoneRect.a11yXPercent, zoneRect.a11yYPercent, zoneRect.a11yWidthPercent, zoneRect.a11yHeightPercent)
         Accessible.selectable: true
         Accessible.selected: root.isSelected
 
@@ -607,7 +599,7 @@ Item {
     ActionButtons {
         id: hoverButtons
 
-        visible: !root.previewMode
+        previewMode: root.previewMode
         root: root
     }
 

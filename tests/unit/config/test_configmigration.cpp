@@ -787,6 +787,11 @@ private Q_SLOTS:
                                     "DefaultLayoutId=\n"
                                     "\n"
                                     "[Appearance]\n"
+                                    // Retired blur toggle, in its actual v1 home ([Appearance]). The
+                                    // migration never copies it, and the drop is structural — every v1
+                                    // group is removed wholesale — so the schema-coverage assertion
+                                    // pins that it never surfaces as an undeclared v2 destination key.
+                                    "EnableBlur=true\n"
                                     "UseSystemColors=true\n"
                                     "HighlightColor=1,2,3,255\n"
                                     "InactiveColor=4,5,6,255\n"
@@ -802,7 +807,6 @@ private Q_SLOTS:
                                     "LabelFontItalic=false\n"
                                     "LabelFontUnderline=false\n"
                                     "LabelFontStrikeout=false\n"
-                                    "EnableBlur=false\n"
                                     "\n"
                                     "[Zones]\n"
                                     "Padding=4\n"
@@ -1035,9 +1039,16 @@ private Q_SLOTS:
         QVERIFY(animations.contains(QStringLiteral("Enabled")));
         QCOMPARE(animations.value(QStringLiteral("Enabled")).toBool(), true);
 
-        // Profile blob is stored as a STRING containing a compact JSON
-        // object — that's how settings.cpp reads/writes it via
-        // PhosphorConfig::Store::read<QString>.
+        // The migration writes the Profile blob as a STRING containing a
+        // compact JSON object, even though the live schema stores the
+        // profile as a nested object (settings.cpp reads it via
+        // readProfileObject as a QVariantMap). The stringified form is a
+        // deliberate migration artifact — it keeps Animations/Profile a
+        // single scalar leaf for the schema/migration cross-check (see the
+        // rationale comment at the profile write in migrateV1ToV2,
+        // configmigration.cpp) — and the Store's legacy-string fallback
+        // parses it on first load, normalising to a nested object on the
+        // next save.
         const QString profileString = animations.value(QStringLiteral("Profile")).toString();
         QVERIFY2(!profileString.isEmpty(), "Migration did not produce Animations/Profile blob from v1 per-field keys");
         const QJsonDocument profileDoc = QJsonDocument::fromJson(profileString.toUtf8());

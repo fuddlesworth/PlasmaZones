@@ -76,6 +76,13 @@ public:
     /// Stage a full clear of the (screen × desktop × activity) context.
     void stageFullClear(const QString& screen, int desktop, const QString& activity);
 
+    /// Remove any staged entry for the (screen × desktop × activity)
+    /// context entirely — a true unstage, unlike `stageFullClear`, which
+    /// stages a daemon-side clear that the flush pushes on Apply. After
+    /// this, the flush leaves the context's daemon-side assignment
+    /// untouched. No-op when nothing is staged for the context.
+    void removeStagedAssignment(const QString& screen, int desktop, const QString& activity);
+
     /// Stage a tiling-only clear (flushes as "mode=0 + no layouts",
     /// reverting the context back to snapping mode).
     void stageTilingClear(const QString& screen, int desktop, const QString& activity);

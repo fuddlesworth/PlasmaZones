@@ -42,7 +42,7 @@ Item {
         color: "transparent"
         visible: root.activeFocus
         border.width: 1
-        border.color: Kirigami.Theme.highlightColor
+        border.color: Kirigami.Theme.focusColor
     }
 
     // Track
@@ -54,7 +54,28 @@ Item {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         radius: height / 2
-        color: root.checked ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+        color: root.checked ? Kirigami.Theme.highlightColor : Kirigami.Theme.alternateBackgroundColor
+        // Hairline on the unchecked track: altBg-on-altBg is invisible when
+        // the switch sits on a SettingsCard's alternate-background body. The
+        // checked track is solid highlight and needs no outline — width goes
+        // to 0 (a transparent 1px border would still inset the fill by a
+        // pixel). The Behaviors below animate the width in and out, and the
+        // hairline colour stays unconditional so the border keeps the right
+        // hue throughout that width transition.
+        border.width: root.checked ? 0 : 1
+        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+
+        Behavior on border.width {
+            PhosphorMotionAnimation {
+                profile: "widget.tint"
+            }
+        }
+
+        Behavior on border.color {
+            PhosphorMotionAnimation {
+                profile: "widget.tint"
+            }
+        }
 
         // Knob
         Rectangle {
@@ -64,7 +85,7 @@ Item {
             height: width
             radius: height / 2
             color: Kirigami.Theme.highlightedTextColor
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             border.width: 0.5
             y: pad
             x: root.checked ? parent.width - width - pad : pad

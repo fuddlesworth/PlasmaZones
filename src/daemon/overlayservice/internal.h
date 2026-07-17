@@ -70,19 +70,29 @@ inline void resetOsdOverlayState(QObject* window)
         return;
     }
     // Clear both overlay states — callers set the one they need afterwards.
-    // locked is explicitly set by every call site, but reset here for safety
-    // when a caller forgets (e.g. showDisabledOsd doesn't set locked at all).
+    // Every layout-OSD show path (showDisabledOsd included) routes through
+    // pushLayoutOsdContent, which writes `locked` explicitly right after this
+    // reset; the reset stays as a safety net for any future call site that
+    // forgets to set one of the states.
     writeQmlProperty(window, QStringLiteral("locked"), false);
     writeQmlProperty(window, QStringLiteral("disabled"), false);
     writeQmlProperty(window, QStringLiteral("disabledReason"), QString());
 }
 
-inline void writeFontProperties(QObject* window, const IZoneVisualizationSettings* settings)
+// @p includeLabelFontColor: only the main overlay slot declares a
+// `labelFontColor` property; the OSD / zone-selector / snap-assist /
+// layout-picker slots deliberately don't wire label color (see
+// PassiveOverlayShell.qml), so writing it there would only create a dead
+// dynamic property. Pass true from the main-overlay update path only.
+inline void writeFontProperties(QObject* window, const IZoneVisualizationSettings* settings,
+                                bool includeLabelFontColor = false)
 {
     if (!window || !settings) {
         return;
     }
-    writeQmlProperty(window, QStringLiteral("labelFontColor"), settings->labelFontColor());
+    if (includeLabelFontColor) {
+        writeQmlProperty(window, QStringLiteral("labelFontColor"), settings->labelFontColor());
+    }
     writeQmlProperty(window, QStringLiteral("fontFamily"), settings->labelFontFamily());
     writeQmlProperty(window, QStringLiteral("fontSizeScale"), settings->labelFontSizeScale());
     writeQmlProperty(window, QStringLiteral("fontWeight"), settings->labelFontWeight());

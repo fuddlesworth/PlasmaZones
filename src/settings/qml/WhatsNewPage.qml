@@ -10,8 +10,8 @@ import org.phosphor.animation
 Kirigami.Dialog {
     id: root
 
-    readonly property color subtleBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
-    readonly property color subtleBorder: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+    readonly property color subtleBg: Kirigami.Theme.alternateBackgroundColor
+    readonly property color subtleBorder: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     readonly property int thinBorder: 1
 
     title: i18n("What's New in PlasmaZones %1", Qt.application.version)
@@ -42,7 +42,7 @@ Kirigami.Dialog {
             radius: Kirigami.Units.smallSpacing * 1.5
             color: root.subtleBg
             border.width: root.thinBorder
-            border.color: cardHover.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : root.subtleBorder
+            border.color: cardHover.hovered ? Kirigami.Theme.hoverColor : root.subtleBorder
 
             HoverHandler {
                 id: cardHover
@@ -126,7 +126,7 @@ Kirigami.Dialog {
                             Label {
                                 Layout.fillWidth: true
                                 // Read through the row's explicit id rather
-                                // than `parent.modelData` \u2014 if the RowLayout
+                                // than `parent.modelData` because if the RowLayout
                                 // ever grew an intermediate wrapper (Pane,
                                 // Item) the `parent` chain would shift and
                                 // this binding would silently resolve to

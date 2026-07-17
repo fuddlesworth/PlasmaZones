@@ -133,7 +133,27 @@ Item {
         padding: Kirigami.Units.smallSpacing
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
+        // The View colorSet is pinned on the contentItem and background
+        // individually, NOT on the Popup node: Kirigami's theme attachment
+        // resolves through parentItem(), and a QQuickPopup's background /
+        // contentItem parent to the internal popup item (→ Overlay.overlay),
+        // so a pin on the Popup node never reaches them. Upstream
+        // qqc2-desktop-style's ToolTip.qml uses this same per-item pattern.
+        // The explicit background (mirroring the LayoutComboBox popup frame)
+        // exists so the pin has a themed Rectangle to land on — the style's
+        // default background can't carry attached properties from here.
+        background: Rectangle {
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
+            color: Kirigami.Theme.backgroundColor
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+            border.width: 1
+            radius: Kirigami.Units.smallSpacing
+        }
+
         contentItem: ColumnLayout {
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             spacing: Kirigami.Units.smallSpacing
 
             ListView {
@@ -145,6 +165,11 @@ Item {
                 model: searchController.results
                 visible: count > 0
                 keyNavigationEnabled: true
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                }
+
                 Keys.onReturnPressed: root.activate(currentIndex)
                 Keys.onEnterPressed: root.activate(currentIndex)
                 Keys.onEscapePressed: function (event) {
@@ -183,7 +208,10 @@ Item {
                     required property int index
                     required property var modelData
 
-                    width: ListView.view ? ListView.view.width : implicitWidth
+                    // Reserve the scrollbar's gutter so the row content ends
+                    // at the scrollbar's left edge instead of running
+                    // underneath it (mirrors the LayoutComboBox popup list).
+                    width: ListView.view ? ListView.view.width - (resultsList.ScrollBar.vertical.visible ? resultsList.ScrollBar.vertical.width : 0) : implicitWidth
                     highlighted: ListView.isCurrentItem
                     topPadding: Kirigami.Units.smallSpacing
                     bottomPadding: Kirigami.Units.smallSpacing

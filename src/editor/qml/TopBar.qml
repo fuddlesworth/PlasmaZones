@@ -17,6 +17,10 @@ import org.phosphor.animation
 ToolBar {
     id: topBar
 
+    // Toolbar chrome resolves against the Header color set
+    Kirigami.Theme.colorSet: Kirigami.Theme.Header
+    Kirigami.Theme.inherit: false
+
     required property var editorController
     required property var availableScreens
     required property var confirmCloseDialog
@@ -29,6 +33,9 @@ ToolBar {
     required property var editorWindow
     required property bool fullscreenMode
     required property bool previewMode
+
+    // Shared frame-contrast border used by chrome elements across the bar
+    readonly property color frameBorderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
     signal fullscreenToggled
 
@@ -92,9 +99,9 @@ ToolBar {
 
                     background: Rectangle {
                         radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
-                        color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.06) : "transparent")
+                        color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.hoverColor, 0.2) : "transparent")
                         border.width: 1
-                        border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
+                        border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? topBar.frameBorderColor : "transparent")
 
                         Behavior on color {
                             PhosphorMotionAnimation {
@@ -151,7 +158,7 @@ ToolBar {
             // Preview mode badge
             Rectangle {
                 visible: topBar.previewMode
-                color: Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, 0.15)
+                color: Theme.withAlpha(Kirigami.Theme.neutralTextColor, 0.15)
                 radius: height / 2
                 implicitWidth: previewLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
                 implicitHeight: previewLabel.implicitHeight + Kirigami.Units.smallSpacing
@@ -193,7 +200,7 @@ ToolBar {
                 Accessible.name: i18nc("@label", "Layout name")
                 Accessible.description: i18nc("@info", "Enter name for the layout")
                 // Add right padding when counter is visible to prevent text overlap
-                rightPadding: (showCounter || activeFocus) ? Kirigami.Units.gridUnit * 3 : 0
+                rightPadding: (showCounter || activeFocus) ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.smallSpacing
                 // textEdited fires only on user input, never on a programmatic write.
                 onTextEdited: {
                     layoutNameField.userEdited = true;
@@ -208,10 +215,10 @@ ToolBar {
                 }
 
                 background: Rectangle {
-                    color: Theme.withAlpha(Kirigami.Theme.textColor, layoutNameField.activeFocus ? 0.08 : 0.04)
+                    color: Kirigami.Theme.alternateBackgroundColor
                     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
                     border.width: 1
-                    border.color: layoutNameField.activeFocus ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
+                    border.color: layoutNameField.activeFocus ? Kirigami.Theme.focusColor : topBar.frameBorderColor
 
                     // Character counter overlay (right-aligned inside field)
                     Label {
@@ -221,7 +228,7 @@ ToolBar {
                         visible: layoutNameField.showCounter || layoutNameField.activeFocus
                         text: i18nc("@info", "%1/%2", layoutNameField.currentLength, layoutNameField.maxLength)
                         color: Kirigami.Theme.disabledTextColor
-                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        font: Kirigami.Theme.smallFont
                         opacity: layoutNameField.activeFocus ? 1 : 0.6
                         Accessible.name: i18nc("@info", "Character count: %1 of %2", layoutNameField.currentLength, layoutNameField.maxLength)
                         Accessible.description: i18nc("@info", "Shows how many characters are used in the layout name")
@@ -501,7 +508,7 @@ ToolBar {
             anchors.bottom: parent.bottom
             width: parent.width
             height: 1
-            color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
+            color: topBar.frameBorderColor
         }
     }
 }

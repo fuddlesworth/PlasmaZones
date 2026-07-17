@@ -87,18 +87,29 @@ SettingsCard {
             description: card.minWidth === 0 ? card.minWidthDisabledDescription : card.minWidthDescription
 
             SettingsSpinBox {
+                id: minWidthSpin
+
                 // Schema-driven bounds — literal bounds would silently truncate
                 // a saved value outside the literal range when the SpinBox
                 // clamped the bound `value` on render.
                 from: card.minWidthFrom
                 to: card.minWidthTo
                 stepSize: 10
-                value: card.minWidth
+                // Feed value through a guarded Binding so a host-side config
+                // change keeps refreshing the control: a plain `value:` binding
+                // is destroyed by SettingsSpinBox's own edit echo after the
+                // first edit. RestoreNone + the focus gate keeps a live edit
+                // from being clobbered.
+                Binding on value {
+                    value: card.minWidth
+                    when: !minWidthSpin.editing
+                    restoreMode: Binding.RestoreNone
+                }
                 // textFromValue already emits the localised "%1 px" suffix;
                 // suppress SettingsSpinBox's default "px" Label so the value
                 // reads "100 px" rather than "100 px px" (and "Off" not "Off px").
                 unitText: ""
-                Accessible.name: card.minWidthAccessibleName
+                accessibleName: card.minWidthAccessibleName
                 onValueModified: value => {
                     card.minWidthModified(value);
                 }
@@ -116,12 +127,20 @@ SettingsCard {
             description: card.minHeight === 0 ? card.minHeightDisabledDescription : card.minHeightDescription
 
             SettingsSpinBox {
+                id: minHeightSpin
+
                 from: card.minHeightFrom
                 to: card.minHeightTo
                 stepSize: 10
-                value: card.minHeight
+                // See minWidthSpin: guarded Binding so a host-side config change
+                // keeps refreshing after the first edit destroys a plain binding.
+                Binding on value {
+                    value: card.minHeight
+                    when: !minHeightSpin.editing
+                    restoreMode: Binding.RestoreNone
+                }
                 unitText: ""
-                Accessible.name: card.minHeightAccessibleName
+                accessibleName: card.minHeightAccessibleName
                 onValueModified: value => {
                     card.minHeightModified(value);
                 }

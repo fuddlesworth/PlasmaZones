@@ -13,10 +13,12 @@ import org.kde.kirigami as Kirigami
  * Shows percentage-based dimensions for zone sizing feedback.
  */
 Rectangle {
-    // 8px padding from bottom
-
     id: dimensionTooltip
 
+    // Stacking order among drawingArea siblings. Zones stack unbounded
+    // (zoneBaseZ + zOrder), so the instantiation site passes canvasOverlayZ + 1
+    // to keep the tooltip above the zones and the snap lines.
+    required property int overlayZ
     property real zoneX: 0
     property real zoneY: 0
     property real zoneWidth: 0
@@ -37,7 +39,8 @@ Rectangle {
     property int fixedPosY: (canvasHeight > 0 && screenHeight > 0) ? Math.round((zoneY / canvasHeight) * screenHeight) : 0
     property int fixedSizeW: (canvasWidth > 0 && screenWidth > 0) ? Math.round((zoneWidth / canvasWidth) * screenWidth) : 0
     property int fixedSizeH: (canvasHeight > 0 && screenHeight > 0) ? Math.round((zoneHeight / canvasHeight) * screenHeight) : 0
-    // Position at bottom center of zone, with bounds checking
+    // Padding between the tooltip and the zone's bottom edge (one grid unit);
+    // the tooltip is positioned at the bottom center of the zone
     readonly property real bottomPadding: Kirigami.Units.gridUnit
 
     visible: showDimensions && zoneWidth > 0 && zoneHeight > 0 && canvasWidth > 0 && canvasHeight > 0
@@ -55,18 +58,11 @@ Rectangle {
     Kirigami.Theme.inherit: false
     Kirigami.Theme.colorSet: Kirigami.Theme.Tooltip
     color: Kirigami.Theme.backgroundColor
-    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-    border.width: constants.tooltipBorderWidth
-    z: 250
+    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+    border.width: 1 // Hairline tooltip border
+    z: dimensionTooltip.overlayZ
     Accessible.name: i18nc("@info:accessibility", "Zone dimensions")
     Accessible.description: isFixedMode ? i18nc("@info:accessibility", "Position: %1px, %2px  Size: %3px × %4px", fixedPosX, fixedPosY, fixedSizeW, fixedSizeH) : i18nc("@info:accessibility", "Position: %1%, %2%  Size: %3% × %4%", xPercent, yPercent, widthPercent, heightPercent)
-
-    // Constants for visual styling
-    QtObject {
-        id: constants
-
-        readonly property int tooltipBorderWidth: 1 // 1px - tooltip border width
-    }
 
     GridLayout {
         id: contentColumn
@@ -84,8 +80,8 @@ Rectangle {
         }
 
         Label {
-            text: isFixedMode ? i18nc("@info Position in pixels", "%1px, %2px", fixedPosX, fixedPosY) : i18nc("@info Position as percentages", "%1% × %2%", xPercent, yPercent)
-            font.family: "monospace"
+            text: isFixedMode ? i18nc("@info Position in pixels", "%1px, %2px", fixedPosX, fixedPosY) : i18nc("@info Position as percentages", "%1%, %2%", xPercent, yPercent)
+            font.family: Kirigami.Theme.fixedWidthFont.family
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
             color: Kirigami.Theme.textColor
         }
@@ -99,11 +95,9 @@ Rectangle {
 
         Label {
             text: isFixedMode ? i18nc("@info Size in pixels", "%1px × %2px", fixedSizeW, fixedSizeH) : i18nc("@info Size as percentages", "%1% × %2%", widthPercent, heightPercent)
-            font.family: "monospace"
+            font.family: Kirigami.Theme.fixedWidthFont.family
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
             color: Kirigami.Theme.textColor
         }
-
     }
-
 }

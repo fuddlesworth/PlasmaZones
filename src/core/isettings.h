@@ -102,10 +102,10 @@ public:
     /// zoneSelectorEnabled() unless you need the raw child flag value.
     ///
     /// Test-stub note: `StubSettings` (tests/unit/helpers/StubSettings.h)
-    /// defaults `snappingEnabled() == true` and `zoneSelectorEnabled() == true`,
-    /// so this returns true unless a test explicitly overrides one of the
-    /// two flags. The same applies to `isSnapAssistActive` (defaults
-    /// `snapAssistEnabled() == false` so it returns false until overridden).
+    /// seeds `snappingEnabled()`, `zoneSelectorEnabled()`, and
+    /// `snapAssistEnabled()` from their `ConfigDefaults` accessors (all
+    /// true), so both this method and `isSnapAssistActive` return true
+    /// unless a test explicitly overrides one of the flags involved.
     bool isZoneSelectorActive() const
     {
         return snappingEnabled() && zoneSelectorEnabled();
@@ -122,7 +122,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // All settings methods are inherited from the segregated interfaces:
     //   - IZoneActivationSettings: drag modifiers, activation triggers
-    //   - IZoneVisualizationSettings: colors, opacity, blur, shader effects
+    //   - IZoneVisualizationSettings: colors, opacity, shader effects
     //   - IZoneGeometrySettings: padding, gaps, thresholds, performance
     //   - IWindowExclusionSettings: excluded apps/classes, size filters
     //   - IZoneSelectorSettings: zone selector UI configuration
@@ -398,7 +398,6 @@ Q_SIGNALS:
     void inactiveOpacityChanged();
     void borderWidthChanged();
     void borderRadiusChanged();
-    void enableBlurChanged();
     void labelFontFamilyChanged();
     void labelFontSizeScaleChanged();
     void labelFontWeightChanged();

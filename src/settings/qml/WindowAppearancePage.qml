@@ -206,6 +206,7 @@ SettingsFlickable {
                     SettingsSpinBox {
                         id: borderWidthSpin
 
+                        accessibleName: i18n("Border width")
                         from: root.ctl.borderWidthMin
                         to: root.ctl.borderWidthMax
                         onValueModified: value => root.ctl.windowBorderWidth = value
@@ -235,6 +236,7 @@ SettingsFlickable {
                     SettingsSpinBox {
                         id: borderRadiusSpin
 
+                        accessibleName: i18n("Corner radius")
                         from: root.ctl.borderRadiusMin
                         to: root.ctl.borderRadiusMax
                         onValueModified: value => root.ctl.windowBorderRadius = value
@@ -287,6 +289,7 @@ SettingsFlickable {
                     description: i18n("Border color for the focused window")
 
                     ColorSwatchRow {
+                        accessibleName: i18n("Active border color")
                         color: {
                             // Map the accent sentinel to the live system highlight
                             // colour (alpha included) — the colour the focused border
@@ -314,6 +317,7 @@ SettingsFlickable {
                     description: i18n("Border color for unfocused windows")
 
                     ColorSwatchRow {
+                        accessibleName: i18n("Inactive border color")
                         color: {
                             // The unfocused border follows the system INACTIVE colour
                             // (alpha included), not the accent, matching what the
@@ -449,6 +453,7 @@ SettingsFlickable {
                     description: i18n("Color the window is washed with when the tint strength is above zero")
 
                     ColorSwatchRow {
+                        accessibleName: i18n("Tint color")
                         color: {
                             // Same accent-sentinel mapping as the border swatches:
                             // preview the live highlight instead of coercing the

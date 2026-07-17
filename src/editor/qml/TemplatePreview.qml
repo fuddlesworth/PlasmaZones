@@ -11,8 +11,6 @@ import org.kde.kirigami as Kirigami
  * Used in ComboBox dropdowns to show what each template looks like.
  */
 Canvas {
-    // 40px
-
     id: root
 
     // Template type: "grid", "columns", "rows", "priority", "focus"
@@ -21,24 +19,24 @@ Canvas {
     property int rows: 2
     // Dimensions using Kirigami.Units for consistency
     readonly property int previewPadding: Kirigami.Units.smallSpacing / 2
-    // 2px padding
+    // 3:2 aspect ratio (gridUnit * 7.5 by gridUnit * 5)
     readonly property int previewWidth: Kirigami.Units.gridUnit * 7.5
-    // 60px (3:2 aspect ratio)
     readonly property int previewHeight: Kirigami.Units.gridUnit * 5
+    // Theme-derived paint colors, hoisted so theme changes trigger a repaint
+    readonly property color zoneColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6)
+    readonly property color borderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
     implicitWidth: previewWidth
     implicitHeight: previewHeight
     onPaint: {
         if (width <= 0 || height <= 0 || !isFinite(width) || !isFinite(height))
-            return ;
+            return;
 
         var ctx = getContext("2d");
         ctx.clearRect(0, 0, width, height);
         // Colors using theme
-        var zoneColor = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6);
-        var borderColor = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.8);
-        ctx.fillStyle = zoneColor;
-        ctx.strokeStyle = borderColor;
+        ctx.fillStyle = root.zoneColor;
+        ctx.strokeStyle = root.borderColor;
         ctx.lineWidth = 1;
         var padding = previewPadding;
         var w = width - padding * 2;
@@ -102,8 +100,14 @@ Canvas {
             ctx.fillRect(offsetX + leftWidth + centerWidth, offsetY, rightWidth, h);
             ctx.strokeRect(offsetX + leftWidth + centerWidth, offsetY, rightWidth, h);
         }
-        ctx.stroke();
     }
+    // Repaint when the layout inputs change
+    onTemplateTypeChanged: requestPaint()
+    onColumnsChanged: requestPaint()
+    onRowsChanged: requestPaint()
+    // Repaint when the theme-derived colors change
+    onZoneColorChanged: requestPaint()
+    onBorderColorChanged: requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
     Component.onCompleted: requestPaint()

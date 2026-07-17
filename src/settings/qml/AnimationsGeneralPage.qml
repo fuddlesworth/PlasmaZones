@@ -222,12 +222,23 @@ SettingsFlickable {
                     description: i18n("How to animate when moving several windows at once")
 
                     WideComboBox {
+                        id: sequenceModeCombo
+
                         Accessible.name: i18n("Multiple windows")
                         enabled: animationsCard.toggleChecked
                         model: [i18n("All at once"), i18n("One by one")]
-                        currentIndex: page.appSettings.animationSequenceMode
                         onActivated: index => {
                             page.appSettings.animationSequenceMode = index;
+                        }
+
+                        // Guarded Binding so a user activation can't sever the
+                        // binding and a config change keeps refreshing the
+                        // control. RestoreNone + the popup gate keeps an open
+                        // dropdown from being clobbered mid-selection.
+                        Binding on currentIndex {
+                            value: page.appSettings.animationSequenceMode
+                            when: !sequenceModeCombo.popup.visible
+                            restoreMode: Binding.RestoreNone
                         }
                     }
                 }
@@ -239,7 +250,7 @@ SettingsFlickable {
                     description: i18n("Pause between each window's animation start")
 
                     SettingsSlider {
-                        Accessible.name: i18n("Stagger delay")
+                        accessibleName: i18n("Stagger delay")
                         enabled: animationsCard.toggleChecked
                         from: settingsController.generalPage.animationStaggerIntervalMin
                         to: settingsController.generalPage.animationStaggerIntervalMax
@@ -258,15 +269,26 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Minimum distance")
                     searchAnchor: "minimumDistance"
-                    description: page.appSettings.animationMinDistance === 0 ? i18n("Currently: always animate, no threshold") : i18n("Skip animation when geometry changes less than this")
+                    description: page.appSettings.animationMinDistance === 0 ? i18n("Always animates with no distance threshold") : i18n("Skip animation when geometry changes less than this")
 
                     SettingsSpinBox {
-                        Accessible.name: i18n("Minimum distance")
+                        id: minDistanceSpin
+
+                        accessibleName: i18n("Minimum distance")
                         enabled: animationsCard.toggleChecked
                         from: settingsController.generalPage.animationMinDistanceMin
                         to: settingsController.generalPage.animationMinDistanceMax
                         stepSize: 5
-                        value: page.appSettings.animationMinDistance
+                        // Feed value through a guarded Binding so a config change
+                        // keeps refreshing the control: a plain `value:` binding is
+                        // destroyed by SettingsSpinBox's own edit echo after the
+                        // first edit. RestoreNone + the focus gate keeps a live edit
+                        // from being clobbered.
+                        Binding on value {
+                            value: page.appSettings.animationMinDistance
+                            when: !minDistanceSpin.editing
+                            restoreMode: Binding.RestoreNone
+                        }
                         // Match the "zero = disabled, otherwise px" treatment used
                         // by the Minimum window width / height spinboxes below so
                         // the user sees a consistent "Off" / "%1 px" rendering

@@ -22,6 +22,10 @@ RowLayout {
     property string unitText: "px"
     property string tooltipText
     property var textFromValue: null
+    //* @brief Screen-reader name for the INNER SpinBox (the focusable control).
+    //* Setting Accessible.name on this RowLayout wrapper never reaches the
+    //* SpinBox, so callers use this instead (mirrors SettingsSlider).
+    property string accessibleName: ""
 
     /// True while the inner SpinBox has keyboard focus. A host that feeds
     /// `value` through an external Binding gates it on `!editing` so a live edit
@@ -37,6 +41,7 @@ RowLayout {
     SpinBox {
         id: spinBox
 
+        Accessible.name: root.accessibleName
         from: root.from
         to: root.to
         stepSize: root.stepSize

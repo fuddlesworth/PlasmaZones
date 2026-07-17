@@ -42,6 +42,22 @@ Item {
         fillAnimation.start();
     }
 
+    // Abort a running fill animation without committing its target geometry.
+    // Drag/resize handlers call this before capturing start geometry so a
+    // press mid-animation neither races the animation's property writes nor
+    // gets a stale commit from onFinished underneath the new operation.
+    function stopFillAnimation() {
+        if (!fillAnimation.running && !zoneRoot.isAnimatingFill)
+            return;
+
+        // Mark as external before stopping: should stop() ever deliver
+        // onFinished, the commit branch (expandToFillWithCoords) must not run.
+        externalAnimation = true;
+        fillAnimation.stop();
+        zoneRoot.isAnimatingFill = false;
+        externalAnimation = false;
+    }
+
     // Trigger animated fill operation
     function animatedExpandToFill() {
         if (!controller || !zoneRoot.zoneId)
@@ -51,13 +67,14 @@ Item {
         if (fillAnimation.running || zoneRoot.isAnimatingFill)
             return;
 
-        // Calculate the fill region using zone center
-        var zoneX = zoneRoot.zoneData ? zoneRoot.zoneData.x : 0;
-        var zoneY = zoneRoot.zoneData ? zoneRoot.zoneData.y : 0;
-        var zoneW = zoneRoot.zoneData ? zoneRoot.zoneData.width : 0.25;
-        var zoneH = zoneRoot.zoneData ? zoneRoot.zoneData.height : 0.25;
-        var centerX = zoneX + zoneW / 2;
-        var centerY = zoneY + zoneH / 2;
+        // Calculate the fill region using the zone center in normalized canvas
+        // coords. Derive it from the visual geometry rather than zoneData:
+        // fixed zones carry their authoritative geometry in the pixel-based
+        // fixedX/fixedY/fixedWidth/fixedHeight fields (x/y/width/height keep
+        // relative fallbacks), so the visual geometry is the mode-agnostic
+        // source for the center.
+        var centerX = (canvasWidth > 0) ? (zoneRoot.visualX + zoneRoot.visualWidth / 2) / canvasWidth : 0.5;
+        var centerY = (canvasHeight > 0) ? (zoneRoot.visualY + zoneRoot.visualHeight / 2) / canvasHeight : 0.5;
         // Store center coords for use in expandToFillWithCoords
         fillCenterX = centerX;
         fillCenterY = centerY;

@@ -8,9 +8,10 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Bottom name bar for the wizard step-2 preview containers.
  *
- * Mirrors the layout-card thumbnail's name label (LayoutThumbnail.qml) so
- * every preview in the app names its content the same way: a full-width,
- * centered label over a translucent strip at the bottom of the frame.
+ * Mirrors the layout card's name label (owned by the shared LayoutCard
+ * component) so every preview in the app names its content the same way:
+ * a full-width, centered label over a translucent strip at the bottom of
+ * the frame.
  */
 Label {
     anchors.bottom: parent.bottom

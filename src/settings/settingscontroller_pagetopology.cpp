@@ -254,7 +254,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::shadersAudioGroup(), CD::inputSourceKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::suppressDefaultLayoutAssignmentKey()},
              // The OSD card also lives on General; its five settings share the
-             // snappingEffectsGroup with the appearance page's blur/showNumbers/
+             // snappingEffectsGroup with the appearance page's showNumbers/
              // flashOnSwitch keys but are distinct keys, so the one-owner
              // invariant holds.
              {CD::snappingEffectsGroup(), CD::osdOnLayoutSwitchKey()},
@@ -277,6 +277,11 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingBehaviorZoneSpanGroup(), CD::enabledKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::toggleActivationKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::triggersKey()},
+             // Legacy modifier is rewritten by every triggers edit
+             // (setZoneSpanTriggers syncs it from the first non-zero trigger),
+             // so it must be reverted alongside Triggers or a per-page Discard
+             // leaves it desynced while the page reports clean.
+             {CD::snappingBehaviorZoneSpanGroup(), CD::modifierKey()},
              {CD::snappingGapsGroup(), CD::adjacentThresholdKey()},
              {CD::snappingBehaviorDisplayGroup(), CD::showOnAllMonitorsKey()},
              {CD::snappingBehaviorDisplayGroup(), CD::filterByAspectRatioKey()},
@@ -298,7 +303,6 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingZonesOpacityGroup(), CD::inactiveKey()},
              {CD::snappingZonesBorderGroup(), CD::widthKey()},
              {CD::snappingZonesBorderGroup(), CD::radiusKey()},
-             {CD::snappingEffectsGroup(), CD::blurKey()},
              {CD::snappingEffectsGroup(), CD::showNumbersKey()},
              {CD::snappingEffectsGroup(), CD::flashOnSwitchKey()},
          }},

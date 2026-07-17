@@ -243,10 +243,6 @@ public:
     {
         return 50;
     }
-    static bool enableBlur()
-    {
-        return true;
-    }
     static QString labelFontFamily()
     {
         return QString();
@@ -1532,15 +1528,6 @@ public:
     static int fillOnDropModifier()
     {
         return static_cast<int>(Qt::ControlModifier);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Update Notification Settings
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static QString dismissedUpdateVersion()
-    {
-        return QString();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

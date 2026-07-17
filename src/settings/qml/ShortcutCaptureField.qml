@@ -12,6 +12,12 @@ import org.kde.kirigami as Kirigami
  * Click the field to enter capture mode, then press a key combination.
  * Press Escape to cancel. Emits keySequenceModified when a valid
  * sequence is captured.
+ *
+ * The caller owns keySequence: the field never writes it, so a capture
+ * only sticks when the keySequenceModified handler persists the value
+ * and the caller propagates the change back into keySequence (binding
+ * or imperative re-sync). capturing is already false when the signal
+ * fires, so re-syncs guarded on !capturing work from the handler.
  */
 TextField {
     id: root
@@ -19,6 +25,8 @@ TextField {
     property string keySequence
     property string tooltipText
     property bool capturing: false
+    //* Name announced to assistive technology; falls back to the field text.
+    property string accessibleName: ""
 
     signal keySequenceModified(string sequence)
 
@@ -166,36 +174,40 @@ TextField {
         return "";
     }
 
+    Accessible.name: accessibleName !== "" ? accessibleName : text
     Layout.fillWidth: true
-    text: capturing ? i18n("Press keys...") : (keySequence || "")
-    placeholderText: "Ctrl+Shift+X"
+    text: capturing ? i18n("Press keys…") : (keySequence || "")
+    placeholderText: i18nc("@info:placeholder example keyboard shortcut", "Ctrl+Shift+X")
     readOnly: true
     color: capturing ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
     Keys.priority: Keys.BeforeItem
-    Keys.onPressed: (event) => {
+    Keys.onPressed: event => {
         if (!capturing)
-            return ;
+            return;
 
         event.accepted = true;
         if (event.key === Qt.Key_Escape) {
             capturing = false;
-            return ;
+            return;
         }
         var key = event.key;
         if (key === Qt.Key_Shift || key === Qt.Key_Control || key === Qt.Key_Alt || key === Qt.Key_AltGr || key === Qt.Key_Meta)
-            return ;
+            return;
 
         var seq = _buildSequence(event.key, event.modifiers);
         if (seq.length > 0) {
-            keySequence = seq;
-            keySequenceModified(seq);
+            // Leave capture mode before emitting so consumers whose
+            // write-back is guarded on !capturing (EditorPage's
+            // Connections re-sync) update the field from the handler.
+            // Never self-assign keySequence here: that would sever the
+            // caller's binding on first capture.
             capturing = false;
+            keySequenceModified(seq);
         }
     }
     onActiveFocusChanged: {
         if (!activeFocus && capturing)
             capturing = false;
-
     }
     ToolTip.visible: hovered && !capturing && tooltipText.length > 0
     ToolTip.text: tooltipText
@@ -211,5 +223,4 @@ TextField {
             }
         }
     }
-
 }

@@ -258,17 +258,6 @@ Item {
             Layout.preferredWidth: paramDelegate.compact ? paramDelegate.sliderControlWidth : -1
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             model: paramDelegate.paramData ? (paramDelegate.paramData.enumOptions || []) : []
-            // -1 (not 0) when the stored value is out of vocabulary (e.g. the
-            // schema changed and dropped an option) so the combo doesn't
-            // silently display a different option than the value holds.
-            currentIndex: {
-                if (!paramDelegate.paramData)
-                    return -1;
-
-                var opts = paramDelegate.paramData.enumOptions || [];
-                var fallback = paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : (opts.length > 0 ? opts[0] : "");
-                return opts.indexOf(paramDelegate._value(fallback));
-            }
             // On an out-of-vocab miss (currentIndex -1) surface the stored raw
             // value rather than a blank combo.
             displayText: {
@@ -284,6 +273,36 @@ Item {
             onActivated: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id, currentText);
+            }
+
+            // Index of the stored value in the enum vocabulary. -1 (not 0)
+            // when the value is out of vocabulary (e.g. the schema changed
+            // and dropped an option) so the combo doesn't silently display a
+            // different option than the value holds.
+            function _enumIndex() {
+                if (!paramDelegate.paramData)
+                    return -1;
+
+                var opts = paramDelegate.paramData.enumOptions || [];
+                var fallback = paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : (opts.length > 0 ? opts[0] : "");
+                return opts.indexOf(paramDelegate._value(fallback));
+            }
+
+            // A model rebind internally resets currentIndex, and the guarded
+            // Binding below won't re-assert when the recomputed index is
+            // unchanged — re-apply explicitly after a model reset.
+            onCountChanged: {
+                if (!popup.visible)
+                    currentIndex = _enumIndex();
+            }
+
+            // Guarded Binding (matching the sibling controls) so a user
+            // activation can't sever the binding and host resets keep
+            // reflecting.
+            Binding on currentIndex {
+                value: enumCombo._enumIndex()
+                when: !enumCombo.popup.visible
+                restoreMode: Binding.RestoreNone
             }
         }
 
@@ -340,7 +359,7 @@ Item {
                 // to physical pixels itself; multiplying by devicePixelRatio
                 // here would double-scale into a thicker, not crisper, line.
                 border.width: colorSwatch.activeFocus ? 2 : 1
-                border.color: colorSwatch.activeFocus ? Kirigami.Theme.focusColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+                border.color: colorSwatch.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                 MouseArea {
                     anchors.fill: parent

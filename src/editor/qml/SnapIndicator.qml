@@ -13,12 +13,21 @@ import org.kde.kirigami as Kirigami
 Item {
     id: snapIndicator
 
+    // Stacking order among drawingArea siblings. Zones stack unbounded
+    // (zoneBaseZ + zOrder), so the instantiation site passes the window's
+    // canvasOverlayZ to keep snap lines above every zone.
+    required property int overlayZ
     // Active snap positions (0-1 relative coordinates)
     property var verticalSnapLines: []
     // Array of x positions
     property var horizontalSnapLines: []
     // Array of y positions
     property bool showSnapLines: true
+    // Lightened highlight variants shared by the snap line bodies and dash gradients
+    readonly property color brightHighlight: Qt.lighter(Kirigami.Theme.highlightColor, 1.5)
+    readonly property color mediumHighlight: Qt.lighter(Kirigami.Theme.highlightColor, 1.3)
+    // Near-background frame-contrast halo that separates the lines from busy content
+    readonly property color haloColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
     // Clear snap lines
     function clearSnapLines() {
@@ -64,7 +73,6 @@ Item {
 
             if (Math.abs(snappedBottom - originalBottom) < veryCloseThreshold && Math.abs(snappedBottom - originalBottom) > 0.001)
                 hLines.push(snappedBottom);
-
         }
         verticalSnapLines = vLines;
         horizontalSnapLines = hLines;
@@ -72,13 +80,13 @@ Item {
     }
 
     anchors.fill: parent
-    z: 200 // Above everything except dialogs
+    z: snapIndicator.overlayZ // Above all zones, whatever the zone count
 
     // Vertical snap lines
     Repeater {
         model: (snapIndicator.showSnapLines && snapIndicator.width > 0) ? snapIndicator.verticalSnapLines : []
 
-        Rectangle {
+        Item {
             required property real modelData
 
             visible: !isNaN(modelData) && modelData >= 0 && modelData <= 1
@@ -86,17 +94,19 @@ Item {
             y: 0
             width: Kirigami.Units.smallSpacing
             height: snapIndicator.height
-            color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.3, Kirigami.Theme.highlightColor.g * 1.3, Kirigami.Theme.highlightColor.b * 1.3, 1)
-            opacity: 1
 
-            // Subtle shadow for contrast
+            // Subtle shadow for contrast, declared first so it paints behind the line
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: -1
-                z: parent.z - 1
-                // Use theme text color for contrast (works in both light and dark themes)
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+                color: snapIndicator.haloColor
                 opacity: 0.8
+            }
+
+            // Line fill
+            Rectangle {
+                anchors.fill: parent
+                color: snapIndicator.mediumHighlight
             }
 
             // Dashed line effect - thicker dashes for better visibility
@@ -108,7 +118,7 @@ Item {
 
                     GradientStop {
                         position: 0
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -118,7 +128,7 @@ Item {
 
                     GradientStop {
                         position: 0.2
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -128,7 +138,7 @@ Item {
 
                     GradientStop {
                         position: 0.4
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -138,7 +148,7 @@ Item {
 
                     GradientStop {
                         position: 0.6
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -148,7 +158,7 @@ Item {
 
                     GradientStop {
                         position: 0.8
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -158,22 +168,18 @@ Item {
 
                     GradientStop {
                         position: 1
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // Horizontal snap lines
     Repeater {
         model: (snapIndicator.showSnapLines && snapIndicator.height > 0) ? snapIndicator.horizontalSnapLines : []
 
-        Rectangle {
+        Item {
             required property real modelData
 
             visible: !isNaN(modelData) && modelData >= 0 && modelData <= 1
@@ -181,17 +187,19 @@ Item {
             y: visible ? (modelData * snapIndicator.height - Kirigami.Units.smallSpacing / 2) : 0 // Center 4px line
             width: snapIndicator.width
             height: Kirigami.Units.smallSpacing
-            color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.3, Kirigami.Theme.highlightColor.g * 1.3, Kirigami.Theme.highlightColor.b * 1.3, 1)
-            opacity: 1
 
-            // Subtle shadow for contrast
+            // Subtle shadow for contrast, declared first so it paints behind the line
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: -1
-                z: parent.z - 1
-                // Use theme text color for contrast (works in both light and dark themes)
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
+                color: snapIndicator.haloColor
                 opacity: 0.8
+            }
+
+            // Line fill
+            Rectangle {
+                anchors.fill: parent
+                color: snapIndicator.mediumHighlight
             }
 
             // Dashed line effect - thicker dashes for better visibility
@@ -203,7 +211,7 @@ Item {
 
                     GradientStop {
                         position: 0
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -213,7 +221,7 @@ Item {
 
                     GradientStop {
                         position: 0.2
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -223,7 +231,7 @@ Item {
 
                     GradientStop {
                         position: 0.4
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -233,7 +241,7 @@ Item {
 
                     GradientStop {
                         position: 0.6
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -243,7 +251,7 @@ Item {
 
                     GradientStop {
                         position: 0.8
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
 
                     GradientStop {
@@ -253,15 +261,10 @@ Item {
 
                     GradientStop {
                         position: 1
-                        color: Qt.rgba(Kirigami.Theme.highlightColor.r * 1.5, Kirigami.Theme.highlightColor.g * 1.5, Kirigami.Theme.highlightColor.b * 1.5, 1)
+                        color: snapIndicator.brightHighlight
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

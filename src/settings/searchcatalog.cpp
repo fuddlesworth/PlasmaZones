@@ -310,8 +310,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("labelScale"),
                PhosphorI18n::tr("Label scale"),
                {PhosphorI18n::tr("size"), PhosphorI18n::tr("text"), PhosphorI18n::tr("multiplier")});
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("blurBehindZones"),
-               PhosphorI18n::tr("Blur behind zones"), {PhosphorI18n::tr("frost"), PhosphorI18n::tr("background")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("zoneNumbers"),
                PhosphorI18n::tr("Zone numbers"),
                {PhosphorI18n::tr("index"), PhosphorI18n::tr("digit"), PhosphorI18n::tr("label")});

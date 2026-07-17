@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "ColorUtils.js" as ColorUtils
 import QtQuick
 import QtQuick.Controls as QQC
 import QtQuick.Dialogs
@@ -18,14 +19,10 @@ Window {
     property var _editorController: editorController
     // State properties
     property string selectedZoneId: editorWindow._editorController ? (editorWindow._editorController.selectedZoneId || "") : ""
-    property var selectedZoneIds: editorWindow._editorController ? editorWindow._editorController.selectedZoneIds : []
     property int selectionCount: editorWindow._editorController ? editorWindow._editorController.selectionCount : 0
     property bool hasMultipleSelection: editorWindow._editorController ? editorWindow._editorController.hasMultipleSelection : false
     property string selectionAnchorId: "" // For Shift+click range selection
     readonly property bool previewMode: editorWindow._editorController ? editorWindow._editorController.previewMode : false
-    property bool isDrawingZone: false
-    property point drawStart: Qt.point(0, 0)
-    property rect drawRect: Qt.rect(0, 0, 0, 0)
     // Fullscreen editing mode - hides all panels for distraction-free editing
     property bool fullscreenMode: false
     // Zone spacing (between zones) matches zone padding (per-layout override or global setting)
@@ -94,13 +91,16 @@ Window {
         editorWindow._editorController.showFullScreenOnTargetScreen(editorWindow);
     }
 
-    // Helper to check if a zone is currently selected
-    // Uses C++ Q_INVOKABLE method - faster than JavaScript loop due to no JS engine overhead
+    // Helper to check if a zone is currently selected.
+    // Reads the NOTIFYable selectedZoneIds property (the controller keeps it in
+    // sync with single selection too) instead of the Q_INVOKABLE isSelected():
+    // an invokable carries no change notification, so bindings calling this
+    // helper would never re-evaluate when the selection changes.
     function isZoneSelected(zoneId) {
         if (!zoneId || !editorWindow._editorController)
             return false;
 
-        return editorWindow._editorController.isSelected(zoneId);
+        return editorWindow._editorController.selectedZoneIds.indexOf(zoneId) !== -1;
     }
 
     // Handle zone click with modifier keys for multi-selection
@@ -159,22 +159,49 @@ Window {
     // screen button in TopBar renders displayName with the id only as a
     // fallback, so anything naming a screen back to the user has to resolve it
     // the same way or it names a screen the user cannot match to a button.
+    // Delegates to the controller's screenDisplayName() invokable, which owns
+    // that resolution.
     function displayNameForScreen(screenId) {
         if (!editorWindow._editorController)
             return screenId;
 
-        var screens = editorWindow._editorController.screenModel;
-        for (var i = 0; i < screens.length; i++) {
-            if (screens[i].name === screenId)
-                return screens[i].displayName || screens[i].name || screenId;
-        }
-        return screenId;
+        return editorWindow._editorController.screenDisplayName(screenId);
+    }
+
+    // Convert a FileDialog URL to a local filesystem path. Single URL→path
+    // implementation for the editor (import/export dialogs here and
+    // ShaderSettingsDialog's preset/image dialogs). decodeURIComponent is
+    // required for %-encoded characters (spaces etc.); the +-quantified slash
+    // regex normalizes both file:// and file:/// forms to an absolute path.
+    function urlToLocalPath(url) {
+        if (!url)
+            return "";
+
+        return decodeURIComponent(url.toString().replace(/^file:\/\/+/, "/"));
     }
 
     // Open the shared context menu for a specific zone
     function openContextMenu(zoneId) {
         sharedContextMenu.zoneId = zoneId;
         sharedContextMenu.popup();
+    }
+
+    // Push the theme-derived default zone colors to C++ (so new zones use theme
+    // colors). Highlight/inactive alphas come from ThemeHelpers, the same
+    // values PropertyPanel applies to its previews — but only the alphas are
+    // shared: the color BASES resolve in different color sets (the panel's
+    // swatches in View, this window in Window), so the pushed defaults and the
+    // panel's swatches can differ. The border default is an opaque
+    // frame-contrast interpolation with no alpha applied. Called on startup and
+    // again on live theme changes so the C++ defaults track the current theme.
+    function pushDefaultZoneColors() {
+        if (!editorWindow._editorController)
+            return;
+
+        var highlightColor = Theme.withAlpha(Kirigami.Theme.highlightColor, Theme.zoneHighlightAlpha);
+        var inactiveColor = Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneInactiveAlpha);
+        var borderColor = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
+        editorWindow._editorController.setDefaultZoneColors(ColorUtils.colorToArgbHex(highlightColor), ColorUtils.colorToArgbHex(inactiveColor), ColorUtils.colorToArgbHex(borderColor));
     }
 
     // Window flags - fullscreen editor window on Wayland
@@ -194,17 +221,7 @@ Window {
         // Initialize selectedZoneId from editorController context property
         if (editorWindow._editorController) {
             editorWindow.selectedZoneId = editorWindow._editorController.selectedZoneId || "";
-            // Set default zone colors from theme (so new zones use theme colors).
-            // The alphas come from ThemeHelpers, the same definitions PropertyPanel's
-            // multi-select previews and single-select dialogs open on.
-            var highlightColor = Theme.withAlpha(Kirigami.Theme.highlightColor, Theme.zoneHighlightAlpha);
-            var inactiveColor = Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneInactiveAlpha);
-            var borderColor = Theme.withAlpha(Kirigami.Theme.disabledTextColor, Theme.zoneBorderAlpha);
-            // Convert QML colors to ARGB hex strings
-            var highlightHex = "#" + Math.round(highlightColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(highlightColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
-            var inactiveHex = "#" + Math.round(inactiveColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
-            var borderHex = "#" + Math.round(borderColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
-            editorWindow._editorController.setDefaultZoneColors(highlightHex, inactiveHex, borderHex);
+            editorWindow.pushDefaultZoneColors();
             // If no layout loaded and not in preview mode, create new
             if (editorWindow._editorController.layoutId === "" && !editorWindow.previewMode)
                 editorWindow._editorController.createNewLayout();
@@ -235,11 +252,21 @@ Window {
 
         anchors.fill: parent
         z: -1
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
+        color: Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.7)
     }
 
     ZoneOperations {
         id: zoneOps
+    }
+
+    // Re-push the theme-derived defaults when the theme changes at runtime, so
+    // zones created after a live color-scheme switch pick up the new theme.
+    Connections {
+        function onColorsChanged() {
+            editorWindow.pushDefaultZoneColors();
+        }
+
+        target: Kirigami.Theme
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -282,7 +309,7 @@ Window {
         onDeleteWithFillRequested: {
             let id = zoneId;
             if (editorWindow._editorController && id)
-                Qt.callLater(zoneOps.deleteWithFillAnimation, id, editorWindow._editorController, editorWindow._zonesRepeater, drawingArea.width, drawingArea.height);
+                Qt.callLater(zoneOps.deleteWithFillAnimation, id, editorWindow._editorController, editorWindow._zonesRepeater);
         }
         onFillRequested: {
             let id = zoneId;
@@ -327,7 +354,6 @@ Window {
         id: keyboardNav
 
         editorController: editorWindow._editorController
-        drawingArea: drawingArea
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -501,33 +527,9 @@ Window {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.splitZone(modelData.id, false);
                         }
-                        onExpandToFillRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.expandToFillSpace(modelData.id);
-                        }
                         onExpandToFillWithCoords: function (mouseX, mouseY) {
                             if (editorWindow._editorController && modelData && modelData.id)
                                 editorWindow._editorController.expandToFillSpace(modelData.id, mouseX, mouseY);
-                        }
-                        onDeleteWithFillRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                zoneOps.deleteWithFillAnimation(modelData.id, editorWindow._editorController, editorWindow._zonesRepeater, drawingArea.width, drawingArea.height);
-                        }
-                        onBringToFrontRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.bringToFront(modelData.id);
-                        }
-                        onSendToBackRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.sendToBack(modelData.id);
-                        }
-                        onBringForwardRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.bringForward(modelData.id);
-                        }
-                        onSendBackwardRequested: {
-                            if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.sendBackward(modelData.id);
                         }
                         // Track zone operations for snap/dimension indicators
                         onOperationStarted: function (zoneId, x, y, width, height) {
@@ -571,6 +573,7 @@ Window {
                     id: snapIndicator
 
                     // anchors.fill is set in SnapIndicator.qml to fill parent (drawingArea)
+                    overlayZ: editorWindow.canvasOverlayZ
                     showSnapLines: true
                 }
 
@@ -578,6 +581,7 @@ Window {
                 DimensionTooltip {
                     id: dimensionTooltip
 
+                    overlayZ: editorWindow.canvasOverlayZ + 1
                     zoneX: activeZoneOperation.x
                     zoneY: activeZoneOperation.y
                     zoneWidth: activeZoneOperation.width
@@ -704,11 +708,21 @@ Window {
         // Tracks hover through a binding: assigning the colour from onEntered/
         // onExited would sever this, and the pill would stop following the theme.
         color: exitButtonMouse.containsMouse ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.3) : Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.9)
-        border.color: Theme.withAlpha(Kirigami.Theme.textColor, 0.2)
-        border.width: 1
+        // Focus ring when reached via Tab, frame-contrast hairline otherwise
+        border.color: fullscreenExitButton.activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+        border.width: fullscreenExitButton.activeFocus ? 2 : 1
         z: 200
         // Fade in/out animation
         opacity: editorWindow.fullscreenMode ? 1 : 0
+        // Keyboard access: the pill is the only way out of fullscreen besides
+        // the F11/Escape shortcuts, so it must be Tab-reachable and activatable.
+        activeFocusOnTab: true
+        Keys.onReturnPressed: editorWindow.toggleFullscreenMode()
+        Keys.onEnterPressed: editorWindow.toggleFullscreenMode()
+        Keys.onSpacePressed: editorWindow.toggleFullscreenMode()
+        Accessible.role: Accessible.Button
+        Accessible.name: i18nc("@action:button", "Exit fullscreen")
+        Accessible.onPressAction: editorWindow.toggleFullscreenMode()
 
         anchors {
             top: parent.top
@@ -868,10 +882,8 @@ Window {
         nameFilters: [i18nc("@item:inlistbox", "JSON files (*.json)"), i18nc("@item:inlistbox", "All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            if (editorWindow._editorController) {
-                var filePath = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));
-                editorWindow._editorController.importLayout(filePath);
-            }
+            if (editorWindow._editorController)
+                editorWindow._editorController.importLayout(editorWindow.urlToLocalPath(selectedFile));
         }
     }
 
@@ -883,10 +895,8 @@ Window {
         fileMode: FileDialog.SaveFile
         defaultSuffix: "json"
         onAccepted: {
-            if (editorWindow._editorController) {
-                var filePath = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));
-                editorWindow._editorController.exportLayout(filePath);
-            }
+            if (editorWindow._editorController)
+                editorWindow._editorController.exportLayout(editorWindow.urlToLocalPath(selectedFile));
         }
     }
 
@@ -925,6 +935,7 @@ Window {
         id: shaderDialog
 
         editorController: editorWindow._editorController
+        editorWindow: editorWindow
     }
 
     // ═══════════════════════════════════════════════════════════════════

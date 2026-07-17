@@ -24,6 +24,10 @@ Item {
     onVisibleChanged: if (!visible) {
         animTimer.stop();
         replayDelay.stop();
+    } else if (root.previewEnabled) {
+        // Restart on re-show so the preview box is not left frozen mid-track
+        // by the hide-branch stop above.
+        replay();
     }
     readonly property int canvasHeight: Kirigami.Units.gridUnit * 15
     readonly property int boxTrackHeight: Kirigami.Units.gridUnit * 2
@@ -153,12 +157,11 @@ Item {
             cp2x = parseFloat(def[2]);
             cp2y = parseFloat(def[3]);
         }
-        // Only signal upstream when the formatted curve string actually
-        // diverges from the inbound `curve` — silences the parse-on-load
-        // path that used to feed back its own input.
-        var formatted = root.formatCurve();
-        if (formatted !== root.curve)
-            root.curveEdited(formatted);
+        // Deliberately no curveEdited emit here. Every caller is a
+        // parse/normalize path (empty, unknown name, malformed bezier), so
+        // emitting would silently rewrite stored data just from opening the
+        // editor. The default is only rendered; genuine user edits emit from
+        // the drag-release handler.
     }
 
     // Format control point values back into a curve string
@@ -363,7 +366,7 @@ Item {
                     ctx.clearRect(0, 0, w, h);
                     // Resolve colors fresh each paint so theme context is always current
                     var accentStr = Kirigami.Theme.highlightColor.toString();
-                    var gridStr = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08).toString();
+                    var gridStr = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast).toString();
                     var yZero = root.yToCanvas(0, gh);
                     var yOne = root.yToCanvas(1, gh);
                     // Horizontal grid lines at 0.25 increments
@@ -377,17 +380,18 @@ Item {
                         ctx.lineTo(pad + gw, py);
                         ctx.stroke();
                     }
-                    // Vertical grid lines at 0.2 increments
-                    for (var gx = 0; gx <= 1; gx += 0.2) {
-                        var px = pad + gx * gw;
+                    // Vertical grid lines at 0.2 increments. Integer loop —
+                    // adding 0.2 accumulates float error so gx overshoots 1.0
+                    // and the x=1.0 line never draws.
+                    for (var gi = 0; gi <= 5; gi++) {
+                        var px = pad + (gi / 5) * gw;
                         ctx.beginPath();
                         ctx.moveTo(px, pad);
                         ctx.lineTo(px, pad + gh);
                         ctx.stroke();
                     }
-                    // Reference lines at y=0 and y=1 (themed positive color, dashed)
-                    var pc = Kirigami.Theme.positiveTextColor;
-                    ctx.strokeStyle = Qt.rgba(pc.r, pc.g, pc.b, 0.6).toString();
+                    // Reference lines at y=0 and y=1 (dashed)
+                    ctx.strokeStyle = Qt.alpha(Kirigami.Theme.textColor, 0.5).toString();
                     ctx.lineWidth = 1;
                     ctx.setLineDash([6, 4]);
                     ctx.beginPath();
@@ -471,7 +475,7 @@ Item {
                         ctx.fill();
                     }
                     // Axis labels
-                    ctx.fillStyle = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4).toString();
+                    ctx.fillStyle = Kirigami.Theme.disabledTextColor.toString();
                     ctx.font = Kirigami.Theme.smallFont.pointSize + "pt sans-serif";
                     ctx.textAlign = "right";
                     ctx.fillText("1", pad - 4, yOne + 4);
@@ -479,9 +483,10 @@ Item {
                 }
             }
 
-            // onPaint samples highlight, text, background and positive-text
-            // colours. Every PlatformTheme colour shares the one `colorsChanged`
-            // notify signal, so this one handler covers all of them.
+            // onPaint samples highlight, highlighted-text, text, separator and
+            // disabled-text colours. Every PlatformTheme colour shares the one
+            // `colorsChanged` notify signal, so this one handler covers all of
+            // them.
             Connections {
                 function onColorsChanged() {
                     curveCanvas.requestPaint();
@@ -571,15 +576,22 @@ Item {
                 }
                 onReleased: {
                     if (activeHandle) {
-                        // Snap to 0.01 increments only on release for clean config values
-                        root.cp1x = Math.round(root.cp1x * 100) / 100;
-                        root.cp1y = Math.round(root.cp1y * 100) / 100;
-                        root.cp2x = Math.round(root.cp2x * 100) / 100;
-                        root.cp2y = Math.round(root.cp2y * 100) / 100;
                         activeHandle = 0;
                         root.replay();
-                        // Emit the update only once at the end of the drag to ensure stability
-                        root.curveEdited(root.formatCurve());
+                        // Emit the update only once at the end of the drag to ensure
+                        // stability, and only if the curve actually changed — a plain
+                        // click on a handle must not rewrite/dirty the value, and it
+                        // must not snap the drawn curve away from the stored string.
+                        if (dragStarted) {
+                            // Snap to 0.01 increments only on release for clean config values
+                            root.cp1x = Math.round(root.cp1x * 100) / 100;
+                            root.cp1y = Math.round(root.cp1y * 100) / 100;
+                            root.cp2x = Math.round(root.cp2x * 100) / 100;
+                            root.cp2y = Math.round(root.cp2y * 100) / 100;
+                            var formatted = root.formatCurve();
+                            if (formatted !== root.curve)
+                                root.curveEdited(formatted);
+                        }
                     }
                 }
                 onCanceled: {

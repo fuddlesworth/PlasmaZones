@@ -300,20 +300,19 @@ ColumnLayout {
             /// of trailing a dangling line down the left of every deeper row.
             readonly property var _effectiveAncestors: [true].concat(delegate.ancestorIsLastChild || [])
             readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
-            /// Tree connector color. Foreground textColor at 0.75 alpha:
-            /// 0.4 and 0.55 both still vanished into the dark expansion
-            /// surface in user testing. The mockup shows clearly legible
-            /// connector lines, so erring on the bright side here is
-            /// closer to the intended affordance than another low-alpha
-            /// attempt — they should read as tree lines, not whispers.
-            readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
-            /// Hairline: 1 device-independent px, matching the rest of the
-            /// chrome's hairline conventions — borders, separators, hover
-            /// strokes. Widths here are DPR-scaled at render time, so a
-            /// plain 1 already stays crisp on high-DPR screens; the earlier
-            /// devicePixelRatio-based shapes double-scaled into thicker,
-            /// not crisper, connectors.
-            readonly property int _guideThickness: 1
+            /// Tree connector color: the separator shade Kirigami.Separator
+            /// computes, the semantic color for exactly this kind of chrome
+            /// line.
+            readonly property color _guideColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+            /// 2 device-independent px, deliberately thicker than the
+            /// chrome's usual 1px hairline: prior user testing found that
+            /// fainter/thinner guides vanished into the dark expansion
+            /// surface, so the connectors keep the heavier stroke to stay
+            /// legible against it. Widths here are DPR-scaled at render
+            /// time, so a plain integer stays crisp on high-DPR screens;
+            /// the earlier devicePixelRatio-based shapes double-scaled
+            /// into thicker, not crisper, connectors.
+            readonly property int _guideThickness: 2
 
             // Size delegate to the tree's available width so the
             // rightmost spacer pushes content into a clean column.
@@ -421,10 +420,6 @@ ColumnLayout {
                         treeCanvas.requestPaint();
                     }
 
-                    function onIsLastChildChanged() {
-                        treeCanvas.requestPaint();
-                    }
-
                     function onHasChildrenRowChanged() {
                         treeCanvas.requestPaint();
                     }
@@ -441,6 +436,18 @@ ColumnLayout {
                     }
 
                     target: contentRow
+                }
+
+                // _guideColor is sampled imperatively inside onPaint, so a
+                // palette change doesn't rebind anything the Canvas watches.
+                // Every PlatformTheme colour shares the one `colorsChanged`
+                // notify signal (same wiring as SpringPreview).
+                Connections {
+                    function onColorsChanged() {
+                        treeCanvas.requestPaint();
+                    }
+
+                    target: Kirigami.Theme
                 }
             }
 
@@ -484,29 +491,18 @@ ColumnLayout {
                 id: groupPill
 
                 Rectangle {
-                    // One semantic tint per group kind. The three hues
-                    // are picked from non-overlapping color families so
-                    // each pill stands clear of the dark-navy expansion
-                    // surface — the previous highlight-blue ANY pill
-                    // blended into the surface hue regardless of alpha.
-                    //   ALL  → positiveText (green)  — every child must match
-                    //   ANY  → neutralText  (amber)  — at least one matches
-                    //   NONE → negativeText (red)    — no child may match
-                    readonly property color _tint: delegate.kind === "all" ? Kirigami.Theme.positiveTextColor : delegate.kind === "none" ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.neutralTextColor
-
+                    // Group kind (ALL / ANY / NONE) is a category, not a
+                    // status, so the pill uses the accent tint and lets
+                    // the label carry the distinction — the stoplight
+                    // positive/neutral/negative colors are reserved for
+                    // genuine status.
                     implicitWidth: groupLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
                     implicitHeight: groupLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
                     // Capsule shape — mockup pills are fully rounded.
                     radius: implicitHeight / 2
-                    // Tinted fill at 0.4 alpha + matching solid border.
-                    // 0.25 was too faint against the dark expansion
-                    // surface to read as a distinct pill background;
-                    // 0.4 gives each badge a clearly visible fill while
-                    // staying soft enough that the white label keeps
-                    // its high-contrast read.
-                    color: Qt.rgba(_tint.r, _tint.g, _tint.b, 0.4)
+                    color: Qt.alpha(Kirigami.Theme.highlightColor, 0.18)
                     border.width: 1
-                    border.color: Qt.rgba(_tint.r, _tint.g, _tint.b, 0.9)
+                    border.color: Qt.alpha(Kirigami.Theme.highlightColor, 0.4)
 
                     Label {
                         id: groupLabel
@@ -590,13 +586,18 @@ ColumnLayout {
                     }
 
                     Rectangle {
+                        // Pin the View set so the pill's altBg / border resolve
+                        // against the content-surface palette regardless of
+                        // which colorSet the hosting expansion area inherits.
+                        Kirigami.Theme.colorSet: Kirigami.Theme.View
+                        Kirigami.Theme.inherit: false
                         Layout.alignment: Qt.AlignVCenter
                         implicitWidth: valueLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
                         implicitHeight: valueLabel.implicitHeight + Kirigami.Units.smallSpacing
                         radius: Kirigami.Units.smallSpacing
                         color: Kirigami.Theme.alternateBackgroundColor
                         border.width: 1
-                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                         Label {
                             id: valueLabel

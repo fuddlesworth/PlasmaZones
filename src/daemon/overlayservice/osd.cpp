@@ -61,7 +61,7 @@ void sizeOsdToScreen(QQuickWindow* window, const QRect& targetGeom)
 
 bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer::Surface*& outSurface,
                                             QQuickItem*& outOsdSlot, QScreen*& outPhysScreen, QRect& screenGeom,
-                                            qreal& aspectRatio, const QString& screenId)
+                                            qreal& aspectRatio, QString& outEffectiveScreenId, const QString& screenId)
 {
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
@@ -79,6 +79,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     }
 
     QString effectiveId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(physScreen) : screenId;
+    outEffectiveScreenId = effectiveId;
 
     auto* state = ensurePassiveShellFor(effectiveId, physScreen);
     if (!state || !state->shell || !state->shell->shellWindow() || !state->shell->shellSurface() || !state->osdSlot()) {
@@ -139,7 +140,9 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     QScreen* physScreen = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, screenId)) {
+    QString effectiveScreenId;
+    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
+                                screenId)) {
         return;
     }
 
@@ -147,6 +150,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     // the screen we're about to render on, not Layout::lastRecalcGeometry()
     // (which may belong to a different screen).
     LayoutOsdContentParams p;
+    p.screenId = effectiveScreenId;
     p.id = layout->id().toString();
     p.name = layout->name();
     p.zones = layout->zones().isEmpty()
@@ -165,10 +169,11 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     // Disarm the render-pipeline prime first so its queued hide doesn't
     // race this real show - see primeSurfaceRenderPipeline.
     cancelSurfacePrime(surface);
-    // Shell wl_surface is permanently mapped - only the slot's opacity
-    // animates. Map the wl_surface on first show via Surface::show()
-    // (idempotent on subsequent shows; the keepMappedOnHide=true config
-    // means the wl_surface stays mapped between slot animations).
+    // Only the slot's opacity animates. Map the wl_surface via
+    // Surface::show() (idempotent on subsequent shows; keepMappedOnHide
+    // is effects-gated - see createWarmedOsdSurface - so the wl_surface
+    // stays mapped between slot animations while shaders or animations
+    // are enabled, and unmaps between shows otherwise).
     if (!surface->isLogicallyShown()) {
         surface->show();
     }
@@ -200,7 +205,9 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     QScreen* physScreen = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, screenId)) {
+    QString effectiveScreenId;
+    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
+                                screenId)) {
         return;
     }
 
@@ -235,6 +242,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     }
 
     LayoutOsdContentParams p;
+    p.screenId = effectiveScreenId;
     p.id = id;
     p.name = name;
     p.zones = zones;
@@ -296,7 +304,30 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     writeQmlProperty(osdSlot, QStringLiteral("globalAutoAssign"), p.globalAutoAssign);
     writeAutotileMetadata(osdSlot, p.showMasterDot, p.producesOverlappingZones, p.zoneNumberDisplay, p.masterCount);
     writeQmlProperty(osdSlot, QStringLiteral("zones"), p.zones);
-    writeFontProperties(osdSlot, m_settings);
+    writeFontProperties(osdSlot, m_settings, /*includeLabelFontColor=*/false);
+    // Zone preview colors and opacities follow the same settings pipeline as
+    // the live overlays and the picker/selector/snap-assist slots (per-zone
+    // custom colors ride inside p.zones; these are the layout-wide effective
+    // defaults). The context overlay-appearance override is layered on top,
+    // exactly like the siblings' writeColorSettings(..., &overlayOverride)
+    // path — all five properties, so a context rule that recolors or
+    // re-fades the popups applies to this OSD too. Without this push the
+    // OSD fell back to QML-side theme roles and rendered differently from
+    // the picker/selector for the same layout.
+    if (m_settings) {
+        const PhosphorZones::ContextOverlayOverride overlayOverride =
+            overlayOverrideForScreen(m_layoutManager, p.screenId);
+        writeQmlProperty(osdSlot, QStringLiteral("highlightColor"),
+                         overlayOverride.highlightColor.value_or(m_settings->highlightColor()));
+        writeQmlProperty(osdSlot, QStringLiteral("inactiveColor"),
+                         overlayOverride.inactiveColor.value_or(m_settings->inactiveColor()));
+        writeQmlProperty(osdSlot, QStringLiteral("borderColor"),
+                         overlayOverride.borderColor.value_or(m_settings->borderColor()));
+        writeQmlProperty(osdSlot, QStringLiteral("activeOpacity"),
+                         overlayOverride.activeOpacity.value_or(m_settings->activeOpacity()));
+        writeQmlProperty(osdSlot, QStringLiteral("inactiveOpacity"),
+                         overlayOverride.inactiveOpacity.value_or(m_settings->inactiveOpacity()));
+    }
     // Stage d: resolve + push the OSD's surface-shader decoration (rounded
     // corners + border) onto the slot. Done here so every layout-OSD show path
     // (showLayoutOsdImpl / showLayoutOsd(string…) / showDisabledOsd) decorates
@@ -466,7 +497,9 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     QScreen* physScreen = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, screenId)) {
+    QString effectiveScreenId;
+    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
+                                screenId)) {
         return;
     }
 
@@ -498,6 +531,7 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     // navigation-mode properties. See the matching note in
     // PassiveOverlayShell.qml's caveat block.
     LayoutOsdContentParams p;
+    p.screenId = effectiveScreenId;
     p.name = reason; // shown in nameLabel when disabled
     p.screenAspectRatio = aspectRatio;
     pushLayoutOsdContent(osdSlot, p);
@@ -524,17 +558,20 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 }
 
 // hideLayoutOsd / hideNavigationOsd (formerly Q_SLOTS connected to a QML
-// `dismissed()` signal) are intentionally gone. The Phase-5 dismiss path is:
+// `dismissed()` signal) are intentionally gone. The dismiss path is:
 //   QML dismissTimer → loaded content `dismissRequested()` signal
-//     → host PassiveOverlayShell re-emits dismissRequested()
-//     → wired by createWarmedOsdSurface to Surface::hide() (string-based)
-//     → SurfaceAnimator::beginHide drives the visual fade
-//     → Surface::Impl flips Qt::WindowTransparentForInput on the QWindow
-// No C++ slot needs to run on dismiss; the QQuickWindow stays Qt-visible
-// across the keepMappedOnHide=true lifecycle so the warmed Vulkan
-// swapchain survives. Pre-warmed by warmUpNotifications and reused for
-// the daemon's lifetime; destroyPassiveShell only fires on
-// screen-removal / shutdown.
+//     → shell window re-emits it as `osdDismissRequested`
+//     → wirePassiveShellSlots (shellhost_bridge.cpp) string-connects that
+//       to OverlayService::onOsdDismissRequested (below)
+//     → ShellHost::hideSlot runs an animator-driven slot-hide
+//     → onOsdSlotHideCompleted flips slot.visible=false and re-syncs
+//       surface state.
+// keepMappedOnHide is conditional (createWarmedOsdSurface): the shell
+// window stays mapped across hides only while shaders or animations are
+// enabled, keeping the warmed Vulkan swapchain alive; with effects off
+// the next syncSurfaceState unmaps the wl_surface. Pre-warmed by
+// warmUpNotifications and reused for the daemon's lifetime;
+// destroyPassiveShell only fires on screen-removal / shutdown.
 
 // Hot-plug hook installed by warmUpNotifications. The single
 // ensureOsdScreenAddedConnected / ensurePassiveShellFor / wirePassiveShellSlots /
@@ -547,9 +584,9 @@ void OverlayService::onOsdDismissRequested()
     // QML osdDismissRequested fired - find which screen's shell window
     // emitted, then run an animator-driven slot-hide. Sender-based
     // resolution rather than carrying the screen id through the signal
-    // because layer-shell QML signals are parameter-less per the
-    // existing project convention (dismissRequested → Surface::hide()
-    // wiring lives in createWarmedOsdSurface).
+    // because the shell's QML dismiss signals are declared parameter-less
+    // by project convention (see PassiveOverlayShell.qml's
+    // osdDismissRequested and its wiring in wirePassiveShellSlots).
     QObject* senderObj = sender();
     auto* senderWindow = qobject_cast<QQuickWindow*>(senderObj);
     if (!senderWindow) {
@@ -666,7 +703,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     // Reuse the per-screen passive shell (create only if not in map).
-    // The shell stays mapped for the daemon's lifetime; per-show the
+    // The shell is kept mapped across hides while shaders or animations
+    // are enabled (effects-gated keepMappedOnHide); per-show the
     // SurfaceAnimator's beginShow on (shellSurface, osdSlot,
     // PhosphorRoles::Osd) replays the fade-in, and
     // restartDismissTimer extends the auto-hide. Cleanup happens only
@@ -698,7 +736,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
             if (ok && count > 0) {
                 windowCount = count;
             }
-            if (action == QStringLiteral("rotate")) {
+            if (action == QLatin1String("rotate")) {
                 displayReason = parts.at(0); // "clockwise" or "counterclockwise"
             }
             // resnap keeps full reason for displayReason (optional)
@@ -752,7 +790,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // via the per-(Surface, target) keying. restartDismissTimer kicks
     // the QML auto-dismiss Timer that emits dismissRequested →
     // animator beginHide on the slot (see osdDismissRequested wiring
-    // in ensurePassiveShellFor).
+    // in wirePassiveShellSlots).
     cancelSurfacePrime(navSurface);
     if (!navSurface->isLogicallyShown()) {
         navSurface->show();

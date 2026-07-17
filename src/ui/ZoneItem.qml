@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
+import org.plasmazones.common as QFZCommon
 
 /**
  * Individual zone display component
@@ -17,9 +18,9 @@ Item {
     property bool isHighlighted: false
     property bool isMultiZone: false // True if this zone is part of a multi-zone selection
     property bool showNumber: true
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor
     property color labelFontColor: Kirigami.Theme.textColor
     property string fontFamily: ""
     property real fontSizeScale: 1
@@ -29,11 +30,8 @@ Item {
     property bool fontStrikeout: false
     property real activeOpacity: 0.5 // Match Settings default
     property real inactiveOpacity: 0.3 // Match Settings default
-    property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
-    property int borderRadius: Kirigami.Units.gridUnit // 8px - use theme spacing
-
-    signal clicked
-    signal hovered
+    property int borderWidth: Kirigami.Units.smallSpacing
+    property int borderRadius: Kirigami.Units.gridUnit
 
     // Zone background
     Rectangle {
@@ -55,11 +53,8 @@ Item {
         border.width: zoneItem.isMultiZone ? (zoneItem.borderWidth + 2) : zoneItem.borderWidth
         border.color: {
             if (zoneItem.isMultiZone && zoneItem.isHighlighted) {
-                // 20% increased brightness for multi-zone - blend with highlight color
-                var baseColor = zoneItem.borderColor;
-                var highlightColor = zoneItem.highlightColor;
-                // Mix border color with highlight color for brighter appearance
-                return Qt.rgba(Math.min(1, baseColor.r * 0.7 + highlightColor.r * 0.3), Math.min(1, baseColor.g * 0.7 + highlightColor.g * 0.3), Math.min(1, baseColor.b * 0.7 + highlightColor.b * 0.3), baseColor.a);
+                // Blend border color toward the highlight for a brighter multi-zone edge
+                return Qt.tint(zoneItem.borderColor, Qt.alpha(zoneItem.highlightColor, 0.3));
             }
             return zoneItem.borderColor;
         }
@@ -99,7 +94,9 @@ Item {
 
             anchors.horizontalCenter: parent.horizontalCenter
             text: zoneItem.zoneNumber
-            font.pixelSize: Math.min(zoneItem.width, zoneItem.height) * 0.3 * zoneItem.fontSizeScale
+            // Floor at 1: a 0x0 delegate (transient geometry) would otherwise
+            // produce pixelSize 0 and trigger a QFont warning.
+            font.pixelSize: Math.max(1, Math.min(zoneItem.width, zoneItem.height) * 0.3 * zoneItem.fontSizeScale)
             font.weight: zoneItem.fontWeight
             font.italic: zoneItem.fontItalic
             font.underline: zoneItem.fontUnderline
@@ -135,13 +132,5 @@ Item {
                 }
             }
         }
-    }
-
-    // Mouse interaction
-    MouseArea {
-        anchors.fill: parent
-        hoverEnabled: true
-        onClicked: zoneItem.clicked()
-        onEntered: zoneItem.hovered()
     }
 }

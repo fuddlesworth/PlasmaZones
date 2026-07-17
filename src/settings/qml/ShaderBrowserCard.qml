@@ -41,6 +41,11 @@ import org.phosphor.animation
 ItemDelegate {
     id: root
 
+    // On the delegate root (not just the background Rectangle) so the fill,
+    // the content chrome, and the labels all resolve the same View set.
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
+
     // ItemDelegate defaults to Qt.NoFocus, which left every shader card out of the
     // tab chain: opening a pack's details was mouse-only, and the focus-border
     // branch below could never fire. AbstractButton gives Space to clicked() for
@@ -88,19 +93,19 @@ ItemDelegate {
 
     background: Rectangle {
         radius: Kirigami.Units.smallSpacing
-        // Match the SettingsCard standard: keep the fill subtle and signal
-        // hover through an accent-tinted border, rather than flooding the
-        // whole card with hoverColor.
-        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, root.hovered ? 0.06 : 0.04)
+        // Subtle altBg fill; hover signals through the hover border plus a
+        // faint hover tint on the fill itself (this card tints its fill on
+        // hover, unlike SettingsCard's border-only hover).
+        color: root.hovered ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.1)) : Kirigami.Theme.alternateBackgroundColor
         border.width: 1
         border.color: {
             if (root.activeFocus)
                 return Kirigami.Theme.focusColor;
 
             if (root.hovered)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
+                return Kirigami.Theme.hoverColor;
 
-            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12);
+            return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         }
 
         Behavior on border.color {
@@ -129,9 +134,9 @@ ItemDelegate {
                 Layout.preferredHeight: width * 9 / 16
                 visible: _hasPreview
                 radius: Kirigami.Units.smallSpacing
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                color: Kirigami.Theme.alternateBackgroundColor
                 border.width: 1
-                border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+                border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 clip: true
 
                 Image {
@@ -140,8 +145,11 @@ ItemDelegate {
                     // `encodeURI` percent-encodes spaces and unicode while
                     // preserving path separators, which a raw `"file://" + path`
                     // concat would silently break on (e.g. user-installed packs
-                    // under `~/My Shaders/`).
-                    source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath) : ""
+                    // under `~/My Shaders/`). It leaves `#` and `?` untouched,
+                    // so those two are escaped explicitly or they would be
+                    // parsed as fragment/query delimiters in the file:// URL.
+                    // Twin site: ShaderBrowserDetailDialog.qml preset dialogs.
+                    source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath).replace(/#/g, "%23").replace(/\?/g, "%3F") : ""
                     fillMode: Image.PreserveAspectCrop
                     sourceSize.width: width * 2
                     sourceSize.height: height * 2
@@ -177,7 +185,7 @@ ItemDelegate {
                     visible: root.effect && root.effect.isUserEffect
                     text: i18nc("@info shader source badge", "User")
                     font: Kirigami.Theme.smallFont
-                    color: Kirigami.Theme.positiveTextColor
+                    color: Kirigami.Theme.highlightColor
                 }
             }
 

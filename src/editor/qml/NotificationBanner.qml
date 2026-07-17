@@ -64,8 +64,8 @@ Rectangle {
 
             Kirigami.Icon {
                 source: banner.iconSource
-                width: Kirigami.Units.iconSizes.medium
-                height: Kirigami.Units.iconSizes.medium
+                Layout.preferredWidth: Kirigami.Units.iconSizes.medium
+                Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                 color: banner.accentColor
             }
 
