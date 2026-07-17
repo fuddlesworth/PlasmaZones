@@ -2,300 +2,11 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="de">
 <context>
-    <name>@action</name>
-    <message>
-        <source>Clear Edge Gap Override</source>
-        <translation type="obsolete">Randabstand-Überschreibung zurücksetzen</translation>
-    </message>
-    <message>
-        <source>Reset Shader Parameters</source>
-        <translation type="obsolete">Shader-Parameter zurücksetzen</translation>
-    </message>
-    <message>
-        <source>Switch Shader Effect</source>
-        <translation type="obsolete">Shader-Effekt wechseln</translation>
-    </message>
-    <message>
-        <source>Bring to Front</source>
-        <translation type="obsolete">In den Vordergrund</translation>
-    </message>
-    <message>
-        <source>Send to Back</source>
-        <translation type="obsolete">In den Hintergrund</translation>
-    </message>
-    <message>
-        <source>Bring Forward</source>
-        <translation type="obsolete">Eine Ebene nach vorne</translation>
-    </message>
-    <message>
-        <source>Send Backward</source>
-        <translation type="obsolete">Eine Ebene nach hinten</translation>
-    </message>
-    <message>
-        <source>Add Zone</source>
-        <translation type="obsolete">Zone hinzufügen</translation>
-    </message>
-    <message>
-        <source>Change Selection</source>
-        <translation type="obsolete">Auswahl ändern</translation>
-    </message>
-    <message>
-        <source>Change Z-Order</source>
-        <translation type="obsolete">Z-Reihenfolge ändern</translation>
-    </message>
-    <message>
-        <source>Clear All Zones</source>
-        <translation type="obsolete">Alle Zonen entfernen</translation>
-    </message>
-    <message>
-        <source>Delete Zone</source>
-        <translation type="obsolete">Zone löschen</translation>
-    </message>
-    <message>
-        <source>Resize Zones</source>
-        <translation type="obsolete">Zonengröße ändern</translation>
-    </message>
-    <message>
-        <source>Duplicate Zone</source>
-        <translation type="obsolete">Zone duplizieren</translation>
-    </message>
-    <message>
-        <source>Fill Zone</source>
-        <translation type="obsolete">Zone füllen</translation>
-    </message>
-    <message>
-        <source>Split Zone</source>
-        <translation type="obsolete">Zone teilen</translation>
-    </message>
-    <message>
-        <source>Toggle Relative/Fixed Size</source>
-        <translation type="obsolete">Relative/feste Größe umschalten</translation>
-    </message>
-    <message>
-        <source>Change Zone Dimensions</source>
-        <translation type="obsolete">Zonenabmessungen ändern</translation>
-    </message>
-    <message>
-        <source>Toggle Use Full Screen Area</source>
-        <translation type="obsolete">Nutzung des gesamten Bildschirmbereichs umschalten</translation>
-    </message>
-    <message>
-        <source>Change Zone Padding</source>
-        <translation type="obsolete">Zonenabstand ändern</translation>
-    </message>
-    <message>
-        <source>Toggle Per-Side Edge Gap</source>
-        <translation type="obsolete">Seitenweisen Randabstand umschalten</translation>
-    </message>
-    <message>
-        <source>Change Overlay Style</source>
-        <translation type="obsolete">Overlay-Stil ändern</translation>
-    </message>
-    <message>
-        <source>Change Edge Gap</source>
-        <translation type="obsolete">Randabstand ändern</translation>
-    </message>
-    <message>
-        <source>Rename Layout</source>
-        <translation type="obsolete">Layout umbenennen</translation>
-    </message>
-    <message>
-        <source>Change Shader Effect</source>
-        <translation type="obsolete">Shader-Effekt ändern</translation>
-    </message>
-    <message>
-        <source>Change Shader Parameter</source>
-        <translation type="obsolete">Shader-Parameter ändern</translation>
-    </message>
-    <message>
-        <source>Change Shader Parameters</source>
-        <translation type="obsolete">Shader-Parameter ändern</translation>
-    </message>
-    <message>
-        <source>Change Zone Visibility</source>
-        <translation type="obsolete">Zonensichtbarkeit ändern</translation>
-    </message>
-    <message>
-        <source>Change Zone Appearance</source>
-        <translation type="obsolete">Zonen-Aussehen ändern</translation>
-    </message>
-    <message>
-        <source>Move Zone</source>
-        <translation type="obsolete">Zone verschieben</translation>
-    </message>
-    <message>
-        <source>Rename Zone</source>
-        <translation type="obsolete">Zone umbenennen</translation>
-    </message>
-    <message>
-        <source>Change Zone Number</source>
-        <translation type="obsolete">Zonennummer ändern</translation>
-    </message>
-</context>
-<context>
-    <name>@info</name>
-    <message>
-        <source>Zone manager not initialized</source>
-        <translation type="obsolete">Zonen-Verwaltung nicht initialisiert</translation>
-    </message>
-    <message>
-        <source>File path cannot be empty</source>
-        <translation type="obsolete">Dateipfad darf nicht leer sein</translation>
-    </message>
-    <message>
-        <source>No shader selected to save</source>
-        <translation type="obsolete">Kein Shader zum Speichern ausgewählt</translation>
-    </message>
-    <message>
-        <source>Preset file must contain a JSON object</source>
-        <translation type="obsolete">Voreinstellungsdatei muss ein JSON-Objekt enthalten</translation>
-    </message>
-    <message>
-        <source>Preset file missing shader ID</source>
-        <translation type="obsolete">Shader-ID fehlt in der Voreinstellungsdatei</translation>
-    </message>
-    <message>
-        <source>Shader in preset is no longer available</source>
-        <translation type="obsolete">Shader in der Voreinstellung ist nicht mehr verfügbar</translation>
-    </message>
-    <message>
-        <source>Zone not found</source>
-        <translation type="obsolete">Zone nicht gefunden</translation>
-    </message>
-    <message>
-        <source>Services not initialized</source>
-        <translation type="obsolete">Dienste nicht initialisiert</translation>
-    </message>
-</context>
-<context>
-    <name>EditorController</name>
-    <message>
-        <source>File path cannot be empty</source>
-        <translation type="vanished">Dateipfad darf nicht leer sein</translation>
-    </message>
-    <message>
-        <source>Cannot connect to PlasmaZones daemon</source>
-        <translation type="vanished">Verbindung zum PlasmaZones-Hintergrunddienst nicht möglich</translation>
-    </message>
-    <message>
-        <source>Failed to import layout: %1</source>
-        <translation type="vanished">Layout konnte nicht importiert werden: %1</translation>
-    </message>
-    <message>
-        <source>Imported layout but received empty ID</source>
-        <translation type="vanished">Layout importiert, aber leere ID erhalten</translation>
-    </message>
-    <message>
-        <source>No layout loaded to export</source>
-        <translation type="vanished">Kein Layout zum Exportieren geladen</translation>
-    </message>
-    <message>
-        <source>Failed to export layout: %1</source>
-        <translation type="vanished">Layout konnte nicht exportiert werden: %1</translation>
-    </message>
-</context>
-<context>
-    <name>PlasmaZones::Daemon</name>
-    <message>
-        <source>Layout: %1</source>
-        <translation type="obsolete">Layout: %1</translation>
-    </message>
-    <message>
-        <source>Layout Locked</source>
-        <translation type="obsolete">Layout gesperrt</translation>
-    </message>
-    <message>
-        <source>Tiling: %1</source>
-        <translation type="obsolete">Tiling: %1</translation>
-    </message>
-</context>
-<context>
-    <name>PlasmaZones::EditorController</name>
-    <message>
-        <source>New Layout</source>
-        <translation type="obsolete">Neues Layout</translation>
-    </message>
-    <message>
-        <source>Layout ID cannot be empty</source>
-        <translation type="obsolete">Layout-ID darf nicht leer sein</translation>
-    </message>
-    <message>
-        <source>Layout service not initialized</source>
-        <translation type="obsolete">Layout-Dienst nicht initialisiert</translation>
-    </message>
-    <message>
-        <source>Invalid layout data format</source>
-        <translation type="obsolete">Ungültiges Layout-Datenformat</translation>
-    </message>
-    <message>
-        <source>Services not initialized</source>
-        <translation type="obsolete">Dienste nicht initialisiert</translation>
-    </message>
-    <message>
-        <source>Zone name cannot exceed 100 characters</source>
-        <translation type="obsolete">Zonenname darf nicht länger als 100 Zeichen sein</translation>
-    </message>
-    <message>
-        <source>Zone name contains invalid characters: &lt; &gt; &quot; &apos; \</source>
-        <translation type="obsolete">Zonenname enthält ungültige Zeichen: &lt; &gt; &quot; &apos; \</translation>
-    </message>
-    <message>
-        <source>A zone with this name already exists</source>
-        <translation type="obsolete">Eine Zone mit diesem Namen existiert bereits</translation>
-    </message>
-    <message>
-        <source>Zone number must be at least 1</source>
-        <translation type="obsolete">Die Zonennummer muss mindestens 1 sein</translation>
-    </message>
-    <message>
-        <source>Zone number cannot exceed 99</source>
-        <translation type="obsolete">Die Zonennummer darf nicht größer als 99 sein</translation>
-    </message>
-    <message>
-        <source>Zone number %1 is already in use</source>
-        <translation type="obsolete">Zonennummer %1 wird bereits verwendet</translation>
-    </message>
-</context>
-<context>
-    <name>PlasmaZones::ShortcutManager</name>
-    <message>
-        <source>Apply Layout %1</source>
-        <translation type="obsolete">Layout %1 anwenden</translation>
-    </message>
-    <message>
-        <source>Snap to Zone %1</source>
-        <translation type="obsolete">In Zone %1 einrasten</translation>
-    </message>
-</context>
-<context>
-    <name>PlasmaZones::WindowDragAdaptor</name>
-    <message>
-        <source>Cancel Zone Overlay</source>
-        <translation type="obsolete">Zonen-Overlay abbrechen</translation>
-    </message>
-</context>
-<context>
     <name>plasmazones</name>
-    <message>
-        <source>PlasmaZones Daemon</source>
-        <translation type="vanished">PlasmaZones-Hintergrunddienst</translation>
-    </message>
-    <message>
-        <source>Window tiling and zone management for KDE Plasma</source>
-        <translation type="vanished">Fensterteilung und Zonenverwaltung für KDE Plasma</translation>
-    </message>
-    <message>
-        <source>© 2026 fuddlesworth</source>
-        <translation type="vanished">© 2026 fuddlesworth</translation>
-    </message>
-    <message>
-        <source>fuddlesworth</source>
-        <translation type="vanished">fuddlesworth</translation>
-    </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="215"/>
         <source>Window tiling and zone management</source>
-        <translation type="unfinished"></translation>
+        <translation>Fensterkachelung und Zonenverwaltung</translation>
     </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="220"/>
@@ -305,17 +16,17 @@
     <message>
         <location filename="../src/daemon/main.cpp" line="224"/>
         <source>Enable debug logging for all PlasmaZones categories</source>
-        <translation type="unfinished"></translation>
+        <translation>Debug-Protokollierung für alle PlasmaZones-Kategorien aktivieren</translation>
     </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="228"/>
         <source>Write log output to &lt;file&gt; instead of stderr</source>
-        <translation type="unfinished"></translation>
+        <translation>Protokollausgabe in &lt;file&gt; statt nach stderr schreiben</translation>
     </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="229"/>
         <source>file</source>
-        <translation type="unfinished"></translation>
+        <translation>Datei</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="138"/>
@@ -330,18 +41,18 @@
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="214"/>
         <source>Disabled on this monitor</source>
-        <translation type="unfinished"></translation>
+        <translation>Auf diesem Bildschirm deaktiviert</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="227"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="238"/>
         <source>Disabled on %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Auf %1 deaktiviert</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="236"/>
         <source>Disabled on this activity</source>
-        <translation type="unfinished"></translation>
+        <translation>In dieser Aktivität deaktiviert</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="295"/>
@@ -367,177 +78,72 @@
     <message>
         <location filename="../src/dbus/windowdragadaptor.cpp" line="412"/>
         <source>Layout Picker: Move Left</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout-Auswahl: Nach links</translation>
     </message>
     <message>
         <location filename="../src/dbus/windowdragadaptor.cpp" line="416"/>
         <source>Layout Picker: Move Right</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout-Auswahl: Nach rechts</translation>
     </message>
     <message>
         <location filename="../src/dbus/windowdragadaptor.cpp" line="420"/>
         <source>Layout Picker: Move Up</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout-Auswahl: Nach oben</translation>
     </message>
     <message>
         <location filename="../src/dbus/windowdragadaptor.cpp" line="424"/>
         <source>Layout Picker: Move Down</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout-Auswahl: Nach unten</translation>
     </message>
     <message>
         <location filename="../src/dbus/windowdragadaptor.cpp" line="428"/>
         <location filename="../src/dbus/windowdragadaptor.cpp" line="430"/>
         <source>Layout Picker: Confirm</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout-Auswahl: Bestätigen</translation>
     </message>
     <message>
-        <source>%1 (Locked)</source>
-        <translation type="vanished">%1 (Gesperrt)</translation>
-    </message>
-    <message>
-        <source>Dismiss layout picker</source>
-        <translation type="vanished">Layout-Auswahl schließen</translation>
-    </message>
-    <message>
-        <source>Choose Layout</source>
-        <translation type="vanished">Layout auswählen</translation>
-    </message>
-    <message>
-        <source>Layout: %1</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Layout: %1</translation>
-    </message>
-    <message>
-        <source>Click to select this layout. Contains %1 zones.</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Klicken, um dieses Layout auszuwählen. Enthält %1 Zonen.</translation>
-    </message>
-    <message>
-        <source>Locked</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Gesperrt</translation>
-    </message>
-    <message>
-        <source>Current layout: %1</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Aktuelles Layout: %1</translation>
-    </message>
-    <message>
-        <source>Select layout: %1</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Layout auswählen: %1</translation>
-    </message>
-    <message>
-        <source>No zone in that direction</source>
-        <translation type="vanished">Keine Zone in dieser Richtung</translation>
-    </message>
-    <message>
-        <source>No empty zone available</source>
-        <translation type="vanished">Keine leere Zone verfügbar</translation>
-    </message>
-    <message>
-        <source>Nothing to rotate</source>
-        <translation type="vanished">Nichts zum Rotieren</translation>
-    </message>
-    <message>
-        <source>Nothing to swap</source>
-        <translation type="vanished">Nichts zum Tauschen</translation>
-    </message>
-    <message>
-        <source>No windows to focus</source>
-        <translation type="vanished">Keine Fenster zum Fokussieren</translation>
-    </message>
-    <message>
-        <source>Already in main position</source>
-        <translation type="vanished">Bereits in Hauptposition</translation>
-    </message>
-    <message>
-        <source>Failed</source>
-        <translation type="vanished">Fehlgeschlagen</translation>
-    </message>
-    <message numerus="yes">
-        <source>Rotated %1 window</source>
-        <translation type="vanished">
-            <numerusform>%1 Fenster rotiert</numerusform>
-            <numerusform></numerusform>
-        </translation>
-        <extra-po-msgid_plural>Rotated %1 windows</extra-po-msgid_plural>
-    </message>
-    <message>
-        <source>Rotated</source>
-        <translation type="vanished">Rotiert</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller.cpp" line="635"/>
+        <location filename="../src/settings/settingscontroller.cpp" line="661"/>
         <source>Zone %1</source>
         <translation>Zone %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller.cpp" line="637"/>
+        <location filename="../src/settings/settingscontroller.cpp" line="663"/>
         <source>%1 — %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 — %2</translation>
     </message>
     <message>
-        <source>Moved</source>
-        <translation type="vanished">Verschoben</translation>
-    </message>
-    <message>
-        <source>Focus: Zone %1</source>
-        <translation type="vanished">Fokus: Zone %1</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="263"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="268"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="264"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="269"/>
         <source>Focus</source>
         <translation>Fokus</translation>
     </message>
     <message>
-        <source>Zone %1 ↔ Zone %2</source>
-        <translation type="vanished">Zone %1 ↔ Zone %2</translation>
-    </message>
-    <message>
-        <source>Swapped</source>
-        <translation type="vanished">Getauscht</translation>
-    </message>
-    <message>
-        <source>→ Zone %1</source>
-        <translation type="vanished">→ Zone %1</translation>
-    </message>
-    <message>
-        <source>Window pushed</source>
-        <translation type="vanished">Fenster verschoben</translation>
-    </message>
-    <message>
-        <source>Restored</source>
-        <translation type="vanished">Wiederhergestellt</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="44"/>
-        <location filename="../src/settings/rulemodel.cpp" line="919"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="42"/>
+        <location filename="../src/settings/rulemodel.cpp" line="944"/>
         <source>Tiled</source>
         <translation>Gekachelt</translation>
     </message>
     <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="46"/>
-        <location filename="../src/settings/rulemodel.cpp" line="917"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="44"/>
+        <location filename="../src/settings/rulemodel.cpp" line="942"/>
         <source>Snapped</source>
         <translation>Eingerastet</translation>
     </message>
     <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="52"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="317"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="50"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="315"/>
         <source>Popups</source>
-        <translation type="unfinished"></translation>
+        <translation>Aufklappfenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="58"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="56"/>
         <source>Layout Picker</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout-Auswahl</translation>
     </message>
     <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="121"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="119"/>
         <source>Global default</source>
-        <translation type="unfinished"></translation>
+        <translation>Globaler Standard</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="164"/>
@@ -547,667 +153,576 @@
         <location filename="../src/settings/rulemodel.cpp" line="214"/>
         <location filename="../src/settings/rulemodel.cpp" line="219"/>
         <source>%1: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: %2</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="215"/>
         <source>On</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="216"/>
         <source>Off</source>
-        <translation type="unfinished"></translation>
+        <translation>Aus</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="272"/>
         <source>Engine: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Engine: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="277"/>
         <source>Snapping: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Einrasten: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="298"/>
         <source>Disable: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Deaktivieren: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="301"/>
         <source>Excluded</source>
-        <translation type="unfinished"></translation>
+        <translation>Ausgeschlossen</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="305"/>
         <source>No animations</source>
-        <translation type="unfinished"></translation>
+        <translation>Keine Animationen</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="308"/>
         <source>Float</source>
-        <translation type="unfinished"></translation>
+        <translation>Schwebend</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="318"/>
         <source>Snap to zone</source>
-        <translation type="unfinished"></translation>
+        <translation>In Zone einrasten</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="321"/>
         <source>Snap to zone %1</source>
-        <translation type="unfinished"></translation>
+        <translation>In Zone %1 einrasten</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="323"/>
         <source>Snap to zones %1</source>
-        <translation type="unfinished"></translation>
+        <translation>In Zonen %1 einrasten</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="332"/>
         <source>Open on monitor: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Auf Bildschirm öffnen: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="336"/>
         <source>Open on desktop %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Auf Arbeitsfläche %1 öffnen</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="345"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="275"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="276"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="345"/>
         <source>Opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>Deckkraft</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="349"/>
         <location filename="../src/settings/rulemodel.cpp" line="354"/>
         <source>Opacity (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Deckkraft (ungültig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="356"/>
         <source>Opacity: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Deckkraft: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="360"/>
         <source>Block animation shader</source>
-        <translation type="unfinished"></translation>
+        <translation>Animations-Shader blockieren</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="361"/>
         <source>Shader: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Shader: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="366"/>
         <location filename="../src/settings/rulemodel.cpp" line="379"/>
         <source>Block decoration</source>
-        <translation type="unfinished"></translation>
+        <translation>Dekoration blockieren</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="381"/>
         <source>Decoration: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Dekoration: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="385"/>
         <source>Duration: %1 ms</source>
-        <translation type="unfinished"></translation>
+        <translation>Dauer: %1 ms</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="389"/>
         <source>Animation curve</source>
-        <translation type="unfinished"></translation>
+        <translation>Animationskurve</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="390"/>
         <source>Curve: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Kurve: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="395"/>
         <source>Overlay shader: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="878"/>
-        <source>Don&apos;t restore position on login</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="887"/>
-        <source>Show title bars</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="890"/>
-        <source>Don&apos;t lock layout</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="893"/>
-        <source>Assign default layout</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="893"/>
-        <source>Don&apos;t assign default layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Overlay-Shader: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="896"/>
+        <source>Don&apos;t restore position on login</source>
+        <translation>Position bei der Anmeldung nicht wiederherstellen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="905"/>
+        <source>Show title bars</source>
+        <translation>Titelleisten anzeigen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="908"/>
+        <source>Don&apos;t lock layout</source>
+        <translation>Layout nicht sperren</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="911"/>
+        <source>Assign default layout</source>
+        <translation>Standard-Layout zuweisen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="911"/>
+        <source>Don&apos;t assign default layout</source>
+        <translation>Standard-Layout nicht zuweisen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="914"/>
         <source>Hide border</source>
-        <translation type="unfinished"></translation>
+        <translation>Rand ausblenden</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="429"/>
         <source>Border width: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Randbreite: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="432"/>
         <source>Corner radius: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Eckenradius: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="439"/>
+        <location filename="../src/settings/rulemodel.cpp" line="467"/>
         <source>Accent</source>
-        <translation type="unfinished"></translation>
+        <translation>Akzent</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="441"/>
         <source>Focused border: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokussierter Rand: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="443"/>
         <source>Unfocused border: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Nicht fokussierter Rand: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="510"/>
+        <location filename="../src/settings/rulemodel.cpp" line="535"/>
         <source>Gap: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Abstand: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="513"/>
+        <location filename="../src/settings/rulemodel.cpp" line="538"/>
         <source>Outer gap: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Äußerer Abstand: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="899"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="379"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="920"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="411"/>
         <source>Per-side outer gaps</source>
-        <translation type="unfinished"></translation>
+        <translation>Seitenweise äußere Abstände</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="899"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="920"/>
         <source>Uniform outer gap</source>
-        <translation type="unfinished"></translation>
+        <translation>Einheitlicher äußerer Abstand</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="405"/>
         <source>Overlay style: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Overlay-Stil: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="412"/>
         <source>Algorithm parameter</source>
-        <translation type="unfinished"></translation>
+        <translation>Algorithmusparameter</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="413"/>
         <source>Algorithm: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="447"/>
-        <source>Max tiled windows: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="450"/>
-        <source>Master count: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Algorithmus: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="454"/>
-        <source>Split ratio: %1%</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="348"/>
+        <source>Tint strength</source>
+        <translation>Tönungsstärke</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="457"/>
-        <source>Insert: %1</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/rulemodel.cpp" line="460"/>
+        <source>Tint strength (invalid)</source>
+        <translation>Tönungsstärke (ungültig)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="461"/>
-        <source>Overflow: %1</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/rulemodel.cpp" line="462"/>
+        <source>Tint strength: %1%</source>
+        <translation>Tönungsstärke: %1%</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="465"/>
-        <source>Drag: %1</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/rulemodel.cpp" line="468"/>
+        <source>Tint color: %1</source>
+        <translation>Tönungsfarbe: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="472"/>
-        <source>Window layer</source>
-        <translation type="unfinished"></translation>
+        <source>Max tiled windows: %1</source>
+        <translation>Max. gekachelte Fenster: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="480"/>
-        <source>Window layer (invalid)</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/rulemodel.cpp" line="475"/>
+        <source>Master count: %1</source>
+        <translation>Hauptbereich-Anzahl: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="479"/>
+        <source>Split ratio: %1%</source>
+        <translation>Teilungsverhältnis: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="482"/>
-        <source>Layer: %1</source>
-        <translation type="unfinished"></translation>
+        <source>Insert: %1</source>
+        <translation>Einfügen: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="488"/>
-        <source>Highlight color: %1</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/rulemodel.cpp" line="486"/>
+        <source>Overflow: %1</source>
+        <translation>Überlauf: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="491"/>
-        <source>Inactive zone color: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="494"/>
-        <source>Overlay border color: %1</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/rulemodel.cpp" line="490"/>
+        <source>Drag: %1</source>
+        <translation>Ziehen: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="497"/>
-        <source>Active opacity: %1%</source>
-        <translation type="unfinished"></translation>
+        <source>Window layer</source>
+        <translation>Fensterebene</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="500"/>
-        <source>Inactive opacity: %1%</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/rulemodel.cpp" line="505"/>
+        <source>Window layer (invalid)</source>
+        <translation>Fensterebene (ungültig)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="503"/>
-        <source>Overlay border width: %1 px</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/rulemodel.cpp" line="507"/>
+        <source>Layer: %1</source>
+        <translation>Ebene: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="506"/>
-        <source>Overlay corner radius: %1 px</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/rulemodel.cpp" line="513"/>
+        <source>Highlight color: %1</source>
+        <translation>Hervorhebungsfarbe: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="516"/>
-        <source>Top gap: %1 px</source>
-        <translation type="unfinished"></translation>
+        <source>Inactive zone color: %1</source>
+        <translation>Farbe inaktiver Zone: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="519"/>
-        <source>Bottom gap: %1 px</source>
-        <translation type="unfinished"></translation>
+        <source>Overlay border color: %1</source>
+        <translation>Overlay-Randfarbe: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="522"/>
-        <source>Left gap: %1 px</source>
-        <translation type="unfinished"></translation>
+        <source>Active opacity: %1%</source>
+        <translation>Deckkraft aktiv: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="525"/>
+        <source>Inactive opacity: %1%</source>
+        <translation>Deckkraft inaktiv: %1%</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="528"/>
+        <source>Overlay border width: %1 px</source>
+        <translation>Overlay-Randbreite: %1 px</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="531"/>
+        <source>Overlay corner radius: %1 px</source>
+        <translation>Overlay-Eckenradius: %1 px</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="541"/>
+        <source>Top gap: %1 px</source>
+        <translation>Oberer Abstand: %1 px</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="544"/>
+        <source>Bottom gap: %1 px</source>
+        <translation>Unterer Abstand: %1 px</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="547"/>
+        <source>Left gap: %1 px</source>
+        <translation>Linker Abstand: %1 px</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="550"/>
         <source>Right gap: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Rechter Abstand: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="600"/>
+        <location filename="../src/settings/rulemodel.cpp" line="625"/>
         <source>Everywhere</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="832"/>
-        <source>Monitor &amp; Layout</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="834"/>
-        <source>Applications</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="836"/>
-        <source>Activities</source>
-        <translation type="unfinished">Aktivitäten</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="840"/>
-        <source>Advanced / Custom</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="842"/>
-        <source>System</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="851"/>
-        <source>Application</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="853"/>
-        <source>Window class</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="855"/>
-        <source>Desktop file</source>
-        <translation type="unfinished"></translation>
+        <translation>Überall</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="857"/>
-        <source>Window role</source>
-        <translation type="unfinished"></translation>
+        <source>Monitor &amp; Layout</source>
+        <translation>Bildschirm &amp; Layout</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="859"/>
-        <source>Process ID</source>
-        <translation type="unfinished"></translation>
+        <source>Applications</source>
+        <translation>Anwendungen</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="861"/>
-        <source>Title</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="863"/>
-        <source>Window type</source>
-        <translation type="unfinished"></translation>
+        <source>Activities</source>
+        <translation>Aktivitäten</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="865"/>
-        <source>Sticky</source>
-        <translation type="unfinished"></translation>
+        <source>Advanced / Custom</source>
+        <translation>Erweitert / Benutzerdefiniert</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="867"/>
+        <source>System</source>
+        <translation>System</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="876"/>
+        <source>Application</source>
+        <translation>Anwendung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="878"/>
+        <source>Window class</source>
+        <translation>Fensterklasse</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="880"/>
+        <source>Desktop file</source>
+        <translation>Desktop-Datei</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="882"/>
+        <source>Window role</source>
+        <translation>Fensterrolle</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="884"/>
+        <source>Process ID</source>
+        <translation>Prozess-ID</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="886"/>
+        <source>Title</source>
+        <translation>Titel</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="888"/>
+        <source>Window type</source>
+        <translation>Fenstertyp</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="890"/>
+        <source>Sticky</source>
+        <translation>Klebrig</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rulemodel.cpp" line="892"/>
         <source>Fullscreen</source>
-        <translation type="unfinished">Vollbild</translation>
+        <translation>Vollbild</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="869"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="597"/>
+        <location filename="../src/settings/rulemodel.cpp" line="894"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="629"/>
         <source>Maximized</source>
-        <translation type="unfinished"></translation>
+        <translation>Maximiert</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="871"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="588"/>
+        <location filename="../src/settings/rulemodel.cpp" line="896"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="620"/>
         <source>Minimized</source>
-        <translation type="unfinished"></translation>
+        <translation>Minimiert</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="873"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="590"/>
+        <location filename="../src/settings/rulemodel.cpp" line="898"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="622"/>
         <source>Focused</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokussiert</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="879"/>
+        <location filename="../src/settings/rulemodel.cpp" line="904"/>
         <source>Activity</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktivität</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="881"/>
+        <location filename="../src/settings/rulemodel.cpp" line="906"/>
         <source>Transient</source>
-        <translation type="unfinished"></translation>
+        <translation>Vorübergehend</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="885"/>
+        <location filename="../src/settings/rulemodel.cpp" line="910"/>
         <source>Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Breite</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="887"/>
+        <location filename="../src/settings/rulemodel.cpp" line="912"/>
         <source>Height</source>
-        <translation type="unfinished"></translation>
+        <translation>Höhe</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="889"/>
+        <location filename="../src/settings/rulemodel.cpp" line="914"/>
         <source>Keep above</source>
-        <translation type="unfinished"></translation>
+        <translation>Im Vordergrund halten</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="891"/>
+        <location filename="../src/settings/rulemodel.cpp" line="916"/>
         <source>Keep below</source>
-        <translation type="unfinished"></translation>
+        <translation>Im Hintergrund halten</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="893"/>
+        <location filename="../src/settings/rulemodel.cpp" line="918"/>
         <source>Skip taskbar</source>
-        <translation type="unfinished"></translation>
+        <translation>Fensterleiste überspringen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="895"/>
+        <location filename="../src/settings/rulemodel.cpp" line="920"/>
         <source>Skip pager</source>
-        <translation type="unfinished"></translation>
+        <translation>Arbeitsflächen-Umschalter überspringen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="897"/>
+        <location filename="../src/settings/rulemodel.cpp" line="922"/>
         <source>Skip switcher</source>
-        <translation type="unfinished"></translation>
+        <translation>Fensterwechsler überspringen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="899"/>
+        <location filename="../src/settings/rulemodel.cpp" line="924"/>
         <source>Modal</source>
-        <translation type="unfinished"></translation>
+        <translation>Modal</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="901"/>
+        <location filename="../src/settings/rulemodel.cpp" line="926"/>
         <source>Decorated</source>
-        <translation type="unfinished"></translation>
+        <translation>Mit Dekoration</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="903"/>
+        <location filename="../src/settings/rulemodel.cpp" line="928"/>
         <source>Resizable</source>
-        <translation type="unfinished"></translation>
+        <translation>Größe veränderbar</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="905"/>
+        <location filename="../src/settings/rulemodel.cpp" line="930"/>
         <source>Movable</source>
-        <translation type="unfinished"></translation>
+        <translation>Verschiebbar</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="907"/>
+        <location filename="../src/settings/rulemodel.cpp" line="932"/>
         <source>Maximizable</source>
-        <translation type="unfinished"></translation>
+        <translation>Maximierbar</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="909"/>
+        <location filename="../src/settings/rulemodel.cpp" line="934"/>
         <source>Position X</source>
-        <translation type="unfinished"></translation>
+        <translation>Position X</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="911"/>
+        <location filename="../src/settings/rulemodel.cpp" line="936"/>
         <source>Position Y</source>
-        <translation type="unfinished"></translation>
+        <translation>Position Y</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="913"/>
+        <location filename="../src/settings/rulemodel.cpp" line="938"/>
         <source>Title (no suffix)</source>
-        <translation type="unfinished"></translation>
+        <translation>Titel (ohne Suffix)</translation>
     </message>
     <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="48"/>
-        <location filename="../src/settings/rulemodel.cpp" line="915"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="46"/>
+        <location filename="../src/settings/rulemodel.cpp" line="940"/>
         <source>Floating</source>
         <translation>Schwebend</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="921"/>
+        <location filename="../src/settings/rulemodel.cpp" line="946"/>
         <source>Zone</source>
-        <translation type="unfinished"></translation>
+        <translation>Zone</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="923"/>
+        <location filename="../src/settings/rulemodel.cpp" line="948"/>
         <source>Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Modus</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="925"/>
+        <location filename="../src/settings/rulemodel.cpp" line="950"/>
         <source>Tiled window count</source>
-        <translation type="unfinished"></translation>
+        <translation>Anzahl gekachelter Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="927"/>
+        <location filename="../src/settings/rulemodel.cpp" line="952"/>
         <source>Screen orientation</source>
-        <translation type="unfinished"></translation>
+        <translation>Bildschirmausrichtung</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="929"/>
+        <location filename="../src/settings/rulemodel.cpp" line="954"/>
         <source>Active layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktives Layout</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="937"/>
+        <location filename="../src/settings/rulemodel.cpp" line="962"/>
         <source>Any window</source>
-        <translation type="unfinished"></translation>
+        <translation>Beliebiges Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="951"/>
+        <location filename="../src/settings/rulemodel.cpp" line="976"/>
         <source>(condition group)</source>
-        <translation type="unfinished"></translation>
+        <translation>(Bedingungsgruppe)</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/rulemodel.cpp" line="958"/>
+        <location filename="../src/settings/rulemodel.cpp" line="983"/>
         <source>%n condition(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n Bedingung</numerusform>
+            <numerusform>%n Bedingungen</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="964"/>
+        <location filename="../src/settings/rulemodel.cpp" line="989"/>
         <source>No action</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Snapped: Zone %1</source>
-        <translation type="vanished">Eingerastet: Zone %1</translation>
-    </message>
-    <message>
-        <source>Next window</source>
-        <translation type="vanished">Nächstes Fenster</translation>
-    </message>
-    <message>
-        <source>Focus main window</source>
-        <translation type="vanished">Hauptfenster fokussieren</translation>
-    </message>
-    <message>
-        <source>Swapped with main window</source>
-        <translation type="vanished">Mit Hauptfenster getauscht</translation>
-    </message>
-    <message>
-        <source>Main area enlarged</source>
-        <translation type="vanished">Hauptbereich vergrößert</translation>
-    </message>
-    <message>
-        <source>Main area reduced</source>
-        <translation type="vanished">Hauptbereich verkleinert</translation>
-    </message>
-    <message>
-        <source>Main window count increased</source>
-        <translation type="vanished">Anzahl der Hauptfenster erhöht</translation>
-    </message>
-    <message>
-        <source>Main window count decreased</source>
-        <translation type="vanished">Anzahl der Hauptfenster verringert</translation>
-    </message>
-    <message>
-        <source>Layout refreshed</source>
-        <translation type="vanished">Layout aktualisiert</translation>
-    </message>
-    <message numerus="yes">
-        <source>Rearranged %1 window</source>
-        <translation type="vanished">
-            <numerusform>%1 Fenster neu angeordnet</numerusform>
-            <numerusform></numerusform>
-        </translation>
-        <extra-po-msgid_plural>Rearranged %1 windows</extra-po-msgid_plural>
-    </message>
-    <message>
-        <source>Windows rearranged</source>
-        <translation type="vanished">Fenster neu angeordnet</translation>
-    </message>
-    <message>
-        <source>Autotile: %1</source>
-        <translation type="vanished">Autotile: %1</translation>
-    </message>
-    <message>
-        <source>Action completed</source>
-        <translation type="vanished">Aktion abgeschlossen</translation>
-    </message>
-    <message>
-        <source>Navigation feedback</source>
-        <translation type="vanished">Navigations-Feedback</translation>
-    </message>
-    <message>
-        <source>Brief feedback when using keyboard navigation to move or focus windows between zones</source>
-        <translation type="vanished">Kurzes Feedback beim Verwenden der Tastaturnavigation zum Verschieben oder Fokussieren von Fenstern zwischen Zonen</translation>
-    </message>
-    <message>
-        <source>Shader error</source>
-        <translation type="vanished">Shader-Fehler</translation>
-    </message>
-    <message>
-        <source>Dismiss snap assist overlay</source>
-        <translation type="vanished">Einrasthilfe-Overlay schließen</translation>
-    </message>
-    <message>
-        <source>Snap %1 to this zone</source>
-        <translation type="vanished">%1 in diese Zone einrasten</translation>
-    </message>
-    <message>
-        <source>Snap window to this zone</source>
-        <translation type="vanished">Fenster in diese Zone einrasten</translation>
-    </message>
-    <message>
-        <source>PlasmaZones Overlay Active
-(No zones defined)</source>
-        <translation type="vanished">PlasmaZones-Overlay aktiv
-(Keine Zonen definiert)</translation>
-    </message>
-    <message>
-        <source>Select Layout</source>
-        <translation type="vanished">Layout auswählen</translation>
-    </message>
-    <message>
-        <source>Layout %1</source>
-        <translation type="vanished">Layout %1</translation>
-    </message>
-    <message>
-        <source>Zone layout selector</source>
-        <translation type="vanished">Zonen-Layout-Auswahl</translation>
-    </message>
-    <message>
-        <source>No layouts available</source>
-        <translation type="vanished">Keine Layouts verfügbar</translation>
-    </message>
-    <message>
-        <source>Pushed</source>
-        <translation type="vanished">Geschoben</translation>
-    </message>
-    <message>
-        <source>Resnapped</source>
-        <translation type="vanished">Neu eingerastet</translation>
-    </message>
-    <message>
-        <source>Done</source>
-        <translation type="vanished">Fertig</translation>
+        <translation>Keine Aktion</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/clipboard.cpp" line="34"/>
@@ -1230,1002 +745,1040 @@
         <translation>%1 Zonen einfügen</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/gaps.cpp" line="332"/>
+        <location filename="../src/editor/controller/gaps.cpp" line="327"/>
         <source>Clear Edge Gap Override</source>
         <comment>@action</comment>
         <translation>Randabstand-Überschreibung zurücksetzen</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="315"/>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="201"/>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="209"/>
+        <location filename="../src/editor/controller/layout.cpp" line="433"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="184"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="192"/>
         <source>New Layout</source>
         <translation>Neues Layout</translation>
     </message>
     <message>
-        <source>Import</source>
-        <translation type="vanished">Importieren</translation>
-    </message>
-    <message>
-        <source>Open Folder</source>
-        <translation type="vanished">Ordner öffnen</translation>
-    </message>
-    <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="60"/>
         <source>Identity</source>
-        <translation type="unfinished"></translation>
+        <translation>Identität</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="66"/>
         <source>Type</source>
-        <translation type="unfinished"></translation>
+        <translation>Typ</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="79"/>
         <source>State</source>
-        <translation type="unfinished"></translation>
+        <translation>Status</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="85"/>
         <source>Taskbar &amp; switcher</source>
-        <translation type="unfinished"></translation>
+        <translation>Taskleiste &amp; Umschalter</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="91"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="238"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="243"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="770"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="149"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="788"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="147"/>
         <source>Tiling</source>
         <translation>Kachelung</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="96"/>
         <source>Size</source>
-        <translation type="unfinished"></translation>
+        <translation>Größe</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="104"/>
         <source>Context</source>
-        <translation type="unfinished"></translation>
+        <translation>Kontext</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="106"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="218"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="260"/>
         <source>Other</source>
-        <translation type="unfinished"></translation>
+        <translation>Sonstiges</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="117"/>
         <source>The application&apos;s ID (Wayland app_id / desktop entry), e.g. org.kde.konsole.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die ID der Anwendung (Wayland app_id / Desktop-Eintrag), z. B. org.kde.konsole.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="119"/>
         <source>The window&apos;s class (WM_CLASS resource class), e.g. konsole.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Klasse des Fensters (WM_CLASS resource class), z. B. konsole.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="121"/>
         <source>The application&apos;s desktop entry file name.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Dateiname des Desktop-Eintrags der Anwendung.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="123"/>
         <source>The window&apos;s X11 role (WM_WINDOW_ROLE). Empty for Wayland-native windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die X11-Rolle des Fensters (WM_WINDOW_ROLE). Bei nativen Wayland-Fenstern leer.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="125"/>
         <source>The window&apos;s process ID.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Prozess-ID des Fensters.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="127"/>
         <source>The window&apos;s title-bar text.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Text der Titelleiste des Fensters.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="129"/>
         <source>The window&apos;s type (Normal, Dialog, Utility, Notification, …).</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Typ des Fensters (Normal, Dialog, Utility, Notification, …).</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="131"/>
         <source>Whether the window is shown on all virtual desktops.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster auf allen Arbeitsflächen angezeigt wird.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="133"/>
         <source>Whether the window is fullscreen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster im Vollbildmodus ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="135"/>
         <source>Whether the window is minimized.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster minimiert ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="137"/>
         <source>Whether the window is maximized.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster maximiert ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="139"/>
         <source>Whether the window currently has keyboard focus.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster derzeit den Tastaturfokus hat.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="141"/>
         <source>Whether the window is a transient (a dialog or popup owned by another window).</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster ein Transient-Fenster ist (ein Dialog oder Popup, das zu einem anderen Fenster gehört).</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="143"/>
         <source>Whether the window is a notification or on-screen display.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster eine Benachrichtigung oder ein On-Screen-Display ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="145"/>
         <source>The window&apos;s width in pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Breite des Fensters in Pixeln.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="147"/>
         <source>The window&apos;s height in pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Höhe des Fensters in Pixeln.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="149"/>
         <source>Whether the window is set to stay above other windows (always on top).</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster über anderen Fenstern bleiben soll (immer im Vordergrund).</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="151"/>
         <source>Whether the window is set to stay below other windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster unter anderen Fenstern bleiben soll.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="153"/>
         <source>Whether the window is hidden from the taskbar.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster in der Taskleiste ausgeblendet ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="155"/>
         <source>Whether the window is hidden from the pager.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster im Arbeitsflächen-Umschalter ausgeblendet ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="157"/>
         <source>Whether the window is hidden from the window switcher (Alt+Tab).</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster im Fensterwechsler (Alt+Tab) ausgeblendet ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="159"/>
         <source>Whether the window is a modal dialog.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster ein modaler Dialog ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="161"/>
         <source>Whether the window has a server-side title-bar and border.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster eine serverseitige Titelleiste und einen Rand hat.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="163"/>
         <source>Whether the window can be resized.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob die Größe des Fensters geändert werden kann.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="169"/>
         <source>The window&apos;s left-edge X position in pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die X-Position der linken Kante des Fensters in Pixeln.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="171"/>
         <source>The window&apos;s top-edge Y position in pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Y-Position der oberen Kante des Fensters in Pixeln.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="173"/>
         <source>The window&apos;s title without the application-name suffix the window manager adds.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Titel des Fensters ohne das Suffix mit dem Anwendungsnamen, das der Fenstermanager hinzufügt.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="175"/>
         <source>Whether the window has been floated out of tiling (snap or autotile).</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster aus der Kachelung herausgelöst wurde und schwebt (Einrasten oder Auto-Kacheln).</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="177"/>
         <source>Whether the window is snapped into a zone (manual-zone mode, where tiled windows are not snapped).</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster in eine Zone eingerastet ist (Manuelle-Zonen-Modus, in dem gekachelte Fenster nicht eingerastet sind).</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="180"/>
         <source>Whether the window is managed by the autotile engine.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster von der Auto-Kachel-Engine verwaltet wird.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="182"/>
         <source>The zone the window is snapped into (manual-zone mode only).</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Zone, in die das Fenster eingerastet ist (nur im Manuelle-Zonen-Modus).</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="184"/>
         <source>The monitor the window is on.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Bildschirm, auf dem sich das Fenster befindet.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="186"/>
         <source>The virtual desktop the window is on.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Arbeitsfläche, auf der sich das Fenster befindet.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="188"/>
         <source>The KDE Activity the window is on.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die KDE-Aktivität, auf der sich das Fenster befindet.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="190"/>
         <source>The engine mode the window is placed by (snapping or tiling).</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Engine-Modus, durch den das Fenster platziert wird (Einrasten oder Kachelung).</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="192"/>
         <source>How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as windows open and close, for example a centered single-window layout that gives way once a second window opens.</source>
-        <translation type="unfinished"></translation>
+        <translation>Wie viele Fenster auf diesem Bildschirm und dieser Arbeitsfläche gekachelt sind. Ermöglicht es einer Regel, den Kachelungsalgorithmus zu wechseln, wenn Fenster geöffnet und geschlossen werden, zum Beispiel ein zentriertes Einzelfenster-Layout, das weicht, sobald ein zweites Fenster geöffnet wird.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="249"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="170"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="168"/>
         <source>Overlay</source>
-        <translation type="unfinished">Overlay</translation>
+        <translation>Overlay</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="252"/>
         <source>Animation</source>
-        <translation type="unfinished"></translation>
+        <translation>Animation</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="258"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="190"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="214"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="188"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="212"/>
         <source>Window</source>
-        <translation type="unfinished"></translation>
+        <translation>Fenster</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="274"/>
         <source>Engine mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Engine-Modus</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="277"/>
         <location filename="../src/settings/rulemodel.cpp" line="276"/>
         <source>Snapping layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Einrast-Layout</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="304"/>
         <source>Engine to disable</source>
-        <translation type="unfinished"></translation>
+        <translation>Zu deaktivierende Engine</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="307"/>
         <source>Opacity (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>Deckkraft (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="317"/>
         <source>Restore position on login (off = don&apos;t restore)</source>
-        <translation type="unfinished"></translation>
+        <translation>Position bei der Anmeldung wiederherstellen (aus = nicht wiederherstellen)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="333"/>
         <source>Hide title bars (off = force visible)</source>
-        <translation type="unfinished"></translation>
+        <translation>Titelleisten ausblenden (aus = sichtbar erzwingen)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="336"/>
         <source>Show border (off = hide)</source>
-        <translation type="unfinished"></translation>
+        <translation>Rand anzeigen (aus = ausblenden)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="339"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="411"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="420"/>
         <source>Border width (px)</source>
-        <translation type="unfinished"></translation>
+        <translation>Randbreite (px)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="342"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="414"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="423"/>
         <source>Corner radius (px)</source>
-        <translation type="unfinished"></translation>
+        <translation>Eckenradius (px)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="348"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="402"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="291"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="411"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
         <source>Border color</source>
-        <translation type="unfinished"></translation>
+        <translation>Randfarbe</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="352"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="361"/>
         <source>Inner gap (px)</source>
-        <translation type="unfinished"></translation>
+        <translation>Innerer Abstand (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="355"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="364"/>
         <source>Outer gap (px)</source>
-        <translation type="unfinished"></translation>
+        <translation>Äußerer Abstand (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="358"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="367"/>
         <source>Use per-side outer gaps (off = one uniform gap)</source>
-        <translation type="unfinished"></translation>
+        <translation>Seitenweise äußere Abstände verwenden (aus = ein einheitlicher Abstand)</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="365"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="374"/>
         <source>Lock the layout (off = don&apos;t lock)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="372"/>
-        <source>Assign a default layout (off = leave unassigned)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="375"/>
-        <source>Top gap (px)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="378"/>
-        <source>Bottom gap (px)</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout sperren (aus = nicht sperren)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="381"/>
-        <source>Left gap (px)</source>
-        <translation type="unfinished"></translation>
+        <source>Assign a default layout (off = leave unassigned)</source>
+        <translation>Standard-Layout zuweisen (aus = nicht zuweisen)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="384"/>
-        <source>Right gap (px)</source>
-        <translation type="unfinished"></translation>
+        <source>Top gap (px)</source>
+        <translation>Oberer Abstand (px)</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="389"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="387"/>
+        <source>Bottom gap (px)</source>
+        <translation>Unterer Abstand (px)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="390"/>
+        <source>Left gap (px)</source>
+        <translation>Linker Abstand (px)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="393"/>
+        <source>Right gap (px)</source>
+        <translation>Rechter Abstand (px)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="398"/>
         <location filename="../src/settings/rulemodel.cpp" line="394"/>
         <source>Overlay shader</source>
-        <translation type="unfinished"></translation>
+        <translation>Overlay-Shader</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="392"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="401"/>
         <location filename="../src/settings/rulemodel.cpp" line="400"/>
         <source>Overlay style</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="423"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="746"/>
-        <location filename="../src/settings/rulemodel.cpp" line="877"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="262"/>
-        <source>Desktop</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="426"/>
-        <source>Event</source>
-        <translation type="unfinished"></translation>
+        <translation>Overlay-Stil</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="432"/>
-        <source>Shader effect</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="764"/>
+        <location filename="../src/settings/rulemodel.cpp" line="902"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="260"/>
+        <source>Desktop</source>
+        <translation>Arbeitsfläche</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="435"/>
+        <source>Event</source>
+        <translation>Ereignis</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="441"/>
+        <source>Shader effect</source>
+        <translation>Shader-Effekt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="444"/>
         <source>Duration (ms)</source>
-        <translation type="unfinished"></translation>
+        <translation>Dauer (ms)</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="438"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="447"/>
         <source>Curve</source>
-        <translation type="unfinished"></translation>
+        <translation>Kurve</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="453"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="462"/>
         <source>Zone numbers like “1, 2”, or a range like “1-3”. Multiple zones snap the window to their combined area.</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonennummern wie „1, 2“ oder ein Bereich wie „1-3“. Bei mehreren Zonen rastet das Fenster in deren kombinierten Bereich ein.</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="819"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="837"/>
         <location filename="../src/settings/rulemodel.cpp" line="243"/>
         <source>Autotile</source>
-        <translation type="unfinished"></translation>
+        <translation>Auto-Kacheln</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="822"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="840"/>
         <location filename="../src/settings/rulemodel.cpp" line="245"/>
         <source>Scrolling</source>
-        <translation type="unfinished"></translation>
+        <translation>Bildlauf</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="827"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="845"/>
         <source>Zone rectangles</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonenrechtecke</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="830"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="848"/>
         <source>Layout preview</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout-Vorschau</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="530"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="539"/>
         <source>Set engine mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Engine-Modus festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="165"/>
         <source>Whether the window can be moved.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster verschoben werden kann.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="167"/>
         <source>Whether the window can be maximized.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob das Fenster maximiert werden kann.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="197"/>
         <source>Whether the monitor is in portrait or landscape orientation. Lets a rule pick a different layout or algorithm on a rotated screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ob der Bildschirm im Hoch- oder Querformat ausgerichtet ist. Ermöglicht es einer Regel, auf einem gedrehten Bildschirm ein anderes Layout oder einen anderen Algorithmus zu wählen.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="201"/>
         <source>The layout currently active on the monitor. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout. It cannot change which layout is assigned (that would be circular).</source>
-        <translation type="unfinished"></translation>
+        <translation>Das derzeit auf dem Bildschirm aktive Layout. Ermöglicht es einer Regel, für den Bildschirm mit einem bestimmten Layout die Abstände, das Overlay oder den Sperrzustand zu ändern. Es kann nicht ändern, welches Layout zugewiesen ist (das wäre zirkulär).</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="246"/>
         <source>Engine</source>
-        <translation type="unfinished"></translation>
+        <translation>Engine</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="286"/>
         <source>Max tiled windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Max. gekachelte Fenster</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="289"/>
         <source>Split ratio (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>Teilungsverhältnis (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="295"/>
         <source>Insert position</source>
-        <translation type="unfinished"></translation>
+        <translation>Einfügeposition</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="320"/>
         <source>Restore to zone on login (off = don&apos;t restore)</source>
-        <translation type="unfinished"></translation>
+        <translation>Bei der Anmeldung in Zone wiederherstellen (aus = nicht wiederherstellen)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="323"/>
         <source>Restore size on unsnap (off = keep zone size)</source>
-        <translation type="unfinished"></translation>
+        <translation>Größe beim Ausrasten wiederherstellen (aus = Zonengröße beibehalten)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="326"/>
         <source>Layer</source>
-        <translation type="unfinished"></translation>
+        <translation>Ebene</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="399"/>
-        <source>Inactive zone color</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="351"/>
+        <source>Show opacity and tint (off = hide)</source>
+        <translation>Deckkraft und Färbung anzeigen (aus = ausblenden)</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="405"/>
-        <source>Active opacity (%)</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="354"/>
+        <source>Tint strength (%)</source>
+        <translation>Färbungsstärke (%)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="357"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="353"/>
+        <source>Tint color</source>
+        <translation>Färbungsfarbe</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="408"/>
-        <source>Inactive opacity (%)</source>
-        <translation type="unfinished"></translation>
+        <source>Inactive zone color</source>
+        <translation>Farbe der inaktiven Zone</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="414"/>
+        <source>Active opacity (%)</source>
+        <translation>Aktive Deckkraft (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="417"/>
+        <source>Inactive opacity (%)</source>
+        <translation>Inaktive Deckkraft (%)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="426"/>
         <source>Show zone numbers (off = hide)</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonennummern anzeigen (aus = ausblenden)</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="429"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="438"/>
         <source>Decoration packs</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="533"/>
-        <source>Set snapping layout</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="536"/>
-        <source>Set tiling algorithm</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="539"/>
-        <source>Set max tiled windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Dekorationspakete</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="542"/>
-        <source>Set split ratio</source>
-        <translation type="unfinished"></translation>
+        <source>Set snapping layout</source>
+        <translation>Einrast-Layout festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="545"/>
-        <source>Set master count</source>
-        <translation type="unfinished"></translation>
+        <source>Set tiling algorithm</source>
+        <translation>Kachelungsalgorithmus festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="548"/>
-        <source>Set insert position</source>
-        <translation type="unfinished"></translation>
+        <source>Set max tiled windows</source>
+        <translation>Max. gekachelte Fenster festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="551"/>
-        <source>Set overflow behavior</source>
-        <translation type="unfinished"></translation>
+        <source>Set split ratio</source>
+        <translation>Teilungsverhältnis festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="554"/>
-        <source>Set drag behavior</source>
-        <translation type="unfinished"></translation>
+        <source>Set master count</source>
+        <translation>Hauptbereich-Anzahl festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="557"/>
-        <source>Set algorithm parameter</source>
-        <translation type="unfinished"></translation>
+        <source>Set insert position</source>
+        <translation>Einfügeposition festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="560"/>
-        <source>Disable engine</source>
-        <translation type="unfinished"></translation>
+        <source>Set overflow behavior</source>
+        <translation>Überlaufverhalten festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="563"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="890"/>
-        <source>Lock layout</source>
-        <translation type="unfinished"></translation>
+        <source>Set drag behavior</source>
+        <translation>Ziehverhalten festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="566"/>
-        <source>Default layout assignment</source>
-        <translation type="unfinished"></translation>
+        <source>Set algorithm parameter</source>
+        <translation>Algorithmusparameter festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="569"/>
-        <source>Exclude window</source>
-        <translation type="unfinished"></translation>
+        <source>Disable engine</source>
+        <translation>Engine deaktivieren</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="572"/>
-        <source>Float window</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="908"/>
+        <source>Lock layout</source>
+        <translation>Layout sperren</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="575"/>
-        <source>Snap to zone(s)</source>
-        <translation type="unfinished"></translation>
+        <source>Default layout assignment</source>
+        <translation>Standard-Layoutzuweisung</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="578"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="878"/>
-        <source>Restore position on login</source>
-        <translation type="unfinished"></translation>
+        <source>Exclude window</source>
+        <translation>Fenster ausschließen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="581"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="881"/>
-        <source>Restore to zone on login</source>
-        <translation type="unfinished"></translation>
+        <source>Float window</source>
+        <translation>Fenster schweben lassen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="584"/>
+        <source>Snap to zone(s)</source>
+        <translation>In Zone(n) einrasten</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="587"/>
-        <source>Set window layer</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="896"/>
+        <source>Restore position on login</source>
+        <translation>Position bei Anmeldung wiederherstellen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="590"/>
-        <source>Override animation shader</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="593"/>
-        <source>Override decoration packs</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="899"/>
+        <source>Restore to zone on login</source>
+        <translation>Bei Anmeldung in Zone wiederherstellen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="596"/>
-        <source>Override animation duration</source>
-        <translation type="unfinished"></translation>
+        <source>Set window layer</source>
+        <translation>Fensterebene festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="599"/>
-        <source>Override animation curve</source>
-        <translation type="unfinished"></translation>
+        <source>Override animation shader</source>
+        <translation>Animations-Shader überschreiben</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="602"/>
-        <source>Set opacity</source>
-        <translation type="unfinished"></translation>
+        <source>Override decoration packs</source>
+        <translation>Dekorationspakete überschreiben</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="605"/>
-        <source>Set overlay shader</source>
-        <translation type="unfinished"></translation>
+        <source>Override animation duration</source>
+        <translation>Animationsdauer überschreiben</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="608"/>
-        <source>Set overlay style</source>
-        <translation type="unfinished"></translation>
+        <source>Override animation curve</source>
+        <translation>Animationskurve überschreiben</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="611"/>
-        <source>Set overlay highlight color</source>
-        <translation type="unfinished"></translation>
+        <source>Set opacity</source>
+        <translation>Deckkraft festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="614"/>
-        <source>Set overlay inactive color</source>
-        <translation type="unfinished"></translation>
+        <source>Set overlay shader</source>
+        <translation>Overlay-Shader festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="617"/>
-        <source>Set overlay border color</source>
-        <translation type="unfinished"></translation>
+        <source>Set overlay style</source>
+        <translation>Overlay-Stil festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="620"/>
-        <source>Set overlay active opacity</source>
-        <translation type="unfinished"></translation>
+        <source>Set overlay highlight color</source>
+        <translation>Overlay-Hervorhebungsfarbe festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="623"/>
-        <source>Set overlay inactive opacity</source>
-        <translation type="unfinished"></translation>
+        <source>Set overlay inactive color</source>
+        <translation>Inaktive Overlay-Farbe festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="626"/>
-        <source>Set overlay border width</source>
-        <translation type="unfinished"></translation>
+        <source>Set overlay border color</source>
+        <translation>Overlay-Randfarbe festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="629"/>
-        <source>Set overlay corner radius</source>
-        <translation type="unfinished"></translation>
+        <source>Set overlay active opacity</source>
+        <translation>Aktive Overlay-Deckkraft festlegen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="632"/>
+        <source>Set overlay inactive opacity</source>
+        <translation>Inaktive Overlay-Deckkraft festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="635"/>
+        <source>Set overlay border width</source>
+        <translation>Overlay-Randbreite festlegen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="638"/>
+        <source>Set overlay corner radius</source>
+        <translation>Overlay-Eckenradius festlegen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="644"/>
         <source>Exclude from animations</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="643"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="887"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="342"/>
-        <source>Hide title bars</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="646"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="896"/>
-        <source>Show border</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="649"/>
-        <source>Set border width</source>
-        <translation type="unfinished"></translation>
+        <translation>Von Animationen ausschließen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="652"/>
-        <source>Set corner radius</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="905"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="356"/>
+        <source>Hide title bars</source>
+        <translation>Titelleisten ausblenden</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="655"/>
-        <source>Set focused border color</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="914"/>
+        <source>Show border</source>
+        <translation>Rand anzeigen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="658"/>
-        <source>Set unfocused border color</source>
-        <translation type="unfinished"></translation>
+        <source>Set border width</source>
+        <translation>Randbreite festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="661"/>
-        <source>Set inner gap</source>
-        <translation type="unfinished"></translation>
+        <source>Set corner radius</source>
+        <translation>Eckenradius festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="664"/>
-        <source>Set outer gap</source>
-        <translation type="unfinished"></translation>
+        <source>Set focused border color</source>
+        <translation>Randfarbe bei Fokus festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="667"/>
-        <source>Use per-side outer gaps</source>
-        <translation type="unfinished"></translation>
+        <source>Set unfocused border color</source>
+        <translation>Randfarbe ohne Fokus festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="670"/>
-        <source>Set top gap</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="917"/>
+        <source>Show opacity and tint</source>
+        <translation>Deckkraft und Tönung anzeigen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="673"/>
-        <source>Set bottom gap</source>
-        <translation type="unfinished"></translation>
+        <source>Set tint strength</source>
+        <translation>Tönungsstärke festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="676"/>
-        <source>Set left gap</source>
-        <translation type="unfinished"></translation>
+        <source>Set tint color</source>
+        <translation>Tönungsfarbe festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="679"/>
-        <source>Set right gap</source>
-        <translation type="unfinished"></translation>
+        <source>Set inner gap</source>
+        <translation>Inneren Abstand festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="682"/>
-        <location filename="../src/settings/rulemodel.cpp" line="331"/>
-        <source>Open on monitor</source>
-        <translation type="unfinished"></translation>
+        <source>Set outer gap</source>
+        <translation>Äußeren Abstand festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="685"/>
-        <location filename="../src/settings/rulemodel.cpp" line="336"/>
-        <source>Open on desktop</source>
-        <translation type="unfinished"></translation>
+        <source>Use per-side outer gaps</source>
+        <translation>Seitenweise äußere Abstände verwenden</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="688"/>
+        <source>Set top gap</source>
+        <translation>Oberen Abstand festlegen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="691"/>
+        <source>Set bottom gap</source>
+        <translation>Unteren Abstand festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="694"/>
-        <source>is</source>
-        <translation type="unfinished"></translation>
+        <source>Set left gap</source>
+        <translation>Linken Abstand festlegen</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="696"/>
-        <source>contains</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="698"/>
-        <source>starts with</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="697"/>
+        <source>Set right gap</source>
+        <translation>Rechten Abstand festlegen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="700"/>
+        <location filename="../src/settings/rulemodel.cpp" line="331"/>
+        <source>Open on monitor</source>
+        <translation>Auf Bildschirm öffnen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="703"/>
+        <location filename="../src/settings/rulemodel.cpp" line="336"/>
+        <source>Open on desktop</source>
+        <translation>Auf Arbeitsfläche öffnen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="712"/>
+        <source>is</source>
+        <translation>ist</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="714"/>
+        <source>contains</source>
+        <translation>enthält</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="716"/>
+        <source>starts with</source>
+        <translation>beginnt mit</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="718"/>
         <source>ends with</source>
-        <translation type="unfinished"></translation>
+        <translation>endet mit</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="702"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="720"/>
         <source>matches regex</source>
-        <translation type="unfinished"></translation>
+        <translation>entspricht regulärem Ausdruck</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="704"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="722"/>
         <source>matches app-id</source>
-        <translation type="unfinished"></translation>
+        <translation>entspricht App-ID</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="706"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="724"/>
         <source>greater than</source>
-        <translation type="unfinished"></translation>
+        <translation>größer als</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="708"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="726"/>
         <source>less than</source>
-        <translation type="unfinished"></translation>
+        <translation>kleiner als</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="736"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="754"/>
         <source>Unknown</source>
-        <translation type="unfinished"></translation>
+        <translation>Unbekannt</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="737"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="755"/>
         <source>Normal window</source>
-        <translation type="unfinished"></translation>
+        <translation>Normales Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="738"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="756"/>
         <source>Dialog</source>
-        <translation type="unfinished"></translation>
+        <translation>Dialog</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="739"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="757"/>
         <source>Utility</source>
-        <translation type="unfinished"></translation>
+        <translation>Dienstprogramm</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="740"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="758"/>
         <source>Toolbar</source>
-        <translation type="unfinished"></translation>
+        <translation>Werkzeugleiste</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="741"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="759"/>
         <source>Splash screen</source>
-        <translation type="unfinished"></translation>
+        <translation>Startbildschirm</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="742"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="760"/>
         <source>Menu</source>
-        <translation type="unfinished"></translation>
+        <translation>Menü</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="743"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="761"/>
         <source>Tooltip</source>
-        <translation type="unfinished"></translation>
+        <translation>Kurzinfo</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="744"/>
-        <location filename="../src/settings/rulemodel.cpp" line="883"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="762"/>
+        <location filename="../src/settings/rulemodel.cpp" line="908"/>
         <source>Notification</source>
-        <translation type="unfinished"></translation>
+        <translation>Benachrichtigung</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="745"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="763"/>
         <source>Dock / panel</source>
-        <translation type="unfinished"></translation>
+        <translation>Dock / Kontrollleiste</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="747"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="765"/>
         <source>On-screen display</source>
-        <translation type="unfinished"></translation>
+        <translation>On-Screen-Display</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="748"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="766"/>
         <source>Popup</source>
-        <translation type="unfinished"></translation>
+        <translation>Aufklappfenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="774"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="792"/>
         <source>Landscape</source>
-        <translation type="unfinished"></translation>
+        <translation>Querformat</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="775"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="793"/>
         <source>Portrait</source>
-        <translation type="unfinished"></translation>
+        <translation>Hochformat</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="835"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="853"/>
         <source>End of stack</source>
-        <translation type="unfinished"></translation>
+        <translation>Ende des Stapels</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="838"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="856"/>
         <source>After focused window</source>
-        <translation type="unfinished"></translation>
+        <translation>Nach dem fokussierten Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="841"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="859"/>
         <source>As master</source>
-        <translation type="unfinished"></translation>
+        <translation>Als Hauptfenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="846"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="864"/>
         <source>Float overflow windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Überzählige Fenster schweben lassen</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="849"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="867"/>
         <source>Unlimited (no cap)</source>
-        <translation type="unfinished"></translation>
+        <translation>Unbegrenzt (keine Obergrenze)</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="854"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="872"/>
         <source>Float on drag</source>
-        <translation type="unfinished"></translation>
+        <translation>Beim Ziehen schweben lassen</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="857"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="875"/>
         <source>Reorder in stack</source>
-        <translation type="unfinished"></translation>
+        <translation>Im Stapel neu anordnen</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="862"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="880"/>
         <source>Above other windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Über anderen Fenstern</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="865"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="883"/>
         <source>Normal stacking</source>
-        <translation type="unfinished"></translation>
+        <translation>Normale Stapelung</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="868"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="886"/>
         <source>Below other windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Unter anderen Fenstern</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="881"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="899"/>
         <source>Don&apos;t restore to zone on login</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="884"/>
-        <source>Keep zone size on unsnap</source>
-        <translation type="unfinished"></translation>
+        <translation>Bei Anmeldung nicht in Zone wiederherstellen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="902"/>
+        <source>Keep zone size on unsnap</source>
+        <translation>Zonengröße beim Ausrasten beibehalten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="917"/>
+        <source>Hide opacity and tint</source>
+        <translation>Deckkraft und Tönung ausblenden</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="923"/>
         <source>Hide zone numbers</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonennummern ausblenden</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="1089"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="1110"/>
         <source>Regular expression, e.g. ^(firefox|chromium)$</source>
-        <translation type="unfinished"></translation>
+        <translation>Regulärer Ausdruck, z. B. ^(firefox|chromium)$</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="1092"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="1113"/>
         <source>Matches by reverse-DNS segments, so “firefox” also matches “org.mozilla.firefox”.</source>
-        <translation type="unfinished"></translation>
+        <translation>Vergleicht anhand von Reverse-DNS-Segmenten, sodass „firefox“ auch auf „org.mozilla.firefox“ zutrifft.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="375"/>
+        <location filename="../src/editor/controller/layout.cpp" line="493"/>
         <source>Layout ID cannot be empty</source>
         <translation>Layout-ID darf nicht leer sein</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="380"/>
+        <location filename="../src/editor/controller/layout.cpp" line="498"/>
         <source>Layout service not initialized</source>
         <translation>Layout-Dienst nicht initialisiert</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="410"/>
+        <location filename="../src/editor/controller/layout.cpp" line="528"/>
         <source>Invalid layout data format</source>
         <translation>Ungültiges Layout-Datenformat</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="725"/>
+        <location filename="../src/editor/controller/layout.cpp" line="843"/>
         <source>Services not initialized</source>
         <translation>Dienste nicht initialisiert</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="920"/>
-        <location filename="../src/editor/controller/layout.cpp" line="955"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1041"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1079"/>
         <source>File path cannot be empty</source>
-        <translation type="unfinished">Dateipfad darf nicht leer sein</translation>
+        <translation>Der Dateipfad darf nicht leer sein</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="927"/>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="405"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1048"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="334"/>
         <source>Failed to import layout: %1</source>
-        <translation type="unfinished">Layout konnte nicht importiert werden: %1</translation>
+        <translation>Import des Layouts fehlgeschlagen: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="935"/>
-        <source>Imported layout but received empty ID</source>
-        <translation type="unfinished">Layout importiert, aber leere ID erhalten</translation>
+        <location filename="../src/editor/controller/layout.cpp" line="1059"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="341"/>
+        <source>That file is not a layout this app can read.</source>
+        <translation>Diese Datei ist kein Layout, das diese Anwendung lesen kann.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="960"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1102"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="386"/>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="545"/>
+        <source>Could not write the export. Check that the folder is writable.</source>
+        <translation>Der Export konnte nicht geschrieben werden. Prüfen Sie, ob der Ordner beschreibbar ist.</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/controller/layout.cpp" line="1084"/>
         <source>No layout loaded to export</source>
-        <translation type="unfinished">Kein Layout zum Exportieren geladen</translation>
+        <translation>Kein Layout zum Exportieren geladen</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="967"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1091"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="377"/>
         <source>Failed to export layout: %1</source>
-        <translation type="unfinished">Layout konnte nicht exportiert werden: %1</translation>
+        <translation>Export des Layouts fehlgeschlagen: %1</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="34"/>
@@ -2234,82 +1787,10 @@
         <translation>%1 Zonen löschen</translation>
     </message>
     <message>
-        <source>Balanced recursive splitting into equal regions</source>
-        <translation type="vanished">Ausgewogene rekursive Aufteilung in gleiche Bereiche</translation>
-    </message>
-    <message>
-        <source>Binary Split</source>
-        <translation type="vanished">Binäre Teilung</translation>
-    </message>
-    <message>
-        <source>Cascade</source>
-        <translation type="vanished">Kaskade</translation>
-    </message>
-    <message>
-        <source>Centered Master</source>
-        <translation type="vanished">Zentrierter Master</translation>
-    </message>
-    <message>
-        <source>Columns</source>
-        <translation type="vanished">Spalten</translation>
-    </message>
-    <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="62"/>
         <source>Duplicate %1 Zones</source>
         <comment>@action</comment>
         <translation>%1 Zonen duplizieren</translation>
-    </message>
-    <message>
-        <source>Dwindle</source>
-        <translation type="vanished">Dwindle</translation>
-    </message>
-    <message>
-        <source>Each new window gets a smaller split, alternating direction</source>
-        <translation type="vanished">Jedes neue Fenster erhält eine kleinere Teilung, abwechselnde Richtung</translation>
-    </message>
-    <message>
-        <source>Equal-height horizontal rows</source>
-        <translation type="vanished">Horizontale Zeilen gleicher Höhe</translation>
-    </message>
-    <message>
-        <source>Equal-sized grid layout</source>
-        <translation type="vanished">Raster-Layout gleicher Größe</translation>
-    </message>
-    <message>
-        <source>Equal-width vertical columns</source>
-        <translation type="vanished">Vertikale Spalten gleicher Breite</translation>
-    </message>
-    <message>
-        <source>Grid</source>
-        <translation type="vanished">Raster</translation>
-    </message>
-    <message>
-        <source>Large master area with stacked secondary windows</source>
-        <translation type="vanished">Großer Hauptbereich mit gestapelten Nebenfenstern</translation>
-    </message>
-    <message>
-        <source>Master + Stack</source>
-        <translation type="vanished">Master + Stapel</translation>
-    </message>
-    <message>
-        <source>BSP</source>
-        <translation type="vanished">BSP</translation>
-    </message>
-    <message>
-        <source>Master area on top, remaining windows stacked below</source>
-        <translation type="vanished">Hauptbereich oben, restliche Fenster darunter gestapelt</translation>
-    </message>
-    <message>
-        <source>Master window centered with columns on each side</source>
-        <translation type="vanished">Hauptfenster zentriert mit Spalten auf jeder Seite</translation>
-    </message>
-    <message>
-        <source>Master windows centered with stacks on both sides</source>
-        <translation type="vanished">Hauptfenster zentriert mit Stapeln auf beiden Seiten</translation>
-    </message>
-    <message>
-        <source>Monocle</source>
-        <translation type="vanished">Monokel</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="106"/>
@@ -2319,129 +1800,40 @@
         <translation>%1 Zonen verschieben</translation>
     </message>
     <message>
-        <source>One window fullscreen at a time, cycle through others</source>
-        <translation type="vanished">Ein Fenster im Vollbild, durch andere blättern</translation>
-    </message>
-    <message>
-        <source>Overlapping windows in a diagonal cascade</source>
-        <translation type="vanished">Überlappende Fenster in diagonaler Kaskade</translation>
-    </message>
-    <message>
         <location filename="../src/editor/controller/multiselect.cpp" line="189"/>
         <source>Resize %1 Zones</source>
         <comment>@action</comment>
         <translation>Größe von %1 Zonen ändern</translation>
     </message>
     <message>
-        <source>Rows</source>
-        <translation type="vanished">Zeilen</translation>
+        <location filename="../src/editor/controller/settings.cpp" line="31"/>
+        <source>Zone name cannot exceed %1 characters</source>
+        <translation>Der Zonenname darf nicht länger als %1 Zeichen sein</translation>
     </message>
     <message>
-        <source>Spiral</source>
-        <translation type="vanished">Spirale</translation>
-    </message>
-    <message>
-        <source>Spread</source>
-        <translation type="vanished">Verteilt</translation>
-    </message>
-    <message>
-        <source>Stair</source>
-        <translation type="vanished">Treppe</translation>
-    </message>
-    <message>
-        <source>Stepped staircase arrangement</source>
-        <translation type="vanished">Gestufte Treppenanordnung</translation>
-    </message>
-    <message>
-        <source>Three Column</source>
-        <translation type="vanished">Drei Spalten</translation>
-    </message>
-    <message>
-        <source>Wide</source>
-        <translation type="vanished">Breit</translation>
-    </message>
-    <message>
-        <source>Windows spiral inward from the edges</source>
-        <translation type="vanished">Fenster spiralförmig von den Rändern nach innen</translation>
-    </message>
-    <message>
-        <source>Windows spread evenly across the screen</source>
-        <translation type="vanished">Fenster gleichmäßig über den Bildschirm verteilt</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/controller/settings.cpp" line="28"/>
-        <source>Zone name cannot exceed 100 characters</source>
-        <translation>Zonenname darf nicht länger als 100 Zeichen sein</translation>
-    </message>
-    <message>
-        <location filename="../src/editor/controller/settings.cpp" line="37"/>
+        <location filename="../src/editor/controller/settings.cpp" line="40"/>
         <source>Zone name contains invalid characters: &lt; &gt; &quot; &apos; \</source>
         <translation>Zonenname enthält ungültige Zeichen: &lt; &gt; &quot; &apos; \</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="49"/>
+        <location filename="../src/editor/controller/settings.cpp" line="52"/>
         <source>A zone with this name already exists</source>
         <translation>Eine Zone mit diesem Namen existiert bereits</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="68"/>
+        <location filename="../src/editor/controller/settings.cpp" line="71"/>
         <source>Zone number must be at least 1</source>
         <translation>Die Zonennummer muss mindestens 1 sein</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="71"/>
+        <location filename="../src/editor/controller/settings.cpp" line="74"/>
         <source>Zone number cannot exceed 99</source>
         <translation>Die Zonennummer darf nicht größer als 99 sein</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="91"/>
+        <location filename="../src/editor/controller/settings.cpp" line="94"/>
         <source>Zone number %1 is already in use</source>
         <translation>Zonennummer %1 wird bereits verwendet</translation>
-    </message>
-    <message>
-        <source>File path cannot be empty</source>
-        <comment>@info</comment>
-        <translation type="vanished">Dateipfad darf nicht leer sein</translation>
-    </message>
-    <message>
-        <source>No shader selected to save</source>
-        <comment>@info</comment>
-        <translation type="vanished">Kein Shader zum Speichern ausgewählt</translation>
-    </message>
-    <message>
-        <source>Failed to save preset: %1</source>
-        <comment>@info</comment>
-        <translation type="vanished">Voreinstellung konnte nicht gespeichert werden: %1</translation>
-    </message>
-    <message>
-        <source>Failed to write preset file: %1</source>
-        <comment>@info</comment>
-        <translation type="vanished">Voreinstellungsdatei konnte nicht geschrieben werden: %1</translation>
-    </message>
-    <message>
-        <source>Failed to open preset file: %1</source>
-        <comment>@info</comment>
-        <translation type="vanished">Voreinstellungsdatei konnte nicht geöffnet werden: %1</translation>
-    </message>
-    <message>
-        <source>Invalid preset file: %1</source>
-        <comment>@info</comment>
-        <translation type="vanished">Ungültige Voreinstellungsdatei: %1</translation>
-    </message>
-    <message>
-        <source>Preset file must contain a JSON object</source>
-        <comment>@info</comment>
-        <translation type="vanished">Voreinstellungsdatei muss ein JSON-Objekt enthalten</translation>
-    </message>
-    <message>
-        <source>Preset file missing shader ID</source>
-        <comment>@info</comment>
-        <translation type="vanished">Shader-ID fehlt in der Voreinstellungsdatei</translation>
-    </message>
-    <message>
-        <source>Shader in preset is no longer available</source>
-        <comment>@info</comment>
-        <translation type="vanished">Shader in der Voreinstellung ist nicht mehr verfügbar</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/shader.cpp" line="271"/>
@@ -2496,17 +1888,9 @@
         <translation>Dienste nicht initialisiert</translation>
     </message>
     <message>
-        <source>PlasmaZones Layout Editor</source>
-        <translation type="vanished">PlasmaZones Layout-Editor</translation>
-    </message>
-    <message>
         <location filename="../src/editor/main.cpp" line="142"/>
         <source>Visual layout editor for PlasmaZones</source>
         <translation>Visueller Layout-Editor für PlasmaZones</translation>
-    </message>
-    <message>
-        <source>(c) 2026 fuddlesworth</source>
-        <translation type="vanished">(c) 2026 fuddlesworth</translation>
     </message>
     <message>
         <location filename="../src/editor/main.cpp" line="147"/>
@@ -2527,1861 +1911,6 @@
         <location filename="../src/editor/main.cpp" line="152"/>
         <source>Open in read-only preview mode</source>
         <translation>Im schreibgeschützten Vorschaumodus öffnen</translation>
-    </message>
-    <message>
-        <source>Split horizontally</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Horizontal teilen</translation>
-    </message>
-    <message>
-        <source>Split this zone into two horizontal sections</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Diese Zone in zwei horizontale Abschnitte teilen</translation>
-    </message>
-    <message>
-        <source>Split horizontally</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Horizontal teilen</translation>
-    </message>
-    <message>
-        <source>Split vertically</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Vertikal teilen</translation>
-    </message>
-    <message>
-        <source>Split this zone into two vertical sections</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Diese Zone in zwei vertikale Abschnitte teilen</translation>
-    </message>
-    <message>
-        <source>Split vertically</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Vertikal teilen</translation>
-    </message>
-    <message>
-        <source>Fill available space</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Verfügbaren Platz füllen</translation>
-    </message>
-    <message>
-        <source>Expand zone to fill available empty space</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Zone erweitern, um verfügbaren leeren Platz zu füllen</translation>
-    </message>
-    <message>
-        <source>Fill available space</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Verfügbaren Platz füllen</translation>
-    </message>
-    <message>
-        <source>Duplicate zone</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Zone duplizieren</translation>
-    </message>
-    <message>
-        <source>Create a copy of this zone</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Eine Kopie dieser Zone erstellen</translation>
-    </message>
-    <message>
-        <source>Duplicate zone</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Zone duplizieren</translation>
-    </message>
-    <message>
-        <source>Delete zone</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Zone löschen</translation>
-    </message>
-    <message>
-        <source>Remove this zone from the layout</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Diese Zone aus dem Layout entfernen</translation>
-    </message>
-    <message>
-        <source>Delete zone</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Zone löschen</translation>
-    </message>
-    <message>
-        <source>Click to set for all</source>
-        <comment>@info</comment>
-        <translation type="vanished">Klicken, um für alle zu setzen</translation>
-    </message>
-    <message>
-        <source>Color hex code</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Farb-Hex-Code</translation>
-    </message>
-    <message>
-        <source>Add Zone</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Zone hinzufügen</translation>
-    </message>
-    <message>
-        <source>Click to add a new zone to the layout</source>
-        <comment>@info</comment>
-        <translation type="vanished">Klicken, um eine neue Zone zum Layout hinzuzufügen</translation>
-    </message>
-    <message>
-        <source>Add a new zone to the layout. The zone will be created centered on the canvas.</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Eine neue Zone zum Layout hinzufügen. Die Zone wird zentriert auf der Arbeitsfläche erstellt.</translation>
-    </message>
-    <message>
-        <source>Apply Template...</source>
-        <comment>@item:inmenu</comment>
-        <translation type="vanished">Vorlage anwenden ...</translation>
-    </message>
-    <message>
-        <source>Grid 2×2</source>
-        <comment>@item:inmenu</comment>
-        <translation type="vanished">Raster 2×2</translation>
-    </message>
-    <message>
-        <source>Grid Layouts</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Raster-Layouts</translation>
-    </message>
-    <message>
-        <source>Grid 3×2</source>
-        <comment>@item:inmenu</comment>
-        <translation type="vanished">Raster 3×2</translation>
-    </message>
-    <message>
-        <source>Columns 2</source>
-        <comment>@item:inmenu</comment>
-        <translation type="vanished">2 Spalten</translation>
-    </message>
-    <message>
-        <source>Column Layouts</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Spalten-Layouts</translation>
-    </message>
-    <message>
-        <source>Columns 3</source>
-        <comment>@item:inmenu</comment>
-        <translation type="vanished">3 Spalten</translation>
-    </message>
-    <message>
-        <source>Rows 2</source>
-        <comment>@item:inmenu</comment>
-        <translation type="vanished">2 Zeilen</translation>
-    </message>
-    <message>
-        <source>Row Layouts</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Zeilen-Layouts</translation>
-    </message>
-    <message>
-        <source>Priority Grid</source>
-        <comment>@item:inmenu</comment>
-        <translation type="vanished">Prioritätsraster</translation>
-    </message>
-    <message>
-        <source>Special Layouts</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Spezielle Layouts</translation>
-    </message>
-    <message>
-        <source>Focus</source>
-        <comment>@item:inmenu</comment>
-        <translation type="vanished">Fokus</translation>
-    </message>
-    <message>
-        <source>Layout templates</source>
-        <comment>@label</comment>
-        <translation type="vanished">Layout-Vorlagen</translation>
-    </message>
-    <message>
-        <source>Apply a predefined layout template</source>
-        <comment>@info</comment>
-        <translation type="vanished">Eine vordefinierte Layout-Vorlage anwenden</translation>
-    </message>
-    <message>
-        <source>Snap to Edges</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">An Kanten einrasten</translation>
-    </message>
-    <message>
-        <source>Toggle edge snapping. Zones will align with edges of other zones when enabled.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Kanteneinrastung umschalten. Zonen werden an den Kanten anderer Zonen ausgerichtet, wenn aktiviert.</translation>
-    </message>
-    <message>
-        <source>Edge snapping enabled. Zones align to edges of other zones. Click to disable.</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Kanteneinrastung aktiviert. Zonen werden an Kanten anderer Zonen ausgerichtet. Klicken zum Deaktivieren.</translation>
-    </message>
-    <message>
-        <source>Edge snapping disabled. Click to enable. Zones will align to edges of other zones.</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Kanteneinrastung deaktiviert. Klicken zum Aktivieren. Zonen werden an Kanten anderer Zonen ausgerichtet.</translation>
-    </message>
-    <message>
-        <source>Snap to Grid</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Am Raster einrasten</translation>
-    </message>
-    <message>
-        <source>Toggle grid snapping. Zones will align to a grid when enabled. Use the dropdowns to change horizontal and vertical grid sizes.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Rastereinrastung umschalten. Zonen werden am Raster ausgerichtet, wenn aktiviert. Verwenden Sie die Auswahllisten, um die horizontale und vertikale Rastergröße zu ändern.</translation>
-    </message>
-    <message>
-        <source>Grid snapping enabled (H:%1% V:%2%). Zones align to grid lines. Click to disable.</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Rastereinrastung aktiviert (H:%1% V:%2%). Zonen werden an Rasterlinien ausgerichtet. Klicken zum Deaktivieren.</translation>
-    </message>
-    <message>
-        <source>Grid snapping disabled. Click to enable. Zones will align to grid lines.</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Rastereinrastung deaktiviert. Klicken zum Aktivieren. Zonen werden an Rasterlinien ausgerichtet.</translation>
-    </message>
-    <message>
-        <source>H:</source>
-        <comment>@label</comment>
-        <translation type="vanished">H:</translation>
-    </message>
-    <message>
-        <source>Horizontal grid interval</source>
-        <comment>@label</comment>
-        <translation type="vanished">Horizontaler Rasterabstand</translation>
-    </message>
-    <message>
-        <source>Adjust horizontal grid interval (1% to 50%)</source>
-        <comment>@info</comment>
-        <translation type="vanished">Horizontalen Rasterabstand anpassen (1% bis 50%)</translation>
-    </message>
-    <message>
-        <source>Horizontal interval: %1%</source>
-        <comment>@info</comment>
-        <translation type="vanished">Horizontaler Abstand: %1%</translation>
-    </message>
-    <message>
-        <source>V:</source>
-        <comment>@label</comment>
-        <translation type="vanished">V:</translation>
-    </message>
-    <message>
-        <source>Vertical grid interval</source>
-        <comment>@label</comment>
-        <translation type="vanished">Vertikaler Rasterabstand</translation>
-    </message>
-    <message>
-        <source>Adjust vertical grid interval (1% to 50%)</source>
-        <comment>@info</comment>
-        <translation type="vanished">Vertikalen Rasterabstand anpassen (1% bis 50%)</translation>
-    </message>
-    <message>
-        <source>Vertical interval: %1%</source>
-        <comment>@info</comment>
-        <translation type="vanished">Vertikaler Abstand: %1%</translation>
-    </message>
-    <message>
-        <source>Show Grid</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Raster anzeigen</translation>
-    </message>
-    <message>
-        <source>Toggle grid overlay visibility. Shows or hides the visual grid lines on the canvas.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Sichtbarkeit der Rasterüberlagerung umschalten. Zeigt oder verbirgt die visuellen Rasterlinien auf der Arbeitsfläche.</translation>
-    </message>
-    <message>
-        <source>Grid overlay visible. Click to hide grid lines.</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Rasterüberlagerung sichtbar. Klicken, um Rasterlinien auszublenden.</translation>
-    </message>
-    <message>
-        <source>Grid overlay hidden. Click to show grid lines.</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Rasterüberlagerung ausgeblendet. Klicken, um Rasterlinien anzuzeigen.</translation>
-    </message>
-    <message>
-        <source>Unsaved changes</source>
-        <comment>@info</comment>
-        <translation type="vanished">Ungespeicherte Änderungen</translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Abbrechen</translation>
-    </message>
-    <message>
-        <source>Discard changes and close editor</source>
-        <comment>@info</comment>
-        <translation type="vanished">Änderungen verwerfen und Editor schließen</translation>
-    </message>
-    <message>
-        <source>Save</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Speichern</translation>
-    </message>
-    <message>
-        <source>Save layout and close editor</source>
-        <comment>@info</comment>
-        <translation type="vanished">Layout speichern und Editor schließen</translation>
-    </message>
-    <message>
-        <source>Zone dimensions</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Zonenabmessungen</translation>
-    </message>
-    <message>
-        <source>Position: %1px, %2px  Size: %3px × %4px</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Position: %1px, %2px  Größe: %3px × %4px</translation>
-        <extra-po-flags>c-format</extra-po-flags>
-    </message>
-    <message>
-        <source>Position: %1%, %2%  Size: %3% × %4%</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Position: %1%, %2%  Größe: %3% × %4%</translation>
-    </message>
-    <message>
-        <source>Pos:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Pos:</translation>
-    </message>
-    <message>
-        <source>%1px, %2px</source>
-        <comment>@info Position in pixels</comment>
-        <translation type="vanished">%1px, %2px</translation>
-        <extra-po-flags>c-format</extra-po-flags>
-    </message>
-    <message>
-        <source>%1% × %2%</source>
-        <comment>@info Position as percentages</comment>
-        <translation type="vanished">%1% × %2%</translation>
-    </message>
-    <message>
-        <source>Size:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Größe:</translation>
-    </message>
-    <message>
-        <source>%1px × %2px</source>
-        <comment>@info Size in pixels</comment>
-        <translation type="vanished">%1px × %2px</translation>
-        <extra-po-flags>c-format</extra-po-flags>
-    </message>
-    <message>
-        <source>%1% × %2%</source>
-        <comment>@info Size as percentages</comment>
-        <translation type="vanished">%1% × %2%</translation>
-    </message>
-    <message>
-        <source>Vertical zone divider</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Vertikaler Zonenteiler</translation>
-    </message>
-    <message>
-        <source>Horizontal zone divider</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Horizontaler Zonenteiler</translation>
-    </message>
-    <message>
-        <source>Drag horizontally to resize adjacent zones</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Horizontal ziehen, um benachbarte Zonen in der Größe zu ändern</translation>
-    </message>
-    <message>
-        <source>Drag vertically to resize adjacent zones</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Vertikal ziehen, um benachbarte Zonen in der Größe zu ändern</translation>
-    </message>
-    <message>
-        <source>Success notification</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Erfolgsbenachrichtigung</translation>
-    </message>
-    <message>
-        <source>Error notification</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Fehlerbenachrichtigung</translation>
-    </message>
-    <message>
-        <source>Dismiss</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Schließen</translation>
-    </message>
-    <message>
-        <source>Dismiss notification</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Benachrichtigung schließen</translation>
-    </message>
-    <message>
-        <source>Layout Editor</source>
-        <comment>@title</comment>
-        <translation type="vanished">Layout-Editor</translation>
-    </message>
-    <message>
-        <source>Exit Fullscreen (F11)</source>
-        <translation type="vanished">Vollbild beenden (F11)</translation>
-    </message>
-    <message>
-        <source>Unsaved Changes</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Ungespeicherte Änderungen</translation>
-    </message>
-    <message>
-        <source>You have unsaved changes. What would you like to do?</source>
-        <comment>@info</comment>
-        <translation type="vanished">Sie haben ungespeicherte Änderungen. Was möchten Sie tun?</translation>
-    </message>
-    <message>
-        <source>Import Layout</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Layout importieren</translation>
-    </message>
-    <message>
-        <source>JSON files (*.json)</source>
-        <comment>@item:inlistbox</comment>
-        <translation type="vanished">JSON-Dateien (*.json)</translation>
-    </message>
-    <message>
-        <source>All files (*)</source>
-        <comment>@item:inlistbox</comment>
-        <translation type="vanished">Alle Dateien (*)</translation>
-    </message>
-    <message>
-        <source>Export Layout</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Layout exportieren</translation>
-    </message>
-    <message>
-        <source>Layout Editor Help</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Layout-Editor-Hilfe</translation>
-    </message>
-    <message>
-        <source>Layout saved successfully</source>
-        <comment>@info</comment>
-        <translation type="vanished">Layout erfolgreich gespeichert</translation>
-    </message>
-    <message>
-        <source>Failed to load layout: %1</source>
-        <comment>@info</comment>
-        <translation type="vanished">Layout konnte nicht geladen werden: %1</translation>
-    </message>
-    <message>
-        <source>Failed to save layout: %1</source>
-        <comment>@info</comment>
-        <translation type="vanished">Layout konnte nicht gespeichert werden: %1</translation>
-    </message>
-    <message>
-        <source>Zone %1: %2</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Zone %1: %2</translation>
-    </message>
-    <message>
-        <source>Zone %1</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Zone %1</translation>
-    </message>
-    <message>
-        <source>Selected zone. Position: %1% × %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Ausgewählte Zone. Position: %1% × %2%, Größe: %3% × %4%. Klicken zum Abwählen, ziehen zum Verschieben, Anfasser zum Ändern der Größe verwenden.</translation>
-    </message>
-    <message>
-        <source>Zone. Position: %1% × %2%, Size: %3% × %4%. Click to select.</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Zone. Position: %1% × %2%, Größe: %3% × %4%. Klicken zum Auswählen.</translation>
-    </message>
-    <message>
-        <source>Keyboard Shortcuts</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Tastenkürzel</translation>
-    </message>
-    <message>
-        <source>File &amp; Window</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Datei und Fenster</translation>
-    </message>
-    <message>
-        <source>Save layout</source>
-        <translation type="vanished">Layout speichern</translation>
-    </message>
-    <message>
-        <source>Close editor</source>
-        <translation type="vanished">Editor schließen</translation>
-    </message>
-    <message>
-        <source>Toggle fullscreen</source>
-        <translation type="vanished">Vollbild umschalten</translation>
-    </message>
-    <message>
-        <source>Show help</source>
-        <translation type="vanished">Hilfe anzeigen</translation>
-    </message>
-    <message>
-        <source>Edit</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Bearbeiten</translation>
-    </message>
-    <message>
-        <source>Undo</source>
-        <translation type="vanished">Rückgängig</translation>
-    </message>
-    <message>
-        <source>Redo</source>
-        <translation type="vanished">Wiederherstellen</translation>
-    </message>
-    <message>
-        <source>Delete zone(s)</source>
-        <translation type="vanished">Zone(n) löschen</translation>
-    </message>
-    <message>
-        <source>Select all</source>
-        <translation type="vanished">Alles auswählen</translation>
-    </message>
-    <message>
-        <source>Duplicate</source>
-        <translation type="vanished">Duplizieren</translation>
-    </message>
-    <message>
-        <source>Copy</source>
-        <translation type="vanished">Kopieren</translation>
-    </message>
-    <message>
-        <source>Cut</source>
-        <translation type="vanished">Ausschneiden</translation>
-    </message>
-    <message>
-        <source>Paste</source>
-        <translation type="vanished">Einfügen</translation>
-    </message>
-    <message>
-        <source>Paste offset</source>
-        <translation type="vanished">Versetzt einfügen</translation>
-    </message>
-    <message>
-        <source>Zone Operations</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Zonen-Aktionen</translation>
-    </message>
-    <message>
-        <source>Split horizontal</source>
-        <translation type="vanished">Horizontal teilen</translation>
-    </message>
-    <message>
-        <source>Split vertical</source>
-        <translation type="vanished">Vertikal teilen</translation>
-    </message>
-    <message>
-        <source>Fill space</source>
-        <translation type="vanished">Platz füllen</translation>
-    </message>
-    <message>
-        <source>Navigation</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Navigation</translation>
-    </message>
-    <message>
-        <source>Move zone 1%</source>
-        <translation type="vanished">Zone um 1% verschieben</translation>
-    </message>
-    <message>
-        <source>Arrow keys</source>
-        <translation type="vanished">Pfeiltasten</translation>
-    </message>
-    <message>
-        <source>Resize zone 1%</source>
-        <translation type="vanished">Zonengröße um 1% ändern</translation>
-    </message>
-    <message>
-        <source>Shift+Arrows</source>
-        <translation type="vanished">Umschalt+Pfeiltasten</translation>
-    </message>
-    <message>
-        <source>Next zone</source>
-        <translation type="vanished">Nächste Zone</translation>
-    </message>
-    <message>
-        <source>Previous zone</source>
-        <translation type="vanished">Vorherige Zone</translation>
-    </message>
-    <message>
-        <source>Mouse Actions</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Mausaktionen</translation>
-    </message>
-    <message>
-        <source>Create zone</source>
-        <translation type="vanished">Zone erstellen</translation>
-    </message>
-    <message>
-        <source>Double-click</source>
-        <translation type="vanished">Doppelklick</translation>
-    </message>
-    <message>
-        <source>Select zone</source>
-        <translation type="vanished">Zone auswählen</translation>
-    </message>
-    <message>
-        <source>Click</source>
-        <translation type="vanished">Klick</translation>
-    </message>
-    <message>
-        <source>Multi-select</source>
-        <translation type="vanished">Mehrfachauswahl</translation>
-    </message>
-    <message>
-        <source>Ctrl+Click</source>
-        <translation type="vanished">Strg+Klick</translation>
-    </message>
-    <message>
-        <source>Move zone</source>
-        <translation type="vanished">Zone verschieben</translation>
-    </message>
-    <message>
-        <source>Drag</source>
-        <translation type="vanished">Ziehen</translation>
-    </message>
-    <message>
-        <source>Resize zone</source>
-        <translation type="vanished">Zonengröße ändern</translation>
-    </message>
-    <message>
-        <source>Drag edge</source>
-        <translation type="vanished">Kante ziehen</translation>
-    </message>
-    <message>
-        <source>Context menu</source>
-        <translation type="vanished">Kontextmenü</translation>
-    </message>
-    <message>
-        <source>Right-click</source>
-        <translation type="vanished">Rechtsklick</translation>
-    </message>
-    <message>
-        <source>Tips</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Tipps</translation>
-    </message>
-    <message>
-        <source>Hover a selected zone to reveal action buttons</source>
-        <translation type="vanished">Über eine ausgewählte Zone fahren, um Aktionsschaltflächen anzuzeigen</translation>
-    </message>
-    <message>
-        <source>Use Templates dropdown for common layouts</source>
-        <translation type="vanished">Vorlagen-Auswahlliste für gängige Layouts verwenden</translation>
-    </message>
-    <message>
-        <source>Enable grid snapping for precise alignment</source>
-        <translation type="vanished">Rastereinrastung für präzise Ausrichtung aktivieren</translation>
-    </message>
-    <message>
-        <source>Per-layout gaps in layout settings (top bar)</source>
-        <translation type="vanished">Layoutspezifische Abstände in den Layout-Einstellungen (obere Leiste)</translation>
-    </message>
-    <message>
-        <source>Zones can overlap for multi-zone snapping</source>
-        <translation type="vanished">Zonen können sich für Mehrzonen-Einrastung überlappen</translation>
-    </message>
-    <message>
-        <source>Accessibility</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Barrierefreiheit</translation>
-    </message>
-    <message>
-        <source>Zone info announced to screen readers. Tab navigates UI, Ctrl+Tab navigates zones.</source>
-        <translation type="vanished">Zoneninformationen werden an Bildschirmleseprogramme übermittelt. Tab navigiert die Oberfläche, Strg+Tab navigiert zwischen Zonen.</translation>
-    </message>
-    <message>
-        <source>• %1</source>
-        <comment>@item:inlistbox Bullet list item, %1 is the tip</comment>
-        <translation type="vanished">• %1</translation>
-    </message>
-    <message>
-        <source>Layout Settings</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Layout-Einstellungen</translation>
-    </message>
-    <message>
-        <source>Per-layout overrides for this layout only.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Layoutspezifische Überschreibungen nur für dieses Layout.</translation>
-    </message>
-    <message>
-        <source>Spacing</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Abstände</translation>
-    </message>
-    <message>
-        <source>Override global gap defaults from System Settings.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Globale Abstandsvorgaben aus den Systemeinstellungen überschreiben.</translation>
-    </message>
-    <message>
-        <source>Zone Padding</source>
-        <comment>@option:check</comment>
-        <translation type="vanished">Zonenabstand</translation>
-    </message>
-    <message>
-        <source>Zone padding value</source>
-        <comment>@label</comment>
-        <translation type="vanished">Wert für Zonenabstand</translation>
-    </message>
-    <message>
-        <source>px</source>
-        <comment>@label</comment>
-        <translation type="vanished">px</translation>
-    </message>
-    <message>
-        <source>px (global)</source>
-        <comment>@label showing global default</comment>
-        <translation type="vanished">px (global)</translation>
-    </message>
-    <message>
-        <source>Edge Gap</source>
-        <comment>@option:check</comment>
-        <translation type="vanished">Randabstand</translation>
-    </message>
-    <message>
-        <source>Edge gap value</source>
-        <comment>@label</comment>
-        <translation type="vanished">Wert für Randabstand</translation>
-    </message>
-    <message>
-        <source>Set per side</source>
-        <comment>@option:check</comment>
-        <translation type="vanished">Pro Seite festlegen</translation>
-    </message>
-    <message>
-        <source>Top</source>
-        <comment>@label edge gap direction</comment>
-        <translation type="vanished">Oben</translation>
-    </message>
-    <message>
-        <source>Top edge gap override</source>
-        <comment>@label</comment>
-        <translation type="vanished">Überschreibung des oberen Randabstands</translation>
-    </message>
-    <message>
-        <source>Bottom</source>
-        <comment>@label edge gap direction</comment>
-        <translation type="vanished">Unten</translation>
-    </message>
-    <message>
-        <source>Bottom edge gap override</source>
-        <comment>@label</comment>
-        <translation type="vanished">Überschreibung des unteren Randabstands</translation>
-    </message>
-    <message>
-        <source>Left</source>
-        <comment>@label edge gap direction</comment>
-        <translation type="vanished">Links</translation>
-    </message>
-    <message>
-        <source>Left edge gap override</source>
-        <comment>@label</comment>
-        <translation type="vanished">Überschreibung des linken Randabstands</translation>
-    </message>
-    <message>
-        <source>Right</source>
-        <comment>@label edge gap direction</comment>
-        <translation type="vanished">Rechts</translation>
-    </message>
-    <message>
-        <source>Right edge gap override</source>
-        <comment>@label</comment>
-        <translation type="vanished">Überschreibung des rechten Randabstands</translation>
-    </message>
-    <message>
-        <source>Overlay</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Overlay</translation>
-    </message>
-    <message>
-        <source>Override the global overlay style for this layout.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Den globalen Overlay-Stil für dieses Layout überschreiben.</translation>
-    </message>
-    <message>
-        <source>Overlay Style</source>
-        <comment>@option:check</comment>
-        <translation type="vanished">Overlay-Stil</translation>
-    </message>
-    <message>
-        <source>Full zone highlight</source>
-        <comment>@item:inlistbox</comment>
-        <translation type="vanished">Vollständige Zonenhervorhebung</translation>
-    </message>
-    <message>
-        <source>Compact preview</source>
-        <comment>@item:inlistbox</comment>
-        <translation type="vanished">Kompakte Vorschau</translation>
-    </message>
-    <message>
-        <source>Overlay display mode</source>
-        <comment>@label</comment>
-        <translation type="vanished">Overlay-Anzeigemodus</translation>
-    </message>
-    <message>
-        <source>Geometry</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Geometrie</translation>
-    </message>
-    <message>
-        <source>Control which screen area zones occupy.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Festlegen, welchen Bildschirmbereich Zonen einnehmen.</translation>
-    </message>
-    <message>
-        <source>Include area behind panels and taskbars</source>
-        <comment>@option:check</comment>
-        <translation type="vanished">Bereich hinter Kontrollleisten und Programmleisten einbeziehen</translation>
-    </message>
-    <message>
-        <source>Apply</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Anwenden</translation>
-    </message>
-    <message>
-        <source>Choose %1 color</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Farbe für %1 wählen</translation>
-    </message>
-    <message>
-        <source>Choose Image...</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Bild wählen ...</translation>
-    </message>
-    <message>
-        <source>Clear image</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Bild entfernen</translation>
-    </message>
-    <message>
-        <source>Locked — preserved during randomize</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Gesperrt — wird beim Zufallsmodus beibehalten</translation>
-    </message>
-    <message>
-        <source>Unlocked — will be randomized</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Entsperrt — wird zufällig gesetzt</translation>
-    </message>
-    <message>
-        <source>Choose Image</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Bild wählen</translation>
-    </message>
-    <message>
-        <source>Image files (*.png *.jpg *.jpeg *.bmp *.webp)</source>
-        <comment>@item:inlistbox</comment>
-        <translation type="vanished">Bilddateien (*.png *.jpg *.jpeg *.bmp *.webp)</translation>
-    </message>
-    <message>
-        <source>Zone Properties</source>
-        <comment>@title</comment>
-        <translation type="vanished">Zonen-Eigenschaften</translation>
-    </message>
-    <message numerus="yes">
-        <source>1 Zone Selected</source>
-        <comment>@title</comment>
-        <translation type="vanished">
-            <numerusform>1 Zone ausgewählt</numerusform>
-            <numerusform></numerusform>
-        </translation>
-        <extra-po-msgid_plural>%1 Zones Selected</extra-po-msgid_plural>
-    </message>
-    <message>
-        <source>Close panel</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Seitenleiste schließen</translation>
-    </message>
-    <message>
-        <source>Close properties panel</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Eigenschaftenleiste schließen</translation>
-    </message>
-    <message>
-        <source>Appearance (All Selected)</source>
-        <comment>@title</comment>
-        <translation type="vanished">Aussehen (alle ausgewählten)</translation>
-    </message>
-    <message>
-        <source>Custom colors:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Benutzerdefinierte Farben:</translation>
-    </message>
-    <message>
-        <source>Enable for all selected</source>
-        <comment>@option:check</comment>
-        <translation type="vanished">Für alle ausgewählten aktivieren</translation>
-    </message>
-    <message>
-        <source>Enable custom colors for all selected zones</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Benutzerdefinierte Farben für alle ausgewählten Zonen aktivieren</translation>
-    </message>
-    <message>
-        <source>Highlight:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Hervorhebung:</translation>
-    </message>
-    <message>
-        <source>Highlight color picker for all selected zones</source>
-        <comment>@label</comment>
-        <translation type="vanished">Hervorhebungsfarbe für alle ausgewählten Zonen</translation>
-    </message>
-    <message>
-        <source>Choose highlight color for all selected zones</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Hervorhebungsfarbe für alle ausgewählten Zonen wählen</translation>
-    </message>
-    <message>
-        <source>Inactive:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Inaktiv:</translation>
-    </message>
-    <message>
-        <source>Inactive color picker for all selected zones</source>
-        <comment>@label</comment>
-        <translation type="vanished">Inaktivfarbe für alle ausgewählten Zonen</translation>
-    </message>
-    <message>
-        <source>Choose inactive color for all selected zones</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Inaktivfarbe für alle ausgewählten Zonen wählen</translation>
-    </message>
-    <message>
-        <source>Border:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Rahmen:</translation>
-    </message>
-    <message>
-        <source>Border color picker for all selected zones</source>
-        <comment>@label</comment>
-        <translation type="vanished">Rahmenfarbe für alle ausgewählten Zonen</translation>
-    </message>
-    <message>
-        <source>Choose border color for all selected zones</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Rahmenfarbe für alle ausgewählten Zonen wählen</translation>
-    </message>
-    <message>
-        <source>Active opacity:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Aktive Deckkraft:</translation>
-    </message>
-    <message>
-        <source>Active opacity for all selected zones</source>
-        <comment>@label</comment>
-        <translation type="vanished">Aktive Deckkraft für alle ausgewählten Zonen</translation>
-    </message>
-    <message>
-        <source>Set active opacity for all selected zones (0-100%)</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Aktive Deckkraft für alle ausgewählten Zonen festlegen (0-100%)</translation>
-    </message>
-    <message>
-        <source>Inactive opacity:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Inaktive Deckkraft:</translation>
-    </message>
-    <message>
-        <source>Inactive opacity for all selected zones</source>
-        <comment>@label</comment>
-        <translation type="vanished">Inaktive Deckkraft für alle ausgewählten Zonen</translation>
-    </message>
-    <message>
-        <source>Set inactive opacity for all selected zones (0-100%)</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Inaktive Deckkraft für alle ausgewählten Zonen festlegen (0-100%)</translation>
-    </message>
-    <message>
-        <source>Border width:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Rahmenbreite:</translation>
-    </message>
-    <message>
-        <source>Border width for all selected zones</source>
-        <comment>@label</comment>
-        <translation type="vanished">Rahmenbreite für alle ausgewählten Zonen</translation>
-    </message>
-    <message>
-        <source>Set border width for all selected zones (0-20)</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Rahmenbreite für alle ausgewählten Zonen festlegen (0-20)</translation>
-    </message>
-    <message>
-        <source>Border radius:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Eckenradius:</translation>
-    </message>
-    <message>
-        <source>Border radius for all selected zones</source>
-        <comment>@label</comment>
-        <translation type="vanished">Eckenradius für alle ausgewählten Zonen</translation>
-    </message>
-    <message>
-        <source>Set corner radius for all selected zones (0-50)</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Eckenradius für alle ausgewählten Zonen festlegen (0-50)</translation>
-    </message>
-    <message>
-        <source>Actions</source>
-        <comment>@title</comment>
-        <translation type="vanished">Aktionen</translation>
-    </message>
-    <message>
-        <source>Actions will apply to all selected zones.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Aktionen werden auf alle ausgewählten Zonen angewendet.</translation>
-    </message>
-    <message>
-        <source>Delete Selected Zones</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Ausgewählte Zonen löschen</translation>
-    </message>
-    <message numerus="yes">
-        <source>Delete 1 selected zone</source>
-        <comment>@info</comment>
-        <translation type="vanished">
-            <numerusform>1 ausgewählte Zone löschen</numerusform>
-            <numerusform></numerusform>
-        </translation>
-        <extra-po-msgid_plural>Delete %1 selected zones</extra-po-msgid_plural>
-    </message>
-    <message>
-        <source>Name:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Name:</translation>
-    </message>
-    <message>
-        <source>Zone name</source>
-        <comment>@label</comment>
-        <translation type="vanished">Zonenname</translation>
-    </message>
-    <message>
-        <source>Number:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Nummer:</translation>
-    </message>
-    <message>
-        <source>Zone number</source>
-        <comment>@label</comment>
-        <translation type="vanished">Zonennummer</translation>
-    </message>
-    <message>
-        <source>Geometry</source>
-        <comment>@title</comment>
-        <translation type="vanished">Geometrie</translation>
-    </message>
-    <message>
-        <source>Mode:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Modus:</translation>
-    </message>
-    <message>
-        <source>Fixed pixel size</source>
-        <comment>@option:check</comment>
-        <translation type="vanished">Feste Pixelgröße</translation>
-    </message>
-    <message>
-        <source>Toggle fixed pixel geometry mode</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Festen Pixel-Geometriemodus umschalten</translation>
-    </message>
-    <message>
-        <source>When enabled, zone uses absolute pixel coordinates instead of relative percentages</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Wenn aktiviert, verwendet die Zone absolute Pixelkoordinaten anstelle von relativen Prozentwerten</translation>
-    </message>
-    <message>
-        <source>X:</source>
-        <comment>@label</comment>
-        <translation type="vanished">X:</translation>
-    </message>
-    <message>
-        <source>X position in pixels</source>
-        <comment>@label</comment>
-        <translation type="vanished">X-Position in Pixeln</translation>
-    </message>
-    <message>
-        <source>Y:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Y:</translation>
-    </message>
-    <message>
-        <source>Y position in pixels</source>
-        <comment>@label</comment>
-        <translation type="vanished">Y-Position in Pixeln</translation>
-    </message>
-    <message>
-        <source>Width:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Breite:</translation>
-    </message>
-    <message>
-        <source>Width in pixels</source>
-        <comment>@label</comment>
-        <translation type="vanished">Breite in Pixeln</translation>
-    </message>
-    <message>
-        <source>Height:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Höhe:</translation>
-    </message>
-    <message>
-        <source>Height in pixels</source>
-        <comment>@label</comment>
-        <translation type="vanished">Höhe in Pixeln</translation>
-    </message>
-    <message>
-        <source>Appearance</source>
-        <comment>@title</comment>
-        <translation type="vanished">Aussehen</translation>
-    </message>
-    <message>
-        <source>Use custom colors</source>
-        <comment>@option:check</comment>
-        <translation type="vanished">Benutzerdefinierte Farben verwenden</translation>
-    </message>
-    <message>
-        <source>Enable custom colors for this zone</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Benutzerdefinierte Farben für diese Zone aktivieren</translation>
-    </message>
-    <message>
-        <source>Highlight color picker</source>
-        <comment>@label</comment>
-        <translation type="vanished">Farbwähler für Hervorhebung</translation>
-    </message>
-    <message>
-        <source>Choose color for highlighted/active zones</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Farbe für hervorgehobene/aktive Zonen wählen</translation>
-    </message>
-    <message>
-        <source>Inactive color picker</source>
-        <comment>@label</comment>
-        <translation type="vanished">Farbwähler für Inaktiv</translation>
-    </message>
-    <message>
-        <source>Choose color for non-selected zones</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Farbe für nicht ausgewählte Zonen wählen</translation>
-    </message>
-    <message>
-        <source>Border color picker</source>
-        <comment>@label</comment>
-        <translation type="vanished">Farbwähler für Rahmen</translation>
-    </message>
-    <message>
-        <source>Choose color for zone borders</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Farbe für Zonenrahmen wählen</translation>
-    </message>
-    <message>
-        <source>Zone active opacity</source>
-        <comment>@label</comment>
-        <translation type="vanished">Aktive Deckkraft der Zone</translation>
-    </message>
-    <message>
-        <source>Adjust zone opacity when highlighted (0-100%)</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Deckkraft der Zone bei Hervorhebung anpassen (0-100%)</translation>
-    </message>
-    <message>
-        <source>Zone inactive opacity</source>
-        <comment>@label</comment>
-        <translation type="vanished">Inaktive Deckkraft der Zone</translation>
-    </message>
-    <message>
-        <source>Adjust zone opacity when not highlighted (0-100%)</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Deckkraft der Zone ohne Hervorhebung anpassen (0-100%)</translation>
-    </message>
-    <message>
-        <source>Border width in pixels</source>
-        <comment>@label</comment>
-        <translation type="vanished">Rahmenbreite in Pixeln</translation>
-    </message>
-    <message>
-        <source>Set zone border width in pixels (0-20)</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Zonenrahmenbreite in Pixeln festlegen (0-20)</translation>
-    </message>
-    <message>
-        <source>Border radius in pixels</source>
-        <comment>@label</comment>
-        <translation type="vanished">Eckenradius in Pixeln</translation>
-    </message>
-    <message>
-        <source>Set zone corner radius in pixels (0-50)</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Eckenradius der Zone in Pixeln festlegen (0-50)</translation>
-    </message>
-    <message>
-        <source>Overlay</source>
-        <comment>@title</comment>
-        <translation type="vanished">Overlay</translation>
-    </message>
-    <message>
-        <source>Style:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Stil:</translation>
-    </message>
-    <message>
-        <source>Use layout default</source>
-        <comment>@item:inlistbox overlay mode</comment>
-        <translation type="vanished">Layout-Standard verwenden</translation>
-    </message>
-    <message>
-        <source>Zone overlay display mode</source>
-        <comment>@label</comment>
-        <translation type="vanished">Overlay-Anzeigemodus der Zone</translation>
-    </message>
-    <message>
-        <source>Override the overlay style for this zone only</source>
-        <comment>@info:accessibility</comment>
-        <translation type="vanished">Den Overlay-Stil nur für diese Zone überschreiben</translation>
-    </message>
-    <message>
-        <source>Delete Zone</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Zone löschen</translation>
-    </message>
-    <message>
-        <source>Delete the selected zone</source>
-        <comment>@info</comment>
-        <translation type="vanished">Die ausgewählte Zone löschen</translation>
-    </message>
-    <message>
-        <source>Zone Highlight Color</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Zonen-Hervorhebungsfarbe</translation>
-    </message>
-    <message>
-        <source>Zone Inactive Color</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Zonen-Inaktivfarbe</translation>
-    </message>
-    <message>
-        <source>Zone Border Color</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Zonen-Rahmenfarbe</translation>
-    </message>
-    <message>
-        <source>Highlight Color for All Selected Zones</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Hervorhebungsfarbe für alle ausgewählten Zonen</translation>
-    </message>
-    <message>
-        <source>Inactive Color for All Selected Zones</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Inaktivfarbe für alle ausgewählten Zonen</translation>
-    </message>
-    <message>
-        <source>Border Color for All Selected Zones</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Rahmenfarbe für alle ausgewählten Zonen</translation>
-    </message>
-    <message>
-        <source>Northwest corner resize handle</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Anfasser an der nordwestlichen Ecke</translation>
-    </message>
-    <message>
-        <source>North edge resize handle</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Anfasser an der oberen Kante</translation>
-    </message>
-    <message>
-        <source>Northeast corner resize handle</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Anfasser an der nordöstlichen Ecke</translation>
-    </message>
-    <message>
-        <source>East edge resize handle</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Anfasser an der rechten Kante</translation>
-    </message>
-    <message>
-        <source>Southeast corner resize handle</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Anfasser an der südöstlichen Ecke</translation>
-    </message>
-    <message>
-        <source>South edge resize handle</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Anfasser an der unteren Kante</translation>
-    </message>
-    <message>
-        <source>Southwest corner resize handle</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Anfasser an der südwestlichen Ecke</translation>
-    </message>
-    <message>
-        <source>West edge resize handle</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Anfasser an der linken Kante</translation>
-    </message>
-    <message>
-        <source>Resize handle</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Größenänderungs-Anfasser</translation>
-    </message>
-    <message>
-        <source>Drag to resize zone from northwest corner</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Ziehen, um die Zonengröße von der nordwestlichen Ecke aus zu ändern</translation>
-    </message>
-    <message>
-        <source>Drag to resize zone from top edge</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Ziehen, um die Zonengröße von der oberen Kante aus zu ändern</translation>
-    </message>
-    <message>
-        <source>Drag to resize zone from northeast corner</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Ziehen, um die Zonengröße von der nordöstlichen Ecke aus zu ändern</translation>
-    </message>
-    <message>
-        <source>Drag to resize zone from right edge</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Ziehen, um die Zonengröße von der rechten Kante aus zu ändern</translation>
-    </message>
-    <message>
-        <source>Drag to resize zone from southeast corner</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Ziehen, um die Zonengröße von der südöstlichen Ecke aus zu ändern</translation>
-    </message>
-    <message>
-        <source>Drag to resize zone from bottom edge</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Ziehen, um die Zonengröße von der unteren Kante aus zu ändern</translation>
-    </message>
-    <message>
-        <source>Drag to resize zone from southwest corner</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Ziehen, um die Zonengröße von der südwestlichen Ecke aus zu ändern</translation>
-    </message>
-    <message>
-        <source>Drag to resize zone from left edge</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Ziehen, um die Zonengröße von der linken Kante aus zu ändern</translation>
-    </message>
-    <message>
-        <source>Drag to resize zone</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Ziehen, um die Zonengröße zu ändern</translation>
-    </message>
-    <message>
-        <source>collapse</source>
-        <comment>@action</comment>
-        <translation type="vanished">einklappen</translation>
-    </message>
-    <message>
-        <source>expand</source>
-        <comment>@action</comment>
-        <translation type="vanished">ausklappen</translation>
-    </message>
-    <message>
-        <source>%1 parameters. Click to %2.</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">%1 Parameter. Klicken zum %2.</translation>
-    </message>
-    <message>
-        <source>Unlock all in %1</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Alle in %1 entsperren</translation>
-    </message>
-    <message>
-        <source>Lock all in %1</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Alle in %1 sperren</translation>
-    </message>
-    <message>
-        <source>General</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Allgemein</translation>
-    </message>
-    <message>
-        <source>Shader Settings</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Shader-Einstellungen</translation>
-    </message>
-    <message>
-        <source>Enable effect:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Effekt aktivieren:</translation>
-    </message>
-    <message>
-        <source>Enable shader effect</source>
-        <comment>@option:check</comment>
-        <translation type="vanished">Shader-Effekt aktivieren</translation>
-    </message>
-    <message>
-        <source>Select shader...</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Shader auswählen ...</translation>
-    </message>
-    <message>
-        <source>Shader:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Shader:</translation>
-    </message>
-    <message>
-        <source>Choose a shader effect from categorized list</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Einen Shader-Effekt aus der kategorisierten Liste wählen</translation>
-    </message>
-    <message>
-        <source>No description available</source>
-        <comment>@info:placeholder</comment>
-        <translation type="vanished">Keine Beschreibung verfügbar</translation>
-    </message>
-    <message>
-        <source>by %1</source>
-        <comment>@info shader author</comment>
-        <translation type="vanished">von %1</translation>
-    </message>
-    <message>
-        <source>v%1</source>
-        <comment>@info shader version</comment>
-        <translation type="vanished">v%1</translation>
-    </message>
-    <message>
-        <source>(User shader)</source>
-        <comment>@info user-installed shader</comment>
-        <translation type="vanished">(Benutzer-Shader)</translation>
-    </message>
-    <message>
-        <source>Parameters</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Parameter</translation>
-    </message>
-    <message>
-        <source>Unlock all parameters</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Alle Parameter entsperren</translation>
-    </message>
-    <message>
-        <source>Lock all parameters</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Alle Parameter sperren</translation>
-    </message>
-    <message>
-        <source>Unlock All</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Alle entsperren</translation>
-    </message>
-    <message>
-        <source>Lock All</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Alle sperren</translation>
-    </message>
-    <message>
-        <source>Randomize unlocked parameters</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Entsperrte Parameter zufällig setzen</translation>
-    </message>
-    <message>
-        <source>Randomize all parameters</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Alle Parameter zufällig setzen</translation>
-    </message>
-    <message>
-        <source>Random</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Zufall</translation>
-    </message>
-    <message>
-        <source>This effect has no configurable parameters.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Dieser Effekt hat keine konfigurierbaren Parameter.</translation>
-    </message>
-    <message>
-        <source>Enable the shader effect to configure visual effects for zone overlays.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Aktivieren Sie den Shader-Effekt, um visuelle Effekte für Zonenüberlagerungen einzurichten.</translation>
-    </message>
-    <message>
-        <source>Dismiss</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Schließen</translation>
-    </message>
-    <message>
-        <source>Load Preset</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Voreinstellung laden</translation>
-    </message>
-    <message>
-        <source>Load shader settings from a preset file</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Shader-Einstellungen aus einer Voreinstellungsdatei laden</translation>
-    </message>
-    <message>
-        <source>Save Preset</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Voreinstellung speichern</translation>
-    </message>
-    <message>
-        <source>Save current shader settings as a preset file</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Aktuelle Shader-Einstellungen als Voreinstellungsdatei speichern</translation>
-    </message>
-    <message>
-        <source>Defaults</source>
-        <comment>@action:button</comment>
-        <translation type="vanished">Voreinstellungen</translation>
-    </message>
-    <message>
-        <source>Loading preview…</source>
-        <comment>@info:placeholder</comment>
-        <translation type="vanished">Vorschau wird geladen …</translation>
-    </message>
-    <message>
-        <source>Choose %1</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">%1 wählen</translation>
-    </message>
-    <message>
-        <source>Save Shader Preset</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Shader-Voreinstellung speichern</translation>
-    </message>
-    <message>
-        <source>Load Shader Preset</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Shader-Voreinstellung laden</translation>
-    </message>
-    <message>
-        <source>Select screen for layout editing</source>
-        <comment>@info</comment>
-        <translation type="vanished">Bildschirm für Layout-Bearbeitung auswählen</translation>
-    </message>
-    <message>
-        <source>Layout:</source>
-        <comment>@label</comment>
-        <translation type="vanished">Layout:</translation>
-    </message>
-    <message>
-        <source>Preview</source>
-        <comment>@info</comment>
-        <translation type="vanished">Vorschau</translation>
-    </message>
-    <message>
-        <source>Layout name</source>
-        <comment>@label</comment>
-        <translation type="vanished">Layout-Name</translation>
-    </message>
-    <message>
-        <source>Enter name for the layout</source>
-        <comment>@info</comment>
-        <translation type="vanished">Namen für das Layout eingeben</translation>
-    </message>
-    <message>
-        <source>%1/%2</source>
-        <comment>@info</comment>
-        <translation type="vanished">%1/%2</translation>
-    </message>
-    <message>
-        <source>Character count: %1 of %2</source>
-        <comment>@info</comment>
-        <translation type="vanished">Zeichenanzahl: %1 von %2</translation>
-    </message>
-    <message>
-        <source>Shows how many characters are used in the layout name</source>
-        <comment>@info</comment>
-        <translation type="vanished">Zeigt an, wie viele Zeichen im Layout-Namen verwendet werden</translation>
-    </message>
-    <message>
-        <source>Undo: %1</source>
-        <comment>@action:tooltip</comment>
-        <translation type="vanished">Rückgängig: %1</translation>
-    </message>
-    <message>
-        <source>Undo</source>
-        <comment>@action:tooltip</comment>
-        <translation type="vanished">Rückgängig</translation>
-    </message>
-    <message>
-        <source>Undo</source>
-        <comment>@action</comment>
-        <translation type="vanished">Rückgängig</translation>
-    </message>
-    <message>
-        <source>Redo: %1</source>
-        <comment>@action:tooltip</comment>
-        <translation type="vanished">Wiederherstellen: %1</translation>
-    </message>
-    <message>
-        <source>Redo</source>
-        <comment>@action:tooltip</comment>
-        <translation type="vanished">Wiederherstellen</translation>
-    </message>
-    <message>
-        <source>Redo</source>
-        <comment>@action</comment>
-        <translation type="vanished">Wiederherstellen</translation>
-    </message>
-    <message>
-        <source>Layout-specific settings (gaps)</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Layoutspezifische Einstellungen (Abstände)</translation>
-    </message>
-    <message>
-        <source>Layout Settings</source>
-        <comment>@action</comment>
-        <translation type="vanished">Layout-Einstellungen</translation>
-    </message>
-    <message>
-        <source>Configure per-layout gap overrides</source>
-        <comment>@info</comment>
-        <translation type="vanished">Layoutspezifische Abstands-Überschreibungen konfigurieren</translation>
-    </message>
-    <message>
-        <source>Layout visibility (per monitor/desktop/activity)</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Layout-Sichtbarkeit (pro Bildschirm/Arbeitsfläche/Aktivität)</translation>
-    </message>
-    <message>
-        <source>Layout Visibility</source>
-        <comment>@action</comment>
-        <translation type="vanished">Layout-Sichtbarkeit</translation>
-    </message>
-    <message>
-        <source>Configure where this layout appears in the zone selector</source>
-        <comment>@info</comment>
-        <translation type="vanished">Festlegen, wo dieses Layout in der Zonenauswahl angezeigt wird</translation>
-    </message>
-    <message>
-        <source>Shader effect settings</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Shader-Effekt-Einstellungen</translation>
-    </message>
-    <message>
-        <source>Shader Settings</source>
-        <comment>@action</comment>
-        <translation type="vanished">Shader-Einstellungen</translation>
-    </message>
-    <message>
-        <source>Configure visual shader effects for zones</source>
-        <comment>@info</comment>
-        <translation type="vanished">Visuelle Shader-Effekte für Zonen konfigurieren</translation>
-    </message>
-    <message>
-        <source>Import layout from file</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Layout aus Datei importieren</translation>
-    </message>
-    <message>
-        <source>Import Layout</source>
-        <comment>@action</comment>
-        <translation type="vanished">Layout importieren</translation>
-    </message>
-    <message>
-        <source>Import a layout from a JSON file</source>
-        <comment>@info</comment>
-        <translation type="vanished">Layout aus einer JSON-Datei importieren</translation>
-    </message>
-    <message>
-        <source>Export layout to file</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Layout in Datei exportieren</translation>
-    </message>
-    <message>
-        <source>Export Layout</source>
-        <comment>@action</comment>
-        <translation type="vanished">Layout exportieren</translation>
-    </message>
-    <message>
-        <source>Export the current layout to a JSON file</source>
-        <comment>@info</comment>
-        <translation type="vanished">Das aktuelle Layout in eine JSON-Datei exportieren</translation>
-    </message>
-    <message>
-        <source>Exit fullscreen mode (F11)</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Vollbildmodus beenden (F11)</translation>
-    </message>
-    <message>
-        <source>Enter fullscreen mode (F11)</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Vollbildmodus aktivieren (F11)</translation>
-    </message>
-    <message>
-        <source>Exit Fullscreen</source>
-        <comment>@action</comment>
-        <translation type="vanished">Vollbild beenden</translation>
-    </message>
-    <message>
-        <source>Fullscreen</source>
-        <comment>@action</comment>
-        <translation type="vanished">Vollbild</translation>
-    </message>
-    <message>
-        <source>Toggle fullscreen editing mode</source>
-        <comment>@info</comment>
-        <translation type="vanished">Vollbild-Bearbeitungsmodus umschalten</translation>
-    </message>
-    <message>
-        <source>Quick reference guide (F1)</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Kurzreferenz (F1)</translation>
-    </message>
-    <message>
-        <source>Help</source>
-        <comment>@action</comment>
-        <translation type="vanished">Hilfe</translation>
-    </message>
-    <message>
-        <source>Open quick reference guide</source>
-        <comment>@info</comment>
-        <translation type="vanished">Kurzreferenz öffnen</translation>
-    </message>
-    <message>
-        <source>Close editor</source>
-        <comment>@tooltip</comment>
-        <translation type="vanished">Editor schließen</translation>
-    </message>
-    <message>
-        <source>Close</source>
-        <comment>@action</comment>
-        <translation type="vanished">Schließen</translation>
-    </message>
-    <message>
-        <source>Close the layout editor</source>
-        <comment>@info</comment>
-        <translation type="vanished">Den Layout-Editor schließen</translation>
-    </message>
-    <message>
-        <source>Zone Selector Visibility</source>
-        <comment>@title:window</comment>
-        <translation type="vanished">Sichtbarkeit der Zonenauswahl</translation>
-    </message>
-    <message>
-        <source>Choose where this layout appears in the zone selector popup. All checked means visible everywhere.</source>
-        <comment>@info</comment>
-        <translation type="vanished">Wählen Sie aus, wo dieses Layout im Zonenauswahl-Fenster angezeigt wird. Alle aktiviert bedeutet überall sichtbar.</translation>
-    </message>
-    <message>
-        <source>Screens</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Bildschirme</translation>
-    </message>
-    <message>
-        <source>Virtual Desktops</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Virtuelle Arbeitsflächen</translation>
-    </message>
-    <message>
-        <source>Desktop %1</source>
-        <comment>@label</comment>
-        <translation type="vanished">Arbeitsfläche %1</translation>
-    </message>
-    <message>
-        <source>Activities</source>
-        <comment>@title:group</comment>
-        <translation type="vanished">Aktivitäten</translation>
-    </message>
-    <message>
-        <source>Split Horizontally</source>
-        <comment>@action</comment>
-        <translation type="vanished">Horizontal teilen</translation>
-    </message>
-    <message>
-        <source>Split Vertically</source>
-        <comment>@action</comment>
-        <translation type="vanished">Vertikal teilen</translation>
-    </message>
-    <message>
-        <source>Copy</source>
-        <comment>@action</comment>
-        <translation type="vanished">Kopieren</translation>
-    </message>
-    <message>
-        <source>Copy zone</source>
-        <comment>@action</comment>
-        <translation type="vanished">Zone kopieren</translation>
-    </message>
-    <message>
-        <source>Copy the selected zone to clipboard</source>
-        <comment>@info</comment>
-        <translation type="vanished">Die ausgewählte Zone in die Zwischenablage kopieren</translation>
-    </message>
-    <message>
-        <source>Cut</source>
-        <comment>@action</comment>
-        <translation type="vanished">Ausschneiden</translation>
-    </message>
-    <message>
-        <source>Cut zone</source>
-        <comment>@action</comment>
-        <translation type="vanished">Zone ausschneiden</translation>
-    </message>
-    <message>
-        <source>Cut the selected zone to clipboard</source>
-        <comment>@info</comment>
-        <translation type="vanished">Die ausgewählte Zone in die Zwischenablage ausschneiden</translation>
-    </message>
-    <message>
-        <source>Duplicate</source>
-        <comment>@action</comment>
-        <translation type="vanished">Duplizieren</translation>
-    </message>
-    <message>
-        <source>Delete</source>
-        <comment>@action</comment>
-        <translation type="vanished">Löschen</translation>
-    </message>
-    <message>
-        <source>Delete and Fill</source>
-        <comment>@action</comment>
-        <translation type="vanished">Löschen und füllen</translation>
-    </message>
-    <message>
-        <source>Delete this zone and expand neighbors to fill the space</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Diese Zone löschen und Nachbarzonen erweitern, um den Platz zu füllen</translation>
-    </message>
-    <message>
-        <source>Paste</source>
-        <comment>@action</comment>
-        <translation type="vanished">Einfügen</translation>
-    </message>
-    <message>
-        <source>Paste zone</source>
-        <comment>@action</comment>
-        <translation type="vanished">Zone einfügen</translation>
-    </message>
-    <message>
-        <source>Paste zones from clipboard</source>
-        <comment>@info</comment>
-        <translation type="vanished">Zonen aus der Zwischenablage einfügen</translation>
-    </message>
-    <message>
-        <source>Paste with Offset</source>
-        <comment>@action</comment>
-        <translation type="vanished">Versetzt einfügen</translation>
-    </message>
-    <message>
-        <source>Paste zone with offset</source>
-        <comment>@action</comment>
-        <translation type="vanished">Zone versetzt einfügen</translation>
-    </message>
-    <message>
-        <source>Paste zones from clipboard with offset to avoid overlap</source>
-        <comment>@info</comment>
-        <translation type="vanished">Zonen aus der Zwischenablage versetzt einfügen, um Überlappung zu vermeiden</translation>
-    </message>
-    <message>
-        <source>Fill Available Space</source>
-        <comment>@action</comment>
-        <translation type="vanished">Verfügbaren Platz füllen</translation>
-    </message>
-    <message>
-        <source>Expand zone to fill adjacent empty space</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">Zone erweitern, um angrenzenden leeren Platz zu füllen</translation>
     </message>
     <message>
         <location filename="../src/editor/undo/commands/AddZoneCommand.cpp" line="16"/>
@@ -4553,220 +2082,12 @@
         <translation>Zonennummer ändern</translation>
     </message>
     <message>
-        <source>3D</source>
-        <comment>@item:inmenu shader category</comment>
-        <translation type="vanished">3D</translation>
-    </message>
-    <message>
-        <source>Audio Visualizer</source>
-        <comment>@item:inmenu shader category</comment>
-        <translation type="vanished">Audio-Visualisierer</translation>
-    </message>
-    <message>
-        <source>Branded</source>
-        <comment>@item:inmenu shader category</comment>
-        <translation type="vanished">Marken</translation>
-    </message>
-    <message>
-        <source>Cyberpunk</source>
-        <comment>@item:inmenu shader category</comment>
-        <translation type="vanished">Cyberpunk</translation>
-    </message>
-    <message>
-        <source>Energy</source>
-        <comment>@item:inmenu shader category</comment>
-        <translation type="vanished">Energie</translation>
-    </message>
-    <message>
-        <source>Organic</source>
-        <comment>@item:inmenu shader category</comment>
-        <translation type="vanished">Organisch</translation>
-    </message>
-    <message>
-        <source>Resize at Divider</source>
-        <comment>@action</comment>
-        <translation type="vanished">Größe am Teiler ändern</translation>
-        <extra-po-flags>kde-format</extra-po-flags>
-    </message>
-    <message>
-        <source>Toggle Zone Geometry Mode</source>
-        <comment>@action</comment>
-        <translation type="vanished">Zonen-Geometriemodus umschalten</translation>
-        <extra-po-flags>kde-format</extra-po-flags>
-    </message>
-    <message>
-        <source>Edit Fixed Geometry</source>
-        <comment>@action</comment>
-        <translation type="vanished">Feste Geometrie bearbeiten</translation>
-        <extra-po-flags>kde-format</extra-po-flags>
-    </message>
-    <message>
-        <source>PlasmaZones</source>
-        <translation type="vanished">PlasmaZones</translation>
-    </message>
-    <message>
-        <source>Version %1</source>
-        <translation type="vanished">Version %1</translation>
-    </message>
-    <message>
-        <source>Version unknown</source>
-        <translation type="vanished">Version unbekannt</translation>
-    </message>
-    <message>
-        <source>A window tiling and zone management tool for KDE Plasma. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.</source>
-        <translation type="vanished">Ein Werkzeug zur Fensterkachelung und Zonenverwaltung für KDE Plasma. Organisieren Sie Ihren Desktop mit anpassbaren Zonen, automatischen Kachel-Layouts und tastaturgesteuerter Fensterplatzierung.</translation>
-    </message>
-    <message>
-        <source>Links</source>
-        <translation type="vanished">Links</translation>
-    </message>
-    <message>
-        <source>GitHub Repository</source>
-        <translation type="vanished">GitHub-Repository</translation>
-    </message>
-    <message>
-        <source>Report a Bug</source>
-        <translation type="vanished">Fehler melden</translation>
-    </message>
-    <message>
-        <source>Documentation / Wiki</source>
-        <translation type="vanished">Dokumentation / Wiki</translation>
-    </message>
-    <message>
-        <source>Releases</source>
-        <translation type="vanished">Veröffentlichungen</translation>
-    </message>
-    <message>
-        <source>License</source>
-        <translation type="vanished">Lizenz</translation>
-    </message>
-    <message>
-        <source>PlasmaZones is free software licensed under the GNU General Public License version 3 or later (GPL-3.0-or-later).</source>
-        <translation type="vanished">PlasmaZones ist freie Software, lizenziert unter der GNU General Public License Version 3 oder später (GPL-3.0-or-later).</translation>
-    </message>
-    <message>
-        <source>View License</source>
-        <translation type="vanished">Lizenz anzeigen</translation>
-    </message>
-    <message>
-        <source>Credits</source>
-        <translation type="vanished">Danksagungen</translation>
-    </message>
-    <message>
-        <source>Created by fuddlesworth</source>
-        <translation type="vanished">Erstellt von fuddlesworth</translation>
-    </message>
-    <message>
-        <source>Inspired by FancyZones, extended with automatic tiling</source>
-        <translation type="vanished">Inspiriert von FancyZones, erweitert um automatische Kachelung</translation>
-    </message>
-    <message>
-        <source>Built with Qt, KDE Frameworks, and Kirigami</source>
-        <translation type="vanished">Erstellt mit Qt, KDE Frameworks und Kirigami</translation>
-    </message>
-    <message>
-        <source>Checking...</source>
-        <translation type="vanished">Prüfe ...</translation>
-    </message>
-    <message>
-        <source>Check for Updates</source>
-        <translation type="vanished">Nach Aktualisierungen suchen</translation>
-    </message>
-    <message>
-        <source>unknown</source>
-        <translation type="vanished">unbekannt</translation>
-    </message>
-    <message>
-        <source>Version %1 is available! You are currently on %2.</source>
-        <translation type="vanished">Version %1 ist verfügbar! Sie verwenden derzeit %2.</translation>
-    </message>
-    <message>
-        <source>You&apos;re up to date (%1).</source>
-        <translation type="vanished">Sie sind auf dem neuesten Stand (%1).</translation>
-    </message>
-    <message>
-        <source>Could not check for updates. Please try again later.</source>
-        <translation type="vanished">Konnte nicht nach Aktualisierungen suchen. Bitte versuchen Sie es später erneut.</translation>
-    </message>
-    <message>
-        <source>Update check result</source>
-        <translation type="vanished">Ergebnis der Aktualisierungsprüfung</translation>
-    </message>
-    <message>
-        <source>View Release</source>
-        <translation type="vanished">Veröffentlichung anzeigen</translation>
-    </message>
-    <message>
-        <source>Dismiss</source>
-        <translation type="vanished">Verwerfen</translation>
-    </message>
-    <message>
-        <source>A new version is available: %1 (installed: %2)</source>
-        <translation type="vanished">Eine neue Version ist verfügbar: %1 (installiert: %2)</translation>
-    </message>
-    <message>
-        <source>Enable PlasmaZones</source>
-        <translation type="vanished">PlasmaZones aktivieren</translation>
-    </message>
-    <message>
-        <source>Running</source>
-        <translation type="vanished">Läuft</translation>
-    </message>
-    <message>
-        <source>Stopped</source>
-        <translation type="vanished">Gestoppt</translation>
-    </message>
-    <message>
-        <source>Opens %1 in web browser</source>
-        <translation type="vanished">Öffnet %1 im Webbrowser</translation>
-    </message>
-    <message>
-        <source>Assign layouts to monitors, activities, configure quick-switch shortcuts, and set up app-to-zone rules.</source>
-        <translation type="vanished">Weisen Sie Bildschirmen und Aktivitäten Layouts zu, konfigurieren Sie Schnellwechsel-Tastenkombinationen und richten Sie Anwendung-zu-Zone-Regeln ein.</translation>
-    </message>
-    <message>
-        <source>Configuration Mode</source>
-        <translation type="vanished">Konfigurationsmodus</translation>
-    </message>
-    <message>
-        <source>Snapping — Zone layouts</source>
-        <translation type="vanished">Einrasten — Zonen-Layouts</translation>
-    </message>
-    <message>
-        <source>Tiling — Autotile algorithms</source>
-        <translation type="vanished">Kachelung — Autotile-Algorithmen</translation>
-    </message>
-    <message>
-        <source>Switch between snapping and tiling configurations. Both are saved independently.</source>
-        <translation type="vanished">Wechseln Sie zwischen Einrast- und Kachelungskonfigurationen. Beide werden unabhängig voneinander gespeichert.</translation>
-    </message>
-    <message>
-        <source>Tiling mode: assign autotile algorithms to each monitor. These are used when tiling is active.</source>
-        <translation type="vanished">Kachelungsmodus: Weisen Sie jedem Bildschirm Autotile-Algorithmen zu. Diese werden verwendet, wenn die Kachelung aktiv ist.</translation>
-    </message>
-    <message>
-        <source>Snapping mode: assign zone layouts to each monitor. These are used when dragging windows.</source>
-        <translation type="vanished">Einrastmodus: Weisen Sie jedem Bildschirm Zonen-Layouts zu. Diese werden beim Ziehen von Fenstern verwendet.</translation>
-    </message>
-    <message>
-        <source>KDE Activities support is not available. Activity-based layout assignments require the KDE Activities service to be running.</source>
-        <translation type="vanished">KDE-Aktivitäten-Unterstützung ist nicht verfügbar. Aktivitätsbasierte Layout-Zuweisungen erfordern, dass der KDE-Aktivitäten-Dienst läuft.</translation>
-    </message>
-    <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="238"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="283"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="442"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="221"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="474"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="219"/>
         <source>Algorithm</source>
         <translation>Algorithmus</translation>
-    </message>
-    <message numerus="yes">
-        <source>Max %1 window</source>
-        <translation type="vanished">
-            <numerusform>Max. %1 Fenster</numerusform>
-            <numerusform></numerusform>
-        </translation>
-        <extra-po-msgid_plural>Max %1 windows</extra-po-msgid_plural>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="280"/>
@@ -4774,549 +2095,196 @@
         <translation>Kachelungsalgorithmus</translation>
     </message>
     <message>
-        <source>Select how windows are automatically arranged on screen</source>
-        <translation type="vanished">Wählen Sie, wie Fenster automatisch auf dem Bildschirm angeordnet werden</translation>
-    </message>
-    <message>
-        <source>Max Windows</source>
-        <translation type="vanished">Max. Fenster</translation>
-    </message>
-    <message>
-        <source>Maximum windows preview</source>
-        <translation type="vanished">Vorschau der maximalen Fensteranzahl</translation>
-    </message>
-    <message>
-        <source>Maximum number of windows to tile with this algorithm</source>
-        <translation type="vanished">Maximale Anzahl von Fenstern, die mit diesem Algorithmus gekachelt werden</translation>
-    </message>
-    <message>
-        <source>Center Ratio</source>
-        <translation type="vanished">Mittenverhältnis</translation>
-    </message>
-    <message>
-        <source>Master Ratio</source>
-        <translation type="vanished">Hauptbereich-Verhältnis</translation>
-    </message>
-    <message>
-        <source>Proportion of screen width for the center column</source>
-        <translation type="vanished">Anteil der Bildschirmbreite für die mittlere Spalte</translation>
-    </message>
-    <message>
-        <source>Proportion of screen width for the master area</source>
-        <translation type="vanished">Anteil der Bildschirmbreite für den Hauptbereich</translation>
-    </message>
-    <message>
-        <source>Center count:</source>
-        <translation type="vanished">Mittenanzahl:</translation>
-    </message>
-    <message>
-        <source>Master count:</source>
-        <translation type="vanished">Hauptbereich-Anzahl:</translation>
-    </message>
-    <message>
-        <source>Center count</source>
-        <translation type="vanished">Mittenanzahl</translation>
-    </message>
-    <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="292"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="456"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="488"/>
         <source>Master count</source>
         <translation>Hauptbereich-Anzahl</translation>
     </message>
     <message>
-        <source>Number of windows in the center area</source>
-        <translation type="vanished">Anzahl der Fenster im mittleren Bereich</translation>
-    </message>
-    <message>
-        <source>Number of windows in the master area</source>
-        <translation type="vanished">Anzahl der Fenster im Hauptbereich</translation>
-    </message>
-    <message>
-        <source>Enable Automatic Tiling</source>
-        <translation type="vanished">Automatische Kachelung aktivieren</translation>
-    </message>
-    <message>
-        <source>Enable automatic tiling</source>
-        <translation type="vanished">Automatische Kachelung aktivieren</translation>
-    </message>
-    <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="255"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="99"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="176"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="97"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="174"/>
         <source>Appearance</source>
         <translation>Darstellung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="273"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="322"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="274"/>
         <source>Colors</source>
         <translation>Farben</translation>
     </message>
     <message>
-        <source>Color scheme:</source>
-        <translation type="vanished">Farbschema:</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="333"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="331"/>
         <source>Use system accent color</source>
         <translation>Systemakzentfarbe verwenden</translation>
     </message>
     <message>
-        <source>Active color:</source>
-        <translation type="vanished">Aktive Farbe:</translation>
-    </message>
-    <message>
-        <source>Inactive color:</source>
-        <translation type="vanished">Inaktive Farbe:</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="324"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="125"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="322"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="123"/>
         <source>Decorations</source>
         <translation>Dekorationen</translation>
     </message>
     <message>
-        <source>Title bars:</source>
-        <translation type="vanished">Titelleisten:</translation>
-    </message>
-    <message>
-        <source>Hide title bars on tiled windows</source>
-        <translation type="vanished">Titelleisten bei gekachelten Fenstern ausblenden</translation>
-    </message>
-    <message>
-        <source>Remove window title bars while autotiled. Restored when floating or leaving autotile mode.</source>
-        <translation type="vanished">Entfernt Titelleisten bei automatisch gekachelten Fenstern. Wird beim Schweben oder Verlassen des Autotile-Modus wiederhergestellt.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="321"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="320"/>
         <source>Borders</source>
         <translation>Ränder</translation>
     </message>
     <message>
-        <source>Border:</source>
-        <translation type="vanished">Rand:</translation>
-    </message>
-    <message>
-        <source>Show borders in tiling mode</source>
-        <translation type="vanished">Ränder im Kachelmodus anzeigen</translation>
-    </message>
-    <message>
-        <source>Draw colored borders around all windows in tiling mode. Active color for focused, inactive for unfocused. Works with or without hidden title bars.</source>
-        <translation type="vanished">Farbige Ränder um alle Fenster im Kachelmodus zeichnen. Aktive Farbe für fokussierte, inaktive für nicht-fokussierte Fenster. Funktioniert mit oder ohne ausgeblendete Titelleisten.</translation>
-    </message>
-    <message>
-        <source>Width:</source>
-        <translation type="vanished">Breite:</translation>
-    </message>
-    <message>
-        <source>Colored border drawn around tiled windows (0 to disable)</source>
-        <translation type="vanished">Farbiger Rand um gekachelte Fenster (0 zum Deaktivieren)</translation>
-    </message>
-    <message>
-        <source>px</source>
-        <translation type="vanished">px</translation>
-    </message>
-    <message>
-        <source>Corner radius:</source>
-        <translation type="vanished">Eckenradius:</translation>
-    </message>
-    <message>
-        <source>Corner radius for the border (0 for square corners)</source>
-        <translation type="vanished">Eckenradius für den Rand (0 für eckige Ecken)</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="79"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="77"/>
         <source>Overview</source>
-        <translation type="unfinished"></translation>
+        <translation>Übersicht</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="83"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="234"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="304"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="81"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="232"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="302"/>
         <source>General</source>
-        <translation type="unfinished">Allgemein</translation>
+        <translation>Allgemein</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="93"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="91"/>
         <source>Placement</source>
-        <translation type="unfinished"></translation>
+        <translation>Platzierung</translation>
     </message>
     <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="42"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="255"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="314"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="40"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="253"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="312"/>
         <source>Windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="134"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="132"/>
         <source>Rules</source>
-        <translation type="unfinished"></translation>
+        <translation>Regeln</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="153"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="151"/>
         <source>Virtual Screens</source>
-        <translation type="unfinished"></translation>
+        <translation>Virtuelle Bildschirme</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="243"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="173"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="171"/>
         <source>Behavior</source>
         <translation>Verhalten</translation>
     </message>
     <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="56"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="183"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="54"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="181"/>
         <source>Zone Selector</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonenauswahl</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="196"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="227"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="194"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="225"/>
         <source>Priority</source>
-        <translation type="unfinished"></translation>
+        <translation>Priorität</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="197"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="228"/>
+        <source>Quick Shortcuts</source>
+        <translation>Schnelltasten</translation>
     </message>
     <message>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="199"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="230"/>
-        <source>Quick Shortcuts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="201"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="289"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="324"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="287"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="322"/>
         <source>Shaders</source>
-        <translation type="unfinished"></translation>
+        <translation>Shader</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="241"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="239"/>
         <source>Transitions</source>
-        <translation type="unfinished"></translation>
+        <translation>Übergänge</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="247"/>
+        <source>Motion</source>
+        <translation>Bewegung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="264"/>
+        <source>Window Motion</source>
+        <translation>Fensterbewegung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="271"/>
+        <source>Window Dragging</source>
+        <translation>Fensterziehen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="306"/>
+        <source>Surfaces</source>
+        <translation>Oberflächen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="319"/>
+        <source>Decoration Sets</source>
+        <translation>Dekorationssätze</translation>
     </message>
     <message>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="249"/>
-        <source>Motion</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="266"/>
-        <source>Window Motion</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="273"/>
-        <source>Window Dragging</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="308"/>
-        <source>Surfaces</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="321"/>
-        <source>Decoration Sets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="251"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="310"/>
         <source>Library</source>
-        <translation type="unfinished"></translation>
+        <translation>Bibliothek</translation>
     </message>
     <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="50"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="256"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="315"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="48"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="254"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="313"/>
         <source>OSDs</source>
-        <translation type="unfinished"></translation>
+        <translation>OSDs</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="259"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="257"/>
         <source>Overlays</source>
-        <translation type="unfinished"></translation>
+        <translation>Overlays</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="274"/>
+        <source>Side Panels</source>
+        <translation>Seitenleisten</translation>
     </message>
     <message>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="276"/>
-        <source>Side Panels</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="278"/>
         <source>Widgets</source>
-        <translation type="unfinished"></translation>
+        <translation>Miniprogramme</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="281"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="279"/>
         <source>Layout Editor</source>
-        <translation type="unfinished">Layout-Editor</translation>
+        <translation>Layout-Editor</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="284"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="282"/>
         <source>Presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Voreinstellungen</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="287"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="285"/>
         <source>Motion Sets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>New windows:</source>
-        <translation type="vanished">Neue Fenster:</translation>
-    </message>
-    <message>
-        <source>Add after existing windows</source>
-        <translation type="vanished">Nach vorhandenen Fenstern hinzufügen</translation>
-    </message>
-    <message>
-        <source>Insert after focused</source>
-        <translation type="vanished">Nach fokussiertem Fenster einfügen</translation>
-    </message>
-    <message>
-        <source>Add as main window</source>
-        <translation type="vanished">Als Hauptfenster hinzufügen</translation>
-    </message>
-    <message>
-        <source>Focus:</source>
-        <translation type="vanished">Fokus:</translation>
-    </message>
-    <message>
-        <source>Automatically focus newly opened windows</source>
-        <translation type="vanished">Neu geöffnete Fenster automatisch fokussieren</translation>
-    </message>
-    <message>
-        <source>Focus follows mouse pointer</source>
-        <translation type="vanished">Fokus folgt dem Mauszeiger</translation>
-    </message>
-    <message>
-        <source>When enabled, moving mouse over a window focuses it</source>
-        <translation type="vanished">Wenn aktiviert, wird ein Fenster fokussiert, wenn der Mauszeiger darüber bewegt wird</translation>
-    </message>
-    <message>
-        <source>Constraints:</source>
-        <translation type="vanished">Einschränkungen:</translation>
-    </message>
-    <message>
-        <source>Respect window minimum size</source>
-        <translation type="vanished">Minimale Fenstergröße berücksichtigen</translation>
-    </message>
-    <message>
-        <source>Windows will not be resized below their minimum size. This may leave gaps in the layout.</source>
-        <translation type="vanished">Fenster werden nicht unter ihre Mindestgröße verkleinert. Dies kann Lücken im Layout hinterlassen.</translation>
+        <translation>Bewegungssätze</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="226"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="370"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="402"/>
         <source>Gaps</source>
         <translation>Abstände</translation>
     </message>
     <message>
-        <source>Inner gap:</source>
-        <translation type="vanished">Innerer Abstand:</translation>
-    </message>
-    <message>
-        <source>Gap between tiled windows</source>
-        <translation type="vanished">Abstand zwischen gekachelten Fenstern</translation>
-    </message>
-    <message>
-        <source>Outer gap:</source>
-        <translation type="vanished">Äußerer Abstand:</translation>
-    </message>
-    <message>
-        <source>Gap from screen edges</source>
-        <translation type="vanished">Abstand von Bildschirmrändern</translation>
-    </message>
-    <message>
-        <source>Set per side</source>
-        <translation type="vanished">Pro Seite festlegen</translation>
-    </message>
-    <message>
-        <source>Per-side gaps:</source>
-        <translation type="vanished">Abstände pro Seite:</translation>
-    </message>
-    <message>
-        <source>Top:</source>
-        <translation type="vanished">Oben:</translation>
-    </message>
-    <message>
-        <source>Top edge gap</source>
-        <comment>@label</comment>
-        <translation type="vanished">Oberer Randabstand</translation>
-    </message>
-    <message>
-        <source>Bottom:</source>
-        <translation type="vanished">Unten:</translation>
-    </message>
-    <message>
-        <source>Bottom edge gap</source>
-        <comment>@label</comment>
-        <translation type="vanished">Unterer Randabstand</translation>
-    </message>
-    <message>
-        <source>Left:</source>
-        <translation type="vanished">Links:</translation>
-    </message>
-    <message>
-        <source>Left edge gap</source>
-        <comment>@label</comment>
-        <translation type="vanished">Linker Randabstand</translation>
-    </message>
-    <message>
-        <source>Right:</source>
-        <translation type="vanished">Rechts:</translation>
-    </message>
-    <message>
-        <source>Right edge gap</source>
-        <comment>@label</comment>
-        <translation type="vanished">Rechter Randabstand</translation>
-    </message>
-    <message>
-        <source>Smart gaps:</source>
-        <translation type="vanished">Intelligente Abstände:</translation>
-    </message>
-    <message>
-        <source>Hide gaps when only one window is tiled</source>
-        <translation type="vanished">Abstände ausblenden, wenn nur ein Fenster gekachelt ist</translation>
-    </message>
-    <message>
-        <source>Choose Active Border Color</source>
-        <translation type="vanished">Aktive Randfarbe auswählen</translation>
-    </message>
-    <message>
-        <source>Choose Inactive Border Color</source>
-        <translation type="vanished">Inaktive Randfarbe auswählen</translation>
-    </message>
-    <message>
-        <source>Keyboard Shortcuts</source>
-        <translation type="vanished">Tastenkombinationen</translation>
-    </message>
-    <message>
-        <source>Duplicate zone:</source>
-        <translation type="vanished">Zone duplizieren:</translation>
-    </message>
-    <message>
-        <source>Keyboard shortcut to duplicate the selected zone</source>
-        <translation type="vanished">Tastenkombination zum Duplizieren der ausgewählten Zone</translation>
-    </message>
-    <message>
-        <source>Split horizontally:</source>
-        <translation type="vanished">Horizontal teilen:</translation>
-    </message>
-    <message>
-        <source>Keyboard shortcut to split selected zone horizontally</source>
-        <translation type="vanished">Tastenkombination zum horizontalen Teilen der ausgewählten Zone</translation>
-    </message>
-    <message>
-        <source>Split vertically:</source>
-        <translation type="vanished">Vertikal teilen:</translation>
-    </message>
-    <message>
-        <source>Keyboard shortcut to split selected zone vertically</source>
-        <translation type="vanished">Tastenkombination zum vertikalen Teilen der ausgewählten Zone</translation>
-    </message>
-    <message>
-        <source>Fill space:</source>
-        <translation type="vanished">Fläche ausfüllen:</translation>
-    </message>
-    <message>
-        <source>Keyboard shortcut to expand selected zone to fill available space</source>
-        <translation type="vanished">Tastenkombination zum Erweitern der ausgewählten Zone auf den verfügbaren Platz</translation>
-    </message>
-    <message>
-        <source>Reset:</source>
-        <translation type="vanished">Zurücksetzen:</translation>
-    </message>
-    <message>
-        <source>Reset to defaults</source>
-        <translation type="vanished">Auf Standardwerte zurücksetzen</translation>
-    </message>
-    <message>
-        <source>Reset all editor shortcuts to their default values</source>
-        <translation type="vanished">Alle Editor-Tastenkombinationen auf ihre Standardwerte zurücksetzen</translation>
-    </message>
-    <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="235"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="769"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="816"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="787"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="834"/>
         <location filename="../src/settings/rulemodel.cpp" line="241"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="147"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="145"/>
         <source>Snapping</source>
         <translation>Einrasten</translation>
     </message>
     <message>
-        <source>Grid snapping:</source>
-        <translation type="vanished">Rastereinrastung:</translation>
-    </message>
-    <message>
-        <source>Enable grid snapping</source>
-        <translation type="vanished">Rastereinrastung aktivieren</translation>
-    </message>
-    <message>
-        <source>Snap zones to a grid while dragging or resizing</source>
-        <translation type="vanished">Zonen beim Ziehen oder Ändern der Größe am Raster einrasten</translation>
-    </message>
-    <message>
-        <source>Edge snapping:</source>
-        <translation type="vanished">Kanteneinrastung:</translation>
-    </message>
-    <message>
-        <source>Enable edge snapping</source>
-        <translation type="vanished">Kanteneinrastung aktivieren</translation>
-    </message>
-    <message>
-        <source>Snap zones to edges of other zones while dragging or resizing</source>
-        <translation type="vanished">Zonen beim Ziehen oder Ändern der Größe an den Kanten anderer Zonen einrasten</translation>
-    </message>
-    <message>
-        <source>Grid interval X:</source>
-        <translation type="vanished">Rasterintervall X:</translation>
-    </message>
-    <message>
-        <source>Grid interval Y:</source>
-        <translation type="vanished">Rasterintervall Y:</translation>
-    </message>
-    <message>
-        <source>Override modifier:</source>
-        <translation type="vanished">Überschreibungs-Modifikator:</translation>
-    </message>
-    <message>
-        <source>Fill on Drop</source>
-        <translation type="vanished">Beim Ablegen ausfüllen</translation>
-    </message>
-    <message>
-        <source>Enable:</source>
-        <translation type="vanished">Aktivieren:</translation>
-    </message>
-    <message>
-        <source>Fill zone on drop with modifier key</source>
-        <translation type="vanished">Zone beim Ablegen mit Modifikatortaste ausfüllen</translation>
-    </message>
-    <message>
-        <source>When enabled, holding the modifier key while dropping a zone expands it to fill available space</source>
-        <translation type="vanished">Wenn aktiviert, wird die Zone durch Gedrückthalten der Modifikatortaste beim Ablegen auf den verfügbaren Platz erweitert</translation>
-    </message>
-    <message>
-        <source>Modifier:</source>
-        <translation type="vanished">Modifikator:</translation>
-    </message>
-    <message>
-        <source>Windows from excluded applications or with excluded window classes will be ignored by both snapping and autotiling.</source>
-        <translation type="vanished">Fenster von ausgeschlossenen Anwendungen oder mit ausgeschlossenen Fensterklassen werden vom Einrasten und Autotiling ignoriert.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="499"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="531"/>
         <source>Window Filtering</source>
         <translation>Fensterfilterung</translation>
-    </message>
-    <message>
-        <source>Exclude transient windows (dialogs, popups, toolbars)</source>
-        <translation type="vanished">Vorübergehende Fenster ausschließen (Dialoge, Popups, Werkzeugleisten)</translation>
-    </message>
-    <message>
-        <source>Minimum window size for zone management:</source>
-        <translation type="vanished">Minimale Fenstergröße für Zonenverwaltung:</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="296"/>
@@ -5324,878 +2292,89 @@
         <translation>Deaktiviert</translation>
     </message>
     <message>
-        <source>Height:</source>
-        <translation type="vanished">Höhe:</translation>
-    </message>
-    <message>
-        <source>Windows smaller than these dimensions will be excluded. Set to 0 to disable.</source>
-        <translation type="vanished">Fenster, die kleiner als diese Abmessungen sind, werden ausgeschlossen. Auf 0 setzen zum Deaktivieren.</translation>
-    </message>
-    <message>
-        <source>Excluded Applications</source>
-        <translation type="vanished">Ausgeschlossene Anwendungen</translation>
-    </message>
-    <message>
-        <source>Application name (e.g., firefox, konsole)</source>
-        <translation type="vanished">Anwendungsname (z.&#xa0;B. firefox, konsole)</translation>
-    </message>
-    <message>
-        <source>No excluded applications</source>
-        <translation type="vanished">Keine ausgeschlossenen Anwendungen</translation>
-    </message>
-    <message>
-        <source>Add application names above to exclude them from snapping and autotiling</source>
-        <translation type="vanished">Fügen Sie oben Anwendungsnamen hinzu, um sie vom Einrasten und Autotiling auszuschließen</translation>
-    </message>
-    <message>
-        <source>Excluded Window Classes</source>
-        <translation type="vanished">Ausgeschlossene Fensterklassen</translation>
-    </message>
-    <message>
-        <source>Window class (e.g., org.kde.dolphin)</source>
-        <translation type="vanished">Fensterklasse (z.&#xa0;B. org.kde.dolphin)</translation>
-    </message>
-    <message>
-        <source>No excluded window classes</source>
-        <translation type="vanished">Keine ausgeschlossenen Fensterklassen</translation>
-    </message>
-    <message>
-        <source>Add window classes above to exclude them from snapping and autotiling</source>
-        <translation type="vanished">Fügen Sie oben Fensterklassen hinzu, um sie vom Einrasten und Autotiling auszuschließen</translation>
-    </message>
-    <message>
-        <source>Custom</source>
-        <translation type="vanished">Benutzerdefiniert</translation>
-    </message>
-    <message>
-        <source>Linear</source>
-        <translation type="vanished">Linear</translation>
-    </message>
-    <message>
-        <source>Gentle (Sine)</source>
-        <translation type="vanished">Sanft (Sinus)</translation>
-    </message>
-    <message>
-        <source>Smooth (Quad)</source>
-        <translation type="vanished">Weich (Quad)</translation>
-    </message>
-    <message>
-        <source>Standard (Cubic)</source>
-        <translation type="vanished">Standard (Kubisch)</translation>
-    </message>
-    <message>
-        <source>Snappy (Quart)</source>
-        <translation type="vanished">Zackig (Quart)</translation>
-    </message>
-    <message>
-        <source>Sharp (Quint)</source>
-        <translation type="vanished">Scharf (Quint)</translation>
-    </message>
-    <message>
-        <source>Aggressive (Expo)</source>
-        <translation type="vanished">Aggressiv (Expo)</translation>
-    </message>
-    <message>
-        <source>Circular (Circ)</source>
-        <translation type="vanished">Kreisförmig (Circ)</translation>
-    </message>
-    <message>
-        <source>Overshoot (Back)</source>
-        <translation type="vanished">Überschwingen (Back)</translation>
-    </message>
-    <message>
-        <source>Elastic</source>
-        <translation type="vanished">Elastisch</translation>
-    </message>
-    <message>
-        <source>Bounce</source>
-        <translation type="vanished">Prellen</translation>
-    </message>
-    <message>
-        <source>Ease In</source>
-        <translation type="vanished">Einblenden</translation>
-    </message>
-    <message>
-        <source>Ease Out</source>
-        <translation type="vanished">Ausblenden</translation>
-    </message>
-    <message>
-        <source>Ease In-Out</source>
-        <translation type="vanished">Ein-/Ausblenden</translation>
-    </message>
-    <message>
-        <source>Style:</source>
-        <translation type="vanished">Stil:</translation>
-    </message>
-    <message>
-        <source>Animation curve style -- controls how acceleration feels</source>
-        <translation type="vanished">Animationskurvenstil – steuert das Beschleunigungsverhalten</translation>
-    </message>
-    <message>
-        <source>Direction:</source>
-        <translation type="vanished">Richtung:</translation>
-    </message>
-    <message>
-        <source>Ease In accelerates from rest, Ease Out decelerates to rest, In-Out does both</source>
-        <translation type="vanished">Einblenden beschleunigt aus der Ruhe, Ausblenden bremst in die Ruhe, Ein-/Ausblenden kombiniert beides</translation>
-    </message>
-    <message>
-        <source>Amplitude:</source>
-        <translation type="vanished">Amplitude:</translation>
-    </message>
-    <message>
-        <source>Amplitude</source>
-        <translation type="vanished">Amplitude</translation>
-    </message>
-    <message>
-        <source>Controls the bounce height -- higher values exaggerate bounces, lower values flatten them (1.0 = standard)</source>
-        <translation type="vanished">Steuert die Prellhöhe – höhere Werte verstärken das Prellen, niedrigere Werte flachen es ab (1,0 = Standard)</translation>
-    </message>
-    <message>
-        <source>Controls the overshoot intensity of the elastic animation (1.0 = standard)</source>
-        <translation type="vanished">Steuert die Überschwingintensität der elastischen Animation (1,0 = Standard)</translation>
-    </message>
-    <message>
-        <source>Bounces:</source>
-        <translation type="vanished">Preller:</translation>
-    </message>
-    <message>
-        <source>Number of bounces</source>
-        <translation type="vanished">Anzahl der Preller</translation>
-    </message>
-    <message>
-        <source>Number of bounces before settling -- fewer bounces feel snappier, more feel bouncier</source>
-        <translation type="vanished">Anzahl der Preller vor dem Stillstand – weniger Preller wirken zackiger, mehr wirken federnder</translation>
-    </message>
-    <message>
-        <source>Period:</source>
-        <translation type="vanished">Periode:</translation>
-    </message>
-    <message>
-        <source>Elastic period</source>
-        <translation type="vanished">Elastische Periode</translation>
-    </message>
-    <message>
-        <source>Controls the oscillation frequency -- lower values produce tighter, faster bounces</source>
-        <translation type="vanished">Steuert die Schwingungsfrequenz – niedrigere Werte erzeugen engere, schnellere Schwingungen</translation>
-    </message>
-    <message>
-        <source>Duration:</source>
-        <translation type="vanished">Dauer:</translation>
-    </message>
-    <message>
         <location filename="../src/settings/rulemodel.cpp" line="385"/>
         <source>Animation duration</source>
         <translation>Animationsdauer</translation>
     </message>
     <message>
-        <source>How long window animations take to complete (milliseconds)</source>
-        <translation type="vanished">Wie lange Fensteranimationen dauern (Millisekunden)</translation>
-    </message>
-    <message>
-        <source>Multiple windows:</source>
-        <translation type="vanished">Mehrere Fenster:</translation>
-    </message>
-    <message>
-        <source>Animate all at once</source>
-        <translation type="vanished">Alle gleichzeitig animieren</translation>
-    </message>
-    <message>
-        <source>Animate one by one (zone order)</source>
-        <translation type="vanished">Nacheinander animieren (Zonenreihenfolge)</translation>
-    </message>
-    <message>
-        <source>When moving multiple windows (resnap, snap all, autotile, etc.), animate them all together or one after another in zone order.</source>
-        <translation type="vanished">Beim Verschieben mehrerer Fenster (Neu-Einrasten, Alle einrasten, Autotile usw.) alle gleichzeitig oder nacheinander in Zonenreihenfolge animieren.</translation>
-    </message>
-    <message>
-        <source>Delay between windows:</source>
-        <translation type="vanished">Verzögerung zwischen Fenstern:</translation>
-    </message>
-    <message>
-        <source>Delay between each window starting its animation</source>
-        <translation type="vanished">Verzögerung zwischen dem Animationsstart jedes Fensters</translation>
-    </message>
-    <message>
-        <source>When animating one by one: milliseconds between each window starting. Lower values create a fast cascading effect with overlapping animations.</source>
-        <translation type="vanished">Bei Einzelanimation: Millisekunden zwischen dem Start jedes Fensters. Niedrigere Werte erzeugen einen schnellen Kaskadeneffekt mit überlappenden Animationen.</translation>
-    </message>
-    <message>
-        <source>%1 ms</source>
-        <translation type="vanished">%1 ms</translation>
-    </message>
-    <message>
-        <source>Minimum distance:</source>
-        <translation type="vanished">Mindestabstand:</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="496"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="528"/>
         <source>Minimum distance</source>
         <translation>Mindestabstand</translation>
     </message>
     <message>
-        <source>Skip animation when the geometry change is smaller than this many pixels. Prevents jittery micro-animations.</source>
-        <translation type="vanished">Animation überspringen, wenn die Geometrieänderung kleiner als diese Anzahl Pixel ist. Verhindert zittrige Mikroanimationen.</translation>
-    </message>
-    <message>
-        <source>(always animate)</source>
-        <translation type="vanished">(immer animieren)</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rulemodel.cpp" line="838"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="109"/>
+        <location filename="../src/settings/rulemodel.cpp" line="863"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="107"/>
         <source>Animations</source>
         <translation>Animationen</translation>
     </message>
     <message>
-        <source>Smooth window geometry transitions</source>
-        <translation type="vanished">Weiche Fenstergeometrie-Übergänge</translation>
-    </message>
-    <message>
-        <source>Animate windows when snapping to zones or tiling. Applies to both manual snapping and autotiling.</source>
-        <translation type="vanished">Fenster beim Einrasten in Zonen oder bei Kachelung animieren. Gilt sowohl für manuelles Einrasten als auch für Autotiling.</translation>
-    </message>
-    <message>
-        <source>On-Screen Display</source>
-        <translation type="vanished">Bildschirmanzeige</translation>
-    </message>
-    <message>
-        <source>Layout switch:</source>
-        <translation type="vanished">Layout-Wechsel:</translation>
-    </message>
-    <message>
-        <source>Show OSD when switching layouts</source>
-        <translation type="vanished">Bildschirmanzeige beim Layout-Wechsel anzeigen</translation>
-    </message>
-    <message>
-        <source>Keyboard navigation:</source>
-        <translation type="vanished">Tastaturnavigation:</translation>
-    </message>
-    <message>
-        <source>Show OSD when using keyboard navigation</source>
-        <translation type="vanished">Bildschirmanzeige bei Tastaturnavigation anzeigen</translation>
-    </message>
-    <message>
-        <source>OSD style:</source>
-        <translation type="vanished">Bildschirmanzeige-Stil:</translation>
-    </message>
-    <message>
-        <source>None</source>
-        <translation type="vanished">Keine</translation>
-    </message>
-    <message>
-        <source>Text only</source>
-        <translation type="vanished">Nur Text</translation>
-    </message>
-    <message>
-        <source>Visual preview</source>
-        <translation type="vanished">Visuelle Vorschau</translation>
-    </message>
-    <message>
-        <source>No OSD shown. Enable layout switch or keyboard navigation above to show OSD.</source>
-        <translation type="vanished">Keine Bildschirmanzeige. Aktivieren Sie Layout-Wechsel oder Tastaturnavigation oben, um die Bildschirmanzeige anzuzeigen.</translation>
-    </message>
-    <message>
-        <source>Show layout name as text only</source>
-        <translation type="vanished">Layout-Namen nur als Text anzeigen</translation>
-    </message>
-    <message>
-        <source>Show visual layout preview</source>
-        <translation type="vanished">Visuelle Layout-Vorschau anzeigen</translation>
-    </message>
-    <message>
-        <source>Overlay style:</source>
-        <translation type="vanished">Overlay-Stil:</translation>
-    </message>
-    <message>
-        <source>Full zone highlight</source>
-        <translation type="vanished">Vollständige Zonenhervorhebung</translation>
-    </message>
-    <message>
-        <source>Compact preview</source>
-        <translation type="vanished">Kompakte Vorschau</translation>
-    </message>
-    <message>
-        <source>Highlight each zone as a full-size translucent rectangle while dragging</source>
-        <translation type="vanished">Jede Zone beim Ziehen als vollflächiges durchscheinendes Rechteck hervorheben</translation>
-    </message>
-    <message>
-        <source>Show a small layout thumbnail inside each zone while dragging</source>
-        <translation type="vanished">Beim Ziehen ein kleines Layout-Vorschaubild in jeder Zone anzeigen</translation>
-    </message>
-    <message>
-        <source>Primary Monitor</source>
-        <translation type="vanished">Primärer Bildschirm</translation>
-    </message>
-    <message>
-        <source>No autotile algorithms available</source>
-        <translation type="vanished">Keine Autotile-Algorithmen verfügbar</translation>
-    </message>
-    <message>
-        <source>Enable autotiling to use tiling algorithms</source>
-        <translation type="vanished">Aktivieren Sie Autotiling, um Kachelungsalgorithmen zu verwenden</translation>
-    </message>
-    <message>
-        <source>Start the PlasmaZones daemon or create a new layout</source>
-        <translation type="vanished">Starten Sie den PlasmaZones-Daemon oder erstellen Sie ein neues Layout</translation>
-    </message>
-    <message>
-        <source>Import Layout</source>
-        <translation type="vanished">Layout importieren</translation>
-    </message>
-    <message>
-        <source>Export Layout</source>
-        <translation type="vanished">Layout exportieren</translation>
-    </message>
-    <message>
-        <source>Delete Layout</source>
-        <translation type="vanished">Layout löschen</translation>
-    </message>
-    <message>
-        <source>Are you sure you want to delete &quot;%1&quot;?</source>
-        <translation type="vanished">Möchten Sie »%1« wirklich löschen?</translation>
-    </message>
-    <message>
-        <source>Delete</source>
-        <translation type="vanished">Löschen</translation>
-    </message>
-    <message>
-        <source>Cancel</source>
-        <translation type="vanished">Abbrechen</translation>
-    </message>
-    <message>
-        <source>Enable PlasmaZones</source>
-        <comment>@info:tooltip</comment>
-        <translation type="vanished">PlasmaZones aktivieren</translation>
-    </message>
-    <message>
-        <source>Highlight:</source>
-        <translation type="vanished">Hervorhebung:</translation>
-    </message>
-    <message>
-        <source>Inactive:</source>
-        <translation type="vanished">Inaktiv:</translation>
-    </message>
-    <message>
-        <source>Import colors:</source>
-        <translation type="vanished">Farben importieren:</translation>
-    </message>
-    <message>
-        <source>From pywal</source>
-        <translation type="vanished">Von pywal</translation>
-    </message>
-    <message>
-        <source>From file...</source>
-        <translation type="vanished">Aus Datei ...</translation>
-    </message>
-    <message>
-        <source>Active opacity:</source>
-        <translation type="vanished">Aktive Deckkraft:</translation>
-    </message>
-    <message>
-        <source>Active zone opacity</source>
-        <translation type="vanished">Deckkraft der aktiven Zone</translation>
-    </message>
-    <message>
-        <source>Inactive opacity:</source>
-        <translation type="vanished">Inaktive Deckkraft:</translation>
-    </message>
-    <message>
-        <source>Inactive zone opacity</source>
-        <translation type="vanished">Deckkraft der inaktiven Zone</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="277"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="278"/>
         <source>Border</source>
         <translation>Rand</translation>
     </message>
     <message>
-        <source>Border width:</source>
-        <translation type="vanished">Randbreite:</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="301"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="302"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="324"/>
         <source>Border width</source>
         <translation>Randbreite</translation>
     </message>
     <message>
-        <source>Border radius:</source>
-        <translation type="vanished">Randradius:</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="303"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="304"/>
         <source>Border radius</source>
         <translation>Randradius</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="279"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="280"/>
         <source>Zone Labels</source>
         <translation>Zonenbeschriftungen</translation>
     </message>
     <message>
-        <source>Color:</source>
-        <translation type="vanished">Farbe:</translation>
-    </message>
-    <message>
-        <source>Font:</source>
-        <translation type="vanished">Schriftart:</translation>
-    </message>
-    <message>
-        <source>System default</source>
-        <translation type="vanished">Systemstandard</translation>
-    </message>
-    <message>
-        <source>Scale:</source>
-        <translation type="vanished">Skalierung:</translation>
-    </message>
-    <message>
-        <source>Label font size scale</source>
-        <translation type="vanished">Skalierung der Beschriftungsschriftgröße</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="281"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="282"/>
         <source>Effects</source>
         <translation>Effekte</translation>
     </message>
     <message>
-        <source>Visual Effects</source>
-        <translation type="vanished">Visuelle Effekte</translation>
-    </message>
-    <message>
-        <source>Blur:</source>
-        <translation type="vanished">Unschärfe:</translation>
-    </message>
-    <message>
-        <source>Enable blur behind zones</source>
-        <translation type="vanished">Unschärfe hinter Zonen aktivieren</translation>
-    </message>
-    <message>
-        <source>Numbers:</source>
-        <translation type="vanished">Nummern:</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="632"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="902"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="641"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="923"/>
         <source>Show zone numbers</source>
         <translation>Zonennummern anzeigen</translation>
     </message>
     <message>
-        <source>Animation:</source>
-        <translation type="vanished">Animation:</translation>
-    </message>
-    <message>
-        <source>Flash zones when switching layouts</source>
-        <translation type="vanished">Zonen beim Layout-Wechsel aufleuchten lassen</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="185"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="186"/>
         <source>Shader Effects</source>
         <translation>Shader-Effekte</translation>
     </message>
     <message>
-        <source>Shaders:</source>
-        <translation type="vanished">Shader:</translation>
-    </message>
-    <message>
-        <source>Enable shader effects</source>
-        <translation type="vanished">Shader-Effekte aktivieren</translation>
-    </message>
-    <message>
-        <source>Frame rate:</source>
-        <translation type="vanished">Bildrate:</translation>
-    </message>
-    <message>
-        <source>Audio Visualization</source>
-        <translation type="vanished">Audiovisualisierung</translation>
-    </message>
-    <message>
-        <source>Audio:</source>
-        <translation type="vanished">Audio:</translation>
-    </message>
-    <message>
-        <source>Enable CAVA audio spectrum</source>
-        <translation type="vanished">CAVA-Audiospektrum aktivieren</translation>
-    </message>
-    <message>
-        <source>Feeds audio spectrum data to shaders that support it.</source>
-        <translation type="vanished">Speist Audiospektrumdaten in Shader ein, die es unterstützen.</translation>
-    </message>
-    <message>
-        <source>CAVA is not installed. Install cava to enable audio visualization.</source>
-        <translation type="vanished">CAVA ist nicht installiert. Installieren Sie cava, um die Audiovisualisierung zu aktivieren.</translation>
-    </message>
-    <message>
-        <source>CAVA is not installed. Install the &lt;b&gt;cava&lt;/b&gt; package to enable audio-reactive shader effects.</source>
-        <translation type="vanished">CAVA ist nicht installiert. Installieren Sie das Paket &lt;b&gt;cava&lt;/b&gt;, um audioreaktive Shader-Effekte zu aktivieren.</translation>
-    </message>
-    <message>
-        <source>Spectrum bars:</source>
-        <translation type="vanished">Spektrumbalken:</translation>
-    </message>
-    <message>
-        <source>Choose Highlight Color</source>
-        <translation type="vanished">Hervorhebungsfarbe auswählen</translation>
-    </message>
-    <message>
-        <source>Choose Inactive Zone Color</source>
-        <translation type="vanished">Farbe für inaktive Zonen auswählen</translation>
-    </message>
-    <message>
-        <source>Choose Border Color</source>
-        <translation type="vanished">Randfarbe auswählen</translation>
-    </message>
-    <message>
-        <source>Choose Label Color</source>
-        <translation type="vanished">Beschriftungsfarbe auswählen</translation>
-    </message>
-    <message>
-        <source>Import Colors from File</source>
-        <translation type="vanished">Farben aus Datei importieren</translation>
-    </message>
-    <message>
-        <source>Color Import Failed</source>
-        <translation type="vanished">Farbimport fehlgeschlagen</translation>
-    </message>
-    <message>
-        <source>Colors imported successfully</source>
-        <translation type="vanished">Farben erfolgreich importiert</translation>
-    </message>
-    <message>
-        <source>Enable Zone Snapping</source>
-        <translation type="vanished">Zoneneinrastung aktivieren</translation>
-    </message>
-    <message>
-        <source>Enable zone snapping</source>
-        <translation type="vanished">Zoneneinrastung aktivieren</translation>
-    </message>
-    <message>
-        <source>Activation</source>
-        <translation type="vanished">Aktivierung</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="253"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="265"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="254"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="266"/>
         <source>Triggers</source>
         <translation>Auslöser</translation>
     </message>
     <message>
-        <source>Zone activation:</source>
-        <translation type="vanished">Zonenaktivierung:</translation>
-    </message>
-    <message>
-        <source>Activate on every window drag</source>
-        <translation type="vanished">Bei jedem Fensterziehen aktivieren</translation>
-    </message>
-    <message>
-        <source>When enabled, the zone overlay appears on every window drag without requiring a modifier key or mouse button.</source>
-        <translation type="vanished">Wenn aktiviert, erscheint das Zonen-Overlay bei jedem Fensterziehen, ohne dass eine Modifikatortaste oder Maustaste erforderlich ist.</translation>
-    </message>
-    <message>
-        <source>Hold to activate:</source>
-        <translation type="vanished">Gedrückt halten zum Aktivieren:</translation>
-    </message>
-    <message>
-        <source>Hold modifier or use mouse button to show zones while dragging. Add multiple triggers to activate with any of them.</source>
-        <translation type="vanished">Modifikator gedrückt halten oder Maustaste verwenden, um Zonen beim Ziehen anzuzeigen. Fügen Sie mehrere Auslöser hinzu, um mit einem beliebigen davon zu aktivieren.</translation>
-    </message>
-    <message>
-        <source>Toggle mode:</source>
-        <translation type="vanished">Umschaltmodus:</translation>
-    </message>
-    <message>
-        <source>Tap trigger to toggle overlay</source>
-        <translation type="vanished">Auslöser antippen, um Overlay umzuschalten</translation>
-    </message>
-    <message>
-        <source>When enabled, press the activation trigger once to show the overlay, press again to hide it. When disabled, hold the trigger to show.</source>
-        <translation type="vanished">Wenn aktiviert, drücken Sie den Aktivierungsauslöser einmal, um das Overlay anzuzeigen, und erneut, um es auszublenden. Wenn deaktiviert, halten Sie den Auslöser gedrückt.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="255"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="256"/>
         <source>Zone Span</source>
         <translation>Zonenübergreifend</translation>
     </message>
     <message>
-        <source>Paint-to-span:</source>
-        <translation type="vanished">Malen zum Verbinden:</translation>
-    </message>
-    <message>
-        <source>Enable zone spanning</source>
-        <translation type="vanished">Zonenübergreifendes Einrasten aktivieren</translation>
-    </message>
-    <message>
-        <source>When enabled, you can paint across multiple zones to snap a window to the combined area.</source>
-        <translation type="vanished">Wenn aktiviert, können Sie über mehrere Zonen malen, um ein Fenster in der kombinierten Fläche einzurasten.</translation>
-    </message>
-    <message>
-        <source>Hold modifier or use mouse button while dragging to paint across zones. Add multiple triggers to activate with any of them.</source>
-        <translation type="vanished">Modifikator gedrückt halten oder Maustaste beim Ziehen verwenden, um über Zonen zu malen. Fügen Sie mehrere Auslöser hinzu, um mit einem beliebigen davon zu aktivieren.</translation>
-    </message>
-    <message>
-        <source>Edge threshold:</source>
-        <translation type="vanished">Kantenschwelle:</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="400"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="432"/>
         <source>Edge threshold</source>
         <translation>Kantenschwelle</translation>
     </message>
     <message>
-        <source>Distance from zone edge for multi-zone selection</source>
-        <translation type="vanished">Abstand vom Zonenrand für Mehrfachzonenauswahl</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="54"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="260"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="52"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="261"/>
         <source>Snap Assist</source>
         <translation>Einrasthilfe</translation>
     </message>
     <message>
-        <source>Window picker:</source>
-        <translation type="vanished">Fensterauswahl:</translation>
-    </message>
-    <message>
-        <source>Enable snap assist</source>
-        <translation type="vanished">Einrasthilfe aktivieren</translation>
-    </message>
-    <message>
-        <source>Show a window picker after snapping to fill remaining empty zones</source>
-        <translation type="vanished">Eine Fensterauswahl nach dem Einrasten anzeigen, um verbleibende leere Zonen zu füllen</translation>
-    </message>
-    <message>
-        <source>Behavior:</source>
-        <translation type="vanished">Verhalten:</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="409"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="441"/>
         <source>Always show after snapping</source>
         <translation>Immer nach dem Einrasten anzeigen</translation>
     </message>
     <message>
-        <source>When enabled, a window picker appears after every snap. When disabled, hold the trigger below while dropping to show the picker for that snap only.</source>
-        <translation type="vanished">Wenn aktiviert, erscheint nach jedem Einrasten eine Fensterauswahl. Wenn deaktiviert, halten Sie den Auslöser unten beim Ablegen gedrückt, um die Fensterauswahl nur für dieses Einrasten anzuzeigen.</translation>
-    </message>
-    <message>
-        <source>Hold to enable:</source>
-        <translation type="vanished">Gedrückt halten zum Aktivieren:</translation>
-    </message>
-    <message>
-        <source>Hold this modifier or mouse button when releasing a window to show the picker for that snap only. Add multiple triggers to activate with any of them.</source>
-        <translation type="vanished">Halten Sie diesen Modifikator oder diese Maustaste beim Loslassen eines Fensters gedrückt, um die Fensterauswahl nur für dieses Einrasten anzuzeigen. Fügen Sie mehrere Auslöser hinzu, um mit einem beliebigen davon zu aktivieren.</translation>
-    </message>
-    <message>
-        <source>Display:</source>
-        <translation type="vanished">Anzeige:</translation>
-    </message>
-    <message>
-        <source>Show zones on all monitors while dragging</source>
-        <translation type="vanished">Zonen auf allen Bildschirmen beim Ziehen anzeigen</translation>
-    </message>
-    <message>
-        <source>Resolution:</source>
-        <translation type="vanished">Auflösung:</translation>
-    </message>
-    <message>
-        <source>Re-snap windows to their zones after resolution changes</source>
-        <translation type="vanished">Fenster nach Auflösungsänderungen erneut in ihre Zonen einrasten</translation>
-    </message>
-    <message>
-        <source>Move new windows to their last used zone</source>
-        <translation type="vanished">Neue Fenster in ihre zuletzt verwendete Zone verschieben</translation>
-    </message>
-    <message>
-        <source>Unsnapping:</source>
-        <translation type="vanished">Lösen:</translation>
-    </message>
-    <message>
-        <source>Restore original window size when unsnapping</source>
-        <translation type="vanished">Ursprüngliche Fenstergröße beim Lösen wiederherstellen</translation>
-    </message>
-    <message>
-        <source>Reopening:</source>
-        <translation type="vanished">Wiederöffnen:</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="458"/>
         <source>Restore windows to their previous zone</source>
         <translation>Fenster in ihrer vorherigen Zone wiederherstellen</translation>
-    </message>
-    <message>
-        <source>When enabled, windows return to their previous zone when reopened, including after login or session restart.</source>
-        <translation type="vanished">Wenn aktiviert, kehren Fenster beim Wiederöffnen in ihre vorherige Zone zurück, auch nach der Anmeldung oder einem Sitzungsneustart.</translation>
-    </message>
-    <message>
-        <source>Sticky windows:</source>
-        <translation type="vanished">Klebende Fenster:</translation>
-    </message>
-    <message>
-        <source>Treat as normal</source>
-        <translation type="vanished">Normal behandeln</translation>
-    </message>
-    <message>
-        <source>Restore only</source>
-        <translation type="vanished">Nur wiederherstellen</translation>
-    </message>
-    <message>
-        <source>Ignore all</source>
-        <translation type="vanished">Alle ignorieren</translation>
-    </message>
-    <message>
-        <source>Sticky windows appear on all desktops. Choose how snapping should behave.</source>
-        <translation type="vanished">Klebende Fenster erscheinen auf allen Arbeitsflächen. Wählen Sie, wie das Einrasten sich verhalten soll.</translation>
-    </message>
-    <message>
-        <source>Zone padding:</source>
-        <translation type="vanished">Zonenabstand:</translation>
-    </message>
-    <message>
-        <source>Zone padding</source>
-        <translation type="vanished">Zonenabstand</translation>
-    </message>
-    <message>
-        <source>Edge gap:</source>
-        <translation type="vanished">Randabstand:</translation>
-    </message>
-    <message>
-        <source>Edge gap</source>
-        <translation type="vanished">Randabstand</translation>
-    </message>
-    <message>
-        <source>Default</source>
-        <translation type="vanished">Standard</translation>
-    </message>
-    <message>
-        <source>Clear assignment</source>
-        <translation type="vanished">Zuweisung aufheben</translation>
-    </message>
-    <message>
-        <source>Clear assignment for %1</source>
-        <translation type="vanished">Zuweisung für %1 aufheben</translation>
-    </message>
-    <message>
-        <source>Color picker</source>
-        <translation type="vanished">Farbauswahl</translation>
-    </message>
-    <message>
-        <source>Current color: %1</source>
-        <translation type="vanished">Aktuelle Farbe: %1</translation>
-    </message>
-    <message>
-        <source>Animation easing curve editor</source>
-        <translation type="vanished">Editor für Animations-Beschleunigungskurven</translation>
-    </message>
-    <message>
-        <source>Drag the control points to customize the animation curve. Click to replay the preview.</source>
-        <translation type="vanished">Ziehen Sie die Kontrollpunkte, um die Animationskurve anzupassen. Klicken Sie, um die Vorschau erneut abzuspielen.</translation>
-    </message>
-    <message>
-        <source>Drag control points to customize the animation curve. Click to replay.</source>
-        <translation type="vanished">Kontrollpunkte ziehen, um die Animationskurve anzupassen. Klicken zum erneuten Abspielen.</translation>
-    </message>
-    <message>
-        <source>Click to replay the animation preview.</source>
-        <translation type="vanished">Klicken, um die Animationsvorschau erneut abzuspielen.</translation>
-    </message>
-    <message>
-        <source>Choose Label Font</source>
-        <translation type="vanished">Beschriftungsschriftart auswählen</translation>
-    </message>
-    <message>
-        <source>Search fonts...</source>
-        <translation type="vanished">Schriftarten suchen ...</translation>
-    </message>
-    <message>
-        <source>Family</source>
-        <translation type="vanished">Familie</translation>
-    </message>
-    <message>
-        <source>Style</source>
-        <translation type="vanished">Stil</translation>
-    </message>
-    <message>
-        <source>Effects:</source>
-        <translation type="vanished">Effekte:</translation>
-    </message>
-    <message>
-        <source>Underline</source>
-        <translation type="vanished">Unterstrichen</translation>
-    </message>
-    <message>
-        <source>Strikeout</source>
-        <translation type="vanished">Durchgestrichen</translation>
-    </message>
-    <message>
-        <source>AaBbCc 123</source>
-        <translation type="vanished">AaBbCc 123</translation>
-    </message>
-    <message>
-        <source>Click to capture modifier</source>
-        <translation type="vanished">Klicken, um Modifikator zu erfassen</translation>
-    </message>
-    <message>
-        <source>Click to capture mouse button</source>
-        <translation type="vanished">Klicken, um Maustaste zu erfassen</translation>
-    </message>
-    <message>
-        <source>Click to capture</source>
-        <translation type="vanished">Klicken zum Erfassen</translation>
-    </message>
-    <message>
-        <source>Press modifier(s)…</source>
-        <translation type="vanished">Modifikator(en) drücken …</translation>
-    </message>
-    <message>
-        <source>Press mouse button…</source>
-        <translation type="vanished">Maustaste drücken …</translation>
-    </message>
-    <message>
-        <source>Press key, modifier, or mouse…</source>
-        <translation type="vanished">Taste, Modifikator oder Maustaste drücken …</translation>
-    </message>
-    <message>
-        <source>Press modifier key(s) only (Escape to cancel)</source>
-        <translation type="vanished">Nur Modifikatortaste(n) drücken (Escape zum Abbrechen)</translation>
-    </message>
-    <message>
-        <source>Press any mouse button: Right, Middle, Back, Forward, or extra (Escape to cancel)</source>
-        <translation type="vanished">Beliebige Maustaste drücken: Rechts, Mitte, Zurück, Vorwärts oder Extra (Escape zum Abbrechen)</translation>
-    </message>
-    <message>
-        <source>Press a key, modifier only, or any mouse button (Escape to cancel)</source>
-        <translation type="vanished">Taste, nur Modifikator oder beliebige Maustaste drücken (Escape zum Abbrechen)</translation>
-    </message>
-    <message>
-        <source>Click then press modifier key(s)</source>
-        <translation type="vanished">Klicken und dann Modifikatortaste(n) drücken</translation>
-    </message>
-    <message>
-        <source>Click then press any mouse button (Right, Middle, Back, Forward, etc.)</source>
-        <translation type="vanished">Klicken und dann beliebige Maustaste drücken (Rechts, Mitte, Zurück, Vorwärts usw.)</translation>
-    </message>
-    <message>
-        <source>Click then press key, modifier(s), or any mouse button</source>
-        <translation type="vanished">Klicken und dann Taste, Modifikator(en) oder beliebige Maustaste drücken</translation>
-    </message>
-    <message>
-        <source>Press modifier(s) — Escape to cancel</source>
-        <translation type="vanished">Modifikator(en) drücken — Escape zum Abbrechen</translation>
-    </message>
-    <message>
-        <source>Press any mouse button (Right, Middle, Back, Forward, etc.) — Escape to cancel</source>
-        <translation type="vanished">Eine beliebige Maustaste drücken (Rechts, Mitte, Zurück, Vorwärts usw.) — Escape zum Abbrechen</translation>
-    </message>
-    <message>
-        <source>Press key, modifier(s), or mouse button — Escape to cancel</source>
-        <translation type="vanished">Taste, Modifikator(en) oder Maustaste drücken — Escape zum Abbrechen</translation>
-    </message>
-    <message>
-        <source>Press keys...</source>
-        <translation type="vanished">Tasten drücken ...</translation>
-    </message>
-    <message>
-        <source>Click to set shortcut</source>
-        <translation type="vanished">Klicken, um Tastenkombination festzulegen</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="266"/>
@@ -6203,438 +2382,10 @@
         <translation>Kein Layout zugewiesen</translation>
     </message>
     <message>
-        <source>No default configured</source>
-        <translation type="vanished">Kein Standard konfiguriert</translation>
-    </message>
-    <message>
-        <source>→ %1 (%2 zones)</source>
-        <translation type="vanished">→ %1 (%2 Zonen)</translation>
-    </message>
-    <message>
-        <source>%1 zones</source>
-        <translation type="vanished">%1 Zonen</translation>
-    </message>
-    <message>
-        <source>Unnamed</source>
-        <translation type="vanished">Unbenannt</translation>
-    </message>
-    <message>
-        <source>Shift</source>
-        <translation type="vanished">Umschalt</translation>
-    </message>
-    <message>
-        <source>Ctrl</source>
-        <translation type="vanished">Strg</translation>
-    </message>
-    <message>
-        <source>Alt</source>
-        <translation type="vanished">Alt</translation>
-    </message>
-    <message>
-        <source>Meta</source>
-        <translation type="vanished">Meta</translation>
-    </message>
-    <message>
-        <source>Right</source>
-        <translation type="vanished">Rechts</translation>
-    </message>
-    <message>
-        <source>Middle</source>
-        <translation type="vanished">Mitte</translation>
-    </message>
-    <message>
-        <source>Back</source>
-        <translation type="vanished">Zurück</translation>
-    </message>
-    <message>
-        <source>Forward</source>
-        <translation type="vanished">Vorwärts</translation>
-    </message>
-    <message>
-        <source>Extra 3</source>
-        <translation type="vanished">Extra 3</translation>
-    </message>
-    <message>
-        <source>Extra 4</source>
-        <translation type="vanished">Extra 4</translation>
-    </message>
-    <message>
-        <source>Extra 5</source>
-        <translation type="vanished">Extra 5</translation>
-    </message>
-    <message>
-        <source>(none)</source>
-        <translation type="vanished">(keine)</translation>
-    </message>
-    <message>
-        <source>Click to change this trigger</source>
-        <translation type="vanished">Klicken, um diesen Auslöser zu ändern</translation>
-    </message>
-    <message>
-        <source>Remove trigger</source>
-        <translation type="vanished">Auslöser entfernen</translation>
-    </message>
-    <message>
-        <source>At least one trigger is required</source>
-        <translation type="vanished">Mindestens ein Auslöser ist erforderlich</translation>
-    </message>
-    <message>
-        <source>Remove this trigger</source>
-        <translation type="vanished">Diesen Auslöser entfernen</translation>
-    </message>
-    <message>
-        <source>Add…</source>
-        <translation type="vanished">Hinzufügen …</translation>
-    </message>
-    <message>
-        <source>Add another activation trigger</source>
-        <translation type="vanished">Weiteren Aktivierungsauslöser hinzufügen</translation>
-    </message>
-    <message>
-        <source>Click to set modifier key(s)</source>
-        <translation type="vanished">Klicken, um Modifikatortaste(n) festzulegen</translation>
-    </message>
-    <message>
-        <source>Click to set any mouse button (Right, Middle, Back, Forward, etc.)</source>
-        <translation type="vanished">Klicken, um Maustaste festzulegen (Rechts, Mitte, Zurück, Vorwärts usw.)</translation>
-    </message>
-    <message>
-        <source>Click to set key, modifier, or any mouse button</source>
-        <translation type="vanished">Klicken, um Taste, Modifikator oder Maustaste festzulegen</translation>
-    </message>
-    <message>
-        <source>Per-Monitor Settings — %1</source>
-        <translation type="vanished">Einstellungen pro Bildschirm — %1</translation>
-    </message>
-    <message>
-        <source>Per-Monitor Settings — All Monitors</source>
-        <translation type="vanished">Einstellungen pro Bildschirm — Alle Bildschirme</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="420"/>
-        <location filename="../src/settings/rulemodel.cpp" line="875"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="429"/>
+        <location filename="../src/settings/rulemodel.cpp" line="900"/>
         <source>Monitor</source>
         <translation>Bildschirm</translation>
-    </message>
-    <message>
-        <source>All Monitors (Default)</source>
-        <translation type="vanished">Alle Bildschirme (Standard)</translation>
-    </message>
-    <message>
-        <source>Monitor selection</source>
-        <translation type="vanished">Bildschirmauswahl</translation>
-    </message>
-    <message>
-        <source>Custom settings for this monitor</source>
-        <translation type="vanished">Benutzerdefinierte Einstellungen für diesen Bildschirm</translation>
-    </message>
-    <message>
-        <source>Using default settings (editing below will create an override)</source>
-        <translation type="vanished">Standardeinstellungen werden verwendet (Bearbeitung unten erstellt eine Überschreibung)</translation>
-    </message>
-    <message>
-        <source>Top-Left</source>
-        <translation type="vanished">Oben links</translation>
-    </message>
-    <message>
-        <source>Top</source>
-        <translation type="vanished">Oben</translation>
-    </message>
-    <message>
-        <source>Top-Right</source>
-        <translation type="vanished">Oben rechts</translation>
-    </message>
-    <message>
-        <source>Left</source>
-        <translation type="vanished">Links</translation>
-    </message>
-    <message>
-        <source>Center</source>
-        <translation type="vanished">Mitte</translation>
-    </message>
-    <message>
-        <source>Bottom-Left</source>
-        <translation type="vanished">Unten links</translation>
-    </message>
-    <message>
-        <source>Bottom</source>
-        <translation type="vanished">Unten</translation>
-    </message>
-    <message>
-        <source>Bottom-Right</source>
-        <translation type="vanished">Unten rechts</translation>
-    </message>
-    <message>
-        <source>Any Screen</source>
-        <translation type="vanished">Beliebiger Bildschirm</translation>
-    </message>
-    <message>
-        <source>Primary</source>
-        <translation type="vanished">Primär</translation>
-    </message>
-    <message>
-        <source>Activity Tiling Assignments</source>
-        <translation type="vanished">Aktivitäts-Kachelungszuweisungen</translation>
-    </message>
-    <message>
-        <source>Activity Assignments</source>
-        <translation type="vanished">Aktivitätszuweisungen</translation>
-    </message>
-    <message>
-        <source>Assign tiling algorithms to KDE Activities. Algorithm changes automatically when you switch activities.</source>
-        <translation type="vanished">Weisen Sie KDE-Aktivitäten Kachelungsalgorithmen zu. Der Algorithmus wechselt automatisch, wenn Sie die Aktivität wechseln.</translation>
-    </message>
-    <message>
-        <source>Assign layouts to KDE Activities. Layout changes automatically when you switch activities.</source>
-        <translation type="vanished">Weisen Sie KDE-Aktivitäten Layouts zu. Das Layout wechselt automatisch, wenn Sie die Aktivität wechseln.</translation>
-    </message>
-    <message>
-        <source>Activities list</source>
-        <translation type="vanished">Aktivitätenliste</translation>
-    </message>
-    <message>
-        <source>Current</source>
-        <translation type="vanished">Aktuell</translation>
-    </message>
-    <message>
-        <source>Use default</source>
-        <translation type="vanished">Standard verwenden</translation>
-    </message>
-    <message>
-        <source>Unlock layout for %1 on %2</source>
-        <translation type="vanished">Layout für %1 auf %2 entsperren</translation>
-    </message>
-    <message>
-        <source>Lock layout for %1 on %2</source>
-        <translation type="vanished">Layout für %1 auf %2 sperren</translation>
-    </message>
-    <message>
-        <source>No activities found. Create activities in System Settings → Activities.</source>
-        <translation type="vanished">Keine Aktivitäten gefunden. Erstellen Sie Aktivitäten in Systemeinstellungen → Aktivitäten.</translation>
-    </message>
-    <message>
-        <source>No screens detected. Make sure the PlasmaZones daemon is running.</source>
-        <translation type="vanished">Keine Bildschirme erkannt. Stellen Sie sicher, dass der PlasmaZones-Daemon läuft.</translation>
-    </message>
-    <message>
-        <source>App-to-Zone Tiling Rules</source>
-        <translation type="vanished">Anwendung-zu-Zone-Kachelungsregeln</translation>
-    </message>
-    <message>
-        <source>App-to-Zone Rules</source>
-        <translation type="vanished">Anwendung-zu-Zone-Regeln</translation>
-    </message>
-    <message>
-        <source>Layout:</source>
-        <translation type="vanished">Layout:</translation>
-    </message>
-    <message>
-        <source>Layout for app rules</source>
-        <translation type="vanished">Layout für Anwendungsregeln</translation>
-    </message>
-    <message>
-        <source>Window class pattern (e.g., firefox, org.kde.dolphin)</source>
-        <translation type="vanished">Fensterklassenmuster (z.&#xa0;B. firefox, org.kde.dolphin)</translation>
-    </message>
-    <message>
-        <source>Window class pattern</source>
-        <translation type="vanished">Fensterklassenmuster</translation>
-    </message>
-    <message>
-        <source>Zone:</source>
-        <translation type="vanished">Zone:</translation>
-    </message>
-    <message>
-        <source>Zone number</source>
-        <translation type="vanished">Zonennummer</translation>
-    </message>
-    <message>
-        <source>Target screen</source>
-        <translation type="vanished">Zielbildschirm</translation>
-    </message>
-    <message>
-        <source>Add</source>
-        <translation type="vanished">Hinzufügen</translation>
-    </message>
-    <message>
-        <source>Add app-to-zone rule</source>
-        <translation type="vanished">Anwendung-zu-Zone-Regel hinzufügen</translation>
-    </message>
-    <message>
-        <source>Pick from running windows</source>
-        <translation type="vanished">Aus laufenden Fenstern auswählen</translation>
-    </message>
-    <message>
-        <source>No app rules defined</source>
-        <translation type="vanished">Keine Anwendungsregeln festgelegt</translation>
-    </message>
-    <message>
-        <source>Add rules above to auto-snap windows to specific zones when they open</source>
-        <translation type="vanished">Fügen Sie oben Regeln hinzu, um Fenster beim Öffnen automatisch in bestimmte Zonen einzurasten</translation>
-    </message>
-    <message>
-        <source>Create a layout first to define app-to-zone rules</source>
-        <translation type="vanished">Erstellen Sie zuerst ein Layout, um Anwendung-zu-Zone-Regeln festzulegen</translation>
-    </message>
-    <message>
-        <source>→ Zone %1 on %2</source>
-        <translation type="vanished">→ Zone %1 auf %2</translation>
-    </message>
-    <message>
-        <source>Remove rule for %1</source>
-        <translation type="vanished">Regel für %1 entfernen</translation>
-    </message>
-    <message>
-        <source>A rule with that pattern already exists.</source>
-        <translation type="vanished">Eine Regel mit diesem Muster existiert bereits.</translation>
-    </message>
-    <message>
-        <source>Rules are shared across modes. Zone numbers correspond to the algorithm&apos;s tile positions.</source>
-        <translation type="vanished">Regeln gelten modusübergreifend. Zonennummern entsprechen den Kachelpositionen des Algorithmus.</translation>
-    </message>
-    <message>
-        <source>Rules are checked in order. The first match wins. Patterns match any part of the window class name, ignoring case.</source>
-        <translation type="vanished">Regeln werden der Reihe nach geprüft. Der erste Treffer gewinnt. Muster stimmen mit jedem Teil des Fensterklassennamens überein, ohne Unterscheidung von Groß- und Kleinschreibung.</translation>
-    </message>
-    <message>
-        <source>Remove %1</source>
-        <translation type="vanished">%1 entfernen</translation>
-    </message>
-    <message>
-        <source>Unnamed Layout</source>
-        <translation type="vanished">Unbenanntes Layout</translation>
-    </message>
-    <message>
-        <source>Layout with %1 zones</source>
-        <translation type="vanished">Layout mit %1 Zonen</translation>
-    </message>
-    <message>
-        <source>Edit</source>
-        <translation type="vanished">Bearbeiten</translation>
-    </message>
-    <message>
-        <source>Set as Default</source>
-        <translation type="vanished">Als Standard festlegen</translation>
-    </message>
-    <message>
-        <source>Show in Zone Selector</source>
-        <translation type="vanished">In Zonenauswahl anzeigen</translation>
-    </message>
-    <message>
-        <source>Hide from Zone Selector</source>
-        <translation type="vanished">Aus Zonenauswahl ausblenden</translation>
-    </message>
-    <message>
-        <source>Disable Auto-assign</source>
-        <translation type="vanished">Automatische Zuweisung deaktivieren</translation>
-    </message>
-    <message>
-        <source>Enable Auto-assign</source>
-        <translation type="vanished">Automatische Zuweisung aktivieren</translation>
-    </message>
-    <message>
-        <source>Export</source>
-        <translation type="vanished">Exportieren</translation>
-    </message>
-    <message>
-        <source>Default autotile algorithm</source>
-        <translation type="vanished">Standard-Autotile-Algorithmus</translation>
-    </message>
-    <message>
-        <source>Default layout</source>
-        <translation type="vanished">Standard-Layout</translation>
-    </message>
-    <message>
-        <source>System layout (read-only)</source>
-        <translation type="vanished">System-Layout (schreibgeschützt)</translation>
-    </message>
-    <message>
-        <source>Modified system layout</source>
-        <translation type="vanished">Geändertes System-Layout</translation>
-    </message>
-    <message>
-        <source>This layout is restricted to specific screens, desktops, or activities</source>
-        <translation type="vanished">Dieses Layout ist auf bestimmte Bildschirme, Arbeitsflächen oder Aktivitäten beschränkt</translation>
-    </message>
-    <message>
-        <source>Auto-assign enabled: new windows fill empty zones. Click to disable.</source>
-        <translation type="vanished">Automatische Zuweisung aktiviert: Neue Fenster füllen leere Zonen. Klicken zum Deaktivieren.</translation>
-    </message>
-    <message>
-        <source>Click to auto-assign new windows to empty zones</source>
-        <translation type="vanished">Klicken, um neue Fenster automatisch leeren Zonen zuzuweisen</translation>
-    </message>
-    <message>
-        <source>Hidden from zone selector. Click to show.</source>
-        <translation type="vanished">In der Zonenauswahl verborgen. Klicken zum Anzeigen.</translation>
-    </message>
-    <message>
-        <source>Visible in zone selector. Click to hide.</source>
-        <translation type="vanished">In der Zonenauswahl sichtbar. Klicken zum Verbergen.</translation>
-    </message>
-    <message>
-        <source>Monitor Tiling Assignments</source>
-        <translation type="vanished">Bildschirm-Kachelungszuweisungen</translation>
-    </message>
-    <message>
-        <source>Monitor Assignments</source>
-        <translation type="vanished">Bildschirmzuweisungen</translation>
-    </message>
-    <message>
-        <source>Monitor list</source>
-        <translation type="vanished">Bildschirmliste</translation>
-    </message>
-    <message>
-        <source>No monitors detected</source>
-        <translation type="vanished">Keine Bildschirme erkannt</translation>
-    </message>
-    <message>
-        <source>Make sure the PlasmaZones daemon is running</source>
-        <translation type="vanished">Stellen Sie sicher, dass der PlasmaZones-Daemon läuft</translation>
-    </message>
-    <message>
-        <source>Unknown Monitor</source>
-        <translation type="vanished">Unbekannter Bildschirm</translation>
-    </message>
-    <message>
-        <source>Algorithm:</source>
-        <translation type="vanished">Algorithmus:</translation>
-    </message>
-    <message>
-        <source>All Desktops:</source>
-        <translation type="vanished">Alle Arbeitsflächen:</translation>
-    </message>
-    <message>
-        <source>Unlock layout for this monitor</source>
-        <translation type="vanished">Layout für diesen Bildschirm entsperren</translation>
-    </message>
-    <message>
-        <source>Lock layout for this monitor</source>
-        <translation type="vanished">Layout für diesen Bildschirm sperren</translation>
-    </message>
-    <message>
-        <source>Per-desktop</source>
-        <translation type="vanished">Pro Arbeitsfläche</translation>
-    </message>
-    <message>
-        <source>Hide per-desktop assignments</source>
-        <translation type="vanished">Zuweisungen pro Arbeitsfläche ausblenden</translation>
-    </message>
-    <message>
-        <source>Show per-desktop assignments</source>
-        <translation type="vanished">Zuweisungen pro Arbeitsfläche anzeigen</translation>
-    </message>
-    <message>
-        <source>Disable PlasmaZones on this monitor</source>
-        <translation type="vanished">PlasmaZones auf diesem Bildschirm deaktivieren</translation>
-    </message>
-    <message>
-        <source>When enabled, zones will not appear on this monitor</source>
-        <translation type="vanished">Wenn aktiviert, werden Zonen auf diesem Bildschirm nicht angezeigt</translation>
-    </message>
-    <message>
-        <source>Per-Desktop Overrides</source>
-        <translation type="vanished">Überschreibungen pro Arbeitsfläche</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="225"/>
@@ -6642,2552 +2393,2355 @@
         <translation>Arbeitsfläche %1</translation>
     </message>
     <message>
-        <source>Unlock layout for %1</source>
-        <translation type="vanished">Layout für %1 entsperren</translation>
-    </message>
-    <message>
-        <source>Lock layout for %1</source>
-        <translation type="vanished">Layout für %1 sperren</translation>
-    </message>
-    <message>
-        <source>Per-desktop assignments are available with multiple virtual desktops.</source>
-        <translation type="vanished">Zuweisungen pro Arbeitsfläche sind bei mehreren virtuellen Arbeitsflächen verfügbar.</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="553"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="585"/>
         <source>Tiling Quick Shortcuts</source>
         <translation>Kachelungs-Schnelltasten</translation>
     </message>
     <message>
-        <source>Quick Layout Shortcuts</source>
-        <translation type="vanished">Schnellwechsel-Tastenkombinationen</translation>
-    </message>
-    <message>
-        <source>Assign tiling algorithms to keyboard shortcuts for instant switching.</source>
-        <translation type="vanished">Weisen Sie Tastenkombinationen Kachelungsalgorithmen zu, um sofort zu wechseln.</translation>
-    </message>
-    <message>
-        <source>Assign layouts to keyboard shortcuts for instant switching.</source>
-        <translation type="vanished">Weisen Sie Tastenkombinationen Layouts zu, um sofort zu wechseln.</translation>
-    </message>
-    <message>
-        <source>Quick layout shortcuts list</source>
-        <translation type="vanished">Liste der Schnellwechsel-Tastenkombinationen</translation>
-    </message>
-    <message>
-        <source>Quick Tiling %1</source>
-        <translation type="vanished">Schnell-Kachelung %1</translation>
-    </message>
-    <message>
-        <source>Quick Layout %1</source>
-        <translation type="vanished">Schnell-Layout %1</translation>
-    </message>
-    <message>
-        <source>No shortcut assigned</source>
-        <translation type="vanished">Kein Kürzel zugewiesen</translation>
-    </message>
-    <message>
-        <source>Clear shortcut</source>
-        <translation type="vanished">Tastenkombination entfernen</translation>
-    </message>
-    <message>
-        <source>Clear shortcut %1</source>
-        <translation type="vanished">Tastenkombination %1 entfernen</translation>
-    </message>
-    <message>
-        <source>Pick Application from Running Windows</source>
-        <translation type="vanished">Anwendung aus laufenden Fenstern auswählen</translation>
-    </message>
-    <message>
-        <source>Pick Window Class from Running Windows</source>
-        <translation type="vanished">Fensterklasse aus laufenden Fenstern auswählen</translation>
-    </message>
-    <message>
-        <source>Refresh</source>
-        <translation type="vanished">Aktualisieren</translation>
-    </message>
-    <message>
-        <source>Filter...</source>
-        <translation type="vanished">Filtern ...</translation>
-    </message>
-    <message>
-        <source>No windows found</source>
-        <translation type="vanished">Keine Fenster gefunden</translation>
-    </message>
-    <message>
-        <source>No matching windows</source>
-        <translation type="vanished">Keine passenden Fenster</translation>
-    </message>
-    <message>
-        <source>Make sure the PlasmaZones daemon and KWin effect are running</source>
-        <translation type="vanished">Stellen Sie sicher, dass der PlasmaZones-Daemon und der KWin-Effekt laufen</translation>
-    </message>
-    <message>
-        <source>Try a different search term</source>
-        <translation type="vanished">Versuchen Sie einen anderen Suchbegriff</translation>
-    </message>
-    <message>
-        <source>The zone selector popup appears when dragging windows to screen edges, allowing quick layout selection.</source>
-        <translation type="vanished">Das Zonenauswahl-Popup erscheint beim Ziehen von Fenstern an Bildschirmränder und ermöglicht eine schnelle Layout-Auswahl.</translation>
-    </message>
-    <message>
-        <source>Enable zone selector popup</source>
-        <translation type="vanished">Zonenauswahl-Popup aktivieren</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="527"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="559"/>
         <source>Position &amp; Trigger</source>
         <translation>Position und Auslöser</translation>
     </message>
     <message>
-        <source>Choose where the popup appears on screen</source>
-        <translation type="vanished">Wählen Sie, wo das Popup auf dem Bildschirm erscheint</translation>
-    </message>
-    <message>
-        <source>Trigger Distance</source>
-        <translation type="vanished">Auslöseabstand</translation>
-    </message>
-    <message>
-        <source>How close to the screen edge before the popup appears</source>
-        <translation type="vanished">Wie nah am Bildschirmrand, bevor das Popup erscheint</translation>
-    </message>
-    <message>
         <location filename="../src/settings/searchcatalog.cpp" line="56"/>
         <location filename="../src/settings/searchcatalog.cpp" line="64"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="169"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="227"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="170"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="228"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="437"/>
         <source>monitor</source>
-        <translation type="unfinished"></translation>
+        <translation>Bildschirm</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="56"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="403"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="415"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="435"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="447"/>
         <source>display</source>
-        <translation type="unfinished"></translation>
+        <translation>Anzeige</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="56"/>
         <source>mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Modus</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="57"/>
         <source>active layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktives Layout</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="59"/>
         <source>rendering</source>
-        <translation type="unfinished"></translation>
+        <translation>Grafikausgabe</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="59"/>
         <source>backend</source>
-        <translation type="unfinished"></translation>
+        <translation>Backend</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="59"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="184"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="185"/>
         <source>opengl</source>
-        <translation type="unfinished"></translation>
+        <translation>OpenGL</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="60"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="184"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="185"/>
         <source>vulkan</source>
-        <translation type="unfinished"></translation>
+        <translation>Vulkan</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="60"/>
         <source>backup</source>
-        <translation type="unfinished"></translation>
+        <translation>Sicherung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="60"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="518"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="550"/>
         <source>export</source>
-        <translation type="unfinished"></translation>
+        <translation>Exportieren</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="61"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="520"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="552"/>
         <source>import</source>
-        <translation type="unfinished"></translation>
+        <translation>Importieren</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="61"/>
         <source>reset</source>
-        <translation type="unfinished"></translation>
+        <translation>Zurücksetzen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="63"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="450"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
         <source>split</source>
-        <translation type="unfinished"></translation>
+        <translation>Teilen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="63"/>
         <source>subdivide</source>
-        <translation type="unfinished"></translation>
+        <translation>Unterteilen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="63"/>
         <source>region</source>
-        <translation type="unfinished"></translation>
+        <translation>Bereich</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="66"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="171"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="172"/>
         <source>layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="66"/>
         <source>zone</source>
-        <translation type="unfinished"></translation>
+        <translation>Zone</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="66"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="535"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="567"/>
         <source>grid</source>
-        <translation type="unfinished"></translation>
+        <translation>Raster</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="67"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="137"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="154"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="138"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="155"/>
         <source>preset</source>
-        <translation type="unfinished"></translation>
+        <translation>Voreinstellung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="67"/>
         <source>template</source>
-        <translation type="unfinished"></translation>
+        <translation>Vorlage</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="68"/>
         <source>aspect ratio</source>
-        <translation type="unfinished"></translation>
+        <translation>Seitenverhältnis</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="75"/>
         <location filename="../src/settings/searchcatalog.cpp" line="125"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="390"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="422"/>
         <source>overlay</source>
-        <translation type="unfinished"></translation>
+        <translation>Overlay</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="75"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="390"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="422"/>
         <source>trigger</source>
-        <translation type="unfinished"></translation>
+        <translation>Auslöser</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="75"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="377"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="530"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="409"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="413"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="562"/>
         <source>edge</source>
-        <translation type="unfinished"></translation>
+        <translation>Kante</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="76"/>
         <source>magnet</source>
-        <translation type="unfinished"></translation>
+        <translation>Magnet</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="76"/>
         <location filename="../src/settings/searchcatalog.cpp" line="84"/>
         <location filename="../src/settings/searchcatalog.cpp" line="117"/>
         <source>snap</source>
-        <translation type="unfinished"></translation>
+        <translation>Einrasten</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="78"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="163"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="164"/>
         <source>color</source>
-        <translation type="unfinished"></translation>
+        <translation>Farbe</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="78"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="284"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="287"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="289"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="291"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="334"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="337"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="340"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="285"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="288"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="290"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="307"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="332"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="335"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="338"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="352"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="354"/>
         <source>colour</source>
-        <translation type="unfinished"></translation>
+        <translation>Farbe</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="78"/>
         <source>opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>Deckkraft</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="79"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="297"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="299"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="298"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
         <source>transparency</source>
-        <translation type="unfinished"></translation>
+        <translation>Transparenz</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="79"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="284"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="334"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="285"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="332"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="352"/>
         <source>theme</source>
-        <translation type="unfinished"></translation>
+        <translation>Design</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="79"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="146"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="158"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="163"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="331"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="360"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="147"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="159"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="164"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="329"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="392"/>
         <source>border</source>
-        <translation type="unfinished"></translation>
+        <translation>Rand</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="81"/>
         <source>zone selector</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonenauswahl</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="81"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="410"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="525"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="442"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="557"/>
         <source>picker</source>
-        <translation type="unfinished"></translation>
+        <translation>Auswahl</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="81"/>
         <source>chooser</source>
-        <translation type="unfinished"></translation>
+        <translation>Auswahl</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="82"/>
         <location filename="../src/settings/searchcatalog.cpp" line="125"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="152"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="153"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="240"/>
         <source>popup</source>
-        <translation type="unfinished"></translation>
+        <translation>Aufklappfenster</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="84"/>
         <location filename="../src/settings/searchcatalog.cpp" line="112"/>
         <location filename="../src/settings/searchcatalog.cpp" line="116"/>
         <location filename="../src/settings/searchcatalog.cpp" line="119"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="146"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="163"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="147"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="164"/>
         <source>window</source>
-        <translation type="unfinished"></translation>
+        <translation>Fenster</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="84"/>
         <location filename="../src/settings/searchcatalog.cpp" line="119"/>
         <source>drag</source>
-        <translation type="unfinished"></translation>
+        <translation>Ziehen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="85"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="392"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="424"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="444"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
         <source>modifier</source>
-        <translation type="unfinished"></translation>
+        <translation>Sondertaste</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="85"/>
         <location filename="../src/settings/searchcatalog.cpp" line="90"/>
         <location filename="../src/settings/searchcatalog.cpp" line="105"/>
         <source>key</source>
-        <translation type="unfinished"></translation>
+        <translation>Taste</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="87"/>
         <location filename="../src/settings/searchcatalog.cpp" line="102"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="169"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="170"/>
         <source>priority</source>
-        <translation type="unfinished"></translation>
+        <translation>Priorität</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="87"/>
         <location filename="../src/settings/searchcatalog.cpp" line="102"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="501"/>
         <source>order</source>
-        <translation type="unfinished"></translation>
+        <translation>Reihenfolge</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="87"/>
         <location filename="../src/settings/searchcatalog.cpp" line="102"/>
         <source>precedence</source>
-        <translation type="unfinished"></translation>
+        <translation>Vorrang</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="89"/>
         <location filename="../src/settings/searchcatalog.cpp" line="104"/>
         <source>shortcut</source>
-        <translation type="unfinished"></translation>
+        <translation>Kurzbefehl</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="89"/>
         <location filename="../src/settings/searchcatalog.cpp" line="104"/>
         <source>hotkey</source>
-        <translation type="unfinished"></translation>
+        <translation>Tastenkürzel</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="89"/>
         <location filename="../src/settings/searchcatalog.cpp" line="104"/>
         <source>keybind</source>
-        <translation type="unfinished"></translation>
+        <translation>Tastenbelegung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="90"/>
         <source>keyboard</source>
-        <translation type="unfinished"></translation>
+        <translation>Tastatur</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="92"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="142"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="157"/>
-        <source>shader</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="92"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="142"/>
-        <source>effect</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="92"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="143"/>
         <location filename="../src/settings/searchcatalog.cpp" line="158"/>
+        <source>shader</source>
+        <translation>Shader</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="92"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="143"/>
+        <source>effect</source>
+        <translation>Effekt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="92"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="159"/>
         <source>glow</source>
-        <translation type="unfinished"></translation>
+        <translation>Leuchten</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="96"/>
         <source>tile</source>
-        <translation type="unfinished"></translation>
+        <translation>Kachel</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="96"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="234"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="235"/>
         <source>tiling</source>
-        <translation type="unfinished"></translation>
+        <translation>Kachelung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="96"/>
         <source>auto</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="97"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="375"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="380"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
-        <source>gap</source>
-        <translation type="unfinished"></translation>
+        <translation>Automatisch</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="97"/>
         <location filename="../src/settings/searchcatalog.cpp" line="166"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="375"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="380"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="404"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="407"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
+        <source>gap</source>
+        <translation>Abstand</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="97"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="167"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="404"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="407"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
         <source>spacing</source>
-        <translation type="unfinished"></translation>
+        <translation>Abstand</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="99"/>
         <source>algorithm</source>
-        <translation type="unfinished"></translation>
+        <translation>Algorithmus</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="99"/>
         <source>bsp</source>
-        <translation type="unfinished"></translation>
+        <translation>BSP</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="99"/>
         <source>binary</source>
-        <translation type="unfinished"></translation>
+        <translation>Binär</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="100"/>
         <source>spiral</source>
-        <translation type="unfinished"></translation>
+        <translation>Spirale</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="100"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="449"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="457"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="481"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="489"/>
         <source>master</source>
-        <translation type="unfinished"></translation>
+        <translation>Hauptbereich</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="100"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="462"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="494"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
         <source>stack</source>
-        <translation type="unfinished"></translation>
+        <translation>Stapel</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="109"/>
         <location filename="../src/settings/searchcatalog.cpp" line="112"/>
         <location filename="../src/settings/searchcatalog.cpp" line="125"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="132"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="135"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="187"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="318"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="133"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="136"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="188"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="317"/>
         <source>animation</source>
-        <translation type="unfinished"></translation>
+        <translation>Animation</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="109"/>
         <source>duration</source>
-        <translation type="unfinished"></translation>
+        <translation>Dauer</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="109"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="137"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="138"/>
         <source>easing</source>
-        <translation type="unfinished"></translation>
+        <translation>Beschleunigung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="110"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="137"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="138"/>
         <source>curve</source>
-        <translation type="unfinished"></translation>
+        <translation>Kurve</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="110"/>
         <source>spring</source>
-        <translation type="unfinished"></translation>
+        <translation>Feder</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="110"/>
         <source>speed</source>
-        <translation type="unfinished"></translation>
+        <translation>Geschwindigkeit</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="113"/>
         <source>open</source>
-        <translation type="unfinished"></translation>
+        <translation>Öffnen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="113"/>
         <source>close</source>
-        <translation type="unfinished"></translation>
+        <translation>Schließen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="113"/>
         <source>minimize</source>
-        <translation type="unfinished"></translation>
+        <translation>Minimieren</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="116"/>
         <source>movement</source>
-        <translation type="unfinished"></translation>
+        <translation>Bewegung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="117"/>
         <source>maximize</source>
-        <translation type="unfinished"></translation>
+        <translation>Maximieren</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="119"/>
         <source>dragging</source>
-        <translation type="unfinished"></translation>
+        <translation>Ziehen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="120"/>
         <source>move</source>
-        <translation type="unfinished"></translation>
+        <translation>Verschieben</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="120"/>
         <source>wobble</source>
-        <translation type="unfinished"></translation>
+        <translation>Wackeln</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="120"/>
         <source>physics</source>
-        <translation type="unfinished"></translation>
+        <translation>Physik</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="123"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="150"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="151"/>
         <source>osd</source>
-        <translation type="unfinished"></translation>
+        <translation>OSD</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="123"/>
         <source>notification</source>
-        <translation type="unfinished"></translation>
+        <translation>Benachrichtigung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="123"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="150"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="506"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="151"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
         <source>on-screen display</source>
-        <translation type="unfinished"></translation>
+        <translation>On-Screen-Anzeige</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="127"/>
         <source>desktop</source>
-        <translation type="unfinished"></translation>
+        <translation>Arbeitsfläche</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="127"/>
         <source>virtual desktop</source>
-        <translation type="unfinished"></translation>
+        <translation>Virtuelle Arbeitsfläche</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="128"/>
         <source>workspace</source>
-        <translation type="unfinished"></translation>
+        <translation>Arbeitsbereich</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="128"/>
         <source>switch</source>
-        <translation type="unfinished"></translation>
+        <translation>Wechseln</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="130"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="128"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="663"/>
+        <source>peek</source>
+        <translation>Vorschau</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="129"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="663"/>
+        <source>show desktop</source>
+        <translation>Arbeitsfläche anzeigen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="131"/>
         <source>side panel</source>
-        <translation type="unfinished"></translation>
+        <translation>Seitenleiste</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="130"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="131"/>
         <source>panel</source>
-        <translation type="unfinished"></translation>
+        <translation>Kontrollleiste</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="130"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="131"/>
         <source>drawer</source>
-        <translation type="unfinished"></translation>
+        <translation>Schublade</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="132"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="133"/>
         <source>widget</source>
-        <translation type="unfinished"></translation>
+        <translation>Miniprogramm</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="135"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="171"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="136"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="172"/>
         <source>editor</source>
-        <translation type="unfinished"></translation>
+        <translation>Editor</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="135"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="136"/>
         <source>layout editor</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout-Editor</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="138"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="140"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="155"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="139"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="141"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="156"/>
         <source>profile</source>
-        <translation type="unfinished"></translation>
+        <translation>Profil</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="140"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="141"/>
         <source>motion set</source>
-        <translation type="unfinished"></translation>
+        <translation>Bewegungssatz</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="116"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="140"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="141"/>
         <source>motion</source>
-        <translation type="unfinished"></translation>
+        <translation>Bewegung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="164"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
         <source>title bar</source>
-        <translation type="unfinished"></translation>
+        <translation>Titelleiste</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="146"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="150"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="152"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="164"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="147"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="151"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="153"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="357"/>
         <source>decoration</source>
-        <translation type="unfinished"></translation>
+        <translation>Dekoration</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="112"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="147"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="148"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="166"/>
         <source>appearance</source>
-        <translation type="unfinished"></translation>
+        <translation>Darstellung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="165"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="375"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="380"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="166"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="404"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="407"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
         <source>gaps</source>
-        <translation type="unfinished"></translation>
+        <translation>Abstände</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="166"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="376"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="167"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="408"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="413"/>
         <source>padding</source>
-        <translation type="unfinished"></translation>
+        <translation>Innenabstand</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="166"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="376"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="167"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="408"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="413"/>
         <source>margin</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="168"/>
-        <source>rule</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="168"/>
-        <source>exclude</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="168"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="478"/>
-        <source>float</source>
-        <translation type="unfinished"></translation>
+        <translation>Rand</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="169"/>
-        <source>activity</source>
-        <translation type="unfinished"></translation>
+        <source>rule</source>
+        <translation>Regel</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="171"/>
-        <source>design</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="169"/>
+        <source>exclude</source>
+        <translation>Ausschließen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="169"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="510"/>
+        <source>float</source>
+        <translation>Schwebend</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="170"/>
+        <source>activity</source>
+        <translation>Aktivität</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="172"/>
+        <source>design</source>
+        <translation>Design</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="173"/>
         <source>zones</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="174"/>
-        <source>about</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="174"/>
-        <source>version</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="174"/>
-        <source>license</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="175"/>
+        <source>about</source>
+        <translation>Über</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="175"/>
+        <source>version</source>
+        <translation>Version</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="175"/>
+        <source>license</source>
+        <translation>Lizenz</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="176"/>
         <source>credits</source>
-        <translation type="unfinished"></translation>
+        <translation>Danksagungen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="181"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="182"/>
         <source>Rendering</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="183"/>
-        <source>Rendering backend</source>
-        <translation type="unfinished"></translation>
+        <translation>Grafikausgabe</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="184"/>
+        <source>Rendering backend</source>
+        <translation>Grafik-Backend</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="185"/>
         <source>graphics</source>
-        <translation type="unfinished"></translation>
+        <translation>Grafik</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="236"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="356"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="237"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="388"/>
         <source>Window filtering</source>
-        <translation type="unfinished"></translation>
+        <translation>Fensterfilterung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="238"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="358"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="501"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="390"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="533"/>
         <source>Exclude transient windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Vorübergehende Fenster ausschließen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="240"/>
         <source>dialog</source>
-        <translation type="unfinished"></translation>
+        <translation>Dialog</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="152"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="153"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="240"/>
         <source>tooltip</source>
-        <translation type="unfinished"></translation>
+        <translation>Kurzinfo</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="246"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
         <source>Reset</source>
-        <translation type="unfinished"></translation>
+        <translation>Zurücksetzen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="248"/>
         <source>reset to defaults</source>
-        <translation type="unfinished"></translation>
+        <translation>Auf Standardwerte zurücksetzen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="248"/>
         <source>defaults</source>
-        <translation type="unfinished"></translation>
+        <translation>Standardwerte</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="427"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="248"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="459"/>
         <source>restore</source>
-        <translation type="unfinished"></translation>
+        <translation>Wiederherstellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="262"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="267"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="263"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="268"/>
         <source>Window Handling</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="283"/>
-        <source>System accent color</source>
-        <translation type="unfinished"></translation>
+        <translation>Fensterbehandlung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="284"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="295"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="334"/>
+        <source>System accent color</source>
+        <translation>Systemakzentfarbe</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="285"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="332"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="352"/>
         <source>scheme</source>
-        <translation type="unfinished"></translation>
+        <translation>Schema</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="396"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="286"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="405"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="287"/>
         <source>Highlight color</source>
-        <translation type="unfinished"></translation>
+        <translation>Hervorhebungsfarbe</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="287"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="288"/>
         <source>active</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktiv</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="287"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="288"/>
         <source>hover</source>
-        <translation type="unfinished"></translation>
+        <translation>Überfahren</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="289"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="290"/>
         <source>Inactive color</source>
-        <translation type="unfinished"></translation>
+        <translation>Farbe für inaktive Zonen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="289"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="340"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
-        <source>unfocused</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="291"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="337"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="340"/>
-        <source>outline</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="294"/>
-        <source>Import colors</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="295"/>
-        <source>pywal</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="295"/>
-        <source>json</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="295"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="520"/>
-        <source>load</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="297"/>
-        <source>Active opacity</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="297"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="299"/>
-        <source>alpha</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="299"/>
-        <source>Inactive opacity</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="301"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
-        <source>thickness</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="242"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="245"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="301"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="311"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="290"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="338"/>
         <location filename="../src/settings/searchcatalog.cpp" line="363"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="366"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="454"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="509"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
+        <source>unfocused</source>
+        <translation>Ohne Fokus</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="335"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="338"/>
+        <source>outline</source>
+        <translation>Umriss</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="295"/>
+        <source>Import colors</source>
+        <translation>Farben importieren</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <source>pywal</source>
+        <translation>pywal</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <source>json</source>
+        <translation>JSON</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="552"/>
+        <source>load</source>
+        <translation>Laden</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="298"/>
+        <source>Active opacity</source>
+        <translation>Deckkraft aktiv</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="298"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
+        <source>alpha</source>
+        <translation>Alpha</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
+        <source>Inactive opacity</source>
+        <translation>Deckkraft inaktiv</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="302"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="324"/>
+        <source>thickness</source>
+        <translation>Dicke</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="243"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="246"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="302"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="312"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="324"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="395"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="486"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="544"/>
         <source>size</source>
-        <translation type="unfinished"></translation>
+        <translation>Größe</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="303"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="304"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
         <source>rounding</source>
-        <translation type="unfinished"></translation>
+        <translation>Abrundung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="303"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="304"/>
         <source>corner</source>
-        <translation type="unfinished"></translation>
+        <translation>Ecke</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="305"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
         <source>Label color</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="311"/>
-        <source>text</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
-        <source>font</source>
-        <translation type="unfinished"></translation>
+        <translation>Beschriftungsfarbe</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="307"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="312"/>
+        <source>text</source>
+        <translation>Text</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="307"/>
+        <source>font</source>
+        <translation>Schriftart</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
         <source>Font</source>
-        <translation type="unfinished"></translation>
+        <translation>Schriftart</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="309"/>
         <source>typeface</source>
-        <translation type="unfinished"></translation>
+        <translation>Schriftbild</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="309"/>
         <source>family</source>
-        <translation type="unfinished"></translation>
+        <translation>Familie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="309"/>
         <source>style</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="310"/>
-        <source>Label scale</source>
-        <translation type="unfinished"></translation>
+        <translation>Stil</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="311"/>
+        <source>Label scale</source>
+        <translation>Beschriftungsgröße</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="312"/>
         <source>multiplier</source>
-        <translation type="unfinished"></translation>
+        <translation>Multiplikator</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
-        <source>Blur behind zones</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
-        <source>frost</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
-        <source>background</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="314"/>
+        <source>Zone numbers</source>
+        <translation>Zonennummern</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="315"/>
-        <source>Zone numbers</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="316"/>
         <source>index</source>
-        <translation type="unfinished"></translation>
+        <translation>Index</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="316"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="315"/>
         <source>digit</source>
-        <translation type="unfinished"></translation>
+        <translation>Ziffer</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="316"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="315"/>
         <source>label</source>
-        <translation type="unfinished"></translation>
+        <translation>Beschriftung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="318"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="317"/>
         <source>Flash on layout switch</source>
-        <translation type="unfinished"></translation>
+        <translation>Bei Layout-Wechsel aufblitzen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="318"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="317"/>
         <source>blink</source>
-        <translation type="unfinished"></translation>
+        <translation>Blinken</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="186"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="187"/>
         <source>Frame rate</source>
-        <translation type="unfinished"></translation>
+        <translation>Bildrate</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="71"/>
         <source>User layouts</source>
-        <translation type="unfinished"></translation>
+        <translation>Benutzerlayouts</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="147"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="157"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="148"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="158"/>
         <source>surface</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="154"/>
-        <source>decoration set</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="154"/>
-        <source>set</source>
-        <translation type="unfinished"></translation>
+        <translation>Oberfläche</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="155"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="157"/>
-        <source>pack</source>
-        <translation type="unfinished"></translation>
+        <source>decoration set</source>
+        <translation>Dekorationssatz</translation>
     </message>
     <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="155"/>
+        <source>set</source>
+        <translation>Satz</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="156"/>
         <location filename="../src/settings/searchcatalog.cpp" line="158"/>
-        <source>glass</source>
-        <translation type="unfinished"></translation>
+        <source>pack</source>
+        <translation>Paket</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="159"/>
+        <source>glass</source>
+        <translation>Glas</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="160"/>
         <source>blur</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="187"/>
-        <source>fps</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="187"/>
-        <source>refresh</source>
-        <translation type="unfinished"></translation>
+        <translation>Weichzeichnen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="188"/>
+        <source>fps</source>
+        <translation>fps</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="188"/>
+        <source>refresh</source>
+        <translation>Aktualisieren</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="189"/>
         <source>Audio Spectrum</source>
-        <translation type="unfinished"></translation>
+        <translation>Audiospektrum</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="190"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="191"/>
         <source>Audio spectrum</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="191"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="194"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="197"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="200"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="205"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="208"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="212"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="215"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="220"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="222"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="224"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="227"/>
-        <source>cava</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="191"/>
-        <source>music</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="191"/>
-        <source>visualizer</source>
-        <translation type="unfinished"></translation>
+        <translation>Audiospektrum</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="192"/>
-        <source>sound</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="195"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="198"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="201"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="203"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="206"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="209"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="213"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="216"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="218"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="221"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="223"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="225"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="228"/>
+        <source>cava</source>
+        <translation>cava</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="192"/>
+        <source>music</source>
+        <translation>Musik</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="192"/>
+        <source>visualizer</source>
+        <translation>Visualisierung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="193"/>
+        <source>sound</source>
+        <translation>Ton</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="194"/>
         <source>Spectrum bars</source>
-        <translation type="unfinished"></translation>
+        <translation>Spektrumbalken</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="194"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="195"/>
         <source>bands</source>
-        <translation type="unfinished"></translation>
+        <translation>Bänder</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="194"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="208"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="212"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="195"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="209"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="213"/>
         <source>frequency</source>
-        <translation type="unfinished"></translation>
+        <translation>Frequenz</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="196"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="197"/>
         <source>Noise reduction</source>
-        <translation type="unfinished"></translation>
+        <translation>Rauschunterdrückung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="197"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="200"/>
-        <source>smoothing</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="197"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="200"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="220"/>
-        <source>smooth</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="199"/>
-        <source>Extra smoothing</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="198"/>
         <location filename="../src/settings/searchcatalog.cpp" line="201"/>
+        <source>smoothing</source>
+        <translation>Glättung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="198"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="201"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="221"/>
+        <source>smooth</source>
+        <translation>Glätten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="200"/>
+        <source>Extra smoothing</source>
+        <translation>Zusätzliche Glättung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
         <source>Automatic gain</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
-        <source>autosens</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
-        <source>sensitivity</source>
-        <translation type="unfinished"></translation>
+        <translation>Automatische Verstärkung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="203"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="205"/>
-        <source>gain</source>
-        <translation type="unfinished"></translation>
+        <source>autosens</source>
+        <translation>Automatische Empfindlichkeit</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="203"/>
+        <source>sensitivity</source>
+        <translation>Empfindlichkeit</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="204"/>
-        <source>Sensitivity</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="206"/>
+        <source>gain</source>
+        <translation>Verstärkung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="207"/>
-        <source>Lowest frequency</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="205"/>
+        <source>Sensitivity</source>
+        <translation>Empfindlichkeit</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="208"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="212"/>
-        <source>cutoff</source>
-        <translation type="unfinished"></translation>
+        <source>Lowest frequency</source>
+        <translation>Niedrigste Frequenz</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="209"/>
-        <source>bass</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="211"/>
-        <source>Highest frequency</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../src/settings/searchcatalog.cpp" line="213"/>
-        <source>treble</source>
-        <translation type="unfinished"></translation>
+        <source>cutoff</source>
+        <translation>Grenzwert</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="210"/>
+        <source>bass</source>
+        <translation>Bass</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="212"/>
+        <source>Highest frequency</source>
+        <translation>Höchste Frequenz</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="214"/>
+        <source>treble</source>
+        <translation>Höhen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="215"/>
         <source>Channels</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="215"/>
-        <source>stereo</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="215"/>
-        <source>mono</source>
-        <translation type="unfinished"></translation>
+        <translation>Kanäle</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="216"/>
+        <source>stereo</source>
+        <translation>Stereo</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="216"/>
+        <source>mono</source>
+        <translation>Mono</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
         <source>Reverse bar order</source>
-        <translation type="unfinished"></translation>
+        <translation>Balkenreihenfolge umkehren</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="218"/>
         <source>flip</source>
-        <translation type="unfinished"></translation>
+        <translation>Umkehren</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="218"/>
         <source>mirror</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="219"/>
-        <source>Monstercat filter</source>
-        <translation type="unfinished"></translation>
+        <translation>Spiegeln</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="220"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="222"/>
-        <source>filter</source>
-        <translation type="unfinished"></translation>
+        <source>Monstercat filter</source>
+        <translation>Monstercat-Filter</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="221"/>
-        <source>Wave filter</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="223"/>
+        <source>filter</source>
+        <translation>Filter</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="222"/>
-        <source>wave</source>
-        <translation type="unfinished"></translation>
+        <source>Wave filter</source>
+        <translation>Wellenfilter</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="223"/>
+        <source>wave</source>
+        <translation>Welle</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="224"/>
         <source>Audio backend</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="224"/>
-        <source>pipewire</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="224"/>
-        <source>pulseaudio</source>
-        <translation type="unfinished"></translation>
+        <translation>Audio-Backend</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="225"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="228"/>
-        <source>capture</source>
-        <translation type="unfinished"></translation>
+        <source>pipewire</source>
+        <translation>PipeWire</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="225"/>
+        <source>pulseaudio</source>
+        <translation>PulseAudio</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="226"/>
-        <source>Audio source</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="229"/>
+        <source>capture</source>
+        <translation>Aufnahme</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="227"/>
+        <source>Audio source</source>
+        <translation>Audioquelle</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="228"/>
         <source>device</source>
-        <translation type="unfinished"></translation>
+        <translation>Gerät</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="230"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="231"/>
         <source>Layout assignment</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout-Zuweisung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="232"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="233"/>
         <source>Don&apos;t assign a layout by default</source>
-        <translation type="unfinished"></translation>
+        <translation>Standardmäßig kein Layout zuweisen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="233"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="234"/>
         <source>default</source>
-        <translation type="unfinished"></translation>
+        <translation>Standard</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="233"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="234"/>
         <source>assign</source>
-        <translation type="unfinished"></translation>
+        <translation>Zuweisen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="233"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="234"/>
         <source>snapping</source>
-        <translation type="unfinished"></translation>
+        <translation>Einrasten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
+        <source>Corner radius</source>
+        <translation>Eckenradius</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="328"/>
-        <source>Corner radius</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="330"/>
         <source>Apply borders to</source>
-        <translation type="unfinished"></translation>
+        <translation>Ränder anwenden auf</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="331"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="329"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="360"/>
         <source>scope</source>
-        <translation type="unfinished"></translation>
+        <translation>Bereich</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="331"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="329"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="360"/>
         <source>which windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Welche Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="336"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="334"/>
         <source>Active border color</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktive Randfarbe</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="335"/>
+        <source>focused</source>
+        <translation>Fokussiert</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="337"/>
-        <source>focused</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="339"/>
         <source>Inactive border color</source>
-        <translation type="unfinished"></translation>
+        <translation>Inaktive Randfarbe</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="340"/>
+        <source>Opacity and tint</source>
+        <translation>Deckkraft und Farbton</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="342"/>
+        <source>Apply opacity and tint to</source>
+        <translation>Deckkraft und Farbton anwenden auf</translation>
+    </message>
+    <message>
         <location filename="../src/settings/searchcatalog.cpp" line="346"/>
+        <source>translucent</source>
+        <translation>Durchscheinend</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="354"/>
+        <source>wash</source>
+        <translation>Überlagerung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
+        <source>blend</source>
+        <translation>Überblenden</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="351"/>
+        <source>Use system accent color for the tint</source>
+        <translation>Systemakzentfarbe für die Tönung verwenden</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="354"/>
+        <source>accent</source>
+        <translation>Akzent</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="357"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="360"/>
         <source>titlebar</source>
-        <translation type="unfinished"></translation>
+        <translation>Titelleiste</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="357"/>
         <source>header</source>
-        <translation type="unfinished"></translation>
+        <translation>Kopfzeile</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="345"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="359"/>
         <source>Hide title bars on</source>
-        <translation type="unfinished"></translation>
+        <translation>Titelleisten ausblenden bei</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="348"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="362"/>
         <source>Focus fade duration</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokus-Überblenddauer</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
         <source>fade</source>
-        <translation type="unfinished"></translation>
+        <translation>Überblenden</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
         <source>dim</source>
-        <translation type="unfinished"></translation>
+        <translation>Abdunkeln</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="350"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="364"/>
         <source>cross-fade</source>
-        <translation type="unfinished"></translation>
+        <translation>Kreuzblende</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="371"/>
-        <source>Inner gap</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="370"/>
+        <source>Performance</source>
+        <translation>Leistung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
+        <source>Animate only the active window</source>
+        <translation>Nur das aktive Fenster animieren</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="373"/>
-        <source>inner</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="377"/>
+        <source>performance</source>
+        <translation>Leistung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="377"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <source>power</source>
+        <translation>Energie</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="377"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="382"/>
+        <source>battery</source>
+        <translation>Akku</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="374"/>
-        <source>Outer gap</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="378"/>
+        <source>gpu</source>
+        <translation>GPU</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="374"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="378"/>
+        <source>heat</source>
+        <translation>Wärme</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="376"/>
-        <source>outer</source>
-        <translation type="unfinished"></translation>
+        <source>Pause while you are away</source>
+        <translation>Pausieren, während Sie abwesend sind</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="382"/>
-        <source>side</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="378"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <source>idle</source>
+        <translation>Leerlauf</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="384"/>
-        <source>Smart gaps</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="380"/>
+        <source>Idle after</source>
+        <translation>Leerlauf nach</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="386"/>
-        <source>smart</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="386"/>
-        <source>single</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="390"/>
-        <source>Activate on every drag</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="392"/>
-        <source>Hold to activate</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="392"/>
-        <source>deactivate</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
-        <source>Toggle mode</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
-        <source>tap</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
-        <source>activation</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="396"/>
-        <source>Span modifier</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="396"/>
-        <source>zone span</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="396"/>
-        <source>paint</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
-        <source>span</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="400"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="530"/>
-        <source>distance</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="400"/>
-        <source>multi-zone</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="402"/>
-        <source>Show zones on all monitors</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <source>timeout</source>
+        <translation>Zeitlimit</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="403"/>
-        <source>screens</source>
-        <translation type="unfinished"></translation>
+        <source>Inner gap</source>
+        <translation>Innerer Abstand</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="405"/>
-        <source>Filter by aspect ratio</source>
-        <translation type="unfinished"></translation>
+        <source>inner</source>
+        <translation>Innen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="421"/>
-        <source>layouts</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="406"/>
+        <source>Outer gap</source>
+        <translation>Äußerer Abstand</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="410"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
-        <source>snap assist</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
-        <source>Hold to enable</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="408"/>
+        <source>outer</source>
+        <translation>Außen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="414"/>
-        <source>Re-snap on resolution change</source>
-        <translation type="unfinished"></translation>
+        <source>side</source>
+        <translation>Seite</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="415"/>
-        <source>resolution</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
-        <source>Open new windows in the last-used zone</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="416"/>
+        <source>Smart gaps</source>
+        <translation>Intelligente Abstände</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="418"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="437"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
-        <source>new window</source>
-        <translation type="unfinished"></translation>
+        <source>smart</source>
+        <translation>Intelligent</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="418"/>
-        <source>last zone</source>
-        <translation type="unfinished"></translation>
+        <source>single</source>
+        <translation>Einzeln</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="420"/>
-        <source>Auto-assign new windows for all layouts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="421"/>
-        <source>auto-assign</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="571"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="577"/>
-        <source>User sets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="584"/>
-        <source>Opened</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="586"/>
-        <source>Closed</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="594"/>
-        <source>Dragged</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="599"/>
-        <source>Snapped Into Zone</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="601"/>
-        <source>Snapped Out of Zone</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="603"/>
-        <source>Layout Switched</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="605"/>
-        <source>Shown</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="606"/>
-        <source>Hidden</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="607"/>
-        <source>Emphasized</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="610"/>
-        <source>Zone Selector Shown</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="612"/>
-        <source>Zone Selector Hidden</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="614"/>
-        <source>Layout Picker Shown</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="616"/>
-        <source>Layout Picker Hidden</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="618"/>
-        <source>Snap Assist Shown</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="620"/>
-        <source>Snap Assist Hidden</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="623"/>
-        <source>Desktop Switched</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="584"/>
-        <location filename="../src/settings/ruleauthoring.cpp" line="884"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="423"/>
-        <source>Restore size on unsnap</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="422"/>
+        <source>Activate on every drag</source>
+        <translation>Bei jedem Ziehen aktivieren</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="424"/>
-        <source>unsnap</source>
-        <translation type="unfinished"></translation>
+        <source>Hold to activate</source>
+        <translation>Zum Aktivieren gedrückt halten</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="424"/>
-        <source>original size</source>
-        <translation type="unfinished"></translation>
+        <source>deactivate</source>
+        <translation>Deaktivieren</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="427"/>
-        <source>login</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="430"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="499"/>
+        <source>Toggle mode</source>
+        <translation>Umschaltmodus</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="429"/>
-        <source>Restore unsnapped windows to their previous position</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="430"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="499"/>
+        <source>tap</source>
+        <translation>Tippen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
+        <source>activation</source>
+        <translation>Aktivierung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
+        <source>Span modifier</source>
+        <translation>Modifikatortaste zum Übergreifen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
+        <source>zone span</source>
+        <translation>Zonenübergreifend</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
+        <source>paint</source>
+        <translation>Malen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="430"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="474"/>
-        <source>floated</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="430"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="474"/>
-        <source>position</source>
-        <translation type="unfinished"></translation>
+        <source>span</source>
+        <translation>Übergreifen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="432"/>
-        <source>Unfloat to a zone when there is no previous zone</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="562"/>
+        <source>distance</source>
+        <translation>Abstand</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="433"/>
-        <source>unfloat</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="432"/>
+        <source>multi-zone</source>
+        <translation>Mehrere Zonen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="433"/>
-        <source>fallback</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="435"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="476"/>
-        <source>Sticky windows</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="434"/>
+        <source>Show zones on all monitors</source>
+        <translation>Zonen auf allen Bildschirmen anzeigen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="435"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="476"/>
-        <source>all desktops</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="435"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="476"/>
-        <source>sticky</source>
-        <translation type="unfinished"></translation>
+        <source>screens</source>
+        <translation>Bildschirme</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="437"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
-        <source>Focus new windows</source>
-        <translation type="unfinished"></translation>
+        <source>Filter by aspect ratio</source>
+        <translation>Nach Seitenverhältnis filtern</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="114"/>
         <location filename="../src/settings/searchcatalog.cpp" line="437"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="439"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="484"/>
-        <source>focus</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="453"/>
+        <source>layouts</source>
+        <translation>Layouts</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="439"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="484"/>
-        <source>Focus follows mouse</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="439"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="484"/>
-        <source>pointer</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="442"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="444"/>
+        <source>snap assist</source>
+        <translation>Einrasthilfe</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="444"/>
-        <source>Max windows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
-        <source>windows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
-        <source>maximum</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="457"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
-        <source>count</source>
-        <translation type="unfinished"></translation>
+        <source>Hold to enable</source>
+        <translation>Zum Aktivieren gedrückt halten</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="446"/>
-        <source>limit</source>
-        <translation type="unfinished"></translation>
+        <source>Re-snap on resolution change</source>
+        <translation>Bei Auflösungsänderung neu einrasten</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="448"/>
-        <source>Master ratio</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="449"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="457"/>
-        <source>center</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="447"/>
+        <source>resolution</source>
+        <translation>Auflösung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="449"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="454"/>
-        <source>ratio</source>
-        <translation type="unfinished"></translation>
+        <source>Open new windows in the last-used zone</source>
+        <translation>Neue Fenster in der zuletzt verwendeten Zone öffnen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="450"/>
-        <source>proportion</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="514"/>
+        <source>new window</source>
+        <translation>Neues Fenster</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="450"/>
+        <source>last zone</source>
+        <translation>Letzte Zone</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="452"/>
+        <source>Auto-assign new windows for all layouts</source>
+        <translation>Neue Fenster für alle Layouts automatisch zuweisen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="453"/>
-        <source>Ratio step size</source>
-        <translation type="unfinished"></translation>
+        <source>auto-assign</source>
+        <translation>Automatisch zuweisen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="454"/>
-        <source>step</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="603"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="609"/>
+        <source>User sets</source>
+        <translation>Benutzervorgaben</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="454"/>
-        <source>increment</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="616"/>
+        <source>Opened</source>
+        <translation>Geöffnet</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="458"/>
-        <source>number</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="618"/>
+        <source>Closed</source>
+        <translation>Geschlossen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="626"/>
+        <source>Dragged</source>
+        <translation>Gezogen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="631"/>
+        <source>Snapped Into Zone</source>
+        <translation>In Zone eingerastet</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="633"/>
+        <source>Snapped Out of Zone</source>
+        <translation>Aus Zone ausgerastet</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="635"/>
+        <source>Layout Switched</source>
+        <translation>Layout gewechselt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="637"/>
+        <source>Shown</source>
+        <translation>Angezeigt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="638"/>
+        <source>Hidden</source>
+        <translation>Ausgeblendet</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="639"/>
+        <source>Emphasized</source>
+        <translation>Hervorgehoben</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="642"/>
+        <source>Zone Selector Shown</source>
+        <translation>Zonenauswahl angezeigt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="644"/>
+        <source>Zone Selector Hidden</source>
+        <translation>Zonenauswahl ausgeblendet</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="646"/>
+        <source>Layout Picker Shown</source>
+        <translation>Layout-Auswahl angezeigt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="648"/>
+        <source>Layout Picker Hidden</source>
+        <translation>Layout-Auswahl ausgeblendet</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="650"/>
+        <source>Snap Assist Shown</source>
+        <translation>Einrasthilfe angezeigt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="652"/>
+        <source>Snap Assist Hidden</source>
+        <translation>Einrasthilfe ausgeblendet</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="655"/>
+        <source>Desktop Switched</source>
+        <translation>Arbeitsfläche gewechselt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruleauthoring.cpp" line="593"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="902"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="455"/>
+        <source>Restore size on unsnap</source>
+        <translation>Größe beim Ausrasten wiederherstellen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="456"/>
+        <source>unsnap</source>
+        <translation>Ausrasten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="456"/>
+        <source>original size</source>
+        <translation>Ursprüngliche Größe</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="459"/>
+        <source>login</source>
+        <translation>Anmeldung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="461"/>
+        <source>Restore unsnapped windows to their previous position</source>
+        <translation>Ausgerastete Fenster an ihrer vorherigen Position wiederherstellen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="462"/>
-        <source>Always re-insert on drag</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="506"/>
+        <source>floated</source>
+        <translation>Schwebend</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="462"/>
-        <source>insert</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="501"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="506"/>
+        <source>position</source>
+        <translation>Position</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="464"/>
-        <source>Hold to re-insert into stack</source>
-        <translation type="unfinished"></translation>
+        <source>Unfloat to a zone when there is no previous zone</source>
+        <translation>In eine Zone einrasten, wenn keine vorherige Zone vorhanden ist</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
+        <source>unfloat</source>
+        <translation>Entschweben</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
+        <source>fallback</source>
+        <translation>Ausweichoption</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="467"/>
-        <source>stack preview</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="508"/>
+        <source>Sticky windows</source>
+        <translation>Klebrige Fenster</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="508"/>
+        <source>all desktops</source>
+        <translation>Alle Arbeitsflächen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="508"/>
+        <source>sticky</source>
+        <translation>Klebrig</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="469"/>
-        <source>New window placement</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="514"/>
+        <source>Focus new windows</source>
+        <translation>Neue Fenster fokussieren</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="114"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="374"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="514"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
+        <source>focus</source>
+        <translation>Fokus</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="471"/>
-        <source>Respect minimum size</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
+        <source>Focus follows mouse</source>
+        <translation>Fokus folgt der Maus</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="471"/>
-        <source>minimum</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
+        <source>pointer</source>
+        <translation>Zeiger</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="473"/>
-        <source>Restore untiled windows to their previous position</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="476"/>
+        <source>Max windows</source>
+        <translation>Max. Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="301"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="477"/>
+        <source>windows</source>
+        <translation>Fenster</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="477"/>
+        <source>maximum</source>
+        <translation>Maximum</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="477"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="489"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="570"/>
+        <source>count</source>
+        <translation>Anzahl</translation>
+    </message>
+    <message>
         <location filename="../src/settings/searchcatalog.cpp" line="478"/>
-        <source>Drag behavior</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="478"/>
-        <source>reorder</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruleauthoring.cpp" line="298"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="480"/>
-        <source>Overflow behavior</source>
-        <translation type="unfinished"></translation>
+        <source>limit</source>
+        <translation>Grenze</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="480"/>
-        <source>max windows</source>
-        <translation type="unfinished"></translation>
+        <source>Master ratio</source>
+        <translation>Hauptbereich-Verhältnis</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="480"/>
-        <source>unlimited</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="481"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="489"/>
+        <source>center</source>
+        <translation>Mitte</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="488"/>
-        <source>Global animation defaults</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="481"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="486"/>
+        <source>ratio</source>
+        <translation>Verhältnis</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
+        <source>proportion</source>
+        <translation>Anteil</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="485"/>
+        <source>Ratio step size</source>
+        <translation>Verhältnis-Schrittweite</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="486"/>
+        <source>step</source>
+        <translation>Schritt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="486"/>
+        <source>increment</source>
+        <translation>Erhöhung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="490"/>
-        <source>Multiple windows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="491"/>
-        <source>sequence</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="491"/>
-        <source>simultaneous</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="491"/>
-        <source>one by one</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="493"/>
-        <source>Stagger delay</source>
-        <translation type="unfinished"></translation>
+        <source>number</source>
+        <translation>Zahl</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="494"/>
-        <source>pause</source>
-        <translation type="unfinished"></translation>
+        <source>Always re-insert on drag</source>
+        <translation>Beim Ziehen immer neu einfügen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="494"/>
-        <source>interval</source>
-        <translation type="unfinished"></translation>
+        <source>insert</source>
+        <translation>Einfügen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="494"/>
-        <source>delay</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="496"/>
+        <source>Hold to re-insert into stack</source>
+        <translation>Zum erneuten Einfügen in den Stapel gedrückt halten</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="242"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="245"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="366"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="509"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
-        <source>threshold</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="499"/>
+        <source>stack preview</source>
+        <translation>Stapelvorschau</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
-        <source>skip</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="501"/>
+        <source>New window placement</source>
+        <translation>Platzierung neuer Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
-        <source>geometry</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="359"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="502"/>
-        <source>dialogs</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="359"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="502"/>
-        <source>popups</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="502"/>
-        <source>tooltips</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="359"/>
         <location filename="../src/settings/searchcatalog.cpp" line="503"/>
-        <source>menus</source>
-        <translation type="unfinished"></translation>
+        <source>Respect minimum size</source>
+        <translation>Mindestgröße berücksichtigen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
+        <source>minimum</source>
+        <translation>Minimum</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="505"/>
-        <source>Exclude notifications and OSDs</source>
-        <translation type="unfinished"></translation>
+        <source>Restore untiled windows to their previous position</source>
+        <translation>Nicht gekachelte Fenster an ihrer vorherigen Position wiederherstellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="506"/>
-        <source>volume</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruleauthoring.cpp" line="301"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="510"/>
+        <source>Drag behavior</source>
+        <translation>Ziehverhalten</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="506"/>
-        <source>brightness</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="510"/>
+        <source>reorder</source>
+        <translation>Neu anordnen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="241"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="362"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="508"/>
-        <source>Minimum window width</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="242"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="509"/>
-        <source>narrow</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="244"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="365"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="511"/>
-        <source>Minimum window height</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="245"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="366"/>
+        <location filename="../src/settings/ruleauthoring.cpp" line="298"/>
         <location filename="../src/settings/searchcatalog.cpp" line="512"/>
-        <source>short</source>
-        <translation type="unfinished"></translation>
+        <source>Overflow behavior</source>
+        <translation>Überlaufverhalten</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="194"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="225"/>
-        <source>Configuration</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
+        <source>max windows</source>
+        <translation>Max. Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="517"/>
-        <source>Backup</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
+        <source>unlimited</source>
+        <translation>Unbegrenzt</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="518"/>
-        <source>save</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="518"/>
         <location filename="../src/settings/searchcatalog.cpp" line="520"/>
-        <source>data</source>
-        <translation type="unfinished"></translation>
+        <source>Global animation defaults</source>
+        <translation>Globale Animationsstandards</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="519"/>
-        <source>Restore</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="522"/>
+        <source>Multiple windows</source>
+        <translation>Mehrere Fenster</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="524"/>
-        <source>Zone selector popup</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="523"/>
+        <source>sequence</source>
+        <translation>Abfolge</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="523"/>
+        <source>simultaneous</source>
+        <translation>gleichzeitig</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="523"/>
+        <source>one by one</source>
+        <translation>nacheinander</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="525"/>
-        <source>enable</source>
-        <translation type="unfinished"></translation>
+        <source>Stagger delay</source>
+        <translation>Staffelungsverzögerung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="525"/>
-        <source>toggle</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="526"/>
+        <source>pause</source>
+        <translation>Pause</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="526"/>
+        <source>interval</source>
+        <translation>Intervall</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="526"/>
+        <source>delay</source>
+        <translation>Verzögerung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="243"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="246"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="395"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="529"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="544"/>
+        <source>threshold</source>
+        <translation>Schwelle</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="529"/>
+        <source>skip</source>
+        <translation>überspringen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="529"/>
+        <source>geometry</source>
+        <translation>Geometrie</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="391"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="534"/>
+        <source>dialogs</source>
+        <translation>Dialoge</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="391"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="534"/>
+        <source>popups</source>
+        <translation>Aufklappfenster</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="534"/>
+        <source>tooltips</source>
+        <translation>Kurzinfos</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="391"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="535"/>
+        <source>menus</source>
+        <translation>Menüs</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="537"/>
+        <source>Exclude notifications and OSDs</source>
+        <translation>Benachrichtigungen und OSDs ausschließen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
+        <source>volume</source>
+        <translation>Lautstärke</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
+        <source>brightness</source>
+        <translation>Helligkeit</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="242"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="540"/>
+        <source>Minimum window width</source>
+        <translation>Minimale Fensterbreite</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="243"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="395"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
+        <source>narrow</source>
+        <translation>schmal</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="245"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="397"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="543"/>
+        <source>Minimum window height</source>
+        <translation>Minimale Fensterhöhe</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="246"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="544"/>
+        <source>short</source>
+        <translation>niedrig</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="548"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="192"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="223"/>
+        <source>Configuration</source>
+        <translation>Konfiguration</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="549"/>
+        <source>Backup</source>
+        <translation>Sicherung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="550"/>
+        <source>save</source>
+        <translation>speichern</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="550"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="552"/>
+        <source>data</source>
+        <translation>Daten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="551"/>
+        <source>Restore</source>
+        <translation>Wiederherstellen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="556"/>
+        <source>Zone selector popup</source>
+        <translation>Zonenauswahl-Aufklappfenster</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="557"/>
+        <source>enable</source>
+        <translation>aktivieren</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="557"/>
+        <source>toggle</source>
+        <translation>umschalten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="561"/>
         <source>Trigger distance</source>
         <translation>Auslöseabstand</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="530"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="562"/>
         <source>proximity</source>
-        <translation type="unfinished"></translation>
+        <translation>Nähe</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="532"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="564"/>
         <source>Layout Arrangement</source>
         <translation>Layout-Anordnung</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="534"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="566"/>
         <source>Arrangement</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="535"/>
-        <source>horizontal</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="535"/>
-        <source>vertical</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="537"/>
-        <source>Grid columns</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
-        <source>columns</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
-        <source>per row</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="540"/>
-        <source>Max visible rows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
-        <source>rows</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
-        <source>scroll</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
-        <source>visible</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="547"/>
-        <source>Snapping Layout Priority</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="549"/>
-        <source>Tiling Algorithm Priority</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="551"/>
-        <source>Snapping Quick Shortcuts</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="559"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="561"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="563"/>
-        <source>User shaders</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="565"/>
-        <source>Easing Presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Anordnung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="567"/>
-        <source>Spring Presets</source>
-        <translation type="unfinished"></translation>
+        <source>horizontal</source>
+        <translation>horizontal</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="567"/>
+        <source>vertical</source>
+        <translation>vertikal</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="569"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="575"/>
-        <source>Save current state</source>
-        <translation type="unfinished"></translation>
+        <source>Grid columns</source>
+        <translation>Rasterspalten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="570"/>
+        <source>columns</source>
+        <translation>Spalten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="570"/>
+        <source>per row</source>
+        <translation>pro Zeile</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="572"/>
+        <source>Max visible rows</source>
+        <translation>Maximal sichtbare Zeilen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="573"/>
+        <source>rows</source>
+        <translation>Zeilen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="573"/>
+        <source>scroll</source>
+        <translation>scrollen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="573"/>
+        <source>visible</source>
+        <translation>sichtbar</translation>
+    </message>
+    <message>
         <location filename="../src/settings/searchcatalog.cpp" line="579"/>
+        <source>Snapping Layout Priority</source>
+        <translation>Priorität der Einrast-Layouts</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="581"/>
+        <source>Tiling Algorithm Priority</source>
+        <translation>Priorität der Kachelungsalgorithmen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="583"/>
+        <source>Snapping Quick Shortcuts</source>
+        <translation>Einrast-Schnelltasten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="591"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="593"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="595"/>
+        <source>User shaders</source>
+        <translation>Benutzer-Shader</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="597"/>
+        <source>Easing Presets</source>
+        <translation>Beschleunigungsvorlagen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="599"/>
+        <source>Spring Presets</source>
+        <translation>Feder-Vorlagen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="601"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="607"/>
+        <source>Save current state</source>
+        <translation>Aktuellen Zustand speichern</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="605"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="611"/>
         <source>Saved sets</source>
-        <translation type="unfinished"></translation>
+        <translation>Gespeicherte Sätze</translation>
     </message>
     <message>
-        <source>Close</source>
-        <translation type="obsolete">Schließen</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="673"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="713"/>
         <source>Snap Out of Zone</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="625"/>
-        <source>Slide In</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="627"/>
-        <source>Slide Out</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="629"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="647"/>
-        <source>Fade In</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="631"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="649"/>
-        <source>Fade Out</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="632"/>
-        <source>Hover</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="633"/>
-        <source>Press</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="635"/>
-        <source>Toggle On</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="637"/>
-        <source>Toggle Off</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="639"/>
-        <source>Show (badge)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="641"/>
-        <source>Hide (badge)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="643"/>
-        <source>Pulse (badge)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="644"/>
-        <source>Tint</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="645"/>
-        <source>Dim</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="651"/>
-        <source>Reorder</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="653"/>
-        <source>Expand (accordion)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="655"/>
-        <source>Collapse (accordion)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="657"/>
-        <source>Progress</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="659"/>
-        <source>Zone Highlight</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="661"/>
-        <source>Zone Highlight: Pop</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="663"/>
-        <source>Zone Highlight: Border</source>
-        <translation type="unfinished"></translation>
+        <translation>Aus Zone ausrasten</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="665"/>
-        <source>Zone Overlay: Layout-Switch Flash</source>
-        <translation type="unfinished"></translation>
+        <source>Slide In</source>
+        <translation>Hereingleiten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="663"/>
+        <source>Peeked at Desktop</source>
+        <translation>Arbeitsfläche kurz angezeigt</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="667"/>
-        <source>Cursor Hover</source>
-        <translation type="unfinished"></translation>
+        <source>Slide Out</source>
+        <translation>Herausgleiten</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="669"/>
-        <source>Cursor Click</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="687"/>
+        <source>Fade In</source>
+        <translation>Einblenden</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="671"/>
-        <source>Snap Into Zone (Fill Preview)</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/searchcatalog.cpp" line="689"/>
+        <source>Fade Out</source>
+        <translation>Ausblenden</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="672"/>
+        <source>Hover</source>
+        <translation>Überfahren</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="673"/>
+        <source>Press</source>
+        <translation>Drücken</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="675"/>
+        <source>Toggle On</source>
+        <translation>Einschalten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="677"/>
+        <source>Toggle Off</source>
+        <translation>Ausschalten</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="679"/>
+        <source>Show (badge)</source>
+        <translation>Anzeigen (Kennzeichen)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="681"/>
+        <source>Hide (badge)</source>
+        <translation>Ausblenden (Kennzeichen)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="683"/>
+        <source>Pulse (badge)</source>
+        <translation>Pulsieren (Kennzeichen)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="684"/>
+        <source>Tint</source>
+        <translation>Einfärben</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="685"/>
+        <source>Dim</source>
+        <translation>Abdunkeln</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="691"/>
+        <source>Reorder</source>
+        <translation>Neu anordnen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
+        <source>Expand (accordion)</source>
+        <translation>Ausklappen (Akkordeon)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="695"/>
+        <source>Collapse (accordion)</source>
+        <translation>Einklappen (Akkordeon)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="697"/>
+        <source>Progress</source>
+        <translation>Fortschritt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="699"/>
+        <source>Zone Highlight</source>
+        <translation>Zonenhervorhebung</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="701"/>
+        <source>Zone Highlight: Pop</source>
+        <translation>Zonenhervorhebung: Aufpoppen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="703"/>
+        <source>Zone Highlight: Border</source>
+        <translation>Zonenhervorhebung: Rand</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="705"/>
+        <source>Zone Overlay: Layout-Switch Flash</source>
+        <translation>Zonen-Overlay: Layoutwechsel-Blinken</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="707"/>
+        <source>Cursor Hover</source>
+        <translation>Zeiger überfährt</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="709"/>
+        <source>Cursor Click</source>
+        <translation>Zeigerklick</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="711"/>
+        <source>Snap Into Zone (Fill Preview)</source>
+        <translation>In Zone einrasten (Füllvorschau)</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="715"/>
         <source>Snap Resize (Drag Preview)</source>
-        <translation type="unfinished"></translation>
+        <translation>Einrast-Größenänderung (Ziehvorschau)</translation>
     </message>
     <message>
-        <source>Arrangement:</source>
-        <translation type="vanished">Anordnung:</translation>
-    </message>
-    <message>
-        <source>Horizontal</source>
-        <translation type="vanished">Horizontal</translation>
-    </message>
-    <message>
-        <source>Vertical</source>
-        <translation type="vanished">Vertikal</translation>
-    </message>
-    <message>
-        <source>Grid columns:</source>
-        <translation type="vanished">Rasterspalten:</translation>
-    </message>
-    <message>
-        <source>Max visible rows:</source>
-        <translation type="vanished">Max. sichtbare Zeilen:</translation>
-    </message>
-    <message>
-        <source>Scrolling enabled when more rows exist</source>
-        <translation type="vanished">Scrollen wird aktiviert, wenn weitere Zeilen vorhanden sind</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="543"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="575"/>
         <source>Preview Size</source>
         <translation>Vorschaugröße</translation>
     </message>
     <message>
-        <source>Auto</source>
-        <translation type="vanished">Automatisch</translation>
-    </message>
-    <message>
-        <source>Approximately 10% of screen width (120-280px)</source>
-        <translation type="vanished">Ungefähr 10&#xa0;% der Bildschirmbreite (120–280&#xa0;px)</translation>
-    </message>
-    <message>
-        <source>Small</source>
-        <translation type="vanished">Klein</translation>
-    </message>
-    <message>
-        <source>120px width</source>
-        <translation type="vanished">120&#xa0;px Breite</translation>
-    </message>
-    <message>
-        <source>Medium</source>
-        <translation type="vanished">Mittel</translation>
-    </message>
-    <message>
-        <source>180px width</source>
-        <translation type="vanished">180&#xa0;px Breite</translation>
-    </message>
-    <message>
-        <source>Large</source>
-        <translation type="vanished">Groß</translation>
-    </message>
-    <message>
-        <source>260px width</source>
-        <translation type="vanished">260&#xa0;px Breite</translation>
-    </message>
-    <message>
-        <source>Custom size with slider</source>
-        <translation type="vanished">Benutzerdefinierte Größe mit Schieberegler</translation>
-    </message>
-    <message>
-        <source>Size:</source>
-        <translation type="vanished">Größe:</translation>
-    </message>
-    <message>
-        <source>Preview size</source>
-        <translation type="vanished">Vorschaugröße</translation>
-    </message>
-    <message>
-        <source>Preview size adjusts automatically based on your screen resolution.</source>
-        <translation type="vanished">Die Vorschaugröße passt sich automatisch an Ihre Bildschirmauflösung an.</translation>
-    </message>
-    <message>
-        <source>Not assigned</source>
-        <translation type="vanished">Nicht zugewiesen</translation>
-    </message>
-    <message>
-        <source>Dynamic</source>
-        <comment>@label:badge</comment>
-        <translation type="vanished">Dynamisch</translation>
-    </message>
-    <message>
-        <source>Auto</source>
-        <comment>@label:badge</comment>
-        <translation type="vanished">Automatisch</translation>
-    </message>
-    <message>
-        <source>Manual</source>
-        <comment>@label:badge</comment>
-        <translation type="vanished">Manuell</translation>
-    </message>
-    <message>
-        <source>Border color:</source>
-        <translation type="vanished">Randfarbe:</translation>
-    </message>
-    <message>
-        <source>Focus Border</source>
-        <translation type="vanished">Fokusrand</translation>
-    </message>
-    <message>
-        <source>Shift modifier key</source>
-        <translation type="vanished">Umschalt-Modifikatortaste</translation>
-    </message>
-    <message>
-        <source>Control modifier key</source>
-        <translation type="vanished">Strg-Modifikatortaste</translation>
-    </message>
-    <message>
-        <source>Alt modifier key</source>
-        <translation type="vanished">Alt-Modifikatortaste</translation>
-    </message>
-    <message>
-        <source>Meta/Super modifier key</source>
-        <translation type="vanished">Meta-/Super-Modifikatortaste</translation>
-    </message>
-    <message>
-        <source>Active: %1</source>
-        <translation type="vanished">Aktiv: %1</translation>
-    </message>
-    <message>
-        <source>Compact layout previews</source>
-        <translation type="vanished">Kompakte Layout-Vorschauen</translation>
-    </message>
-    <message>
-        <source>Balanced size (default)</source>
-        <translation type="vanished">Ausgewogene Größe (Standard)</translation>
-    </message>
-    <message>
-        <source>Detailed layout previews</source>
-        <translation type="vanished">Detaillierte Layout-Vorschauen</translation>
-    </message>
-    <message>
-        <source>Presets:</source>
-        <translation type="vanished">Voreinstellungen:</translation>
-    </message>
-    <message>
-        <source>(Custom)</source>
-        <translation type="vanished">(Benutzerdefiniert)</translation>
-    </message>
-    <message>
-        <source>Lock aspect ratio</source>
-        <translation type="vanished">Seitenverhältnis sperren</translation>
-    </message>
-    <message>
-        <source>Preview: %1 x %2 pixels
-Aspect ratio: %3</source>
-        <translation type="vanished">Vorschau: %1 x %2 Pixel
-Seitenverhältnis: %3</translation>
-    </message>
-    <message>
-        <source>PlasmaZones is disabled</source>
-        <translation type="vanished">PlasmaZones ist deaktiviert</translation>
-    </message>
-    <message>
-        <source>Turn on PlasmaZones to manage window layouts.</source>
-        <translation type="vanished">PlasmaZones aktivieren, um Fenster-Layouts zu verwalten.</translation>
-    </message>
-    <message>
-        <source>Edit Layout</source>
-        <translation type="vanished">Layout bearbeiten</translation>
-    </message>
-    <message>
-        <source>Use the visual editor to create and modify zone layouts.</source>
-        <translation type="vanished">Verwenden Sie den visuellen Editor, um Zonen-Layouts zu erstellen und zu bearbeiten.</translation>
-    </message>
-    <message>
-        <source>Open Layout Editor</source>
-        <translation type="vanished">Layout-Editor öffnen</translation>
-    </message>
-    <message>
-        <source>You can also edit layout JSON files directly:</source>
-        <translation type="vanished">Sie können auch die Layout-JSON-Dateien direkt bearbeiten:</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="155"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="153"/>
         <source>Layouts</source>
         <translation>Layouts</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="138"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="136"/>
         <source>Editor</source>
         <translation>Editor</translation>
     </message>
     <message>
-        <source>Assignments</source>
-        <translation type="vanished">Zuweisungen</translation>
-    </message>
-    <message>
-        <source>Exclusions</source>
-        <translation type="vanished">Ausnahmen</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="140"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="138"/>
         <source>About</source>
         <translation>Über</translation>
-    </message>
-    <message>
-        <source>Delete the selected layout</source>
-        <translation type="vanished">Das ausgewählte Layout löschen</translation>
-    </message>
-    <message>
-        <source>Set this layout as the default for screens without specific assignments</source>
-        <translation type="vanished">Dieses Layout als Standard für Bildschirme ohne bestimmte Zuweisung festlegen</translation>
-    </message>
-    <message>
-        <source>Enable snapping</source>
-        <translation type="obsolete">Kanteneinrastung aktivieren</translation>
-    </message>
-    <message>
-        <source>Snapping Behavior</source>
-        <translation type="obsolete">Fensterverhalten</translation>
-    </message>
-    <message>
-        <source>Preset:</source>
-        <translation type="obsolete">Voreinstellungen:</translation>
-    </message>
-    <message>
-        <source>Reset to default</source>
-        <translation type="vanished">Auf Standard zurücksetzen</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="310"/>
@@ -9195,723 +4749,821 @@ Seitenverhältnis: %3</translation>
         <translation>Zonen</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="257"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="87"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="258"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="85"/>
         <source>Display</source>
         <translation>Anzeige</translation>
     </message>
     <message>
-        <source>Update available!</source>
-        <translation type="vanished">Aktualisierung verfügbar!</translation>
-    </message>
-    <message>
-        <source>Reset to Default</source>
-        <translation type="vanished">Auf Standard zurücksetzen</translation>
-    </message>
-    <message>
-        <source>Reset to Defaults</source>
-        <translation type="vanished">Auf Standardwerte zurücksetzen</translation>
-    </message>
-    <message>
-        <source>Custom layout with %1 zones</source>
-        <translation type="vanished">Benutzerdefiniertes Layout mit %1 Zonen</translation>
-    </message>
-    <message>
-        <source>System · %1 zones</source>
-        <translation type="vanished">System · %1 Zonen</translation>
-    </message>
-    <message>
-        <source>Zone Layout</source>
-        <translation type="vanished">Zonen-Layout</translation>
-    </message>
-    <message numerus="yes">
-        <source>Rotated %n windows</source>
-        <translation type="vanished">
-            <numerusform>%n Fenster rotiert</numerusform>
-            <numerusform>%n Fenster rotiert</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <source>Rearranged %n windows</source>
-        <translation type="vanished">
-            <numerusform>%n Fenster neu angeordnet</numerusform>
-            <numerusform>%n Fenster neu angeordnet</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <source>Max %n windows</source>
-        <translation type="vanished">
-            <numerusform>Max. %n Fenster</numerusform>
-            <numerusform>Max. %n Fenster</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <source>%n Zones Selected</source>
-        <comment>@title</comment>
-        <translation type="vanished">
-            <numerusform>%n Zone ausgewählt</numerusform>
-            <numerusform>%n Zonen ausgewählt</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
-        <source>Delete %n selected zones</source>
-        <comment>@info</comment>
-        <translation type="vanished">
-            <numerusform>%n ausgewählte Zone löschen</numerusform>
-            <numerusform>%n ausgewählte Zonen löschen</numerusform>
-        </translation>
-    </message>
-    <message>
-        <location filename="../src/daemon/daemon.cpp" line="2126"/>
+        <location filename="../src/daemon/daemon.cpp" line="2159"/>
         <source>The PlasmaZones KWin effect plugin is not installed where KWin can find it. Reinstall PlasmaZones.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das PlasmaZones-KWin-Effekt-Plugin ist nicht an einem Ort installiert, an dem KWin es finden kann. Installieren Sie PlasmaZones erneut.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="2165"/>
+        <location filename="../src/daemon/daemon.cpp" line="2198"/>
         <source>The PlasmaZones KWin effect was built for KWin %1 but KWin %2 is running, so KWin will not load it. Rebuild and reinstall PlasmaZones against the running KWin.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der PlasmaZones-KWin-Effekt wurde für KWin %1 erstellt, es läuft jedoch KWin %2, sodass KWin ihn nicht lädt. Erstellen und installieren Sie PlasmaZones erneut passend zum laufenden KWin.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="2194"/>
+        <location filename="../src/daemon/daemon.cpp" line="2225"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der PlasmaZones-KWin-Effekt hat sich nicht beim Hintergrunddienst registriert, sodass das Ziehen von Fenstern und Kurzbefehle nicht funktionieren. Stellen Sie sicher, dass er in den Systemeinstellungen unter &gt; Arbeitsflächen-Effekte aktiviert ist, und starten Sie dann die Plasma-Sitzung neu.</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon.cpp" line="2213"/>
+        <location filename="../src/daemon/daemon.cpp" line="2244"/>
         <source>PlasmaZones: window manager integration inactive</source>
-        <translation type="unfinished"></translation>
+        <translation>PlasmaZones: Fenstermanager-Integration inaktiv</translation>
     </message>
     <message>
         <location filename="../src/settings/algorithmservice.cpp" line="70"/>
         <source> (Copy)</source>
         <extracomment>Suffix appended to the name of a duplicated algorithm. Keep the leading space.</extracomment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="323"/>
-        <source>Only Luau algorithm files (.luau) can be imported.</source>
-        <translation type="unfinished"></translation>
+        <translation> (Kopie)</translation>
     </message>
     <message>
         <location filename="../src/settings/algorithmservice.cpp" line="329"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="401"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="413"/>
+        <source>Could not read the algorithm file. Check that it still exists and is readable.</source>
+        <translation>Die Algorithmusdatei konnte nicht gelesen werden. Prüfen Sie, ob sie noch vorhanden und lesbar ist.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="338"/>
+        <source>Only Luau algorithm files (.luau) can be imported.</source>
+        <translation>Es können nur Luau-Algorithmusdateien (.luau) importiert werden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="343"/>
         <source>Algorithm file names may contain only letters, digits, hyphens, and underscores.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dateinamen von Algorithmen dürfen nur Buchstaben, Ziffern, Bindestriche und Unterstriche enthalten.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="354"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="356"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="418"/>
+        <source>That algorithm file is too large to load. Algorithms are limited to 1 MB.</source>
+        <translation>Diese Algorithmusdatei ist zu groß zum Laden. Algorithmen sind auf 1 MB begrenzt.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="387"/>
         <source>Too many algorithms share this name. Remove some and try again.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="362"/>
-        <source>Could not copy the algorithm file. Check available disk space and permissions.</source>
-        <translation type="unfinished"></translation>
+        <translation>Zu viele Algorithmen teilen sich diesen Namen. Entfernen Sie einige und versuchen Sie es erneut.</translation>
     </message>
     <message>
         <location filename="../src/settings/algorithmservice.cpp" line="426"/>
+        <source>Could not copy the algorithm file. Check available disk space and permissions.</source>
+        <translation>Die Algorithmusdatei konnte nicht kopiert werden. Prüfen Sie den verfügbaren Speicherplatz und die Berechtigungen.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="492"/>
         <source>Algorithm was created but not picked up by the registry. Try refreshing or restarting the application.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Algorithmus wurde erstellt, aber nicht von der Registrierung erkannt. Versuchen Sie es mit einer Aktualisierung oder starten Sie die Anwendung neu.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="487"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="552"/>
         <source>No algorithm is selected to delete.</source>
-        <translation type="unfinished"></translation>
+        <translation>Es ist kein Algorithmus zum Löschen ausgewählt.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="495"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="559"/>
         <source>Only user-created algorithms can be deleted.</source>
-        <translation type="unfinished"></translation>
+        <translation>Es können nur benutzererstellte Algorithmen gelöscht werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="502"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="566"/>
         <source>Algorithm file not found.</source>
-        <translation type="unfinished"></translation>
+        <translation>Algorithmusdatei nicht gefunden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="516"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="580"/>
         <source>The user algorithms directory does not exist.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Verzeichnis der Benutzeralgorithmen ist nicht vorhanden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="517"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="581"/>
         <source>That file is outside the user algorithms directory.</source>
-        <translation type="unfinished"></translation>
+        <translation>Diese Datei liegt außerhalb des Verzeichnisses der Benutzeralgorithmen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="530"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="594"/>
         <source>Could not delete algorithm file. Check file permissions.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Algorithmusdatei konnte nicht gelöscht werden. Prüfen Sie die Dateiberechtigungen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="540"/>
-        <location filename="../src/settings/algorithmservice.cpp" line="660"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="604"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="720"/>
         <source>The algorithm file could not be found.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="547"/>
-        <source>That algorithm is no longer registered.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="562"/>
-        <source>Too many copies of this algorithm already exist. Rename or delete some before duplicating.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="570"/>
-        <source>The algorithm file path could not be resolved.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="577"/>
-        <source>Could not read source algorithm file.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Algorithmusdatei konnte nicht gefunden werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/algorithmservice.cpp" line="610"/>
-        <source>Could not duplicate the algorithm. Its metadata format is not recognised. Expected `name = &quot;...&quot;` and `id = &quot;...&quot;` on separate lines.</source>
-        <translation type="unfinished"></translation>
+        <source>That algorithm is no longer registered.</source>
+        <translation>Dieser Algorithmus ist nicht mehr registriert.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="621"/>
-        <source>Could not rewrite the algorithm&apos;s metadata.</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/algorithmservice.cpp" line="628"/>
+        <source>Too many copies of this algorithm already exist. Rename or delete some before duplicating.</source>
+        <translation>Es sind bereits zu viele Kopien dieses Algorithmus vorhanden. Benennen Sie einige um oder löschen Sie einige, bevor Sie duplizieren.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="631"/>
-        <location filename="../src/settings/algorithmservice.cpp" line="642"/>
-        <source>Could not write duplicate algorithm file. Check disk space and permissions.</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/algorithmservice.cpp" line="636"/>
+        <source>The algorithm file path could not be resolved.</source>
+        <translation>Der Pfad zur Algorithmusdatei konnte nicht aufgelöst werden.</translation>
     </message>
     <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="643"/>
         <location filename="../src/settings/algorithmservice.cpp" line="654"/>
+        <source>Could not read source algorithm file.</source>
+        <translation>Die Quell-Algorithmusdatei konnte nicht gelesen werden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="695"/>
+        <source>Could not duplicate the algorithm. Its metadata table is not in a shape this app can rewrite.</source>
+        <translation>Der Algorithmus konnte nicht dupliziert werden. Seine Metadatentabelle liegt nicht in einer Form vor, die diese Anwendung neu schreiben kann.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="730"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="739"/>
+        <source>Could not read the algorithm file for export.</source>
+        <translation>Die Algorithmusdatei konnte nicht zum Export gelesen werden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="702"/>
+        <source>Could not write duplicate algorithm file. Check disk space and permissions.</source>
+        <translation>Die duplizierte Algorithmusdatei konnte nicht geschrieben werden. Prüfen Sie den Speicherplatz und die Berechtigungen.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="714"/>
         <source>No export destination specified.</source>
-        <translation type="unfinished"></translation>
+        <translation>Es wurde kein Exportziel angegeben.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="675"/>
-        <source>Could not copy algorithm file for export.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="682"/>
-        <source>Could not replace existing file at export destination.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="694"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="745"/>
         <source>Could not write to export destination.</source>
-        <translation type="unfinished"></translation>
+        <translation>Zum Exportziel konnte nicht geschrieben werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="738"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="782"/>
         <source>Too many algorithms already share this name. Rename or delete some before creating another.</source>
-        <translation type="unfinished"></translation>
+        <translation>Es teilen sich bereits zu viele Algorithmen diesen Namen. Benennen Sie einige um oder löschen Sie einige, bevor Sie einen weiteren erstellen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/algorithmservice.cpp" line="801"/>
-        <location filename="../src/settings/algorithmservice.cpp" line="812"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="816"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="859"/>
+        <source>The selected template could not be used. Pick another template or start blank.</source>
+        <translation>Die ausgewählte Vorlage konnte nicht verwendet werden. Wählen Sie eine andere Vorlage oder beginnen Sie mit einer leeren.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="833"/>
+        <source>The selected template could not be found. Pick another template or start blank.</source>
+        <translation>Die ausgewählte Vorlage konnte nicht gefunden werden. Wählen Sie eine andere Vorlage oder beginnen Sie mit einer leeren.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="841"/>
+        <location filename="../src/settings/algorithmservice.cpp" line="849"/>
+        <source>The selected template could not be read. Pick another template or start blank.</source>
+        <translation>Die ausgewählte Vorlage konnte nicht gelesen werden. Wählen Sie eine andere Vorlage oder beginnen Sie mit einer leeren.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/algorithmservice.cpp" line="878"/>
         <source>Could not write algorithm file. Check disk space and permissions.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Algorithmusdatei konnte nicht geschrieben werden. Prüfen Sie den Speicherplatz und die Berechtigungen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="129"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="131"/>
         <source>Cannot modify sets while a discard is in progress.</source>
-        <translation type="unfinished"></translation>
+        <translation>Sätze können nicht geändert werden, während ein Verwerfen läuft.</translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="340"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="342"/>
         <source>Cannot save while a discard is in progress.</source>
-        <translation type="unfinished"></translation>
+        <translation>Speichern nicht möglich, während ein Verwerfen läuft.</translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="505"/>
-        <location filename="../src/settings/rulecontroller.cpp" line="151"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="507"/>
+        <location filename="../src/settings/rulecontroller.cpp" line="150"/>
         <source>Discard already in flight.</source>
-        <translation type="unfinished"></translation>
+        <translation>Es läuft bereits ein Verwerfen.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/animationspagecontroller.cpp" line="573"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="575"/>
         <source>Could not restore %n profile file(s). They remain pending.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n Profildatei konnte nicht wiederhergestellt werden. Sie bleibt ausstehend.</numerusform>
+            <numerusform>%n Profildateien konnten nicht wiederhergestellt werden. Sie bleiben ausstehend.</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="708"/>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="718"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="709"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="719"/>
         <source>Cannot modify presets while a discard is in progress.</source>
-        <translation type="unfinished"></translation>
+        <translation>Voreinstellungen können nicht geändert werden, während ein Verwerfen läuft.</translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller_shaders.cpp" line="166"/>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="100"/>
+        <location filename="../src/settings/animationspagecontroller_shaders.cpp" line="165"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="98"/>
         <source>Could not create the user shader directory.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Shader-Verzeichnis des Benutzers konnte nicht erstellt werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/kzonesimporter.cpp" line="62"/>
         <source>No KZones configuration found in kwinrc</source>
-        <translation type="unfinished"></translation>
+        <translation>Keine KZones-Konfiguration in kwinrc gefunden</translation>
     </message>
     <message>
         <location filename="../src/settings/kzonesimporter.cpp" line="68"/>
         <source>Failed to parse KZones layoutsJson: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>KZones-layoutsJson konnte nicht ausgewertet werden: %1</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/kzonesimporter.cpp" line="73"/>
         <source>Imported %n layout(s) from KZones</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n Layout aus KZones importiert</numerusform>
+            <numerusform>%n Layouts aus KZones importiert</numerusform>
         </translation>
     </message>
     <message>
         <location filename="../src/settings/kzonesimporter.cpp" line="75"/>
         <source>No layouts found in KZones configuration</source>
-        <translation type="unfinished"></translation>
+        <translation>Keine Layouts in der KZones-Konfiguration gefunden</translation>
     </message>
     <message>
         <location filename="../src/settings/kzonesimporter.cpp" line="83"/>
         <source>No file path specified</source>
-        <translation type="unfinished"></translation>
+        <translation>Kein Dateipfad angegeben</translation>
     </message>
     <message>
         <location filename="../src/settings/kzonesimporter.cpp" line="88"/>
         <source>Could not open file: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Datei konnte nicht geöffnet werden: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/kzonesimporter.cpp" line="101"/>
         <source>Failed to parse KZones JSON: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>KZones-JSON konnte nicht ausgewertet werden: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/kzonesimporter.cpp" line="111"/>
         <source>KZones file does not contain a JSON array or object</source>
-        <translation type="unfinished"></translation>
+        <translation>Die KZones-Datei enthält kein JSON-Array und kein JSON-Objekt</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/kzonesimporter.cpp" line="116"/>
         <source>Imported %n layout(s) from KZones file</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n Layout aus KZones-Datei importiert</numerusform>
+            <numerusform>%n Layouts aus KZones-Datei importiert</numerusform>
         </translation>
     </message>
     <message>
         <location filename="../src/settings/kzonesimporter.cpp" line="118"/>
         <source>No valid layouts found in file</source>
-        <translation type="unfinished"></translation>
+        <translation>Keine gültigen Layouts in der Datei gefunden</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="102"/>
+        <location filename="../src/settings/main.cpp" line="108"/>
         <source>PlasmaZones Settings</source>
-        <translation type="unfinished"></translation>
+        <translation>PlasmaZones-Einstellungen</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="107"/>
+        <location filename="../src/settings/main.cpp" line="113"/>
         <source>Open a specific settings page</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine bestimmte Einstellungsseite öffnen</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="110"/>
+        <location filename="../src/settings/main.cpp" line="116"/>
         <source>Reveal a specific setting on the page (deep link)</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine bestimmte Einstellung auf der Seite anzeigen (Deep Link)</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="114"/>
+        <location filename="../src/settings/main.cpp" line="120"/>
         <source>Reveal a specific section on the page (deep link)</source>
-        <translation type="unfinished"></translation>
+        <translation>Einen bestimmten Abschnitt auf der Seite anzeigen (Deep Link)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulecontroller.cpp" line="166"/>
+        <location filename="../src/settings/rulecontroller.cpp" line="165"/>
         <source>Failed to fetch the daemon&apos;s rule set.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Regelsatz des Hintergrunddienstes konnte nicht abgerufen werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulecontroller.cpp" line="248"/>
+        <location filename="../src/settings/rulecontroller.cpp" line="247"/>
         <source>The daemon rejected one or more rules.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Hintergrunddienst hat eine oder mehrere Regeln abgelehnt.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulecontroller.cpp" line="376"/>
+        <location filename="../src/settings/rulecontroller.cpp" line="375"/>
         <source>A save is already in flight.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein Speichervorgang läuft bereits.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulecontroller.cpp" line="387"/>
+        <location filename="../src/settings/rulecontroller.cpp" line="386"/>
         <source>The daemon&apos;s rules changed while you were editing. Review or use Save anyway to overwrite.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Regeln des Hintergrunddienstes haben sich während der Bearbeitung geändert. Prüfen Sie sie oder verwenden Sie „Trotzdem speichern“, um sie zu überschreiben.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulecontroller.cpp" line="398"/>
+        <location filename="../src/settings/rulecontroller.cpp" line="397"/>
         <source>One or more rules failed validation and could not be saved. See the log for details.</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine oder mehrere Regeln haben die Validierung nicht bestanden und konnten nicht gespeichert werden. Weitere Angaben finden Sie im Protokoll.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulecontroller.cpp" line="658"/>
+        <location filename="../src/settings/rulecontroller.cpp" line="657"/>
         <source>%1 (copy)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="39"/>
-        <source>New monitor rule</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="43"/>
-        <source>New desktop rule</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="50"/>
-        <source>New application rule</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="54"/>
-        <source>New activity rule</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (Kopie)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruletemplates.cpp" line="58"/>
+        <source>New monitor rule</source>
+        <translation>Neue Bildschirmregel</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="62"/>
+        <source>New desktop rule</source>
+        <translation>Neue Arbeitsflächenregel</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="70"/>
+        <source>New application rule</source>
+        <translation>Neue Anwendungsregel</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="74"/>
+        <source>New activity rule</source>
+        <translation>Neue Aktivitätsregel</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="78"/>
         <source>New animation rule</source>
-        <translation type="unfinished"></translation>
+        <translation>Neue Animationsregel</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="68"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="88"/>
         <source>New custom rule</source>
-        <translation type="unfinished"></translation>
+        <translation>Neue benutzerdefinierte Regel</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="93"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="121"/>
         <source>Set a layout on a monitor</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout auf einem Bildschirm festlegen</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="94"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="122"/>
         <source>Pick a snapping layout to use on one monitor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein Einrast-Layout für einen Bildschirm auswählen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="95"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="123"/>
         <source>Set a tiling algorithm on a monitor</source>
-        <translation type="unfinished"></translation>
+        <translation>Kachelungsalgorithmus auf einem Bildschirm festlegen</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="96"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="124"/>
         <source>Pick an autotile algorithm to use on one monitor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Einen Auto-Kachel-Algorithmus für einen Bildschirm auswählen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="98"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="126"/>
         <source>Lock the layout on a monitor</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout auf einem Bildschirm sperren</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="99"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="127"/>
         <source>Pin the active layout on one monitor so it can&apos;t be switched. This is the rule-driven version of the lock-layout shortcut.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das aktive Layout auf einem Bildschirm fixieren, sodass es nicht gewechselt werden kann. Dies ist die regelbasierte Variante des Kurzbefehls zum Sperren des Layouts.</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="102"/>
-        <location filename="../src/settings/ruletemplates.cpp" line="163"/>
-        <source>Exclude an app from tiling</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruletemplates.cpp" line="130"/>
+        <source>Set a layout on a virtual desktop</source>
+        <translation>Layout auf einer Arbeitsfläche festlegen</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="103"/>
-        <source>Keep one application&apos;s windows out of the snap and autotile engines entirely.</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruletemplates.cpp" line="131"/>
+        <source>Pick a snapping layout to use on one virtual desktop.</source>
+        <translation>Ein Einrast-Layout für eine Arbeitsfläche auswählen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="105"/>
-        <location filename="../src/settings/ruletemplates.cpp" line="170"/>
-        <source>Don&apos;t animate small windows</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruletemplates.cpp" line="133"/>
+        <source>Set a layout for portrait monitors</source>
+        <translation>Layout für Bildschirme im Hochformat festlegen</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="106"/>
-        <source>Skip open and close animations for windows narrower than a chosen width. Handy for tiny popups and tool windows.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="119"/>
-        <source>Snapping layout on monitor</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruletemplates.cpp" line="134"/>
+        <source>Pick a snapping layout to use whenever a monitor is in portrait orientation. Handy for rotating screens.</source>
+        <translation>Ein Einrast-Layout auswählen, das verwendet wird, sobald ein Bildschirm im Hochformat ausgerichtet ist. Praktisch für drehbare Bildschirme.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruletemplates.cpp" line="137"/>
-        <source>Tiling algorithm on monitor</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/ruletemplates.cpp" line="215"/>
+        <source>Open an app in a zone</source>
+        <translation>Eine Anwendung in einer Zone öffnen</translation>
     </message>
     <message>
-        <location filename="../src/settings/ruletemplates.cpp" line="152"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="138"/>
+        <source>Snap one application&apos;s windows into a chosen zone when they open.</source>
+        <translation>Die Fenster einer Anwendung beim Öffnen in eine ausgewählte Zone einrasten.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="140"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="226"/>
+        <source>Open an app on a monitor</source>
+        <translation>Eine Anwendung auf einem Bildschirm öffnen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="141"/>
+        <source>Send one application&apos;s windows to a chosen monitor when they open.</source>
+        <translation>Die Fenster einer Anwendung beim Öffnen an einen ausgewählten Bildschirm senden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="143"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="234"/>
+        <source>Float an app</source>
+        <translation>Eine Anwendung schweben lassen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="144"/>
+        <source>Keep one application&apos;s windows floating instead of tiled. The windows stay managed, unlike a full exclusion.</source>
+        <translation>Die Fenster einer Anwendung schwebend statt gekachelt halten. Die Fenster bleiben verwaltet, anders als bei einem vollständigen Ausschluss.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="147"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="244"/>
+        <source>Exclude an app from tiling</source>
+        <translation>Eine Anwendung von der Kachelung ausschließen</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="148"/>
+        <source>Keep one application&apos;s windows out of the snap and autotile engines entirely.</source>
+        <translation>Die Fenster einer Anwendung vollständig aus dem Einrast- und Auto-Kachel-System heraushalten.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="150"/>
+        <location filename="../src/settings/ruletemplates.cpp" line="251"/>
+        <source>Don&apos;t animate small windows</source>
+        <translation>Kleine Fenster nicht animieren</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="151"/>
+        <source>Skip open and close animations for windows narrower than a chosen width. Handy for tiny popups and tool windows.</source>
+        <translation>Öffnen- und Schließen-Animationen für Fenster überspringen, die schmaler als eine ausgewählte Breite sind. Praktisch für winzige Aufklappfenster und Werkzeugfenster.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="164"/>
+        <source>Snapping layout on monitor</source>
+        <translation>Einrast-Layout auf Bildschirm</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="171"/>
+        <source>Tiling algorithm on monitor</source>
+        <translation>Kachelungsalgorithmus auf Bildschirm</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="186"/>
         <source>Lock layout on monitor</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout auf Bildschirm sperren</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="197"/>
+        <source>Snapping layout on virtual desktop</source>
+        <translation>Einrast-Layout auf Arbeitsfläche</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/ruletemplates.cpp" line="207"/>
+        <source>Layout for portrait monitors</source>
+        <translation>Layout für Bildschirme im Hochformat</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="216"/>
+        <source>Layout created, but aspect-ratio class could not be applied: %1</source>
+        <translation>Layout erstellt, aber die Seitenverhältnis-Klasse konnte nicht angewendet werden: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/settingscontroller_layouts.cpp" line="230"/>
-        <source>Layout created, but aspect-ratio class could not be applied: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="244"/>
         <source>Could not create the layout. The daemon returned an empty layout ID.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Layout konnte nicht erstellt werden. Der Hintergrunddienst hat eine leere Layout-ID zurückgegeben.</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="252"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="238"/>
         <source>Could not create the layout. The daemon may not be running.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Layout konnte nicht erstellt werden. Möglicherweise läuft der Hintergrunddienst nicht.</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="271"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="257"/>
         <source>Could not delete layout: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout konnte nicht gelöscht werden: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="287"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="273"/>
         <source>Could not duplicate layout: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Layout konnte nicht dupliziert werden: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="388"/>
-        <source>Import refused: unsafe path</source>
-        <translation type="unfinished"></translation>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="323"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="472"/>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="565"/>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="929"/>
+        <source>That file path is not allowed.</source>
+        <translation>Dieser Dateipfad ist nicht zulässig.</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="432"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="355"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="530"/>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="497"/>
+        <source>That export path is not allowed.</source>
+        <translation>Dieser Exportpfad ist nicht zulässig.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="400"/>
         <source>Failed to update layout visibility: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Sichtbarkeit des Layouts konnte nicht aktualisiert werden: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="445"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="413"/>
         <source>Failed to update auto-assign: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Automatische Zuweisung konnte nicht aktualisiert werden: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_layouts.cpp" line="459"/>
+        <location filename="../src/settings/settingscontroller_layouts.cpp" line="427"/>
         <source>Failed to update aspect ratio: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Seitenverhältnis konnte nicht aktualisiert werden: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_lifecycle.cpp" line="189"/>
+        <location filename="../src/settings/settingscontroller_lifecycle.cpp" line="187"/>
         <source>Failed to apply assignment changes: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Zuweisungsänderungen konnten nicht angewendet werden: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/shaderpackinstaller.cpp" line="303"/>
         <source>Shader pack installed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Shader-Paket installiert.</translation>
     </message>
     <message>
         <location filename="../src/settings/shaderpackinstaller.cpp" line="305"/>
         <source>The dropped path is not a valid shader pack directory.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der abgelegte Pfad ist kein gültiges Shader-Paket-Verzeichnis.</translation>
     </message>
     <message>
         <location filename="../src/settings/shaderpackinstaller.cpp" line="307"/>
         <source>The shader pack is missing metadata.json (or it is a symlink).</source>
-        <translation type="unfinished"></translation>
+        <translation>Dem Shader-Paket fehlt die Datei metadata.json (oder sie ist eine symbolische Verknüpfung).</translation>
     </message>
     <message>
         <location filename="../src/settings/shaderpackinstaller.cpp" line="309"/>
         <source>The user shader directory could not be created.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Shader-Verzeichnis des Benutzers konnte nicht erstellt werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/shaderpackinstaller.cpp" line="311"/>
         <source>A shader pack with this name is already installed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein Shader-Paket mit diesem Namen ist bereits installiert.</translation>
     </message>
     <message>
         <location filename="../src/settings/shaderpackinstaller.cpp" line="313"/>
         <source>The shader pack exceeds the maximum allowed size or file count.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Shader-Paket überschreitet die maximal zulässige Größe oder Dateianzahl.</translation>
     </message>
     <message>
         <location filename="../src/settings/shaderpackinstaller.cpp" line="315"/>
         <source>Copying the shader pack failed. The partial install was rolled back.</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Kopieren des Shader-Pakets ist fehlgeschlagen. Die unvollständige Installation wurde zurückgenommen.</translation>
     </message>
     <message>
         <location filename="../src/settings/shaderpackinstaller.cpp" line="317"/>
         <source>Unknown shader pack installer error.</source>
-        <translation type="unfinished"></translation>
+        <translation>Unbekannter Fehler beim Installieren des Shader-Pakets.</translation>
     </message>
     <message>
         <location filename="../src/settings/snappingzonescontroller.cpp" line="78"/>
         <source>Color import file does not exist: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Farbimportdatei existiert nicht: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/snappingzonescontroller.cpp" line="96"/>
         <source>Color import file does not resolve to a regular file: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Farbimportdatei verweist nicht auf eine reguläre Datei: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/snappingzonescontroller.cpp" line="101"/>
         <source>Color import file must be a .json file: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Farbimportdatei muss eine .json-Datei sein: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="444"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="540"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="449"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="545"/>
         <source>A set named &quot;%1&quot; already exists.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein Satz mit dem Namen &quot;%1&quot; existiert bereits.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="353"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="535"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="546"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="612"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="355"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="540"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="551"/>
         <location filename="../src/settings/shadersetstore.cpp" line="617"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="622"/>
         <source>Could not read the set &quot;%1&quot;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Satz &quot;%1&quot; konnte nicht gelesen werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/shadersetstore.cpp" line="169"/>
         <source>Could not back up the existing set, so it was left untouched.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der vorhandene Satz konnte nicht gesichert werden und blieb daher unverändert.</translation>
     </message>
     <message>
         <location filename="../src/settings/shadersetstore.cpp" line="234"/>
         <source>Could not write the set to disk.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Satz konnte nicht auf die Festplatte geschrieben werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="357"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="359"/>
         <source>&quot;%1&quot; was written by a newer version of PlasmaZones.</source>
-        <translation type="unfinished"></translation>
+        <translation>&quot;%1&quot; wurde von einer neueren Version von PlasmaZones geschrieben.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="362"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="367"/>
         <source>&quot;%1&quot; does not match this page.</source>
-        <translation type="unfinished"></translation>
+        <translation>&quot;%1&quot; passt nicht zu dieser Seite.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="366"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="371"/>
         <source>Could not apply &quot;%1&quot;.</source>
-        <translation type="unfinished"></translation>
+        <translation>&quot;%1&quot; konnte nicht angewendet werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="434"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="528"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="439"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="533"/>
         <source>That name cannot be used. Try one with letters or numbers in it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dieser Name kann nicht verwendet werden. Versuchen Sie einen mit Buchstaben oder Zahlen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="454"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="459"/>
         <source>There is nothing to capture yet.</source>
-        <translation type="unfinished"></translation>
+        <translation>Es gibt noch nichts zu erfassen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="495"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="503"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="500"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="508"/>
         <source>Could not delete &quot;%1&quot;.</source>
-        <translation type="unfinished"></translation>
+        <translation>&quot;%1&quot; konnte nicht gelöscht werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="427"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="521"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="432"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="526"/>
         <source>A set needs a name.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ein Satz braucht einen Namen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="584"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="589"/>
         <source>Renamed the set, but the old file could not be removed. Delete it by hand from the sets folder.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Satz wurde umbenannt, aber die alte Datei konnte nicht entfernt werden. Löschen Sie sie manuell aus dem Sätze-Ordner.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="600"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="605"/>
         <source>Could not write to that location.</source>
-        <translation type="unfinished"></translation>
+        <translation>An diesen Speicherort konnte nicht geschrieben werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="626"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="631"/>
         <source>Could not write to %1.</source>
-        <translation type="unfinished"></translation>
+        <translation>Nach %1 konnte nicht geschrieben werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="647"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="652"/>
         <source>That file is not a readable set.</source>
-        <translation type="unfinished"></translation>
+        <translation>Diese Datei ist kein lesbarer Satz.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="651"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="656"/>
         <source>That set was written by a newer version of PlasmaZones.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dieser Satz wurde von einer neueren Version von PlasmaZones geschrieben.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="658"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="663"/>
         <source>That set is empty.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dieser Satz ist leer.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="664"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="670"/>
         <source>That set does not match this page.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dieser Satz passt nicht zu dieser Seite.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="675"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="681"/>
         <source>That set has no usable name.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dieser Satz hat keinen verwendbaren Namen.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="461"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="682"/>
-        <location filename="../src/settings/shadersetstore.cpp" line="704"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="466"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="688"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="710"/>
         <source>Could not create the sets folder.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Sätze-Ordner konnte nicht erstellt werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/shadersetstore.cpp" line="709"/>
+        <location filename="../src/settings/shadersetstore.cpp" line="715"/>
         <source>Could not open the sets folder.</source>
-        <translation type="unfinished"></translation>
+        <translation>Der Sätze-Ordner konnte nicht geöffnet werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/animationpresetlibrary.cpp" line="130"/>
         <location filename="../src/settings/animationpresetlibrary.cpp" line="199"/>
         <source>A preset needs a name.</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine Voreinstellung braucht einen Namen.</translation>
     </message>
     <message>
         <location filename="../src/settings/animationpresetlibrary.cpp" line="140"/>
         <source>That name cannot be used for a preset.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dieser Name kann nicht für eine Voreinstellung verwendet werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/animationpresetlibrary.cpp" line="150"/>
         <location filename="../src/settings/animationpresetlibrary.cpp" line="159"/>
         <location filename="../src/settings/animationpresetlibrary.cpp" line="178"/>
         <source>Could not save the preset &quot;%1&quot;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Voreinstellung &quot;%1&quot; konnte nicht gespeichert werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/animationpresetlibrary.cpp" line="253"/>
         <source>Could not find the preset &quot;%1&quot;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Voreinstellung &quot;%1&quot; konnte nicht gefunden werden.</translation>
     </message>
     <message>
         <location filename="../src/settings/animationpresetlibrary.cpp" line="261"/>
         <location filename="../src/settings/animationpresetlibrary.cpp" line="271"/>
         <source>Could not delete the preset &quot;%1&quot;.</source>
-        <translation type="unfinished"></translation>
+        <translation>Die Voreinstellung &quot;%1&quot; konnte nicht gelöscht werden.</translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="262"/>
+        <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="260"/>
+        <location filename="../src/settings/animationspagecontroller_shaders.cpp" line="407"/>
         <source>Cannot reset while a discard is in progress.</source>
-        <translation type="unfinished"></translation>
+        <translation>Zurücksetzen ist nicht möglich, während ein Verwerfen läuft.</translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="284"/>
+        <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="282"/>
         <source>Some animation overrides could not be reset.</source>
-        <translation type="unfinished"></translation>
+        <translation>Einige Animations-Überschreibungen konnten nicht zurückgesetzt werden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="488"/>
+        <source>Settings can only be exported to a local file.</source>
+        <translation>Einstellungen können nur in eine lokale Datei exportiert werden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="529"/>
+        <source>That is the settings file this app is using. Export to a different file.</source>
+        <translation>Das ist die Einstellungsdatei, die diese Anwendung verwendet. Exportieren Sie in eine andere Datei.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="556"/>
+        <source>Settings can only be imported from a local file.</source>
+        <translation>Einstellungen können nur aus einer lokalen Datei importiert werden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="570"/>
+        <source>That settings file is no longer there.</source>
+        <translation>Diese Einstellungsdatei ist nicht mehr vorhanden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="584"/>
+        <source>Those are the settings this app is already using. Pick a different file to import.</source>
+        <translation>Das sind die Einstellungen, die diese Anwendung bereits verwendet. Wählen Sie zum Importieren eine andere Datei.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="607"/>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="612"/>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="617"/>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="641"/>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="685"/>
+        <source>That is not a settings file this app can read.</source>
+        <translation>Das ist keine Einstellungsdatei, die diese Anwendung lesen kann.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="657"/>
+        <source>Could not back up your current settings, so nothing was imported.</source>
+        <translation>Ihre aktuellen Einstellungen konnten nicht gesichert werden, daher wurde nichts importiert.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="670"/>
+        <source>Could not read that older settings file.</source>
+        <translation>Diese ältere Einstellungsdatei konnte nicht gelesen werden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="677"/>
+        <source>Could not read that settings file.</source>
+        <translation>Diese Einstellungsdatei konnte nicht gelesen werden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="697"/>
+        <source>Could not replace your settings with that file.</source>
+        <translation>Ihre Einstellungen konnten nicht durch diese Datei ersetzt werden.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="725"/>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="730"/>
+        <source>Your settings could not be put back. A copy is saved at %1.</source>
+        <translation>Ihre Einstellungen konnten nicht wiederhergestellt werden. Eine Kopie ist unter %1 gespeichert.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/settingscontroller_session.cpp" line="770"/>
+        <source>Your settings were imported, but the animation pages still show the old ones. Reopen the settings window to see the imported values.</source>
+        <translation>Ihre Einstellungen wurden importiert, aber die Animationsseiten zeigen weiterhin die alten an. Öffnen Sie das Einstellungsfenster erneut, um die importierten Werte zu sehen.</translation>
     </message>
 </context>
 </TS>
