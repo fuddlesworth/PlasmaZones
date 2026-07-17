@@ -446,6 +446,13 @@ vec4 surfaceColor(vec2 uv) {
 // common to both cancels, leaving the padding alone. An unpadded window
 // carries canvas == expanded, hence equal rects and an exact zero, which
 // keeps its mask bit-identical to the un-widened form.
+//
+// Valid only for SURFACE-EXTENT packs, whose card space is the frame: there
+// both rects share the frame as inner rect, so the result is pad/frame in
+// the card units their masks use. An anchor-extent pack carries
+// `iAnchorRectInTexture == (0, 0, 1, 1)` (inner == expanded), so this would
+// return pad/expanded instead — a different unit that would under-widen its
+// mask. No anchor-extent pack calls this.
 vec2 surfacePadRel() {
 #ifdef PLASMAZONES_KWIN
     // No layer means no composited canvas, so `iLayerRectInTexture` carries

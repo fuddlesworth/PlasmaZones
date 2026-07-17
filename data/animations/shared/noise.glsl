@@ -188,10 +188,18 @@ float boundaryMask(vec2 uv) {
 // antialiased crop: fully-covered interior pixels stay at 1.0 (no
 // inner-edge fade), the edge pixel gets its real fractional coverage,
 // and the sub-pixel outside half is ordinary edge AA, not a halo.
-float boundaryMaskAA(vec2 uv) {
+//
+// `pad` widens the accepted range to [-pad, 1 + pad] per axis so a
+// surface-extent pack keeps the decoration chain's outer margin — the halo
+// the compositor composited into the padded uSurfaceLayer canvas, which
+// surfaceColor() resolves for uv outside [0, 1] — instead of cropping it at
+// the frame edge. Pass surfacePadRel() (card-space, frame-anchored, so it
+// pairs with the anchor-space uv here); an unpadded window carries vec2(0)
+// and the crop is bit-identical to the bare [0, 1] form.
+float boundaryMaskAA(vec2 uv, vec2 pad) {
     vec2 fw = max(fwidth(uv), vec2(1.0e-5));
-    vec2 lo = smoothstep(-0.5 * fw, 0.5 * fw, uv);
-    vec2 hi = smoothstep(-0.5 * fw, 0.5 * fw, vec2(1.0) - uv);
+    vec2 lo = smoothstep(-0.5 * fw, 0.5 * fw, uv + pad);
+    vec2 hi = smoothstep(-0.5 * fw, 0.5 * fw, vec2(1.0) + pad - uv);
     return lo.x * lo.y * hi.x * hi.y;
 }
 

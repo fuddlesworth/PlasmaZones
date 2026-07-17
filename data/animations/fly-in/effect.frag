@@ -47,7 +47,9 @@ vec4 pTransition(vec2 uv, float t) {
 
     // Surface-spanning UV → the window's own ("anchor") [0,1] space.
     // Fragments outside the window map outside [0,1] and are cropped by
-    // boundaryMaskAA below.
+    // boundaryMaskAA below, widened by the decoration chain's outer margin
+    // so a flying window carries its halo instead of clipping it at the
+    // frame edge.
     vec2 auv = anchorRemap(uv);
 
     // Decide the fly-in edge from the window's position within its
@@ -87,5 +89,5 @@ vec4 pTransition(vec2 uv, float t) {
     // is sampled further toward -x in its own texture.
     vec2 sample_uv = auv;
     sample_uv.x = auv.x - offsetUv;
-    return surfaceColor(sample_uv) * boundaryMaskAA(sample_uv);
+    return surfaceColor(sample_uv) * boundaryMaskAA(sample_uv, surfacePadRel());
 }

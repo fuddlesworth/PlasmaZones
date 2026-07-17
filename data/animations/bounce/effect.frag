@@ -49,7 +49,9 @@ vec4 pTransition(vec2 uv, float t) {
 
     // Map the surface-UV into the window's ("anchor") own [0,1] space.
     // Fragments outside the window map outside [0,1] and are cropped by
-    // boundaryMaskAA below.
+    // boundaryMaskAA below, widened by the decoration chain's outer margin
+    // so a bouncing window carries its halo instead of clipping it at the
+    // frame edge.
     vec2 auv = anchorRemap(uv);
 
     // Decaying bounce: one window-height above the frame at t=0, settling
@@ -62,5 +64,5 @@ vec4 pTransition(vec2 uv, float t) {
     // with the bounce and settles to 0 (identity sampling) at rest.
     vec2 sample_uv = auv;
     sample_uv.y = auv.y + offset;
-    return surfaceColor(sample_uv) * boundaryMaskAA(sample_uv);
+    return surfaceColor(sample_uv) * boundaryMaskAA(sample_uv, surfacePadRel());
 }
