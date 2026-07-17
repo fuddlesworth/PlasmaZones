@@ -590,45 +590,35 @@ install(CODE "
 # profile JSONs to install or validate. The install(CODE) stale-cleanup
 # block above is intentionally kept for upgrades from older builds.
 
-# Install bundled RenderNode shaders (raw GLSL, no compilation needed)
+# Install bundled RenderNode shaders (raw GLSL, no compilation needed).
+# Ship the whole pack tree so every asset a pack's metadata references
+# travels with it, and exclude only hidden editor/OS/dev files (.DS_Store,
+# .luaurc-style linter configs, VCS dotfiles). An extension allowlist here
+# silently dropped any new asset type, or any JSON not named metadata.json.
 install(DIRECTORY data/overlays/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/overlays
-    FILES_MATCHING
-    PATTERN "metadata.json"
-    PATTERN "*.glsl"
-    PATTERN "*.vert"
-    PATTERN "*.frag"
-    PATTERN "*.png"
-    PATTERN "*.svg"
+    PATTERN ".*" EXCLUDE
 )
 
 # Install bundled animation transition shader packs. The daemon's
 # AnimationShaderRegistry scans ${XDG_DATA_DIRS}/plasmazones/animations
 # at startup; user overrides at ~/.local/share/plasmazones/animations win.
+# Ship the whole pack tree (metadata, shaders, the shared/ GLSL includes,
+# and any texture a pack references) and exclude only hidden dev/OS files.
 install(DIRECTORY data/animations/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/animations
-    FILES_MATCHING
-    PATTERN "metadata.json"
-    PATTERN "*.frag"
-    PATTERN "*.vert"
-    # GLSL include files (shared/animation_uniforms.glsl, shared/animation.vert).
-    PATTERN "*.glsl"
-    PATTERN "*.png"
+    PATTERN ".*" EXCLUDE
 )
 
 # Install bundled surface shader packs (window border / rounded corners today;
 # the third shader-pack category alongside shaders + animations). The kwin-effect
 # discovers ${XDG_DATA_DIRS}/plasmazones/surface via the SurfaceShaderRegistry;
 # user overrides at ~/.local/share/plasmazones/surface win.
+# Ship the whole pack tree (metadata, shaders, the shared/ GLSL includes,
+# and any texture a pack references) and exclude only hidden dev/OS files.
 install(DIRECTORY data/surface/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/surface
-    FILES_MATCHING
-    PATTERN "metadata.json"
-    PATTERN "*.frag"
-    PATTERN "*.vert"
-    # GLSL include files (shared/surface_uniforms.glsl).
-    PATTERN "*.glsl"
-    PATTERN "*.png"
+    PATTERN ".*" EXCLUDE
 )
 
 # Install bundled scripted tiling algorithms
