@@ -1,0 +1,53 @@
+{
+    "id": "border-gradient",
+    "name": "Gradient Border",
+    "description": "Rounded corners and a window border coloured by a still two-colour gradient across the frame. The gradient direction is set in degrees, and the band dims when the surface loses focus. Width, corner radius, angle and the two colours are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Borders",
+    "providesBorder": true,
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "borderWidth",
+            "name": "Border width",
+            "type": "int",
+            "default": 2,
+            "min": 0,
+            "max": 10,
+            "description": "Thickness of the gradient border (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "gradientAngle",
+            "name": "Gradient angle",
+            "type": "float",
+            "default": 45.0,
+            "min": 0.0,
+            "max": 360.0,
+            "description": "Direction of the gradient across the frame (degrees)"
+        },
+        {
+            "id": "colorA",
+            "name": "First colour",
+            "type": "color",
+            "default": "#ff3daee9",
+            "description": "Gradient start colour"
+        },
+        {
+            "id": "colorB",
+            "name": "Second colour",
+            "type": "color",
+            "default": "#ff9b59b6",
+            "description": "Gradient end colour"
+        }
+    ]
+}

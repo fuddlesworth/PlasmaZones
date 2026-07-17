@@ -22,7 +22,7 @@ namespace PhosphorZones {
  * set is `layoutSettingKeys` in the .cpp) are NOT part of that structural
  * definition and no longer live inside the layout `.json`. They live here, in a
  * single `layout-settings.json` sidecar keyed by layout UUID — the same
- * sibling-store pattern used by windowrules.json / quicklayouts.json.
+ * sibling-store pattern used by rules.json / quicklayouts.json.
  *
  * The split happens only at the file boundary. The in-memory Layout/Zone model
  * still carries every setting (so the editor, D-Bus wire format, and runtime
@@ -65,6 +65,14 @@ public:
     /// is treated as an empty store (returns true). Returns false only on a
     /// parse error.
     bool loadFromFile(const QString& path);
+
+    /// The on-disk document for the current in-memory map: stamped with
+    /// SchemaVersion, layouts with empty settings omitted. @ref saveToFile
+    /// writes exactly this. Exposed so a caller that must stage the sidecar
+    /// alongside another file — committing both only once neither can fail —
+    /// can produce the same bytes without going through saveToFile's
+    /// open/write/commit in one step.
+    QJsonObject toJson() const;
 
     /// Atomically write the in-memory map to @p path (stamped with
     /// SchemaVersion). Layouts with empty settings are omitted.

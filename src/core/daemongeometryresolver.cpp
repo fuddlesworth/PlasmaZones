@@ -8,28 +8,37 @@
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ZoneDefaults.h>
 
 namespace PlasmaZones {
 
 QVariantMap DaemonGeometryResolver::contextGapOverrideFor(const QString& screenId) const
 {
-    if (!m_layoutRegistry || screenId.isEmpty()) {
+    if (screenId.isEmpty()) {
         return {};
     }
-    const int virtualDesktop = m_currentVirtualDesktop ? m_currentVirtualDesktop(screenId) : 0;
-    const QString activity = m_currentActivity ? m_currentActivity() : QString();
     // Translation to the PerScreenSnappingKey-shaped map is shared with the
     // preview/query geometry helpers via GeometryUtils::contextGapOverrideMap.
-    return GeometryUtils::contextGapOverrideMap(
-        m_layoutRegistry->resolveContextGaps(screenId, virtualDesktop, activity));
+    // This is the snap-commit geometry path, so resolve against the "snapping"
+    // placement mode — a per-mode `Mode Equals "snapping"` gap rule applies here.
+    // The config per-monitor gap is merged UNDER the rule override so a user gap
+    // rule still wins per slot, while a monitor with only a config gap gets it.
+    QVariantMap ruleGaps;
+    if (m_layoutRegistry) {
+        const int virtualDesktop = m_currentVirtualDesktop ? m_currentVirtualDesktop(screenId) : 0;
+        const QString activity = m_currentActivity ? m_currentActivity() : QString();
+        ruleGaps = GeometryUtils::contextGapOverrideMap(
+            m_layoutRegistry->resolveContextGaps(screenId, virtualDesktop, activity, QStringLiteral("snapping")));
+    }
+    return GeometryUtils::mergeConfigPerScreenGaps(std::move(ruleGaps), m_settings, screenId);
 }
 
-int DaemonGeometryResolver::resolveZonePadding(PhosphorZones::Layout* layout, const QString& screenId) const
+int DaemonGeometryResolver::resolveInnerGap(PhosphorZones::Layout* layout, const QString& screenId) const
 {
     if (!m_settings) {
-        return PhosphorEngine::GeometryDefaults::ZonePadding;
+        return PhosphorEngine::GeometryDefaults::InnerGap;
     }
-    return GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId, contextGapOverrideFor(screenId));
+    return GeometryUtils::getEffectiveInnerGap(layout, m_settings, contextGapOverrideFor(screenId));
 }
 
 PhosphorLayout::EdgeGaps DaemonGeometryResolver::resolveOuterGaps(PhosphorZones::Layout* layout,
@@ -38,17 +47,31 @@ PhosphorLayout::EdgeGaps DaemonGeometryResolver::resolveOuterGaps(PhosphorZones:
     if (!m_settings) {
         return PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
     }
-    return GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId, contextGapOverrideFor(screenId));
+    return GeometryUtils::getEffectiveOuterGaps(layout, m_settings, contextGapOverrideFor(screenId));
 }
 
 int DaemonGeometryResolver::defaultBorderWidth() const
 {
-    return m_settings ? m_settings->borderWidth() : 2;
+    // Fall back to the canonical zone default (same source GeometryUtils uses)
+    // rather than a magic number, for the degenerate no-settings case.
+    return m_settings ? m_settings->borderWidth() : ::PhosphorZones::ZoneDefaults::BorderWidth;
 }
 
 int DaemonGeometryResolver::defaultBorderRadius() const
 {
-    return m_settings ? m_settings->borderRadius() : 0;
+    return m_settings ? m_settings->borderRadius() : ::PhosphorZones::ZoneDefaults::BorderRadius;
+}
+
+int DaemonGeometryResolver::snapBorderInset() const
+{
+    // No inset. The KWin effect's border shader recolours the window's OWN
+    // outermost band (inside the frame), for decorated and borderless windows
+    // alike, so the border never extends past the frame edge into the neighbour.
+    // A snapped window therefore fills its zone exactly; any visible separation
+    // between tiles must come from the zone gap/padding settings, not from a
+    // border-width inset (which previously assumed the border was drawn OUTSIDE
+    // the frame and added a spurious 2x-border-width gap between tiles).
+    return 0;
 }
 
 } // namespace PlasmaZones

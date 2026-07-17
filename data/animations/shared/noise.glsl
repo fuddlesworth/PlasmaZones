@@ -46,6 +46,18 @@ vec2 hash22(vec2 p) {
     return fract((p3.xx + p3.yz) * p3.zy);
 }
 
+// 1D hash from a vec2 using the Inigo Quilez `fract(p3 * 0.1031)` chain
+// (the scalar-output sibling of hash22 above; distinct from niriHash's
+// `sin(dot(...))` pattern below). Byte-equivalent to Burn-My-Windows'
+// common.glsl hash12, so bmw_compat.glsl pulls this in rather than
+// carrying its own copy — the single LGPL definition every consumer
+// shares (aura-glow directly, tv-glitch / wisps via bmw_compat).
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
 float simplex2D(vec2 p) {
     const float K1 = 0.366025404;
     const float K2 = 0.211324865;
@@ -80,22 +92,35 @@ float surfaceSeed() {
 // (127.1, 311.7))) * 43758.5453)` pattern. Used by the niri-derived
 // ports for per-cell / per-instance pseudo-random in [0, 1). Lifted
 // from the file-scope copies that previously lived in dissolve,
-// glitch, ink-splash, plasma-flow, smoke, snap, and soft-warp-fade
+// glitch, ink-splash, smoke, snap, and soft-warp-fade
 // — all bit-equivalent except for sub-ULP variance in the
 // constant's last decimals (43758.5453 vs 43758.5453123, identical
 // in float32). Other niri ports keep their own hashes when the
-// constants are deliberately different (crosshatch, randomsquares
-// use (12.9898, 78.233); static-fade uses unique magic constants;
-// perlin pre-mods the dot product). Voronoi-shatter's vs_hash2
-// returns vec2 and stays local.
+// constants are deliberately different: static-fade uses unique magic
+// constants; perlin pre-mods the dot product. The (12.9898, 78.233)
+// sin-dot variant is shared just below as `classicHash`. Voronoi-shatter's
+// vs_hash2 returns vec2 and stays local.
 float niriHash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
+// Classic Inigo Quilez `fract(sin(dot(p, (12.9898, 78.233))) * 43758.5453)`
+// value hash — the OTHER canonical sin-dot magic-constant pair (niriHash
+// above uses (127.1, 311.7)). Lifted from the byte-identical per-shader
+// copies that lived in crosshatch (crosshatch_rand), randomsquares
+// (rs_rand), heat-melt (hm_rand), and the desktop packs dissolve /
+// crosszoom / aretha (pz_hash, pz_rand). Deliberate variants that must
+// NOT use this stay local: perlin
+// pre-mods the dot product, static-fade uses unique constants,
+// voronoi-shatter returns a vec2.
+float classicHash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
 // niri-style bilinear value noise on niriHash (smooth-step interp
-// at integer lattice corners). Used by the 4 niri ports that need
-// procedural noise — plasma-flow, soft-warp-fade, ink-splash,
-// smoke. Identical body across all four; lifting deduplicates ~10
+// at integer lattice corners). Used by the 3 niri ports that need
+// procedural noise — soft-warp-fade, ink-splash,
+// smoke. Identical body across all three; lifting deduplicates ~10
 // lines per shader. Perlin's perlin_noise stays local because it
 // uses an alternative bilinear formulation tied to perlin_random's
 // non-shareable hash.
@@ -105,6 +130,23 @@ float niriNoise(vec2 p) {
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(niriHash(i),                    niriHash(i + vec2(1.0, 0.0)), f.x),
                mix(niriHash(i + vec2(0.0, 1.0)),   niriHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// Parameterised fBm over niriNoise: `octaves` layers with amplitude
+// halving (gain 0.5) and frequency scaled by `lacunarity` per octave.
+// Reproduces the two niri ports' hand-rolled loops exactly — ink-splash
+// uses fbm(p, 5, 2.1) (its is_fbm) and smoke uses fbm(p, 6, 2.0) (its
+// sm_fbm), which share this skeleton and differ only in octave count and
+// lacunarity. Starting amplitude 0.5 and gain 0.5 are the shared constants.
+float fbm(vec2 p, int octaves, float lacunarity) {
+    float v = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < octaves; i++) {
+        v += amp * niriNoise(p);
+        p *= lacunarity;
+        amp *= 0.5;
+    }
+    return v;
 }
 
 // Boundary mask for shaders that displace sample UVs. Returns 1.0
@@ -117,8 +159,8 @@ float niriNoise(vec2 p) {
 //
 // Bands sit OUTSIDE [0, 1] so identity sampling (sample_uv ∈
 // [0, 1]) gets mask = 1 everywhere — no inner-edge alpha clipping.
-// Used by morph, popin, fade, inkwell-drop, plasma-flow, ripple,
-// smoke, snap, soft-warp-fade, and glide. See PR #425 for the
+// Used by many niri-derived packs (e.g. popin, fade, inkwell-drop,
+// ripple, smoke, snap, soft-warp-fade, glide). See PR #425 for the
 // inside-vs-outside-band fix history.
 float boundaryMask(vec2 uv) {
     vec2 lo = smoothstep(vec2(-0.005), vec2(0.0),   uv);
@@ -146,11 +188,38 @@ float boundaryMask(vec2 uv) {
 // antialiased crop: fully-covered interior pixels stay at 1.0 (no
 // inner-edge fade), the edge pixel gets its real fractional coverage,
 // and the sub-pixel outside half is ordinary edge AA, not a halo.
-float boundaryMaskAA(vec2 uv) {
+//
+// `pad` widens the accepted range to [-pad, 1 + pad] per axis so a
+// surface-extent pack keeps the decoration chain's outer margin — the halo
+// the compositor composited into the padded uSurfaceLayer canvas, which
+// surfaceColor() resolves for uv outside [0, 1] — instead of cropping it at
+// the frame edge. Pass surfacePadRel() (card-space, frame-anchored, so it
+// pairs with the anchor-space uv here); an unpadded window carries vec2(0)
+// and the crop is bit-identical to the bare [0, 1] form.
+float boundaryMaskAA(vec2 uv, vec2 pad) {
     vec2 fw = max(fwidth(uv), vec2(1.0e-5));
-    vec2 lo = smoothstep(-0.5 * fw, 0.5 * fw, uv);
-    vec2 hi = smoothstep(-0.5 * fw, 0.5 * fw, vec2(1.0) - uv);
+    vec2 lo = smoothstep(-0.5 * fw, 0.5 * fw, uv + pad);
+    vec2 hi = smoothstep(-0.5 * fw, 0.5 * fw, vec2(1.0) + pad - uv);
     return lo.x * lo.y * hi.x * hi.y;
+}
+
+// Pointy-top hex-grid helpers shared by the Aretha packs (aretha-materialize
+// and desktop-aretha), ported from data/overlays/aretha-shell. `hexDist`
+// returns 0 at a cell centre rising to ~0.5 at the edge; `hexLocal` returns
+// the offset from the nearest hex-cell centre for a point in hex-grid space.
+// Distinct from the hexagon / honeycomb packs, which use different hex
+// formulations and keep their own math.
+float hexDist(vec2 p) {
+    p = abs(p);
+    return max(p.x * 0.866025 + p.y * 0.5, p.y);  // 0 at center .. ~0.5 at edge
+}
+
+vec2 hexLocal(vec2 uv) {
+    vec2 r = vec2(1.0, 1.732);
+    vec2 h = r * 0.5;
+    vec2 a = mod(uv, r) - h;
+    vec2 b = mod(uv - h, r) - h;
+    return dot(a, a) < dot(b, b) ? a : b;
 }
 
 #endif

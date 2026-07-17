@@ -31,8 +31,8 @@ RowLayout {
 
     Kirigami.Icon {
         source: root.icon
-        width: Kirigami.Units.iconSizes.small
-        height: Kirigami.Units.iconSizes.small
+        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+        Layout.preferredHeight: Kirigami.Units.iconSizes.small
         visible: root.icon !== ""
     }
 
@@ -42,5 +42,4 @@ RowLayout {
         text: root.title
         font.weight: Font.DemiBold
     }
-
 }

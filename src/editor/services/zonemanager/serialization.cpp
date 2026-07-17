@@ -18,7 +18,7 @@ void ZoneManager::setDefaultColors(const QString& highlightColor, const QString&
     m_defaultBorderColor = borderColor;
 }
 
-QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReuse)
+QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReuse, int insertIndex)
 {
     if (zoneData.isEmpty()) {
         qCWarning(lcEditorZone) << "Empty zone data for addZoneFromMap";
@@ -85,7 +85,7 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
         : QString();
     int zoneNumber = zoneData.contains(::PhosphorZones::ZoneJsonKeys::ZoneNumber)
         ? zoneData[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt()
-        : m_zones.size() + 1;
+        : nextAvailableZoneNumber();
 
     QVariantMap zone = createZone(name, zoneNumber, x, y, width, height);
 
@@ -144,16 +144,46 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
         syncRelativeFromFixed(zone);
     }
 
-    // Copy z-order if present, otherwise set to end
-    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::ZOrder)) {
-        zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = zoneData[::PhosphorZones::ZoneJsonKeys::ZOrder].toInt();
-    } else {
-        zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = m_zones.size();
-    }
+    // Sanitize the incoming zone number against the live set. The number is
+    // user-owned and kept verbatim ONLY when it is a valid unique value in
+    // 1..99; a missing key (toInt() == 0), an out-of-range value, or a collision
+    // with another live zone all fall back to nextAvailableZoneNumber() so the
+    // 1..99 unique invariant holds. The retired renumberZones() used to scrub
+    // this; it is done inline here. @p selfIndex is the index of the zone being
+    // updated in place (which must not count as colliding with itself), or -1
+    // for a fresh insert.
+    const auto sanitizedNumber = [this](int desired, int selfIndex) -> int {
+        if (desired >= 1 && desired <= 99) {
+            bool collides = false;
+            for (int i = 0; i < m_zones.size(); ++i) {
+                if (i == selfIndex) {
+                    continue;
+                }
+                if (m_zones[i].toMap().value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt() == desired) {
+                    collides = true;
+                    break;
+                }
+            }
+            if (!collides) {
+                return desired;
+            }
+        }
+        return nextAvailableZoneNumber();
+    };
 
     if (existingIndex >= 0 && allowIdReuse) {
         // Update existing zone in place (for undo/redo)
         // This prevents QML from seeing the zone disappear and reappear
+        // zOrder is the zone's index in the list, never whatever the incoming
+        // map carried: a paste source or a pre-delete snapshot was numbered
+        // against a different list.
+        zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = existingIndex;
+        // The number goes through the same range+uniqueness scrub as a fresh
+        // insert. An undo/redo replay carries the pre-delete number, which is
+        // valid and (with itself excluded) unique, so it round-trips untouched;
+        // only a degenerate or colliding number is reassigned.
+        zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] =
+            sanitizedNumber(zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt(), existingIndex);
         m_zones[existingIndex] = zone;
 
         // Handle signal emission (deferred during batch updates)
@@ -172,8 +202,25 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
             Q_EMIT zonesModified();
         }
     } else {
-        // Add new zone
-        m_zones.append(zone);
+        // The number is user-owned: keep the incoming value verbatim only when
+        // it is a valid unique 1..99 number, otherwise hand out the next highest
+        // free number so the range+unique invariant holds. Undo of a delete
+        // replays the pre-delete number, which the delete freed and nothing has
+        // renumbered into, so it comes back exactly as the user had it. A paste,
+        // a duplicate redo, or a hand-crafted clipboard map can carry a number
+        // that collides, is 0/missing, or is out of range, and each of those is
+        // reassigned.
+        zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] =
+            sanitizedNumber(zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt(), -1);
+
+        // The list index IS the z-order. A caller that knows where the zone used
+        // to sit (undo of a delete) passes that index so it comes back at its
+        // original height; everyone else lands on top, the end of the list.
+        const int at = (insertIndex >= 0 && insertIndex < m_zones.size()) ? insertIndex : m_zones.size();
+        m_zones.insert(at, zone);
+        // An insert below the top shifts every zone after it, so recompact rather
+        // than stamping this one zone. Keeps zOrder a dense 0..count-1 permutation.
+        updateAllZOrderValues();
 
         // Handle signal emission (deferred during batch updates)
         if (m_batchUpdateDepth > 0) {
@@ -285,10 +332,13 @@ void ZoneManager::restoreZones(const QVariantList& zones)
         }
         zoneIds.insert(zoneId);
 
-        // Check for duplicate numbers (warn but don't fail - numbers can be renumbered)
+        // Check for duplicate numbers. A restore replays a snapshot verbatim, so
+        // it never renumbers: the duplicate is kept as-is and both zones carry
+        // the same number. Warn only, since a duplicate number is not grounds to
+        // reject an otherwise valid snapshot.
         int zoneNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
         if (zoneNumber > 0 && zoneNumbers.contains(zoneNumber)) {
-            qCWarning(lcEditorZone) << "Duplicate zone number in restoreZones:" << zoneNumber << "(will be renumbered)";
+            qCWarning(lcEditorZone) << "Duplicate zone number in restoreZones, kept as-is:" << zoneNumber;
         }
         if (zoneNumber > 0) {
             zoneNumbers.insert(zoneNumber);
@@ -299,6 +349,11 @@ void ZoneManager::restoreZones(const QVariantList& zones)
 
     // Restore the deduplicated list
     m_zones = hasDuplicates ? validated : zones;
+    // The list order is the z-order, so stamping zOrder from it reproduces the
+    // snapshot's stacking and closes the hole a dropped duplicate would leave
+    // in the run. Never trust the zOrder the incoming maps carry: a snapshot was
+    // numbered against a different list, and a parsed layout carries none at all.
+    updateAllZOrderValues();
     Q_EMIT zonesChanged();
     Q_EMIT zonesModified();
 }

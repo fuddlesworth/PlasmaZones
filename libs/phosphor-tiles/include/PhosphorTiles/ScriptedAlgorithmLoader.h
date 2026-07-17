@@ -8,6 +8,7 @@
 #include <QByteArray>
 #include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QString>
 
 #include <memory>
@@ -36,7 +37,9 @@ class ITileAlgorithmRegistry;
  *
  * User scripts under `writableLocation/<subdirectory>/` override system
  * scripts with the same filename (system dirs come from every XDG
- * GenericDataLocation entry, in order).
+ * GenericDataLocation entry, in order). A script may only ever shadow another
+ * script by that XDG priority, never a C++ built-in: a script whose id collides
+ * with a built-in is refused outright.
  */
 class PHOSPHORTILES_EXPORT ScriptedAlgorithmLoader : public QObject
 {
@@ -128,8 +131,8 @@ private:
     /// process-wide singleton means each composition root (daemon,
     /// editor, settings) gets its own supervisor thread.
     std::shared_ptr<PhosphorScripting::LuauWatchdog> m_watchdog;
-    /// VM shared by all trusted bundled scripts so the ~per-VM baseline + 42 KB
-    /// pluau prelude is paid once instead of per script. shared_ptr because a
+    /// VM shared by all trusted bundled scripts so the per-VM baseline plus the
+    /// `pluau` prelude is paid once instead of per script. shared_ptr because a
     /// deferred-deleted algorithm may outlive this loader and still hold (and
     /// on teardown, release its module from) this engine. Untrusted user
     /// scripts get their own isolated engines instead (not this one). Created
@@ -139,6 +142,12 @@ private:
     std::unique_ptr<LuauScanStrategy> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path
+    /// Files the last scan refused (failed to load, duplicate id, or
+    /// built-in collision). Rebuilt every scan by loadFromDirectory and
+    /// merged into the desired per-file watch list so an in-place fix of
+    /// a broken script still triggers a rescan; these files own no
+    /// registry entry, so they never appear in m_scriptIdToPath.
+    QSet<QString> m_refusedFilePaths;
     /// Signature of the last registered script set — sorted (id, path,
     /// size, mtime) digest. Used by scanAndRegister() to suppress
     /// redundant algorithmsChanged() emissions on filesystem pokes that

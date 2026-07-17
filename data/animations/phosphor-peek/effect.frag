@@ -1,0 +1,149 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Phosphor Peek — the show-desktop peek in the official Phosphor style, the
+// peek leg of the phosphor-flux / phosphor-bloom / desktop-phosphor set. The
+// windows scene de-energizes like a powered circuit shutting down: a front
+// sweeps across the screen along glowing traces, the windows drain out along
+// those traces into the brand gradient (cyan #22D3EE, blue #3B82F6, purple
+// #A855F7, rose #F43F5E), and the bare desktop is left behind the front.
+//
+// `t` is peek progress in [0,1]: the FROM texture is ALWAYS the scene with
+// windows and the TO texture ALWAYS the bare desktop, on both legs. The
+// kwin-effect reverses TIME rather than the textures — the hide leg drives t
+// 0 → 1 and the show-back leg drives it 1 → 0 — so this shader only ever
+// describes the windows-to-desktop direction and needs no reversal logic, and
+// the show leg automatically retraces it (the circuit re-energizes). Retracing
+// covers everything keyed off `t`: the front, the de-energize drain, and the
+// glow envelope. The two iFrame-driven terms below (the trace dashes and the
+// draining sparks) are decoration that runs forward on both legs, since iFrame
+// counts up per leg and this pass binds no iIsReversed.
+// Run by the screen-level desktop-transition pass, which binds uFromDesktop and
+// uToDesktop, pushes progress as iTime, and binds the p_color* slots from the
+// customColors pool at parity with the per-window and surface contracts.
+#include <desktop_transition.glsl>
+#include <noise.glsl>
+
+// Four-stop brand gradient, t in [0, 1]: cyan -> blue -> purple -> rose. Each
+// stop falls back to its brand default when its colour slot is unset.
+vec3 fluxGradient(float t) {
+    vec3 cyan   = length(p_colorCyan.rgb)   > 0.01 ? p_colorCyan.rgb   : vec3(0.133, 0.827, 0.933);
+    vec3 blue   = length(p_colorBlue.rgb)   > 0.01 ? p_colorBlue.rgb   : vec3(0.231, 0.510, 0.965);
+    vec3 purple = length(p_colorPurple.rgb) > 0.01 ? p_colorPurple.rgb : vec3(0.659, 0.333, 0.969);
+    vec3 rose   = length(p_colorRose.rgb)   > 0.01 ? p_colorRose.rgb   : vec3(0.957, 0.247, 0.369);
+    t = clamp(t, 0.0, 1.0) * 3.0;
+    vec3 c = mix(cyan, blue, clamp(t, 0.0, 1.0));
+    c = mix(c, purple, clamp(t - 1.0, 0.0, 1.0));
+    c = mix(c, rose, clamp(t - 2.0, 0.0, 1.0));
+    return c;
+}
+
+vec4 pTransition(vec2 uv, float t) {
+#ifdef PLASMAZONES_KWIN
+    float tt = clamp(t, 0.0, 1.0);
+    vec2 res = resolutionSafe();
+    float aspect = res.x / max(res.y, 1.0);
+    float density = max(p_scale, 2.0);
+
+    // Drain direction. iSwitchDelta is all zeros for a peek, so the configured
+    // direction is used directly; the default (1, 1) drains along the brand's
+    // top-left-to-bottom-right diagonal. Guard the degenerate zero vector the
+    // way desktop_transition.glsl's switchDirection() does — an epsilon nudge
+    // alone still normalizes to NaN for tiny opposing components.
+    vec2 rawDir = vec2(p_dirX, p_dirY);
+    vec2 dir = dot(rawDir, rawDir) > 1.0e-6 ? normalize(rawDir) : vec2(1.0, 0.0);
+    vec2 perp = vec2(-dir.y, dir.x);
+
+    // Position of this fragment projected onto the drain direction. The 0.7071
+    // scale maps the projection onto the full [0,1] span for a DIAGONAL
+    // direction, which is the default. An axis-aligned drain only spans
+    // [0.146, 0.854], so its front crosses empty space for a little of the
+    // sweep at each end before it reaches any fragment. The endpoint
+    // guarantees below hold either way, because the front starts and ends
+    // beyond both bounds.
+    float proj = clamp(dot(uv - 0.5, dir) * 0.7071 + 0.5, 0.0, 1.0);
+    // Meander the front along the traces so it reads as signal drain, not a
+    // straight wipe. The jitter is bounded so the endpoint guarantees hold.
+    float jitter = (fbm(uv * density * vec2(aspect, 1.0), 4, 2.0) - 0.5) * 0.18;
+    float p = proj + jitter;
+
+    // The front sweeps just past the fragment extent on each side so t = 0 is
+    // exactly the windows scene and t = 1 is exactly the desktop, whatever the
+    // softness and jitter do in between. proj is clamped to [0, 1] and jitter is
+    // bounded to [-0.09, +0.079] (fbm over the [0, 1) niriNoise), so p lands in
+    // [-0.09, 1.079]. Tying the endpoints to `soft` (rather than the old fixed
+    // [-0.6, 1.6] sized for the WORST-CASE soft = 0.4) makes the front reveal the
+    // first fragment at tt ≈ 0 and the last at tt ≈ 1 for ANY softness, so the
+    // drain uses the whole [0, 1] domain. The old fixed range finished the sweep
+    // at tt ≈ 0.85 (and started it at ≈ 0.15) at the default softness, leaving
+    // the rest of the timeline a static fully-drained frame — which an ease-out
+    // progress curve then stretched into a visible hang before the peek settled.
+    // The 0.02 margin past p ± soft plus the tt ≥ 0.96 backstop below keep both
+    // endpoints clean against the jitter bound.
+    float soft = mix(0.05, 0.4, clamp(p_softness, 0.0, 1.0));
+    float front = mix(-0.11 - soft, 1.10 + soft, tt);
+
+    // reveal: 0 = windows still here .. 1 = desktop drained through.
+    float reveal = smoothstep(p - soft, p + soft, front);
+    reveal = max(reveal, smoothstep(0.96, 1.0, tt));
+
+    vec3 col = crossFade(uv, reveal).rgb;
+
+    // Global envelope so the additive glow is exactly 0 at both endpoints and
+    // never lingers on the settled frames.
+    float env = smoothstep(0.0, 0.05, tt) * (1.0 - smoothstep(0.9, 1.0, tt));
+
+    // Distance from the front, signed: positive where the front has passed.
+    float fb = front - p;
+    // A band that peaks right on the front where the drain happens.
+    float band = smoothstep(-0.28, 0.0, fb) * (1.0 - smoothstep(0.0, 0.28, fb));
+
+    // De-energize: the windows darken just as the front reaches them, before
+    // the desktop takes over. Gated by band, so no residue at the endpoints.
+    col *= 1.0 - band * (1.0 - reveal) * clamp(p_dim, 0.0, 1.0) * 0.7;
+
+    // Traces: thin lines parallel to the drain direction, carrying dashes that
+    // flow along the drain so the windows read as pixels draining down them.
+    float across = dot(uv - 0.5, perp);
+    float freq = density * 2.0;
+    float tri = abs(fract(across * freq) - 0.5) * 2.0;
+    float line = 1.0 - smoothstep(0.0, 0.12, tri);
+    float dash = fract(proj * freq - float(iFrame) * 0.05
+                       + classicHash(floor(vec2(across * freq, 0.0))));
+    float flow = smoothstep(0.6, 1.0, dash);
+    float trace = line * (0.35 + 0.65 * flow);
+
+    // Draining sparks: brand-coloured points twinkling on the front.
+    float spark = classicHash(floor(uv * res / 6.0) + floor(float(iFrame) * 0.35));
+    spark = smoothstep(0.92, 1.0, spark);
+
+    // Brand-gradient glow riding the front, coloured by how far along the drain
+    // the local front is, brightened along the traces and by the sparks.
+    vec3 frontCol = fluxGradient(clamp(p, 0.0, 1.0));
+    float glow = clamp(p_glow, 0.0, 2.0);
+    col += frontCol * band * env * glow * (0.45 + 0.9 * trace);
+    col += frontCol * band * env * glow * spark * 0.8;
+
+    // Two opaque scenes blended stay opaque; the pass draws with blending off
+    // and replaces the screen, so alpha is a constant 1. NO bound on the rgb:
+    // the de-energize dim MULTIPLIES by a factor in [0.3, 1] (cannot flip
+    // sign) and the glow terms only ever ADD non-negative brand colour, so
+    // nothing here can push below the captures. Any clamp or max would only
+    // clip legitimate out-of-range capture values (HDR above 1.0, wide-gamut
+    // scRGB below 0), including at the exact endpoints. Nothing runs after
+    // this return to normalise it: the desktop pass keeps PZ_FINALIZE_COLOR at
+    // its identity default, because the capture FBOs already inherit the
+    // output's colorDescription and converting again would double-transform
+    // (see the kFinalizeColorBlock note in shader_transitions.cpp).
+    //
+    // This deliberately diverges from desktop-phosphor and desktop-aretha,
+    // which DO clamp their additive glow. Their clamp is the anomaly: on an HDR
+    // output it crushes capture values the blend never created. Do not "restore"
+    // it here for consistency.
+    return vec4(col, 1.0);
+#else
+    // Desktop transitions are compositor-only; the daemon never runs them.
+    // Return transparent so the pack still bakes for the daemon target.
+    return vec4(0.0);
+#endif
+}

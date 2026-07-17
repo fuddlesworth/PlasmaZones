@@ -9,31 +9,16 @@ import org.phosphor.animation
 /**
  * @brief Shared zone preview component for rendering layout zones
  *
- * Used by:
- * - KCM LayoutThumbnail for settings page previews
- * - ZoneSelectorWindow for drag-and-drop zone selection
- * - LayoutPreview for layout selection popup
+ * Instantiated directly and via LayoutCard across settings and overlay surfaces.
  *
  * Renders zones with consistent styling, gaps, numbers, and theming.
  */
 Item {
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Required Properties
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Optional Properties
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Color Properties (with sensible defaults)
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Signals
-    // ═══════════════════════════════════════════════════════════════════════════
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Zone Rendering
-    // ═══════════════════════════════════════════════════════════════════════════
-
     id: root
+
+    // Settings-embedded preview — resolve theme roles against the View set
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
 
     /// Array of zone objects with relativeGeometry: { x, y, width, height }
     required property var zones
@@ -64,26 +49,27 @@ Item {
     /// Plasma's system animation-speed preference still applies. Consumers
     /// (`LayoutCard.qml`, `AlgorithmPreview.qml`) override per-instance.
     property int animationDuration: Kirigami.Units.shortDuration
-    /// Whether zone click/hover signals are enabled (disable for thumbnail use)
-    property bool interactive: false
-    /// Whether all zones highlight together when any is selected
-    property bool highlightAllZones: false
     /// Array of zone IDs to highlight (for navigation OSD zone highlighting)
     property var highlightedZoneIds: []
+    /// Whether specific zones are singled out, by index or by zone ID. The
+    /// card-level `isActive` / `isHovered` states must not light every zone
+    /// while this holds, or the singled-out zone renders identically to its
+    /// siblings and the selection is invisible. Consumers that pass no per-zone
+    /// selection (layout picker, OSD, settings thumbnails) keep the whole-card
+    /// highlight.
+    readonly property bool hasZoneSelection: root.selectedZoneIndex >= 0 || (root.highlightedZoneIds && root.highlightedZoneIds.length > 0)
     /// Zone fill opacity when not active/hovered
     property real inactiveOpacity: 0.25
     /// Zone fill opacity when active/hovered
     property real activeOpacity: 0.45
-    /// Highlight color for selected zones (default: theme highlight)
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    /// Inactive color for non-selected zones (default: theme text)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    /// Border color (default: theme text)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    /// Highlight color for selected zones (default: shared View-set highlight)
+    property color highlightColor: ZoneColorDefaults.previewActiveZoneColor
+    /// Inactive color for non-selected zones (default: shared View-set surface)
+    property color inactiveColor: ZoneColorDefaults.previewInactiveZoneColor
+    /// Border color (default: shared View-set separator)
+    property color borderColor: ZoneColorDefaults.previewZoneBorderColor
     /// Label font color for zone numbers (default: theme text)
     property color labelFontColor: Kirigami.Theme.textColor
-    /// Scale factor when zone is hovered (1.0 = no scale, set > 1.0 to enable)
-    property real hoverScale: 1
     /// Font properties for zone number labels
     property string fontFamily: ""
     property real fontSizeScale: 1
@@ -96,16 +82,17 @@ Item {
     /// Number of master zones to mark with indicator dots
     property int masterCount: 1
 
-    /// Emitted when a zone is hovered
-    signal zoneHovered(int index)
-
     Repeater {
-        // Brighter border when hovered
-
         model: root.zones || []
 
         delegate: Rectangle {
             id: zoneRect
+
+            // The zone selector hit-tests the cursor in C++ by reading these
+            // delegates' rendered geometry (selector.cpp::updateSelectorPosition)
+            // rather than replaying the layout math below. Renaming this breaks
+            // per-zone highlighting silently, so it is part of the contract.
+            objectName: "zonePreviewZone"
 
             required property var modelData
             required property int index
@@ -114,23 +101,18 @@ Item {
             // Zones may come from LayoutPreview (flat x/y/w/h) or the legacy
             // zonesToVariantList shape (nested relativeGeometry); prefer flat,
             // fall back to nested.
-            property var relGeo: modelData.relativeGeometry || ({
-            })
+            property var relGeo: modelData.relativeGeometry || ({})
             property real relX: Math.max(0, Math.min((modelData.x !== undefined ? modelData.x : (relGeo.x || 0)), 1))
             property real relY: Math.max(0, Math.min((modelData.y !== undefined ? modelData.y : (relGeo.y || 0)), 1))
             property real relWidth: Math.max(0, Math.min((modelData.width !== undefined ? modelData.width : (relGeo.width || 0.25)), 1 - relX))
             property real relHeight: Math.max(0, Math.min((modelData.height !== undefined ? modelData.height : (relGeo.height || 1)), 1 - relY))
-            // Check if this zone is selected (by index, highlightAllZones, or by zone ID)
+            // Check if this zone is selected (by index or by zone ID)
             property bool isZoneSelected: {
-                // Highlight all zones when any is selected (highlightAllZones mode)
-                if (root.highlightAllZones && root.selectedZoneIndex >= 0)
-                    return true;
-
-                // Option 2: Highlight by index (layout selector mode)
+                // Option 1: Highlight by index (layout selector mode)
                 if (root.selectedZoneIndex === index)
                     return true;
 
-                // Option 3: Highlight by zone ID (navigation OSD mode)
+                // Option 2: Highlight by zone ID (navigation OSD mode)
                 // Note: QStringList from C++ becomes QVariantList in QML, so we need
                 // to iterate and compare strings explicitly (indexOf may not work)
                 if (root.highlightedZoneIds && root.highlightedZoneIds.length > 0) {
@@ -139,14 +121,15 @@ Item {
                         for (var i = 0; i < root.highlightedZoneIds.length; i++) {
                             if (String(root.highlightedZoneIds[i]) === String(zoneId))
                                 return true;
-
                         }
                     }
                 }
                 return false;
             }
-            // Track per-zone hover state
-            property bool isZoneHovered: root.interactive && zoneMouseArea.containsMouse
+            /// Whether this zone renders in the highlighted state. The card-level
+            /// states only apply when no specific zone is singled out — see
+            /// `root.hasZoneSelection`.
+            readonly property bool isZoneHighlighted: isZoneSelected || (!root.hasZoneSelection && (root.isActive || root.isHovered))
             // Detect screen boundaries (tolerance 0.01)
             readonly property real edgeTolerance: 0.01
             readonly property real leftGap: relX < edgeTolerance ? root.edgeGap : root.zonePadding / 2
@@ -160,27 +143,23 @@ Item {
             y: root.producesOverlappingZones ? (relY * root.height) : (relY * root.height + topGap)
             width: root.producesOverlappingZones ? Math.max(root.minZoneSize, relWidth * root.width) : Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
             height: root.producesOverlappingZones ? Math.max(root.minZoneSize, relHeight * root.height) : Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
-            // Scale on hover (only if hoverScale > 1.0)
-            scale: isZoneHovered && root.hoverScale > 1 ? root.hoverScale : 1
-            z: isZoneHovered ? 10 : 1
-            transformOrigin: Item.Center
-            // Zone fill color - use highlight color when selected/hovered, inactive color otherwise
+            // Zone fill color - use highlight color when selected/hovered, inactive color otherwise.
+            // The configured fill opacity is baked into the FILL colour's alpha
+            // (discarding the colour's own carried alpha so the two don't
+            // multiply), matching the live shader overlay where only FillA
+            // carries the opacity (overlay_data.cpp sets FillA = activeOpacity
+            // and leaves border alpha untouched). Delegate `opacity` must stay
+            // 1 — it would multiply into the border AND the zone-number label,
+            // dimming both far below the pipeline values.
+            // The plain border below keeps its colour's carried alpha
+            // deliberately (pipeline border alpha ≈0.78 matches the live
+            // overlay), while the fill strips its own.
             color: {
-                var isHighlighted = root.isActive || root.isHovered || isZoneSelected || isZoneHovered;
-                if (isHighlighted)
-                    return root.highlightColor;
-
-                return root.inactiveColor;
+                var base = isZoneHighlighted ? root.highlightColor : root.inactiveColor;
+                return Qt.rgba(base.r, base.g, base.b, isZoneHighlighted ? root.activeOpacity : root.inactiveOpacity);
             }
-            opacity: (root.isActive || root.isHovered || isZoneSelected || isZoneHovered) ? root.activeOpacity : root.inactiveOpacity
-            // Border - brighter on hover
-            border.color: {
-                if (isZoneHovered)
-                    return Qt.rgba(Math.min(1, root.highlightColor.r * 1.2), Math.min(1, root.highlightColor.g * 1.2), Math.min(1, root.highlightColor.b * 1.2), 1);
-
-                return root.borderColor;
-            }
-            border.width: (isZoneSelected || isZoneHovered) ? 2 : 1
+            border.color: root.borderColor
+            border.width: isZoneSelected ? 2 : 1
             radius: Kirigami.Units.smallSpacing * 0.5
 
             // Zone number label
@@ -195,7 +174,7 @@ Item {
                 font.strikeout: root.fontStrikeout
                 font.family: root.fontFamily
                 color: root.labelFontColor
-                opacity: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? 0.9 : 0.6
+                opacity: zoneRect.isZoneHighlighted ? 0.9 : 0.6
                 visible: {
                     if (!root.showZoneNumbers)
                         return false;
@@ -210,9 +189,9 @@ Item {
                     case "first":
                         return index === 0;
                     case "last":
-                        return index === root.zones.length - 1;
+                        return index === (root.zones || []).length - 1;
                     case "firstAndLast":
-                        return index === 0 || index === root.zones.length - 1;
+                        return index === 0 || index === (root.zones || []).length - 1;
                     default:
                         return true; // "all"
                     }
@@ -225,23 +204,10 @@ Item {
                         // select state). Reading `opacity` itself would never
                         // pick the fadeOut leg — the binding only moves
                         // between 0.6 and 0.9, both of which are > 0.5.
-                        profile: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? "widget.fadeIn" : "widget.fadeOut"
+                        profile: zoneRect.isZoneHighlighted ? "widget.fadeIn" : "widget.fadeOut"
                         durationOverride: root.animationDuration
                     }
-
                 }
-
-            }
-
-            // Mouse interaction for zone selection (only when interactive)
-            MouseArea {
-                id: zoneMouseArea
-
-                anchors.fill: parent
-                anchors.margins: -Math.round(Kirigami.Units.smallSpacing / 2) // Slightly larger hit area
-                hoverEnabled: root.interactive && root.visible
-                enabled: root.interactive
-                onEntered: root.zoneHovered(index)
             }
 
             // Animations — durationOverride binds to root.animationDuration
@@ -252,25 +218,6 @@ Item {
                     profile: "widget.zoneHighlight"
                     durationOverride: root.animationDuration
                 }
-
-            }
-
-            Behavior on opacity {
-                PhosphorMotionAnimation {
-                    profile: "widget.zoneHighlight"
-                    durationOverride: root.animationDuration
-                }
-
-            }
-
-            Behavior on scale {
-                // OutBack overshoot=1.20 feel — restored faithfully via the
-                // osd-pop curve referenced through widget.zoneHighlight.pop.
-                PhosphorMotionAnimation {
-                    profile: "widget.zoneHighlight.pop"
-                    durationOverride: root.animationDuration
-                }
-
             }
 
             // Border feedback uses the half-duration widget.zoneHighlight.border
@@ -281,7 +228,6 @@ Item {
                     profile: "widget.zoneHighlight.border"
                     durationOverride: Math.round(root.animationDuration / 2)
                 }
-
             }
 
             Behavior on border.width {
@@ -289,11 +235,8 @@ Item {
                     profile: "widget.zoneHighlight.border"
                     durationOverride: Math.round(root.animationDuration / 2)
                 }
-
             }
-
         }
-
     }
 
     // Master indicator dots overlaid on master zone(s) for autotile algorithms
@@ -303,12 +246,14 @@ Item {
         Rectangle {
             required property var modelData
             required property int index
-            readonly property var relGeo: modelData.relativeGeometry || ({
-            })
-            readonly property real relX: modelData.x !== undefined ? modelData.x : (relGeo.x || 0)
-            readonly property real relY: modelData.y !== undefined ? modelData.y : (relGeo.y || 0)
-            readonly property real leftOffset: relX < 0.01 ? root.edgeGap : root.zonePadding / 2
-            readonly property real topOffset: relY < 0.01 ? root.edgeGap : root.zonePadding / 2
+            // Mirror the zone rect's geometry handling above: [0,1]-clamped
+            // relative coordinates, and gap offsets skipped for overlapping
+            // layouts so the dot tracks the zone's actual rendered origin.
+            readonly property var relGeo: modelData.relativeGeometry || ({})
+            readonly property real relX: Math.max(0, Math.min((modelData.x !== undefined ? modelData.x : (relGeo.x || 0)), 1))
+            readonly property real relY: Math.max(0, Math.min((modelData.y !== undefined ? modelData.y : (relGeo.y || 0)), 1))
+            readonly property real leftOffset: root.producesOverlappingZones ? 0 : (relX < 0.01 ? root.edgeGap : root.zonePadding / 2)
+            readonly property real topOffset: root.producesOverlappingZones ? 0 : (relY < 0.01 ? root.edgeGap : root.zonePadding / 2)
 
             visible: index < root.masterCount
             Accessible.ignored: true
@@ -317,9 +262,7 @@ Item {
             width: Kirigami.Units.smallSpacing * 2
             height: Kirigami.Units.smallSpacing * 2
             radius: Kirigami.Units.smallSpacing
-            color: Kirigami.Theme.positiveTextColor
+            color: Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, 1)
         }
-
     }
-
 }

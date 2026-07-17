@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -84,9 +83,9 @@ Item {
         implicitWidth: pillRow.implicitWidth + Kirigami.Units.largeSpacing
         implicitHeight: pillRow.implicitHeight + Kirigami.Units.smallSpacing
         radius: height / 2
-        color: pillMouse.containsMouse || popup.visible ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
-        border.width: Math.round(Screen.devicePixelRatio)
-        border.color: chip.isPerScreen || popup.visible ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+        color: pillMouse.containsMouse || popup.visible ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.12)) : Kirigami.Theme.alternateBackgroundColor
+        border.width: 1
+        border.color: chip.isPerScreen || popup.visible ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.6) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
         RowLayout {
             id: pillRow
@@ -143,8 +142,11 @@ Item {
             activeFocusOnTab: true
             Accessible.role: Accessible.ButtonDropDown
             Accessible.name: i18nc("@action", "Scope: %1", chip.label)
+            Accessible.focusable: true
             Keys.onSpacePressed: popup.visible ? popup.close() : popup.open()
             Keys.onReturnPressed: popup.visible ? popup.close() : popup.open()
+            // Numpad Enter alias, matching the sibling card components.
+            Keys.onEnterPressed: popup.visible ? popup.close() : popup.open()
             onClicked: popup.visible ? popup.close() : popup.open()
         }
 
@@ -166,12 +168,34 @@ Item {
         id: popup
 
         y: pill.height + Kirigami.Units.smallSpacing
+        // Non-negative margins opt into QQuickPopup's window-edge clamping
+        // (same mechanism as WideComboBox's popup): without them the
+        // margins stay at the default -1 (no clamping) and a chip near the
+        // window's bottom or right edge pushes the popover off-screen.
+        topMargin: Kirigami.Units.smallSpacing
+        bottomMargin: Kirigami.Units.smallSpacing
+        leftMargin: Kirigami.Units.smallSpacing
+        rightMargin: Kirigami.Units.smallSpacing
         padding: Kirigami.Units.largeSpacing
         modal: false
         focus: true
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // CloseOnPressOutsideParent, NOT CloseOnPressOutside: a press on the
+        // chip itself must not auto-close the popup, or the chip's own
+        // click-toggle races it (policy closes on press, then the release's
+        // click sees a closed popup and reopens it). Presses on the chip are
+        // inside the parent, so only the toggle handler acts on them.
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
         contentItem: ColumnLayout {
+            // A colorSet pinned on the Popup node itself is inert: the theme
+            // attachment resolves through the *item* parent chain, and both
+            // contentItem and background reparent to the popup item (under
+            // Overlay), never to the Popup object. So — matching upstream
+            // qqc2 ToolTip.qml — the View set is pinned here and on the
+            // background Rectangle so DisplayMap, the Reset button, and the
+            // frame all resolve content-surface colours.
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             spacing: Kirigami.Units.smallSpacing
 
             DisplayMap {
@@ -197,10 +221,15 @@ Item {
         }
 
         background: Rectangle {
+            // Same pin as the contentItem root (see comment there): the
+            // background parents to the popup item, not the Popup object, so
+            // it needs its own View pin to escape the Overlay's palette.
+            Kirigami.Theme.colorSet: Kirigami.Theme.View
+            Kirigami.Theme.inherit: false
             radius: Kirigami.Units.smallSpacing * 1.5
             color: Kirigami.Theme.backgroundColor
-            border.width: Math.round(Screen.devicePixelRatio)
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+            border.width: 1
+            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
         }
     }
 }

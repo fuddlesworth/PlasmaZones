@@ -34,7 +34,7 @@ QStringList discoverDataDirs(QLatin1StringView xdgRelative)
     // the writable user location FIRST, system dirs AFTER. The loader
     // iterates in caller-supplied order and lets later entries override
     // earlier on key collision, so we reverse to achieve the standard
-    // "system first, user wins last" layering (decision X). Matches
+    // "system first, user wins last" layering. Matches
     // LayoutManager::loadLayouts.
     QStringList dirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QString(xdgRelative),
                                                  QStandardPaths::LocateDirectory);
@@ -83,11 +83,9 @@ AnimationLoaderHandles constructAnimationLoaders(PhosphorAnimation::CurveRegistr
     QDir().mkpath(writableUserDir(QLatin1StringView{"plasmazones/profiles"}));
 
     // Construct loaders with NO initial load — callers run the scan
-    // explicitly (via runInitialAnimationLoad) AFTER they have wired
-    // any consumer-side signals so the initial scan's emits are
-    // observed. The daemon needs this; secondary processes call
-    // runInitialAnimationLoad immediately and have no pre-load wiring
-    // to set up.
+    // explicitly (runInitialCurveLoad → seedShellAnimationFamilies →
+    // runInitialProfileLoad) AFTER they have wired any consumer-side
+    // signals so the initial scan's emits are observed.
     //
     // Registry reference is captured at loader construction — this
     // prevents any later async rescan from landing on a different
@@ -131,16 +129,6 @@ void runInitialProfileLoad(PhosphorAnimation::ProfileLoader& profileLoader, cons
 
     profileLoader.loadLibraryBuiltins();
     profileLoader.loadFromDirectories(dirs.profileDirs, LiveReload::On);
-}
-
-void runInitialAnimationLoad(PhosphorAnimation::CurveLoader& curveLoader,
-                             PhosphorAnimation::ProfileLoader& profileLoader, const AnimationLoaderDirs& dirs)
-{
-    // Curves first so any profile JSON referencing a user-authored curve
-    // resolves on first parse rather than waiting for the curveLoader→
-    // profileLoader rescan wire to fire on the second pass.
-    runInitialCurveLoad(curveLoader, dirs);
-    runInitialProfileLoad(profileLoader, dirs);
 }
 
 void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& registry,
@@ -233,10 +221,11 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         {QLatin1StringView{"widget.pulse.slow"}, QLatin1StringView{"cubic-bezier:0.45,0.0,0.55,1.0"}, 1500.0},
 
         // ── Windows ───────────────────────────────────────────────
-        // Family ease-out for open/move/resize/focus/maximize;
-        // close is the notable ease-in exception.
+        // Family ease-out for open/move/focus/maximize;
+        // close is the notable ease-in exception. (No resize legs exist —
+        // they were dropped from the taxonomy, see profilepaths.cpp.)
         {QLatin1StringView{"window"}, QLatin1StringView{"widget-out"}, 200.0},
-        {QLatin1StringView{"window.close"}, QLatin1StringView{"cubic-in"}, 150.0},
+        {QLatin1StringView{"window.appearance.close"}, QLatin1StringView{"cubic-in"}, 150.0},
 
         // ── Editor ────────────────────────────────────────────────
         // Layout-editor fill-preview / snap-resize animations on the
@@ -250,10 +239,20 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
         // highlight family root inherits the widget OutCubic feel.
         {QLatin1StringView{"widget.zoneHighlight"}, QLatin1StringView{"widget-out"}, 200.0},
 
-        // No `workspace.*` seeds: virtual-desktop transitions are KWin's
-        // compositor-level domain (Slide / Fade Desktop / etc.). PZ does
-        // not run a parallel animation in that lane to avoid double
-        // transforms and bypassing the user's KWin effect choice.
+        // No `desktop.*` motion seeds — and NOT because a seed here would be
+        // unread. It would be read: the daemon runs this same function on its
+        // own registry (daemon.cpp), and settingsadaptor's `motionProfileTree`
+        // getter flattens that registry's snapshot into the tree the
+        // kwin-effect fetches over D-Bus, where every non-`Global` path becomes
+        // an OVERRIDE. An override beats the caller's base in overlayChainOnto,
+        // so a `desktop` seed would shadow the user's global animation duration
+        // and curve for both desktop legs — and the desktop transitions are
+        // specifically designed to INHERIT them, so that the global slider
+        // retimes them (see the desktopChanged and showingDesktopChanged
+        // handlers in lifecycle.cpp). Unseeded, they fall through to the
+        // animator's global profile, which is the contract. Seeds also exist to
+        // preserve prior bundled-JSON character, and these transitions are new:
+        // there is no prior tuning to preserve.
     }};
 
     for (const auto& seed : seeds) {

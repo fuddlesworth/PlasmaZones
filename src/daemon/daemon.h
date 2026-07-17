@@ -40,6 +40,10 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PhosphorSurfaceShaders {
+class SurfaceShaderRegistry;
+}
+
 namespace PhosphorEngine {
 class WindowRegistry;
 }
@@ -49,15 +53,19 @@ class ActivityManager;
 class VirtualDesktopManager;
 }
 
-// PhosphorWindowRules::WindowRuleSet is held as a value member below
-// (m_excludeRuleSet) — needs a complete type, so include the header
-// rather than forward-declare. WindowRuleStore stays in the header by
-// pointer only; including WindowRuleSet.h leaves the store forward
-// declared here.
-#include <PhosphorWindowRules/WindowRuleSet.h>
+namespace PhosphorServiceIdle {
+class IdleService;
+}
 
-namespace PhosphorWindowRules {
-class WindowRuleStore;
+// PhosphorRules::RuleSet is held as a value member below
+// (m_excludeRuleSet) — needs a complete type, so include the header
+// rather than forward-declare. RuleStore stays in the header by
+// pointer only; including RuleSet.h leaves the store forward
+// declared here.
+#include <PhosphorRules/RuleSet.h>
+
+namespace PhosphorRules {
+class RuleStore;
 }
 
 namespace PhosphorZones {
@@ -89,7 +97,7 @@ class OverlayAdaptor;
 class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class WindowDragAdaptor;
-class WindowRuleAdaptor;
+class RuleAdaptor;
 class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
@@ -271,6 +279,44 @@ private:
      */
     void setupAnimationProfiles();
     void setupAnimationShaderEffects();
+    void setupSurfaceShaderEffects();
+
+    /// Watch the session going idle and push it to the KWin effect, which pauses
+    /// decoration-chain animation on it. See m_idleService for why the daemon owns this
+    /// rather than the effect.
+    ///
+    /// Called from init(), and again from start() after a stop(). A TIMEOUT change does not
+    /// come through here — it re-arms the ladder via refreshIdleStages() — and the
+    /// PauseWhenIdle toggle re-arms nothing at all, deliberately (see idle.cpp).
+    void setupIdleService();
+
+    /// (Re)arm the idle ladder from the current timeout. A single stage, armed whenever
+    /// the compositor supports idle notification — NOT torn down when PauseWhenIdle goes
+    /// off (an empty ladder cannot tell us the seat is already idle when the user turns
+    /// the feature back on). Called from init() and whenever the timeout moves.
+    void refreshIdleStages();
+
+    /// Disconnect every connection setupIdleService made whose sender outlives the idle
+    /// service, and forget them. Used by BOTH stop() and a re-entrant setupIdleService, so
+    /// a second setup cannot stack duplicates on top of live connections.
+    void teardownIdleConnections();
+
+    /// Is the session idle, as far as decoration pausing is concerned?
+    ///
+    /// The seat being idle is a FACT (the ladder reports it whenever the compositor
+    /// supports idle notification). Pausing on it is a CHOICE (the PauseWhenIdle setting).
+    /// This is the single place the two are combined, so the toggle cannot be honoured on
+    /// one publishing path and forgotten on another.
+    [[nodiscard]] bool sessionIdleNow() const;
+
+    /// Announce the session's idle state to the KWin effect, on CHANGE only.
+    ///
+    /// The idle service can report the same state more than once, and a redundant emit
+    /// is a D-Bus broadcast that says nothing (the effect does dedupe it at its own
+    /// door, so it costs traffic rather than repaints). @p force overrides the change
+    /// check for the one case where our last published value is not the question: a
+    /// client that just (re)connected and knows nothing of it.
+    void publishSessionIdle(bool idle, bool force = false);
     /// Push the current `Settings::animationProfile()` into the registry
     /// under the shell's well-known paths. Called from
     /// `setupAnimationProfiles()` at startup and from the coalescing
@@ -497,6 +543,30 @@ private:
     void updateAutotileScreens();
 
     /**
+     * @brief React to a rule change that may have altered active assignments.
+     *
+     * The unified rule store emits rulesChanged on any rule edit, but only a
+     * change to the ACTIVE context's resolved assignment needs windows moved.
+     * Diffs each screen's resolved assignment id against the snapshot; for the
+     * screens that changed, retiles autotile screens (updateAutotileScreens
+     * self-diffs) and drives the legacy resnap/OSD path via the LayoutAdaptor
+     * (markScreensChanged + applyAssignmentChanges). A no-op when nothing
+     * assignment-affecting changed (appearance / exclude / lock edits, etc.).
+     */
+    void reconcileActiveAssignments();
+
+    /**
+     * @brief Recompute each effective screen's active assignment id and return
+     *        the set whose id differs from @ref m_activeAssignmentByScreen,
+     *        updating the snapshot to the new values (dropping removed screens).
+     *
+     * Called by reconcileActiveAssignments (with apply) and, with the result
+     * discarded, to refresh the snapshot after a context switch or a legacy
+     * apply so a later rule edit doesn't falsely re-resnap those screens.
+     */
+    QSet<QString> diffActiveAssignments();
+
+    /**
      * @brief Respond to a PhosphorScreens::ScreenManager VS cache change for a physical screen
      *
      * Wired to PhosphorScreens::ScreenManager::virtualScreensChanged. Performs the post-change
@@ -565,14 +635,14 @@ private:
     void syncModeFromAssignments();
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
-    // Unified WindowRule store (windowrules.json). Declared BEFORE
+    // Unified Rule store (rules.json). Declared BEFORE
     // m_layoutManager because the LayoutRegistry borrows it for its
     // rule-backed assignment cascade — construction order must build the
-    // store first. The WindowRuleAdaptor borrows it too.
-    std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_windowRuleStore;
-    // Filtered slice of m_windowRuleStore — only rules whose action list
+    // store first. The RuleAdaptor borrows it too.
+    std::unique_ptr<PhosphorRules::RuleStore> m_ruleStore;
+    // Filtered slice of m_ruleStore — only rules whose action list
     // contains a terminal `Exclude`. Built via
-    // `PhosphorWindowRules::ExclusionRules::excludeRulesFrom` and kept in
+    // `PhosphorRules::ExclusionRules::excludeRulesFrom` and kept in
     // lockstep with the unified store via the rulesChanged subscription
     // wired in init(). SnapEngine borrows a pointer into this set for its
     // `isAppIdExcluded` probe; the WindowTrackingAdaptor's
@@ -583,9 +653,9 @@ private:
     // back-to-back resolves. Replaces a legacy QStringList-based settings
     // path that derived the equivalent set from two flat string lists —
     // see configmigration.cpp::migrateV3ToV4 for the schema fold; the
-    // unified `PhosphorWindowRules::ExclusionRules` namespace now does the
+    // unified `PhosphorRules::ExclusionRules` namespace now does the
     // slicing across both the daemon and the kwin-effect.
-    PhosphorWindowRules::WindowRuleSet m_excludeRuleSet;
+    PhosphorRules::RuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old
     // AlgorithmRegistry::instance() singleton — per-process ownership is
@@ -693,6 +763,56 @@ private:
     /// be declared AFTER m_screenManager so the initializer-list construction
     /// order matches.
     std::unique_ptr<OverlayService> m_overlayService;
+    /// Session-idle detection for Decorations.Performance.PauseWhenIdle.
+    ///
+    /// Owned by the DAEMON, not the effect: idleness arrives over
+    /// `ext-idle-notify-v1`, which is a Wayland CLIENT protocol. The effect lives
+    /// inside the compositor, which SERVES that protocol rather than consuming it,
+    /// so it cannot watch for its own session going idle. The daemon is already a
+    /// Wayland client, so it watches and pushes the resolved boolean to the effect
+    /// over D-Bus (SettingsAdaptor::sessionIdleChanged).
+    ///
+    /// The effect pauses decoration-chain animation while idle. That is the only
+    /// lever that lets the GPU leave its top performance state: an animated pack
+    /// repaints every window carrying it on every vsync, and it is the EXISTENCE of
+    /// per-frame work, not its size, that holds the clocks up.
+    std::unique_ptr<PhosphorServiceIdle::IdleService> m_idleService;
+
+    /// Coalesces idle-ladder rebuilds. Rearming is not free and not silent — it
+    /// destroys and recreates the compositor's ext-idle-notify-v1 object, and while
+    /// the session is idle it announces a resume, which wakes every decorated window.
+    /// The "Idle after" slider writes on every step of a drag, so the rebuild is
+    /// deferred to one net reconfigure once the value settles.
+    QTimer m_idleStagesRefreshTimer;
+    static constexpr int kIdleStagesRefreshDebounceMs = 250;
+
+    /// Retry budget for an idle ladder that would not arm. The failure this covers is a
+    /// login race (the seat's input devices are not advertised yet), so it resolves in well
+    /// under a second or it is not going to resolve at all — a handful of tries a second
+    /// apart is generous. When the budget runs out the feature degrades to off, which is
+    /// what it silently did before anyone was checking.
+    static constexpr int kIdleArmRetries = 5;
+    static constexpr int kIdleArmRetryDelayMs = 1000;
+    int m_idleArmRetriesLeft = kIdleArmRetries;
+
+    /// The last idle state we announced. The effect starts up assuming an active
+    /// session, so this starts false and the two agree from the outset.
+    bool m_publishedSessionIdle = false;
+
+    /// This compositor has no ext-idle-notify-v1, established once. m_idleService is null in
+    /// that case, which is indistinguishable from "not built yet" — so start()'s re-arm,
+    /// which guards on exactly that, would rebuild and re-probe the service on every
+    /// stop()→start() cycle and log the unsupported notice again each time.
+    bool m_idleUnsupported = false;
+
+    /// Every connection setupIdleService made whose SENDER outlives m_idleService: the two
+    /// settings signals, the debounce timer (a value member), and bridgeRegistered when a
+    /// compositor bridge exists (conditional, so three or four). Held so
+    /// stop() severs exactly these — not, say, every connection m_settings has to us, most
+    /// of which are made in the constructor or init() and would never come back on a
+    /// stop()→start() cycle — and so a re-armed service cannot stack duplicates.
+    QList<QMetaObject::Connection> m_idleConnections;
+
     std::unique_ptr<PhosphorWorkspaces::VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<PhosphorWorkspaces::ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;
@@ -714,12 +834,12 @@ private:
     // window (and any queued D-Bus call landing in that window would UAF).
     ShaderAdaptor* m_shaderAdaptor = nullptr;
     ControlAdaptor* m_controlAdaptor = nullptr;
-    // Unified WindowRule store + its D-Bus adaptor. The store owns
-    // windowrules.json (daemon sole writer); the adaptor exposes it on
-    // org.plasmazones.WindowRules. Adaptor is Qt-parented (raw pointer); it
+    // Unified Rule store + its D-Bus adaptor. The store owns
+    // rules.json (daemon sole writer); the adaptor exposes it on
+    // org.plasmazones.Rules. Adaptor is Qt-parented (raw pointer); it
     // borrows the store, so stop() calls detach() before the store unique_ptr
     // is destroyed.
-    WindowRuleAdaptor* m_windowRuleAdaptor = nullptr;
+    RuleAdaptor* m_ruleAdaptor = nullptr;
     // Compositor bridge adaptor (KWin effect ↔ daemon protocol endpoint).
     // Parented to `this`; holds only plain state, so it needs no detach().
     CompositorBridgeAdaptor* m_compositorBridge = nullptr;
@@ -780,6 +900,18 @@ private:
     /// before this registry is reset, preventing dangling-pointer
     /// access during shutdown.
     std::unique_ptr<PhosphorAnimationShaders::AnimationShaderRegistry> m_animationShaderRegistry;
+
+    /// Surface shader effect discovery (window border / rounded corners / glow
+    /// — the third shader-pack category beside zone shaders + animation
+    /// transitions). Scans `plasmazones/surface` from XDG data dirs and monitors
+    /// for user-dropped packs via QFileSystemWatcher, mirroring
+    /// m_animationShaderRegistry. The daemon warm-bakes discovered packs so the
+    /// first surface paint never blocks on glslang, and lends the registry to
+    /// the overlay service (setSurfaceShaderRegistry, Stage d) whose
+    /// SurfaceShaderItem hosts render decoration packs on OSD / popup surfaces.
+    /// Declared AFTER m_overlayService: stop() nulls the overlay's borrow
+    /// before resetting this registry.
+    std::unique_ptr<PhosphorSurfaceShaders::SurfaceShaderRegistry> m_surfaceShaderRegistry;
 
     /// Phase 4 sub-commit 7: user-authored curve / profile scanners.
     /// Scan `plasmazones/curves` and `plasmazones/profiles` from XDG
@@ -854,8 +986,20 @@ private:
      */
     void pruneAutotileOrdersForWindow(const QString& instanceId);
 
+    /// Arm OSD suppression for @p count upcoming resnap feedback signals. ADDS
+    /// to the running count (never clobbers) so overlapping async resnap streams
+    /// accumulate instead of overwriting each other, and (re)starts the watchdog
+    /// so a primed feedback that never arrives can't leave the counter stuck. A
+    /// non-positive @p count is a no-op. See @ref m_suppressResnapOsd.
+    void armResnapOsdSuppression(int count);
+
     bool m_running = false;
     int m_suppressResnapOsd = 0;
+    /// Bounds @ref m_suppressResnapOsd leakage: a resnap that produces zero
+    /// moves emits no feedback, so without this the count would stay armed and
+    /// suppress the next unrelated OSD. Reset to 0 on timeout; re-armed by
+    /// @ref armResnapOsdSuppression.
+    QTimer m_suppressResnapOsdWatchdog;
 
     /// Shutdown flag — set by `aboutToQuit`, `stop()`. Gates `shouldSuppressOsd()`.
     bool m_shuttingDown = false;
@@ -909,6 +1053,20 @@ private:
     // Keyed by TilingStateKey (not plain screen name) so cross-desktop toggles
     // don't overwrite each other's ordering.
     QHash<TilingStateKey, QStringList> m_lastAutotileOrders;
+
+    // Last-applied active assignment id per effective screen (resolved for that
+    // screen's current desktop/activity). Diffed on rulesChanged to find the
+    // screens a rule edit actually moved; refreshed on context switches and
+    // after any apply so a later edit doesn't falsely re-resnap. See
+    // reconcileActiveAssignments / diffActiveAssignments.
+    QHash<QString, QString> m_activeAssignmentByScreen;
+
+    // Last observed tiled-window count per screen, tracked so the engine's
+    // placementChanged stream only re-resolves the per-screen tiling algorithm
+    // when the count actually changes (a Field::TiledWindowCount rule keys on
+    // it). Without this gate every retile (drag, resize) would re-walk the
+    // assignment cascade.
+    QHash<QString, int> m_lastTiledCountByScreen;
 
     // Snap-float restore entries collected during windowsReleasedFromTiling.
     // Consumed by the toggle handler to batch geometry restores into the resnap signal.

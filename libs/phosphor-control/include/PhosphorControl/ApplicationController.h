@@ -44,6 +44,8 @@ class PHOSPHORCONTROL_EXPORT ApplicationController : public QObject
     Q_PROPERTY(PhosphorControl::PageRegistry* registry READ registry CONSTANT)
     Q_PROPERTY(bool dirty READ isDirty NOTIFY dirtyChanged)
     Q_PROPERTY(QString currentPageId READ currentPageId WRITE setCurrentPageId NOTIFY currentPageIdChanged)
+    Q_PROPERTY(bool canGoBack READ canGoBack NOTIFY historyChanged)
+    Q_PROPERTY(bool canGoForward READ canGoForward NOTIFY historyChanged)
     Q_PROPERTY(bool applying READ isApplying NOTIFY applyingChanged)
     Q_PROPERTY(bool discarding READ isDiscarding NOTIFY discardingChanged)
     QML_NAMED_ELEMENT(ApplicationController)
@@ -67,6 +69,22 @@ public:
 
     QString currentPageId() const;
     void setCurrentPageId(const QString& id);
+
+    /** Browser-style navigation history over `currentPageId`.
+     *
+     *  Every ORDINARY page change (sidebar click, deep link, CLI --page,
+     *  gotoPrevious/NextPage, …) pushes the page it left onto the back
+     *  stack and clears the forward stack — exactly the browser model.
+     *  `goBack()` / `goForward()` move along the recorded trail without
+     *  re-recording (they shuffle entries between the two stacks instead).
+     *  Both return the page id landed on, or an empty string when there
+     *  was nowhere to go. Stale entries (pages unregistered after being
+     *  visited) are skipped and dropped. History depth is capped at
+     *  kMaxHistoryEntries; the oldest entry falls off first. */
+    bool canGoBack() const;
+    bool canGoForward() const;
+    Q_INVOKABLE QString goBack();
+    Q_INVOKABLE QString goForward();
 
     /** Deep-link reveal latch (generic — every settings app built on this
      *  shell gets deep-link-to-anchor for free).
@@ -160,6 +178,10 @@ public:
 Q_SIGNALS:
     void dirtyChanged();
     void currentPageIdChanged();
+    /// Emitted when canGoBack / canGoForward may have flipped (shared
+    /// NOTIFY for both properties — they always change together or not
+    /// at all from the QML binding system's perspective).
+    void historyChanged();
     /// Emitted when the deep-link pending anchor is set or cleared. PageHost
     /// listens so an already-current page reveals immediately.
     void pendingAnchorChanged();
@@ -198,6 +220,17 @@ private:
     PageRegistry* m_registry = nullptr;
     QList<QPointer<StagingDomain>> m_domains;
     QString m_currentPageId;
+    // Back/forward navigation history (see canGoBack/goBack). The back
+    // stack's last entry is the page goBack() lands on; symmetric for
+    // the forward stack. m_navigatingHistory suppresses recording while
+    // goBack/goForward drive setCurrentPageId, so history moves don't
+    // re-record themselves.
+    QStringList m_backHistory;
+    QStringList m_forwardHistory;
+    bool m_navigatingHistory = false;
+    /// History depth cap — plenty for a settings session while bounding
+    /// worst-case memory for a long-lived window.
+    static constexpr int kMaxHistoryEntries = 64;
     // Deep-link reveal latch (see setPendingAnchor). Transient; not page identity.
     QString m_pendingAnchor;
     QString m_pendingAnchorPage;

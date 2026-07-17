@@ -31,10 +31,10 @@
 #include "dbus/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/WindowRegistry.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/MatchTypes.h>
+#include <PhosphorRules/RuleStore.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include "config/configdefaults.h"
 #include <QUuid>
@@ -174,8 +174,12 @@ private Q_SLOTS:
             m_snapAdaptor->clearEngine();
         }
         m_snapAdaptor = nullptr;
-        // WTA is owned by m_parent (QDBusAbstractAdaptor parent)
+        // WTA is owned by m_parent (QDBusAbstractAdaptor parent). Detach the
+        // borrowed engine from the service BEFORE deleting it so the service
+        // never holds a dangling SnapEngine* (the local-WTA tests below detach
+        // symmetrically).
         m_wta->service()->setSnapState(nullptr);
+        m_wta->service()->setSnapEngine(nullptr);
         delete m_snapEngine;
         m_snapEngine = nullptr;
         delete m_parent;
@@ -196,7 +200,7 @@ private Q_SLOTS:
     // moveWindowToZone
     // =====================================================================
 
-    // ── Open routing: RouteToScreen / RouteToDesktop window rules ──
+    // ── Open routing: RouteToScreen / RouteToDesktop rules ──
     void testApplyOpenRoutingForAutotile_routesToAutotileScreenAndDesktop()
     {
         // DP-2 is an AUTOTILE screen; DP-1 (the spawn screen) stays snapping (the
@@ -213,8 +217,8 @@ private Q_SLOTS:
                                  0, 0, QString(), 0, QVariantMap());
 
         // Rule: route "routeapp" onto DP-2 and onto virtual desktop 2.
-        using namespace PhosphorWindowRules;
-        WindowRule rule;
+        using namespace PhosphorRules;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.enabled = true;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("routeapp"));
@@ -226,9 +230,9 @@ private Q_SLOTS:
         desk.params.insert(QString(ActionParam::TargetDesktop), 2);
         rule.actions = {route, desk};
 
-        WindowRuleStore store(ConfigDefaults::windowRulesFilePath(), m_parent);
+        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
         QVERIFY(store.addRule(rule));
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
 
         QSignalSpy outputSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
@@ -244,7 +248,7 @@ private Q_SLOTS:
         QCOMPARE(desktopSpy.count(), 1);
         QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
 
-        m_wta->setWindowRuleStore(nullptr);
+        m_wta->setRuleStore(nullptr);
         m_wta->setWindowRegistry(nullptr);
     }
 
@@ -258,8 +262,8 @@ private Q_SLOTS:
         m_wta->setWindowMetadata(QStringLiteral("inst2"), QStringLiteral("snaproute"), QString(), QString(), QString(),
                                  0, 0, QString(), 0, QVariantMap());
 
-        using namespace PhosphorWindowRules;
-        WindowRule rule;
+        using namespace PhosphorRules;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.enabled = true;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("snaproute"));
@@ -271,9 +275,9 @@ private Q_SLOTS:
         desk.params.insert(QString(ActionParam::TargetDesktop), 3);
         rule.actions = {route, desk};
 
-        WindowRuleStore store(ConfigDefaults::windowRulesFilePath(), m_parent);
+        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
         QVERIFY(store.addRule(rule));
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
 
         QSignalSpy outputSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
@@ -286,7 +290,7 @@ private Q_SLOTS:
         QCOMPARE(desktopSpy.count(), 1); // desktop routing is engine-neutral
         QCOMPARE(desktopSpy.at(0).at(1).toInt(), 3);
 
-        m_wta->setWindowRuleStore(nullptr);
+        m_wta->setRuleStore(nullptr);
         m_wta->setWindowRegistry(nullptr);
     }
 
@@ -300,8 +304,8 @@ private Q_SLOTS:
         m_wta->setWindowMetadata(QStringLiteral("inst3"), QStringLiteral("deskapp"), QString(), QString(), QString(), 0,
                                  0, QString(), 0, QVariantMap());
 
-        using namespace PhosphorWindowRules;
-        WindowRule rule;
+        using namespace PhosphorRules;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.enabled = true;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("deskapp"));
@@ -310,9 +314,9 @@ private Q_SLOTS:
         desk.params.insert(QString(ActionParam::TargetDesktop), 4);
         rule.actions = {desk};
 
-        WindowRuleStore store(ConfigDefaults::windowRulesFilePath(), m_parent);
+        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
         QVERIFY(store.addRule(rule));
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
 
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
         m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst3"), QStringLiteral("DP-1"));
@@ -326,7 +330,7 @@ private Q_SLOTS:
         m_wta->applyOpenDesktopRouting(QStringLiteral("nomatch|inst4"), QStringLiteral("DP-1"));
         QCOMPARE(quietSpy.count(), 0);
 
-        m_wta->setWindowRuleStore(nullptr);
+        m_wta->setRuleStore(nullptr);
         m_wta->setWindowRegistry(nullptr);
     }
 
@@ -358,8 +362,8 @@ private Q_SLOTS:
         wta->setWindowMetadata(QStringLiteral("inst1"), QStringLiteral("routeapp"), QString(), QString(), QString(), 0,
                                0, QString(), 0, QVariantMap());
 
-        using namespace PhosphorWindowRules;
-        WindowRule rule;
+        using namespace PhosphorRules;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.enabled = true;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("routeapp"));
@@ -367,9 +371,9 @@ private Q_SLOTS:
         route.type = QString(ActionType::RouteToScreen);
         route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
         rule.actions = {route}; // bare RouteToScreen, NO SnapToZone
-        WindowRuleStore store(ConfigDefaults::windowRulesFilePath(), &parent);
+        RuleStore store(ConfigDefaults::rulesFilePath(), &parent);
         QVERIFY(store.addRule(rule));
-        wta->setWindowRuleStore(&store);
+        wta->setRuleStore(&store);
 
         // Window opened on DP-1 at a known frame.
         const QString w = QStringLiteral("routeapp|inst1");
@@ -392,7 +396,7 @@ private Q_SLOTS:
         const int x = args.at(1).toInt();
         QVERIFY2(x >= 1920 && x < 3840, "the window must land within DP-2's geometry");
 
-        wta->setWindowRuleStore(nullptr);
+        wta->setRuleStore(nullptr);
         wta->setWindowRegistry(nullptr);
         wta->service()->setSnapEngine(nullptr);
         wta->service()->setSnapState(nullptr);
@@ -425,8 +429,8 @@ private Q_SLOTS:
         wta->setWindowMetadata(QStringLiteral("inst2"), QStringLiteral("snaproute"), QString(), QString(), QString(), 0,
                                0, QString(), 0, QVariantMap());
 
-        using namespace PhosphorWindowRules;
-        WindowRule rule;
+        using namespace PhosphorRules;
+        Rule rule;
         rule.id = QUuid::createUuid();
         rule.enabled = true;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("snaproute"));
@@ -437,9 +441,9 @@ private Q_SLOTS:
         snapTo.type = QString(ActionType::SnapToZone);
         snapTo.params.insert(QString(ActionParam::Zones), QJsonArray{1});
         rule.actions = {route, snapTo};
-        WindowRuleStore store(ConfigDefaults::windowRulesFilePath(), &parent);
+        RuleStore store(ConfigDefaults::rulesFilePath(), &parent);
         QVERIFY(store.addRule(rule));
-        wta->setWindowRuleStore(&store);
+        wta->setRuleStore(&store);
 
         const QString w = QStringLiteral("snaproute|inst2");
         wta->setFrameGeometry(w, 100, 100, 800, 600);
@@ -452,7 +456,7 @@ private Q_SLOTS:
         QVERIFY2(outputSpy.isEmpty(), "a route+snap rule must not free-move via applyOpenScreenRouting");
         QVERIFY2(geomSpy.isEmpty(), "a route+snap rule must not free-move via applyOpenScreenRouting");
 
-        wta->setWindowRuleStore(nullptr);
+        wta->setRuleStore(nullptr);
         wta->setWindowRegistry(nullptr);
         wta->service()->setSnapEngine(nullptr);
         wta->service()->setSnapState(nullptr);
@@ -612,7 +616,11 @@ private Q_SLOTS:
         QCOMPARE(
             QRect(spy.at(0).at(1).toInt(), spy.at(0).at(2).toInt(), spy.at(0).at(3).toInt(), spy.at(0).at(4).toInt()),
             floatedGeo);
-        QVERIFY(m_snapEngine->snapState()->isFloating(w2)); // reopened floating, not snapped
+        // Reopened floating in the screen's per-key store (the engine's open path
+        // registers it there). This test wires the single-store facade convenience,
+        // which only sees the global holder, so check the engine's own store-agnostic
+        // float view instead of snapState() (globals).
+        QVERIFY(m_snapEngine->isFloating(w2)); // reopened floating, not snapped
         // The record is re-recorded under the LIVE windowId (w2) so the window's
         // float-back survives logout/login — KWin assigns a new uuid at login, so the
         // record matched by appId FIFO, and consuming it (the old behaviour) lost the
@@ -622,7 +630,10 @@ private Q_SLOTS:
         QVERIFY(!m_wta->service()->placementStore().contains(w1));
         // Pre-float zone is restored so a subsequent float-toggle resnaps the
         // window back into its original zone (unfloatToZone reads preFloatZones).
-        QCOMPARE(m_snapEngine->snapState()->preFloatZones(w2), QStringList{m_zoneIds[0]});
+        // stateForWindow is never null — it falls back to the global holder for
+        // an untracked window — so this asserts the zone, not the pointer.
+        PhosphorSnapEngine::SnapState* w2State = m_snapEngine->stateForWindow(w2);
+        QCOMPARE(w2State->preFloatZones(w2), QStringList{m_zoneIds[0]});
     }
 
     void testFloatRestore_loadedAssignmentDoesNotMaskFloatedRecord()
@@ -665,7 +676,7 @@ private Q_SLOTS:
         QCOMPARE(
             QRect(spy.at(0).at(1).toInt(), spy.at(0).at(2).toInt(), spy.at(0).at(3).toInt(), spy.at(0).at(4).toInt()),
             floatedGeo);
-        QVERIFY(m_snapEngine->snapState()->isFloating(w));
+        QVERIFY(m_snapEngine->isFloating(w));
         // Same-uuid restart re-records the floated entry so it survives further restarts.
         QVERIFY(m_wta->service()->placementStore().contains(w, QStringLiteral("settings")));
     }

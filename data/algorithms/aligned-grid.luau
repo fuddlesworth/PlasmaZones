@@ -76,17 +76,11 @@ local function transfer(fr, growIdx, shrinkIdx, delta)
     fr[shrinkIdx] = fr[shrinkIdx] - delta
 end
 
-local function gridShape(count)
-    local cols = math.ceil(math.sqrt(count))
-    local rows = math.ceil(count / cols)
-    return cols, rows
-end
-
 return pluau.algorithm {
     metadata = {
         name = "Aligned Grid",
         id = "aligned-grid",
-        description = "Resize-aware grid: drag a cell edge to move the whole aligned column/row",
+        description = "Resize-aware grid where dragging a cell edge moves the whole aligned column or row",
         producesOverlappingZones = false,
         supportsMasterCount = false,
         supportsSplitRatio = false,
@@ -99,15 +93,11 @@ return pluau.algorithm {
 
     tile = function(ctx)
         local count = ctx.windowCount
-        if count <= 0 then
-            return {}
-        end
         local area = ctx.area
-        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
-            return pluau.fillArea(area, count)
-        end
+        local early = pluau.guardArea(area, count)
+        if early then return early end
         local gap = ctx.innerGap
-        local cols, rows = gridShape(count)
+        local cols, rows = pluau.gridShape(count)
 
         -- Use stored fractions only if they were computed for this exact shape;
         -- a window add/remove that reshapes the grid resets to uniform.
@@ -126,14 +116,8 @@ return pluau.algorithm {
         local colW = fractionsToSizes(contentW, colFr, cols)
         local rowH = fractionsToSizes(contentH, rowFr, rows)
 
-        local colX = { area.x }
-        for c = 1, cols - 1 do
-            colX[c + 1] = colX[c] + colW[c] + gap
-        end
-        local rowY = { area.y }
-        for r = 1, rows - 1 do
-            rowY[r + 1] = rowY[r] + rowH[r] + gap
-        end
+        local colX = pluau.cumulativeOffsets(area.x, colW, gap)
+        local rowY = pluau.cumulativeOffsets(area.y, rowH, gap)
 
         local zones = {}
         for i = 0, count - 1 do
@@ -182,7 +166,7 @@ return pluau.algorithm {
             return state.scriptState
         end
 
-        local cols, rows = gridShape(count)
+        local cols, rows = pluau.gridShape(count)
         local row = math.floor(idx / cols)
         local col = idx % cols
 

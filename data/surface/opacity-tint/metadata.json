@@ -1,0 +1,37 @@
+{
+    "id": "opacity-tint",
+    "name": "Opacity and Tint",
+    "description": "Fades the window's surface and can wash it with a colour of your choice. Opacity dims the whole surface, while the tint blends it toward the tint colour by the amount you set. Leave the tint strength at zero for a plain fade.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Ambience",
+    "providesOpacityTint": true,
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "opacity",
+            "name": "Opacity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How visible the surface stays, where 1.0 is fully opaque and 0.0 is invisible"
+        },
+        {
+            "id": "tintStrength",
+            "name": "Tint strength",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How strongly the tint colour blends over the surface, where 0 keeps it untinted"
+        },
+        {
+            "id": "tintColor",
+            "name": "Tint colour",
+            "type": "color",
+            "default": "#ff3daee9",
+            "description": "Colour the surface is washed with when the tint strength is above zero"
+        }
+    ]
+}

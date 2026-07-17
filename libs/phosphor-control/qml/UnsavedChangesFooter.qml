@@ -2,13 +2,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.phosphor.control
-import "ThemeHelpers.js" as ThemeHelpers
 
 /**
  * Persistent dirty indicator + slide-in unsaved-changes action bar.
@@ -23,8 +21,10 @@ import "ThemeHelpers.js" as ThemeHelpers
  *      animates open when controller.dirty flips true. Contains an
  *      icon + "Unsaved changes" label and two action buttons:
  *      Discard (flat — opens a confirm prompt before throwing away
- *      edits) and Save (highlighted — calls controller.applyAll()).
- *      Matches the legacy Phosphor footer 1:1.
+ *      edits) and Save (highlighted — dispatches
+ *      controller.applyAllAsync(); see the saveRequested doc below
+ *      for the dispatch/complete split). Matches the legacy Phosphor
+ *      footer 1:1.
  */
 ColumnLayout {
     id: root
@@ -65,11 +65,22 @@ ColumnLayout {
 
     // ── Persistent accent line ──────────────────────────────────────
     Rectangle {
+        id: accentLine
+
+        // Default Rectangle color is white; gate the tint Behavior on
+        // Component.completed so the first paint lands without an
+        // animated white→target flash. Same first-paint gate idiom as
+        // SidebarRow.qml / SidebarBackButton.qml.
+        property bool _behaviorReady: false
+
+        Component.onCompleted: _behaviorReady = true
         Layout.fillWidth: true
-        height: Math.round(Screen.devicePixelRatio)
-        color: root.controller.dirty ? Kirigami.Theme.highlightColor : ThemeHelpers.withAlpha(Kirigami.Theme.textColor, ThemeHelpers.SUBTLE_BACKGROUND_ALPHA)
+        height: 1
+        color: root.controller.dirty ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
         Behavior on color {
+            enabled: accentLine._behaviorReady
+
             PhosphorMotionAnimation {
                 profile: "widget.tint"
             }
@@ -95,21 +106,29 @@ ColumnLayout {
         Rectangle {
             id: barContent
 
+            // Drop out of the scene entirely when fully collapsed so
+            // the Save/Discard buttons don't linger as invisible tab
+            // stops (phantom AT focus + Enter firing a no-op batch).
+            // The slide animation is unaffected: expansion > 0 for the
+            // whole animated leg, and at 0 the bar height is 0 anyway.
+            visible: dirtyBar.expansion > 0
             width: parent.width
-            implicitHeight: barRow.implicitHeight + Kirigami.Units.smallSpacing * 3
+            // Mirror barRow's two rounded vertical margins exactly —
+            // a plain smallSpacing * 3 diverges when smallSpacing is
+            // odd and squeezes the row by 1px.
+            implicitHeight: barRow.implicitHeight + 2 * Math.round(Kirigami.Units.smallSpacing * 1.5)
             anchors.bottom: parent.bottom
-            color: ThemeHelpers.activeTint(Kirigami.Theme.neutralTextColor)
+            color: Kirigami.Theme.neutralBackgroundColor
 
             // Top accent line for the bar itself, separate from the
-            // persistent line above. Always neutralTextColor so the
-            // bar reads as a distinct surface. Routes through
-            // ThemeHelpers.withAlpha for symmetry with the persistent
-            // line just above (also 0.4 alpha).
+            // persistent line above. An opaque mix of the bar surface
+            // and neutralTextColor so the bar reads as a distinct
+            // caution surface on every scheme.
             Rectangle {
                 anchors.top: parent.top
                 width: parent.width
-                height: Math.round(Screen.devicePixelRatio)
-                color: ThemeHelpers.withAlpha(Kirigami.Theme.neutralTextColor, 0.4)
+                height: 1
+                color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.neutralBackgroundColor, Kirigami.Theme.neutralTextColor, 0.4)
             }
 
             RowLayout {
@@ -135,7 +154,7 @@ ColumnLayout {
                     // form in most icon themes, and Kirigami.Icon's
                     // color binding only applies to monochrome / mask
                     // sources — otherwise the tint here is silently
-                    // ignored and the warning glyph keeps its theme's
+                    // ignored and the glyph keeps its theme's
                     // built-in colour, mismatching the "Unsaved
                     // changes" label beside it.
                     source: "dialog-information-symbolic"

@@ -97,7 +97,8 @@ public:
 
     /**
      * @brief Set the shortcut registrar used to (un)register the Escape
-     *        cancel-overlay shortcut around active drag sessions.
+     *        cancel-overlay shortcut for the snap-assist phase and layout
+     *        picker (the drag itself uses the kwin-effect's keyboard grab).
      *
      * Must be called after construction, before any drag operations.
      * The registrar is owned by Daemon — this is a non-owning pointer. Routing
@@ -119,8 +120,14 @@ public:
     /**
      * Register / unregister the cancel-overlay Escape shortcut on demand.
      *
-     * Drag-active code paths register/unregister automatically as part of
-     * the drag lifecycle. The layout picker re-uses the same id
+     * The snap-assist phase (start.cpp's snapAssistShown handler) and the
+     * layout picker register / unregister this on demand. The drag itself
+     * needs no binding: the
+     * kwin-effect grabs the keyboard for the whole drag and routes Escape
+     * to cancelSnap() directly, so a KGlobalAccel grab would never fire
+     * during a drag (and binding one per drag fsynced kglobalshortcutsrc and
+     * stuttered the compositor on slow disks, #167). The layout picker
+     * re-uses the same id
      * (kCancelOverlayId) so KGlobalAccel never sees two distinct actions
      * competing for Escape — once a key is granted, KGlobalAccel routes
      * to a single action, and a second registration with a fresh id is
@@ -135,10 +142,18 @@ public:
     {
         registerCancelOverlayShortcut();
     }
-    void releaseCancelOverlayShortcut()
-    {
-        unregisterCancelOverlayShortcut();
-    }
+
+    /// Release the shared cancel-overlay Escape grab, but ONLY when no other
+    /// consumer still needs it. kCancelOverlayId is bound on behalf of the
+    /// layout picker (start.cpp, layoutPickerRequested) and the snap-assist
+    /// phase (start.cpp, snapAssistShown); the drag itself never binds it (the
+    /// kwin-effect's keyboard grab handles Escape during a drag). Every normal
+    /// release site routes through here so one consumer's teardown cannot tear
+    /// the grab out from under another consumer that is still showing. Two
+    /// sites deliberately bypass it with an unconditional release: cancelSnap()
+    /// (the explicit Escape-pressed teardown) and clearForCompositorReconnect()
+    /// (force-release when the compositor that held the grab is already gone).
+    void releaseCancelOverlayShortcutIfIdle();
 
     /// Register the layout-picker keyboard navigation accelerators
     /// (Left/Right/Up/Down/Return/Enter) as global shortcuts. Required
@@ -152,15 +167,6 @@ public:
     void ensureLayoutPickerNavShortcutsRegistered(std::function<void(int dx, int dy)> moveCb,
                                                   std::function<void()> confirmCb);
     void releaseLayoutPickerNavShortcuts();
-
-    /// Whether a drag is currently active (m_draggedWindowId non-empty).
-    /// Daemon uses this to gate the picker-dismissed Escape release on
-    /// drag state — releasing while a drag is in flight would tear down
-    /// the drag's own Escape grab.
-    bool isDragActive() const
-    {
-        return !m_draggedWindowId.isEmpty();
-    }
 
 public Q_SLOTS:
     /**
@@ -390,9 +396,16 @@ public:
     static PhosphorProtocol::DragPolicy computeDragPolicy(const ISettings* settings,
                                                           const PhosphorEngine::IPlacementEngine* autotileEngine,
                                                           const QString& windowId, const QString& screenId,
-                                                          const PhosphorContext::IContextResolver* resolver);
+                                                          const PhosphorContext::IContextResolver* resolver,
+                                                          bool reorderMode);
 
 private:
+    /// Whether reorder (drag-to-swap) mode is effective for @p screenId: a matched
+    /// context SetDragBehavior rule wins, otherwise the global
+    /// `autotileDragBehavior` setting. Resolves through m_layoutManager (which the
+    /// static computeDragPolicy can't reach), so callers pass the result in.
+    bool effectiveReorderMode(const QString& screenId) const;
+
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
 
@@ -494,11 +507,18 @@ private:
     bool m_prevAutotileDragInsertHeld = false; // Previous frame's autotile drag-insert trigger state
     bool m_zoneSpanToggled = false; // Current toggle state for zone span (toggle mode)
     bool m_prevZoneSpanTriggerHeld = false; // Previous frame's zone span trigger state for edge detection
-    // Drag-to-reorder mode is active for the current drag: cached at beginDrag
-    // time so per-tick dragMoved work (60+ Hz) doesn't have to re-query the
-    // settings + engine on every cursor update. Requires (a) autotile-bypass
-    // path, (b) AutotileDragBehavior::Reorder, and (c) window was tracked+tiled
-    // at drag-start. Cleared by endDrag / clearPendingSnapDragState.
+    // Drag-to-reorder mode is active for the current autotile screen: cached so
+    // per-tick dragMoved work (60+ Hz) doesn't have to re-query the settings +
+    // engine on every cursor update. Seeded at beginDrag from the start screen
+    // (requires (a) autotile-bypass path, (b) AutotileDragBehavior::Reorder,
+    // (c) window tiled at drag-start) and RE-LATCHED to the cursor's current screen
+    // on each policy flip in updateDragCursor under the SAME conditions (destination
+    // bypassReason == AutotileScreen AND isWindowTiled), so a mid-drag crossing
+    // between screens with divergent per-context SetDragBehavior rules applies the
+    // destination screen's mode without ever adopting a floating window into the
+    // stack or forcing a preview on a context-disabled screen. Cleared by endDrag,
+    // clearPendingSnapDragState, cancelSnap, handleWindowClosed, and the shared
+    // resetDragState teardown.
     bool m_dragReorderActive = false;
     bool m_overlayShown = false;
     // Overlay was blanked mid-drag via IOverlayService::setIdleForDragPause()
@@ -526,8 +546,8 @@ private:
     bool m_modifierConflictWarned = false; // Logged once per drag, reset on next dragStarted
 
     // Escape cancel-overlay shortcut is registered/unregistered dynamically
-    // via the PhosphorShortcuts Registry around drag sessions — no QAction
-    // member needed (the Registry owns everything).
+    // via the PhosphorShortcuts Registry for the snap-assist phase and layout
+    // picker — no QAction member needed (the Registry owns everything).
 
     // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
     QVector<ParsedTrigger> m_cachedActivationTriggers;
@@ -594,7 +614,8 @@ private Q_SLOTS:
 
     /**
      * Called when snap assist is dismissed (selection, timeout, click-away, etc.)
-     * Unregisters the Escape shortcut that was kept alive for snap assist
+     * Unregisters the Escape shortcut that start.cpp's snapAssistShown handler
+     * bound for snap assist
      */
     void onSnapAssistDismissed();
 };

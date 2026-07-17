@@ -1,0 +1,86 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "urn:plasmazones:schema:surface-metadata",
+    "title": "PlasmaZones Surface Shader Metadata",
+    "description": "metadata.json for a bundled or user surface (decoration) shader pack. Core identity and the parameter contract are enforced. Optional compositing and multipass keys (providesBorder, providesOpacityTint, needsBackdrop, multipass, bufferShaders, bufferScale, bufferFeedback, bufferWrap, bufferWraps, bufferFilter, bufferFilters, depthBuffer, animated, audio, paddingParam, vertexShader, textures, and the retired handlesOpacity) and descriptive metadata (description, author, version, category, preview) are allowed through.",
+    "type": "object",
+    "required": ["id", "name", "fragmentShader", "parameters"],
+    "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "version": { "type": "string" },
+        "category": { "type": "string" },
+        "preview": { "type": "string" },
+        "fragmentShader": { "type": "string", "minLength": 1 },
+        "vertexShader": { "type": "string" },
+        "animated": { "type": "boolean" },
+        "audio": { "type": "boolean" },
+        "handlesOpacity": {
+            "type": "boolean",
+            "description": "Retired and ignored. Opacity is layer-backed now (the compositor folds the window's resolved opacity into the chain), so packs no longer declare it. Accepted only so pre-existing pack metadata still validates."
+        },
+        "providesBorder": { "type": "boolean" },
+        "providesOpacityTint": { "type": "boolean" },
+        "needsBackdrop": { "type": "boolean" },
+        "multipass": { "type": "boolean" },
+        "bufferShaders": {
+            "type": "array",
+            "items": { "type": "string" }
+        },
+        "bufferScale": { "type": "number" },
+        "bufferFeedback": { "type": "boolean" },
+        "bufferWrap": { "type": "string", "enum": ["clamp", "repeat", "mirror"] },
+        "bufferWraps": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["clamp", "repeat", "mirror"] }
+        },
+        "bufferFilter": { "type": "string", "enum": ["linear", "nearest", "mipmap"] },
+        "bufferFilters": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["linear", "nearest", "mipmap"] }
+        },
+        "depthBuffer": { "type": "boolean" },
+        "paddingParam": { "type": "string" },
+        "textures": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["path"],
+                "properties": {
+                    "path": { "type": "string", "minLength": 1 },
+                    "wrap": { "type": "string", "enum": ["clamp", "repeat", "mirror"] }
+                }
+            }
+        },
+        "parameters": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/parameter" }
+        }
+    },
+    "definitions": {
+        "parameter": {
+            "type": "object",
+            "required": ["id", "name", "type", "default"],
+            "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "name": { "type": "string", "minLength": 1 },
+                "description": { "type": "string" },
+                "group": { "type": "string" },
+                "type": {
+                    "type": "string",
+                    "enum": ["float", "int", "bool", "color", "image"],
+                    "description": "Marshalling type of the uniform (image binds a texture slot). An unknown type cannot be bound, so it is rejected."
+                },
+                "default": {
+                    "type": ["number", "string", "boolean"],
+                    "description": "Default value. Use a string for color (#aarrggbb), a number for float or int, and a boolean for bool."
+                },
+                "min": { "type": "number" },
+                "max": { "type": "number" },
+                "step": { "type": "number" }
+            }
+        }
+    }
+}

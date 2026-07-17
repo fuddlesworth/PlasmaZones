@@ -339,10 +339,47 @@ QQuickItem* findShaderAnchorRecursive(QQuickItem* root)
     QStack<QQuickItem*> stack;
     stack.push(root);
     QQuickItem* firstMatch = nullptr;
+    QQuickItem* firstOverride = nullptr;
     bool warnedDuplicate = false;
     while (!stack.isEmpty()) {
         QQuickItem* item = stack.pop();
         if (!item) {
+            continue;
+        }
+        // A decorated-output anchor (`shaderAnchorOverride: true`, set by the
+        // SurfaceDecoration host on its composed shader item) ALWAYS wins over
+        // a plain `shaderAnchor` tag. The host demotes the raw card's plain
+        // tag when its decoration activates, but that demote/promote pair is
+        // two independent property writes racing this walk — resolving the
+        // raw card here draws the decoration statically at final geometry
+        // while the shader animates the bare card. The override tag makes the
+        // preference structural instead of ordering-dependent.
+        //
+        // Do NOT early-return: keep scanning so a SECOND override elsewhere in
+        // the tree is caught and warned (a descendant of the first override is
+        // NOT — this branch `continue`s without pushing the first override's
+        // subtree, so only siblings/cousins outside it are seen). Two live
+        // overrides mean a host bug (e.g. a released-but-not-yet-deleted
+        // delegate re-tagging itself against the successor chain) — anchoring
+        // the corpse animates a frozen capture while the real surface draws
+        // statically.
+        if (item->property("shaderAnchorOverride").toBool()) {
+            if (!firstOverride) {
+                firstOverride = item;
+            } else {
+                // Latch on a root property, like the shaderAnchor dupe warning
+                // below, so this fires at most once per scene over the animator's
+                // lifetime — runLeg runs on every show/hide and would otherwise
+                // spam an identical message into the journal at each leg.
+                static const char* kOverrideDupeWarnedProperty = "_phosphorShaderOverrideDupeWarned";
+                if (!root->property(kOverrideDupeWarnedProperty).toBool()) {
+                    qCWarning(lcSurfaceAnimator).nospace()
+                        << "multiple shaderAnchorOverride tags found under " << root << " — using first match "
+                        << firstOverride << " ignoring " << item
+                        << " (a released delegate may have re-tagged itself; check the host's detag-on-release path)";
+                    root->setProperty(kOverrideDupeWarnedProperty, true);
+                }
+            }
             continue;
         }
         if (item->property("shaderAnchor").toBool()) {
@@ -369,7 +406,7 @@ QQuickItem* findShaderAnchorRecursive(QQuickItem* root)
             stack.push(child);
         }
     }
-    return firstMatch;
+    return firstOverride ? firstOverride : firstMatch;
 }
 
 /// Resolve a Profile path through the registry, falling back to a
@@ -434,6 +471,16 @@ QList<QPointer<QQuickItem>> hideAnchorSiblings(QQuickItem* shaderAnchor, QQuickI
     const auto siblings = shaderAnchor->parentItem()->childItems();
     for (QQuickItem* sibling : siblings) {
         if (sibling == shaderAnchor || sibling == shaderItem || sibling == shaderSource) {
+            continue;
+        }
+        // Never hide capture plumbing. A QQuickShaderEffectSource sibling
+        // (e.g. the decoration host's card snapshot feeding the anchor's
+        // uTexture0) is parked off-screen and draws nothing user-visible,
+        // but setVisible(false) suppresses its updatePaintNode and therefore
+        // its FBO render — the anchor would then sample a frozen (or, on a
+        // fresh show, empty) texture for the whole leg. Hiding it also buys
+        // nothing: it is not a decorator drawing a second visible copy.
+        if (qobject_cast<QQuickShaderEffectSource*>(sibling)) {
             continue;
         }
         if (sibling->isVisible()) {
@@ -567,8 +614,8 @@ struct ShaderAttachResult
     /// decorator follows the shader's output and keeps drawing the
     /// shadow), but Qt 6's MultiEffect crashes inside its private
     /// QQuickShaderEffect's event handler when the source is a
-    /// non-stock QQuickItem subclass. Hide for now; the
-    /// shadow-pop-in at teardown is the lesser evil.
+    /// non-stock QQuickItem subclass. Hiding the siblings is the chosen
+    /// tradeoff; the shadow-pop-in at teardown is the lesser evil.
     QList<QPointer<QQuickItem>> hiddenSiblings;
     /// Live fboExtentKind. Captured by the syncGeometry lambda by
     /// `shared_ptr` so a metadata edit that flips an effect from
@@ -600,7 +647,7 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
                                          << "x" << shaderAnchor->height();
 
     // Render the anchor into a separate FBO via QQuickShaderEffectSource;
-    // the ShaderEffect samples that FBO as iChannel0. The separate FBO
+    // the ShaderEffect samples that FBO as uTexture0. The separate FBO
     // is what sidesteps the "Texture used with different accesses within
     // the same pass" Vulkan validation: the source FBO render and the
     // shader effect's read are different render passes.
@@ -608,20 +655,20 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // **Gated on `foundExplicitAnchor`**: only created when a descendant
     // tagged `shaderAnchor: true` was found. The fallback path (no tag,
     // anchor==target==QML root) leaves `shaderSource` null and skips the
-    // `setSourceItem` call below, so iChannel0 is unbound for the whole
+    // `setSourceItem` call below, so uTexture0 is unbound for the whole
     // leg — the shader runs without a content texture and any
-    // `texture(iChannel0, …)` call returns whatever the GL spec does for
+    // `texture(uTexture0, …)` call returns whatever the GL spec does for
     // an unbound sampler (typically transparent black). This is
     // intentional: layer-enabling a QQuickRootItem-rooted target breaks
     // scene-graph rendering for the consumer's whole window. Animation
-    // shaders that need an iChannel0 sample MUST be paired with a
+    // shaders that need an uTexture0 sample MUST be paired with a
     // `shaderAnchor: true` descendant in the consumer's QML; the
     // explicit=false case in the qCDebug above is the operator's signal
     // that a shader is running source-less.
     //
     // live=true: open animations have no prior frame to snapshot. A
     // one-shot grab (live=false) races the source's first layout/paint
-    // and captures an empty FBO, leaving iChannel0 transparent for the
+    // and captures an empty FBO, leaving uTexture0 transparent for the
     // whole animation. Re-rendering each frame also lets the shader
     // pick up content that moves during the leg.
     //
@@ -630,7 +677,7 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     //
     // Width/Height MUST be non-zero — Qt's QQuickShaderEffectSource
     // skips updatePaintNode (and the FBO render along with it) at 0×0,
-    // leaving iChannel0 unpopulated even with hideSource set.
+    // leaving uTexture0 unpopulated even with hideSource set.
     //
     // Position is parked far off-screen. QQuickShaderEffectSource is
     // itself a renderable item: its updatePaintNode returns a node that
@@ -783,7 +830,8 @@ ShaderAttachResult attachShaderToAnchor(QQuickItem* target,
     // (the only consumers) were ported to read the pad implicitly via
     // `iAnchorPosInFbo / iResolution`. customParams[7] is now a regular
     // user-parameter slot like the other seven, available for any future
-    // shader pack that declares >24 float params.
+    // shader pack that declares >28 float params (customParams[7].x is
+    // flat slot 28, reached only once the first 28 sub-slots are filled).
 
     // Build the geometry-sync lambda + its dependencies.
     //
@@ -1739,7 +1787,14 @@ public:
                                               if (sit == m_tracks.end() || !sit->second.target) {
                                                   return;
                                               }
-                                              sit->second.target->setOpacity(v);
+                                              // Clamp: an overshooting curve's value is
+                                              // unbounded, so a hide leg (1 -> 0) with a
+                                              // bouncy spring drives this NEGATIVE (the
+                                              // step response peaks at 1.163 for zeta=0.5,
+                                              // so 1 - 1.163 = -0.163; at zeta=0.05 it is
+                                              // -0.85). The sibling shader leg already
+                                              // clamps for the same reason.
+                                              sit->second.target->setOpacity(qBound(qreal(0.0), v, qreal(1.0)));
                                           },
                                           /*onComplete=*/
                                           [this, surface, target]() {
@@ -1832,10 +1887,17 @@ public:
                                                  // (transparent/invisible) before the spring
                                                  // oscillates back to a slightly positive
                                                  // value, producing a visible disappear→re-
-                                                 // render→disappear flicker. Mirror what the
-                                                 // kwin-effect path already does for window
-                                                 // shader transitions (paint_pipeline.cpp's
-                                                 // `qBound(0.0, anim->state().value, 1.0)`).
+                                                 // render→disappear flicker. This is a
+                                                 // DELIBERATE divergence from the compositor,
+                                                 // which now lets an overshooting curve's iTime
+                                                 // leave [0,1] (see
+                                                 // ShaderInternal::clampProgressForCurve). The
+                                                 // daemon keeps the clamp: its surfaces are
+                                                 // QQuickItems whose hide legs would flicker on
+                                                 // an out-of-range value, and it has no
+                                                 // geometry bounce to stay consistent with. So
+                                                 // the same pack with the same curve bounces in
+                                                 // the compositor and is flat here, on purpose.
                                                  // Geometry sync runs off the anchor's
                                                  // widthChanged/heightChanged signals (see
                                                  // syncGeometry); the per-tick callback only

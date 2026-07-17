@@ -22,6 +22,17 @@ RowLayout {
     property string unitText: "px"
     property string tooltipText
     property var textFromValue: null
+    //* @brief Screen-reader name for the INNER SpinBox (the focusable control).
+    //* Setting Accessible.name on this RowLayout wrapper never reaches the
+    //* SpinBox, so callers use this instead (mirrors SettingsSlider).
+    property string accessibleName: ""
+
+    /// True while the inner SpinBox has keyboard focus. A host that feeds
+    /// `value` through an external Binding gates it on `!editing` so a live edit
+    /// is not overwritten, while still letting a later reload refresh the value
+    /// (the inner onValueModified echo to `root.value` otherwise destroys a
+    /// computed `value:` binding on the host side after the first edit).
+    readonly property alias editing: spinBox.activeFocus
 
     signal valueModified(int value)
 
@@ -30,6 +41,7 @@ RowLayout {
     SpinBox {
         id: spinBox
 
+        Accessible.name: root.accessibleName
         from: root.from
         to: root.to
         stepSize: root.stepSize
@@ -38,7 +50,7 @@ RowLayout {
             root.value = value;
             root.valueModified(value);
         }
-        textFromValue: root.textFromValue ? root.textFromValue : function(value, locale) {
+        textFromValue: root.textFromValue ? root.textFromValue : function (value, locale) {
             return Number(value).toLocaleString(locale, 'f', 0);
         }
         ToolTip.visible: root.tooltipText.length > 0 && hovered
@@ -48,5 +60,4 @@ RowLayout {
     Label {
         text: root.unitText
     }
-
 }

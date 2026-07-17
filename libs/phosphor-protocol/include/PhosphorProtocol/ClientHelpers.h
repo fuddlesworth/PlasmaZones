@@ -78,6 +78,46 @@ inline QDBusMessage syncCall(const QString& interface, const QString& method, co
 }
 
 /**
+ * @brief Ask the daemon to reparse config.json from disk.
+ *
+ * Every settings writer in the tree writes config.json IN PROCESS and then
+ * tells the daemon to reparse — nothing writes a setting over the bus. The
+ * reload is not a courtesy: a backend sync rewrites the WHOLE document from
+ * its in-memory root, so a daemon still holding the pre-write snapshot would
+ * put the old values back on its next flush, from any source, at any later
+ * time.
+ *
+ * Async and error-logged. Prefer this: the notification's only consumer is the
+ * daemon, so a caller with nothing to order against the reply gains nothing
+ * from blocking on it. Blocking does NOT close the clobber window either — the
+ * daemon can flush between the write and the reparse whether or not the writer
+ * waits — it only makes the writer wait out the round trip.
+ *
+ * @param parent      Owns the reply watcher; must outlive the round trip.
+ * @param logContext  Prefix for the failure warning.
+ */
+inline void reloadDaemonSettings(QObject* parent, const QString& logContext = {})
+{
+    fireAndForget(parent, Service::Interface::Settings, QStringLiteral("reloadSettings"), {}, logContext);
+}
+
+/**
+ * @brief Blocking form of @ref reloadDaemonSettings.
+ *
+ * Only for a caller with a real ordering requirement against the reply — the
+ * KCM clears its `m_saving` guard once this returns, and an async call there
+ * races: the daemon's settingsChanged can land after the guard is clear and
+ * trigger a spurious load() that reverts the just-saved assignments. A caller
+ * that only needs the daemon to catch up eventually wants the async form.
+ *
+ * Bounded by `Service::SyncCallTimeoutMs`.
+ */
+inline void reloadDaemonSettingsBlocking()
+{
+    syncCall(Service::Interface::Settings, QStringLiteral("reloadSettings"));
+}
+
+/**
  * @brief Async helper for loading a single daemon setting.
  *
  * Sends getSetting(name) to the Settings interface, unwraps the QDBusVariant,

@@ -22,35 +22,30 @@ set(plasmazones_settings_SRCS
     searchcatalog.cpp
     searchproviders.h
     searchproviders.cpp
+    registryshaderpreviewbackend.h
     settingscontroller.h
     settingscontroller.cpp
-    # SettingsController is large enough to violate the 800-line cap
-    # if kept as a single TU. The sub-domain methods live in sibling
-    # .cpp files compiled into the same target — same class, multiple
-    # translation units, no API change. Order matches reading order:
-    # construction → lifecycle → page registry → per-domain CRUD.
+    # SettingsController's sub-domain methods live in sibling .cpp files
+    # compiled into the same target — same class, multiple translation units,
+    # no API change. Order matches reading order: construction → lifecycle →
+    # page registry → per-domain CRUD.
     settingscontroller_lifecycle.cpp
     settingscontroller_pageregistration.cpp
+    settingscontroller_pagetopology.cpp
     settingscontroller_layouts.cpp
     settingscontroller_session.cpp
-    # Per-screen autotile/snapping/zone-selector override wrappers — split
-    # out so settingscontroller_session.cpp stays under the 800-line cap.
+    # Per-screen autotile/snapping/zone-selector override wrappers.
     settingscontroller_perscreen.cpp
     settingscontroller_ordering.cpp
     # Virtual-screen lifecycle methods (getVirtualScreenConfig +
-    # apply/remove/stage variants). Split out of _session.cpp to
-    # keep that TU under the 800-line cap (CLAUDE.md).
+    # apply/remove/stage variants).
     settingscontroller_virtualscreens.cpp
     # D-Bus subscription wiring (wireDaemonSubscriptions + reloadLocal
-    # RuleStore) — extracted from settingscontroller.cpp so the central
-    # TU stays under the 800-line cap (CLAUDE.md).
+    # RuleStore).
     settingscontroller_dbuswire.cpp
-    # Active-page navigation + per-page dirty tracking + external-edit
-    # envelope — extracted from settingscontroller.cpp so the central TU
-    # stays under the 800-line cap (CLAUDE.md).
+    # Active-page navigation + per-page dirty tracking + external-edit envelope.
     settingscontroller_pagestate.cpp
-    # RAII begin/endExternalEdit wrapper — extracted from
-    # settingscontroller.h so the header stays under the 800-line cap.
+    # RAII begin/endExternalEdit wrapper, extracted from settingscontroller.h.
     externaleditscope.h
     externaleditscope.cpp
     # Per-page sub-controllers — hang off SettingsController as child QObjects,
@@ -58,35 +53,34 @@ set(plasmazones_settings_SRCS
     animationspagecontroller.h
     animationspagecontroller.cpp
     # Internal header carrying the inline effect/parameter/profile→QVariantMap
-    # helpers shared between the two AnimationsPageController TUs. Inline
+    # helpers shared across the four AnimationsPageController TUs. Inline
     # definitions make cross-TU linkage independent of unity-build merging.
     animations_controller_detail.h
     # AnimationsPageController shader-leg methods compile into the same
-    # target — same class, separate TU, no API change. Keeps the main
-    # cpp under the 800-line cap (CLAUDE.md).
+    # target — same class, separate TU, no API change.
     animationspagecontroller_shaders.cpp
     # AnimationsPageController override-CRUD methods (userProfilesDir,
     # hasOverride / rawProfile / resolvedProfile / setOverride /
-    # clearOverride). Same split rationale as _shaders.cpp — the main
-    # TU grew past 800 lines after the F#2c async-revert addition.
+    # clearOverride).
     animationspagecontroller_overrides.cpp
-    # AnimationsPageController path-discovery helpers
-    # (sectionForPath / eventLabel / parentPath / parentChain). Same
-    # split rationale — small per-Q_INVOKABLE methods extracted so the
-    # main TU stays under the 800-line cap.
+    # AnimationsPageController path-discovery helpers, small per-Q_INVOKABLE
+    # methods (sectionForPath / eventLabel / parentChain).
     animationspagecontroller_paths.cpp
     # Shared validate+copy primitive for installing shader packs.
     # Consumed by AnimationsPageController + SnappingShadersPageController.
     # Centralises the symlink-rejection + metadata.json safety checks.
     shaderpackinstaller.h
     shaderpackinstaller.cpp
-    # Sub-services hosted by AnimationsPageController as child QObjects:
-    # preset library + motion-set store. Split out to keep
-    # animationspagecontroller.cpp under the project's 800-line cap.
+    # Preset library — a sub-service hosted by AnimationsPageController as a
+    # child QObject.
     animationpresetlibrary.h
     animationpresetlibrary.cpp
-    motionsetstore.h
-    motionsetstore.cpp
+    # Shared set store (motion sets + decoration sets) and the motion-set
+    # domain closures that specialise it.
+    shadersetstore.h
+    shadersetstore.cpp
+    motionsetdomain.h
+    motionsetdomain.cpp
     animationfileutils.h
     animationfileutils.cpp
     editorpagecontroller.h
@@ -95,8 +89,10 @@ set(plasmazones_settings_SRCS
     generalpagecontroller.cpp
     snappingzonescontroller.h
     snappingzonescontroller.cpp
-    snappingwindowappearancecontroller.h
-    snappingwindowappearancecontroller.cpp
+    # Slim "Window Appearance" page bounds + baseline-rule-id facade (also
+    # carries the unified gap slider bounds now that gaps live on this page).
+    windowappearancecontroller.h
+    windowappearancecontroller.cpp
     snappingbehaviorcontroller.h
     snappingbehaviorcontroller.cpp
     snappingeffectscontroller.h
@@ -105,10 +101,24 @@ set(plasmazones_settings_SRCS
     snappingshaderspagecontroller.cpp
     snappingzoneselectorcontroller.h
     snappingzoneselectorcontroller.cpp
+    # Decoration drill-down page — PER-SURFACE chains of decoration shader
+    # packs, resolved through a
+    # DecorationProfileTree (baseline + walk-up inheritance). Parallel to
+    # AnimationsPageController's tree model but with no per-event staging;
+    # mutations write straight to the Settings decorationProfileTree.
+    decorationpagecontroller.h
+    decorationpagecontroller.cpp
+    # Surface-taxonomy helper (parentChain) in a sibling TU. Same class,
+    # separate TU.
+    decorationpagecontroller_paths.cpp
+    decorationpagecontroller_browser.cpp
+    decorationpagecontroller_sets.cpp
+    # Internal header carrying the inline effect/parameter/profile→QVariantMap
+    # helpers. Consumed only by decorationpagecontroller.cpp; kept separate to
+    # hold the conversion helpers out of the controller TU.
+    decoration_controller_detail.h
     tilingalgorithmcontroller.h
     tilingalgorithmcontroller.cpp
-    tilingappearancecontroller.h
-    tilingappearancecontroller.cpp
     tilingbehaviorcontroller.h
     tilingbehaviorcontroller.cpp
     # PhosphorControl integration scaffold. PageAdapter wraps existing
@@ -122,33 +132,33 @@ set(plasmazones_settings_SRCS
     pageadapter.cpp
     settingsstagingdomain.h
     settingsstagingdomain.cpp
-    # Window Rules page — the unified rule surface. WindowRuleController
-    # owns one WindowRuleModel (QAbstractListModel) and talks to the
-    # daemon's org.plasmazones.WindowRules adaptor.
-    windowrulemodel.h
-    windowrulemodel.cpp
-    windowrulecontroller.h
-    windowrulecontroller.cpp
-    # Read-only / projection methods of WindowRuleController — sections,
+    # Rules page — the unified rule surface. RuleController
+    # owns one RuleModel (QAbstractListModel) and talks to the
+    # daemon's org.plasmazones.Rules adaptor.
+    rulemodel.h
+    rulemodel.cpp
+    rulecontroller.h
+    rulecontroller.cpp
+    # Read-only / projection methods of RuleController — sections,
     # rulesSnapshot, monitorOverview, ruleScreenIds, author surfaces
     # (matchFields/operatorsForField/actionTypes/defaultPayloadFor),
-    # validation entry points. Split out so windowrulecontroller.cpp stays
-    # under the 800-line cap; same class, separate TU, no API change.
-    windowrulecontroller_views.cpp
-    # WindowRuleController label-lookup setters (screen/activity/layout/
-    # snapping-layout/tiling-algorithm) plus the wiring-completion gate.
-    # Five tiny pass-throughs into WindowRuleModel; split out so
-    # windowrulecontroller.cpp stays under the project's 800-line cap.
-    windowrulecontroller_lookups.cpp
-    # WindowRuleController authoring metadata + templates — pure read-only
-    # helpers split out so windowrulecontroller.cpp stays under the project's
-    # 800-line cap. The controller's Q_INVOKABLE entry points (matchFields,
-    # operatorsForField, actionTypes, newEmptyRule, ruleTemplates,
-    # newRuleFromTemplate) delegate here.
-    windowruleauthoring.h
-    windowruleauthoring.cpp
-    windowruletemplates.h
-    windowruletemplates.cpp
+    # validation entry points. Same class, separate TU, no API change.
+    rulecontroller_views.cpp
+    # RuleController label-lookup setters (screen / activity / zone /
+    # virtual-desktop / snapping-layout / tiling-algorithm / shader-effect /
+    # overlay-shader / decoration-pack) plus the QML curve-label resolver.
+    # Thin pass-throughs into RuleModel.
+    rulecontroller_lookups.cpp
+    # RuleController per-page dirty split + managed-baseline reset/discard.
+    rulecontroller_baseline.cpp
+    # RuleController authoring metadata + templates — pure read-only helpers.
+    # The controller's Q_INVOKABLE entry points (matchFields, operatorsForField,
+    # actionTypes, newEmptyRule, ruleTemplates, newRuleFromTemplate) delegate
+    # here.
+    ruleauthoring.h
+    ruleauthoring.cpp
+    ruletemplates.h
+    ruletemplates.cpp
     # QAbstractItemModel adapter that exposes a rule's match expression
     # to QtQuick.Controls.TreeView for read-only preview. Registered as a
     # QML type via the qt_add_qml_module call below.
@@ -164,6 +174,8 @@ set(plasmazones_settings_SRCS
     kzonesimporter.cpp
     stagingservice.h
     stagingservice.cpp
+    algorithmscaffold.h
+    algorithmscaffold.cpp
     algorithmservice.h
     algorithmservice.cpp
     settingslaunchcontroller.h
@@ -184,6 +196,22 @@ set(plasmazones_settings_SRCS
 )
 
 add_executable(plasmazones-settings ${plasmazones_settings_SRCS})
+
+# GCC 16 LTO false positive: stageEntries() builds a QList of entries whose
+# DecorationProfile holds std::optional members. A disengaged optional's payload
+# bytes are legitimately uninitialized and only ever read behind the engaged
+# flag, but GCC's link-time IPA maybe-uninitialized pass loses that guard across
+# the QList append/reallocation inline chain and warns against the Qt headers
+# (qswap.h / qshareddata_impl.h / bits/move.h). The warnings surface at the
+# ltrans stage, so in-source diagnostic pragmas cannot reach them (the reported
+# location is outside the pragma region) and whether they fire varies with LTO
+# partitioning. Deterministic, file-scoped treatment: keep this one TU out of
+# LTO so its functions are never re-analysed at link, and silence the same
+# false positive class in its own compile.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(decorationpagecontroller_sets.cpp PROPERTIES
+        COMPILE_OPTIONS "-fno-lto;-Wno-maybe-uninitialized")
+endif()
 
 target_include_directories(plasmazones-settings PRIVATE
     ${CMAKE_BINARY_DIR}/generated
@@ -215,13 +243,13 @@ qt_add_qml_module(plasmazones-settings
         # the macro and emits the type in plasmazones-settings.qmltypes.
         matchexpressiontreemodel.h
         matchexpressiontreemodel.cpp
-        # WindowRuleModel — exposed as `WindowRuleModel` (uncreatable) so
+        # RuleModel — exposed as `RuleModel` (uncreatable) so
         # QML can reference its `Section` enum (e.g.
-        # `WindowRuleModel.Animation`) and `Roles` enum (e.g.
-        # `WindowRuleModel.SectionRole`) without QML hardcoding the
+        # `RuleModel.Animation`) and `Roles` enum (e.g.
+        # `RuleModel.SectionRole`) without QML hardcoding the
         # integer values.
-        windowrulemodel.h
-        windowrulemodel.cpp
+        rulemodel.h
+        rulemodel.cpp
     QML_FILES
         qml/Main.qml
         qml/Toast.qml
@@ -229,16 +257,18 @@ qt_add_qml_module(plasmazones-settings
         qml/GlobalSearchField.qml
         qml/GeneralPage.qml
         # Snapping, organised by subject (Overlay / Zone Selector / Window),
-        # each with a Behavior + Appearance page. Window Appearance also hosts
-        # the per-screen Gaps; Shaders lives under Configuration.
+        # each with a Behavior page. Shaders lives under Configuration. The
+        # window border / title-bar appearance AND the unified gaps are shared
+        # across modes and live on the top-level WindowAppearancePage.
         qml/SnappingOverlayBehaviorPage.qml
         qml/SnappingOverlayAppearancePage.qml
         qml/SnappingZoneSelectorPage.qml
         qml/SnappingWindowBehaviorPage.qml
-        qml/SnappingWindowAppearancePage.qml
-        qml/TilingAppearancePage.qml
         qml/TilingBehaviorPage.qml
         qml/TilingAlgorithmPage.qml
+        # Shared, mode-neutral page: the baseline window-appearance editor, which
+        # also hosts the unified inner/outer gap controls.
+        qml/WindowAppearancePage.qml
         qml/EditorPage.qml
         qml/LayoutsPage.qml
         qml/SnappingQuickShortcutsPage.qml
@@ -246,14 +276,17 @@ qt_add_qml_module(plasmazones-settings
         qml/SnappingOrderingPage.qml
         qml/TilingQuickShortcutsPage.qml
         qml/TilingOrderingPage.qml
-        # Window Rules — the unified rule page replacing the five legacy
+        # Rules — the unified rule page replacing the five legacy
         # assignment / app-rule surfaces. Every component (including the
         # recursively-instantiated MatchExpressionEditor) MUST be listed.
-        qml/WindowRulesPage.qml
+        qml/RulesPage.qml
         qml/MonitorOverview.qml
         qml/MonitorOverviewTile.qml
-        qml/WindowRuleRow.qml
-        qml/WindowRuleSectionList.qml
+        qml/ExpandableRowDelegate.qml
+        qml/ExpandChevron.qml
+        qml/ReorderableColumn.qml
+        qml/RuleRow.qml
+        qml/RuleSectionList.qml
         qml/RuleEditorSheet.qml
         qml/RuleEditorBody.qml
         qml/RuleEditorStatusBar.qml
@@ -276,11 +309,11 @@ qt_add_qml_module(plasmazones-settings
         qml/QuickLayoutSlotsCard.qml
         qml/WindowPickerDialog.qml
         qml/LayoutComboBox.qml
+        qml/LayoutContextMenu.qml
         qml/WideComboBox.qml
         qml/FontPickerDialog.qml
         qml/ColorButton.qml
         qml/InputCapture.qml
-        qml/KeySequenceInput.qml
         qml/ModifierAndMouseCheckBoxes.qml
         qml/PositionPicker.qml
         qml/AlgorithmPreview.qml
@@ -290,9 +323,14 @@ qt_add_qml_module(plasmazones-settings
         qml/MonitorScopeChip.qml
         qml/LayoutGridDelegate.qml
         qml/LayoutManageCard.qml
-        qml/LayoutViewSwitch.qml
+        qml/SegmentedViewSwitch.qml
         qml/LayoutFilterBar.qml
         qml/LayoutFilterLogic.js
+        # Shared group/sort infrastructure (Layouts + Rules pages)
+        qml/GroupSortBar.qml
+        qml/GroupSortLogic.js
+        # Shared theme-font construction (whole-group `font:` bindings)
+        qml/FontUtils.js
         qml/ZoneSelectorSection.qml
         qml/EasingPreview.qml
         qml/EasingSettings.qml
@@ -307,9 +345,12 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationEventCardList.qml
         qml/AnimationProfileEditor.qml
         qml/AnimationsWindowsPage.qml
-        qml/AnimationsEditorPage.qml
+        qml/AnimationsWindowMotionPage.qml
+        qml/AnimationsWindowDraggingPage.qml
         qml/AnimationsOsdsPage.qml
         qml/AnimationsOverlaysPage.qml
+        qml/AnimationsDesktopsPage.qml
+        qml/AnimationsEditorPage.qml
         qml/AnimationsSidePanelsPage.qml
         qml/AnimationsWidgetsPage.qml
         qml/AnimationsGeneralPage.qml
@@ -317,12 +358,40 @@ qt_add_qml_module(plasmazones-settings
         qml/AnimationsPresetsPage.qml
         qml/AnimationsShadersPage.qml
         qml/SnappingShadersPage.qml
+        # Decoration drill-down — per-surface override cards (Windows / OSDs /
+        # Popups), each driving a ChainEditor (ordered decoration-pack list with
+        # per-pack params) and border/titlebar field overrides via
+        # DecorationPageController.
+        qml/DecorationSetsPage.qml
+        qml/DecorationShadersPage.qml
+        qml/DecorationWindowsPage.qml
+        qml/DecorationOsdsPage.qml
+        qml/DecorationPopupsPage.qml
+        qml/DecorationSurfaceCardList.qml
+        qml/DecorationSurfaceCard.qml
+        qml/ChainEditor.qml
         # Pack-agnostic shader-browser components — shared by the
-        # animation-shader and snapping-overlay-shader pages. Both pages
-        # are thin wrappers that pass the right controller bridge.
+        # animation-shader, snapping-overlay-shader and decoration-shader
+        # pages. All three are thin wrappers that pass the right controller
+        # bridge.
         qml/ShaderBrowserPage.qml
         qml/ShaderBrowserCard.qml
+        # Domain-agnostic sets page + rich set card — shared by the Decoration
+        # Sets and Motion Sets pages. Both are thin wrappers that pass the
+        # right ShaderSetStore bridge plus their domain copy.
+        qml/ShaderSetsPage.qml
+        qml/ShaderSetCard.qml
+        # Shared drag-and-drop import band (shader packs, layouts /
+        # algorithms, sets).
+        qml/FileDropZone.qml
+        qml/ImportDropCard.qml
+        # Shared row badge (neutral metadata + highlighted state).
+        qml/MetadataChip.qml
         qml/FilterMenuButton.qml
+        # Stay-open checkable menu item used by FilterMenuButton, the one
+        # checkbox-filter-menu implementation (Layouts via LayoutFilterBar's
+        # invisible instances, Rules + shader browser directly).
+        qml/StayOpenMenuItem.qml
         qml/ShaderBrowserDetailDialog.qml
         qml/CurveEditorDialog.qml
         qml/CurvePresets.qml
@@ -332,6 +401,7 @@ qt_add_qml_module(plasmazones-settings
         qml/SpringPhysics.js
         qml/SettingsCard.qml
         qml/GapsSettingsCard.qml
+        qml/WindowFilterCard.qml
         qml/OsdCard.qml
         qml/ShortcutCaptureField.qml
         qml/ModifierComboBox.qml
@@ -352,43 +422,21 @@ qt_add_qml_module(plasmazones-settings
         qml/WizardTemplateCard.qml
         qml/WizardPreviewBadge.qml
         qml/WizardConfigCard.qml
+        qml/WizardPreviewFrame.qml
         qml/WizardUtils.js
     NO_PLUGIN
 )
 
-# Embed What's New data
+# Embed What's New data + its JSON Schema (the committed
+# data/schemas/whatsnew.schema.json, single source of truth shared with CI).
+# whatsnew.json lands at :/whatsnew.json and the schema at
+# :/schemas/whatsnew.schema.json, so SettingsController can validate it on load.
 qt_add_resources(plasmazones-settings "whatsnew_data"
     PREFIX "/"
     BASE "${CMAKE_SOURCE_DIR}/data"
     FILES
         ${CMAKE_SOURCE_DIR}/data/whatsnew.json
-)
-
-# Embed org.plasmazones.common QML module — settings uses a hand-rolled
-# qmldir (see org_plasmazones_common/qmldir) instead of linking
-# plasmazones_shared_qmlplugin so the binary stays standalone. Every type
-# the settings UI consumes from the shared module must be both listed
-# here AND in the qmldir.
-qt_add_resources(plasmazones-settings "shared_common_qml"
-    PREFIX "/qt/qml/org/plasmazones/common"
-    BASE "${CMAKE_SOURCE_DIR}/src/shared"
-    FILES
-        ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/CapabilityBadgeRow.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/ZonePreview.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/CategoryMenuButton.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterRow.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterSection.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterEditor.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/ShaderCompileErrorBanner.qml
-        ${CMAKE_SOURCE_DIR}/src/shared/ZoneShaderRenderer.qml
-)
-qt_add_resources(plasmazones-settings "shared_common_qmldir"
-    PREFIX "/qt/qml/org/plasmazones/common"
-    BASE "${CMAKE_CURRENT_SOURCE_DIR}/org_plasmazones_common"
-    FILES
-        ${CMAKE_CURRENT_SOURCE_DIR}/org_plasmazones_common/qmldir
+        ${CMAKE_SOURCE_DIR}/data/schemas/whatsnew.schema.json
 )
 
 target_link_libraries(plasmazones-settings
@@ -396,8 +444,16 @@ target_link_libraries(plasmazones-settings
         plasmazones_core
         plasmazones_rendering  # ZoneShaderItem (live shader preview in the browser)
         plasmazones_shaderpreview  # shared ShaderPreviewController feed (T3.1)
+        PhosphorFsLoader::PhosphorFsLoader  # SchemaValidator — validates whatsnew.json on load
         PhosphorAnimation::PhosphorAnimation  # motion runtime + QML module
         PhosphorAnimationQmlplugin  # Generated by qt_add_qml_module (STATIC)
+        plasmazones_shared_qmlplugin  # org.plasmazones.common (STATIC) — registered via
+                                      # Q_IMPORT_QML_PLUGIN in main.cpp. Replaces the old
+                                      # hand-rolled qmldir + resource embed, which silently
+                                      # broke ("X is not a type") whenever a shared type
+                                      # was added but not hand-listed; the generated
+                                      # module can never drift.
+        PhosphorSurface::PhosphorSurface  # SurfaceShaderRegistry/Effect (Decoration page)
         PhosphorControl::PhosphorControl  # ApplicationController, PageController, IStagingDomain
         PhosphorControl::PhosphorControlQml  # QML chrome: SettingsAppWindow, Sidebar, footer, etc.
         PhosphorControlQmlplugin  # Generated by qt_add_qml_module (STATIC) — registers the

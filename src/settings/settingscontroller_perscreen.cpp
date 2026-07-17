@@ -10,12 +10,12 @@
 // perScreenOverridesChanged() (UI refresh). Emitting from these wrappers
 // would mark the page dirty even for no-op or rejected writes.
 //
-// Split out of settingscontroller_session.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). All methods here are members of
-// PlasmaZones::SettingsController and use its private state — same class,
-// separate translation unit, no API change.
+// All methods here are members of PlasmaZones::SettingsController and use its
+// private state. Same class, separate translation unit, no API change.
 
 #include "settingscontroller.h"
+
+#include "../config/settings.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
@@ -59,16 +59,6 @@ bool SettingsController::hasPerScreenAutotileSettings(const QString& screenName)
     return m_settings.hasPerScreenAutotileSettings(screenName);
 }
 
-bool SettingsController::hasPerScreenAutotileGapsSettings(const QString& screenName) const
-{
-    return m_settings.hasPerScreenAutotileGapsSettings(screenName);
-}
-
-void SettingsController::clearPerScreenAutotileGapsSettings(const QString& screenName)
-{
-    m_settings.clearPerScreenAutotileGapsSettings(screenName);
-}
-
 bool SettingsController::hasPerScreenAutotileAlgorithmSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenAutotileAlgorithmSettings(screenName);
@@ -79,27 +69,24 @@ void SettingsController::clearPerScreenAutotileAlgorithmSettings(const QString& 
     m_settings.clearPerScreenAutotileAlgorithmSettings(screenName);
 }
 
-// ── Per-screen snapping overrides ────────────────────────────────────────
+// ── Per-screen gap overrides (config-backed) ─────────────────────────────
+// A per-monitor gap override is the gap-dimension sub-domain of the per-screen
+// autotile config store (unified — one value per monitor drives both snap and
+// tile). The Gaps card's monitor scope chip drives has/clear through these; the
+// gap controls themselves read/write via the WindowAppearanceController's
+// gapValue/writeGap invokables.
 
-QVariantMap SettingsController::getPerScreenSnappingSettings(const QString& screenName) const
+bool SettingsController::hasPerScreenGapOverride(const QString& screenName) const
 {
-    return m_settings.getPerScreenSnappingSettings(screenName);
+    return m_settings.hasPerScreenGapOverride(screenName);
 }
 
-void SettingsController::setPerScreenSnappingSetting(const QString& screenName, const QString& key,
-                                                     const QVariant& value)
+void SettingsController::clearPerScreenGapOverride(const QString& screenName)
 {
-    m_settings.setPerScreenSnappingSetting(screenName, key, value);
-}
-
-void SettingsController::clearPerScreenSnappingSettings(const QString& screenName)
-{
-    m_settings.clearPerScreenSnappingSettings(screenName);
-}
-
-bool SettingsController::hasPerScreenSnappingSettings(const QString& screenName) const
-{
-    return m_settings.hasPerScreenSnappingSettings(screenName);
+    // Settings::clearPerScreenGapOverride emits perScreenAutotileSettingsChanged →
+    // perScreenOverridesChanged (wired in settingscontroller.cpp), so no manual
+    // emit is needed here.
+    m_settings.clearPerScreenGapOverride(screenName);
 }
 
 // ── Per-screen zone selector overrides ───────────────────────────────────

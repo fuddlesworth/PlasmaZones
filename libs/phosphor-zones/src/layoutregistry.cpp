@@ -11,20 +11,30 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QStandardPaths>
 #include <algorithm>
 
 namespace PhosphorZones {
 
-LayoutRegistry::LayoutRegistry(PhosphorWindowRules::WindowRuleStore* ruleStore, QString layoutSubdirectory,
-                               QObject* parent)
+LayoutRegistry::LayoutRegistry(PhosphorRules::RuleStore* ruleStore, QString layoutSubdirectory, QObject* parent)
     : IZoneLayoutRegistry(parent)
     , m_ruleStore(ruleStore)
     , m_layoutSubdirectory(std::move(layoutSubdirectory))
 {
-    Q_ASSERT_X(m_ruleStore != nullptr, "LayoutRegistry",
-               "ruleStore is required — assignment resolution dereferences it");
-    Q_ASSERT_X(!m_layoutSubdirectory.isEmpty(), "LayoutRegistry", "layoutSubdirectory is required");
+    // qFatal, not Q_ASSERT: initCommon() unconditionally dereferences
+    // m_ruleStore (->ruleSet()), so a null store is a developer composition-root
+    // error that would otherwise segfault in release where Q_ASSERT compiles
+    // out. Matches the layoutSubdirectory invariants below.
+    if (m_ruleStore == nullptr) {
+        qFatal("LayoutRegistry: ruleStore is required — assignment resolution dereferences it");
+    }
+    // qFatal, not Q_ASSERT_X: an empty subdirectory concatenates to the bare XDG
+    // data root (a trailing slash), so — like the absolute / ".." checks in
+    // initCommon — it must fail in release too, not compile out.
+    if (m_layoutSubdirectory.isEmpty()) {
+        qFatal("LayoutRegistry: layoutSubdirectory is required");
+    }
     initCommon();
 }
 
@@ -53,7 +63,7 @@ void LayoutRegistry::initCommon()
 
     // One evaluation model — bound to the store's live rule set. The store
     // owns the set's lifetime; the evaluator holds a reference to it.
-    m_evaluator = std::make_unique<PhosphorWindowRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    m_evaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
 
     // Forward the detailed layoutsChanged signal into the unified
     // ILayoutSourceRegistry::contentsChanged notifier so any subscribed
@@ -74,6 +84,18 @@ void LayoutRegistry::setDefaultLayoutIdProvider(std::function<QString()> provide
 void LayoutRegistry::setDefaultAutotileAlgorithmProvider(std::function<QString()> provider)
 {
     m_defaultAutotileAlgorithmProvider = std::move(provider);
+}
+
+void LayoutRegistry::setTiledWindowCountProvider(
+    std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)> provider)
+{
+    m_tiledWindowCountProvider = std::move(provider);
+}
+
+void LayoutRegistry::setScreenOrientationProvider(
+    std::function<std::optional<QString>(const QString& screenId)> provider)
+{
+    m_screenOrientationProvider = std::move(provider);
 }
 
 void LayoutRegistry::setSnappingPreferredProvider(std::function<bool()> provider)
@@ -390,22 +412,43 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     const bool wasActive = (m_activeLayout == layout);
     const QString filePath = layoutFilePath(layoutId);
     const QString systemPath = layout->systemSourcePath();
+    const QString layoutIdStr = layoutId.toString();
+
+    // Drop the layout's settings sidecar entry. For a user override being
+    // deleted to restore the system original, this is also what we want — the
+    // restored system layout must not inherit the user's custom settings.
+    //
+    // This is the only step here that can fail, so it runs FIRST and takes the
+    // whole removal down with it, mirroring saveLayout's leave-it-dirty-and-
+    // retry discipline. Persisting it after the layout file was gone would let
+    // a failed write drop the entry from memory while disk kept it: the
+    // restored layout would look correct for the rest of the session, and the
+    // next loadLayouts() would merge the deleted override's settings straight
+    // back onto it — precisely what dropping the entry is here to prevent, and
+    // nothing rewrites the sidecar in between. Putting the entry back and
+    // returning leaves the layout, its file and the sidecar mutually
+    // consistent, so the user can retry.
+    //
+    // A layout with no sidecar entry skips the write entirely: toJson() omits
+    // empty entries, so removing one cannot change the file's bytes. That keeps
+    // an unwritable sidecar from blocking the deletion of layouts that never
+    // had settings in the first place.
+    const QJsonObject removedSettings = m_layoutSettings.settingsFor(layoutIdStr);
+    if (!removedSettings.isEmpty()) {
+        m_layoutSettings.removeLayout(layoutIdStr);
+        if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
+            m_layoutSettings.setSettingsFor(layoutIdStr, removedSettings);
+            qCWarning(lcZonesLib) << "Failed to persist the layout settings sidecar — keeping layout" << layoutIdStr
+                                  << "rather than leaving its settings orphaned on disk";
+            return;
+        }
+    }
 
     // Remove from layouts list
     m_layouts.removeOne(layout);
 
-    const QString layoutIdStr = layoutId.toString();
-
     // Delete layout file (using stored path)
     QFile::remove(filePath);
-
-    // Drop the layout's settings sidecar entry. For a user override being
-    // deleted to restore the system original, this is also what we want — the
-    // restored system layout should not inherit the user's custom settings.
-    m_layoutSettings.removeLayout(layoutIdStr);
-    if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
-        qCWarning(lcZonesLib) << "Failed to persist layout settings sidecar after removing" << layoutIdStr;
-    }
 
     // Clear every pointer that could capture the about-to-deleteLater
     // layout. m_previousLayout is obvious. m_activeLayout is the subtle
@@ -488,7 +531,7 @@ PhosphorZones::Layout* LayoutRegistry::duplicateLayout(PhosphorZones::Layout* so
     }
 
     auto newLayout = new PhosphorZones::Layout(*source);
-    newLayout->setName(source->name() + QStringLiteral(" (Copy)"));
+    newLayout->setName(source->name() + duplicateNameSuffix());
     // Note: Copy constructor already leaves sourcePath empty, making it a user layout
 
     // Reset visibility restrictions so duplicated layout starts fresh

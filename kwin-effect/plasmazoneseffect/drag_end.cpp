@@ -47,6 +47,15 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // shape was a 9-tuple of out-params) with a typed struct.
     QPointF cursorAtRelease = m_dragTracker->lastCursorPos();
 
+    // Snapshot the drag-start floating state NOW, synchronously at dispatch.
+    // The ApplyFloat branch in the async reply lambda below consults it, but
+    // the member is overwritten by the next DragTracker::dragStarted — if a
+    // successive drag starts before this endDrag reply lands (the daemon may
+    // take up to EndDragTimeoutMs), reading the member there would see the
+    // wrong drag's state. Capturing a local is the same staleness guard the
+    // beginDrag reply gets from m_dragGeneration.
+    const bool startedFloating = m_dragStartedFloating;
+
     // qRound the cursor coords (not truncation): the hot-path updateDragCursor
     // stream rounds, so on fractional-scale outputs the release coordinate the
     // daemon resolves the drop zone against must round too, or it can differ by
@@ -82,7 +91,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     timeoutTimer->start(EndDragTimeoutMs);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, windowId, handled, timeoutTimer](QDBusPendingCallWatcher* w) {
+            [this, safeWindow, windowId, handled, timeoutTimer, startedFloating](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 if (*handled) {
                     // Timeout already fired; this is a late reply — discard.
@@ -121,6 +130,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 case PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap:
                     // Window was dragged out of its zone — no longer snap-managed.
                     m_snapHandler->clearWindowSnapped(windowId);
+                    // Snapped → unsnapped flips the Mode / IsSnapped rule fields;
+                    // re-resolve now (symmetric with the snap-commit path below).
+                    invalidateRuleCacheForStateChange(windowId);
                     break;
 
                 case PhosphorProtocol::DragOutcome::ApplyFloat: {
@@ -146,9 +158,22 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     if (dropScreenId.isEmpty()) {
                         break;
                     }
-                    m_autotileHandler->handleDragToFloat(safeWindow, windowId);
+                    // Only run the float transition (which restores the
+                    // pre-autotile size) when the window was TILED at drag
+                    // start. A window that was already floating is merely being
+                    // moved — handleDragToFloat would re-apply the stale
+                    // pre-autotile rect and clobber any resize the user made
+                    // while it was floating. The float-screen reassignment
+                    // (setWindowFloatingForScreen) below still runs so a
+                    // cross-screen move updates the daemon's float tracking.
+                    if (!startedFloating) {
+                        m_autotileHandler->handleDragToFloat(safeWindow, windowId);
+                    }
                     // Window is now floating — drop it from snapping's set.
                     m_snapHandler->clearWindowSnapped(windowId);
+                    // Now floating — flips the Mode / IsSnapped / IsFloating rule
+                    // fields; re-resolve now instead of waiting for the broadcast.
+                    invalidateRuleCacheForStateChange(windowId);
                     // Note: m_dragFloatedWindowIds is intentionally NOT re-set here.
                     // See dragStopped handler — the marker is cleared at drag end
                     // because the daemon's drag-end float path (setWindowFloat →
@@ -200,6 +225,12 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         // broadcast already landed.
                         m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, scr);
+                        // Floating → snapped changes the Mode / IsSnapped rule
+                        // match fields. Invalidate the per-window match cache so a
+                        // placement-scoped border / opacity rule re-resolves now,
+                        // rather than waiting for the daemon's windowStateChanged
+                        // broadcast (self-contained, mirrors the autotile path).
+                        invalidateRuleCacheForStateChange(windowId);
                     } else {
                         // Unresolved or autotile-owned screen: this commit is
                         // not snap-tracked — drop any stale snap entry +
@@ -207,6 +238,9 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         // discriminator epilogue as the single-window and
                         // batch apply paths.
                         m_snapHandler->clearWindowSnapped(windowId);
+                        // Symmetric with the snap-tracked branch above: the
+                        // window's snap state changed, so re-resolve its rules.
+                        invalidateRuleCacheForStateChange(windowId);
                     }
                     break;
                 }
@@ -237,6 +271,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                                         PhosphorAnimation::ProfilePaths::WindowSnapOut);
                     // Drag-to-unsnap: window left zone-managed sizing.
                     m_snapHandler->clearWindowSnapped(windowId);
+                    // Unsnapped — flips the Mode / IsSnapped rule fields; re-resolve.
+                    invalidateRuleCacheForStateChange(windowId);
                     break;
                 }
                 }

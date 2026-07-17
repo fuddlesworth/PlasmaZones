@@ -27,23 +27,14 @@
 // BMW-exact behaviour should pair this with a Linear profile.
 
 #include <noise.glsl>
-
-// 2D simplex noise — MIT-licensed (Inigo Quilez). Definitions hosted
-// in shared/noise.glsl so the seven shaders that need it pull from one
-// source-of-truth rather than carrying a verbatim copy each.
-
-float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * .1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-}
+// simplex2D + hash22 (MIT-licensed Inigo Quilez ports) and hash12 come from
+// shared/noise.glsl; easeOutCubic comes from shared/easing.glsl. The local
+// copies of hash12 and easeOutCubic collapsed to those. easeInSine /
+// easeOutSine stay local — they have no shared home yet.
+#include <easing.glsl>
 
 float easeInSine(float t)  { return 1.0 - cos(t * 1.5707963267948966); }
 float easeOutSine(float t) { return sin(t * 1.5707963267948966); }
-float easeOutCubic(float t) {
-    float f = t - 1.0;
-    return f * f * f + 1.0;
-}
 
 // HSV-rotate `color` by `hueOffset` (in [0,1]). Implemented in HSV
 // space because the colour cycle is generated as RGB cosines and we
@@ -96,7 +87,7 @@ vec4 alphaOver(vec4 under, vec4 over)
     return vec4(mix(under.rgb * under.a, over.rgb, over.a) / max(a, 1e-4), a);
 }
 
-// 16-tap radial blur of the window content. `radius` in pixels;
+// 45-tap radial blur of the window content. `radius` in pixels;
 // `samples` is the inner-loop count (3 keeps the cost reasonable).
 // Pre-multiplied texture read is summed in pre-multiplied space and
 // divided by sample count — the result stays pre-multiplied.
@@ -130,7 +121,7 @@ vec4 blurredInputColor(vec2 uv, float radius, float samples)
     float sampleCountF = float(sampleCount);
     // Hoist iResolution floor out of the 45-tap inner loop —
     // invariant across all samples.
-    vec2 flooredResolution = max(iResolution, vec2(1.0));
+    vec2 flooredResolution = resolutionSafe();
     for (float d = 0.0; d < tau; d += tau / dirs) {
         for (int i = 0; i < sampleCount; ++i) {
             float s = float(i) / sampleCountF;
@@ -159,7 +150,7 @@ vec4 pTransition(vec2 uv, float t)
     // the suite's pattern (matrix/hexagon/honeycomb/pixelate). The
     // else branch would otherwise compute `0.0 / 0.0 = NaN` and
     // poison the entire composite.
-    vec2 res = max(iResolution, vec2(1.0));
+    vec2 res = resolutionSafe();
     if (res.x > res.y) {
         oneToOneUV.y *= res.y / res.x;
     } else {
@@ -249,5 +240,5 @@ vec4 pTransition(vec2 uv, float t)
     // (transparent backdrop) but lights up snap-assist's tinted
     // content underneath as a residual halo. Premultiplying RGB by
     // the final alpha keeps the blend correct against any backdrop.
-    return vec4(windowCol.rgb * windowCol.a, windowCol.a);
+    return premultiply(windowCol);
 }

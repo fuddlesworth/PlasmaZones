@@ -20,36 +20,39 @@ void ShaderTransitionManager::rebuildAnimationRuleSet()
     // setRules always bumps the rule set's revision, so the bound evaluator
     // observes the change and discards stale `(windowId, revision)` cache
     // entries on next access.
-    m_animationRuleSet.setRules(m_windowRuleAnimationRules);
+    m_animationRuleSet.setRules(m_ruleAnimationRules);
 
-    // Recompute the SetOpacity-presence gate for the per-frame opacity resolve
-    // (see hasOpacityRules()). Only enabled rules count — a disabled opacity
-    // rule resolves to no override, so it must not force the per-window query
-    // build every frame.
+    // Recompute the action-presence gates: SetOpacity for the per-frame
+    // opacity resolve (see hasOpacityRules()) and SetWindowLayer for the
+    // layer reconcile / bulk sweep (see hasWindowLayerRules()). Only enabled
+    // rules count — a disabled rule resolves to no override, so it must not
+    // force the per-window query build.
     m_hasOpacityRules = false;
-    for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleAnimationRules) {
+    m_hasWindowLayerRules = false;
+    for (const PhosphorRules::Rule& rule : m_ruleAnimationRules) {
         if (!rule.enabled) {
             continue;
         }
-        for (const PhosphorWindowRules::RuleAction& action : rule.actions) {
-            if (action.type == PhosphorWindowRules::ActionType::SetOpacity) {
+        for (const PhosphorRules::RuleAction& action : rule.actions) {
+            if (action.type == PhosphorRules::ActionType::SetOpacity) {
                 m_hasOpacityRules = true;
-                break;
+            } else if (action.type == PhosphorRules::ActionType::SetWindowLayer) {
+                m_hasWindowLayerRules = true;
             }
         }
-        if (m_hasOpacityRules) {
+        if (m_hasOpacityRules && m_hasWindowLayerRules) {
             break;
         }
     }
 }
 
-void ShaderTransitionManager::setWindowRuleAnimationRules(QList<PhosphorWindowRules::WindowRule> rules)
+void ShaderTransitionManager::setRuleAnimationRules(QList<PhosphorRules::Rule> rules)
 {
-    if (m_windowRuleAnimationRules == rules) {
+    if (m_ruleAnimationRules == rules) {
         // No-op rewrite — keep the evaluator's match cache warm.
         return;
     }
-    m_windowRuleAnimationRules = std::move(rules);
+    m_ruleAnimationRules = std::move(rules);
     rebuildAnimationRuleSet();
 }
 

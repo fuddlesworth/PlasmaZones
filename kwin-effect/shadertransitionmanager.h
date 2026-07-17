@@ -9,8 +9,8 @@
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
-#include <PhosphorWindowRules/RuleEvaluator.h>
-#include <PhosphorWindowRules/WindowRuleSet.h>
+#include <PhosphorRules/RuleEvaluator.h>
+#include <PhosphorRules/RuleSet.h>
 
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
@@ -19,6 +19,7 @@
 #include <QLoggingCategory>
 #include <QPointF>
 #include <QPointer>
+#include <QRectF>
 #include <QSet>
 #include <QSize>
 #include <QString>
@@ -88,34 +89,34 @@ public:
         return m_shaderProfileTree;
     }
 
-    /// Rebuild the effect-rule `WindowRuleSet` from `m_windowRuleAnimationRules`
-    /// — the rules from `windowrules.json` that carry any effect-consumed
-    /// action (the `OverrideAnimation*` triple plus `SetOpacity`; see
-    /// `PhosphorWindowRules::ActionType::isEffectRuleAction`). Call after
-    /// every mutation of that list. The bound `RuleEvaluator` picks up
-    /// the new revision transparently and its match cache is invalidated.
+    /// Rebuild the effect-rule `RuleSet` from `m_ruleAnimationRules`
+    /// — the rules from `rules.json` that carry any effect-consumed
+    /// action (admitted via `ActionRegistry::hasTag(type, Tag::Effect)`;
+    /// the authoritative membership list is the descriptor tag
+    /// assignments in ruleaction.cpp). Call after every mutation of that
+    /// list. The bound `RuleEvaluator` picks up the new revision
+    /// transparently and its match cache is invalidated.
     void rebuildAnimationRuleSet();
 
-    /// Replace the set of `windowrules.json` rules that carry any
-    /// effect-consumed action (`OverrideAnimation*` or `SetOpacity` —
-    /// see `isEffectRuleAction`). The effect refreshes this on the
-    /// `org.plasmazones.WindowRules.rulesChanged` D-Bus signal so a new
+    /// Replace the set of `rules.json` rules that carry any
+    /// effect-consumed action (admitted via
+    /// `ActionRegistry::hasTag(type, Tag::Effect)`). The effect refreshes this on the
+    /// `org.plasmazones.Rules.rulesChanged` D-Bus signal so a new
     /// effect rule authored in the settings UI fires without a restart.
     /// Triggers `rebuildAnimationRuleSet()` only when the list actually
     /// changes — a no-op rewrite keeps the evaluator's match cache warm.
-    void setWindowRuleAnimationRules(QList<PhosphorWindowRules::WindowRule> rules);
+    void setRuleAnimationRules(QList<PhosphorRules::Rule> rules);
 
     /// The evaluator bound to the effect-rule set. Resolution of the
-    /// per-window cascade for every effect-consumed action (the
-    /// `OverrideAnimation*` triple plus `SetOpacity`) routes through
-    /// this evaluator.
-    const PhosphorWindowRules::RuleEvaluator& animationRuleEvaluator() const
+    /// per-window cascade for every effect-consumed (`Tag::Effect`)
+    /// action routes through this evaluator.
+    const PhosphorRules::RuleEvaluator& animationRuleEvaluator() const
     {
         return m_animationRuleEvaluator;
     }
 
     /// The animation rule set itself — for the `!isEmpty()` fast path.
-    const PhosphorWindowRules::WindowRuleSet& animationRuleSet() const
+    const PhosphorRules::RuleSet& animationRuleSet() const
     {
         return m_animationRuleSet;
     }
@@ -130,6 +131,18 @@ public:
     bool hasOpacityRules() const
     {
         return m_hasOpacityRules;
+    }
+
+    /// True when at least one enabled rule carries a `SetWindowLayer` action.
+    /// Gates the per-window layer reconcile (`reconcileRuleWindowLayer`'s fast
+    /// path) and the bulk-placement sweep in `invalidateAllRuleCaches` —
+    /// without it, a session whose rules never touch the layer (opacity or
+    /// border only) would still pay a cache-cold per-window rule resolution
+    /// across the whole stacking order on every daemon loss / bringup re-seed.
+    /// Recomputed by `rebuildAnimationRuleSet()` on every rule-set change.
+    bool hasWindowLayerRules() const
+    {
+        return m_hasWindowLayerRules;
     }
 
     /// Per-event motion-profile tree mirrored from the daemon's
@@ -316,29 +329,31 @@ private:
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorAnimation::ProfileTree m_motionProfileTree;
-    // Rules from windowrules.json that carry any effect-consumed action
-    // (`OverrideAnimation*` triple OR `SetOpacity` — see
-    // `PhosphorWindowRules::ActionType::isEffectRuleAction`). Refreshed
-    // from the daemon's org.plasmazones.WindowRules interface on every
+    // Rules from rules.json that carry any effect-consumed action
+    // (admitted via `ActionRegistry::hasTag(type, Tag::Effect)`;
+    // authoritative list in ruleaction.cpp). Refreshed
+    // from the daemon's org.plasmazones.Rules interface on every
     // `rulesChanged` signal; mirrored into `m_animationRuleSet` so the
     // bound RuleEvaluator picks up the new revision.
-    QList<PhosphorWindowRules::WindowRule> m_windowRuleAnimationRules;
+    QList<PhosphorRules::Rule> m_ruleAnimationRules;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Window-rule view of the animation rules
     //
-    // `m_animationRuleSet` mirrors `m_windowRuleAnimationRules`, rebuilt by
+    // `m_animationRuleSet` mirrors `m_ruleAnimationRules`, rebuilt by
     // `rebuildAnimationRuleSet()` on every D-Bus refresh.
     // `m_animationRuleEvaluator` binds a const reference to it — declaration
     // ORDER MATTERS: the rule set must outlive (and precede) the evaluator.
     // ═══════════════════════════════════════════════════════════════════════════
-    PhosphorWindowRules::WindowRuleSet m_animationRuleSet;
-    PhosphorWindowRules::RuleEvaluator m_animationRuleEvaluator{m_animationRuleSet};
+    PhosphorRules::RuleSet m_animationRuleSet;
+    PhosphorRules::RuleEvaluator m_animationRuleEvaluator{m_animationRuleSet};
 
     // Cached "any enabled rule carries SetOpacity" predicate — recomputed in
     // rebuildAnimationRuleSet() so the per-frame opacity resolve can skip the
     // WindowQuery build entirely when no opacity rule exists. See hasOpacityRules().
     bool m_hasOpacityRules = false;
+    // Same shape for SetWindowLayer. See hasWindowLayerRules().
+    bool m_hasWindowLayerRules = false;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Texture Cache
@@ -384,6 +399,31 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
     quint64 m_shaderTransitionGenerationCounter = 0;
     QHash<KWin::EffectWindow*, bool> m_lastFullyMaximized;
+    // Frame rect captured at windowMaximizedStateAboutToChange — the rect the
+    // window is LEAVING. KWin emits the about-to-change signal before any
+    // geometry change, so this is the only place the maximize morph's
+    // departure rect can be read. Latest-wins per window; erased with
+    // m_lastFullyMaximized on windowDeleted.
+    QHash<KWin::EffectWindow*, QRectF> m_preMaximizeFrame;
+    // Maximize/restore morph whose state edge fired BEFORE the client
+    // committed the new size. KWin does not guarantee the geometry has been
+    // applied when windowMaximizedStateChanged is emitted: an occluded or
+    // slow client leaves the frame at (or near) the departure rect — a
+    // live trace on KWin 6.7.2 showed maximizedChanged arriving with only
+    // the position applied and the size still pending the client's ack.
+    // Installing the morph then would tween between two same-size rects
+    // while the real resize lands as a raw snap mid-animation. Instead the
+    // state edge arms this entry and the size-delivering
+    // windowFrameGeometryChanged completes the install (window_lifecycle.cpp),
+    // so the animation starts exactly when the window visibly changes size.
+    // Erased on completion, on windowDeleted, and on a stale-deadline check
+    // at consumption time.
+    struct PendingMaximizeMorph
+    {
+        QRectF departureFrame;
+        qint64 armedAtMs = 0;
+    };
+    QHash<KWin::EffectWindow*, PendingMaximizeMorph> m_pendingMaximizeMorph;
     QPointer<KWin::EffectWindow> m_lastFocusShaderWindow;
 };
 

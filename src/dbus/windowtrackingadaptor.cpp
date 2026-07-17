@@ -24,8 +24,8 @@
 #include "../core/types.h"
 #include <PhosphorEngine/WindowRegistry.h>
 // Complete type required where ~WindowTrackingAdaptor destroys the
-// unique_ptr<RuleEvaluator> member (m_windowRuleEvaluator).
-#include <PhosphorWindowRules/RuleEvaluator.h>
+// unique_ptr<RuleEvaluator> member (m_ruleEvaluator).
+#include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -821,6 +821,8 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             meta.isModal = existing->isModal;
             meta.hasDecoration = existing->hasDecoration;
             meta.isResizable = existing->isResizable;
+            meta.isMovable = existing->isMovable;
+            meta.isMaximizable = existing->isMaximizable;
             meta.width = existing->width;
             meta.height = existing->height;
             meta.positionX = existing->positionX;
@@ -856,6 +858,8 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         meta.isModal = optBool(Key::IsModal);
         meta.hasDecoration = optBool(Key::HasDecoration);
         meta.isResizable = optBool(Key::IsResizable);
+        meta.isMovable = optBool(Key::IsMovable);
+        meta.isMaximizable = optBool(Key::IsMaximizable);
         meta.width = optInt(Key::Width);
         meta.height = optInt(Key::Height);
         meta.positionX = optInt(Key::PositionX);
@@ -1029,6 +1033,21 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         m_lastActiveScreenId = resolvedScreen;
     }
 
+    // Cross-monitor re-home backstop (the analogue of autotile's windowFocused
+    // migration): if the snap engine tracks this window but its owning per-key
+    // store names a DIFFERENT monitor than the one it activated on, migrate its
+    // snap state onto the activation screen so screenForTrackedWindow and the
+    // unfloat fallback-screen resolution report the real monitor (#724). Guarded
+    // by screensMatch so a mere virtual/physical id-form difference on the same
+    // monitor never churns the stores. windowScreenChanged handles the primary
+    // drift path; this catches activations that arrive without a screen-change report.
+    if (PhosphorSnapEngine::SnapEngine* snap = snapEngine(); snap && !resolvedScreen.isEmpty()) {
+        const QString owning = snap->screenForTrackedWindow(windowId);
+        if (!owning.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(owning, resolvedScreen)) {
+            snap->migrateWindowToScreen(windowId, resolvedScreen);
+        }
+    }
+
     qCDebug(lcDbusWindow) << "Window activated:" << windowId << "on screen" << screenId;
 
     // Update last-used zone when focusing a snapped window
@@ -1075,7 +1094,7 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
     int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine) {
-        // The autotile engine keys every internal map (m_windowToStateKey,
+        // The autotile engine keys every internal map (m_states reverse map,
         // m_windowMinSizes, m_autotileFloatedWindows, TilingState membership)
         // on each window's CANONICAL id — its FIRST-seen composite, frozen by
         // the daemon-side WindowRegistry. The alive list, by contrast, carries

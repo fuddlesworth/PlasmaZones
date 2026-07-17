@@ -8,7 +8,7 @@
 #include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
-#include <PhosphorWindowRules/ExclusionRules.h>
+#include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
@@ -187,6 +187,10 @@ void Daemon::initializeAutotile()
                                     entry.targetZoneIds = snapSlot.zoneIds;
                                     entry.targetGeometry = geo;
                                     entry.targetScreenId = restoreScreen;
+                                    // The durable record knows which desktop this snap
+                                    // belongs to; carry it so the batch commit doesn't
+                                    // re-stamp the window onto the current desktop.
+                                    entry.virtualDesktop = rec->virtualDesktop;
                                     m_pendingSnapFloatRestores.append(entry);
                                 } else {
                                     qCWarning(lcDaemon) << "windowsReleased: snap-zone restore for" << windowId
@@ -501,7 +505,9 @@ void Daemon::initializeAutotile()
 
                 // Emit ONE batched signal (suppresses one OSD regardless of screen count)
                 concreteSnap->emitBatchedResnap(allResnapEntries);
-                m_suppressResnapOsd = allResnapEntries.isEmpty() ? 0 : 1;
+                // Empty ⇒ no feedback to suppress; a no-op arm must NOT zero a
+                // concurrent stream's outstanding count (the old `= 0` did).
+                armResnapOsdSuppression(allResnapEntries.isEmpty() ? 0 : 1);
             }
         });
 
@@ -826,11 +832,11 @@ void Daemon::finalizeStartup()
     // priming call (daemon.cpp's setExcludeRuleSet/setRules/prune sequence, run
     // synchronously before the rulesChanged subscription wires) already pruned what
     // was loaded then; this re-run covers records that landed during the later
-    // autotile load. Patterns derive from the unified WindowRule store via
-    // PhosphorWindowRules::ExclusionRules; the WTA prune removeIf's the placement store.
+    // autotile load. Patterns derive from the unified Rule store via
+    // PhosphorRules::ExclusionRules; the WTA prune removeIf's the placement store.
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-            PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+            PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
     }
 
     // Signal that daemon is fully initialized and ready for queries
@@ -931,6 +937,11 @@ void Daemon::finalizeStartup()
             });
         }
     }
+
+    // Prime the active-assignment snapshot now that screens and initial layouts
+    // are applied, so the first rule edit diffs against the live assignments
+    // (not an empty baseline, which would resnap every screen once).
+    diffActiveAssignments();
 }
 
 void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, const QString& screenId)

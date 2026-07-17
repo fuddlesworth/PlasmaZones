@@ -36,8 +36,10 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             // KEYBOARD SHORTCUTS
             // ═══════════════════════════════════════════════════════════════
+            // File component (SectionHeader.qml); title-only, no icon
             SectionHeader {
                 title: i18nc("@title:group", "Keyboard Shortcuts")
+                Layout.columnSpan: 2
             }
 
             GridLayout {
@@ -102,7 +104,7 @@ ScrollView {
 
                 ShortcutLabel {
                     action: i18n("Duplicate")
-                    shortcut: editorController ? editorController.editorDuplicateShortcut : "Ctrl+D"
+                    shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorDuplicateShortcut : "Ctrl+D")
                 }
 
                 ShortcutLabel {
@@ -134,17 +136,17 @@ ScrollView {
 
                 ShortcutLabel {
                     action: i18n("Split horizontal")
-                    shortcut: editorController ? editorController.editorSplitHorizontalShortcut : "Ctrl+Shift+H"
+                    shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorSplitHorizontalShortcut : "Ctrl+Shift+H")
                 }
 
                 ShortcutLabel {
                     action: i18n("Split vertical")
-                    shortcut: editorController ? editorController.editorSplitVerticalShortcut : "Ctrl+Alt+V"
+                    shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorSplitVerticalShortcut : "Ctrl+Alt+V")
                 }
 
                 ShortcutLabel {
                     action: i18n("Fill space")
-                    shortcut: editorController ? editorController.editorFillShortcut : "Ctrl+Shift+F"
+                    shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorFillShortcut : "Ctrl+Shift+F")
                 }
 
                 // Navigation
@@ -173,7 +175,6 @@ ScrollView {
                     action: i18n("Previous zone")
                     shortcut: "Ctrl+Shift+Tab"
                 }
-
             }
 
             // ═══════════════════════════════════════════════════════════════
@@ -181,6 +182,7 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             SectionHeader {
                 title: i18nc("@title:group", "Mouse Actions")
+                Layout.columnSpan: 2
             }
 
             GridLayout {
@@ -219,7 +221,6 @@ ScrollView {
                     action: i18n("Context menu")
                     shortcut: i18n("Right-click")
                 }
-
             }
 
             // ═══════════════════════════════════════════════════════════════
@@ -227,6 +228,7 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             SectionHeader {
                 title: i18nc("@title:group", "Tips")
+                Layout.columnSpan: 2
             }
 
             ColumnLayout {
@@ -253,7 +255,6 @@ ScrollView {
                 TipLabel {
                     tipText: i18n("Zones can overlap for multi-zone snapping")
                 }
-
             }
 
             // ═══════════════════════════════════════════════════════════════
@@ -261,6 +262,7 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             SectionHeader {
                 title: i18nc("@title:group", "Accessibility")
+                Layout.columnSpan: 2
             }
 
             Label {
@@ -274,32 +276,7 @@ ScrollView {
             Item {
                 Layout.fillHeight: true
             }
-
         }
-
-    }
-
-    component SectionHeader: RowLayout {
-        required property string title
-
-        Layout.fillWidth: true
-        Layout.columnSpan: 2
-        spacing: Kirigami.Units.smallSpacing
-
-        Rectangle {
-            width: Math.round(Kirigami.Units.smallSpacing * 0.75)
-            height: sectionLabel.height
-            color: Kirigami.Theme.highlightColor
-            radius: Math.round(Kirigami.Units.smallSpacing / 4)
-        }
-
-        Label {
-            id: sectionLabel
-
-            text: parent.title
-            font.weight: Font.DemiBold
-        }
-
     }
 
     component SubsectionHeader: Label {
@@ -324,9 +301,7 @@ ScrollView {
         Label {
             text: shortcut
             font.family: Kirigami.Theme.fixedWidthFont.family
-            color: Kirigami.Theme.linkColor
         }
-
     }
 
     component TipLabel: Label {
@@ -336,5 +311,4 @@ ScrollView {
         wrapMode: Text.WordWrap
         Layout.fillWidth: true
     }
-
 }

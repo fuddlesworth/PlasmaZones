@@ -3,11 +3,14 @@
 
 #include "renderer.h"
 
+#include "zoneentryscaffold.h"
+
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ShaderNodeRhi.h>
 #include <PhosphorRendering/ZoneShaderCommon.h>
 #include <PhosphorRendering/ZoneShaderNodeRhi.h>
 #include <PhosphorRendering/ZoneUniformExtension.h>
+#include <PhosphorShaders/ShaderRegistry.h>
 
 #include <rhi/qrhi.h>
 
@@ -15,6 +18,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QPainter>
@@ -106,19 +110,10 @@ class RenderEffect : public PhosphorRendering::ShaderEffect
 {
     Q_OBJECT
 public:
-    explicit RenderEffect(QQuickItem* parent = nullptr)
-        : PhosphorRendering::ShaderEffect(parent)
-    {
-    }
     explicit RenderEffect(QQuickItem* parent, const QString& vertPath)
         : PhosphorRendering::ShaderEffect(parent)
         , m_vertexShaderPath(vertPath)
     {
-    }
-
-    void setVertexShaderPath(const QString& p)
-    {
-        m_vertexShaderPath = p;
     }
 
     /// Total zone count + currently-highlighted count. Zone-aware shaders
@@ -291,7 +286,7 @@ QStringList shaderIncludePaths()
     // for each shader root, push <root>/shared FIRST then <root>. The /shared
     // entry is where common.glsl / audio.glsl / zone.vert live in the source
     // tree; without it `#include <common.glsl>` only resolves accidentally via
-    // an installed copy at /usr/share/plasmazones/shaders/common.glsl, and the
+    // an installed copy at /usr/share/plasmazones/overlays/common.glsl, and the
     // shared zone.vert fallback (see resolveZoneVertexShader) wouldn't find
     // anything either.
     QStringList paths;
@@ -304,19 +299,19 @@ QStringList shaderIncludePaths()
     };
     const QStringList xdg = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation);
     for (const QString& dir : xdg) {
-        pushRoot(dir + QStringLiteral("/shaders"));
+        pushRoot(dir + QStringLiteral("/overlays"));
     }
-    pushRoot(QStringLiteral("/usr/share/plasmazones/shaders"));
-    pushRoot(QStringLiteral("data/shaders"));
+    pushRoot(QStringLiteral("/usr/share/plasmazones/overlays"));
+    pushRoot(QStringLiteral("data/overlays"));
     paths.append(QStringLiteral("libs/phosphor-rendering/shaders"));
     return paths;
 }
 
 // Resolve which vertex shader to pass to RenderEffect. metadata.json declares
 // vertexShader explicitly only for packs that ship a non-standard one
-// (currently magnetic-field). The other 25 zone shaders rely on the runtime's
+// (currently magnetic-field). Every other zone shader relies on the runtime's
 // fallback to the shared zone.vert that lives at
-// data/shaders/shared/zone.vert. Without this the base ShaderEffect's default
+// data/overlays/shared/zone.vert. Without this the base ShaderEffect's default
 // vertex shader (kDefaultVertexShaderSource — emits only vTexCoord) is used,
 // every zone fragment shader fails to link with `vFragCoord not declared as
 // input from previous stage`, and every preview comes out as the clear colour.
@@ -580,6 +575,32 @@ int Renderer::render(const RenderOptions& opts)
     effect->setSize(QSizeF(size));
     effect->setVisible(true);
     effect->setShaderIncludePaths(includePaths);
+
+    // T1.1 / T1.4 parity with ZoneShaderItem (zoneshaderitem.cpp): install the
+    // zone entry-point scaffold so a pack authored as just `vec4 pZone(ZoneCtx)`
+    // / `pImage(vec2)` (no main()) is assembled — prologue prepended, generated
+    // main() appended — and push the generated `#define p_<id> ...` preamble so
+    // parameter reads resolve to the customParams/customColors lanes the
+    // metadata defaults were seeded into. Without both, every migrated pack
+    // (the whole bundled catalog) fails to compile — no #version, no p_
+    // defines — and previews come out as empty frames.
+    effect->setEntryScaffold(PlasmaZones::zoneEntryPrologue(), PlasmaZones::zoneEntryCandidates());
+    {
+        // Pack dir from the metadata path — NOT from the frag path, which a
+        // pack may point into a subdirectory ("fragmentShader": "sub/x.frag"
+        // would make the frag-derived dir miss metadata.json entirely).
+        // One deliberate divergence from the daemon: no schema validation
+        // runs here (the registry scan gates packs on
+        // shaderMetadataValidator().validate()), so the tool still previews
+        // a pack the daemon would skip for a schema error.
+        QString metaError;
+        const auto info =
+            PhosphorShaders::ShaderRegistry::parsePackMetadata(QFileInfo(opts.metadataPath).absolutePath(), &metaError);
+        if (!metaError.isEmpty()) {
+            qCWarning(lcRenderer) << "param preamble unavailable for" << opts.metadata.id << ":" << metaError;
+        }
+        effect->setParamPreamble(PhosphorShaders::ShaderRegistry::paramPreamble(info));
+    }
 
     // The QML wrapper enables layer.enabled on ZoneShaderItem so the shader
     // renders to a private FBO. Without this, the scene graph's batch

@@ -28,27 +28,17 @@ Item {
     // Layout data
     property var layouts: []
     property string activeLayoutId: ""
-    property string hoveredLayoutId: ""
     property bool globalAutoAssign: false
     property string selectedLayoutId: ""
     property int selectedZoneIndex: -1
     property int minZoneSize: 8
     property int cursorX: -1
     property int cursorY: -1
-    property real screenAspectRatio: 16 / 9
-    property int screenWidth: 1920
     property int selectorPosition: 0
-    property int selectorLayoutMode: 1
-    property int selectorGridColumns: 5
-    property int previewWidth: 180
-    property int previewHeight: 101
-    property bool previewLockAspect: true
-    property bool positionIsVertical: false
     property int indicatorWidth: 180
     property int indicatorHeight: 101
     property int indicatorSpacing: 18
     property int layoutColumns: 1
-    property int layoutRows: 1
     property int contentWidth: 180
     property int contentHeight: 129
     property int containerPadding: 36
@@ -84,27 +74,17 @@ Item {
     property int cardSidePadding: 18
     property int containerWidth: 216
     property int containerHeight: 165
-    property int barHeight: 175
-    property int barWidth: 216
-    property int totalRows: 1
     property int scrollContentHeight: 129
     property int scrollContentWidth: 180
     property bool needsScrolling: false
     property bool needsHorizontalScrolling: false
-    property real previewScale: 0.09375
-    property int zonePadding: 0
-    property int zoneBorderWidth: 2
-    property int zoneBorderRadius: 8
     property int scaledPadding: 1
     property int scaledBorderWidth: 1
     property int scaledBorderRadius: 2
     property bool locked: false
-    readonly property real _fallbackHighlightAlpha: 0.7
-    readonly property real _fallbackInactiveAlpha: 0.4
-    readonly property real _fallbackBorderAlpha: 0.9
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, _fallbackHighlightAlpha)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, _fallbackInactiveAlpha)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, _fallbackBorderAlpha)
+    property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
     property string fontFamily: ""
     property real fontSizeScale: 1
     property int fontWeight: Font.Bold
@@ -126,11 +106,6 @@ Item {
             var hBar = scrollView.ScrollBar.horizontal;
             hBar.position = Math.max(0, Math.min(1 - hBar.size, hBar.position - step));
         }
-    }
-
-    function resetCursorState() {
-        root.cursorX = -1;
-        root.cursorY = -1;
     }
 
     anchors.fill: parent
@@ -197,7 +172,6 @@ Item {
         width: root.containerWidth
         height: root.containerHeight
         backgroundColor: root.backgroundColor
-        textColor: root.textColor
         containerRadius: root.containerRadius
         state: {
             switch (root.selectorPosition) {
@@ -435,18 +409,13 @@ Item {
                             previewWidth: root.indicatorWidth
                             previewHeight: root.indicatorHeight
                             showCardBackground: true
-                            // The zone-selector slot is supposed to be input-transparent —
+                            // The zone-selector slot is input-transparent by design —
                             // OverlayService::updateSelectorPosition pushes cursor coords from
                             // the D-Bus drag stream and writes `selectedLayoutId` /
                             // `selectedZoneIndex` back; the commit happens at drag-end in
-                            // WindowDragAdaptor's drop path (drop.cpp). The shared shell
-                            // surface only flips to input-grabbing when snap-assist / layout-
-                            // picker is up, and during that window the still-hiding zone-
-                            // selector slot was leaking hover events into these MouseAreas,
-                            // which switched the active layout out from under the user. Hard-
-                            // disabling interactivity here matches the design contract and is
-                            // defense in depth against any future input-grab regression.
-                            interactive: false
+                            // WindowDragAdaptor's drop path (drop.cpp). ZonePreview carries no
+                            // pointer handlers at all (its hover machinery was removed), so
+                            // nothing here can switch the active layout on stray hover events.
                             selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
                             zonePadding: root.scaledPadding
                             edgeGap: root.scaledPadding
@@ -456,7 +425,6 @@ Item {
                             zoneBorderColor: root.borderColor
                             inactiveOpacity: root.inactiveOpacity
                             activeOpacity: root.activeOpacity
-                            hoverScale: 1.05
                             highlightColor: root.highlightColor
                             textColor: root.textColor
                             backgroundColor: root.backgroundColor
@@ -469,10 +437,10 @@ Item {
                             animationDuration: animationConstants.normalDuration
                             shortAnimationDuration: animationConstants.shortDuration
                             labelTopMargin: root.labelTopMargin
-                            // No onZoneHovered: interactive=false above means the inner
-                            // MouseArea never fires. `selectedLayoutId` / `selectedZoneIndex`
-                            // are written from C++ (selector.cpp::updateSelectorPosition) so
-                            // the highlight still tracks the cursor.
+                            // No hover handling: ZonePreview has no MouseAreas.
+                            // `selectedLayoutId` / `selectedZoneIndex` are written from C++
+                            // (selector.cpp::updateSelectorPosition) so the highlight still
+                            // tracks the cursor.
                         }
 
                         Rectangle {
@@ -487,13 +455,14 @@ Item {
                                 source: "object-locked"
                                 width: Math.min(parent.width, parent.height) * 0.3
                                 height: width
-                                color: Kirigami.Theme.highlightedTextColor
+                                color: Kirigami.Theme.textColor
                             }
 
                             MouseArea {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.ForbiddenCursor
+                                Accessible.role: Accessible.Button
                                 Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked. Switch to this layout before selecting a zone.")
                                 onClicked: function (mouse) {
                                     mouse.accepted = true;

@@ -62,7 +62,7 @@ vec4 pTransition(vec2 uv, float t)
     // (every column getting the same noise → uniform shift for one
     // frame instead of staggered melt). The first paintable frame
     // replaces this with the real surface dimensions.
-    vec2 flooredResolution = max(iResolution, vec2(1.0));
+    vec2 flooredResolution = resolutionSafe();
     vec2 pixelGrid  = vec2(pixelSize) / flooredResolution;
 
     // Snap to cell centre.

@@ -47,7 +47,16 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect.cpp
     plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
-    plasmazoneseffect/borders.cpp
+    plasmazoneseffect/decoration_appearance.cpp
+    plasmazoneseffect/decorations.cpp
+    plasmazoneseffect/decoration_teardown.cpp
+    plasmazoneseffect/decoration_render.cpp
+    plasmazoneseffect/surfacelayers.cpp
+    plasmazoneseffect/surface_backdrop.cpp
+    plasmazoneseffect/surface_capture.cpp
+    plasmazoneseffect/surface_gating.cpp
+    plasmazoneseffect/decoration_rules.cpp
+    plasmazoneseffect/surface_audio.cpp
     plasmazoneseffect/window_identity.cpp
     plasmazoneseffect/mouse_drag.cpp
     plasmazoneseffect/window_filtering.cpp
@@ -57,14 +66,21 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_lifecycle.cpp
     plasmazoneseffect/daemon_bringup.cpp
     plasmazoneseffect/daemon_apply.cpp
+    plasmazoneseffect/rule_invalidation.cpp
     plasmazoneseffect/drag_snap.cpp
     plasmazoneseffect/drag_end.cpp
+    plasmazoneseffect/mesh_sim.cpp
+    plasmazoneseffect/mesh_sim.h
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/shader_transitions.cpp
+    plasmazoneseffect/surface_compile.cpp
     plasmazoneseffect/shader_resolve.cpp
     plasmazoneseffect/shader_resolve.h
     plasmazoneseffect/shader_internal.h
+    plasmazoneseffect/surface_types.h
+    plasmazoneseffect/transition_types.h
     plasmazoneseffect/types.h
+    plasmazoneseffect/surface_fold.h
     shadertransitionmanager.h
     shadertransitionmanager.cpp
     autotilehandler.cpp
@@ -75,6 +91,11 @@ set(plasmazones_effect_SRCS
     autotilehandler/wiring.cpp
     snaphandler.cpp
     snaphandler.h
+    desktoptransitionmanager.cpp
+    desktoptransitioncapture.cpp
+    desktoptransitionshader.cpp
+    desktoptransitionteardown.cpp
+    desktoptransitionmanager.h
     navigationhandler.cpp
     navigationhandler.h
     screenchangehandler.cpp
@@ -109,6 +130,28 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
 # KWin's GL headers) would break that ordering. Mirrors the daemon's identical
 # guard on dmabufglimport.cpp (src/CMakeLists.txt).
 set_source_files_properties(snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+# All four TUs of DesktopTransitionManager stay out of the Unity blob.
+#
+# None of them fixes a PRESENT collision, and the comments here used to imply
+# otherwise. Every file-local name across the four is unique repo-wide
+# (drawDesktopBlendQuad, translatePackParams, captureFormatFor,
+# allocateOutputTexture), and desktoptransitionmanager.cpp:42 is explicit that
+# its quad helper was given a distinct name from surfacelayers.cpp's
+# drawFullscreenQuad precisely so the blob CANNOT collide — differently-named
+# anonymous-namespace entities never do. The remaining two TUs carry no
+# file-local entity at all: the vertex source in desktoptransitionshader.cpp is
+# a FUNCTION-local static, and desktoptransitionteardown.cpp has no anonymous
+# namespace.
+#
+# The exclusion is a uniform prophylactic rule instead: this class is split by
+# concern across four files that freely add file-local helpers, and a future one
+# sharing a name with any other blob member would fail the build in a way that
+# reads as unrelated. Keeping the whole class out costs only blob parallelism
+# and cross-TU inlining, neither of which matters for four small TUs.
+set_source_files_properties(desktoptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(desktoptransitionteardown.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE
@@ -131,21 +174,31 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # the re-export and this target would break mysteriously. Named
     # here so the link graph matches the include graph.
     PhosphorAnimation::PhosphorAnimation
-    # PhosphorWindowRules: the unified LGPL rule engine. The effect resolves
+    # PhosphorRules: the unified LGPL rule engine. The effect resolves
     # its per-window animation overrides AND its exclusion gates through
-    # RuleEvaluator over slices of windowrules.json — the snap-drag gate
+    # RuleEvaluator over slices of rules.json — the snap-drag gate
     # binds to `ExclusionRules::excludeRulesFrom`, the animation gate to
     # `ExclusionRules::excludeAnimationsRulesFrom`, both filtering the
     # same unified rule-store push that drives the OverrideAnimation*
     # pipeline. Both the effect and the daemon link this one library so
     # there is exactly one match-code implementation (GPL->LGPL link is
     # fine).
-    PhosphorWindowRules::PhosphorWindowRules
+    PhosphorRules::PhosphorRules
     # ShaderIncludeResolver: kwin-effect resolves `#include` directives
     # in animation shader source so the canonical header inlines before
     # the `#define PLASMAZONES_KWIN` injection selects its default-block
     # branch (KWin::GLShader's classic-GL pipeline doesn't bind UBOs).
     PhosphorShaders::PhosphorShaders
+    # PhosphorSurface: the surface-shader pack registry/contract. The effect
+    # compiles the selected surface pack (window border / rounded corners) from
+    # data/surface via SurfaceShaderRegistry, the third shader-pack category
+    # alongside animations + overlay shaders. GPL->LGPL link is fine.
+    PhosphorSurface::PhosphorSurface
+    # PhosphorAudio: the CAVA spectrum provider (Qt-Core-only). The effect runs
+    # its OWN CavaSpectrumProvider to feed audio-reactive surface decorations
+    # (border-audio), since the daemon's spectrum is not exported over the
+    # low-frequency D-Bus config channel. GPL->LGPL link is fine.
+    PhosphorAudio::PhosphorAudio
     # libepoxy: EGL dma-buf export entry points for snap-assist thumbnail
     # zero-copy delivery (snapassistthumbnailcapture.cpp). Qt6::DBus's
     # QDBusUnixFileDescriptor carries the exported fd to the daemon.
@@ -156,7 +209,6 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
 target_include_directories(kwin_effect_plasmazones PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
-    ${CMAKE_SOURCE_DIR}  # For shared/ headers (virtualscreenid.h)
 )
 
 # Note: metadata.json is embedded in the plugin binary via Q_PLUGIN_METADATA in

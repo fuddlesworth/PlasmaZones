@@ -25,50 +25,51 @@
 
 namespace PhosphorPlacement {
 
+// Snapped-window frames are passed through the shared
+// PhosphorGeometry::insetRect helper (the autotile path is deliberately
+// un-inset and does not call it) with the
+// inset from IGeometryResolver::snapBorderInset, which returns 0 in all
+// configurations today: the KWin effect's border shader recolours the window's
+// own outermost band INSIDE the frame, so frames are not inset and a snapped
+// window fills its zone exactly (no border-width gap between tiles). insetRect
+// is retained as the seam for a future per-window-border design that would draw
+// outside the frame; with inset 0 it is a no-op.
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFilter, int desktopFilter) const
 {
-    const QHash<QString, QStringList>& zones = m_snapState->zoneAssignments();
-    const QHash<QString, QString>& screens = m_snapState->screenAssignments();
-    const QHash<QString, int>& desktops = m_snapState->desktopAssignments();
-
     QSet<QUuid> occupiedZoneIds;
-    for (auto it = zones.constBegin(); it != zones.constEnd(); ++it) {
-        // Skip floating windows — they have preserved zone assignments (for resnap
-        // on mode switch) but should not make zones appear occupied.
-        if (isWindowFloating(it.key())) {
-            continue;
-        }
-        // When screen filter is set, only count zones from windows on that screen.
-        // This prevents windows on other screens (or desktops sharing the same layout)
-        // from making zones appear occupied on the target screen.
-        if (!screenFilter.isEmpty()) {
-            QString windowScreen = screens.value(it.key());
-            if (!PhosphorScreens::ScreenIdentity::screensMatch(windowScreen, screenFilter)) {
-                continue;
+    forEachZoneAssignedWindow(
+        [&](const QString& windowId, const QStringList& zoneIds, const QString& windowScreen, int windowDesktop) {
+            // Skip floating windows — they have preserved zone assignments (for resnap
+            // on mode switch) but should not make zones appear occupied.
+            if (isWindowFloating(windowId)) {
+                return;
             }
-        }
-        // When desktop filter is set, only count zones from windows on that desktop.
-        // Desktop 0 means "all desktops" (pinned window) — always include those.
-        if (desktopFilter > 0) {
-            int windowDesktop = desktops.value(it.key(), 0);
-            if (windowDesktop != 0 && windowDesktop != desktopFilter) {
-                continue;
+            // When screen filter is set, only count zones from windows on that screen.
+            // This prevents windows on other screens (or desktops sharing the same layout)
+            // from making zones appear occupied on the target screen.
+            if (!screenFilter.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(windowScreen, screenFilter)) {
+                return;
             }
-        }
-        for (const QString& zoneId : it.value()) {
-            if (zoneId.startsWith(kZoneSelectorIdPrefix)) {
-                continue;
+            // When desktop filter is set, only count zones from windows on that desktop.
+            // Desktop 0 means "all desktops" (pinned window) — always include those.
+            if (!desktopMatchesFilter(windowDesktop, desktopFilter)) {
+                return;
             }
-            auto uuid = parseUuid(zoneId);
-            if (uuid) {
-                occupiedZoneIds.insert(*uuid);
+            for (const QString& zoneId : zoneIds) {
+                if (zoneId.startsWith(kZoneSelectorIdPrefix)) {
+                    continue;
+                }
+                auto uuid = parseUuid(zoneId);
+                if (uuid) {
+                    occupiedZoneIds.insert(*uuid);
+                }
             }
-        }
-    }
+        });
     return occupiedZoneIds;
 }
 
@@ -157,12 +158,21 @@ PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QStri
     // blocking snap assist (discussion #323).
     const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
     QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
-    int zp = m_geometryResolver ? m_geometryResolver->resolveZonePadding(layout, screenId)
-                                : PhosphorEngine::GeometryDefaults::ZonePadding;
+    int zp = m_geometryResolver ? m_geometryResolver->resolveInnerGap(layout, screenId)
+                                : PhosphorEngine::GeometryDefaults::InnerGap;
     auto og = m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
                                  : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
-    int defaultBw = m_geometryResolver ? m_geometryResolver->defaultBorderWidth() : 2;
-    int defaultBr = m_geometryResolver ? m_geometryResolver->defaultBorderRadius() : 0;
+    // The null-resolver fallbacks mirror PhosphorZones::ZoneDefaults
+    // (BorderWidth=2, BorderRadius=8) — the same defaults DaemonGeometryResolver
+    // falls back to when its settings are absent. They are duplicated as
+    // literals here because phosphor-placement does not depend on
+    // phosphor-zones' defaults header and pulling it in for two constants is
+    // disproportionate; this branch is a degenerate safety path (production
+    // always wires a DaemonGeometryResolver).
+    constexpr int kFallbackBorderWidth = 2;
+    constexpr int kFallbackBorderRadius = 8;
+    int defaultBw = m_geometryResolver ? m_geometryResolver->defaultBorderWidth() : kFallbackBorderWidth;
+    int defaultBr = m_geometryResolver ? m_geometryResolver->defaultBorderRadius() : kFallbackBorderRadius;
 
     PhosphorProtocol::EmptyZoneList result;
     for (PhosphorZones::Zone* zone : layout->zones()) {
@@ -220,12 +230,19 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    int zp = m_geometryResolver ? m_geometryResolver->resolveZonePadding(layout, screenId)
-                                : PhosphorEngine::GeometryDefaults::ZonePadding;
+    int zp = m_geometryResolver ? m_geometryResolver->resolveInnerGap(layout, screenId)
+                                : PhosphorEngine::GeometryDefaults::InnerGap;
     auto og = m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
                                  : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap);
-    return PhosphorZones::GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, zp,
-                                                                  og);
+    QRect geo =
+        PhosphorZones::GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, zp, og);
+    // Reserved snap-border inset seam: snapBorderInset() returns 0 in every
+    // config today (the border shader recolours the window's own band, no
+    // geometry inset), so this is currently a no-op. Single chokepoint for
+    // actual window frames — snap-assist previews use getZoneGeometryWithGaps
+    // directly (buildEmptyZoneList) and bypass this, so previews stay un-inset.
+    int inset = m_geometryResolver ? m_geometryResolver->snapBorderInset() : 0;
+    return PhosphorGeometry::insetRect(geo, inset);
 }
 
 QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
@@ -252,8 +269,8 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
 
         QRectF geoF = PhosphorZones::GeometryUtils::getZoneGeometryForScreenF(
             m_screenManager, zone, screen, screenId, layout,
-            m_geometryResolver ? m_geometryResolver->resolveZonePadding(layout, screenId)
-                               : PhosphorEngine::GeometryDefaults::ZonePadding,
+            m_geometryResolver ? m_geometryResolver->resolveInnerGap(layout, screenId)
+                               : PhosphorEngine::GeometryDefaults::InnerGap,
             m_geometryResolver ? m_geometryResolver->resolveOuterGaps(layout, screenId)
                                : PhosphorLayout::EdgeGaps::uniform(PhosphorEngine::GeometryDefaults::OuterGap));
         if (geoF.isValid()) {
@@ -264,7 +281,12 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
             }
         }
     }
-    return combined.toAlignedRect();
+    // Inset the COMBINED span once (not per sub-zone) so the border traces the
+    // outer edge of the multi-zone frame, matching the single per-mode snap
+    // border the effect draws. snapBorderInset() returns 0 in every config
+    // today (reserved seam), so this is currently a no-op.
+    int inset = m_geometryResolver ? m_geometryResolver->snapBorderInset() : 0;
+    return PhosphorGeometry::insetRect(combined.toAlignedRect(), inset);
 }
 
 } // namespace PhosphorPlacement

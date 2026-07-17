@@ -49,6 +49,16 @@ public:
     void setStages(const QList<IdleStage>& stages);
     [[nodiscard]] QList<IdleStage> stages() const;
 
+    /// Is anything WRONG with the current ladder? False means some stage could not arm, so
+    /// no edge will ever come and a caller gating on idleness is gating on a fact nobody is
+    /// reporting. False for an empty ladder too: nothing is watching.
+    ///
+    /// An INHIBITED machine reports TRUE. Inhibition tears the sources down deliberately, so
+    /// "no sources" there means "nothing is supposed to be armed", not "arming failed" — and
+    /// the caller that reads this responds to false by rebuilding and eventually giving up,
+    /// which is not what a healthy paused ladder deserves.
+    [[nodiscard]] bool isArmed() const;
+
     /// 0 when active; otherwise the 1-based index of the deepest stage currently
     /// fired.
     [[nodiscard]] int currentStage() const;

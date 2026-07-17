@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 3.1.3 LANGUAGES C CXX)
+project(PlasmaZones VERSION 3.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -273,10 +273,8 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Translations (Qt Linguist). Extracted to cmake/PhosphorTranslations.cmake
-# (included in this scope) to keep this file's growth in check — it has
-# since crept past the 800-line cap again; the next self-contained block
-# to outgrow its section should be extracted the same way. See that file
-# for the update-ts / lrelease detail.
+# and included in this scope. Other self-contained blocks can be extracted the
+# same way. See that file for the update-ts / lrelease detail.
 # ---------------------------------------------------------------------------
 include(cmake/PhosphorTranslations.cmake)
 
@@ -297,18 +295,26 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-dbus)        # generic, service-agnostic D-Bus client utilities (Client, HasDBusStreaming)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants, needed by phosphor-screens (Resolver endpoint defaults)
-add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader) - Core-only, needed by phosphor-window-rules's store watcher
+add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader) - Core-only, needed by phosphor-rules's store watcher
 # phosphor-registry: generic Registry<T> + 5 factory interfaces + plugin/metadata
 # loaders. Unconditional (third-party hosts + demos consume it without the shell).
 # Moved ahead of phosphor-shaders: ShaderRegistry now composes Registry<T> +
 # MetadataPackLoader<T>, so the in-tree target must exist before shaders configures
 # (else find_package resolves a stale installed copy). Depends on phosphor-fsloader.
 add_subdirectory(libs/phosphor-registry)    # generic Registry<T> + 5 factory interfaces + plugin loader
-add_subdirectory(libs/phosphor-window-rules)  # unified window/context rule engine (MatchExpression, RuleEvaluator) - depends on phosphor-identity + phosphor-protocol + phosphor-fsloader
+add_subdirectory(libs/phosphor-rules)  # unified window/context rule engine (MatchExpression, RuleEvaluator) - depends on phosphor-identity + phosphor-protocol + phosphor-fsloader
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
 add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderRegistry)
+add_subdirectory(libs/phosphor-surface)     # surface-shader pack subsystem (SurfaceShaderContract/Effect/Registry) - depends on phosphor-shaders/registry/fsloader
 add_subdirectory(libs/phosphor-wayland)       # Wayland layer-shell QPA plugin + LayerSurface - needed by phosphor-screens
+# ext-idle-notify-v1. Built unconditionally (it used to sit behind
+# BUILD_PHOSPHOR_SHELL) because the DAEMON now depends on it: the KWin effect
+# pauses decoration animation while the session is idle, and idleness is a Wayland
+# CLIENT concern the compositor serves rather than consumes, so the daemon has to
+# watch for it and push the result to the effect. Only needs phosphor-wayland, which
+# is already unconditional.
+add_subdirectory(libs/phosphor-service-idle)  # Wayland idle monitoring + inhibition
 add_subdirectory(libs/phosphor-geometry)    # pure geometry math (coordinate transforms, overlap, min-size) - needed by phosphor-screens (swapper directional selector)
 add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision - needed by phosphor-zones
 add_subdirectory(libs/phosphor-zones)       # zone primitives + LayoutManager (depends on phosphor-config IBackend, phosphor-screens ScreenIdentity)
@@ -362,6 +368,9 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-ipc)     # JSON-over-Unix-socket IpcRouter + IpcTarget QML type
     add_subdirectory(cli/phosphorctl)       # phosphorctl call / list / schema / subscribe
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types
+    add_subdirectory(libs/phosphor-shell-widgets)  # Phosphor.Widgets M3 atom library (Phase 3.1); depends on phosphor-theme
+    add_subdirectory(libs/phosphor-shell-osd)      # Phosphor.OSD on-screen-display framework (Phase 3.3); depends on theme + widgets
+    add_subdirectory(libs/phosphor-shell-notifications) # Phosphor.Notifications toast framework (Phase 3.4); depends on theme + widgets
 endif()
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
@@ -465,7 +474,6 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-brightness) # display / keyboard backlight brightness (Phase 2.4)
     add_subdirectory(libs/phosphor-service-notifications) # org.freedesktop.Notifications server (Phase 2.5)
     add_subdirectory(libs/phosphor-service-polkit)        # PolicyKit authentication agent (Phase 2.6)
-    add_subdirectory(libs/phosphor-service-idle)          # Wayland idle monitoring + inhibition (Phase 2.7)
     add_subdirectory(libs/phosphor-service-clipboard)     # Wayland clipboard history (data-control) (Phase 2.8)
     add_subdirectory(libs/phosphor-service-lock)          # PAM auth + ext-session-lock-v1 coordination (Phase 2.9)
     add_subdirectory(libs/phosphor-service-session)       # logind session/power actions + inhibitors (Phase 2.10)
@@ -514,7 +522,7 @@ install(FILES
     dbus/org.plasmazones.Shader.xml
     dbus/org.plasmazones.Snap.xml
     dbus/org.plasmazones.WindowDrag.xml
-    dbus/org.plasmazones.WindowRules.xml
+    dbus/org.plasmazones.Rules.xml
     dbus/org.plasmazones.WindowTracking.xml
     dbus/org.plasmazones.ZoneDetection.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}
@@ -582,30 +590,35 @@ install(CODE "
 # profile JSONs to install or validate. The install(CODE) stale-cleanup
 # block above is intentionally kept for upgrades from older builds.
 
-# Install bundled RenderNode shaders (raw GLSL, no compilation needed)
-install(DIRECTORY data/shaders/
-    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/shaders
-    FILES_MATCHING
-    PATTERN "metadata.json"
-    PATTERN "*.glsl"
-    PATTERN "*.vert"
-    PATTERN "*.frag"
-    PATTERN "*.png"
-    PATTERN "*.svg"
+# Install bundled RenderNode shaders (raw GLSL, no compilation needed).
+# Ship the whole pack tree so every asset a pack's metadata references
+# travels with it, and exclude only hidden editor/OS/dev files (.DS_Store,
+# .luaurc-style linter configs, VCS dotfiles). An extension allowlist here
+# silently dropped any new asset type, or any JSON not named metadata.json.
+install(DIRECTORY data/overlays/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/overlays
+    PATTERN ".*" EXCLUDE
 )
 
 # Install bundled animation transition shader packs. The daemon's
 # AnimationShaderRegistry scans ${XDG_DATA_DIRS}/plasmazones/animations
 # at startup; user overrides at ~/.local/share/plasmazones/animations win.
+# Ship the whole pack tree (metadata, shaders, the shared/ GLSL includes,
+# and any texture a pack references) and exclude only hidden dev/OS files.
 install(DIRECTORY data/animations/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/animations
-    FILES_MATCHING
-    PATTERN "metadata.json"
-    PATTERN "*.frag"
-    PATTERN "*.vert"
-    # GLSL include files (shared/animation_uniforms.glsl, shared/animation.vert).
-    PATTERN "*.glsl"
-    PATTERN "*.png"
+    PATTERN ".*" EXCLUDE
+)
+
+# Install bundled surface shader packs (window border / rounded corners today;
+# the third shader-pack category alongside shaders + animations). The kwin-effect
+# discovers ${XDG_DATA_DIRS}/plasmazones/surface via the SurfaceShaderRegistry;
+# user overrides at ~/.local/share/plasmazones/surface win.
+# Ship the whole pack tree (metadata, shaders, the shared/ GLSL includes,
+# and any texture a pack references) and exclude only hidden dev/OS files.
+install(DIRECTORY data/surface/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/surface
+    PATTERN ".*" EXCLUDE
 )
 
 # Install bundled scripted tiling algorithms
@@ -663,12 +676,24 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
 #   phosphor-registry-demo — in-process IBarWidgetFactory registration
 #                            (registry + theme).
 #   phosphor-ipc-demo    — three IpcTargets driven via phosphorctl.
+#   phosphor-widgets-kitchen-sink — every Phosphor.Widgets atom in its
+#                            enabled/disabled states (widgets + theme).
+#   phosphor-bar-canvas-demo — connected-corner bar; a popout grows out of
+#                            the bar as one Shape, toggled via PopoutService.
+#   phosphor-osd-demo — OSDHost overlay; the four built-in OSDs via
+#                            Registry<IOSDFactory>, driven by phosphorctl.
+#   phosphor-toast-demo — ToastHost overlay fed by a real NotificationServer
+#                            (notify-send) + buttons; DND exercises the rules seam.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-theme-demo)
     add_subdirectory(examples/phosphor-theme-cli)
     add_subdirectory(examples/phosphor-popout-demo)
     add_subdirectory(examples/phosphor-registry-demo)
     add_subdirectory(examples/phosphor-ipc-demo)
+    add_subdirectory(examples/phosphor-widgets-kitchen-sink)
+    add_subdirectory(examples/phosphor-bar-canvas-demo)
+    add_subdirectory(examples/phosphor-osd-demo)
+    add_subdirectory(examples/phosphor-toast-demo)
 endif()
 
 # phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell

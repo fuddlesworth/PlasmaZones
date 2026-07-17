@@ -59,15 +59,18 @@ SettingsFlickable {
 
     function _currentState() {
         var target = _selectedScreen;
-        // If no screen selected, use first screen
-        if (!target && _screenStates.length > 0)
-            target = _screenStates[0].screenId || "";
+        // No selection yet — fall back to the first reported state.
+        if (!target)
+            return _screenStates.length > 0 ? _screenStates[0] : null;
 
         for (var i = 0; i < _screenStates.length; i++) {
             if (_screenStates[i].screenId === target)
                 return _screenStates[i];
         }
-        return _screenStates.length > 0 ? _screenStates[0] : null;
+        // The selected screen has no reported state. Return null so the
+        // "Unable to retrieve monitor state" warning shows, rather than
+        // displaying (and staging against) another monitor's context.
+        return null;
     }
 
     function _findLayout(layoutId) {
@@ -79,11 +82,6 @@ SettingsFlickable {
                 return _layouts[i];
         }
         return null;
-    }
-
-    function _getZones(layoutId) {
-        var layout = _findLayout(layoutId);
-        return layout ? (layout.zones || []) : [];
     }
 
     // Stage the current local state for the selected screen (flushed on Apply).
@@ -102,15 +100,55 @@ SettingsFlickable {
         var snapping = "";
         var tiling = "";
         if (stateView.localMode === 1) {
-            var algoId = stateView.localAlgorithmId || state.algorithmId;
-            if (!algoId)
+            if (stateView.localAlgorithmCleared) {
+                // The user explicitly picked "Default": stage an assignment
+                // clear so an earlier explicit pick in this session and any
+                // daemon-side explicit assignment are reverted on Apply,
+                // instead of pinning the currently-resolved algorithm via
+                // the fallback below.
+                settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
                 return;
+            }
+            // The || fallback serves the mode-toggle path, which stages the
+            // currently-resolved algorithm when the user has not picked one.
+            var algoId = stateView.localAlgorithmId || state.algorithmId;
+            if (!algoId) {
+                // Nothing resolved to pin. Unstage any stale staged entry
+                // for this context (e.g. an opposite-mode pick from earlier
+                // in the session) so Apply cannot commit it while the UI
+                // shows Default. A true unstage, not a staged clear — a
+                // staged clear is pushed on Apply and would wipe a
+                // pre-existing daemon-side assignment the user never touched.
+                if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
+                    settingsController.removeStagedAssignment(_selectedScreen, desktop, activity);
+                return;
+            }
 
             tiling = "autotile:" + algoId;
         } else {
-            var layoutId = stateView.localLayoutId || state.layoutId;
-            if (!layoutId)
+            if (stateView.localLayoutCleared) {
+                // The user explicitly picked "Default": stage an assignment
+                // clear so an earlier explicit pick in this session and any
+                // daemon-side explicit assignment are reverted on Apply,
+                // instead of pinning the currently-resolved layout via the
+                // fallback below.
+                settingsController.stageAssignmentClear(_selectedScreen, desktop, activity);
                 return;
+            }
+            // The || fallback serves the mode-toggle path, which stages the
+            // currently-resolved layout when the user has not picked one.
+            var layoutId = stateView.localLayoutId || state.layoutId;
+            if (!layoutId) {
+                // Nothing resolved to pin. Unstage any stale staged entry
+                // for this context (e.g. an opposite-mode pick from earlier
+                // in the session) so Apply cannot commit it while the UI
+                // shows Default. A true unstage, not a staged clear — a
+                // staged clear is pushed on Apply and would wipe a
+                // pre-existing daemon-side assignment the user never touched.
+                if (Object.keys(settingsController.getStagedAssignment(_selectedScreen, desktop, activity)).length > 0)
+                    settingsController.removeStagedAssignment(_selectedScreen, desktop, activity);
+                return;
+            }
 
             snapping = layoutId;
         }
@@ -225,6 +263,15 @@ SettingsFlickable {
             property int localMode: 0
             property string localLayoutId: ""
             property string localAlgorithmId: ""
+            // True after the user explicitly picks "Default" in the layout
+            // selector. Tracked separately from localLayoutId because the
+            // combo reports Default as an empty value, which is otherwise
+            // indistinguishable from the not-yet-touched state.
+            property bool localLayoutCleared: false
+            // Same tracking for the algorithm selector's "Default" pick: the
+            // combo reports it as an empty value, indistinguishable from the
+            // not-yet-touched state without this flag.
+            property bool localAlgorithmCleared: false
             property bool isTiling: localMode === 1
             // Resolved layout object for LayoutThumbnail
             property var currentLayout: root._findLayout(localLayoutId)
@@ -238,8 +285,22 @@ SettingsFlickable {
 
                 var desktop = screenState.virtualDesktop || 0;
                 var activity = screenState.activity || "";
+                // Selection context changed — drop any pending explicit
+                // "Default" pick; the state below re-initializes from
+                // staged or daemon values.
+                localLayoutCleared = false;
+                localAlgorithmCleared = false;
                 var staged = settingsController.getStagedAssignment(root._selectedScreen, desktop, activity);
-                if (Object.keys(staged).length > 0) {
+                if (staged.fullCleared) {
+                    // A staged full clear means "Default" is pending for this
+                    // context: show Default rather than re-reading the
+                    // daemon's still-resolved explicit values.
+                    localMode = screenState.mode || 0;
+                    localLayoutId = "";
+                    localAlgorithmId = "";
+                    localLayoutCleared = true;
+                    localAlgorithmCleared = true;
+                } else if (Object.keys(staged).length > 0) {
                     // Restore from staged state
                     localMode = staged.mode !== undefined ? staged.mode : (screenState.mode || 0);
                     localLayoutId = staged.layoutId !== undefined ? staged.layoutId : (screenState.layoutId || "");
@@ -256,9 +317,12 @@ SettingsFlickable {
             LayoutThumbnail {
                 Layout.alignment: Qt.AlignHCenter
                 visible: !stateView.isTiling
+                // Fallback stands in for a layout the local list doesn't carry,
+                // so there are no zones to draw. The daemon still reports the
+                // resolved name, so show that rather than nothing.
                 layout: stateView.currentLayout || ({
-                        "name": i18n("Default"),
-                        "zones": root._getZones(stateView.localLayoutId)
+                        "displayName": (stateView.screenState && stateView.screenState.layoutName) || i18n("Default"),
+                        "zones": []
                     })
                 isSelected: true
                 baseHeight: Kirigami.Units.gridUnit * 14
@@ -266,7 +330,7 @@ SettingsFlickable {
                 screenAspectRatio: root._selectedScreenAspectRatio
                 Accessible.name: {
                     var l = stateView.currentLayout;
-                    return l ? i18n("Snapping layout preview: %1", l.name) : i18n("Snapping layout preview");
+                    return l ? i18n("Snapping layout preview: %1", l.displayName) : i18n("Snapping layout preview");
                 }
             }
 
@@ -280,8 +344,10 @@ SettingsFlickable {
                     if (found)
                         return found;
 
+                    // getScreenStates reports the algorithm's display name, so
+                    // prefer it over the raw id ("bsp") the local list missed.
                     return {
-                        "name": stateView.localAlgorithmId || i18n("Default"),
+                        "displayName": (stateView.screenState && stateView.screenState.algorithmName) || stateView.localAlgorithmId || i18n("Default"),
                         "zones": []
                     };
                 }
@@ -292,7 +358,7 @@ SettingsFlickable {
                 Accessible.name: {
                     var algoId = "autotile:" + stateView.localAlgorithmId;
                     var found = root._findLayout(algoId);
-                    return found ? i18n("Tiling algorithm preview: %1", found.name) : i18n("Tiling algorithm preview");
+                    return found ? i18n("Tiling algorithm preview: %1", found.displayName) : i18n("Tiling algorithm preview");
                 }
             }
 
@@ -303,6 +369,13 @@ SettingsFlickable {
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
                     stateView.localMode = idx;
+                    // A mode toggle is an explicit re-pin: the user is asking
+                    // for this mode on this screen, so any earlier "Default"
+                    // pick no longer applies. Clear both flags so
+                    // _stageCurrentState stages the currently-resolved value
+                    // instead of silently dropping the mode change.
+                    stateView.localLayoutCleared = false;
+                    stateView.localAlgorithmCleared = false;
                     root._stageCurrentState();
                 }
             }
@@ -318,7 +391,9 @@ SettingsFlickable {
                 showPreview: true
                 onActivated: function (idx) {
                     var entry = model[idx];
-                    stateView.localLayoutId = entry ? (entry.value || "") : "";
+                    var id = entry ? (entry.value || "") : "";
+                    stateView.localLayoutId = id;
+                    stateView.localLayoutCleared = (id === "");
                     root._stageCurrentState();
                 }
             }
@@ -339,6 +414,7 @@ SettingsFlickable {
                         stateView.localAlgorithmId = id.substring(9);
                     else
                         stateView.localAlgorithmId = id;
+                    stateView.localAlgorithmCleared = (id === "");
                     root._stageCurrentState();
                 }
             }

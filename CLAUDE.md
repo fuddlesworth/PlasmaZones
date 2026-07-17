@@ -49,7 +49,7 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Parent-based ownership for QObjects; `std::unique_ptr`/`QPointer` otherwise; never manual delete
 - Forward declare in headers; group includes: own header → project → KDE → Qt
 - `PLASMAZONES_EXPORT` on public API classes
-- Keep files under 800 lines
+- Keep files under 1000 lines, with a 15% grace (hard ceiling 1150). Under 1000 is the target; 1000–1150 is tolerated and not a review finding on its own. Past 1150, split by concern.
 - Input validation at system boundaries
 
 ### Qt6 String Literals (CRITICAL)
@@ -319,7 +319,7 @@ npx @claude-flow/cli@latest doctor --fix
 ## Key Pitfalls
 - Never copy QObjects — Never hardcode colors/spacing — Never use indices for zones
 - Never emit without checking value changed — Never use raw string literals with Qt6
-- Keep files under 800 lines — Keep QML for UI, C++ for logic
+- Keep files under 1000 lines (15% grace, hard ceiling 1150) — Keep QML for UI, C++ for logic
 
 ## Support
 - Documentation: https://github.com/ruvnet/claude-flow

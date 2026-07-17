@@ -52,9 +52,13 @@ public:
     /// path schedules another.
     void scheduleClientAreaReport();
 
-    /// Hook @p w for work-area reporting when it is a panel (dock): connects
-    /// its geometry-changed signal and schedules a report. A no-op for
-    /// non-dock windows. Called for every `windowAdded` and once per
+    /// Hook @p w for work-area reporting when it may reserve screen-edge
+    /// space: connects its geometry-changed signal and schedules a report.
+    /// Matches docks AND unmovable layer-shell surfaces — a third-party
+    /// shell's panel (e.g. phosphor-shell) carries an exclusive zone but is
+    /// NOT isDock() to KWin, and missing it leaves the daemon's compositor
+    /// work-area override stale when that panel resizes. A no-op for every
+    /// other window. Called for every `windowAdded` and once per
     /// already-mapped window at effect startup so pre-existing panels are
     /// covered too.
     void trackDockWindow(KWin::EffectWindow* w);
@@ -83,8 +87,9 @@ public Q_SLOTS:
     void slotScreenLayoutChanged();
 
     /// Connected to `EffectsHandler::windowClosed` — schedules a work-area
-    /// report when @p w is a panel (dock) so the strut it freed reaches the
-    /// daemon. A no-op for non-dock windows.
+    /// report when @p w may have reserved screen-edge space (same match as
+    /// @ref trackDockWindow) so the strut it freed reaches the daemon. A
+    /// no-op for every other window.
     void onWindowClosed(KWin::EffectWindow* w);
 
 private:

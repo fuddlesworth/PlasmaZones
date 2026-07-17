@@ -20,6 +20,10 @@
 #include <QString>
 #include <QStringList>
 
+namespace PhosphorSurfaceShaders {
+class DecorationProfileTree;
+}
+
 namespace PlasmaZones {
 
 /**
@@ -98,10 +102,10 @@ public:
     /// zoneSelectorEnabled() unless you need the raw child flag value.
     ///
     /// Test-stub note: `StubSettings` (tests/unit/helpers/StubSettings.h)
-    /// defaults `snappingEnabled() == true` and `zoneSelectorEnabled() == true`,
-    /// so this returns true unless a test explicitly overrides one of the
-    /// two flags. The same applies to `isSnapAssistActive` (defaults
-    /// `snapAssistEnabled() == false` so it returns false until overridden).
+    /// seeds `snappingEnabled()`, `zoneSelectorEnabled()`, and
+    /// `snapAssistEnabled()` from their `ConfigDefaults` accessors (all
+    /// true), so both this method and `isSnapAssistActive` return true
+    /// unless a test explicitly overrides one of the flags involved.
     bool isZoneSelectorActive() const
     {
         return snappingEnabled() && zoneSelectorEnabled();
@@ -118,12 +122,13 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // All settings methods are inherited from the segregated interfaces:
     //   - IZoneActivationSettings: drag modifiers, activation triggers
-    //   - IZoneVisualizationSettings: colors, opacity, blur, shader effects
+    //   - IZoneVisualizationSettings: colors, opacity, shader effects
     //   - IZoneGeometrySettings: padding, gaps, thresholds, performance
     //   - IWindowExclusionSettings: excluded apps/classes, size filters
     //   - IZoneSelectorSettings: zone selector UI configuration
     //   - IWindowBehaviorSettings: snap restore, sticky handling
     //   - IDefaultLayoutSettings: default layout ID
+    //   - IOrderingSettings: manual layout/algorithm ordering
     //   - IAnimationSettings: animation/shader-profile state + window filtering
     //
     // See settings_interfaces.h for the full API.
@@ -136,9 +141,9 @@ public:
     // ISettings, not IAnimationSettings alone.
     //
     // animationExcludedApplications / animationExcludedWindowClasses virtuals
-    // retired in v4 — the lists folded into ExcludeAnimations WindowRules; the
+    // retired in v4 — the lists folded into ExcludeAnimations Rules; the
     // KWin effect now derives its m_animationExclusionRuleSet from the unified
-    // rule store via PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom.
+    // rule store via PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom.
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
@@ -150,37 +155,6 @@ public:
     virtual void setSnappingFocusNewWindows(bool enabled) = 0;
     virtual bool snappingFocusFollowsMouse() const = 0;
     virtual void setSnappingFocusFollowsMouse(bool enabled) = 0;
-    virtual bool autotileHideTitleBars() const = 0;
-    virtual void setAutotileHideTitleBars(bool hide) = 0;
-    virtual bool autotileShowBorder() const = 0;
-    virtual void setAutotileShowBorder(bool show) = 0;
-    virtual int autotileBorderWidth() const = 0;
-    virtual void setAutotileBorderWidth(int width) = 0;
-    virtual int autotileBorderRadius() const = 0;
-    virtual void setAutotileBorderRadius(int radius) = 0;
-    virtual QColor autotileBorderColor() const = 0;
-    virtual void setAutotileBorderColor(const QColor& color) = 0;
-    virtual QColor autotileInactiveBorderColor() const = 0;
-    virtual void setAutotileInactiveBorderColor(const QColor& color) = 0;
-    virtual bool autotileUseSystemBorderColors() const = 0;
-    virtual void setAutotileUseSystemBorderColors(bool use) = 0;
-
-    // Snapping window decoration settings (fetched by KWin effect via D-Bus).
-    // Parallel to autotile* — the snapped window's border / title-bar.
-    virtual bool snappingHideTitleBars() const = 0;
-    virtual void setSnappingHideTitleBars(bool hide) = 0;
-    virtual bool snappingShowBorder() const = 0;
-    virtual void setSnappingShowBorder(bool show) = 0;
-    virtual int snappingBorderWidth() const = 0;
-    virtual void setSnappingBorderWidth(int width) = 0;
-    virtual int snappingBorderRadius() const = 0;
-    virtual void setSnappingBorderRadius(int radius) = 0;
-    virtual QColor snappingBorderColor() const = 0;
-    virtual void setSnappingBorderColor(const QColor& color) = 0;
-    virtual QColor snappingInactiveBorderColor() const = 0;
-    virtual void setSnappingInactiveBorderColor(const QColor& color) = 0;
-    virtual bool snappingUseSystemBorderColors() const = 0;
-    virtual void setSnappingUseSystemBorderColors(bool use) = 0;
 
     virtual StickyWindowHandling autotileStickyWindowHandling() const = 0;
     virtual void setAutotileStickyWindowHandling(StickyWindowHandling handling) = 0;
@@ -204,6 +178,29 @@ public:
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
     virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
 
+    // Hierarchical per-surface decoration tree — a DecorationProfile (surface
+    // shader-pack chain + its per-pack parameters) keyed on a dot-path surface
+    // namespace. Mirrors the animation shaderProfileTree pair (which lives on
+    // IAnimationSettings): the typed getter returns the parsed tree, and the
+    // JSON-string facade routes through it for the Q_PROPERTY meta-object
+    // dirty-tracking loop. Lives on the interface so page controllers and the
+    // settings adaptor depend on ISettings, not the concrete Settings.
+    virtual PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const = 0;
+    virtual void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) = 0;
+    virtual QString decorationProfileTreeJson() const = 0;
+    virtual void setDecorationProfileTreeJson(const QString& json) = 0;
+
+    // Decorations.Performance — bounds on WHEN the decoration chain animates. An
+    // animated pack repaints every window carrying it on every vsync, and that
+    // alone keeps the GPU in its top performance state regardless of how cheap the
+    // per-frame work is, so these gate the redraw rather than shrink it.
+    virtual bool decorationAnimateFocusedOnly() const = 0;
+    virtual void setDecorationAnimateFocusedOnly(bool value) = 0;
+    virtual bool decorationPauseWhenIdle() const = 0;
+    virtual void setDecorationPauseWhenIdle(bool value) = 0;
+    virtual int decorationIdleTimeoutSec() const = 0;
+    virtual void setDecorationIdleTimeoutSec(int value) = 0;
+
     // Color-import helper used by SnappingZonesController. Returns
     // an empty string on success, a user-readable error message
     // otherwise. The signature mirrors Settings::loadColorsFromFile
@@ -218,6 +215,48 @@ public:
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
+
+    // Window decoration appearance (tiled/snapped window border + title bar).
+    // Mode-neutral, distinct from the ZONE OVERLAY border settings
+    // (borderWidth/borderRadius/borderColor on IZoneVisualizationSettings) —
+    // these describe the actual window decoration the compositor paints, edited
+    // on the Window Appearance settings page.
+    virtual bool showWindowBorder() const = 0;
+    virtual void setShowWindowBorder(bool show) = 0;
+    virtual QString windowBorderScope() const = 0;
+    virtual void setWindowBorderScope(const QString& scope) = 0;
+    virtual int windowBorderWidth() const = 0;
+    virtual void setWindowBorderWidth(int width) = 0;
+    virtual int windowBorderRadius() const = 0;
+    virtual void setWindowBorderRadius(int radius) = 0;
+    virtual QString windowBorderColorActive() const = 0;
+    virtual void setWindowBorderColorActive(const QString& color) = 0;
+    virtual QString windowBorderColorInactive() const = 0;
+    virtual void setWindowBorderColorInactive(const QString& color) = 0;
+    virtual bool hideWindowTitleBars() const = 0;
+    virtual void setHideWindowTitleBars(bool hide) = 0;
+    virtual QString windowTitleBarScope() const = 0;
+    virtual void setWindowTitleBarScope(const QString& scope) = 0;
+    // Decoration focus cross-fade duration (ms): how long uSurfaceFocused
+    // ramps between focused and unfocused for the decoration packs that mix
+    // by focus. Independent of the window animation system; 0 = instant.
+    virtual int focusFadeDuration() const = 0;
+    virtual void setFocusFadeDuration(int ms) = 0;
+    // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*): the
+    // opacity analogue of the plain border, rendered by the built-in
+    // "opacity-tint" surface pack and suppressed by any user decoration pack.
+    // Opacity and tint strength are [0.0, 1.0]; the tint colour is an
+    // #AARRGGBB hex string or the "accent" sentinel like the border colours.
+    virtual bool showWindowOpacityTint() const = 0;
+    virtual void setShowWindowOpacityTint(bool show) = 0;
+    virtual QString windowOpacityTintScope() const = 0;
+    virtual void setWindowOpacityTintScope(const QString& scope) = 0;
+    virtual double windowOpacity() const = 0;
+    virtual void setWindowOpacity(double opacity) = 0;
+    virtual double windowTintStrength() const = 0;
+    virtual void setWindowTintStrength(double strength) = 0;
+    virtual QString windowTintColor() const = 0;
+    virtual void setWindowTintColor(const QString& color) = 0;
 
     // Editor settings — used by EditorPageController. Editor-scope rather
     // than Snapping/Tiling-scope, so they don't fit any sub-interface.
@@ -287,41 +326,40 @@ public:
         return false;
     }
 
-    // NOTE: only the getter `override`s — `getPerScreenSnappingSettings`
+    // NOTE: snapping exposes only the getter — `getPerScreenSnappingSettings`
     // is the lone snapping accessor declared on
     // PhosphorEngine::IGeometrySettings (consumed by the geometry
-    // pipeline). The set/clear/has triplet is ISettings-only (writers
-    // live in settings + KCM, never reached from the geometry path),
-    // so they're plain `virtual` with no base to override. Mirrors the
-    // autotile + zone-selector blocks above where neither side declares
-    // any of the four on IGeometrySettings.
+    // pipeline). Per-screen snapping gaps are rule-backed now, so there
+    // is no set/clear/has triplet: the getter reads the resolved gap
+    // rules and there is no per-screen snapping writer surface (unlike
+    // the autotile + zone-selector blocks above, which still carry
+    // ISettings-only set/clear/has writers).
     QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const override
     {
         return {};
     }
-    virtual void setPerScreenSnappingSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
-                                             const QVariant& /*value*/)
+
+    // Per-monitor gap overrides (config-backed, unified snap+tile), keyed in the
+    // short engine form (InnerGap / OuterGap / UsePerSideOuterGap / OuterGap
+    // {Top,Bottom,Left,Right}). Consumed by the geometry cascade merge
+    // (GeometryUtils::mergeConfigPerScreenGaps) as the config layer beneath any
+    // context gap rule. Default is a no-op empty map so test stubs inherit it.
+    virtual QVariantMap perScreenGapOverrides(const QString& /*screenIdOrName*/) const
     {
-    }
-    virtual void clearPerScreenSnappingSettings(const QString& /*screenIdOrName*/)
-    {
-    }
-    virtual bool hasPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
-    {
-        return false;
+        return {};
     }
 
     // Persistence (unique to ISettings)
     //
     // Borrowed-store contract for load(): when the concrete Settings was
-    // constructed with an externally-owned `WindowRuleStore*` (e.g. the
+    // constructed with an externally-owned `RuleStore*` (e.g. the
     // daemon's shared store), load() MUST NOT reload that store — the owner
     // is the writer and an interleaved load() here would clobber unflushed
     // in-memory edits. Only the owning side (or a future cross-process
     // watcher) drives reloads on the borrowed path. Implementations that
     // own their store (the standard constructor) reload normally. See
     // Settings::load (settings.cpp) for the live guard against
-    // `m_ownedWindowRuleStore`.
+    // `m_ownedRuleStore`.
     virtual void load() = 0;
     virtual void save() = 0;
     virtual void reset() = 0;
@@ -360,14 +398,13 @@ Q_SIGNALS:
     void inactiveOpacityChanged();
     void borderWidthChanged();
     void borderRadiusChanged();
-    void enableBlurChanged();
     void labelFontFamilyChanged();
     void labelFontSizeScaleChanged();
     void labelFontWeightChanged();
     void labelFontItalicChanged();
     void labelFontUnderlineChanged();
     void labelFontStrikeoutChanged();
-    void zonePaddingChanged();
+    void innerGapChanged();
     void outerGapChanged();
     void usePerSideOuterGapChanged();
     void outerGapTopChanged();
@@ -395,11 +432,17 @@ Q_SIGNALS:
     void filterLayoutsByAspectRatioChanged();
     // excludedApplications / excludedWindowClasses signals retired in v4
     // — see settings_interfaces.h for the rationale (lists folded into
-    // unified Exclude WindowRules; consumers subscribe to the rule store
-    // through PhosphorWindowRules::WindowRuleStore::rulesChanged instead).
+    // unified Exclude Rules; consumers subscribe to the rule store
+    // through PhosphorRules::RuleStore::rulesChanged instead).
     void excludeTransientWindowsChanged();
     void minimumWindowWidthChanged();
     void minimumWindowHeightChanged();
+    // Decoration window filtering — paired with the IWindowExclusionSettings
+    // decoration virtuals. Consumed by the kwin-effect (via the generic
+    // settingsChanged D-Bus broadcast) and the decorations settings page.
+    void decorationExcludeTransientWindowsChanged();
+    void decorationMinimumWindowWidthChanged();
+    void decorationMinimumWindowHeightChanged();
     // Animation window filtering — paired with the IAnimationSettings
     // virtuals. Same shape as the snapping/tiling exclusion signals; lives
     // in its own change-set so animation-only consumers (the kwin-effect,
@@ -426,6 +469,21 @@ Q_SIGNALS:
     void perScreenSnappingSettingsChanged();
     // Rendering
     void renderingBackendChanged();
+    // Window decoration appearance (border + title bar)
+    void showWindowBorderChanged();
+    void windowBorderScopeChanged();
+    void windowBorderWidthChanged();
+    void windowBorderRadiusChanged();
+    void windowBorderColorActiveChanged();
+    void windowBorderColorInactiveChanged();
+    void hideWindowTitleBarsChanged();
+    void windowTitleBarScopeChanged();
+    void focusFadeDurationChanged();
+    void showWindowOpacityTintChanged();
+    void windowOpacityTintScopeChanged();
+    void windowOpacityChanged();
+    void windowTintStrengthChanged();
+    void windowTintColorChanged();
     // Editor
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();
@@ -439,10 +497,21 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     // Shader effects
-    void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
     void enableAudioVisualizerChanged();
     void audioSpectrumBarCountChanged();
+    void audioAutosensChanged();
+    void audioSensitivityChanged();
+    void audioNoiseReductionChanged();
+    void audioLowerCutoffHzChanged();
+    void audioHigherCutoffHzChanged();
+    void audioMonstercatChanged();
+    void audioWavesChanged();
+    void audioChannelModeChanged();
+    void audioReverseChanged();
+    void audioExtraSmoothingChanged();
+    void audioInputMethodChanged();
+    void audioInputSourceChanged();
     // Global shortcuts
     void openEditorShortcutChanged();
     void openSettingsShortcutChanged();
@@ -523,13 +592,8 @@ Q_SIGNALS:
     void autotileSplitRatioStepChanged();
     void autotileMasterCountChanged();
     void autotilePerAlgorithmSettingsChanged();
-    void autotileInnerGapChanged();
-    void autotileOuterGapChanged();
-    void autotileUsePerSideOuterGapChanged();
-    void autotileOuterGapTopChanged();
-    void autotileOuterGapBottomChanged();
-    void autotileOuterGapLeftChanged();
-    void autotileOuterGapRightChanged();
+    // Autotile inner/outer gap change signals are unified with snapping —
+    // listeners use innerGapChanged / outerGap*Changed above.
     void autotileSmartGapsChanged();
     void autotileMaxWindowsChanged();
     void autotileFocusNewWindowsChanged();
@@ -538,20 +602,6 @@ Q_SIGNALS:
     void autotileFocusFollowsMouseChanged();
     void snappingFocusNewWindowsChanged();
     void snappingFocusFollowsMouseChanged();
-    void autotileHideTitleBarsChanged();
-    void autotileShowBorderChanged();
-    void autotileBorderWidthChanged();
-    void autotileBorderRadiusChanged();
-    void autotileBorderColorChanged();
-    void autotileInactiveBorderColorChanged();
-    void autotileUseSystemBorderColorsChanged();
-    void snappingHideTitleBarsChanged();
-    void snappingShowBorderChanged();
-    void snappingBorderWidthChanged();
-    void snappingBorderRadiusChanged();
-    void snappingBorderColorChanged();
-    void snappingInactiveBorderColorChanged();
-    void snappingUseSystemBorderColorsChanged();
     void autotileStickyWindowHandlingChanged();
     void autotileDragBehaviorChanged();
     void autotileOverflowBehaviorChanged();
@@ -568,6 +618,12 @@ Q_SIGNALS:
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
     void shaderProfileTreeChanged();
+
+    // Surface decoration settings
+    void decorationProfileTreeChanged();
+    void decorationAnimateFocusedOnlyChanged();
+    void decorationPauseWhenIdleChanged();
+    void decorationIdleTimeoutSecChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

@@ -1,0 +1,44 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Border surface shader — rounded corners + window border, the first surface
+// pack. Width, corner radius and colours are this pack's own PARAMETERS (not a
+// separate host-defined "decoration appearance"): p_borderWidth / p_cornerRadius
+// (logical px, scaled to device px by uSurfaceScale) and p_activeColor /
+// p_inactiveColor, mixed on the contract's uSurfaceFocused so the focused vs
+// unfocused colour is the shader's job. (p_useSystemAccent is consumed host-side
+// — when set, the effect fills the active/inactive colour params from the system
+// scheme — so the shader just reads the colour params.)
+//
+// One analytic rounded-rect SDF over the content/frame rect both clips the
+// content to the inner rounded rect and lays the border band over the
+// background, so a translucent border blends with what is behind the surface.
+//
+// Written against the pSurface entry scaffold: this pack defines only
+// `vec4 pSurface(vec2 uv)` and the harness generates the main() + the
+// #version / #include <surface_lib.glsl> / layout prologue (see
+// SurfaceShaderRegistry::surfaceEntryPrologue).
+
+vec4 pSurface(vec2 uv) {
+    vec4 tex = surfaceTexel(uv);
+
+    // Identity-decoration state: before a host wires real geometry the frame
+    // rect is degenerate (uSurfaceFrameSize == 0). The SDF below would collapse
+    // to "edge everywhere" and paint a border over the whole surface, so pass
+    // the captured content through untouched until a real frame arrives.
+    if (surfaceFrameDegenerate()) {
+        return tex;
+    }
+
+    // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
+    // and band edge from this pack's logical-px width and corner radius.
+    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius);
+
+    // Focus-mixed border colour (the shader picks active vs inactive).
+    vec4 outlineColor = mix(p_inactiveColor, p_activeColor, clamp(uSurfaceFocused, 0.0, 1.0));
+
+    // Clip content to the inner rounded rect; lay the band over transparency,
+    // premultiplied. width <= 0 (no border in the chain's params) leaves the
+    // content rounded with no band.
+    return borderComposite(tex, outlineColor, bb.edge, bb.insideMask);
+}

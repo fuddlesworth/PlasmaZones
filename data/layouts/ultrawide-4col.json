@@ -3,7 +3,6 @@
     "name": "Ultrawide 4-Column",
     "description": "Four equal columns for 21:9 monitors, each roughly 16:9 proportioned",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "ultrawide",
     "zones": [

@@ -3,7 +3,7 @@
 
 # phosphor-config
 
-> Pluggable configuration backends: JSON-on-disk, QSettings, or a
+> Pluggable configuration backends: JSON-on-disk or a
 > custom `IBackend`, with a schema-validated `Store` and a versioned
 > migration runner.
 
@@ -16,8 +16,7 @@ library provides:
 
 - **A `Store` front-end** with `read<T>(group, key)`, `readVariant(group, key)`,
   and `write(group, key, value)` over a pluggable `IBackend`. The library ships
-  `JsonBackend` and `QSettingsBackend`, and tests can supply their own in-memory
-  `IBackend`.
+  `JsonBackend`, and tests can supply their own in-memory `IBackend`.
 - **Schema-driven defaults and validation.** The `Schema` declares the groups
   and, per `KeyDef`, the default value, optional expected type, and an optional
   validator applied on both read and write.
@@ -34,9 +33,9 @@ library provides:
 | Type | Purpose |
 |------|---------|
 | `PhosphorConfig::Store`             | Front-end API: `read<T>()`, `readVariant()`, `write()`, `reset()`, `changed()` signal |
-| `PhosphorConfig::IBackend`          | Abstract backend. Shipped: `JsonBackend`, `QSettingsBackend` |
+| `PhosphorConfig::IBackend`          | Abstract backend. Shipped: `JsonBackend` |
 | `PhosphorConfig::JsonBackend`       | JSON-on-disk, with the path chosen by the consumer (e.g. `$XDG_CONFIG_HOME/<app>/config.json`) |
-| `PhosphorConfig::QSettingsBackend`  | QSettings-backed, useful in Qt-only (non-KF6) builds |
+| `PhosphorConfig::QSettingsBackend`  | Read-only reader for a legacy KConfig-style INI file, for migration onto `JsonBackend` |
 | `PhosphorConfig::Schema`            | Declarative struct: groups of `KeyDef` (default + expected type + validator), version, migration chain |
 | `PhosphorConfig::MigrationRunner`   | Runs the schema's `MigrationStep` chain, one step per schema bump |
 | `PhosphorConfig::IGroupPathResolver`| Group-name to backend-key mapping |

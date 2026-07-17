@@ -2,12 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
-import org.plasmazones.common as QFZCommon
 import "SearchAnchorHelpers.js" as SearchAnchors
 
 /**
@@ -21,6 +19,11 @@ Item {
     required property var modelData
     required property int index
     required property var appSettings
+    // Controller exposing the per-layout mutation invokables
+    // (setLayoutAutoAssign, setLayoutHidden). Required explicitly rather than
+    // read from the implicit context property, matching this file's
+    // explicit-dependency policy for everything the delegate touches.
+    required property var settingsController
     required property real cellWidth
     required property real cellHeight
     property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile
@@ -49,8 +52,6 @@ Item {
     signal selected(int index)
     signal activated(string layoutId)
     signal deleteRequested(var layout)
-    signal exportRequested(string layoutId)
-    signal setAsDefaultRequested(var layout)
     signal contextMenuRequested(var layout)
 
     width: cellWidth
@@ -60,9 +61,15 @@ Item {
     // page's reveal registry so a layouts search result scrolls to and pulses
     // this exact card (expanding its group card if collapsed). Deferred via
     // callLater so the subtree is attached before the parent-chain walk; mirrors
-    // WindowRuleSectionList's per-row registration. No-op when hosted outside a
+    // RuleSectionList's per-row registration. No-op when hosted outside a
     // SettingsFlickable (pageFor returns null).
     Component.onCompleted: Qt.callLater(function () {
+        // The coalesced callback can fire after this delegate has been
+        // destroyed (model churn during fast filtering/reloads); the dying
+        // context resolves ids to undefined/null. Bail before dereferencing
+        // rather than throwing — same guard as LayoutComboBox._doRebuild.
+        if (typeof root === "undefined" || !root)
+            return;
         var pg = SearchAnchors.pageFor(root);
         if (pg)
             pg.registerSearchAnchor("layout:" + root.modelData.id, root, SearchAnchors.cardFor(root));
@@ -74,11 +81,32 @@ Item {
     }
 
     Accessible.name: modelData.displayName || i18n("Unnamed Layout")
-    Accessible.description: i18n("Layout with %1 zones", modelData.zoneCount || 0)
+    Accessible.description: i18np("Layout with %1 zone", "Layout with %1 zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
-    Keys.onReturnPressed: root.activated(root.modelData.id)
+    Accessible.focusable: true
+    // Keyboard reachability for the Keys handlers below (matches
+    // WizardTemplateCard): without a tab stop this Item can never gain
+    // active focus inside the hosting Flow, making them dead code.
+    activeFocusOnTab: true
+    // Select before activating, matching the mouse path (single-click selects,
+    // double-click delivers selection then activation) so keyboard activation
+    // never leaves a stale selection highlight on another card.
+    Keys.onReturnPressed: {
+        root.selected(root.index);
+        root.activated(root.modelData.id);
+    }
+    // Numpad Enter alias, matching the sibling card components.
+    Keys.onEnterPressed: {
+        root.selected(root.index);
+        root.activated(root.modelData.id);
+    }
+    // Space selects without activating (WizardTemplateCard/PositionPicker
+    // semantics).
+    Keys.onSpacePressed: root.selected(root.index)
     Keys.onDeletePressed: {
-        if (!root.modelData.isSystem && !root.modelData.isAutotile)
+        // Only system items are undeletable; user (non-system) algorithms are
+        // deletable via the context menu, so keyboard Delete matches that path.
+        if (!root.modelData.isSystem)
             root.deleteRequested(root.modelData);
     }
 
@@ -95,6 +123,10 @@ Item {
         acceptedButtons: root.contextMenuEnabled ? (Qt.LeftButton | Qt.RightButton) : Qt.LeftButton
         hoverEnabled: false
         onClicked: mouse => {
+            // Move active focus to the clicked card so a previously
+            // keyboard-focused card doesn't keep the focus ring and receive
+            // subsequent Return/Delete presses.
+            root.forceActiveFocus();
             if (mouse.button === Qt.RightButton) {
                 root.selected(root.index);
                 root.contextMenuRequested(root.modelData);
@@ -114,24 +146,24 @@ Item {
         anchors.fill: parent
         anchors.margins: Kirigami.Units.smallSpacing
         radius: Kirigami.Units.smallSpacing * 1.5
-        color: {
-            if (root.isSelected)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15);
-
-            if (root.isHovered)
-                return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06);
-
-            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03);
-        }
-        border.width: Math.round(Screen.devicePixelRatio)
+        Kirigami.Theme.colorSet: Kirigami.Theme.View
+        Kirigami.Theme.inherit: false
+        // Neutral surface only — selection/hover fills and borders are
+        // painted ONCE by the shared LayoutCard inside the thumbnail (same
+        // built-in state chrome the daemon popups use), so the delegate no
+        // longer layers its own highlight tints around it.
+        color: Kirigami.Theme.backgroundColor
+        border.width: root.activeFocus ? 2 : 1
         border.color: {
-            if (root.isSelected)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5);
+            // Keyboard-focus indicator (tab stop on the root Item) — kept at
+            // the delegate level with Kirigami.Theme.focusColor per the
+            // color map; LayoutCard has no keyboard-focus concept.
+            if (root.activeFocus)
+                return Kirigami.Theme.focusColor;
 
-            if (root.isHovered)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3);
-
-            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08);
+            // Framework-canonical separator mix (Kirigami.Theme has no
+            // separatorColor role; this matches Kirigami.Separator).
+            return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         }
 
         ColumnLayout {
@@ -160,6 +192,8 @@ Item {
                     anchors.centerIn: parent
                     layout: root.modelData
                     isSelected: root.isSelected
+                    isHovered: root.isHovered
+                    globalAutoAssign: root.globalAutoAssign
                     fontFamily: root.appSettings ? root.appSettings.labelFontFamily : ""
                     fontSizeScale: root.appSettings ? root.appSettings.labelFontSizeScale : 1
                     fontWeight: root.appSettings ? root.appSettings.labelFontWeight : Font.Bold
@@ -209,7 +243,7 @@ Item {
                         visible: root.viewMode === 1 ? root.modelData.id === root.autotileDefaultId : root.modelData.id === root.appSettings.defaultLayoutId
                         width: Kirigami.Units.iconSizes.small
                         height: Kirigami.Units.iconSizes.small
-                        color: Kirigami.Theme.positiveTextColor
+                        color: Kirigami.Theme.textColor
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.visible: defaultIconMA.containsMouse && visible
                         ToolTip.text: root.viewMode === 1 ? i18n("Default autotile algorithm") : i18n("Default layout")
@@ -318,7 +352,7 @@ Item {
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: effectiveAuto ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
-                        onClicked: settingsController.setLayoutAutoAssign(root.modelData.id, !perLayoutAuto)
+                        onClicked: root.settingsController.setLayoutAutoAssign(root.modelData.id, !perLayoutAuto)
                         Accessible.name: i18n("Auto-assign layout")
                         ToolTip.visible: hovered
                         ToolTip.text: tooltipText()
@@ -334,7 +368,7 @@ Item {
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.hiddenFromSelector ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
-                        onClicked: settingsController.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
+                        onClicked: root.settingsController.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
                         Accessible.name: i18n("Toggle layout visibility")
                         ToolTip.visible: hovered
                         ToolTip.text: root.modelData.hiddenFromSelector ? i18n("Hidden from zone selector. Click to show.") : i18n("Visible in zone selector. Click to hide.")
@@ -342,41 +376,19 @@ Item {
                 }
             }
 
-            // Info row with category and aspect ratio badges
+            // Info row — the category/capability/aspect-ratio badges are now
+            // rendered by the shared LayoutCard inside the thumbnail (same
+            // badge row the popups show), so only the zone count remains here.
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: Kirigami.Units.smallSpacing
-
-                QFZCommon.CategoryBadge {
-                    visible: root.modelData.category !== undefined
-                    category: root.modelData.category !== undefined ? root.modelData.category : 0
-                    autoAssign: root.modelData.autoAssign === true
-                    globalAutoAssign: root.globalAutoAssign
-                }
-
-                // Autotile capability badges (memory / reflow / script-state).
-                // Shared with the overlay layout card so the set stays identical.
-                QFZCommon.CapabilityBadgeRow {
-                    layoutData: root.modelData
-                }
-
-                QFZCommon.AspectRatioBadge {
-                    aspectRatioClass: root.modelData.aspectRatioClass || "any"
-                }
 
                 Label {
                     elide: Text.ElideRight
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
-                    text: i18n("%1 zones", root.modelData.zoneCount || 0)
+                    text: i18np("%1 zone", "%1 zones", root.modelData.zoneCount || 0)
                 }
-            }
-        }
-
-        Behavior on color {
-            PhosphorMotionAnimation {
-                profile: "widget.hover"
-                durationOverride: Kirigami.Units.shortDuration
             }
         }
 

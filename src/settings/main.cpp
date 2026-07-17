@@ -13,8 +13,8 @@
 #include "phosphor_qml_i18n.h"
 #include "searchcatalog.h"
 #include "searchproviders.h"
-#include "windowrulecontroller.h"
-#include "windowrulemodel.h"
+#include "rulecontroller.h"
+#include "rulemodel.h"
 
 #include <PhosphorControl/SearchController.h>
 
@@ -35,9 +35,15 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QScopeGuard>
+#include <QtQml/qqmlextensionplugin.h>
 
 #include <memory>
 #include <vector>
+
+// Import the static org.plasmazones.common QML module (same pattern as the
+// daemon, src/daemon/main.cpp). The generated plugin carries the
+// auto-generated qmldir, so shared types can never silently go missing again.
+Q_IMPORT_QML_PLUGIN(org_plasmazones_commonPlugin)
 
 namespace {
 
@@ -205,23 +211,23 @@ int main(int argc, char* argv[])
     auto* searchController = new PhosphorControl::SearchController(controller.app(), &controller);
     PlasmaZones::seedSearchCatalog(searchController);
 
-    // Dynamic content providers (layouts, window rules). unique_ptr locals
+    // Dynamic content providers (layouts, rules). unique_ptr locals
     // declared before the engine so they outlive it; SearchController holds them
     // non-owning (ISearchProvider is not a QObject, so no parent applies).
     auto layoutsProvider = std::make_unique<PlasmaZones::LayoutsSearchProvider>(&controller);
-    auto windowRulesProvider = std::make_unique<PlasmaZones::WindowRulesSearchProvider>(&controller);
+    auto rulesProvider = std::make_unique<PlasmaZones::RulesSearchProvider>(&controller);
     searchController->registerProvider(layoutsProvider.get());
-    searchController->registerProvider(windowRulesProvider.get());
+    searchController->registerProvider(rulesProvider.get());
     QObject::connect(&controller, &PlasmaZones::SettingsController::layoutsChanged, searchController,
                      &PhosphorControl::SearchController::invalidate);
-    if (controller.windowRulesPage() != nullptr && controller.windowRulesPage()->model() != nullptr) {
+    if (controller.rulesPage() != nullptr && controller.rulesPage()->model() != nullptr) {
         // Both add/remove (countChanged) and any in-place edit (rename,
         // match-summary, … via dataChanged) must refresh the index. invalidate()
         // is lazy, so over-firing on unrelated role changes is cheap.
-        QObject::connect(controller.windowRulesPage()->model(), &PlasmaZones::WindowRuleModel::countChanged,
-                         searchController, &PhosphorControl::SearchController::invalidate);
-        QObject::connect(controller.windowRulesPage()->model(), &PlasmaZones::WindowRuleModel::dataChanged,
-                         searchController, &PhosphorControl::SearchController::invalidate);
+        QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::countChanged, searchController,
+                         &PhosphorControl::SearchController::invalidate);
+        QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::dataChanged, searchController,
+                         &PhosphorControl::SearchController::invalidate);
     }
 
     QQmlApplicationEngine engine;
@@ -250,7 +256,7 @@ int main(int argc, char* argv[])
     // types compile LAZILY on first instantiation, not when the page's own
     // unit compiles, so the first navigation to a page otherwise pays that
     // first-time child compilation — which measurement showed dominates
-    // first-visit cost (e.g. Window Rules' first build was ~1560 ms, ~1300 ms
+    // first-visit cost (e.g. Rules' first build was ~1560 ms, ~1300 ms
     // of it child compilation; warmed it drops to ~260 ms). Compiling here,
     // asynchronously (on the type-loader thread, never blocking the UI) and
     // holding the components so the engine keeps the compiled units cached,

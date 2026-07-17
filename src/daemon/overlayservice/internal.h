@@ -28,10 +28,10 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Shared helpers used by multiple overlayservice TUs
-// Pure helpers (writeQmlProperty, patchZonesWithHighlight, parseZonesJson,
-// ensureShaderTimerStarted, getAnchorsForPosition) are in overlay_helpers.h
-// so tests can include them without pulling in ConfigDefaults/ShaderRegistry.
+// Shared helpers used by multiple overlayservice TUs.
+// The pure helpers live in overlay_helpers.h so tests can include them without
+// pulling in ConfigDefaults/ShaderRegistry; they are listed at the bottom of
+// this file, where the one enumeration is kept.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Extracted label font/color settings from IZoneVisualizationSettings with fallback defaults.
@@ -70,19 +70,29 @@ inline void resetOsdOverlayState(QObject* window)
         return;
     }
     // Clear both overlay states — callers set the one they need afterwards.
-    // locked is explicitly set by every call site, but reset here for safety
-    // when a caller forgets (e.g. showDisabledOsd doesn't set locked at all).
+    // Every layout-OSD show path (showDisabledOsd included) routes through
+    // pushLayoutOsdContent, which writes `locked` explicitly right after this
+    // reset; the reset stays as a safety net for any future call site that
+    // forgets to set one of the states.
     writeQmlProperty(window, QStringLiteral("locked"), false);
     writeQmlProperty(window, QStringLiteral("disabled"), false);
     writeQmlProperty(window, QStringLiteral("disabledReason"), QString());
 }
 
-inline void writeFontProperties(QObject* window, const IZoneVisualizationSettings* settings)
+// @p includeLabelFontColor: only the main overlay slot declares a
+// `labelFontColor` property; the OSD / zone-selector / snap-assist /
+// layout-picker slots deliberately don't wire label color (see
+// PassiveOverlayShell.qml), so writing it there would only create a dead
+// dynamic property. Pass true from the main-overlay update path only.
+inline void writeFontProperties(QObject* window, const IZoneVisualizationSettings* settings,
+                                bool includeLabelFontColor = false)
 {
     if (!window || !settings) {
         return;
     }
-    writeQmlProperty(window, QStringLiteral("labelFontColor"), settings->labelFontColor());
+    if (includeLabelFontColor) {
+        writeQmlProperty(window, QStringLiteral("labelFontColor"), settings->labelFontColor());
+    }
     writeQmlProperty(window, QStringLiteral("fontFamily"), settings->labelFontFamily());
     writeQmlProperty(window, QStringLiteral("fontSizeScale"), settings->labelFontSizeScale());
     writeQmlProperty(window, QStringLiteral("fontWeight"), settings->labelFontWeight());
@@ -260,7 +270,7 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
 /// A rule-driven `LockContext` lock is checked FIRST, ahead of the persisted per-mode store: it is
 /// mode-agnostic (locks regardless of @p currentMode) and live-resolved, exactly mirroring the
 /// daemon's resolver-routed `IContextGateSource::isContextLocked`. Without this, a `LockContext`
-/// window rule would block the layout-switch gate but leave the selector/overlay reporting unlocked —
+/// rule would block the layout-switch gate but leave the selector/overlay reporting unlocked —
 /// the same overlay-vs-selector split PR #247 eliminated for manual locks.
 ///
 /// Pass the current mode explicitly when only the active mode's lock is relevant.
@@ -282,15 +292,15 @@ inline bool isAnyModeLocked(ISettings* settings, PhosphorZones::IZoneLayoutRegis
         || settings->isContextLocked(Utils::contextLockKey(1, screenId), desktop, activity);
 }
 
-/// Resolve the per-context overlay-property override (shader / style)
+/// Resolve the per-context overlay-property override (shader / style / appearance)
 /// for @p screenId at that screen's current virtual desktop + activity. A thin
 /// wrapper over IZoneLayoutRegistry::resolveContextOverlay that supplies the live
 /// context, mirroring how @ref isAnyModeLocked routes the lock check. Under
 /// per-output virtual desktops (#648) the desktop is resolved per-screen so the
 /// override matches the desktop actually shown on @p screenId, not the active
 /// monitor's. Returns an empty override when there is no registry or no matching
-/// overlay rule, so the overlay falls through to the active layout's own
-/// shader / display-mode.
+/// overlay rule, so each field falls through to the active layout's own shader /
+/// display-mode or the global appearance config.
 inline PhosphorZones::ContextOverlayOverride
 overlayOverrideForScreen(PhosphorZones::IZoneLayoutRegistry* layoutRegistry, const QString& screenId)
 {
@@ -302,31 +312,6 @@ overlayOverrideForScreen(PhosphorZones::IZoneLayoutRegistry* layoutRegistry, con
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PhosphorZones::Zone selector helpers shared across overlayservice_selector*.cpp TUs
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// Recursive QML item search by objectName
-inline QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName)
-{
-    if (!item) {
-        return nullptr;
-    }
-
-    if (item->objectName() == objectName) {
-        return item;
-    }
-
-    const auto children = item->childItems();
-    for (auto* child : children) {
-        if (auto* found = findQmlItemByName(child, objectName)) {
-            return found;
-        }
-    }
-
-    return nullptr;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Window destroy helpers (per-screen state struct fields)
 // ═══════════════════════════════════════════════════════════════════════════════
 // Individual destroy functions are implemented inline in each TU
@@ -334,24 +319,38 @@ inline QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName
 // m_screenStates[screenId] fields directly.
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Shared color/opacity settings push for snap assist and layout picker
+// Shared color/opacity settings push for the overlay surfaces
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Write common zone color/opacity appearance settings to a QML window.
-/// Used by snap assist and layout picker to avoid duplicating the 5-7 property writes.
-inline void writeColorSettings(QObject* window, const IZoneVisualizationSettings* settings)
+/// Write the common zone color/opacity appearance settings to a QML window.
+/// Used by the main overlay, zone selector, snap assist, and layout picker to
+/// avoid duplicating the 5 colour/opacity property writes.
+///
+/// When @p overlayOverride is non-null, each property it fills wins over the
+/// global @p settings value — a context overlay-appearance rule (SetOverlay*)
+/// layering on top of config. An unset override field falls through to the
+/// global setting, so config stays authoritative.
+inline void writeColorSettings(QObject* window, const IZoneVisualizationSettings* settings,
+                               const PhosphorZones::ContextOverlayOverride* overlayOverride = nullptr)
 {
     if (!window || !settings) {
         return;
     }
-    writeQmlProperty(window, QStringLiteral("highlightColor"), settings->highlightColor());
-    writeQmlProperty(window, QStringLiteral("inactiveColor"), settings->inactiveColor());
-    writeQmlProperty(window, QStringLiteral("borderColor"), settings->borderColor());
-    writeQmlProperty(window, QStringLiteral("activeOpacity"), settings->activeOpacity());
-    writeQmlProperty(window, QStringLiteral("inactiveOpacity"), settings->inactiveOpacity());
+    const auto ov = overlayOverride;
+    writeQmlProperty(window, QStringLiteral("highlightColor"),
+                     ov && ov->highlightColor ? *ov->highlightColor : settings->highlightColor());
+    writeQmlProperty(window, QStringLiteral("inactiveColor"),
+                     ov && ov->inactiveColor ? *ov->inactiveColor : settings->inactiveColor());
+    writeQmlProperty(window, QStringLiteral("borderColor"),
+                     ov && ov->borderColor ? *ov->borderColor : settings->borderColor());
+    writeQmlProperty(window, QStringLiteral("activeOpacity"),
+                     ov && ov->activeOpacity ? *ov->activeOpacity : settings->activeOpacity());
+    writeQmlProperty(window, QStringLiteral("inactiveOpacity"),
+                     ov && ov->inactiveOpacity ? *ov->inactiveOpacity : settings->inactiveOpacity());
 }
 
-// patchZonesWithHighlight, parseZonesJson, ensureShaderTimerStarted, getAnchorsForPosition
+// writeQmlProperty, patchZonesWithHighlight, parseZonesJson, ensureShaderTimerStarted,
+// getAnchorsForPosition, findQmlItemByName, collectQmlItemsByName, mapVisibleRectToItem
 // are defined in overlay_helpers.h (included above)
 
 } // namespace PlasmaZones

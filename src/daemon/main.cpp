@@ -9,6 +9,7 @@
 #include "../core/logging.h"
 #include "../core/translationloader.h"
 #include "phosphor_i18n.h"
+#include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneshaderitem.h"
 #include "version.h"
 #include "vulkan_support.h"
@@ -191,6 +192,13 @@ int main(int argc, char* argv[])
     // This enables RenderNodeOverlay.qml to use the GPU-accelerated shader item
     // (the item's ctor registers the ZoneLabelTexture metatype + QImage converter).
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
+
+    // Register SurfaceShaderItem (per-surface decoration layer) for QML.
+    // Same module URI/version as ZoneShaderItem. The on-screen host is
+    // SurfaceDecoration.qml, driven by OverlayService::applyDecoration on the
+    // OSD / popup surfaces (Stage d); the per-application-window host lives in
+    // the kwin-effect (renderSurfaceChainComposite), not in this process.
+    qmlRegisterType<PlasmaZones::SurfaceShaderItem>("PlasmaZones", 1, 0, "SurfaceShaderItem");
 
     // Set up application metadata
     // applicationName is the KGlobalAccel component key — must match plasmazonesd.desktop

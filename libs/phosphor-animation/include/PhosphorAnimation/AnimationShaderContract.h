@@ -18,7 +18,7 @@ namespace PhosphorAnimationShaders {
 ///      driven by a 0..1 timeline (open, close, snap, drag, etc.).
 ///
 ///   2. **Overlay/zone-background shaders** — `PhosphorShaders::ShaderRegistry`,
-///      sourced from `data/shaders/*/`. Long-lived ambient effects with
+///      sourced from `data/overlays/*/`. Long-lived ambient effects with
 ///      access to the rich `BaseUniforms` UBO (`iMouse`, `iDate`,
 ///      `customColors[16]`, audio-spectrum / wallpaper / multipass
 ///      textures, etc.). Daemon-only (RHI/multipass infrastructure has
@@ -30,7 +30,8 @@ namespace PhosphorAnimationShaders {
 ///   • **Compositor (window-content) execution** — `kwin-effect` running
 ///     inside the KWin compositor process. Uses classic OpenGL via
 ///     `KWin::GLShader`. Animates window contents during lifecycle
-///     events (`window.open`, `window.move`, `window.snapIn`, …).
+///     events (`window.appearance.open`, `window.movement.move`,
+///     `window.movement.snapIn`, …).
 ///
 ///   • **Daemon (overlay-surface) execution** — `SurfaceAnimator::runLeg`
 ///     in the Phosphor daemon. Uses Qt RHI via
@@ -57,8 +58,9 @@ namespace PhosphorAnimationShaders {
 ///
 ///   • Default branch (daemon path): `layout(std140, binding = 0) uniform
 ///     AnimationUniforms { ... };` — std140-aligned with
-///     `PhosphorShaders::BaseUniforms` covering its full footprint
-///     (currently 672 bytes; pinned by BaseUniforms.h's static_asserts),
+///     `PhosphorShaders::BaseUniforms` covering the base footprint
+///     (672 bytes; pinned by BaseUniforms.h's static_asserts) plus the
+///     48-byte anchor extension (AnimationUniformExtension, total 720),
 ///     populated by Qt-RHI's binding=0 upload.
 ///
 ///   • `#ifdef PLASMAZONES_KWIN` branch (compositor path): plain
@@ -71,7 +73,7 @@ namespace PhosphorAnimationShaders {
 ///
 /// Shader authors do NOT need their own `#ifdef PLASMAZONES_KWIN` blocks
 /// — both branches expose the same identifiers (`iTime`, `iResolution`,
-/// `customParams[N]`, `iChannel0`, etc.). The macro switch describes the
+/// `customParams[N]`, `uTexture0`, etc.). The macro switch describes the
 /// uniform-binding ABI, not the runtime feature set.
 ///
 /// @par Per-effect declared parameters
@@ -121,24 +123,38 @@ namespace PhosphorAnimationShaders {
 ///     containment.
 ///   • `customParams[N]` / `customColors[N]` — per-effect declared
 ///     parameters resolved at transition begin time.
-///   • `iChannel0` — redirected surface texture. Daemon: live FBO
+///   • `uTexture0` — redirected surface texture. Daemon: live FBO
 ///     from the layer-enabled shader anchor. Kwin: KWin's
 ///     `OffscreenEffect`-managed window snapshot.
+///   • `iTextureResolution[]` — pixel sizes of the bound user textures.
+///     Daemon: node-resolved live. Kwin: pushed by paintWindow's
+///     per-effect texture loop.
+///
+/// @par Audio spectrum (opt-in module, both runtimes)
+/// `iAudioSpectrumSize` + the `uAudioSpectrum` sampler are an opt-in
+/// module: a pack includes `data/animations/shared/audio.glsl` (after the
+/// canonical header) and declares `"audio": true` in its metadata. The
+/// daemon feeds them via `SurfaceAnimator::setAudioSpectrum` (the
+/// `OverlayService` wires CAVA's `IAudioSpectrumProvider::spectrumUpdated`
+/// here); the kwin-effect reuses its surface-decoration CAVA provider and
+/// pushes both per frame from `paintWindow`. The metadata flag is what
+/// keys the kwin CAVA run-gate — an assigned audio pack keeps the
+/// provider warm so a transition's first frame already has a spectrum.
+/// The helpers read 0 (render static) while the visualizer is off.
 ///
 /// @par Daemon-only extensions
-/// These fields receive zero values on the compositor path; shaders
-/// that need them must run on the daemon overlay path until the
-/// compositor wires the matching producers:
+/// Shaders that need these must run on the daemon overlay path until
+/// the compositor wires the matching producers — but the two fail in
+/// DIFFERENT ways on the compositor:
 ///
-///   • `iAudioSpectrumSize` and the audio spectrum binding — fed by
-///     `SurfaceAnimator::setAudioSpectrum` (the daemon's
-///     `OverlayService` wires CAVA's `IAudioSpectrumProvider::spectrumUpdated`
-///     here)
 ///   • `iChannelResolution[]` — auto-populated when multipass buffer
-///     shaders are bound
-///   • `iTextureResolution[]` — auto-populated when user textures are
-///     bound (bindings 7-10)
-///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`
+///     shaders are bound. NOT declared by the canonical header's
+///     `#ifdef PLASMAZONES_KWIN` branch (the compositor is single-pass,
+///     no buffer FBOs), so reaching for it there is a COMPILE error,
+///     not a zero read.
+///   • `iTimeHi` — auto-computed wrap counterpart of `iTime`. Declared
+///     on both branches for source parity; reads zero on the
+///     compositor.
 ///
 /// @par Spatial uniforms — per-runtime capture geometry
 /// These four fields describe where the captured card sits inside the
@@ -161,31 +177,45 @@ namespace PhosphorAnimationShaders {
 ///     `uTexture0`. `surfaceColor()` folds it in so a card-space [0, 1]
 ///     sample addresses the card's region of the padded texture. A
 ///     bare card-sized anchor carries the (0, 0, 1, 1) identity.
-///   • `iSurfaceScreenPos` — the surface's global screen origin (.xy)
-///     plus host screen size (.zw). Edge-distance math (fly-in's
-///     nearest-edge pick) reads this.
+///   • `iSurfaceScreenPos` — the surface's origin (.xy — global
+///     workspace coordinates on the kwin path, position within the host
+///     wl_surface on the daemon) plus the host extent (.zw — screen size
+///     on the kwin path, the host surface's size on the daemon). The
+///     minimize-to-icon packs reconstruct the window rect from it, and
+///     position-keyed noise seeds hash it.
 ///
 /// `iFlipBufferY`, `qt_Matrix`, `qt_Opacity`, `_appField0` /
 /// `_appField1` are daemon-only and absent from the canonical header's
 /// `#ifdef PLASMAZONES_KWIN` branch entirely.
 namespace AnimationShaderContract {
 
-/// `float iTime` — transition progress in [0.0, 1.0]. Both runtimes
-/// drive this from a 0..1 timeline (kwin: lifecycle elapsed/duration or
-/// animator state value; daemon: `SurfaceAnimator::runLeg`'s
-/// `shaderTime->start(0.0, 1.0, ...)`). Authors should `clamp(iTime,
-/// 0.0, 1.0)` defensively in case a future timeline overshoots.
+/// `float iTime` — transition progress, normally in [0.0, 1.0].
+///
+/// **`iTime` CAN LEAVE [0, 1].** A curve that overshoots (an underdamped
+/// spring, a back / elastic ease) delivers its overshoot to the shader
+/// rather than being flattened: `iTime` may exceed 1.0 and dip below 0.0
+/// for those curves, because the overshoot IS the curve, and the geometry
+/// animator bounces past its target on the same pick. Authors MUST
+/// `clamp(iTime, 0.0, 1.0)` defensively wherever an out-of-range value
+/// would misbehave — a `texture()` fetch, or a `mix()` whose endpoints
+/// must not be extrapolated past. Where the overshoot is meaningful
+/// (a rect lerp, a scale), let it through and the pack bounces for free.
+/// Non-overshooting curves are still clamped by the host.
 ///
 /// **Curve shape is NOT guaranteed to be linear.** Both runtimes feed
 /// `iTime` through the resolved `Profile`'s easing curve:
 ///
-///   • Compositor (kwin-effect): `paintWindow` reads progress from either
-///     the time-based (`(now - startTimeMs) / durationMs`, linear) or
-///     `m_windowAnimator->animationFor(w)` (curved by the geometry
-///     animation's profile). Lifecycle events (`window.open`,
-///     `window.close`, focus etc.) ride the linear branch;
-///     `window.snap*` / `window.layoutSwitch` events ride the curved
-///     one (their geometry tween drives progress).
+///   • Compositor (kwin-effect): BOTH branches are curve-shaped. The
+///     time-driven branch (`window.appearance.*` — open, close, minimize,
+///     focus — and the desktop switch) eases its linear
+///     `(now - startTimeMs) / durationMs` through the curve resolved by
+///     the motion cascade (global → the category's "All" node → the
+///     per-event node → a Rule override). The animator-driven branch
+///     (`window.movement.*` via `applyWindowGeometry`) reads the already
+///     curve-shaped geometry animation's state value. A stateful spring
+///     integrates per frame toward 1 and rings out over its settle time.
+///     There is no longer a linear branch: a null curve is reachable only
+///     before settings load, so in practice every event is curved.
 ///   • Daemon (SurfaceAnimator): the `shaderTime` AnimatedValue runs
 ///     under the resolved `showShaderProfile` / `hideShaderProfile`
 ///     curve, falling back to the opacity profile's curve when the
@@ -238,14 +268,23 @@ inline constexpr const char* kIDate = "iDate";
 /// Authoring rule: branch with `iIsReversed == 1` (NOT `iIsReversed != 0`
 /// or implicit-truthy). This pins the behaviour against any future
 /// runtime that elects to extend the encoding (e.g. negative for
-/// "unknown direction"). The matrix shader follows this convention.
+/// "unknown direction"). Bundled packs read direction through the
+/// `p_reversed` / `legProgress()` helpers in the canonical header, which
+/// encode this rule once.
 inline constexpr const char* kIIsReversed = "iIsReversed";
 
-/// `vec4 iSurfaceScreenPos` — the shader surface's position in screen
-/// coords plus the host screen dimensions, both in logical pixels.
-///   .xy = (surfaceX, surfaceY) — top-left of the shader surface
-///         relative to the screen origin
-///   .zw = (screenWidth, screenHeight) of the host screen
+/// `vec4 iSurfaceScreenPos` — the shader surface's position plus the
+/// host screen dimensions, both in logical pixels.
+///   .xy = (surfaceX, surfaceY) — top-left of the shader surface. On the
+///         kwin path this is the window's GLOBAL (workspace) origin —
+///         the raw `frameGeometry()` top-left, the same space as
+///         `iFromRect` / `iToRect` / `iIconRect` — which coincides with
+///         screen-relative only on a single output at the workspace
+///         origin. The daemon pushes the anchor's position within its
+///         host wl_surface (the playing field), whose size fills .zw
+///         there.
+///   .zw = (screenWidth, screenHeight) of the host screen on the kwin
+///         path; the host surface's size on the daemon path
 ///
 /// Daemon: written to the appended `AnimationUniformExtension` (UBO
 /// offset 672 = sizeof(BaseUniforms)). The extension is installed by
@@ -257,10 +296,18 @@ inline constexpr const char* kIIsReversed = "iIsReversed";
 /// name. Independent of the UBO mechanism — the UBO contract isolation
 /// only matters on the daemon path.
 ///
-/// Vertex / fragment shaders that need to know where the surface sits
-/// on its host screen (fly-in from closest edge, screen-relative noise)
-/// read this. Both runtimes populate it once per leg attach + on every
-/// anchor or window geometry signal.
+/// Shaders that need the surface's position read this: the
+/// minimize-to-icon packs (genie, phosphor-siphon) reconstruct the
+/// window rect as `vec4(iSurfaceScreenPos.xy, iAnchorSize)`, valid
+/// because they pair it with the same-space `iIconRect`, and
+/// `surfaceSeed()` in noise.glsl hashes it for position-keyed noise.
+/// It is NOT suitable for per-output edge-distance math — fly-in's
+/// nearest-edge pick deliberately avoids it (a global coordinate does
+/// not share an origin with a per-output extent on multi-monitor
+/// setups) and uses `iAnchorPosInFbo` / `iResolution` instead.
+/// Population cadence: the daemon writes it on leg attach and on every
+/// anchor or window geometry signal; the kwin path pushes it every
+/// paint frame.
 inline constexpr const char* kISurfaceScreenPos = "iSurfaceScreenPos";
 
 /// `vec2 iAnchorSize` — captured anchor (card) pixel size in logical
@@ -281,12 +328,17 @@ inline constexpr const char* kIAnchorSize = "iAnchorSize";
 ///   vec2 anchorSizeUv    = iAnchorSize    / iResolution;
 ///   vec2 anchorUv        = (vTexCoord - anchorTopLeftUv) / anchorSizeUv;
 /// Daemon-side written via `AnimationUniformExtension`; kwin-effect
-/// uses classic-GL `setUniform`. On kwin the value is (0, 0) today
-/// (the OffscreenEffect FBO covers the window's frameGeometry 1:1,
-/// no actor expansion), which makes the anchor-space remap collapse
-/// to identity. Equivalent to the pre-refactor `customParams[7].x = 0`
-/// fallback that morph documented as the kwin path. A future actor-
-/// expansion PR would push (padW, padH) instead.
+/// uses classic-GL `setUniform`. On kwin the value is the anchor's
+/// top-left offset within whatever rect the FBO spans: the shadow /
+/// decoration inset within the EXPANDED window geometry for an
+/// anchor-extent transition (KWin's OffscreenEffect redirects the whole
+/// window item — see `kIAnchorRectInTexture` below), or the window's
+/// position within the output for a surface-extent transition. It
+/// collapses to (0, 0) only when the expanded geometry equals the frame
+/// (an undecorated, shadowless window). Shaders MUST apply the
+/// anchor-space remap (`anchorRemap` in anchor_remap.glsl) on both
+/// runtimes; `tests/unit/ui/test_anchor_uniforms.cpp` pins the kwin
+/// inset values.
 inline constexpr const char* kIAnchorPosInFbo = "iAnchorPosInFbo";
 
 /// `vec4 iAnchorRectInTexture` — the card's UV sub-rect within
@@ -310,17 +362,41 @@ inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
 
 /// `vec4 iFromRect` / `vec4 iToRect` — geometry-morph endpoints in
 /// logical screen pixels `(x, y, width, height)`. Used by the window
-/// move/resize morph: the window jumps to its destination instantly via
+/// geometry morph (snap / layout switch / maximize): the window jumps to
+/// its destination instantly via
 /// `moveResize`, and the shader animates the visual transition by
 /// interpolating the drawn quad from `iFromRect` (old frame) to `iToRect`
 /// (new frame) by `iTime`, cross-fading the captured old content
 /// (`uOldWindow`) into the live new content. Both default to `(0,0,0,0)`
 /// for non-morph transitions (window.open/close/etc.), which a shader can
-/// treat as "no morph". kwin-effect: pushed via classic-GL `setUniform`;
-/// daemon: reserved in the UBO contract for source parity (the morph runs
-/// compositor-side, but the shared header declares them on both branches).
+/// treat as "no morph". COMPOSITOR PATH ONLY, and deliberately NOT
+/// declared by the canonical shared header: each geometry-morph pack
+/// (flow, fold, ripple-snap, stretch, window-morph) declares the pair
+/// itself inside its own `#ifdef PLASMAZONES_KWIN` block — geometry
+/// events never run on the daemon, and the guard keeps the daemon's
+/// strict SPIR-V bake from ever seeing the loose declarations.
 inline constexpr const char* kIFromRect = "iFromRect";
 inline constexpr const char* kIToRect = "iToRect";
+
+/// `vec4 iIconRect` — the window's task-manager icon rectangle in logical
+/// screen pixels `(x, y, width, height)`, same coordinate space as
+/// `iFromRect` / `iToRect` and as `iSurfaceScreenPos.xy` + `iAnchorSize`
+/// (the window's frame rect). Captured from `EffectWindow::iconGeometry()`
+/// when the transition installs and pushed every frame, so a
+/// minimize-to-icon pack (genie, phosphor-siphon) can deform the window
+/// toward its taskbar icon. The rect comes from the task manager via
+/// PlasmaWindowManagement; a window that sits in no task manager carries
+/// `(0, 0, 0, 0)`, which a pack MUST treat as "no icon target" and
+/// degrade to an in-place animation. The rect may sit on a DIFFERENT
+/// output than the window (a taskbar on another monitor); the
+/// window is painted only during its own output's pass, so a
+/// deformation toward a foreign-output icon clips at that output's
+/// edge. COMPOSITOR PATH ONLY and deliberately NOT declared by the
+/// canonical shared header, exactly like `iFromRect` / `iToRect`: a pack
+/// that reads it declares it inside its own `#ifdef PLASMAZONES_KWIN`
+/// block, keeping the daemon's strict SPIR-V bake away from the loose
+/// declaration.
+inline constexpr const char* kIIconRect = "iIconRect";
 
 /// `sampler2D uOldWindow` — snapshot of the window's content captured at
 /// the old frame size just before the instant `moveResize`. The morph
@@ -328,11 +404,92 @@ inline constexpr const char* kIToRect = "iToRect";
 /// content in `uTexture0` (alpha `iTime`), each mapped at native aspect,
 /// so an aspect-ratio-changing resize doesn't stretch the content. Bound
 /// to a dedicated texture unit on the kwin path; a transparent 1×1
-/// fallback is bound when no snapshot was captured.
+/// fallback is bound when no snapshot was captured. The sampler is NOT
+/// declared by the canonical header — only the `iHasOldWindow` gate int
+/// is; packs that sample old content opt in via
+/// `data/animations/shared/old_content.glsl`, which declares the sampler
+/// inside its own `#ifdef PLASMAZONES_KWIN` guard.
 inline constexpr const char* kUOldWindow = "uOldWindow";
 
+/// `sampler2D uSurfaceLayer` — COMPOSITOR PATH ONLY. The window's surface
+/// after the surface-layer stack (border / rounded corners, and any future
+/// layers such as a colour tint) has been composited into an FBO. When
+/// `iHasSurfaceLayer != 0`, `surfaceColor()` samples THIS in place of the bare
+/// live `uTexture0`, so an animation composites OVER the layered surface
+/// instead of the raw window — the border (and any other surface layer) stays
+/// visible for the whole transition instead of vanishing the instant the
+/// animation shader takes the draw slot. Bound to a dedicated texture unit on
+/// the kwin path; produced by `PlasmaZonesEffect::renderSurfaceChain`. Absent
+/// on the daemon path (the daemon composes its own multipass surface).
+inline constexpr const char* kUSurfaceLayer = "uSurfaceLayer";
+
+/// `int iHasSurfaceLayer` — COMPOSITOR PATH ONLY. 1 when `uSurfaceLayer` holds
+/// a valid layered surface for this frame (the window has ≥1 active surface
+/// layer), 0 otherwise. `surfaceColor()` branches on it so a window with no
+/// surface layers animates the bare `uTexture0` exactly as before. Pushed every
+/// frame by the kwin-effect; defaults to 0 (GL zero-init), so a shader that
+/// never receives it falls back to the unlayered path.
+inline constexpr const char* kIHasSurfaceLayer = "iHasSurfaceLayer";
+
+/// `int iHasOldWindow` — COMPOSITOR PATH ONLY. 1 when `uOldWindow` holds a
+/// genuinely captured old-content snapshot for this transition, 0 when no
+/// capture ran (a held lifecycle event like window.movement.move begins with
+/// no geometry change to snapshot). Old-content samplers MUST gate on this
+/// and fall back to `surfaceColor()` when 0: the compositor's no-snapshot
+/// fallback aliases `uOldWindow` onto unit 0 (the RAW undecorated window),
+/// so an ungated cross-fade from "old" blanks every decoration pack until
+/// the fade completes.
+inline constexpr const char* kIHasOldWindow = "iHasOldWindow";
+
+/// `vec2 iMoveVelocity` — COMPOSITOR PATH ONLY. Spring-smoothed window
+/// velocity in logical px/s during a HELD interactive move transition
+/// (holdUntilRelease; an interactive resize starts no shader transition).
+/// The smoothing filter is underdamped on
+/// purpose: after the pointer stops or releases, the value decays through
+/// zero with a slight overshoot, so a velocity-driven deformation (wobble,
+/// tilt) relaxes with a natural spring settle instead of freezing. Zero
+/// for time-driven transitions and on the daemon path.
+inline constexpr const char* kIMoveVelocity = "iMoveVelocity";
+/// `vec2 iMoveOffset` — COMPOSITOR PATH ONLY. Raw displacement of the
+/// window's frame origin since the interactive grab, logical px. Zero for
+/// non-held transitions and on the daemon path.
+inline constexpr const char* kIMoveOffset = "iMoveOffset";
+/// `vec2 iMoveVelocity2` — COMPOSITOR PATH ONLY. A second, LOOSER spring
+/// over the same frame velocity (lower stiffness, lighter damping), so it
+/// lags iMoveVelocity and rings longer after release. Blending between the
+/// two by distance from the grip point gives a jelly deformation whose far
+/// regions move out of phase with the grip — the KDE-wobbly billow —
+/// without any per-vertex state in the shader.
+inline constexpr const char* kIMoveVelocity2 = "iMoveVelocity2";
+/// `vec2 iMoveTrail[16]` — COMPOSITOR PATH ONLY. Short motion history for
+/// HELD move transitions: slot k holds the window origin as it was
+/// k*15 ms in the past, RELATIVE to the current origin (so a static window
+/// publishes all zeros). 16 slots = 240 ms of path. The host merely records
+/// positions — all deformation logic stays in the shader, which samples the
+/// trail at a per-vertex delay to follow the drag PATH (delayed-follow is
+/// what a spring mesh visually does), typically weighted by distance from
+/// the grip point (iMouse).
+inline constexpr const char* kIMoveTrail = "iMoveTrail";
+/// `vec2 iMoveMesh[16]` — COMPOSITOR PATH ONLY. The solved displacements of
+/// a 4x4 neighbour-coupled soft-body control lattice for HELD move
+/// transitions: slot i+4*j is node (i,j)'s deflection from its ideal grid
+/// position on the current frame, logical px, row 0 at the top. The host
+/// runs the spring simulation (grip-constrained, wave-propagating); a pack
+/// interpolates the lattice across its render mesh (bilinear or bicubic
+/// Bezier) to deform WITH real physics. All zeros at rest / non-held /
+/// daemon. Generic: wobble is the first consumer, but any geometry pack
+/// can read the same lattice.
+inline constexpr const char* kIMoveMesh = "iMoveMesh";
+/// Card/anchor-space [0,1] sub-rect of the animated surface WITHIN
+/// uSurfaceLayer's canvas (xy offset, zw scale) — the layer analogue of
+/// iAnchorRectInTexture. The compositor pads the layer canvas by the
+/// decoration chain's outer margin (glow reach), so the layer needs its own
+/// remap; an unpadded layer carries the same value as iAnchorRectInTexture.
+/// Compositor-only, like uSurfaceLayer itself.
+inline constexpr const char* kILayerRectInTexture = "iLayerRectInTexture";
+
 /// `float iWindowOpacity` — the window's effective rule-resolved opacity
-/// in [0.0, 1.0], COMPOSITOR PATH ONLY. A `SetOpacity` window rule must
+/// in [0.0, 1.0], COMPOSITOR PATH ONLY. A `SetOpacity` rule must
 /// dim the window for the whole duration of a transition, but the custom
 /// transition shader is compiled `MapTexture`-only (no `Modulate` trait),
 /// so KWin never applies `data.opacity()` to it — `surfaceColor()`
@@ -349,8 +506,8 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 /// Maximum number of user-declared textures per animation effect.
 ///
 /// Each declared texture binds to one of the canonical samplers
-/// `iChannel1` / `iChannel2` / `iChannel3`. The redirected surface
-/// itself (`iChannel0`, binding 7 on the daemon, TEXTURE0 on KWin) is
+/// `uTexture1` / `uTexture2` / `uTexture3`. The redirected surface
+/// itself (`uTexture0`, binding 7 on the daemon, TEXTURE0 on KWin) is
 /// not counted here — that's a separate runtime-managed slot. The
 /// daemon's `PhosphorRendering::kMaxUserTextures = 4` includes slot 0,
 /// hence the off-by-one in the budget. Pinned to the daemon constant
@@ -361,6 +518,21 @@ inline constexpr const char* kIWindowOpacity = "iWindowOpacity";
 /// why the assert can't sit in this header (epoxy/Qt typedef collision
 /// in the kwin-effect TU).
 inline constexpr int kMaxUserTextureSlots = 3;
+
+/// `int iAudioSpectrumSize` — CAVA bar count, 0 while the audio visualizer
+/// is off or cava is unavailable. Daemon: BaseUniforms UBO member fed by
+/// `SurfaceAnimator::setAudioSpectrum`. Kwin: default-block uniform
+/// declared by the opt-in `data/animations/shared/audio.glsl` module,
+/// pushed per frame via `bindSurfaceAudio` (shared with the surface
+/// decoration path).
+inline constexpr const char* kIAudioSpectrumSize = "iAudioSpectrumSize";
+
+/// `sampler2D uAudioSpectrum` — the CAVA spectrum texture (`bars×1`,
+/// R = bar value in 0..1). Declared by the opt-in audio.glsl module:
+/// binding 6 on the daemon (the overlay convention), a named sampler
+/// bound to a dedicated unit at draw time on the kwin path. Never
+/// sampled while `iAudioSpectrumSize` is 0.
+inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
 
 /// `vec4 iMouse` — cursor position in shader-local pixels.
 /// `.xy = (cursorX, cursorY)` relative to the shader surface's origin
@@ -471,10 +643,14 @@ inline QString colorKey(int slot)
 /// run on both runtimes without per-runtime overrides.
 ///
 /// The C++ side of the contract is pinned by `static_assert(offsetof(...))`
-/// statements in `<PhosphorShaders/BaseUniforms.h>` for every field
-/// declared in the GLSL UBO. If anyone reorders `BaseUniforms`, those
-/// asserts fail at compile time and the canonical GLSL header has to
-/// be updated to match. The GLSL side is exercised at build time by
+/// statements in `<PhosphorShaders/BaseUniforms.h>` for every BASE field
+/// declared in the GLSL UBO (through iIsReversed at byte 660); the anchor
+/// tail (iSurfaceScreenPos .. iAnchorRectInTexture, bytes 672-719, 720 total)
+/// is supplied by AnimationUniformExtension and pinned by the size
+/// static_asserts in `<PhosphorAnimation/AnimationUniformExtension.h>`.
+/// If anyone reorders `BaseUniforms`, those asserts fail at compile time
+/// and the canonical GLSL header has to be updated to match. The GLSL side
+/// is exercised at build time by
 /// `tests/unit/ui/test_animation_shader_bake.cpp`, which runs every
 /// built-in animation shader through `qsb` (which in turn computes
 /// std140 offsets) — a layout drift would surface there as a bake

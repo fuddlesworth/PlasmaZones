@@ -58,6 +58,23 @@ endif()
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
 
+# phosphor-animation -- PhosphorControlQml links the QML plugin so the
+# chrome's org.phosphor.animation imports resolve for consumers. In the
+# superbuild the target already exists. A standalone configure additionally
+# requires phosphor-animation vendored via add_subdirectory: the installed
+# PhosphorAnimation package exports only the C++ target (the STATIC
+# PhosphorAnimationQml target is never installed/exported), so find_package
+# alone cannot provide it.
+if(NOT TARGET PhosphorAnimation::PhosphorAnimationQml)
+    find_package(PhosphorAnimation CONFIG REQUIRED)
+    # find_package succeeding is not enough — surface the missing QML
+    # target here with a clear message instead of an opaque "Target not
+    # found" later in the configure.
+    if(NOT TARGET PhosphorAnimation::PhosphorAnimationQml)
+        message(FATAL_ERROR "phosphor-control: the installed PhosphorAnimation package exports only the C++ target; vendor phosphor-animation via add_subdirectory for a standalone build")
+    endif()
+endif()
+
 # Shared-vs-static lib type. SHARED is the LGPL-friendly default: an
 # end-user can relink against a modified copy of this library without
 # also having to relink the consuming application, satisfying the
@@ -115,9 +132,8 @@ set(phosphorcontrol_SRCS
     src/pagecontroller.cpp
     src/pageregistry.cpp
     src/applicationcontroller.cpp
-    # Async state-machine half of ApplicationController — split out so
-    # applicationcontroller.cpp stays under the 800-line cap (CLAUDE.md).
-    # Same class, separate TU, no API change.
+    # Async state-machine half of ApplicationController. Same class,
+    # separate TU, no API change.
     src/applicationcontroller_async.cpp
     src/localizedcontext.cpp
     src/dbusbridge.cpp
@@ -196,12 +212,21 @@ target_link_libraries(PhosphorControl
 )
 
 set_target_properties(PhosphorControl PROPERTIES
-    VERSION ${PHOSPHORCONTROL_VERSION}
-    SOVERSION 0
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
     UNITY_BUILD OFF
 )
+
+# VERSION/SOVERSION apply to SHARED libraries only and are silently
+# ignored on STATIC — set them only on the SHARED build so the property
+# surface matches what the target actually carries (same principle as
+# the PhosphorControlQml STATIC note below).
+if(PHOSPHOR_CONTROL_BUILD_SHARED)
+    set_target_properties(PhosphorControl PROPERTIES
+        VERSION ${PHOSPHORCONTROL_VERSION}
+        SOVERSION 0
+    )
+endif()
 
 # Surface the CMake version to the C++ version() accessor so the two
 # stay in sync (avoid drift between the project metadata + a hardcoded
@@ -266,7 +291,6 @@ set(phosphorcontrol_qml_FILES
 # `.qml`/`.mjs` for QML_FILES and `.js` for RESOURCES.
 set(phosphorcontrol_qml_RESOURCES
     qml/LoaderHelpers.js
-    qml/ThemeHelpers.js
 )
 
 qt_add_qml_module(PhosphorControlQml
@@ -314,8 +338,9 @@ target_link_libraries(PhosphorControlQml
     PUBLIC
         PhosphorControl::PhosphorControl
         # The chrome QML files import org.phosphor.animation for the
-        # spring-physics motion profiles (panel.fadeIn/Out,
-        # widget.accordionExpand/Collapse, widget.tint, widget.pulse).
+        # motion profiles they bind (panel.fadeIn/Out, panel.slideIn/Out,
+        # widget.accordionExpand/Collapse, widget.fadeIn, widget.hover,
+        # widget.tint, widget.tint.fast).
         # Linking the QML plugin here pulls phosphor-animation into
         # the consumer's QML import path automatically.
         PhosphorAnimation::PhosphorAnimationQml

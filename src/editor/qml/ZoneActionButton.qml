@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
@@ -47,37 +46,38 @@ AbstractButton {
             if (actionButton.useNegativeColor && actionButton.hovered)
                 return Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
 
-            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.15);
+            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.hoverColor, 0.4) : Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.5);
         }
-        border.width: actionButton.activeFocus ? Math.round(Screen.devicePixelRatio * Theme.focusBorderWidth) : Math.round(Screen.devicePixelRatio)
+        border.width: actionButton.activeFocus ? Theme.focusBorderWidth : 1
+        // On hover only the fill changes; the border keeps the resting
+        // frame-contrast colour so the button stays visibly outlined (a border
+        // matching the hover fill would blend into it and vanish). This holds
+        // for both variants, including the negative (delete) hover fill.
         border.color: {
             if (actionButton.activeFocus)
-                return Theme.withAlpha(Kirigami.Theme.highlightColor, 0.8);
+                return Kirigami.Theme.focusColor;
 
-            if (actionButton.useNegativeColor && actionButton.hovered)
-                return Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5);
-
-            return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08);
+            return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         }
 
         Behavior on border.width {
             PhosphorMotionAnimation {
                 profile: "widget.press"
-                durationOverride: Theme.animDuration
+                durationOverride: Kirigami.Units.longDuration
             }
         }
 
         Behavior on color {
             PhosphorMotionAnimation {
                 profile: "widget.press"
-                durationOverride: Theme.animDuration
+                durationOverride: Kirigami.Units.longDuration
             }
         }
 
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.press"
-                durationOverride: Theme.animDuration
+                durationOverride: Kirigami.Units.longDuration
             }
         }
     }

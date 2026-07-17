@@ -28,6 +28,31 @@ namespace {
 // multiple times per screen connect/disconnect/resolution change. 500ms lets
 // all signals from a single user action settle before we process.
 constexpr int ScreenChangeDebounceMs = 500;
+
+// Whether @p w can reserve screen-edge space (a strut) and so must be tracked
+// for work-area reporting. Plasma panels and X11 docks report isDock(). A
+// layer-shell panel from a third-party shell (e.g. a phosphor-shell bar with
+// an exclusive zone) does NOT — KWin classifies it as an unmovable NORMAL
+// window (isDock()=false, isNormalWindow()=true, isMovable()=false) — so an
+// isDock()-only gate leaves its strut changes unreported and the daemon's
+// compositor work-area override goes stale. Match those by "Wayland client
+// the user cannot interactively move", excluding the unmovable states that
+// cannot carry an exclusive zone: xdg popups (tooltips/menus — they churn on
+// open/close), fullscreen windows, and special windows (desktop, splash,
+// notifications, OSDs). Over-matching is cheap — a tracked window that never
+// reserves space only costs one signal connection, and every report the
+// daemon receives with an unchanged rect is deduplicated there.
+bool mayReserveScreenEdge(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return false;
+    }
+    if (w->isDock()) {
+        return true;
+    }
+    return w->isWaylandClient() && !w->isMovable() && !w->isPopupWindow() && !w->isFullScreen() && !w->isSpecialWindow()
+        && !w->isDesktop();
+}
 } // namespace
 
 ScreenChangeHandler::ScreenChangeHandler(PlasmaZonesEffect* effect, QObject* parent)
@@ -259,14 +284,17 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
                 return;
             }
             qCInfo(lcScreenChange) << "Repositioning window" << m_effect->getWindowId(e.window) << "to" << e.geometry;
-            m_effect->applyWindowGeometry(e.window, e.geometry);
+            // Resolution-change resnap: the effect-local twin of the daemon's
+            // "resnap" action, which daemon_apply.cpp routes to WindowLayoutSwitch.
+            m_effect->applyWindowGeometry(e.window, e.geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                          PhosphorAnimation::ProfilePaths::WindowLayoutSwitch);
         }
     });
 }
 
 void ScreenChangeHandler::trackDockWindow(KWin::EffectWindow* w)
 {
-    if (!w || !w->isDock()) {
+    if (!mayReserveScreenEdge(w)) {
         return;
     }
     // A panel mapped (or was already mapped at effect startup). KWin reserves
@@ -274,7 +302,7 @@ void ScreenChangeHandler::trackDockWindow(KWin::EffectWindow* w)
     // during its own lifetime (config changes, content-driven thickness).
     // Hook frame-geometry changes so every strut adjustment re-pushes the
     // work area. `this` as the connection context auto-disconnects the lambda
-    // when either the dock's EffectWindow or this handler is destroyed.
+    // when either the panel's EffectWindow or this handler is destroyed.
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this]() {
         scheduleClientAreaReport();
     });
@@ -283,7 +311,7 @@ void ScreenChangeHandler::trackDockWindow(KWin::EffectWindow* w)
 
 void ScreenChangeHandler::onWindowClosed(KWin::EffectWindow* w)
 {
-    if (!w || !w->isDock()) {
+    if (!mayReserveScreenEdge(w)) {
         return;
     }
     // A panel closed — its strut is freed and KWin grows the work area.

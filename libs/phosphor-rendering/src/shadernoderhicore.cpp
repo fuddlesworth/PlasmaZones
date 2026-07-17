@@ -4,6 +4,7 @@
 #include "internal.h"
 
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/BaseUniformProfile.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QFile>
@@ -76,7 +77,7 @@ static constexpr char kShaderCacheKeyDelim = '\0';
 /// the standard delimiter. Stable across runs (mtime is fs metadata)
 /// but invalidates the cache the moment ANY transitively-included
 /// header is modified — closing the gap that previously let an edit
-/// to `data/shaders/shared/common.glsl` (e.g. a UBO layout change) be
+/// to `data/overlays/shared/common.glsl` (e.g. a UBO layout change) be
 /// silently masked by a per-`.frag`/`.vert` cache hit because the
 /// top-level shader file's mtime didn't change.
 ///
@@ -167,14 +168,14 @@ QRhi* ShaderNodeRhi::safeRhi() const
                                                                                        : nullptr;
 }
 
-ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item)
+ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::IUboProfile> profile)
     : m_item(item)
+    , m_uboProfile(profile ? std::move(profile) : std::make_unique<PhosphorShaders::BaseUniformProfile>())
 {
     Q_ASSERT(item != nullptr);
-    std::memset(&m_baseUniforms, 0, sizeof(m_baseUniforms));
-    QMatrix4x4 identity;
-    std::memcpy(m_baseUniforms.qt_Matrix, identity.constData(), 16 * sizeof(float));
-    m_baseUniforms.qt_Opacity = 1.0f;
+    // The UBO profile's ctor seeds an identity qt_Matrix + qt_Opacity=1.0 (the
+    // init that used to live here, moved into BaseUniformProfile so the
+    // surface profile gets the same lead-in for free).
     // Initialize all customParams to -1.0 (the "unset" sentinel).
     // Shaders use `>= 0.0` checks to distinguish set values from defaults.
     for (int i = 0; i < kMaxCustomParams; ++i) {
@@ -188,11 +189,35 @@ ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item)
     // 1x1 transparent fallback for when textures are disabled
     m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);
     m_transparentFallbackImage.fill(Qt::transparent);
+
+    // preprocess() pulls the source provider's layer current before this
+    // node renders (see the override's doc in the header). Without the
+    // flag the scene graph never calls it.
+    setFlag(QSGNode::UsePreprocess, true);
 }
 
 ShaderNodeRhi::~ShaderNodeRhi()
 {
+    QObject::disconnect(m_sourceTextureChangedConn);
     releaseRhiResources();
+}
+
+void ShaderNodeRhi::preprocess()
+{
+    // Stock-parity dependency pull (QSGRhiShaderEffectNode does the same
+    // for its sampled sources): if the source is a dynamic texture (a
+    // ShaderEffectSource layer), bring it current NOW — during the
+    // preprocess phase of WHICHEVER renderer owns this node, main pass or
+    // an enclosing QSGLayer. This gives deterministic same-frame
+    // convergence through nested capture chains (card snapshot → stage →
+    // tap → stage → transition capture): each consumer pulls its upstream
+    // layer before rendering, instead of racing undefined layer-grab
+    // ordering. updateTexture() is a cheap no-op on a clean layer.
+    if (QSGTextureProvider* provider = m_sourceTextureProvider.data()) {
+        if (auto* dynamicTex = qobject_cast<QSGDynamicTexture*>(provider->texture())) {
+            dynamicTex->updateTexture();
+        }
+    }
 }
 
 void ShaderNodeRhi::invalidateItem()
@@ -317,8 +342,7 @@ void ShaderNodeRhi::prepare()
         return;
     }
 
-    const int uboSize = static_cast<int>(sizeof(PhosphorShaders::BaseUniforms))
-        + (m_uniformExtension ? m_uniformExtension->extensionSize() : 0);
+    const int uboSize = m_uboProfile->baseSize() + (m_uniformExtension ? m_uniformExtension->extensionSize() : 0);
 
     if (!m_initialized) {
         // Do NOT set m_initialized = true until every resource below has been
@@ -593,9 +617,14 @@ void ShaderNodeRhi::prepare()
                 cb->endPass();
 
                 if (i + 1 < n && m_ubo) {
+                    // Inter-pass write→read barrier only: re-uploading 4 bytes at
+                    // offset 0 (the first float of qt_Matrix) forces the backend to
+                    // serialize pass i's writes before pass i+1 samples its output.
+                    // The value is immediately re-pinned by the next pass / final
+                    // restore, so this is a sync hint, not a meaningful data update.
                     QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
                     if (barrier) {
-                        barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, &m_baseUniforms);
+                        barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, m_uboProfile->mutableData());
                         cb->resourceUpdate(barrier);
                     }
                 }
@@ -646,7 +675,9 @@ void ShaderNodeRhi::prepare()
         if (m_ubo) {
             QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
             if (barrier) {
-                barrier->updateDynamicBuffer(m_ubo.get(), 0, 16 * sizeof(float), m_baseUniforms.qt_Matrix);
+                // qt_Matrix is the leading mat4 of every UBO profile (offset 0),
+                // so mutableData() points directly at it.
+                barrier->updateDynamicBuffer(m_ubo.get(), 0, 16 * sizeof(float), m_uboProfile->mutableData());
                 cb->resourceUpdate(barrier);
             }
         }

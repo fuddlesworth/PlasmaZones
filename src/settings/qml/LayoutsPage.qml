@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import "GroupSortLogic.js" as Core
 import "LayoutFilterLogic.js" as Logic
 import QtQuick
 import QtQuick.Controls
@@ -13,7 +14,7 @@ import org.plasmazones.common as QFZCommon
  * @brief Layouts / tiling-algorithms listing page.
  *
  * Uses the standardized card-container pattern (see ShaderBrowserPage /
- * WindowRulesPage): a SettingsFlickable root whose content is the view switch,
+ * RulesPage): a SettingsFlickable root whose content is the view switch,
  * the import card, the search row, the filter/group/sort bar, and one
  * collapsible SettingsCard per group, each hosting a responsive Flow of
  * LayoutGridDelegate cards. Rooting on
@@ -26,14 +27,18 @@ SettingsFlickable {
 
     // Capture the context property so child components can access it via root.settingsBridge
     readonly property var settingsBridge: appSettings
+    // Capture the settingsController context property so it can be passed
+    // explicitly to LayoutGridDelegate (whose own `settingsController` property
+    // would otherwise shadow the context name inside the delegate's bindings).
+    readonly property var controllerBridge: settingsController
     readonly property real cardHeight: Kirigami.Units.gridUnit * 12
     readonly property real minCardWidth: Kirigami.Units.gridUnit * 14
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
     property int viewMode: 0
     // Selected layout id (tracked across group cards).
     property string selectedLayoutId: ""
-    // Grouped, filtered, sorted layouts — `[{ label, layouts: [...] }]` from
-    // LayoutFilterLogic.finalizeGroups. Rebuilt by rebuildModel().
+    // Grouped, filtered, sorted layouts — `[{ label, items: [...] }]` from
+    // GroupSortLogic.finalizeGroups (Core). Rebuilt by rebuildModel().
     property var groupsModel: []
 
     // Capability group definitions for tiling view — hoisted to avoid
@@ -96,6 +101,22 @@ SettingsFlickable {
             "test": a => {
                 return a.supportsScriptState === true;
             }
+        },
+        {
+            "key": "singleWindow",
+            "label": i18n("Single Window"),
+            "order": 7,
+            "test": a => {
+                return a.supportsSingleWindow === true;
+            }
+        },
+        {
+            "key": "reflowsOnFocus",
+            "label": i18n("Follows Focus"),
+            "order": 8,
+            "test": a => {
+                return a.reflowsOnFocus === true;
+            }
         }
     ]
 
@@ -125,9 +146,20 @@ SettingsFlickable {
         else
             filtered = Logic.applyTilingFilters(filtered, search, filterBar);
         let groups = root.buildGroups(filtered, filterBar.groupByIndex);
-        let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder();
+        // The priority order stores ids in each mode's own namespace: snapping
+        // layouts by bare UUID (matches the cards), tiling algorithms by bare
+        // algorithm id ("bsp"). The tiling cards are keyed "autotile:<id>", so
+        // prefix the tiling order to the card namespace before matching, or the
+        // Priority sort silently no-ops for the tiling view.
+        let customOrder = root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id);
         Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
-        root.groupsModel = Logic.finalizeGroups(groups);
+        // "None" is the one grouping that should still show its (single) card
+        // header — the user wants the title + count even with no grouping. Every
+        // other grouping keeps the legacy "drop the header when it collapses to a
+        // single group" behaviour (a lone "Built-in" card needs no redundant
+        // header).
+        let isNoneGroup = root.viewMode === 0 ? filterBar.groupByIndex === filterBar.groupSnappingNone : filterBar.groupByIndex === filterBar.groupTilingNone;
+        root.groupsModel = Core.finalizeGroups(groups, isNoneGroup);
     }
 
     function selectDefaultLayout(mode) {
@@ -153,7 +185,7 @@ SettingsFlickable {
         // autotile mode doesn't accidentally select a bare snap layout.
         const sections = root.groupsModel || [];
         for (let i = 0; i < sections.length; ++i) {
-            const items = sections[i].layouts || [];
+            const items = sections[i].items || [];
             for (let j = 0; j < items.length; ++j) {
                 const item = items[j];
                 const itemIsAutotile = item.isAutotile === true;
@@ -179,14 +211,14 @@ SettingsFlickable {
             if (groupIdx === filterBar.groupCapability)
                 return Logic.groupByCapability(filtered, root.tilingCapabilityGroups, i18n("Other"));
             else if (groupIdx === filterBar.groupTilingSource)
-                return Logic.groupByBoolKey(filtered, item => {
+                return Core.groupByBoolKey(filtered, item => {
                     return Logic.isBuiltIn(item);
                 }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));
-            else if (groupIdx === filterBar.groupPersistent)
-                return Logic.groupByBoolKey(filtered, item => {
-                    return item.supportsMemory === true;
-                }, "persistent", i18n("Persistent"), "stateless", i18n("Stateless"));
-            return Logic.ungrouped(filtered);
+            else if (groupIdx === filterBar.groupTilingVisibility)
+                return Core.groupByBoolKey(filtered, item => {
+                    return item.hiddenFromSelector !== true;
+                }, "visible", i18n("Visible"), "hidden", i18n("Hidden"));
+            return Core.ungrouped(filtered, i18n("All algorithms"));
         }
         // Snapping grouping
         if (groupIdx === filterBar.groupAspectRatio)
@@ -196,14 +228,18 @@ SettingsFlickable {
                 return i18np("%n zone", "%n zones", count);
             }, i18n("Unknown"));
         else if (groupIdx === filterBar.groupAutoManual)
-            return Logic.groupByBoolKey(filtered, item => {
+            return Core.groupByBoolKey(filtered, item => {
                 return item.autoAssign === true;
             }, "auto", i18n("Auto"), "manual", i18n("Manual"));
         else if (groupIdx === filterBar.groupSource)
-            return Logic.groupByBoolKey(filtered, item => {
+            return Core.groupByBoolKey(filtered, item => {
                 return Logic.isBuiltIn(item);
             }, "builtin", i18n("Built-in"), "user", i18n("User Layouts"));
-        return Logic.ungrouped(filtered);
+        else if (groupIdx === filterBar.groupVisibility)
+            return Core.groupByBoolKey(filtered, item => {
+                return item.hiddenFromSelector !== true;
+            }, "visible", i18n("Visible"), "hidden", i18n("Hidden"));
+        return Core.ungrouped(filtered, i18n("All layouts"));
     }
 
     contentHeight: content.implicitHeight
@@ -247,15 +283,16 @@ SettingsFlickable {
 
         width: parent.width
         // Uniform large spacing between the toolbar, filter bar, and group cards
-        // — matches the ShaderBrowserPage / WindowRulesPage content rhythm so the
+        // — matches the ShaderBrowserPage / RulesPage content rhythm so the
         // filter-row → first-section gap lines up with the other listing pages.
         spacing: Kirigami.Units.largeSpacing
 
         // ─── View switch (Snapping / Tiling) — only when autotiling is on ──
-        // Centered monitor-switcher-style tiles (see LayoutViewSwitch).
-        LayoutViewSwitch {
+        // Centered monitor-switcher-style tiles (shared SegmentedViewSwitch).
+        SegmentedViewSwitch {
             Layout.fillWidth: true
             visible: root.settingsBridge.autotileEnabled
+            modes: [i18n("Snapping"), i18n("Tiling")]
             currentIndex: root.viewMode
             onIndexChanged: index => {
                 root.viewMode = index;
@@ -300,11 +337,13 @@ SettingsFlickable {
 
             ToolButton {
                 icon.name: "view-filter"
+                // Active state is binding-driven, not a user toggle — checkable omitted.
                 checked: filterBar.hasActiveFilters
                 onClicked: filterBar.popupFilterMenu()
-                Accessible.name: filterBar.hasActiveFilters ? i18n("Filter (active)") : i18n("Filter")
+                Accessible.name: filterBar.hasActiveFilters ? i18nc("@action:button", "Filter (active)") : i18nc("@action:button", "Filter")
                 ToolTip.visible: hovered
-                ToolTip.text: filterBar.hasActiveFilters ? i18n("Filters active. Click to change") : i18n("Filter")
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+                ToolTip.text: filterBar.hasActiveFilters ? i18nc("@info:tooltip", "Filters active. Click to change") : i18nc("@info:tooltip", "Filter")
             }
 
             Button {
@@ -349,7 +388,11 @@ SettingsFlickable {
 
                     return hints.length > 0 ? hints.join("\n") : i18n("Try adjusting your filters or search terms");
                 }
-                return root.viewMode === 1 ? i18n("Enable autotiling to use tiling algorithms") : i18n("Start the PlasmaZones daemon or create a new layout");
+                // The tiling view is only reachable while autotiling is on (the
+                // switch is gated on it, and turning it off forces viewMode back
+                // to 0), so an empty list here means the same thing it means for
+                // snapping: nothing has been loaded yet.
+                return root.viewMode === 1 ? i18n("Start the PlasmaZones daemon or add a tiling algorithm") : i18n("Start the PlasmaZones daemon or create a new layout");
             }
 
             helpfulAction: Kirigami.Action {
@@ -375,7 +418,7 @@ SettingsFlickable {
 
                 Layout.fillWidth: true
                 headerText: modelData.label
-                headerTrailingText: root.viewMode === 1 ? i18np("%n algorithm", "%n algorithms", modelData.layouts.length) : i18np("%n layout", "%n layouts", modelData.layouts.length)
+                headerTrailingText: root.viewMode === 1 ? i18np("%n algorithm", "%n algorithms", modelData.items.length) : i18np("%n layout", "%n layouts", modelData.items.length)
                 // Only labelled groups get a collapse affordance — a header-less
                 // ungrouped card has nothing to click to toggle.
                 collapsible: modelData.label.length > 0
@@ -398,10 +441,11 @@ SettingsFlickable {
                         readonly property real _cardWidth: (width - spacing * (_columns - 1)) / _columns
 
                         Repeater {
-                            model: groupCard.modelData.layouts
+                            model: groupCard.modelData.items
 
                             LayoutGridDelegate {
                                 appSettings: root.settingsBridge
+                                settingsController: root.controllerBridge
                                 cellWidth: cardFlow._cardWidth
                                 cellHeight: root.cardHeight
                                 viewMode: root.viewMode
@@ -410,7 +454,7 @@ SettingsFlickable {
                                 // (KCM / future preview) `window.layoutContextMenu`
                                 // is undefined; suppress the right-button mask so a
                                 // missing menu doesn't pretend to exist.
-                                contextMenuEnabled: window && window.layoutContextMenu
+                                contextMenuEnabled: !!(typeof window !== "undefined" && window && window.layoutContextMenu)
                                 onSelected: idx => {
                                     root.selectedLayoutId = String(modelData.id);
                                 }
@@ -422,7 +466,7 @@ SettingsFlickable {
                                     deleteConfirmDialog.open();
                                 }
                                 onContextMenuRequested: layout => {
-                                    if (window && window.layoutContextMenu)
+                                    if (typeof window !== "undefined" && window && window.layoutContextMenu)
                                         window.layoutContextMenu.showForLayout(layout);
                                 }
                             }
@@ -453,6 +497,7 @@ SettingsFlickable {
 
         title: i18n("Export Layout")
         nameFilters: [i18n("JSON files (*.json)")]
+        defaultSuffix: "json"
         fileMode: FileDialog.SaveFile
         onAccepted: {
             settingsController.exportLayout(exportDialog.layoutId, root.filePathFromUrl(selectedFile));
@@ -467,10 +512,11 @@ SettingsFlickable {
         nameFilters: [i18n("Luau files (*.luau)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            if (settingsController.importAlgorithm(root.filePathFromUrl(selectedFile))) {
-                if (window && window.showToast)
-                    window.showToast(i18n("Algorithm imported"));
-            }
+            // Success only. A failure already toasts through
+            // algorithmOperationFailed below, with the reason this could not
+            // know, and reporting it here too gave the user two messages.
+            if (settingsController.importAlgorithm(root.filePathFromUrl(selectedFile)) && typeof window !== "undefined" && window && window.showToast)
+                window.showToast(i18n("Algorithm imported"));
         }
     }
 
@@ -492,7 +538,7 @@ SettingsFlickable {
     // parameter name for grep-friendliness even though it is unused here.
     Connections {
         function onKzonesImportFinished(count, message) {
-            if (window && window.showToast)
+            if (typeof window !== "undefined" && window && window.showToast)
                 window.showToast(message);
         }
 
@@ -519,15 +565,14 @@ SettingsFlickable {
         // When LayoutsPage is hosted outside Main.qml (KCM / preview host),
         // `window.layoutContextMenu` is undefined; an unguarded target would
         // emit a runtime warning on every signal fire. Disable entirely then.
-        enabled: window && window.layoutContextMenu
-        target: window && window.layoutContextMenu ? window.layoutContextMenu : null
+        enabled: typeof window !== "undefined" && window && window.layoutContextMenu
+        target: typeof window !== "undefined" && window && window.layoutContextMenu ? window.layoutContextMenu : null
     }
 
     // New Layout wizard dialog
     NewLayoutDialog {
         id: newLayoutDialog
 
-        appSettings: root.settingsBridge
         controller: settingsController
     }
 
@@ -551,16 +596,27 @@ SettingsFlickable {
 
         function onAlgorithmOperationFailed(reason) {
             // Only show toast when the wizard dialog is closed — if the dialog
-            // is open, it shows the error inline via its own Connections block
-            if (!newAlgorithmDialog.opened && window && window.showToast)
-                window.showToast(reason);
+            // is open, it shows the error inline via its own Connections block.
+            // The routing decision is deferred: create can emit this
+            // synchronously for a created-but-degraded result and still return
+            // true, and the wizard only close()s after that return. Checking
+            // `opened` at emit time would see the dialog still open and swallow
+            // the toast even though the dialog is about to close and take its
+            // inline error with it. A plain validation failure keeps the dialog
+            // open, so the deferred check still routes it inline.
+            Qt.callLater(function () {
+                if (!newAlgorithmDialog.opened && typeof window !== "undefined" && window && window.showToast)
+                    window.showToast(reason);
+            });
         }
 
         function onLayoutOperationFailed(reason) {
-            // Only show toast when the wizard dialog is closed — if the dialog
-            // is open, it shows the error inline via its own Connections block
-            if (!newLayoutDialog.opened && window && window.showToast)
-                window.showToast(reason);
+            // Deferred for the same emit-before-close ordering as
+            // onAlgorithmOperationFailed above.
+            Qt.callLater(function () {
+                if (!newLayoutDialog.opened && typeof window !== "undefined" && window && window.showToast)
+                    window.showToast(reason);
+            });
         }
 
         target: settingsController

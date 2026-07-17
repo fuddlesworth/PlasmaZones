@@ -1,6 +1,27 @@
 {
     "releases": [
         {
+            "version": "3.2.0",
+            "date": "2026-07-17",
+            "highlights": [
+                "Window borders, title bars, and gaps are now window rules. A new Windows page (under Appearance) edits the defaults, and you can override them per window or per context on the Rules page (#699)",
+                "New Mode condition: a rule can match snapped or tiled windows, so snapping and tiling can have different gaps or appearance (#699)",
+                "Per-monitor gaps: pick a monitor on the Gaps card to set its gaps on their own (#699)",
+                "Focused and unfocused border colors are now set separately, each with its own color swatch (#699)",
+                "Window Rules is now just Rules, since rules cover gaps, layout, and animation too. Your rules carry over automatically, and any appearance or gap settings you had customized are migrated into rules on upgrade (#699)",
+                "The managed default rules for borders, title bars, and gaps live in a System section on the Rules page and can't be deleted (#699)",
+                "The rule editor's action and condition pickers are alphabetized and grouped so they are easier to scan (#699)",
+                "A new Theater tiling layout keeps one window centered at a width you set per monitor, and with more windows the focused one moves to a centered spotlight while the rest line up on rails down both sides. It starts hidden, so turn it on from the Algorithms list to try it (#704)",
+                "Peeking at the desktop can now play a full-screen animation. Pick a pack for the new Peeked at Desktop event on the Animations → Transitions → Desktop page. Three new packs ship with it, Peek Recede, Peek Blinds, and Phosphor Peek, and every desktop transition pack works there too (#777)",
+                "New window decoration effects: a Decoration category adds glass, blur, glow, shadow, and animated border packs that draw behind and around your windows. Pick them from a browser and save your own sets (#624)",
+                "Switching virtual desktops can play a full-screen transition. Turn it on for the new desktop switch event on the Animations page and pick from eleven packs such as Fade, Slide, Wipe, and Cube (#747)",
+                "Audio-reactive window borders that move with your music, with the full CAVA audio settings to tune them (#624, #763)",
+                "New rule actions to keep a window above or below others and to tune a screen or desktop's tiling on its own, plus a Centered single-window layout (#733, #759, #703)",
+                "The settings app now remembers the pages you visit, so you can step back and forward through them (#749)",
+                "Fixed: dragging a window could briefly stutter at the start and end of a drag on some systems, because a shortcut config file was rewritten on every drag. That write is gone, so dragging stays smooth (#714)"
+            ]
+        },
+        {
             "version": "3.1.3",
             "date": "2026-07-01",
             "highlights": [
@@ -19,7 +40,7 @@
             "version": "3.1.1",
             "date": "2026-06-24",
             "highlights": [
-                "Open an app on a specific monitor or virtual desktop with a window rule, and optionally snap it into a zone there. This brings back the per-monitor app assignments from v3 (#691)",
+                "Open an app on a specific monitor or virtual desktop with a rule, and optionally snap it into a zone there. This brings back the per-monitor app assignments from v3 (#691)",
                 "Fixed: autotiling could fail to load any algorithm in some regional locales (for example where the decimal separator is a comma), showing 'No autotile algorithms available'. All algorithms load again (#692)",
                 "Fixed: per-monitor app assignments that stopped working after upgrading from v3 are migrated correctly again (#686)",
                 "Fixed: Quick Shortcuts (Meta+Alt+number) now apply the layout you assigned to that slot instead of the one at that position in your priority list (#684)",
@@ -34,10 +55,10 @@
             "highlights": [
                 "Autotiling is on by default, so PlasmaZones works like a dynamic tiler out of the box with no setup. Existing configs keep their current setting (#671)",
                 "Resize-aware tiling: master-stack, wide, focus-sidebar, zen, deck, and horizontal-deck now reflow when you drag a window edge, updating the split ratio for that desktop (#666)",
-                "New option to suppress the default layout for a context, on its own or through a window rule, so a screen, desktop, or activity can show no layout instead of falling back to the global default (#676)",
+                "New option to suppress the default layout for a context, on its own or through a rule, so a screen, desktop, or activity can show no layout instead of falling back to the global default (#676)",
                 "Rebuilt Layouts page: a searchable, card-based catalogue with capability filters and badges, and search results that jump straight to a layout",
                 "Fixed: toggling from autotiling back to snapping no longer leaves windows stuck in their tiled positions, and master-ratio and master-count tweaks stay on the desktop you made them on instead of leaking to other screens",
-                "New Window Rules page: one place to manage everything that used to live across Snapping Assignments, Tiling Assignments, Animations App Rules, and the per-mode disabled-apps lists. Browse, add, edit, duplicate, drag-reorder, and disable rules from a single list",
+                "New Rules page: one place to manage everything that used to live across Snapping Assignments, Tiling Assignments, Animations App Rules, and the per-mode disabled-apps lists. Browse, add, edit, duplicate, drag-reorder, and disable rules from a single list",
                 "Each rule matches windows by class, title, role, app ID, desktop, activity, and screen, and now also by transient/notification kind, window size, and focus. Match terms combine with AND, OR, and NOT, then the rule applies snapping, tiling, animation, appearance (borders, title bars, corner radius, accent color, gaps, opacity), or exclusion actions",
                 "Your existing assignments, animation app rules, and per-monitor / per-desktop / per-activity disable settings were migrated automatically on first launch. If something looks off, your old configuration is preserved on disk and can be restored manually",
                 "Snapping focus options to match autotiling: optionally focus a window when it snaps into a zone on open, and focus-follows-mouse over snapped windows (both off by default)",

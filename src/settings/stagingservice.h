@@ -61,7 +61,7 @@ public:
     // ── Assignment staging ────────────────────────────────────────────
 
     /// Stage a snapping-layout assignment. The snapping and tiling slots are
-    /// mutually exclusive in the unified Window Rule model — one assignment
+    /// mutually exclusive in the unified Rule model — one assignment
     /// context carries either a snapping layout or a tiling algorithm, not
     /// both — so staging here clears any staged tiling assignment for the
     /// same context. Callers that want to write both atomically must use
@@ -75,6 +75,13 @@ public:
 
     /// Stage a full clear of the (screen × desktop × activity) context.
     void stageFullClear(const QString& screen, int desktop, const QString& activity);
+
+    /// Remove any staged entry for the (screen × desktop × activity)
+    /// context entirely — a true unstage, unlike `stageFullClear`, which
+    /// stages a daemon-side clear that the flush pushes on Apply. After
+    /// this, the flush leaves the context's daemon-side assignment
+    /// untouched. No-op when nothing is staged for the context.
+    void removeStagedAssignment(const QString& screen, int desktop, const QString& activity);
 
     /// Stage a tiling-only clear (flushes as "mode=0 + no layouts",
     /// reverting the context back to snapping mode).
@@ -122,6 +129,17 @@ public:
     bool hasUnsavedVirtualScreenConfig(const QString& physicalScreenId) const;
     QVariantList stagedVirtualScreenConfig(const QString& physicalScreenId) const;
 
+    /// True if any virtual-screen edit is staged (any physical screen). Backs
+    /// the per-page dirty check for the Virtual Screens page.
+    bool hasStagedVirtualScreenConfigs() const
+    {
+        return !m_virtualScreenConfigs.isEmpty();
+    }
+
+    /// Drop all staged virtual-screen edits (per-page Discard reverts to the
+    /// saved configs; the getters fall back to the daemon otherwise).
+    void clearVirtualScreenConfigs();
+
     /// Persist staged VS configs to Settings (KConfig) for on-disk
     /// durability. Runs BEFORE `Settings::save()` — the subsequent save
     /// writes everything out in one go.
@@ -142,6 +160,23 @@ public:
     /// staged layout ID (possibly empty).
     bool stagedSnappingQuickSlot(int slotNumber, QString& out) const;
     bool stagedTilingQuickSlot(int slotNumber, QString& out) const;
+
+    /// True if any quick-slot edit is staged for the mode. Backs the per-page
+    /// dirty check for the Quick Shortcuts pages.
+    bool hasStagedSnappingQuickSlots() const
+    {
+        return !m_snappingQuickSlots.isEmpty();
+    }
+    bool hasStagedTilingQuickSlots() const
+    {
+        return !m_tilingQuickSlots.isEmpty();
+    }
+
+    /// Drop all staged quick-slot edits for the mode (per-page Discard reverts
+    /// to the daemon's saved slots; the getters fall back to the daemon when a
+    /// slot is not staged).
+    void clearSnappingQuickSlots();
+    void clearTilingQuickSlots();
 
     /// Push staged quick-layout slots (both snapping and tiling modes) to the
     /// daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER `notifyReload`

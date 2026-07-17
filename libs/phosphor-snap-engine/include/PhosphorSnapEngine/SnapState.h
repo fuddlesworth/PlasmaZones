@@ -91,9 +91,12 @@ public:
     int desktopForWindow(const QString& windowId) const;
 
     /// Re-stamp a snapped window's virtual-desktop membership to @p virtualDesktop,
-    /// keeping its zone and screen. The ONE place a desktop other than the live
-    /// current one is written — used by cross-desktop directional move, where
-    /// the window relocates to another desktop but keeps its snapped slot.
+    /// keeping its zone and screen. The one place a desktop is re-stamped on an
+    /// EXISTING assignment without touching its zone or screen — used by
+    /// cross-desktop directional move, where the window relocates to another
+    /// desktop but keeps its snapped slot. (Full assignment writes can also carry
+    /// a non-current desktop: RouteToDesktop pins and batch-resnap desktop
+    /// preservation both route through assignWindowToZones.)
     /// No-op for a window that isn't currently assigned. Returns true on change.
     bool reassignDesktop(const QString& windowId, int virtualDesktop);
 
@@ -119,14 +122,6 @@ public:
             return;
         }
         m_windowScreenAssignments = s;
-        Q_EMIT stateChanged();
-    }
-    void setDesktopAssignments(const QHash<QString, int>& d)
-    {
-        if (m_windowDesktopAssignments == d) {
-            return;
-        }
-        m_windowDesktopAssignments = d;
         Q_EMIT stateChanged();
     }
 
@@ -178,16 +173,36 @@ public:
     bool isEmpty() const;
     void clear();
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Rotation
-    // ═══════════════════════════════════════════════════════════════════════════
+    /// Move @p windowId's per-window placement entries (zone assignment, live
+    /// screen, desktop, floating bit, pre-float zone/screen, auto-snap flag) OUT
+    /// of this store and INTO @p target, rewriting the LIVE screen assignment to
+    /// @p newScreenId so target->screenForWindow(windowId) reports the destination
+    /// monitor (the #724 cross-monitor determinism requirement). The pre-float
+    /// zone/screen ride along UNCHANGED: they name the SOURCE monitor's home zone,
+    /// preserved so an unfloat on any monitor restores the home zone (cross-monitor
+    /// restore is allowed; there is no refusal guard). The global-scalar fields
+    /// (last-used-zone, user-snapped classes) are NOT moved — they stay global.
+    /// No-op when @p target is null/this or the window has no entry in this store.
+    void migrateWindowTo(SnapState* target, const QString& windowId, const QString& newScreenId);
 
-    /// Rotate zone assignments: each window moves to the next/previous zone
-    /// in zone-number order. Returns the list of window IDs affected.
-    QStringList rotateAssignments(bool clockwise);
+    /// Remove ALL of @p windowId's per-window data from this store (zone/screen/
+    /// desktop assignment, floating bit, pre-float zone/screen, auto-snap flag),
+    /// returning true if anything was removed. Emits NO signal: this is the snap
+    /// engine's single-owner enforcement primitive — it evicts a window from every
+    /// store EXCEPT the one the reverse map owns it in, so a re-keyed window never
+    /// leaves a phantom copy behind (see SnapEngine::stateForWindowOnScreen). An
+    /// evicted phantom was never a legitimate resident here, so firing
+    /// windowUnassigned/stateChanged for it would be wrong. windowClosed() is the
+    /// signalling wrapper for the genuine "this window went away" case.
+    bool removeWindowData(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Last-Used Zone Tracking
+    //
+    // Each per-(screen,desktop,activity) store tracks its OWN last-used zone, so a
+    // window opening on monitor A only ever restores to a zone A was last snapped to
+    // (never monitor B's). The on-disk `LastUsedZoneId` persists a single id; the
+    // facade picks the representative store by lastUsedSeq() (most-recently updated).
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Update last-used zone and emit stateChanged.
@@ -212,6 +227,14 @@ public:
     int lastUsedDesktop() const
     {
         return m_lastUsedDesktop;
+    }
+    /// Monotonic stamp bumped every time this store's last-used zone is set to a
+    /// non-empty value (via updateLastUsedZone / restoreLastUsedZone). 0 means
+    /// "never set". The facade compares stamps across stores to pick the single
+    /// representative last-used zone it persists to disk.
+    quint64 lastUsedSeq() const
+    {
+        return m_lastUsedSeq;
     }
     void retagLastUsedZoneClass(const QString& newClass)
     {
@@ -271,31 +294,6 @@ public:
         return m_windowZoneAssignments;
     }
 
-    void setZoneAssignments(const QHash<QString, QStringList>& zones)
-    {
-        if (m_windowZoneAssignments == zones) {
-            return;
-        }
-        m_windowZoneAssignments = zones;
-        Q_EMIT stateChanged();
-    }
-    void setFloatingWindows(const QSet<QString>& windows)
-    {
-        if (m_floatingWindows == windows) {
-            return;
-        }
-        m_floatingWindows = windows;
-        Q_EMIT stateChanged();
-    }
-    void setPreFloatZoneAssignments(const QHash<QString, QStringList>& a)
-    {
-        if (m_preFloatZoneAssignments == a) {
-            return;
-        }
-        m_preFloatZoneAssignments = a;
-        Q_EMIT stateChanged();
-    }
-
 Q_SIGNALS:
     void windowAssigned(const QString& windowId, const QString& zoneId);
     void windowUnassigned(const QString& windowId);
@@ -311,8 +309,6 @@ private:
     /// bare-appId alias writes (addPreFloat*/clearPreFloatZone) safe. See the
     /// .cpp header comment.
     QString canonicalizeForLookup(const QString& rawWindowId) const;
-
-    bool removeWindowData(const QString& windowId);
 
     /// Shared body of unassignWindow / unsnapForFloat. Removes the window's
     /// zone assignment and (optionally) its screen+desktop assignment, clears
@@ -351,6 +347,8 @@ private:
     QString m_lastUsedScreenId;
     QString m_lastUsedZoneClass;
     int m_lastUsedDesktop = 0;
+    /// Per-store recency stamp for the last-used zone (see lastUsedSeq()).
+    quint64 m_lastUsedSeq = 0;
 
     QSet<QString> m_userSnappedClasses;
     QSet<QString> m_autoSnappedWindows;

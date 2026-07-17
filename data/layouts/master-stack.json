@@ -3,7 +3,6 @@
     "name": "Master + Stack",
     "description": "Classic tiling layout with 60% master and 40% stacked",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "standard",
     "zones": [

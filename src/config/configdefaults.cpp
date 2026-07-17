@@ -34,9 +34,9 @@ QString ConfigDefaults::sessionFilePath()
     return configDir() + QStringLiteral("/plasmazones/session.json");
 }
 
-QString ConfigDefaults::windowRulesFilePath()
+QString ConfigDefaults::rulesFilePath()
 {
-    return configDir() + QStringLiteral("/plasmazones/windowrules.json");
+    return configDir() + QStringLiteral("/plasmazones/rules.json");
 }
 
 QString ConfigDefaults::quickLayoutsFilePath()
@@ -91,6 +91,7 @@ QJsonObject ConfigDefaults::defaultLayoutVisibilitySettings()
         QStringLiteral("spread"),
         QStringLiteral("stair"),
         QStringLiteral("tatami"),
+        QStringLiteral("theater"),
         QStringLiteral("wide"),
         QStringLiteral("zen"),
     };

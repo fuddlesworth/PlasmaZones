@@ -3,35 +3,31 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as PZCommon
 
 /**
- * @brief Shared timing + shader editor body used by every page that
- *        builds an animation profile.
+ * @brief Timing + shader editor body for the per-event animation card.
  *
  * Owns the working-state properties for both axes (curve / duration
  * for timing, effect id / parameter map for shader) and renders the
- * widget tree the per-event card and the App Rules form both need
- * (CurveThumbnail + Customize button → CurveEditorDialog,
- * timing-mode combo, duration slider, CategoryMenuButton +
- * ShaderParameterEditor + ColorDialog).
+ * widget tree the per-event card needs (CurveThumbnail + Customize
+ * button → CurveEditorDialog, timing-mode combo, duration slider,
+ * CategoryMenuButton + ShaderParamsEditor — the shared editor + colour
+ * dialog + lock / randomize host).
  *
- * The editor is intentionally persistence-agnostic: it emits
- * @c valueChanged() whenever any tracked field is touched, and the
- * consumer decides whether to commit live (per-event card) or batch
- * the result on a single button click (App Rules). Properties are
- * fully read-write so a consumer can also seed the editor from disk
- * before showing it.
+ * The editor emits @c valueChanged() whenever any tracked field is
+ * touched; the consumer commits live. Properties are fully read-write
+ * so the consumer can seed the editor from disk before showing it. The
+ * picker model and parameter schema are fed in by the consumer
+ * (@c availableShaders / @c shaderParamSchema) so the editor doesn't
+ * reach a global context itself.
  *
- * The shader-parameter sub-editor exposes the same locking /
- * randomize / colour-picker affordances as the per-event card via
- * the @c enableLocking / @c enableRandomize / @c enableImage flags;
- * pages that don't want them (App Rules) leave the flags at their
- * defaults.
+ * The shader-parameter sub-editor exposes reset / locking / randomize /
+ * colour-picker affordances via the @c enableReset / @c enableLocking /
+ * @c enableRandomize / @c enableImage flags.
  */
 ColumnLayout {
     id: root
@@ -62,7 +58,10 @@ ColumnLayout {
     /// UI affordance only — not persisted. The per-event card
     /// rewires this on shader switch (same-named ids in different
     /// shader schemas are unrelated); App Rules leaves locking off.
-    property var lockedShaderParams: ({})
+    /// Aliased onto the shared ShaderParamsEditor's `lockedParams`, which
+    /// owns the lock map and self-updates it; assigning here (the card's
+    /// reset-on-shader-change) writes straight through.
+    property alias lockedShaderParams: paramEditor.lockedParams
     // ── Configuration inputs ────────────────────────────────────────
     /// Title for the curve dialog ("Customize Curve: <eventLabel>").
     property string eventLabel: ""
@@ -70,42 +69,33 @@ ColumnLayout {
     /// card sets this false for events whose runtime path doesn't
     /// consume a shader leg (e.g. `panel.slideIn`).
     property bool shaderLegSupported: true
-    /// Whether the shader section is rendered (in addition to the
-    /// shader-leg gate above). The App Rules page sets this to
-    /// `false` when the user picks the Timing-kind radio so the
-    /// shader controls collapse out of the form.
-    property bool showShaderSection: true
-    /// Whether to render the timing section (curve / duration). Per-
-    /// event cards always render it; the App Rules page hides it when
-    /// the user picks the Shader-kind radio.
+    /// Whether to render the timing section (curve / duration). The
+    /// per-event card hides it when its master override toggle is off.
     property bool showTimingSection: true
     /// Bumped externally on `shaderEffectsChanged` so this editor's
-    /// `shaderParameters(effectId)` schema binding re-evaluates when a
-    /// pack is dropped / removed mid-session.
+    /// consumer-fed picker / schema bindings re-evaluate when a pack is
+    /// dropped / removed mid-session.
     property int registryRevision: 0
     /// Picker model — the consumer hands in
     /// `availableShaderEffects()` (or a registry-tick-bound
     /// equivalent) so the picker stays reactive without this editor
     /// having to subscribe.
     property var availableShaders: []
+    /// Parameter schema for the currently-picked shader — the consumer
+    /// hands in `shaderParameters(shaderEffectId)` (registry-tick-bound)
+    /// so the editor doesn't reach a global context for it.
+    property var shaderParamSchema: []
     // ── Shader-param editor feature toggles ─────────────────────────
-    /// Locking is per-event-card-only — App Rules don't need it.
+    /// Locking is per-event-card-only — the global-defaults page doesn't need it.
     property bool enableLocking: false
     /// Randomize same.
     property bool enableRandomize: false
+    /// Reset-all-to-defaults, defaulting to `enableRandomize` so it tracks
+    /// the same contexts (per-event card on, global-defaults page off).
+    property bool enableReset: enableRandomize
     /// Image picker is reserved for shader textures (overlay packs);
     /// animation packs don't use it.
     property bool enableImage: false
-    // ── Inheritance opt-out (App Rules mode) ────────────────────────
-    /// When true, render `Override curve` / `Override duration`
-    /// checkboxes that gate whether the saved value commits the
-    /// engaged-empty / zero sentinel for that axis (so the rule
-    /// resolver falls through to the per-event default). The
-    /// per-event card leaves this false — its master override toggle
-    /// handles the inherit-vs-set decision at a higher level.
-    property bool showOverrideCheckboxes: false
-    property bool overrideCurve: true
-    property bool overrideDuration: true
     // ── Computed ────────────────────────────────────────────────────
     /// Wire-format curve string the rule / profile schema expects.
     readonly property string curveString: {
@@ -122,8 +112,8 @@ ColumnLayout {
     /// `shaderParamWriteRequested` signals instead, so consumers can
     /// distinguish a curve edit from a shader switch (which carries
     /// side-effects like dropping the previous effect's params).
-    /// Per-event card connects this to its imperative commit path;
-    /// App Rules leaves it disconnected (commits on Add click).
+    /// The per-event card and the global-defaults page (AnimationsGeneralPage)
+    /// each connect this to their own commit path.
     signal valueChanged
     /// Emitted when the user activates a shader from the picker.
     /// Distinct from `valueChanged` so the consumer can persist a
@@ -139,8 +129,8 @@ ColumnLayout {
     /// Lock toolbar affordances. The editor self-updates
     /// `lockedShaderParams` before emitting these — consumers only need
     /// to subscribe if they want to persist the lock state somewhere
-    /// (the per-event card writes to controller; App Rules holds it in
-    /// the working set). Both signals fire AFTER the editor's own
+    /// (the per-event card writes to controller; the global-defaults page
+    /// leaves locking off). Both signals fire AFTER the editor's own
     /// state mutation, so a consumer reading `lockedShaderParams` in
     /// the handler sees the post-toggle map.
     signal lockToggleRequested(string paramId, bool locked)
@@ -150,9 +140,14 @@ ColumnLayout {
     /// and assigns it to `shaderParams` BEFORE emitting. The signal
     /// payload carries the rolled map so a consumer that wants to
     /// persist (per-event card → controller) doesn't have to re-read
-    /// the editor's state — staging-only consumers (App Rules) can
-    /// ignore the signal entirely.
+    /// the editor's state — a consumer with randomize disabled (the
+    /// global-defaults page) never emits it.
     signal randomizeRequested(var rolled)
+    /// Reset all shader params to their schema defaults. Same self-update
+    /// contract as `randomizeRequested`: the editor stages the defaults map
+    /// onto `shaderParams` before emitting, and the payload carries the map
+    /// so the consumer persists it in one batch write.
+    signal resetRequested(var defaults)
 
     // ── Helpers ─────────────────────────────────────────────────────
     /// "Easing · Cubic In-Out" / "Spring · Snappy" (or "Custom").
@@ -179,24 +174,6 @@ ColumnLayout {
         return i18n("%1 ms", duration);
     }
 
-    // ── Imperative API ──────────────────────────────────────────────
-    /// Compute a randomized parameter map without writing it.
-    /// The per-event card uses this then routes through its batch
-    /// writer so a single setShaderOverride call carries every roll.
-    function randomizedShaderParams() {
-        return paramEditor.computeRandomized();
-    }
-
-    /// Update the lock state after a single-row toggle.
-    function lockedAfterToggle(paramId, locked) {
-        return paramEditor.lockedAfterToggle(paramId, locked);
-    }
-
-    /// Update the lock state after the toolbar's lock-all toggle.
-    function lockedAfterAllToggle(locked) {
-        return paramEditor.lockedAfterAllToggle(locked);
-    }
-
     spacing: Kirigami.Units.smallSpacing
 
     // ── Timing section ──────────────────────────────────────────────
@@ -206,34 +183,6 @@ ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
 
         // Curve summary row: thumbnail + description + Customize…
-        // The override-curve checkbox sits on the same row so the
-        // user can disable the override without losing their working
-        // state.
-        // Curve override checkbox — own row in App Rules mode so it
-        // doesn't crowd the curve summary preview / button below.
-        // Hidden entirely in per-event-card mode (the card's master
-        // override toggle gates the whole timing section).
-        CheckBox {
-            Layout.fillWidth: true
-            // Inset to match the SettingsRows below (which self-inset by
-            // largeSpacing); without it this custom row runs edge-to-edge.
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            Layout.rightMargin: Kirigami.Units.largeSpacing
-            visible: root.showOverrideCheckboxes
-            text: i18n("Override curve")
-            checked: root.overrideCurve
-            onToggled: {
-                root.overrideCurve = checked;
-                root.valueChanged();
-            }
-            ToolTip.text: i18n("When off, the per-event default curve is used.")
-            ToolTip.visible: hovered
-        }
-
-        // Curve summary row: thumbnail + description + Customize…
-        // Dimmed when the override is off so the user can still see
-        // the inherited preview without it competing for visual
-        // weight with the active controls.
         RowLayout {
             Layout.fillWidth: true
             // Inset the curve-summary row (thumbnail + description + Customize…)
@@ -243,8 +192,6 @@ ColumnLayout {
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
             spacing: Kirigami.Units.largeSpacing
-            opacity: (!root.showOverrideCheckboxes || root.overrideCurve) ? 1 : 0.5
-            enabled: !root.showOverrideCheckboxes || root.overrideCurve
 
             CurveThumbnail {
                 id: curveThumbnail
@@ -271,7 +218,7 @@ ColumnLayout {
                 Label {
                     Layout.fillWidth: true
                     text: root.summarySecondary()
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
                     elide: Text.ElideRight
                 }
@@ -290,7 +237,6 @@ ColumnLayout {
         // Timing mode — Easing vs Spring discriminator.
         SettingsRow {
             title: i18n("Timing mode")
-            enabled: !root.showOverrideCheckboxes || root.overrideCurve
 
             WideComboBox {
                 Accessible.name: i18n("Timing mode")
@@ -308,25 +254,9 @@ ColumnLayout {
             visible: root.timingMode === CurvePresets.timingModeEasing
         }
 
-        // Duration override checkbox — same own-row layout as the
-        // curve override above. Hidden in per-event-card mode.
-        CheckBox {
-            Layout.fillWidth: true
-            visible: root.showOverrideCheckboxes && root.timingMode === CurvePresets.timingModeEasing
-            text: i18n("Override duration")
-            checked: root.overrideDuration
-            onToggled: {
-                root.overrideDuration = checked;
-                root.valueChanged();
-            }
-            ToolTip.text: i18n("When off, the per-event default duration is used.")
-            ToolTip.visible: hovered
-        }
-
         SettingsRow {
             visible: root.timingMode === CurvePresets.timingModeEasing
             title: i18n("Duration")
-            enabled: !root.showOverrideCheckboxes || root.overrideDuration
 
             SettingsSlider {
                 from: 50
@@ -346,11 +276,11 @@ ColumnLayout {
 
     // ── Shader section ──────────────────────────────────────────────
     SettingsSeparator {
-        visible: root.shaderLegSupported && root.showShaderSection && root.showTimingSection
+        visible: root.shaderLegSupported && root.showTimingSection
     }
 
     SettingsRow {
-        visible: root.shaderLegSupported && root.showShaderSection
+        visible: root.shaderLegSupported
         title: i18n("Shader effect")
         description: i18n("Apply a shader transition to this event")
 
@@ -379,55 +309,55 @@ ColumnLayout {
 
     // Inline parameter editor surfaces only when an effect is
     // assigned and that effect declares parameters.
-    PZCommon.ShaderParameterEditor {
+    PZCommon.ShaderParamsEditor {
         id: paramEditor
 
-        readonly property var _paramSchema: {
-            void (root.registryRevision);
-            return root.shaderEffectId.length > 0 ? settingsController.animationsPage.shaderParameters(root.shaderEffectId) : [];
-        }
+        // Schema is consumer-fed (root.shaderParamSchema) so this editor
+        // doesn't reach a global context; the consumer binds it to
+        // shaderParameters(shaderEffectId) with a registry-tick dependency.
+        readonly property var _paramSchema: root.shaderParamSchema
 
         Layout.fillWidth: true
-        visible: root.shaderLegSupported && root.showShaderSection && root.shaderEffectId.length > 0 && _paramSchema.length > 0
+        // SettingsRow insets its content by largeSpacing on both sides
+        // via internal anchors; this editor lays out directly in the
+        // ColumnLayout, so match that inset explicitly or the Parameters
+        // header and rows hug the card's left edge.
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
+        visible: root.shaderLegSupported && root.shaderEffectId.length > 0 && _paramSchema.length > 0
         parameters: _paramSchema
         currentValues: root.shaderParams
-        lockedParams: root.lockedShaderParams
+        effectId: root.shaderEffectId
         enableLocking: root.enableLocking
         enableRandomize: root.enableRandomize
-        enableGroups: true
+        enableReset: root.enableReset
         enableImage: root.enableImage
         compact: true
-        onValueChanged: function (paramId, value) {
-            root.shaderParamWriteRequested(root.shaderEffectId, paramId, value);
+        // The shared editor owns the lock map (aliased onto
+        // `lockedShaderParams`) and hosts the colour dialog, so only the
+        // value-write and randomize signals need handling here. The lock
+        // signals are re-emitted for API parity; current consumers ignore
+        // them (lock state is working-state only).
+        onValueChanged: function (effectId, paramId, value) {
+            root.shaderParamWriteRequested(effectId, paramId, value);
         }
         onLockToggled: function (paramId, locked) {
-            // Editor owns `lockedShaderParams` — self-update before
-            // emitting so subscribers reading the property see the
-            // post-toggle map. Consumers that just want to persist the
-            // lock state (per-event card) connect to the signal; pure
-            // staging consumers (App Rules) need no handler at all.
-            root.lockedShaderParams = paramEditor.lockedAfterToggle(paramId, locked);
             root.lockToggleRequested(paramId, locked);
         }
-        onLockAllRequested: function (lock) {
-            root.lockedShaderParams = paramEditor.lockedAfterAllToggle(lock);
-            root.lockAllToggleRequested(lock);
+        onLockAllRequested: function (locked) {
+            root.lockAllToggleRequested(locked);
         }
-        onRandomizeRequested: {
-            // Roll once, stage on the editor (so the UI updates), and
-            // emit with the rolled map so a persisting consumer can
-            // batch the per-param writes through a single controller
-            // call without re-rolling.
-            const rolled = paramEditor.computeRandomized();
+        onRandomizeRequested: function (rolled) {
+            // Stage the rolled map so the UI updates before the consumer's
+            // persistence round-trips it back through `shaderParams`.
             root.shaderParams = rolled;
             root.randomizeRequested(rolled);
         }
-        onRequestColorPicker: function (paramId, paramName, current) {
-            colorDialog.effectId = root.shaderEffectId;
-            colorDialog.paramId = paramId;
-            colorDialog.paramName = paramName;
-            colorDialog.selectedColor = current;
-            colorDialog.open();
+        onResetRequested: function (defaults) {
+            // Same staging as randomize: reflect the defaults immediately,
+            // then hand the map up for the consumer to persist.
+            root.shaderParams = defaults;
+            root.resetRequested(defaults);
         }
     }
 
@@ -455,30 +385,6 @@ ColumnLayout {
             root.springZeta = zeta;
             root.timingMode = CurvePresets.timingModeSpring;
             root.valueChanged();
-        }
-    }
-
-    // QtQuick.Dialogs.ColorDialog wraps the OS-native colour picker —
-    // runs in its own platform window, no `parent` assignment needed
-    // (and none accepted). Carries `effectId` so a registry refresh
-    // mid-pick can't retarget the write at a different effect's param
-    // map (the per-event card consumes that field via the param-write
-    // signal handler).
-    ColorDialog {
-        id: colorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-
-        property string effectId: ""
-        property string paramId: ""
-        property string paramName: ""
-
-        title: paramName.length > 0 ? i18nc("@title:window", "Choose %1", paramName) : i18nc("@title:window", "Pick color")
-        onAccepted: {
-            if (paramId === "" || effectId === "")
-                return;
-
-            root.shaderParamWriteRequested(effectId, paramId, selectedColor.toString());
         }
     }
 }

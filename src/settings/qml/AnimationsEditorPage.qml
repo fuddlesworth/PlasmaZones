@@ -10,6 +10,7 @@ import QtQuick
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Layout editor animation events")
+    headerText: i18n("Animations inside the layout editor. \"All Editor Events\" is the default. Each event can override it.")
     eventModel: [
         {
             "eventPath": "editor",

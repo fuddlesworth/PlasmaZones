@@ -7,21 +7,25 @@
 
 #include "layoutregistry_rulehelpers_p.h"
 
-#include <PhosphorWindowRules/ContextRuleBridge.h>
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
+#include "zoneslogging.h"
+
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
 
 namespace PhosphorZones::RuleHelpers {
 
-namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+namespace CRB = PhosphorRules::ContextRuleBridge;
 
-PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity)
+PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity,
+                                  const QString& mode)
 {
     PWR::WindowQuery query;
     query.screenId = screenId;
     query.virtualDesktop = virtualDesktop;
     query.activity = activity;
+    query.mode = mode;
     return query;
 }
 
@@ -29,7 +33,7 @@ QString contextRuleName(const QString& screenId, int virtualDesktop, const QStri
 {
     // Single formula lives in ContextRuleBridge — this private helper stays as
     // a thin forwarder so callers inside phosphor-zones don't need to reach
-    // into the windowrule namespace directly.
+    // into the rule namespace directly.
     return CRB::contextRuleName(screenId, virtualDesktop, activity);
 }
 
@@ -48,7 +52,7 @@ bool matchIsExactContext(const PWR::MatchExpression& match, const QString& scree
     return CRB::matchIsExactContext(match, screenId, virtualDesktop, activity);
 }
 
-bool hasEngineModeAction(const PWR::WindowRule& rule)
+bool hasEngineModeAction(const PWR::Rule& rule)
 {
     for (const PWR::RuleAction& action : rule.actions) {
         if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
@@ -58,7 +62,7 @@ bool hasEngineModeAction(const PWR::WindowRule& rule)
     return false;
 }
 
-bool hasSnappingLayoutAction(const PWR::WindowRule& rule)
+bool hasSnappingLayoutAction(const PWR::Rule& rule)
 {
     for (const PWR::RuleAction& action : rule.actions) {
         if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)) {
@@ -68,7 +72,7 @@ bool hasSnappingLayoutAction(const PWR::WindowRule& rule)
     return false;
 }
 
-bool hasTilingAlgorithmAction(const PWR::WindowRule& rule)
+bool hasTilingAlgorithmAction(const PWR::Rule& rule)
 {
     for (const PWR::RuleAction& action : rule.actions) {
         if (action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
@@ -78,7 +82,7 @@ bool hasTilingAlgorithmAction(const PWR::WindowRule& rule)
     return false;
 }
 
-bool isPureAssignmentRule(const PWR::WindowRule& rule)
+bool isPureAssignmentRule(const PWR::Rule& rule)
 {
     // True when every action belongs to the three assignment slots
     // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). Used by
@@ -118,7 +122,7 @@ bool matchIsExactContextActivity(const PWR::MatchExpression& match)
     return CRB::matchIsExactContextActivity(match);
 }
 
-bool isContextAssignmentRule(const PWR::WindowRule& rule)
+bool isContextAssignmentRule(const PWR::Rule& rule)
 {
     if (!hasEngineModeAction(rule) || rule.match.isCatchAll()) {
         return false;
@@ -127,7 +131,7 @@ bool isContextAssignmentRule(const PWR::WindowRule& rule)
         || matchIsExactContextActivity(rule.match);
 }
 
-AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
+AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule)
 {
     AssignmentEntry entry;
     // A rule with no SetEngineMode action leaves the mode at the Snapping
@@ -139,7 +143,7 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
             // Decode through `modeFromWireString` so every token the
             // ActionRegistry validator accepts round-trips end-to-end.
             // The canonical vocabulary lives at `engineModeOptions()` in
-            // libs/phosphor-window-rules/src/ruleaction.cpp — today
+            // libs/phosphor-rules/src/ruleaction.cpp — today
             // snapping / autotile / scrolling. The previous two-valued
             // `== "autotile"` ternary silently coerced every non-Autotile
             // token to Snapping — including the registered, picker-exposed
@@ -152,6 +156,14 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
             const QString modeToken = action.params.value(PWR::ActionParam::Mode).toString();
             if (const auto mode = modeFromWireString(modeToken)) {
                 entry.mode = *mode;
+            } else if (!modeToken.isEmpty()) {
+                // A non-empty token the closed mode vocabulary doesn't recognize
+                // (a typo in a hand-edited rules.json, or a token from a newer
+                // schema). We keep the Snapping default rather than reject the
+                // rule, but log it so the silent degrade is diagnosable.
+                qCWarning(PhosphorZones::lcZonesLib)
+                    << "Assignment rule" << rule.id.toString() << "carries an unrecognized SetEngineMode token"
+                    << modeToken << "— keeping the Snapping default";
             }
         } else if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)) {
             entry.snappingLayout = action.params.value(PWR::ActionParam::LayoutId).toString();
@@ -160,6 +172,38 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
         }
     }
     return entry;
+}
+
+int nextAssignmentPriority(const QList<PWR::Rule>& rules)
+{
+    bool sawAny = false;
+    int maxPriority = 0;
+    // Scan only assignment rules (those carrying a SetEngineMode action). A
+    // user-authored layout-only context rule is not counted, so creating an
+    // assignment while such a rule outranks it is the one case the seed can
+    // land below an existing rule; the user resolves it by dragging.
+    for (const PWR::Rule& rule : rules) {
+        if (!isContextAssignmentRule(rule)) {
+            continue;
+        }
+        if (!sawAny || rule.priority > maxPriority) {
+            maxPriority = rule.priority;
+            sawAny = true;
+        }
+    }
+    // No assignment rule yet — seed at the Context band top so the first
+    // assignment lands inside the Settings Context band; later creates climb
+    // from the running max. The unbounded `max + 1` climb is deliberate: it is
+    // how "the newest assignment wins" is realised under priority-wins (a
+    // clamp would tie the new rule with the current top and lose the tie by
+    // list order). After enough concurrent assignments the climb can cross out
+    // of the Context band; a Settings reorder renormalises it back, and the
+    // band number only affects cross-section display order, never which
+    // assignment a context resolves to.
+    if (!sawAny) {
+        return PWR::ContextRuleBridge::kContextBandBase + 99;
+    }
+    return maxPriority + 1;
 }
 
 } // namespace PhosphorZones::RuleHelpers

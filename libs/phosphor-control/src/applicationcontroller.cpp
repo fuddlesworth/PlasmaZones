@@ -54,7 +54,26 @@ void ApplicationController::setCurrentPageId(const QString& id)
         qWarning() << "ApplicationController::setCurrentPageId: unknown page" << id;
         return;
     }
+    // Record ordinary navigation in the back/forward history: push the
+    // page being left and drop the forward trail (browser model). Moves
+    // driven by goBack/goForward manage the stacks themselves and set
+    // m_navigatingHistory to skip this. The startup transition (empty →
+    // first page) records nothing — there is no page to go back to.
+    const bool couldGoBack = canGoBack();
+    const bool couldGoForward = canGoForward();
+    if (!m_navigatingHistory) {
+        if (!m_currentPageId.isEmpty()) {
+            m_backHistory.append(m_currentPageId);
+            if (m_backHistory.size() > kMaxHistoryEntries) {
+                m_backHistory.removeFirst();
+            }
+        }
+        m_forwardHistory.clear();
+    }
     m_currentPageId = id;
+    if (canGoBack() != couldGoBack || canGoForward() != couldGoForward) {
+        Q_EMIT historyChanged();
+    }
     // Discard a stale deep-link reveal anchor when navigation moves to a
     // different page than the one it targeted (discard-on-navigate-away).
     if (!m_pendingAnchor.isEmpty() && m_pendingAnchorPage != m_currentPageId) {
@@ -246,8 +265,7 @@ void ApplicationController::discardAll()
 // NOTE: applyAllAsync / discardAllAsync / completeApplyIfDone /
 // completeDiscardIfDone / forceResetAsyncState / asyncBatchTimeoutMs
 // (READ/WRITE) live in applicationcontroller_async.cpp — same class,
-// separate TU, split out to keep this file under the 800-line cap
-// (CLAUDE.md).
+// separate TU.
 
 void ApplicationController::resetCurrentPage()
 {
@@ -315,6 +333,74 @@ QString ApplicationController::gotoNextPage()
     const int next = state.currentIdx < 0 || state.currentIdx == state.ids.size() - 1 ? 0 : state.currentIdx + 1;
     setCurrentPageId(state.ids.at(next));
     return state.ids.at(next);
+}
+
+bool ApplicationController::canGoBack() const
+{
+    return !m_backHistory.isEmpty();
+}
+
+bool ApplicationController::canGoForward() const
+{
+    return !m_forwardHistory.isEmpty();
+}
+
+QString ApplicationController::goBack()
+{
+    const bool couldGoBack = canGoBack();
+    const bool couldGoForward = canGoForward();
+    QString landed;
+    while (!m_backHistory.isEmpty()) {
+        const QString target = m_backHistory.takeLast();
+        // Drop stale entries: the page was unregistered after being
+        // visited, or the entry duplicates the current page (defensive —
+        // setCurrentPageId's same-id early-return means recording never
+        // produces one, but a subclass override could).
+        if (target == m_currentPageId || !m_registry->hasPage(target)) {
+            continue;
+        }
+        if (!m_currentPageId.isEmpty()) {
+            m_forwardHistory.append(m_currentPageId);
+        }
+        // m_navigatingHistory suppresses the recording branch in
+        // setCurrentPageId — a history move must not push onto the back
+        // stack again or clear the forward trail it just extended.
+        m_navigatingHistory = true;
+        setCurrentPageId(target);
+        m_navigatingHistory = false;
+        landed = target;
+        break;
+    }
+    if (canGoBack() != couldGoBack || canGoForward() != couldGoForward) {
+        Q_EMIT historyChanged();
+    }
+    return landed;
+}
+
+QString ApplicationController::goForward()
+{
+    const bool couldGoBack = canGoBack();
+    const bool couldGoForward = canGoForward();
+    QString landed;
+    while (!m_forwardHistory.isEmpty()) {
+        const QString target = m_forwardHistory.takeLast();
+        // Same stale-entry policy as goBack.
+        if (target == m_currentPageId || !m_registry->hasPage(target)) {
+            continue;
+        }
+        if (!m_currentPageId.isEmpty()) {
+            m_backHistory.append(m_currentPageId);
+        }
+        m_navigatingHistory = true;
+        setCurrentPageId(target);
+        m_navigatingHistory = false;
+        landed = target;
+        break;
+    }
+    if (canGoBack() != couldGoBack || canGoForward() != couldGoForward) {
+        Q_EMIT historyChanged();
+    }
+    return landed;
 }
 
 QStringList ApplicationController::parentChainFor(const QString& id) const

@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.plasmazones.settings
+
+import "FontUtils.js" as FontUtils
 
 /**
  * @brief Read-only match-expression preview backed by
@@ -21,7 +22,7 @@ import org.plasmazones.settings
  *
  * Wire → user-label resolution stays on the QML side, keyed off the
  * controller's `matchFields()` / `operatorsForField()` tables already
- * cached on `WindowRulesPage`. The C++ model deliberately exposes only
+ * cached on `RulesPage`. The C++ model deliberately exposes only
  * the raw wire fields so the label-resolution logic lives in exactly
  * one place per axis (this file for the read-only view; the editor
  * components for authoring).
@@ -29,8 +30,8 @@ import org.plasmazones.settings
 ColumnLayout {
     id: root
 
-    /// The WindowRuleController — supplies the wire→label tables for
-    /// fields and operators. Threaded down from `WindowRulesPage`.
+    /// The RuleController — supplies the wire→label tables for
+    /// fields and operators. Threaded down from `RulesPage`.
     required property var controller
     /// Cached `controller.matchFields()` table. Same caching rationale as
     /// `RuleEditorBody` — the Q_INVOKABLE allocates a fresh list per call.
@@ -40,7 +41,7 @@ ColumnLayout {
     /// backing model and re-expands the tree.
     required property var matchJson
     /// Composite app-settings surface (screens + activities), threaded down
-    /// from `WindowRulesPage`. Used by `_valueLabel` to resolve screen-id /
+    /// from `RulesPage`. Used by `_valueLabel` to resolve screen-id /
     /// activity-uuid leaves to the same friendly labels the leaf editor
     /// shows. Optional — when null, screen/activity leaves fall back to the
     /// raw wire value (still better than nothing, mirrors the editor's own
@@ -82,9 +83,10 @@ ColumnLayout {
         return opWire;
     }
 
-    /// Wire→valueKind helper for `_valueLabel`. Returns the controller-side
-    /// kind string ("string" / "number" / "bool" / "screen" / "activity") or
-    /// "string" for unknown fields — the safest default since `String(value)`
+    /// Wire→valueKind helper for `_valueLabel`. Returns the field's controller-side
+    /// kind string (any of the kinds MatchLeafEditor dispatches on: string, number,
+    /// bool, screen, activity, windowType, virtualDesktop, mode, orientation, layout)
+    /// or "string" for unknown fields — the safest default since `String(value)`
     /// is what a plain-string render would do anyway.
     function _valueKind(wire) {
         for (var i = 0; i < root.matchFieldOptions.length; ++i) {
@@ -96,20 +98,23 @@ ColumnLayout {
 
     /// Localize a leaf's value for display, mirroring `MatchLeafEditor`'s
     /// per-kind editors so the read-only preview agrees with the editor:
-    ///   - bool → "True" / "False" (i18n'd)
+    ///   - bool → "On" / "Off" (i18n'd)
     ///   - screen → `appSettings.screens.displayLabel` for the matching name
     ///   - activity → `appSettings.activities.name` for the matching id
+    ///   - windowType → the enum option's label from the field entry
+    ///   - layout → `appSettings.layouts.displayName` for the matching id
+    ///   - mode / orientation → the token's option label from the field entry
     ///   - everything else (string, number) → `String(value)`
     /// Falls back to the raw wire value when a lookup misses (e.g. the
     /// rule references an unplugged monitor or removed activity), matching
     /// the editor's dangling-pin fallback.
-    function _valueLabel(value, fieldWire) {
+    function _valueLabel(value, fieldWire, opWire) {
         if (value === undefined || value === null)
             return "";
 
         var kind = root._valueKind(fieldWire);
         if (kind === "bool")
-            return value === true || value === "true" ? i18n("True") : i18n("False");
+            return value === true || value === "true" ? i18n("On") : i18n("Off");
 
         if (kind === "screen" && root.appSettings) {
             var screens = root.appSettings.screens;
@@ -120,7 +125,8 @@ ColumnLayout {
                         // mark the primary monitor to match the editor's picker.
                         var label = screens[i].displayLabel || String(value);
                         if (screens[i].isPrimary)
-                            label += " · " + i18n("Primary");
+                            return i18nc("@label monitor caption", "%1 · %2", label, i18n("Primary"));
+
                         return label;
                     }
                 }
@@ -132,6 +138,15 @@ ColumnLayout {
                 for (var j = 0; j < activities.length; ++j) {
                     if (activities[j].id === value)
                         return activities[j].name || String(value);
+                }
+            }
+        }
+        if (kind === "layout" && root.appSettings) {
+            var layouts = root.appSettings.layouts;
+            if (layouts) {
+                for (var L = 0; L < layouts.length; ++L) {
+                    if (layouts[L].id === value)
+                        return layouts[L].displayName || String(value);
                 }
             }
         }
@@ -150,6 +165,34 @@ ColumnLayout {
                 }
                 break;
             }
+        }
+        // Closed string-token dropdowns (Mode, Screen orientation) — resolve the
+        // token to its friendly label from the field entry's options, the same way
+        // windowType does, so the tree shows "Portrait" not the raw "portrait".
+        if (kind === "mode" || kind === "orientation") {
+            for (var m = 0; m < root.matchFieldOptions.length; ++m) {
+                var modeEntry = root.matchFieldOptions[m];
+                if (modeEntry.wire !== fieldWire)
+                    continue;
+                var modeOpts = modeEntry.options || [];
+                for (var mo = 0; mo < modeOpts.length; ++mo) {
+                    if (modeOpts[mo].value === value)
+                        return modeOpts[mo].label || String(value);
+                }
+                break;
+            }
+        }
+        // Virtual desktop — resolve the 1-based number to its name via
+        // `appSettings.virtualDesktopNames` (0-indexed) so the tree shows "Work"
+        // rather than the bare number, matching the editor picker and the collapsed
+        // rule-list summary. Only for `equals` — under greaterThan/lessThan the value
+        // is a numeric threshold where a name reads as nonsense, so those keep the
+        // number. An out-of-range / unnamed desktop also keeps the number.
+        if (kind === "virtualDesktop" && opWire === "equals" && root.appSettings) {
+            var names = root.appSettings.virtualDesktopNames || [];
+            var idx = parseInt(value, 10) - 1;
+            if (idx >= 0 && idx < names.length && names[idx])
+                return names[idx];
         }
         return String(value);
     }
@@ -240,7 +283,7 @@ ColumnLayout {
             /// `hasChildrenRow`.
             required property bool hasChildrenRow
             /// Effective layout depth: the WHEN section header hosted by
-            /// WindowRuleRow is treated as the depth-0 parent, so the model's
+            /// RuleRow is treated as the depth-0 parent, so the model's
             /// root composite renders one level in —
             /// indented under the header with a connector, mirroring how the
             /// THEN action list sits under its pill (ActionListView already
@@ -257,24 +300,19 @@ ColumnLayout {
             /// of trailing a dangling line down the left of every deeper row.
             readonly property var _effectiveAncestors: [true].concat(delegate.ancestorIsLastChild || [])
             readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
-            /// Tree connector color. Foreground textColor at 0.75 alpha:
-            /// 0.4 and 0.55 both still vanished into the dark expansion
-            /// surface in user testing. The mockup shows clearly legible
-            /// connector lines, so erring on the bright side here is
-            /// closer to the intended affordance than another low-alpha
-            /// attempt — they should read as tree lines, not whispers.
-            readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
-            /// One-physical-pixel hairline (`Math.max(1, ...)` so even when
-            /// devicePixelRatio rounds to zero we still draw something).
-            /// Matches the rest of the chrome's hairline conventions —
-            /// borders, separators, hover strokes. The earlier
-            /// `Math.max(2, Math.round(... * 1.5))` shape was tuned against
-            /// the broken `Kirigami.Units.devicePixelRatio` (which evaluated
-            /// to NaN and fell through to the floor of 2); once the
-            /// underlying ratio started returning the real value the
-            /// `* 1.5` made the connectors noticeably thicker than the
-            /// original visual baseline.
-            readonly property int _guideThickness: Math.max(1, Math.round(Screen.devicePixelRatio))
+            /// Tree connector color: the separator shade Kirigami.Separator
+            /// computes, the semantic color for exactly this kind of chrome
+            /// line.
+            readonly property color _guideColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+            /// 2 device-independent px, deliberately thicker than the
+            /// chrome's usual 1px hairline: prior user testing found that
+            /// fainter/thinner guides vanished into the dark expansion
+            /// surface, so the connectors keep the heavier stroke to stay
+            /// legible against it. Widths here are DPR-scaled at render
+            /// time, so a plain integer stays crisp on high-DPR screens;
+            /// the earlier devicePixelRatio-based shapes double-scaled
+            /// into thicker, not crisper, connectors.
+            readonly property int _guideThickness: 2
 
             // Size delegate to the tree's available width so the
             // rightmost spacer pushes content into a clean column.
@@ -382,10 +420,6 @@ ColumnLayout {
                         treeCanvas.requestPaint();
                     }
 
-                    function onIsLastChildChanged() {
-                        treeCanvas.requestPaint();
-                    }
-
                     function onHasChildrenRowChanged() {
                         treeCanvas.requestPaint();
                     }
@@ -402,6 +436,18 @@ ColumnLayout {
                     }
 
                     target: contentRow
+                }
+
+                // _guideColor is sampled imperatively inside onPaint, so a
+                // palette change doesn't rebind anything the Canvas watches.
+                // Every PlatformTheme colour shares the one `colorsChanged`
+                // notify signal (same wiring as SpringPreview).
+                Connections {
+                    function onColorsChanged() {
+                        treeCanvas.requestPaint();
+                    }
+
+                    target: Kirigami.Theme
                 }
             }
 
@@ -445,29 +491,18 @@ ColumnLayout {
                 id: groupPill
 
                 Rectangle {
-                    // One semantic tint per group kind. The three hues
-                    // are picked from non-overlapping color families so
-                    // each pill stands clear of the dark-navy expansion
-                    // surface — the previous highlight-blue ANY pill
-                    // blended into the surface hue regardless of alpha.
-                    //   ALL  → positiveText (green)  — every child must match
-                    //   ANY  → neutralText  (amber)  — at least one matches
-                    //   NONE → negativeText (red)    — no child may match
-                    readonly property color _tint: delegate.kind === "all" ? Kirigami.Theme.positiveTextColor : delegate.kind === "none" ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.neutralTextColor
-
+                    // Group kind (ALL / ANY / NONE) is a category, not a
+                    // status, so the pill uses the accent tint and lets
+                    // the label carry the distinction — the stoplight
+                    // positive/neutral/negative colors are reserved for
+                    // genuine status.
                     implicitWidth: groupLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
                     implicitHeight: groupLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
                     // Capsule shape — mockup pills are fully rounded.
                     radius: implicitHeight / 2
-                    // Tinted fill at 0.4 alpha + matching solid border.
-                    // 0.25 was too faint against the dark expansion
-                    // surface to read as a distinct pill background;
-                    // 0.4 gives each badge a clearly visible fill while
-                    // staying soft enough that the white label keeps
-                    // its high-contrast read.
-                    color: Qt.rgba(_tint.r, _tint.g, _tint.b, 0.4)
-                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
-                    border.color: Qt.rgba(_tint.r, _tint.g, _tint.b, 0.9)
+                    color: Qt.alpha(Kirigami.Theme.highlightColor, 0.18)
+                    border.width: 1
+                    border.color: Qt.alpha(Kirigami.Theme.highlightColor, 0.4)
 
                     Label {
                         id: groupLabel
@@ -478,8 +513,12 @@ ColumnLayout {
                         // since font.capitalization can't selectively
                         // upper-case only the first word.
                         text: delegate.kind === "all" ? i18nc("Match-tree group where every child must match", "ALL of") : delegate.kind === "any" ? i18nc("Match-tree group where at least one child must match", "ANY of") : i18nc("Match-tree group where no child may match", "NONE of")
-                        font.bold: true
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                        // illegal duplicate binding that fails the whole document. FontUtils
+                        // passes only the size dimension the theme font actually carries.
+                        font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                            bold: true
+                        })
                         // Foreground textColor guarantees high contrast
                         // against the tinted pill fill on every theme.
                         color: Kirigami.Theme.textColor
@@ -537,25 +576,34 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignVCenter
                         Layout.minimumWidth: Kirigami.Units.gridUnit * 8
                         text: root._opLabel(delegate.fieldWire, delegate.opWire)
-                        font.capitalization: Font.AllUppercase
-                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                        // illegal duplicate binding that fails the whole document. FontUtils
+                        // passes only the size dimension the theme font actually carries.
+                        font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                            capitalization: Font.AllUppercase
+                        })
                         opacity: 0.55
                     }
 
                     Rectangle {
+                        // Pin the View set so the pill's altBg / border resolve
+                        // against the content-surface palette regardless of
+                        // which colorSet the hosting expansion area inherits.
+                        Kirigami.Theme.colorSet: Kirigami.Theme.View
+                        Kirigami.Theme.inherit: false
                         Layout.alignment: Qt.AlignVCenter
                         implicitWidth: valueLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
                         implicitHeight: valueLabel.implicitHeight + Kirigami.Units.smallSpacing
                         radius: Kirigami.Units.smallSpacing
                         color: Kirigami.Theme.alternateBackgroundColor
-                        border.width: Math.round(Screen.devicePixelRatio)
-                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                        border.width: 1
+                        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                         Label {
                             id: valueLabel
 
                             anchors.centerIn: parent
-                            text: root._valueLabel(delegate.value, delegate.fieldWire)
+                            text: root._valueLabel(delegate.value, delegate.fieldWire, delegate.opWire)
                             font.family: Kirigami.Theme.smallFont.family
                         }
                     }

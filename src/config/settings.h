@@ -3,24 +3,31 @@
 
 #pragma once
 
-#include "../core/interfaces.h"
 #include "../core/constants.h"
+#include "../core/interfaces.h"
+#include "configbackends.h"
+#include "configdefaults.h"
+
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
-#include <PhosphorTileEngine/IAutotileSettings.h>
-#include <PhosphorSnapEngine/ISnapSettings.h>
-#include <PhosphorScreens/VirtualScreen.h>
-#include "configdefaults.h"
-#include "configbackends.h"
-
 #include <PhosphorConfig/Store.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleStore.h>
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorSnapEngine/ISnapSettings.h>
+#include <PhosphorTileEngine/IAutotileSettings.h>
 
-#include <memory>
 #include <QFont>
 #include <QHash>
+#include <QJsonValue>
+#include <QList>
+#include <QPair>
+#include <QUuid>
 #include <QVariantMap>
+#include <QVector>
+
+#include <memory>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -70,7 +77,7 @@ public:
      *                      through the caller's registry, preserving
      *                      `shared_ptr<const Curve>` identity across the
      *                      Settings ↔ daemon boundary.
-     * @param windowRuleStore Non-owned WindowRuleStore pointer. When non-null,
+     * @param ruleStore Non-owned RuleStore pointer. When non-null,
      *                        Settings shares this store rather than owning a
      *                        second instance pointed at the same file — a
      *                        dual-store setup races on disk (one store's
@@ -78,7 +85,7 @@ public:
      *                        edits because both rebuild `kept` from stale
      *                        in-memory snapshots). The daemon, which already
      *                        owns the canonical store for `LayoutRegistry`
-     *                        and `WindowRuleAdaptor`, passes it in here so
+     *                        and `RuleAdaptor`, passes it in here so
      *                        every in-process consumer mutates the same
      *                        ruleset. Standalone processes (settings app,
      *                        editor) pass nullptr and Settings falls back to
@@ -89,7 +96,7 @@ public:
      * @param parent Parent QObject
      */
     Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
-             PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent);
+             PhosphorRules::RuleStore* ruleStore, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -133,7 +140,6 @@ public:
     Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity WRITE setInactiveOpacity NOTIFY inactiveOpacityChanged)
     Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth NOTIFY borderWidthChanged)
     Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
-    Q_PROPERTY(bool enableBlur READ enableBlur WRITE setEnableBlur NOTIFY enableBlurChanged)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily WRITE setLabelFontFamily NOTIFY labelFontFamilyChanged)
     Q_PROPERTY(
         qreal labelFontSizeScale READ labelFontSizeScale WRITE setLabelFontSizeScale NOTIFY labelFontSizeScaleChanged)
@@ -144,8 +150,11 @@ public:
     Q_PROPERTY(
         bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
-    // PhosphorZones::Zone settings
-    Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
+    // Zone settings — inner/outer gaps are the single shared model used by BOTH
+    // snapping and tiling. Config-backed (the "Gaps" group in config.json),
+    // like every other settings page. The autotile* gap forwarders below route
+    // through these same getters, so the tile engine stays untouched.
+    Q_PROPERTY(int innerGap READ innerGap WRITE setInnerGap NOTIFY innerGapChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(
         bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
@@ -154,6 +163,33 @@ public:
     Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
     Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
     Q_PROPERTY(int adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
+
+    // Window decoration appearance (tiled/snapped window border + title bar) —
+    // config-backed (the "Windows" group). Distinct from the zone-overlay border
+    // Q_PROPERTYs above (borderWidth/borderRadius/borderColor).
+    Q_PROPERTY(bool showWindowBorder READ showWindowBorder WRITE setShowWindowBorder NOTIFY showWindowBorderChanged)
+    Q_PROPERTY(
+        QString windowBorderScope READ windowBorderScope WRITE setWindowBorderScope NOTIFY windowBorderScopeChanged)
+    Q_PROPERTY(int windowBorderWidth READ windowBorderWidth WRITE setWindowBorderWidth NOTIFY windowBorderWidthChanged)
+    Q_PROPERTY(
+        int windowBorderRadius READ windowBorderRadius WRITE setWindowBorderRadius NOTIFY windowBorderRadiusChanged)
+    Q_PROPERTY(QString windowBorderColorActive READ windowBorderColorActive WRITE setWindowBorderColorActive NOTIFY
+                   windowBorderColorActiveChanged)
+    Q_PROPERTY(QString windowBorderColorInactive READ windowBorderColorInactive WRITE setWindowBorderColorInactive
+                   NOTIFY windowBorderColorInactiveChanged)
+    Q_PROPERTY(bool hideWindowTitleBars READ hideWindowTitleBars WRITE setHideWindowTitleBars NOTIFY
+                   hideWindowTitleBarsChanged)
+    Q_PROPERTY(QString windowTitleBarScope READ windowTitleBarScope WRITE setWindowTitleBarScope NOTIFY
+                   windowTitleBarScopeChanged)
+    Q_PROPERTY(int focusFadeDuration READ focusFadeDuration WRITE setFocusFadeDuration NOTIFY focusFadeDurationChanged)
+    Q_PROPERTY(bool showWindowOpacityTint READ showWindowOpacityTint WRITE setShowWindowOpacityTint NOTIFY
+                   showWindowOpacityTintChanged)
+    Q_PROPERTY(QString windowOpacityTintScope READ windowOpacityTintScope WRITE setWindowOpacityTintScope NOTIFY
+                   windowOpacityTintScopeChanged)
+    Q_PROPERTY(double windowOpacity READ windowOpacity WRITE setWindowOpacity NOTIFY windowOpacityChanged)
+    Q_PROPERTY(
+        double windowTintStrength READ windowTintStrength WRITE setWindowTintStrength NOTIFY windowTintStrengthChanged)
+    Q_PROPERTY(QString windowTintColor READ windowTintColor WRITE setWindowTintColor NOTIFY windowTintColorChanged)
 
     // Performance and behavior (configurable constants)
     Q_PROPERTY(int pollIntervalMs READ pollIntervalMs WRITE setPollIntervalMs NOTIFY pollIntervalMsChanged)
@@ -204,9 +240,9 @@ public:
     // Window filtering — the global knobs. The per-application /
     // per-class exclusion list Q_PROPERTYs (excludedApplications,
     // excludedWindowClasses) retired in v4 along with the standalone
-    // Exclusions settings page; the lists folded into Window Rules and
+    // Exclusions settings page; the lists folded into Rules and
     // the daemon serves the runtime evaluator from
-    // PhosphorWindowRules::ExclusionRules over the unified rule store.
+    // PhosphorRules::ExclusionRules over the unified rule store.
     Q_PROPERTY(bool excludeTransientWindows READ excludeTransientWindows WRITE setExcludeTransientWindows NOTIFY
                    excludeTransientWindowsChanged)
     Q_PROPERTY(
@@ -224,11 +260,20 @@ public:
                    NOTIFY animationMinimumWindowWidthChanged)
     Q_PROPERTY(int animationMinimumWindowHeight READ animationMinimumWindowHeight WRITE setAnimationMinimumWindowHeight
                    NOTIFY animationMinimumWindowHeightChanged)
+
+    // Decoration window filtering — separate group from snapping/tiling and
+    // animation filtering so the border pass can be tuned independently.
+    Q_PROPERTY(bool decorationExcludeTransientWindows READ decorationExcludeTransientWindows WRITE
+                   setDecorationExcludeTransientWindows NOTIFY decorationExcludeTransientWindowsChanged)
+    Q_PROPERTY(int decorationMinimumWindowWidth READ decorationMinimumWindowWidth WRITE setDecorationMinimumWindowWidth
+                   NOTIFY decorationMinimumWindowWidthChanged)
+    Q_PROPERTY(int decorationMinimumWindowHeight READ decorationMinimumWindowHeight WRITE
+                   setDecorationMinimumWindowHeight NOTIFY decorationMinimumWindowHeightChanged)
     // The animationExcludedApplications / animationExcludedWindowClasses
     // Q_PROPERTYs retired in v4 — the lists folded into `ExcludeAnimations`
-    // WindowRules and the effect's `shouldAnimateWindow` gate now resolves
+    // Rules and the effect's `shouldAnimateWindow` gate now resolves
     // against the slice
-    // `PhosphorWindowRules::ExclusionRules::excludeAnimationsRulesFrom`
+    // `PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom`
     // produces from the unified rule store.
 
     // PhosphorZones::Zone Selector
@@ -265,18 +310,9 @@ public:
         int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
     Q_PROPERTY(QVariantMap autotilePerAlgorithmSettings READ autotilePerAlgorithmSettings WRITE
                    setAutotilePerAlgorithmSettings NOTIFY autotilePerAlgorithmSettingsChanged)
-    Q_PROPERTY(int autotileInnerGap READ autotileInnerGap WRITE setAutotileInnerGap NOTIFY autotileInnerGapChanged)
-    Q_PROPERTY(int autotileOuterGap READ autotileOuterGap WRITE setAutotileOuterGap NOTIFY autotileOuterGapChanged)
-    Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap
-                   NOTIFY autotileUsePerSideOuterGapChanged)
-    Q_PROPERTY(
-        int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY autotileOuterGapTopChanged)
-    Q_PROPERTY(int autotileOuterGapBottom READ autotileOuterGapBottom WRITE setAutotileOuterGapBottom NOTIFY
-                   autotileOuterGapBottomChanged)
-    Q_PROPERTY(int autotileOuterGapLeft READ autotileOuterGapLeft WRITE setAutotileOuterGapLeft NOTIFY
-                   autotileOuterGapLeftChanged)
-    Q_PROPERTY(int autotileOuterGapRight READ autotileOuterGapRight WRITE setAutotileOuterGapRight NOTIFY
-                   autotileOuterGapRightChanged)
+    // Autotile inner/outer gaps are unified with snapping — the settings UI binds
+    // the shared innerGap / outerGap* properties above for both modes. The
+    // IAutotileSettings gap getters (autotileInnerGap(), …) forward to them.
     Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY
                    autotileFocusNewWindowsChanged)
     Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
@@ -306,6 +342,18 @@ public:
     // dirty-tracking / notifyReload plumbing).
     Q_PROPERTY(QString shaderProfileTreeJson READ shaderProfileTreeJson WRITE setShaderProfileTreeJson NOTIFY
                    shaderProfileTreeChanged)
+    // JSON string facade for the per-surface decoration tree — same
+    // meta-object dirty-tracking rationale as shaderProfileTreeJson above.
+    Q_PROPERTY(QString decorationProfileTreeJson READ decorationProfileTreeJson WRITE setDecorationProfileTreeJson
+                   NOTIFY decorationProfileTreeChanged)
+
+    // Decorations.Performance — bounds on WHEN the decoration chain animates.
+    Q_PROPERTY(bool decorationAnimateFocusedOnly READ decorationAnimateFocusedOnly WRITE setDecorationAnimateFocusedOnly
+                   NOTIFY decorationAnimateFocusedOnlyChanged)
+    Q_PROPERTY(bool decorationPauseWhenIdle READ decorationPauseWhenIdle WRITE setDecorationPauseWhenIdle NOTIFY
+                   decorationPauseWhenIdleChanged)
+    Q_PROPERTY(int decorationIdleTimeoutSec READ decorationIdleTimeoutSec WRITE setDecorationIdleTimeoutSec NOTIFY
+                   decorationIdleTimeoutSecChanged)
 
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
@@ -316,34 +364,6 @@ public:
                    snappingFocusFollowsMouseChanged)
     Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize
                    NOTIFY autotileRespectMinimumSizeChanged)
-    Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY
-                   autotileHideTitleBarsChanged)
-    Q_PROPERTY(
-        bool autotileShowBorder READ autotileShowBorder WRITE setAutotileShowBorder NOTIFY autotileShowBorderChanged)
-    Q_PROPERTY(
-        int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY autotileBorderWidthChanged)
-    Q_PROPERTY(int autotileBorderRadius READ autotileBorderRadius WRITE setAutotileBorderRadius NOTIFY
-                   autotileBorderRadiusChanged)
-    Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY
-                   autotileBorderColorChanged)
-    Q_PROPERTY(QColor autotileInactiveBorderColor READ autotileInactiveBorderColor WRITE setAutotileInactiveBorderColor
-                   NOTIFY autotileInactiveBorderColorChanged)
-    Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE
-                   setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
-    Q_PROPERTY(bool snappingHideTitleBars READ snappingHideTitleBars WRITE setSnappingHideTitleBars NOTIFY
-                   snappingHideTitleBarsChanged)
-    Q_PROPERTY(
-        bool snappingShowBorder READ snappingShowBorder WRITE setSnappingShowBorder NOTIFY snappingShowBorderChanged)
-    Q_PROPERTY(
-        int snappingBorderWidth READ snappingBorderWidth WRITE setSnappingBorderWidth NOTIFY snappingBorderWidthChanged)
-    Q_PROPERTY(int snappingBorderRadius READ snappingBorderRadius WRITE setSnappingBorderRadius NOTIFY
-                   snappingBorderRadiusChanged)
-    Q_PROPERTY(QColor snappingBorderColor READ snappingBorderColor WRITE setSnappingBorderColor NOTIFY
-                   snappingBorderColorChanged)
-    Q_PROPERTY(QColor snappingInactiveBorderColor READ snappingInactiveBorderColor WRITE setSnappingInactiveBorderColor
-                   NOTIFY snappingInactiveBorderColorChanged)
-    Q_PROPERTY(bool snappingUseSystemBorderColors READ snappingUseSystemBorderColors WRITE
-                   setSnappingUseSystemBorderColors NOTIFY snappingUseSystemBorderColorsChanged)
     Q_PROPERTY(int autotileStickyWindowHandling READ autotileStickyWindowHandlingInt WRITE
                    setAutotileStickyWindowHandlingInt NOTIFY autotileStickyWindowHandlingChanged)
     Q_PROPERTY(int autotileDragBehavior READ autotileDragBehaviorInt WRITE setAutotileDragBehaviorInt NOTIFY
@@ -372,13 +392,27 @@ public:
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
 
     // Shader Effects
-    Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
-                   enableShaderEffectsChanged)
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
     Q_PROPERTY(bool enableAudioVisualizer READ enableAudioVisualizer WRITE setEnableAudioVisualizer NOTIFY
                    enableAudioVisualizerChanged)
     Q_PROPERTY(int audioSpectrumBarCount READ audioSpectrumBarCount WRITE setAudioSpectrumBarCount NOTIFY
                    audioSpectrumBarCountChanged)
+    Q_PROPERTY(bool audioAutosens READ audioAutosens WRITE setAudioAutosens NOTIFY audioAutosensChanged)
+    Q_PROPERTY(int audioSensitivity READ audioSensitivity WRITE setAudioSensitivity NOTIFY audioSensitivityChanged)
+    Q_PROPERTY(
+        int audioNoiseReduction READ audioNoiseReduction WRITE setAudioNoiseReduction NOTIFY audioNoiseReductionChanged)
+    Q_PROPERTY(
+        int audioLowerCutoffHz READ audioLowerCutoffHz WRITE setAudioLowerCutoffHz NOTIFY audioLowerCutoffHzChanged)
+    Q_PROPERTY(
+        int audioHigherCutoffHz READ audioHigherCutoffHz WRITE setAudioHigherCutoffHz NOTIFY audioHigherCutoffHzChanged)
+    Q_PROPERTY(bool audioMonstercat READ audioMonstercat WRITE setAudioMonstercat NOTIFY audioMonstercatChanged)
+    Q_PROPERTY(bool audioWaves READ audioWaves WRITE setAudioWaves NOTIFY audioWavesChanged)
+    Q_PROPERTY(QString audioChannelMode READ audioChannelMode WRITE setAudioChannelMode NOTIFY audioChannelModeChanged)
+    Q_PROPERTY(bool audioReverse READ audioReverse WRITE setAudioReverse NOTIFY audioReverseChanged)
+    Q_PROPERTY(
+        int audioExtraSmoothing READ audioExtraSmoothing WRITE setAudioExtraSmoothing NOTIFY audioExtraSmoothingChanged)
+    Q_PROPERTY(QString audioInputMethod READ audioInputMethod WRITE setAudioInputMethod NOTIFY audioInputMethodChanged)
+    Q_PROPERTY(QString audioInputSource READ audioInputSource WRITE setAudioInputSource NOTIFY audioInputSourceChanged)
 
     // Global Shortcuts (configurable via KCM, registered with KGlobalAccel)
     Q_PROPERTY(
@@ -492,7 +526,9 @@ public:
     Q_PROPERTY(QString toggleLayoutLockShortcut READ toggleLayoutLockShortcut WRITE setToggleLayoutLockShortcut NOTIFY
                    toggleLayoutLockShortcutChanged)
 
-    // Virtual Screen Swap / Rotate (Meta+Ctrl+Shift+Arrow, Meta+Ctrl+Shift+[/])
+    // Virtual Screen Swap / Rotate (Meta+Ctrl+Alt+Shift+Arrow, Meta+Ctrl+Alt+[/]
+    // — the Alt is mandatory: the Alt-less chords are KWin built-ins, see
+    // configdefaults.h)
     Q_PROPERTY(QString swapVirtualScreenLeftShortcut READ swapVirtualScreenLeftShortcut WRITE
                    setSwapVirtualScreenLeftShortcut NOTIFY swapVirtualScreenLeftShortcutChanged)
     Q_PROPERTY(QString swapVirtualScreenRightShortcut READ swapVirtualScreenRightShortcut WRITE
@@ -512,27 +548,35 @@ public:
 
     /**
      * @brief Standalone ctor that owns its config backend but BORROWS a
-     *        WindowRuleStore.
+     *        RuleStore.
      *
      * Same standalone semantics as Settings(QObject*) — owns a freshly migrated
      * config backend and leaves the CurveRegistry null (animation profiles parse
-     * through the process-static fallback) — but takes its WindowRuleStore from
+     * through the process-static fallback) — but takes its RuleStore from
      * the caller instead of owning one. The settings app uses this so a single
      * store is shared between this Settings instance (per-mode monitor disable
-     * lists, which persist in windowrules.json) and the SettingsController's
+     * lists, which persist in rules.json) and the SettingsController's
      * in-process LayoutRegistry, eliminating the divergence two independent
      * stores over the same file would otherwise allow.
      *
-     * @param windowRuleStore Borrowed store; must outlive this Settings. A null
+     * @param ruleStore Borrowed store; must outlive this Settings. A null
      *        argument degrades to owning a store (same fallback the
      *        backend-injecting ctor uses) so a misuse still yields a working
      *        object.
      * @param parent Parent QObject.
      */
-    Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent);
+    Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent);
     ~Settings() override = default;
 
     // No singleton - use dependency injection instead
+
+    // Canonical storage-key form of a screen identifier: resolve a connector
+    // name (e.g. "DP-2") to its stable EDID id (e.g. "Dell:U2722D:115107"),
+    // preserving any virtual "/vs:N" suffix. Identifiers already in id form, and
+    // connectors that don't currently resolve to a connected screen, pass
+    // through unchanged. Per-screen overrides (gaps, autotile) are keyed by this
+    // stable form so reads/writes/migration agree across connector renumbering.
+    static QString canonicalPerScreenKey(const QString& screenIdOrName);
 
     // Activation — PhosphorConfig::Store-backed.
     QVariantList dragActivationTriggers() const override;
@@ -606,8 +650,6 @@ public:
     void setBorderWidth(int width) override;
     int borderRadius() const override;
     void setBorderRadius(int radius) override;
-    bool enableBlur() const override;
-    void setEnableBlur(bool enable) override;
     QString labelFontFamily() const override;
     void setLabelFontFamily(const QString& family) override;
     qreal labelFontSizeScale() const override;
@@ -621,13 +663,15 @@ public:
     bool labelFontStrikeout() const override;
     void setLabelFontStrikeout(bool strikeout) override;
 
-    // PhosphorZones::Zone geometry (Snapping.Gaps) — PhosphorConfig::Store-backed.
-    int zonePadding() const override;
-    void setZonePadding(int padding) override;
+    // Zone geometry (shared inner/outer gaps) — PhosphorConfig::Store-backed
+    // (the "Gaps" group). The autotile* gap forwarders above route through these
+    // same getters, so the tile engine resolves the same values as snapping.
+    int innerGap() const override;
+    void setInnerGap(int gap) override;
     int outerGap() const override;
     void setOuterGap(int gap) override;
     bool usePerSideOuterGap() const override;
-    void setUsePerSideOuterGap(bool enabled) override;
+    void setUsePerSideOuterGap(bool usePerSide) override;
     int outerGapTop() const override;
     void setOuterGapTop(int gap) override;
     int outerGapBottom() const override;
@@ -638,6 +682,38 @@ public:
     void setOuterGapRight(int gap) override;
     int adjacentThreshold() const override;
     void setAdjacentThreshold(int threshold) override;
+
+    // Window decoration appearance (tiled/snapped window border + title bar) —
+    // PhosphorConfig::Store-backed (the "Windows" group).
+    bool showWindowBorder() const override;
+    void setShowWindowBorder(bool show) override;
+    QString windowBorderScope() const override;
+    void setWindowBorderScope(const QString& scope) override;
+    int windowBorderWidth() const override;
+    void setWindowBorderWidth(int width) override;
+    int windowBorderRadius() const override;
+    void setWindowBorderRadius(int radius) override;
+    QString windowBorderColorActive() const override;
+    void setWindowBorderColorActive(const QString& color) override;
+    QString windowBorderColorInactive() const override;
+    void setWindowBorderColorInactive(const QString& color) override;
+    bool hideWindowTitleBars() const override;
+    void setHideWindowTitleBars(bool hide) override;
+    QString windowTitleBarScope() const override;
+    void setWindowTitleBarScope(const QString& scope) override;
+    int focusFadeDuration() const override;
+    void setFocusFadeDuration(int ms) override;
+    // Plain opacity+tint layer (same "Windows" group).
+    bool showWindowOpacityTint() const override;
+    void setShowWindowOpacityTint(bool show) override;
+    QString windowOpacityTintScope() const override;
+    void setWindowOpacityTintScope(const QString& scope) override;
+    double windowOpacity() const override;
+    void setWindowOpacity(double opacity) override;
+    double windowTintStrength() const override;
+    void setWindowTintStrength(double strength) override;
+    QString windowTintColor() const override;
+    void setWindowTintColor(const QString& color) override;
 
     // Performance — PhosphorConfig::Store-backed (see settingsschema.cpp).
     int pollIntervalMs() const override;
@@ -719,6 +795,15 @@ public:
     void setAnimationMinimumWindowWidth(int width) override;
     int animationMinimumWindowHeight() const override;
     void setAnimationMinimumWindowHeight(int height) override;
+
+    // Decoration window filtering — same shape as the animation filter but
+    // stored under `Decorations.WindowFiltering`.
+    bool decorationExcludeTransientWindows() const override;
+    void setDecorationExcludeTransientWindows(bool exclude) override;
+    int decorationMinimumWindowWidth() const override;
+    void setDecorationMinimumWindowWidth(int width) override;
+    int decorationMinimumWindowHeight() const override;
+    void setDecorationMinimumWindowHeight(int height) override;
     // animationExcludedApplications / animationExcludedWindowClasses
     // (+ their add*/remove* convenience methods) retired in v4 — see the
     // Q_PROPERTY block above for the migration notes.
@@ -765,20 +850,37 @@ public:
                                                  const QVariant& value) override;
     Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenIdOrName) const override;
-    // Sub-domains of the shared per-screen autotile map: the Gaps card and the
-    // Algorithm card each report/clear only their own keys so one card's reset
-    // never wipes the other card's per-monitor overrides.
-    bool hasPerScreenAutotileGapsSettings(const QString& screenIdOrName) const;
+    // Algorithm sub-domain of the shared per-screen autotile map: the Algorithm
+    // card reports/clears only its own keys (the complement of the gap dimensions
+    // and SmartGaps) so its reset never wipes another card's per-monitor overrides.
     bool hasPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName) const;
-    void clearPerScreenAutotileGapsSettings(const QString& screenIdOrName);
     void clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName);
 
-    // Per-screen snapping config (override > global fallback)
+    // Per-screen snapping gaps project the config-backed per-monitor gap
+    // overrides (perScreenGapOverrides) — the geometry path only reads them, so
+    // this is the sole accessor; writes go through setPerScreenAutotileSetting /
+    // the perScreenGap* helpers, and the ISettings set/clear/has snapping triplet
+    // stays as no-op defaults.
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
-    Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenIdOrName, const QString& key,
-                                                 const QVariant& value) override;
-    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName) override;
-    Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenIdOrName) const override;
+
+    // Per-monitor gap overrides (config-backed, unified — one value per monitor
+    // drives both snap and tile). Stored in the per-screen autotile store; these
+    // accessors expose just the gap-dimension sub-domain. perScreenGapOverrides
+    // returns the override keyed in the short engine form (InnerGap / OuterGap /
+    // UsePerSideOuterGap / OuterGap{Top,Bottom,Left,Right}) — the SAME key strings
+    // contextGapOverrideMap produces, so the geometry cascade merge is a plain
+    // QVariantMap union. Empty map when the screen has no gap override. Writes go
+    // through setPerScreenAutotileSetting.
+    QVariantMap perScreenGapOverrides(const QString& screenIdOrName) const override;
+    bool hasPerScreenGapOverride(const QString& screenIdOrName) const;
+    void clearPerScreenGapOverride(const QString& screenIdOrName);
+
+    /// True iff the gap-dimension subset of the per-screen store differs between
+    /// @p before and @p after. load() uses it to fire perScreenSnappingSettingsChanged
+    /// (the daemon's gap-resnap trigger for already-snapped windows) on a per-monitor
+    /// gap change, without over-firing on an algorithm/split-only per-screen change.
+    static bool perScreenGapDimensionsDiffer(const QHash<QString, QVariantMap>& before,
+                                             const QHash<QString, QVariantMap>& after);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
@@ -797,20 +899,37 @@ public:
     void setAutotileMasterCount(int count) override;
     QVariantMap autotilePerAlgorithmSettings() const override;
     void setAutotilePerAlgorithmSettings(const QVariantMap& settings) override;
-    int autotileInnerGap() const override;
-    void setAutotileInnerGap(int gap);
-    int autotileOuterGap() const override;
-    void setAutotileOuterGap(int gap);
-    bool autotileUsePerSideOuterGap() const override;
-    void setAutotileUsePerSideOuterGap(bool enabled);
-    int autotileOuterGapTop() const override;
-    void setAutotileOuterGapTop(int gap);
-    int autotileOuterGapBottom() const override;
-    void setAutotileOuterGapBottom(int gap);
-    int autotileOuterGapLeft() const override;
-    void setAutotileOuterGapLeft(int gap);
-    int autotileOuterGapRight() const override;
-    void setAutotileOuterGapRight(int gap);
+    // Autotile gap getters forward to the shared inner/outer gap model so tiling
+    // and snapping always resolve the same values. There are no autotile-specific
+    // gap setters: the settings UI writes the shared setInnerGap()/setOuterGap*().
+    int autotileInnerGap() const override
+    {
+        return innerGap();
+    }
+    int autotileOuterGap() const override
+    {
+        return outerGap();
+    }
+    bool autotileUsePerSideOuterGap() const override
+    {
+        return usePerSideOuterGap();
+    }
+    int autotileOuterGapTop() const override
+    {
+        return outerGapTop();
+    }
+    int autotileOuterGapBottom() const override
+    {
+        return outerGapBottom();
+    }
+    int autotileOuterGapLeft() const override
+    {
+        return outerGapLeft();
+    }
+    int autotileOuterGapRight() const override
+    {
+        return outerGapRight();
+    }
     bool autotileFocusNewWindows() const override;
     void setAutotileFocusNewWindows(bool focus);
     bool autotileSmartGaps() const override;
@@ -883,6 +1002,23 @@ public:
     QString shaderProfileTreeJson() const;
     void setShaderProfileTreeJson(const QString& json);
 
+    // Per-surface decoration tree (DecorationProfile: shader-pack chain + its
+    // per-pack parameters), persisted under the Decorations group. Typed accessors
+    // mirror shaderProfileTree; the JSON-string facade backs the Q_PROPERTY
+    // above.
+    PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override;
+    void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) override;
+    QString decorationProfileTreeJson() const override;
+    void setDecorationProfileTreeJson(const QString& json) override;
+
+    // Decorations.Performance — PhosphorConfig::Store-backed.
+    bool decorationAnimateFocusedOnly() const override;
+    void setDecorationAnimateFocusedOnly(bool value) override;
+    bool decorationPauseWhenIdle() const override;
+    void setDecorationPauseWhenIdle(bool value) override;
+    int decorationIdleTimeoutSec() const override;
+    void setDecorationIdleTimeoutSec(int value) override;
+
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;
     void setAutotileFocusFollowsMouse(bool focus) override;
@@ -892,34 +1028,6 @@ public:
     void setSnappingFocusFollowsMouse(bool focus) override;
     bool autotileRespectMinimumSize() const override;
     void setAutotileRespectMinimumSize(bool respect);
-    bool autotileHideTitleBars() const override;
-    void setAutotileHideTitleBars(bool hide) override;
-    bool autotileShowBorder() const override;
-    void setAutotileShowBorder(bool show) override;
-    int autotileBorderWidth() const override;
-    void setAutotileBorderWidth(int width) override;
-    int autotileBorderRadius() const override;
-    void setAutotileBorderRadius(int radius) override;
-    QColor autotileBorderColor() const override;
-    void setAutotileBorderColor(const QColor& color) override;
-    QColor autotileInactiveBorderColor() const override;
-    void setAutotileInactiveBorderColor(const QColor& color) override;
-    bool autotileUseSystemBorderColors() const override;
-    void setAutotileUseSystemBorderColors(bool use) override;
-    bool snappingHideTitleBars() const override;
-    void setSnappingHideTitleBars(bool hide) override;
-    bool snappingShowBorder() const override;
-    void setSnappingShowBorder(bool show) override;
-    int snappingBorderWidth() const override;
-    void setSnappingBorderWidth(int width) override;
-    int snappingBorderRadius() const override;
-    void setSnappingBorderRadius(int radius) override;
-    QColor snappingBorderColor() const override;
-    void setSnappingBorderColor(const QColor& color) override;
-    QColor snappingInactiveBorderColor() const override;
-    void setSnappingInactiveBorderColor(const QColor& color) override;
-    bool snappingUseSystemBorderColors() const override;
-    void setSnappingUseSystemBorderColors(bool use) override;
     StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
     int autotileStickyWindowHandlingInt() const;
@@ -970,14 +1078,36 @@ public:
     // ranges uniformly); setters route the write through the store so the
     // value is coerced + persisted in memory on the same call, with save()
     // flushing to disk.
-    bool enableShaderEffects() const override;
-    void setEnableShaderEffects(bool enable) override;
     int shaderFrameRate() const override;
     void setShaderFrameRate(int fps) override;
     bool enableAudioVisualizer() const override;
     void setEnableAudioVisualizer(bool enable) override;
     int audioSpectrumBarCount() const override;
     void setAudioSpectrumBarCount(int count) override;
+    bool audioAutosens() const override;
+    void setAudioAutosens(bool enable) override;
+    int audioSensitivity() const override;
+    void setAudioSensitivity(int percent) override;
+    int audioNoiseReduction() const override;
+    void setAudioNoiseReduction(int value) override;
+    int audioLowerCutoffHz() const override;
+    void setAudioLowerCutoffHz(int hz) override;
+    int audioHigherCutoffHz() const override;
+    void setAudioHigherCutoffHz(int hz) override;
+    bool audioMonstercat() const override;
+    void setAudioMonstercat(bool enable) override;
+    bool audioWaves() const override;
+    void setAudioWaves(bool enable) override;
+    QString audioChannelMode() const override;
+    void setAudioChannelMode(const QString& mode) override;
+    bool audioReverse() const override;
+    void setAudioReverse(bool enable) override;
+    int audioExtraSmoothing() const override;
+    void setAudioExtraSmoothing(int percent) override;
+    QString audioInputMethod() const override;
+    void setAudioInputMethod(const QString& method) override;
+    QString audioInputSource() const override;
+    void setAudioInputSource(const QString& source) override;
 
     // Global Shortcuts (for KGlobalAccel) — PhosphorConfig::Store-backed.
     QString openEditorShortcut() const;
@@ -1121,19 +1251,86 @@ public:
     int fillOnDropModifier() const override;
     void setFillOnDropModifier(int mod) override;
 
-    // Old inline accessors replaced above — kept anchors below so the second
-    // half of the replaced region can be collapsed in one edit pass.
-
     // Persistence
     void load() override;
     void save() override;
     void reset() override;
 
+    /// Write the current settings to @p filePath as a standalone config file,
+    /// without touching the live config or the per-page Discard baseline.
+    ///
+    /// This is deliberately not `save()`-then-copy. `save()` commits to
+    /// ~/.config and re-baselines, so exporting would persist edits the user
+    /// never chose to save and leave a later Discard with nothing to revert
+    /// to. The values reaching the file are the same ones: Store-backed groups
+    /// already write through to the backend's in-memory root on every setter,
+    /// so a snapshot of it carries pending edits whether or not Save was
+    /// pressed.
+    ///
+    /// The per-screen override and virtual-screen helpers can only stage into
+    /// the live root, so exportTo snapshots the root (and the backend's dirty
+    /// flag) before staging and restores both after taking the export
+    /// snapshot. That snapshot/restore is what keeps the export side-effect
+    /// free: without it the staged groups would sit in the live root and be
+    /// committed by a later sync() or the backend's flush-on-destruction.
+    ///
+    /// Returns false if the write fails, or if the backend is not JSON-backed
+    /// (exports are config.json documents).
+    bool exportTo(const QString& filePath);
+
+    // ── Per-page reset / discard support (settings app) ─────────────────────
+    // A config key addressed as (group, key). A page "owns" a list of these;
+    // SettingsController holds the page→keys manifest and drives the two
+    // mutators below for the active page.
+    using ConfigKey = QPair<QString, QString>;
+    using ConfigKeyList = QList<ConfigKey>;
+
+    /// True when the current in-memory value of (@p group, @p key) differs
+    /// from the committed baseline — i.e. the key carries an unsaved edit.
+    bool isKeyModified(const QString& group, const QString& key) const;
+
+    /// Per-page Discard: revert each key to the committed baseline. Bracketed
+    /// by the same Q_PROPERTY NOTIFY re-emit as load() so QML bindings update,
+    /// and emits settingsChanged() once if anything actually changed.
+    ///
+    /// SCOPE: re-emits only Q_PROPERTY NOTIFY signals (+ settingsChanged). It
+    /// does NOT re-emit the non-Q_PROPERTY change signals load() also fires —
+    /// the per-mode disable-list signals (disabled*Changed) and the per-screen
+    /// signals (perScreen*SettingsChanged). This is correct for the current
+    /// per-page manifest (all Q_PROPERTY-backed keys); if a future page ever
+    /// owns a disable-list or per-screen key, extend this to re-emit those.
+    void discardKeys(const ConfigKeyList& keys);
+
+    /// Per-page Reset: set each key to its schema default. Same NOTIFY /
+    /// settingsChanged() re-emit contract — and the same scope limit — as
+    /// discardKeys().
+    void resetKeys(const ConfigKeyList& keys);
+
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
-    Q_INVOKABLE void applySystemColorScheme();
-    void applyAutotileBorderSystemColor();
-    void applySnappingBorderSystemColor();
+    /// Derives the four zone-color keys from the current application palette.
+    /// Deliberately NOT Q_INVOKABLE: there is no QML caller, and an ad-hoc
+    /// QML invocation would write the derived keys without the baseline /
+    /// dirty-tracking bookkeeping its three C++ call sites provide (see the
+    /// ownership rule at rebaselineDerivedColorKeys()).
+    void applySystemColorScheme();
+
+    /// Re-derives the system-scheme zone colors when the application palette
+    /// changes at runtime (theme switch). Without this, every long-running
+    /// process (daemon, settings app) keeps the palette SNAPSHOT taken at
+    /// load() and serves stale zone colors until restart.
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
+    /// True while eventFilter() is re-deriving the zone colors from a runtime
+    /// ApplicationPaletteChange. The re-derive is palette-driven, not a user
+    /// edit — SettingsController::onSettingsPropertyChanged() checks this to
+    /// avoid flipping the global unsaved-changes footer on a theme switch
+    /// (the baseline rebaseline alone keeps isKeyModified() honest, but the
+    /// controller's NOTIFY-driven dirty flag fires before any value check).
+    bool isApplyingSystemPalette() const
+    {
+        return m_applyingSystemPalette;
+    }
 
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via
@@ -1154,6 +1351,10 @@ Q_SIGNALS:
     // here — see src/core/isettings.h.
 
 private:
+    /// Installs the QEvent::ApplicationPaletteChange filter on the application
+    /// object (see eventFilter above). Called once per constructor, after load().
+    void trackSystemPaletteChanges();
+
     /// Member-function-pointer alias used by the indexed shortcut setters
     /// (quickLayoutShortcut / snapToZoneShortcut) when fanning out to the
     /// per-index NOTIFY signal.
@@ -1163,8 +1364,8 @@ private:
     /// passed into @ref writeTriggerList.
     using TriggerListSignalFn = void (Settings::*)();
 
-    /// Shared trigger-list setter used by the four "plain" setters
-    /// (activation, deactivation, snap-assist, autotile-insert). Caps at
+    /// Shared trigger-list setter used by the three "plain" setters
+    /// (activation, snap-assist, autotile-insert). Caps at
     /// @c MaxTriggersPerAction, round-trips through the schema's validator,
     /// and only emits @p specificSignal + @c settingsChanged on a real change.
     /// @c setZoneSpanTriggers does its own dance because it also synchronises
@@ -1179,7 +1380,7 @@ private:
 
     /// Shared writer for the three per-mode disable lists. Replaces the whole
     /// `DisableEngine` context-rule family for (@p mode, @p axisInt) in the
-    /// WindowRule store — @p axisInt is a `DisableAxis` value (file-local enum
+    /// Rule store — @p axisInt is a `DisableAxis` value (file-local enum
     /// in settings.cpp; passed as an int so the header stays decoupled). Drops
     /// malformed composite entries, fires @p signalFn + @c settingsChanged
     /// only on a real (canonical-set) change.
@@ -1187,7 +1388,7 @@ private:
                              DisableModeSignalFn signalFn);
 
     /// Shared reader for the three per-mode disable lists. Enumerates the
-    /// `DisableEngine` context rules in the WindowRule store scoped to
+    /// `DisableEngine` context rules in the Rule store scoped to
     /// @p mode and @p axisInt (a `DisableAxis` value), projecting each rule's
     /// pinned context dimensions back to its list-entry string form. The
     /// monitor variant's connector-name → canonical-id resolution lives in
@@ -1198,15 +1399,48 @@ private:
     // Only non-Store groups need dedicated helpers now. Store-backed groups
     // (Activation/Display/ZoneGeometry/Behavior/ZoneSelector/Shortcut/
     // Autotiling/Editor/Appearance/Rendering/Shaders/Ordering) persist via
-    // setters and flush via m_configBackend->sync() in save().
+    // setters and flush via m_configBackend->commit() in save().
     void loadPerScreenOverrides(PhosphorConfig::IBackend* backend);
     void loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
     void saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend);
     void saveVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
 
-    // Groups that save() writes exhaustively (excludes unmanaged groups).
+    // ── NOTIFY re-emit machinery (shared by load / discardKeys / resetKeys) ──
+    // load() and the per-page mutators write backing state directly (bypassing
+    // the property setters), so they must re-emit NOTIFY by hand or QML
+    // bindings never refresh. snapshotNotifyProperties() captures every own
+    // NOTIFY-able Q_PROPERTY value (index-aligned to the metaobject) BEFORE the
+    // mutation; emitChangedNotifyProperties() fires the NOTIFY of each property
+    // whose value changed and returns whether any fired.
+    QVector<QVariant> snapshotNotifyProperties() const;
+    bool emitChangedNotifyProperties(const QVector<QVariant>& before);
+
+    // Refresh the committed baseline — the last-persisted value of every
+    // schema-declared key. Called at the end of load() and save() (the only
+    // points where the in-memory store equals disk); discardKeys() reverts to
+    // this baseline and isKeyModified() compares against it. Private: mutating
+    // the baseline anywhere but a load/save commit point desyncs dirty tracking.
+    // ONE narrow exception: rebaselineDerivedColorKeys() below refreshes just
+    // the four palette-derived zone-color entries after a runtime palette
+    // re-derive — those keys are palette-owned, never user edits.
+    void captureBaseline();
+
+    // Refresh the baseline for ONLY the four palette-derived zone-color keys
+    // after a runtime re-derive. System-colors mode owns these keys: they
+    // follow the palette and are never user edits, so a theme switch must not
+    // flip isKeyModified() (phantom unsaved-changes footer) or arm Discard
+    // with the stale pre-switch colors. The one legitimate caller is the
+    // ApplicationPaletteChange path in eventFilter(); see the definition for
+    // why the setUseSystemColors() and load() paths must NOT call it.
+    void rebaselineDerivedColorKeys();
+
+    // Groups that reset() deletes exhaustively (excludes unmanaged groups like
+    // Updates). NOT used by save() — save() iterates the schema and lets
+    // purgeStaleKeys() handle cleanup.
     static QStringList managedGroupNames();
-    // Delete all per-screen override groups (ZoneSelector:*, AutotileScreen:*, SnappingScreen:*).
+    // Delete all per-screen override groups by prefix (ZoneSelector:*,
+    // AutotileScreen:*, and the legacy SnappingScreen:* which is no longer written
+    // but is still swept to scrub any file an older build left behind).
     static void deletePerScreenGroups(PhosphorConfig::IBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
@@ -1256,15 +1490,43 @@ private:
     // from hand-written load*/save* functions routes through here. See
     // settingsschema.cpp for the current list of migrated groups.
     std::unique_ptr<PhosphorConfig::Store> m_store;
+
+    // Committed baseline: the last-persisted value of every schema-declared
+    // key, keyed group → {key → value}. Refreshed by captureBaseline() at the
+    // end of load() and save() — plus one targeted exception: eventFilter()'s
+    // ApplicationPaletteChange path calls rebaselineDerivedColorKeys() to
+    // refresh ONLY the four palette-derived zone-color entries, so a runtime
+    // theme switch doesn't read as an unsaved edit. Backs per-page Discard
+    // (revert to baseline) and value-based per-page dirty checks
+    // (isKeyModified).
+    QHash<QString, QVariantMap> m_baseline;
+
+    // Raised (RAII, via QScopedValueRollback) around eventFilter()'s runtime
+    // palette re-derive; surfaced through isApplyingSystemPalette() so
+    // NOTIFY-driven dirty tracking can tell a palette-driven refresh from a
+    // user edit. Never true outside that synchronous window.
+    bool m_applyingSystemPalette = false;
+
+    // Raised (RAII, via QScopedValueRollback) around the two batched
+    // applySystemColorScheme() call sites: load() and eventFilter()'s runtime
+    // palette re-derive. The derive routes through the public color setters,
+    // whose per-setter NOTIFY + settingsChanged emissions would duplicate the
+    // caller's own snapshot-based announcement (each changed NOTIFY exactly
+    // once plus a single settingsChanged). While true, the color setters
+    // persist silently and the caller remains the sole announcer. Never true
+    // outside those synchronous windows — setUseSystemColors relies on the
+    // setters emitting normally.
+    bool m_suppressDerivedColorEmissions = false;
+
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Per-mode disable lists are stored as `DisableEngine` context rules in
-    // the unified WindowRule store (windowrules.json), NOT in config.json.
+    // the unified Rule store (rules.json), NOT in config.json.
     //
     // The store can be either owned (standalone settings app / editor / tests
     // that have no daemon counterpart) or borrowed (daemon process — the
     // daemon owns the canonical store for `LayoutRegistry` and
-    // `WindowRuleAdaptor`, and passes that same instance in so every
+    // `RuleAdaptor`, and passes that same instance in so every
     // in-process writer mutates the same in-memory ruleset). Mirroring the
     // existing `LayoutRegistry`-via-borrowed-pointer pattern eliminates the
     // dual-store race where two stores pointed at the same file each rebuild
@@ -1274,10 +1536,34 @@ private:
     // does not — the owner is responsible for having loaded already.
     // load() reloads the active store from disk so cross-process deltas
     // surface; the disabled*/setDisabled*/is*Disabled accessors read/write
-    // through `m_windowRuleStore` (a raw pointer that always tracks the
+    // through `m_ruleStore` (a raw pointer that always tracks the
     // active store — owned or borrowed).
-    std::unique_ptr<PhosphorWindowRules::WindowRuleStore> m_ownedWindowRuleStore;
-    PhosphorWindowRules::WindowRuleStore* m_windowRuleStore = nullptr;
+    std::unique_ptr<PhosphorRules::RuleStore> m_ownedRuleStore;
+    PhosphorRules::RuleStore* m_ruleStore = nullptr;
+
+    // Connect the active rule store's rulesChanged to onRuleStoreChanged and
+    // seed the per-screen gap fingerprint. Called once at the end of every
+    // constructor (after load()), so both the owned and borrowed store paths get
+    // the reactive wiring.
+    void connectRuleStoreGapReactivity();
+
+    // React to a rule-store change. The GLOBAL inner/outer gaps and the
+    // per-monitor gap overrides are config-backed, so their NOTIFY is owned by the
+    // setters / load(), not this handler. What remains rule-backed is the CONTEXT
+    // gap cascade (per-mode / desktop / activity gap Rules), so this re-syncs the
+    // per-screen consumers — but only when a gap action somewhere in the rule set
+    // actually changed, so a non-gap rule write (mode/assignment toggle) doesn't
+    // spuriously fire settingsChanged. Bound to the store's rulesChanged signal.
+    void onRuleStoreChanged();
+
+    // Fingerprint of every gap action across the rule set, used to gate the
+    // per-screen gap re-sync in onRuleStoreChanged so only real gap edits fire it.
+    QString gapRulesFingerprint() const;
+
+    // Snapshot of all gap actions across the rule set; gates the per-screen gap
+    // re-sync in onRuleStoreChanged so non-gap rule writes (mode/assignment
+    // toggles) don't fire it. Seeded in connectRuleStoreGapReactivity.
+    QString m_cachedGapFingerprint;
 
     // Activation
     // Activation is stored in m_store.
@@ -1286,8 +1572,8 @@ private:
     // Display is stored in m_store; no cached members here.
 
     // Appearance
-    // Appearance + Labels + Opacity + Border + Effects.Blur are stored in
-    // m_store; no cached members here.
+    // Appearance + Labels + Opacity + Border are stored in m_store; no
+    // cached members here.
 
     // PhosphorZones::Zone settings
     // PhosphorZones::Zone geometry is stored in m_store; no cached members here.
@@ -1312,7 +1598,6 @@ private:
 
     // PhosphorZones::Zone Selector
     // PhosphorZones::Zone selector is stored in m_store.
-    // (remaining zone selector members stored in m_store)
 
     // Virtual screen configurations (physicalScreenId -> config)
     QHash<QString, PhosphorScreens::VirtualScreenConfig> m_virtualScreenConfigs;
@@ -1323,8 +1608,10 @@ private:
     // Per-screen autotile overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
 
-    // Per-screen snapping overrides (screenIdOrName -> settings map)
-    QHash<QString, QVariantMap> m_perScreenSnappingSettings;
+    // Per-monitor gaps are unified (one value per monitor drives both snap and
+    // tile) and live in the map above; the gap-dimension sub-domain is projected
+    // by perScreenGapOverrides and surfaced as getPerScreenSnappingSettings. There
+    // is no separate per-screen snapping store.
 
     // Autotiling Settings
     // Autotiling stored in m_store.

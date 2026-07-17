@@ -1,0 +1,47 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Mosaic pack: the backdrop pixelated into coarse cells instead of
+// blurred — privacy glass. SINGLE PASS: unlike the rest of the Blur
+// family this pack needs no Gaussian buffers, it samples the RAW
+// backdrop once per fragment at the cell centre via backdropTexel()
+// (which clamps into the valid capture rect on its own). Same slab
+// composite as the blur family: the pane shows through wherever the
+// window itself is translucent.
+//
+// Retired handlesOpacity contract: uSurfaceOpacity is a constant 1.0 now
+// (SetOpacity is layer-backed and custom chains own their alpha). The pack's
+// own contentOpacity parameter fades the window content so the mosaic shows
+// on opaque windows; a theme's own translucent pixels reveal it the same way
+// with no parameter involved.
+// DAEMON FALLBACK: no scene behind daemon surfaces (uHasBackdrop = 0), so
+// the pack renders a still tint slab with the same corner rounding.
+
+#include <surface_backdrop.glsl>
+
+vec4 pSurface(vec2 uv) {
+    SurfaceSlab slab = surfaceSlabOpen(uv, p_cornerRadius * uSurfaceScale);
+    // Fade the window content over the pane; the translucency it frees is
+    // filled by the mosaic in slabComposite below.
+    slab.window *= clamp(p_contentOpacity, 0.0, 1.0);
+    vec2 px = slab.px;
+    float mask = slab.mask;
+
+    vec4 pane;
+    if (uHasBackdrop >= 0.5) {
+        // Quantise the fragment to its cell centre in device px (anchored to
+        // the frame corner so the grid doesn't crawl when the window moves a
+        // sub-cell amount), then sample the raw backdrop there.
+        float cell = max(p_cellSize, 2.0) * max(uSurfaceScale, 0.001);
+        vec2 local = px - uSurfaceFrameTopLeft;
+        vec2 snapped = (floor(local / cell) + 0.5) * cell;
+        vec4 b = backdropTexel(uv + pxToUv(snapped - local));
+        vec3 rgb = mix(b.rgb, p_tintColor.rgb * b.a, clamp(p_tintStrength, 0.0, 1.0));
+        pane = vec4(rgb, b.a) * mask;
+    } else {
+        // Original pseudo look for daemon surfaces: a still tint slab.
+        pane = vec4(p_tintColor.rgb, 1.0) * 0.4 * mask;
+    }
+
+    return slabComposite(slab.window, pane);
+}

@@ -71,57 +71,24 @@ void AutotileHandler::clearTiledTracking()
     m_border.tiledWindowsByScreen.clear();
 }
 
-bool AutotileHandler::updateHideTitleBarsSetting(bool enabled)
-{
-    if (m_border.hideTitleBars == enabled) {
-        return false;
-    }
-    m_border.hideTitleBars = enabled;
-    if (!enabled) {
-        // Turning OFF — release every autotile ownership; the manager
-        // restores each title bar no other owner still claims. Deferred +
-        // an immediate drain: each restore is a 30-120 ms synchronous
-        // Wayland round-trip, so the drain runs them one per event-loop
-        // tick instead of stalling the compositor for the whole batch.
-        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Autotile,
-                                                        DecorationManager::Restore::Deferred);
-        m_effect->decorationManager()->drainPendingRestores();
-    } else {
-        // Turning ON — hide title bars for all currently tiled windows. The
-        // windows are already placed in their zones, so the AlreadyPlaced
-        // sequence re-asserts the zone rect across the decoration change
-        // (KWin holds the client size constant, which would otherwise leave
-        // a title-bar-height gap).
-        const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
-        for (const auto& p : pairs) {
-            m_effect->decorationManager()->acquire(p.first, DecorationManager::autotile(p.second),
-                                                   DecorationManager::Placement::AlreadyPlaced);
-        }
-    }
-    return true;
-}
-
-bool AutotileHandler::updateShowBorderSetting(bool enabled)
-{
-    if (m_border.showBorder == enabled) {
-        return false;
-    }
-    m_border.showBorder = enabled;
-    return true;
-}
-
 void AutotileHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;
 }
 
 void AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,
-                                                       const QRectF& frame, bool knownFreeFloating)
+                                                       KWin::EffectWindow* w, const QRectF& frameIn,
+                                                       bool knownFreeFloating)
 {
     if (windowId.isEmpty() || screenId.isEmpty()) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry save: empty id" << windowId << screenId;
         return;
     }
+    // Correct for maximize/fullscreen (shared with SnapHandler's capture): a maximized
+    // window's frameGeometry() is the full monitor, and storing that as the float-back
+    // size floats the window back maximized. This store is the SAME daemon free-geometry
+    // record snap reads, so an unguarded capture here would poison snap's restore too.
+    const QRectF frame = PlasmaZonesEffect::freeGeometryForCapture(w, frameIn);
     if (!frame.isValid() || frame.width() <= 0 || frame.height() <= 0) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry save: invalid frame" << frame << "for" << windowId;
         return;
@@ -238,7 +205,10 @@ void AutotileHandler::requestDaemonPreTileRestore(KWin::EffectWindow* w, const Q
             kw->maximize(KWin::MaximizeRestore);
             --m_suppressMaximizeChanged;
         }
-        m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh));
+        // Snap-out: leaving zone-managed sizing.
+        m_effect->applyWindowGeometry(safeW, QRect(reply.argumentAt<1>(), reply.argumentAt<2>(), rw, rh),
+                                      /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                                      PhosphorAnimation::ProfilePaths::WindowSnapOut);
         qCInfo(lcEffect) << "Desktop switch: restored pre-snap geometry from daemon for orphaned window" << windowId;
     });
 }
@@ -348,11 +318,12 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
 void AutotileHandler::applyFloatCleanup(const QString& windowId)
 {
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
-    // A floating window is no longer tile-managed on any screen — release
-    // autotile's decoration ownership (the manager restores the title bar
-    // unless another owner still claims it) and clear tiled tracking.
-    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Autotile);
-    AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    // A floating window is no longer tile-managed on any screen — clear tiled
+    // tracking. clearWindowTiledAllScreens re-resolves the window's rules when the
+    // tiled status flips, so a baseline border / title-bar rule scoped to tiled
+    // windows stops drawing / hiding on the now-floating window (the setWindowFloating
+    // above also re-resolves on the IsFloating flip; both coalesce).
+    clearWindowTiledAllScreens(windowId);
     // Drop centering/target tracking too — a floated window isn't being
     // tiled anymore so a stale entry here would trigger centering on the
     // next frameGeometryChanged, snapping the floated window back into an
@@ -361,8 +332,41 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     // path has to clean up after itself.
     m_autotileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
-    m_effect->removeWindowBorder(windowId);
+    // Shared placement-flip funnel (update-or-remove in the same turn) —
+    // the bare removal here left the float paths WITHOUT a bulk
+    // updateAllDecorations follow-up (daemon auto-float past maxWindows)
+    // undecorated until an unrelated refresh, the same drag-start blackout
+    // the snap engine had. The tiled/floating facts were flipped above, so
+    // the funnel resolves the floating-state chain.
+    m_effect->reconcileDecorationOnPlacementFlip(windowId);
     unmaximizeMonocleWindow(windowId);
+}
+
+void AutotileHandler::markWindowTiled(const QString& screenId, const QString& windowId)
+{
+    const bool wasTiled = isTiledWindow(windowId);
+    AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
+    // Re-resolve only on the false→true transition: a window already tiled on
+    // another screen stays tiled, so re-adding it changes no rule outcome.
+    if (!wasTiled) {
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
+}
+
+void AutotileHandler::clearWindowTiledAllScreens(const QString& windowId)
+{
+    if (AutotileStateHelpers::removeFromAllScreens(m_border, windowId)) {
+        // Was tiled on at least one screen and now is not — IsTiled flipped.
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
+}
+
+void AutotileHandler::clearWindowTiledOnScreen(const QString& screenId, const QString& windowId)
+{
+    if (AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, windowId) && !isTiledWindow(windowId)) {
+        // Removed from this screen and not tiled on any other — IsTiled flipped.
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
 }
 
 } // namespace PlasmaZones

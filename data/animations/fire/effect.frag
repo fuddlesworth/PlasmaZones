@@ -75,7 +75,10 @@ vec2 effectMask(float hideTime, float fadeWidth, float edgeFadeWidth) {
   float windowMask = 1.0 - clamp((burnProgress - t) / fadeWidth, 0.0, 1.0);
 
   // Gradient from top burning window.
-  float effectMask = clamp(t * (1.0 - windowMask) / burnProgress, 0.0, 1.0);
+  // burnProgress is exactly 0 on the leg's first frame, making this 0.0/0.0 = NaN.
+  // Pre-existing (uProgress is clamped, so the overshoot change neither causes nor
+  // worsens it), but a NaN mask is a NaN mask.
+  float effectMask = clamp(t * (1.0 - windowMask) / max(burnProgress, 1e-4), 0.0, 1.0);
 
   // Fade-out when the window burned down.
   if (progress > hideTime) {
@@ -142,5 +145,5 @@ vec4 pTransition(vec2 uv, float t) {
   // oColor = vec4(vec3(effectMask.x), 1);
   // oColor = vec4(vec3(effectMask.y), 1);
 
-  return vec4(oColor.rgb * oColor.a, oColor.a);
+  return premultiply(oColor);
 }

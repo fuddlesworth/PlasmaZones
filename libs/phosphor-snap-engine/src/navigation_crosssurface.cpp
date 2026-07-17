@@ -5,7 +5,6 @@
  * @file navigation_crosssurface.cpp
  * @brief SnapEngine cross-surface resolution helpers.
  *
- * Split out of navigation_actions.cpp to keep that TU under the 800-line limit.
  * These are SnapEngine members invoked by the in-surface navigation entry points
  * in navigation_actions.cpp when a directional operation reaches a layout
  * boundary and must resolve a landing on a neighbouring virtual desktop or
@@ -88,11 +87,12 @@ QString SnapEngine::windowInZoneOnScreen(const QString& zoneId, const QString& s
         return QString();
     }
     // windowsInZone is screen-agnostic (a zone UUID is shared by every output the
-    // layout drives), so pin to the daemon's stored screen assignment.
+    // layout drives), so pin to the daemon's stored screen assignment. The
+    // screenForWindow point accessor also canonicalizes the id (issue #628),
+    // which a raw flat-map .value() lookup never did.
     const QStringList windows = m_windowTracker->windowsInZone(zoneId);
-    const QHash<QString, QString>& screens = m_windowTracker->screenAssignments();
     for (const QString& windowId : windows) {
-        if (screens.value(windowId) == screenId) {
+        if (m_windowTracker->screenForWindow(windowId) == screenId) {
             return windowId;
         }
     }

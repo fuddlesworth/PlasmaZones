@@ -101,15 +101,15 @@ void StagingService::clearAll()
     m_tilingQuickSlots.clear();
 }
 
-// Snapping and tiling slots are mutually exclusive in the unified Window Rule
+// Snapping and tiling slots are mutually exclusive in the unified Rule
 // model: a single context (screen × desktop × activity) carries either a
 // snapping layout OR a tiling algorithm, never both. Staging one therefore
 // clears the other so the flush emits a coherent `setAssignmentEntry` with
 // matching engine mode. The earlier per-page "Snapping > Assignments" and
 // "Tiling > Assignments" flows treated the two slots as independent fields,
-// but those pages were retired by the Window Rule refactor — callers now
+// but those pages were retired by the Rule refactor — callers now
 // stage via `stageAssignmentEntry` (Overview page composite write) or via
-// the Window Rule pipeline. The per-field `stageSnapping` / `stageTiling`
+// the Rule pipeline. The per-field `stageSnapping` / `stageTiling`
 // entry points are kept for any future single-slot mutator that wants the
 // mutually-exclusive contract.
 void StagingService::stageSnapping(const QString& screen, int desktop, const QString& activity, const QString& layoutId)
@@ -137,6 +137,13 @@ void StagingService::stageFullClear(const QString& screen, int desktop, const QS
     e.stagedMode = std::nullopt;
     e.snappingLayoutId = std::nullopt;
     e.tilingAlgorithmId = std::nullopt;
+}
+
+void StagingService::removeStagedAssignment(const QString& screen, int desktop, const QString& activity)
+{
+    // Erase the map entry entirely (keyed the same way assignmentEntry
+    // keys it) so the flush never sees this context at all.
+    m_assignments.remove(assignmentCacheKey(screen, desktop, activity));
 }
 
 void StagingService::stageTilingClear(const QString& screen, int desktop, const QString& activity)
@@ -365,6 +372,11 @@ void StagingService::flushVirtualScreensToDaemon()
     m_virtualScreenConfigs.clear();
 }
 
+void StagingService::clearVirtualScreenConfigs()
+{
+    m_virtualScreenConfigs.clear();
+}
+
 // ─── Quick layout slots ──────────────────────────────────────────────
 
 void StagingService::stageSnappingQuickSlot(int slotNumber, const QString& layoutId)
@@ -395,6 +407,16 @@ bool StagingService::stagedTilingQuickSlot(int slotNumber, QString& out) const
     }
     out = *it;
     return true;
+}
+
+void StagingService::clearSnappingQuickSlots()
+{
+    m_snappingQuickSlots.clear();
+}
+
+void StagingService::clearTilingQuickSlots()
+{
+    m_tilingQuickSlots.clear();
 }
 
 void StagingService::flushQuickSlotsToDaemon()

@@ -201,6 +201,28 @@ public:
     void setFixedGeometry(const QRectF& geometry);
 
     /**
+     * @brief Normalize a fixedGeometry payload arriving from an untrusted boundary.
+     *
+     * X/Y are pixel offsets from the screen origin and MAY be negative —
+     * computeAbsoluteGeometry adds them to the origin verbatim, so a negative
+     * offset legitimately places a zone off-screen. Width/height are extents
+     * and cannot be negative. A non-finite value has no meaningful clamp (it
+     * poisons every later comparison and serializes as JSON null) so it drops
+     * to 0, which lands the rect in the degenerate bucket below.
+     *
+     * The result is empty (QRectF::isEmpty) when the payload cannot describe a
+     * zone that renders. Callers must treat that as "no usable fixed payload"
+     * and fall back to Relative rather than storing it: a zero-extent fixed
+     * zone normalizes to a zero-extent relativeGeometry, which the layout
+     * schema rejects with exclusiveMinimum 0 — and it rejects the WHOLE layout,
+     * so storing one turns the next save into a file the loader drops.
+     *
+     * Shared by every ingress that accepts the key (Zone::fromJson for files,
+     * LayoutAdaptor::updateLayout for D-Bus) so they cannot drift apart.
+     */
+    static QRectF sanitizeFixedGeometry(const QRectF& geometry);
+
+    /**
      * @brief Returns normalized 0-1 coordinates regardless of geometry mode
      * @param referenceGeometry The screen geometry to normalize against
      * @return Normalized coordinates for spatial queries

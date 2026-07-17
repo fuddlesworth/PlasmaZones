@@ -6,7 +6,7 @@
 ## Context
 
 PlasmaZones started as a KWin plugin. All policy logic (zone detection, snap resolution,
-autotile, navigation, window rules, shortcuts) lives in the daemon (`plasmazonesd`) because
+autotile, navigation, rules, shortcuts) lives in the daemon (`plasmazonesd`) because
 the KWin effect API cannot host it in-process. The plugin streams state to the daemon over
 D-Bus; the daemon computes; the daemon signals back geometry commands.
 
@@ -17,7 +17,7 @@ libraries directly — zero IPC for frame-critical work. The daemon either doesn
 ## Design Decisions
 
 1. **The compositor owns all policy decisions in standalone mode.** Zone detection, snap
-   resolution, autotile, navigation, window rules, drag handling — all in-process.
+   resolution, autotile, navigation, rules, drag handling — all in-process.
 
 2. **No daemon runs alongside the standalone compositor.** The compositor handles persistence
    (layout/rule/config file I/O) and exposes D-Bus interfaces for external tools directly.
@@ -45,7 +45,7 @@ phosphor-compositor process:                KWin process:
   │   ├── phosphor-zones                    plasmazonesd process:
   │   ├── phosphor-snap-engine                ├── PolicyEngine (same libraries)
   │   ├── phosphor-placement                  ├── D-Bus API (org.plasmazones.Service)
-  │   ├── phosphor-windowrule                 ├── Persistence (layouts, rules, config)
+  │   ├── phosphor-rule                 ├── Persistence (layouts, rules, config)
   │   └── phosphor-config                     └── KWin plugin protocol
   ├── Persistence (direct file I/O)             (CompositorBridge, WindowDrag,
   ├── D-Bus API (org.plasmazones.Service)        WindowTracking interfaces)
@@ -76,8 +76,8 @@ public:
     PhosphorSnapEngine::SnapEngine& snapEngine();
     PhosphorPlacement::WindowTrackingService& windowTracking();
 
-    // --- Window Rules ---
-    PhosphorWindowRule::RuleEvaluator& ruleEvaluator();
+    // --- Rules ---
+    PhosphorRule::RuleEvaluator& ruleEvaluator();
     void reloadRules();
 
     // --- Drag Resolution (replaces daemon's WindowDragAdaptor) ---
@@ -115,7 +115,7 @@ private:
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutRegistry;
     std::unique_ptr<PhosphorSnapEngine::SnapEngine> m_snapEngine;
     std::unique_ptr<PhosphorPlacement::WindowTrackingService> m_windowTracking;
-    std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_ruleEvaluator;
+    std::unique_ptr<PhosphorRule::RuleEvaluator> m_ruleEvaluator;
     std::unique_ptr<PhosphorConfig::Store> m_configStore;
 
     Compositor* m_compositor;
@@ -151,7 +151,7 @@ target_link_libraries(phosphor-compositor-core-policy
         PhosphorZones
         PhosphorSnapEngine
         PhosphorPlacement
-        PhosphorWindowRule
+        PhosphorRule
         PhosphorConfig
     PRIVATE
         PhosphorEngine
@@ -192,7 +192,7 @@ process owns it.
 │   ├── SetActiveLayout(outputName, layoutId)
 │   └── signal LayoutChanged(outputName, layoutId)
 │
-├── WindowRules                 org.plasmazones.WindowRules
+├── Rules                 org.plasmazones.Rules
 │   ├── GetAllRules() → array
 │   ├── SaveRule(json)
 │   ├── DeleteRule(id)
@@ -236,7 +236,7 @@ private:
     // Adaptors (generated from XML interface files)
     SettingsAdaptor* m_settings;
     LayoutsAdaptor* m_layouts;
-    WindowRulesAdaptor* m_rules;
+    RulesAdaptor* m_rules;
     WindowsAdaptor* m_windows;
     ZonesAdaptor* m_zones;
     ControlAdaptor* m_control;
@@ -324,7 +324,7 @@ SnapEngine already using new threshold on next drag. Instant.
 ~/.local/share/plasmazones/layouts/     — Zone layout JSON files
 ~/.local/share/plasmazones/session/     — Session restore (window→zone mappings)
 ~/.config/plasmazones/config.json       — Settings
-~/.config/plasmazones/windowrules.json  — Window rules
+~/.config/plasmazones/rules.json  — Rules
 ```
 
 The compositor reads/writes these directly. No intermediary.

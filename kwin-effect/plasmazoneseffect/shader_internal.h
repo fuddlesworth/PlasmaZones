@@ -3,15 +3,125 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
+#include <PhosphorAnimation/Curve.h>
 
+#include <QByteArray>
 #include <QRectF>
+#include <QString>
+#include <QVariant>
 #include <QVector2D>
 #include <QVector4D>
 #include <QtGlobal>
 
 #include <array>
 #include <chrono>
+
+#include <epoxy/gl.h>
+
+namespace PlasmaZones::ShaderInternal {
+
+/// Save/restore the global GL state the offscreen decoration folds perturb —
+/// blend enable + separate blend funcs, viewport, clear colour, active texture
+/// unit. The folds (renderSurfaceChainComposite, which inlines the buffer
+/// passes, plus the snapshot captures) run offscreen passes plus a nested
+/// effects->drawWindow immediately BEFORE KWin's on-screen draw of the same
+/// frame, and KWin's convention is that an effect hands blend/viewport back
+/// the way it found them; without this guard the first frame after a fold
+/// inherits whatever state the fold's last inner draw left (a disabled
+/// GL_BLEND renders the animation shader's premultiplied output as OPAQUE
+/// BLACK across the whole quad — the close-animation black-flash class).
+/// Header-inline so both consuming TUs share one definition under the Unity
+/// build.
+class ScopedGlState
+{
+public:
+    ScopedGlState()
+    {
+        m_blendEnabled = glIsEnabled(GL_BLEND);
+        glGetIntegerv(GL_BLEND_SRC_RGB, &m_blendSrcRgb);
+        glGetIntegerv(GL_BLEND_DST_RGB, &m_blendDstRgb);
+        glGetIntegerv(GL_BLEND_SRC_ALPHA, &m_blendSrcAlpha);
+        glGetIntegerv(GL_BLEND_DST_ALPHA, &m_blendDstAlpha);
+        glGetIntegerv(GL_VIEWPORT, m_viewport);
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, m_clearColor);
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &m_activeTexture);
+        // OffscreenData::paint toggles GL_SCISSOR_TEST — the nested
+        // effects->drawWindow inside a fold can flip it, so it belongs in
+        // the snapshot alongside blend.
+        m_scissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
+        glGetIntegerv(GL_SCISSOR_BOX, m_scissorBox);
+    }
+    ~ScopedGlState()
+    {
+        if (m_blendEnabled) {
+            glEnable(GL_BLEND);
+        } else {
+            glDisable(GL_BLEND);
+        }
+        glBlendFuncSeparate(static_cast<GLenum>(m_blendSrcRgb), static_cast<GLenum>(m_blendDstRgb),
+                            static_cast<GLenum>(m_blendSrcAlpha), static_cast<GLenum>(m_blendDstAlpha));
+        glViewport(m_viewport[0], m_viewport[1], m_viewport[2], m_viewport[3]);
+        glClearColor(m_clearColor[0], m_clearColor[1], m_clearColor[2], m_clearColor[3]);
+        glActiveTexture(static_cast<GLenum>(m_activeTexture));
+        if (m_scissorEnabled) {
+            glEnable(GL_SCISSOR_TEST);
+        } else {
+            glDisable(GL_SCISSOR_TEST);
+        }
+        glScissor(m_scissorBox[0], m_scissorBox[1], m_scissorBox[2], m_scissorBox[3]);
+    }
+    ScopedGlState(const ScopedGlState&) = delete;
+    ScopedGlState& operator=(const ScopedGlState&) = delete;
+
+private:
+    GLboolean m_blendEnabled = GL_FALSE;
+    GLint m_blendSrcRgb = GL_ONE;
+    GLint m_blendDstRgb = GL_ONE_MINUS_SRC_ALPHA;
+    GLint m_blendSrcAlpha = GL_ONE;
+    GLint m_blendDstAlpha = GL_ONE_MINUS_SRC_ALPHA;
+    GLint m_viewport[4] = {0, 0, 0, 0};
+    GLfloat m_clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    GLint m_activeTexture = GL_TEXTURE0;
+    GLboolean m_scissorEnabled = GL_FALSE;
+    GLint m_scissorBox[4] = {0, 0, 0, 0};
+};
+
+/// Splice `#define PLASMAZONES_KWIN` (plus the ARB explicit-location
+/// extension enables) after the shader's `#version` directive, selecting the
+/// classic-GL default-block branch of the shared uniform headers that
+/// KWin::GLShader requires. Shared by the animation compile path
+/// (shader_transitions.cpp, where it is defined) and the surface-pack compile
+/// path (surface_compile.cpp); it has external linkage here rather than an
+/// anonymous-namespace copy per TU because the kwin-effect builds as a Unity
+/// (jumbo) target, where duplicate anonymous-namespace definitions collide.
+/// Full behavioural notes (BOM strip, comment-aware #version scan, missing
+/// #version synthesis) live at the definition.
+QByteArray injectKwinDefineAfterVersion(const QString& source);
+
+} // namespace PlasmaZones::ShaderInternal
+
+namespace PhosphorSurfaceShaders {
+struct SurfaceShaderEffect;
+}
+
+namespace PlasmaZones {
+struct SurfaceParamValues; // types.h
+
+namespace ShaderInternal {
+
+/// Translate a surface pack's declared parameter defaults merged with a
+/// DecorationProfile's per-pack friendly overrides into contract-slot uniform
+/// values (SurfaceParamValues, types.h). Defined in surface_compile.cpp;
+/// external linkage for the same Unity-build reason as
+/// injectKwinDefineAfterVersion. Used by compiledPack() for the baseline bake
+/// and by updateWindowDecoration() for the per-window values.
+SurfaceParamValues resolveSurfaceParamValues(const PhosphorSurfaceShaders::SurfaceShaderEffect& eff,
+                                             const QVariantMap& friendlyOverrides);
+
+} // namespace ShaderInternal
+} // namespace PlasmaZones
 
 namespace PlasmaZones::ShaderInternal {
 
@@ -89,6 +199,114 @@ inline QVector4D computeTextureSubRect(const QRectF& inner, const QRectF& outer)
                      static_cast<float>(inner.height()) / outerH);
 }
 
+/// The lifetime (ms) a shader transition should run for, given the motion
+/// cascade's resolved @p nominalMs and its timing @p curve.
+///
+/// A STATEFUL (spring) curve derives its own timeline from its physics rather
+/// than the duration slider — mirroring the settings UI's "Spring mode derives
+/// its own duration" — so it runs for the spring's analytical settle time and
+/// rings out under the paint pass's per-frame step() instead of being cut at
+/// the easing duration.
+///
+/// Every result is clamped into the animation envelope. All three callers (the
+/// animator's lifetime, the per-window shader leg, and the desktop switch) feed an
+/// already-clamped nominal (resolveEventMotionProfile bounds the motion cascade's
+/// duration at the source), so for a STATELESS curve this qBound is idempotent.
+/// It stays load-bearing for the SPRING path, whose settleTime() is derived from
+/// the curve's physics and is bounded by nothing upstream — and it keeps the
+/// helper correct for any future caller that hands it a raw tree duration.
+///
+/// Consequence at parity across all callers: a spring whose settleTime() exceeds
+/// the max is CUT, and for a very soft one that means cut before it visibly
+/// starts, not merely mid-ring. `omega=0.1, zeta=0.1` settles in 530 s, floored to
+/// Spring::MaxSettleSeconds (30 s) and then clamped to 2 s here — at which point
+/// the integrated value is still ~0.02, so the transition tears down with iTime
+/// near ZERO and the window snaps. The clamp is doing its job (it is the only
+/// thing between such a profile and a pinned repaint), but a pack author tuning a
+/// soft spring should know the envelope, not the physics, is what they hit.
+inline int resolveTransitionLifetimeMs(int nominalMs, const PhosphorAnimation::Curve* curve)
+{
+    const int lifetime = (curve && curve->isStateful()) ? qRound(curve->settleTime() * 1000.0) : nominalMs;
+    return qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, lifetime,
+                  PhosphorAnimation::Limits::MaxAnimationDurationMs);
+}
+
+/// The iTime clamp POLICY, in one place.
+///
+/// An overshooting curve (underdamped spring, elastic ease) keeps its overshoot —
+/// the overshoot IS the curve, and the geometry animator bounces past the target on
+/// the same pick, so flattening it here would make the shader and the geometry
+/// disagree. It is bounded, not clamped: the same overshoot envelope the animator
+/// interpolates within (`PhosphorAnimation::boundCurveProgress`, see
+/// AnimationLimits.h), which every curve the library produces already satisfies, so
+/// it is a backstop for a hand-edited profile or a third-party registered curve
+/// rather than a limit a bundled pack ever meets. A pack author cannot write a
+/// defence against an unstated range, which is why the range is stated.
+///
+/// Every other curve is clamped to [0, 1], where an out-of-range value is a bug
+/// rather than the intent.
+///
+/// Both progress sources must route through this: `easeProgress` (the time-driven
+/// branch) and `paintWindow`'s animator-driven branch. They are two call sites of
+/// one policy, and when the policy lived in two places only one of them got
+/// updated — the animator branch kept clamping, which flattened the bounce for
+/// exactly the `window.movement.*` events whose geometry visibly bounces.
+inline qreal clampProgressForCurve(qreal value, const PhosphorAnimation::Curve* curve)
+{
+    return (curve && curve->overshoots()) ? PhosphorAnimation::boundCurveProgress(value) : qBound(0.0, value, 1.0);
+}
+
+/// Ease @p linear through @p curve. Shared by the per-window transition paint
+/// and the desktop switch, which otherwise carried this logic (and its dt cap)
+/// twice.
+///
+/// A null curve is linear. A stateless curve evaluates @p linear directly. A
+/// STATEFUL (spring) curve integrates @p state toward 1 by the inter-frame dt
+/// and returns the integrated value, ignoring @p linear.
+///
+/// OVERSHOOT: a curve that reports `overshoots()` (an underdamped spring, a
+/// back / elastic ease) returns its value UNCLAMPED, so iTime can exceed 1 — and
+/// dip below 0 — for those curves. That is deliberate: the overshoot IS the
+/// curve, and clamping it flattens a bouncy pick into a plateau at 1.0 while the
+/// geometry animator (`AnimatedValue::advance`, which likewise does not clamp)
+/// bounces past the target. Flattening here would make the shader and the
+/// geometry disagree about the same curve. Non-overshooting curves stay clamped,
+/// where an out-of-range value is a bug rather than the intent.
+///
+/// Packs must therefore treat iTime as UNBOUNDED for these curves —
+/// `AnimationShaderContract::kITime` tells authors to clamp defensively, and a
+/// pack that samples a texture or lerps a rect on iTime without clamping will
+/// extrapolate past its endpoint on an overshooting pick.
+///
+/// @p stepCurve owns the SINGLE per-frame integrator step: the paint pass passes
+/// true; a predictor that must not advance the integrator (the backdrop capture)
+/// passes false and reads the last stepped value.
+///
+/// The dt is capped at Limits::MaxShaderTimeDeltaSeconds — NOT for stability.
+/// Spring::step is an EXACT exponential integrator, so it is unconditionally stable
+/// at any dt. The cap bounds how far a stall JUMPS: a suspend/resume or compositor
+/// hitch would otherwise advance the spring several seconds in one frame, which is
+/// correct physics but reads as a teleport. @p lastPaintTimeMs < 0 is the
+/// "no prior paint" sentinel and yields dt = 0.
+inline qreal easeProgress(const PhosphorAnimation::Curve* curve, PhosphorAnimation::CurveState& state,
+                          qint64 lastPaintTimeMs, qint64 nowMs, qreal linear, bool stepCurve)
+{
+    if (!curve) {
+        return linear;
+    }
+    if (!curve->isStateful()) {
+        return clampProgressForCurve(curve->evaluate(linear), curve);
+    }
+    if (stepCurve) {
+        const qreal dt = lastPaintTimeMs < 0
+            ? 0.0
+            : qBound(0.0, qreal(nowMs - lastPaintTimeMs) / 1000.0,
+                     static_cast<qreal>(PhosphorAnimation::Limits::MaxShaderTimeDeltaSeconds));
+        curve->step(dt, state, 1.0);
+    }
+    return clampProgressForCurve(state.value, curve);
+}
+
 /// Pre-baked uniform / param key strings for the hot paths.
 ///
 /// `customParams[0..7]` and `uTexture1..3` (and their wrap / svgSize
@@ -122,5 +340,57 @@ static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColor
               "kCustomColorsElementNames literal must grow to match kMaxCustomColors");
 static_assert(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots == 3,
               "User-texture name arrays must grow to match kMaxUserTextureSlots");
+
+/// Texture unit for the audio-spectrum sampler (uAudioSpectrum) in the surface
+/// composite fold. The fold's main + buffer passes bind unit 0 (uTexture0),
+/// 1..4 (iChannel0..3), and 5 (uBackdrop); unit 6 is the first free unit.
+///
+/// The present passthrough in decoration_render.cpp (`kSurfaceChannelBaseUnit`)
+/// reuses a unit in this same range, but the two never collide: the fold
+/// completes and unbinds unit 6 before drawWindow's present pass runs, so they
+/// occupy their units in disjoint phases regardless of the exact numbers.
+/// Shared here (not file-local) so the fold (surfacelayers.cpp) and the bind
+/// helper (surface_audio.cpp) agree on one value. If audio ever moves into the
+/// present phase, revisit this overlap.
+inline constexpr int kSurfaceAudioUnit = 6;
+static_assert(kSurfaceAudioUnit > 5,
+              "kSurfaceAudioUnit must clear the fold's units 0..5 (uTexture0/iChannel/backdrop)");
+
+/// First texture unit for SURFACE pack user textures (uTexture1..3) in the
+/// composite fold's main pass: units 7..9, clear of the fold's units 0..5 and
+/// the audio unit 6. The animation paintWindow path also binds audio at unit 6
+/// (bindSurfaceAudio) in its own phase; its user textures live at units 1..3,
+/// so the two paths' maps never meet on the same draw.
+inline constexpr int kSurfaceUserTextureBaseUnit = 7;
+static_assert(kSurfaceUserTextureBaseUnit > kSurfaceAudioUnit,
+              "surface user textures must sit above the audio unit — the fold binds both in the same pass");
+
+/// Surface decoration texture units shared by the animation-layer paths in
+/// paint_pipeline.cpp and the present rebind in decoration_render.cpp. All are
+/// offset from kMaxUserTextureSlots (N, = 3 today) so the animation
+/// user-texture slots 0..N-1 never collide with them:
+///   kOldSnapshotUnit        (N+1) — the morph cross-fade's old-window snapshot
+///   kSurfaceLayerUnit       (N+2) — the composited surface layer bound for the
+///                                   animation shader / transition rebind
+///   kSurfaceChannelBaseUnit (N+3) — the present passthrough's final composite
+///                                   slot (shares unit 6 with kSurfaceAudioUnit
+///                                   in the disjoint present phase, see above)
+/// Centralized here (not re-derived per call site) so the fold, the animation
+/// path, and the present rebind can't drift apart if the contract's slot count
+/// changes.
+inline constexpr int kOldSnapshotUnit = 1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+inline constexpr int kSurfaceLayerUnit = 2 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+inline constexpr int kSurfaceChannelBaseUnit =
+    3 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+static_assert(kOldSnapshotUnit < kSurfaceLayerUnit && kSurfaceLayerUnit < kSurfaceChannelBaseUnit,
+              "surface decoration units must stay ordered and distinct");
+// Pin the relationship to the audio unit: today kSurfaceChannelBaseUnit == 6 ==
+// kSurfaceAudioUnit (the documented disjoint-phase overlap), while the layer /
+// old-snapshot units sit below it. A kMaxUserTextureSlots bump that pushes
+// kSurfaceLayerUnit onto the audio unit (N=4 → both 6) would silently collide
+// mid-fold, so fail at compile time instead.
+static_assert(kSurfaceLayerUnit != kSurfaceAudioUnit && kSurfaceChannelBaseUnit >= kSurfaceAudioUnit,
+              "surface layer unit must not collide with the audio unit, and the present slot must "
+              "stay at or above it — a kMaxUserTextureSlots bump needs the audio/present unit map revisited");
 
 } // namespace PlasmaZones::ShaderInternal

@@ -3,15 +3,13 @@
 
 // Layout + algorithm CRUD methods for SettingsController.
 //
-// Split out of settingscontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). All methods here are members of
-// PlasmaZones::SettingsController and use its private state — they
-// live in a separate translation unit but compile into the same
-// `plasmazones-settings` executable. No API changes.
+// All methods here are members of PlasmaZones::SettingsController and use its
+// private state. They live in a separate translation unit from
+// settingscontroller.cpp but compile into the same `plasmazones-settings`
+// executable. No API changes.
 
 #include "settingscontroller.h"
 
-#include "../common/layoutbundlebuilder.h"
 #include "../common/layoutpreviewserialize.h"
 #include "../config/configdefaults.h"
 #include "../core/geometryutils.h"
@@ -19,7 +17,6 @@
 #include "../core/utils.h"
 #include "../phosphor_i18n.h"
 #include "dbusutils.h"
-#include "kzonesimporter.h"
 
 // Most of the dependency graph (Settings, PhosphorZones layouts, daemon
 // D-Bus helpers, page controllers) is reached transitively through
@@ -29,11 +26,11 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/LayoutComputeService.h>
 
-#include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -50,27 +47,26 @@ void SettingsController::scheduleLayoutLoad()
 
 void SettingsController::loadLayoutsAsync()
 {
-    // Force-reload the in-process PhosphorZones::LayoutRegistry from disk before reading.
-    // The LayoutManager's QFileSystemWatcher catches most disk changes,
-    // but Qt's QFSW has known misses on cross-process atomic-rename
-    // writes (the daemon writes layouts via QSaveFile, which creates a
-    // new inode the watcher may not bind to in time). Belt-and-suspenders:
-    // every D-Bus layout signal that triggers loadLayoutsAsync (layoutCreated
+    // Force-reload the in-process PhosphorZones::LayoutRegistry from disk
+    // before reading. The registry watches nothing — an explicit
+    // loadLayouts() is the only thing that rescans disk — so this call is
+    // what carries a daemon-side layout write into the local preview path.
+    // Every D-Bus layout signal that triggers loadLayoutsAsync (layoutCreated
     // / layoutDeleted / layoutChanged / layoutPropertyChanged /
-    // layoutListChanged — see the connect block in the ctor) ALSO forces
-    // an explicit reload here, so the local-source preview path stays
-    // strictly in sync with the daemon's view regardless of which file-
-    // event path fires first.
+    // layoutListChanged — see
+    // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions) relies on it.
+    // It is not a redundant backup for a file watcher.
     if (m_localLayoutManager) {
         m_localLayoutManager->loadLayouts();
     }
 
     // Step 1: instant paint from the in-process composite source is handled
-    // by the ctor-wired PhosphorZones::LayoutRegistry::layoutsChanged lambda (see ~line 180
-    // — it calls recalcLocalLayouts() + swaps m_layouts from localLayoutPreviews()
-    // and emits layoutsChanged). loadLayouts() above triggers that signal
-    // synchronously when the disk contents actually changed, so the instant-paint
-    // path runs without a duplicate recalc/emit here.
+    // by the PhosphorZones::LayoutRegistry::layoutsChanged lambda wired in
+    // settingscontroller.cpp's ctor
+    // (it calls recalcLocalLayouts() + swaps m_layouts from localLayoutPreviews()
+    // and emits layoutsChanged). loadLayouts() above emits that signal
+    // synchronously on every call, so the instant-paint path runs without a
+    // duplicate recalc/emit here.
 
     // Step 2: async D-Bus call to pick up daemon-side enrichment
     // (hasSystemOrigin / hiddenFromSelector / defaultOrder / allow-lists)
@@ -144,10 +140,9 @@ void SettingsController::loadLayoutsAsync()
 }
 
 // ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
-// See header doc for why these exist. Both helpers route through the shared
-// toVariantMap so settings + editor + future consumers emit the
-// same QML-compatible shape (drop-in replacement for the legacy m_layouts
-// produced by LayoutAdaptor::getLayoutList).
+// See header doc for why this exists. It routes through the shared
+// toVariantMap, so it emits the same projection the daemon's D-Bus side emits
+// via toJson — minus that path's getLayoutList enrichment layer.
 
 QVariantList SettingsController::localLayoutPreviews() const
 {
@@ -184,18 +179,6 @@ void SettingsController::recalcLocalLayouts()
     }
 }
 
-QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount)
-{
-    if (id.isEmpty() || !m_localSources.composite()) {
-        return {};
-    }
-    const auto preview = m_localSources.composite()->previewAt(id, windowCount);
-    if (preview.id.isEmpty()) {
-        return {};
-    }
-    return toVariantMap(preview);
-}
-
 void SettingsController::createNewLayout()
 {
     createNewLayout(PhosphorI18n::tr("New Layout"), QStringLiteral("custom"), -1, true);
@@ -207,6 +190,9 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
     QString sanitizedName = name.trimmed();
     if (sanitizedName.isEmpty())
         sanitizedName = PhosphorI18n::tr("New Layout");
+    // Clamp client-side to the daemon's cap so the pending-select name matches
+    // what the daemon actually stores (it silently truncates at this length).
+    sanitizedName = clampName(sanitizedName);
 
     const QString layoutType = type.isEmpty() ? QStringLiteral("custom") : type;
 
@@ -329,80 +315,32 @@ void SettingsController::openLayoutsFolder()
     QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
 
-// Path validation for import/export dialogs. Promoted out of an
-// anonymous namespace and into a static member so the cross-TU
-// `settingscontroller_session.cpp` (import/export-all-settings) can
-// reuse the same defence-in-depth path sanitiser.
-//
-// User-driven calls come from QFileDialog (already canonical), but the
-// methods are Q_INVOKABLE so a compromised page resource — or a future
-// `--page` CLI flag — could pass arbitrary strings. Defence-in-depth:
-//   * Reject paths containing NUL (POSIX path corruption / D-Bus
-//     marshalling break).
-//   * Reject paths beginning with `~` (untilde resolution is QML's
-//     responsibility, not ours).
-//   * Reject relative-traversal segments AFTER cleanPath so
-//     `/home/x/../../etc/passwd` doesn't survive normalisation, AND
-//     also reject leading-`..` shapes (`../foo`, plain `..`) that
-//     cleanPath preserves verbatim — those are filesystem-root-escape
-//     attempts that the QFileDialog path never produces.
-// Returns the canonical path or empty on rejection. Caller logs.
-QString SettingsController::sanitizeIOPath(const QString& raw)
-{
-    if (raw.isEmpty() || raw.contains(QLatin1Char('\0'))) {
-        return {};
-    }
-    if (raw.startsWith(QLatin1Char('~'))) {
-        return {};
-    }
-    const QString clean = QDir::cleanPath(raw);
-    // cleanPath resolves `..`; reject if the cleaned form still contains
-    // `..` as a segment (which means the path started outside any
-    // resolvable filesystem root, e.g. relative `../../etc/passwd`).
-    if (clean.contains(QStringLiteral("/../")) || clean.endsWith(QStringLiteral("/.."))) {
-        return {};
-    }
-    // cleanPath doesn't strip leading-`..` shapes (`..`, `../foo`,
-    // `../../bar`) — they're still relative-traversal escape attempts
-    // even after canonicalisation.
-    if (clean == QStringLiteral("..") || clean.startsWith(QStringLiteral("../"))) {
-        return {};
-    }
-    // Require absolute paths. The Q_INVOKABLE entry points are reached
-    // from QFileDialog (which always yields an absolute URL) and from
-    // the test suite; relative paths shouldn't surface here. A
-    // compromised QML page or a future `--page` CLI flag passing a
-    // bare `report.json` would otherwise resolve relative to the
-    // settings-app cwd and read/write outside the user's intent.
-    if (!clean.startsWith(QLatin1Char('/'))) {
-        return {};
-    }
-    return clean;
-}
-
 void SettingsController::importLayout(const QString& filePath)
 {
-    const QString safe = sanitizeIOPath(filePath);
+    const QString safe = Utils::sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "importLayout: refusing unsafe path" << filePath;
-        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Import refused: unsafe path"));
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That file path is not allowed."));
         return;
     }
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("importLayout"), {safe});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString newLayoutId = reply.arguments().first().toString();
-        if (!newLayoutId.isEmpty()) {
-            m_pendingSelectLayoutId = newLayoutId;
-        }
-    } else if (reply.type() == QDBusMessage::ErrorMessage) {
-        // Surface the daemon's rejection (corrupt JSON, permission denied,
-        // layout-id collision, etc.) — without this branch the page
-        // silently refreshes and the user has no feedback, mirroring the
-        // pattern that Pass-4 hardening already applied to setLayoutHidden
-        // / setLayoutAutoAssign / setLayoutAspectRatio.
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        // The transport itself failed: the daemon is not running, or the method
+        // is missing. The daemon's own rejections do NOT arrive here (it has no
+        // QDBusContext and never sends an error reply) — they come back as an
+        // empty id below.
         qCWarning(lcCore) << "importLayout failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Failed to import layout: %1").arg(reply.errorMessage()));
+    } else if (reply.arguments().isEmpty() || reply.arguments().first().toString().isEmpty()) {
+        // An empty id is how the daemon reports every rejection it can name: a
+        // file that is not there, not readable, not JSON, or not a layout. It is
+        // a ReplyMessage, so without this branch the page just refreshes and the
+        // user is left to work out that nothing was imported.
+        qCWarning(lcCore) << "importLayout: daemon rejected" << safe;
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That file is not a layout this app can read."));
+    } else {
+        m_pendingSelectLayoutId = reply.arguments().first().toString();
     }
     scheduleLayoutLoad();
 }
@@ -411,13 +349,43 @@ void SettingsController::exportLayout(const QString& layoutId, const QString& fi
 {
     if (layoutId.isEmpty())
         return;
-    const QString safe = sanitizeIOPath(filePath);
+    const QString safe = Utils::sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "exportLayout: refusing unsafe path" << filePath;
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That export path is not allowed."));
         return;
     }
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                QStringLiteral("exportLayout"), {layoutId, safe});
+    // A replying call, not sendOneWay. The write happens in the daemon, so a
+    // one-way send has nowhere to put "the folder is not writable" and the file
+    // picker just closed on a user who is owed an answer. Sent async through a
+    // QDBusPendingCallWatcher (same idiom as loadLayoutsAsync above) so the UI
+    // thread never stalls on the round-trip; the watcher lambda evaluates the
+    // reply and surfaces the same failure toasts a blocking call would.
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                   QStringLiteral("exportLayout"), {layoutId, safe}),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, safe](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        // Evaluate the raw QDBusMessage rather than a typed QDBusPendingReply<bool>
+        // so the branch structure matches the daemon's actual reply shapes:
+        // transport/daemon errors arrive as an ErrorMessage; a rejection the
+        // daemon can name arrives as a ReplyMessage carrying false.
+        const QDBusMessage reply = w->reply();
+        if (reply.type() == QDBusMessage::ErrorMessage) {
+            qCWarning(lcCore) << "exportLayout failed:" << reply.errorMessage();
+            Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Failed to export layout: %1").arg(reply.errorMessage()));
+            return;
+        }
+        // The daemon answers false for a destination it could not open, write or
+        // commit. That is a ReplyMessage, not an ErrorMessage, so it needs its own
+        // branch or it reads as success.
+        if (reply.arguments().isEmpty() || !reply.arguments().first().toBool()) {
+            qCWarning(lcCore) << "exportLayout: daemon could not write" << safe;
+            Q_EMIT layoutOperationFailed(
+                PhosphorI18n::tr("Could not write the export. Check that the folder is writable."));
+        }
+    });
 }
 
 void SettingsController::setLayoutHidden(const QString& layoutId, bool hidden)
@@ -462,15 +430,16 @@ void SettingsController::setLayoutAspectRatio(const QString& layoutId, int aspec
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Algorithm CRUD
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Algorithm helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// All bodies moved to AlgorithmService; SettingsController::* methods below
-// are 1-line Q_INVOKABLE forwarders so QML's entry points stay stable.
+// The algorithm bodies live in AlgorithmService. The SettingsController::*
+// methods below are Q_INVOKABLE forwarders so QML's entry points stay stable.
+// Most are one line. The three exceptions: the ones taking a path sanitize it
+// first (that guard belongs on the controller, which is where QML hands the
+// path in); openLayoutFile resolves the layout's real on-disk path through the
+// local registry before falling back to the service; and algorithmIdFromLayoutId
+// has no service body at all, being a pure LayoutId helper.
 
 QVariantList SettingsController::availableAlgorithms() const
 {
@@ -478,9 +447,11 @@ QVariantList SettingsController::availableAlgorithms() const
 }
 
 QVariantList SettingsController::generateAlgorithmPreview(const QString& algorithmId, int windowCount,
-                                                          double splitRatio, int masterCount) const
+                                                          double splitRatio, int masterCount,
+                                                          const QVariantMap& customParams) const
 {
-    return m_algorithmService->generateAlgorithmPreview(algorithmId, windowCount, splitRatio, masterCount);
+    return m_algorithmService->generateAlgorithmPreview(algorithmId, windowCount, splitRatio, masterCount,
+                                                        customParams);
 }
 
 QVariantList SettingsController::generateAlgorithmDefaultPreview(const QString& algorithmId) const
@@ -495,7 +466,13 @@ void SettingsController::openAlgorithmsFolder()
 
 bool SettingsController::importAlgorithm(const QString& filePath)
 {
-    return m_algorithmService->importAlgorithm(filePath);
+    const QString safe = Utils::sanitizeIOPath(filePath);
+    if (safe.isEmpty()) {
+        qCWarning(lcCore) << "importAlgorithm: refusing unsafe path" << filePath;
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("That file path is not allowed."));
+        return false;
+    }
+    return m_algorithmService->importAlgorithm(safe);
 }
 
 QString SettingsController::algorithmIdFromLayoutId(const QString& layoutId)
@@ -514,7 +491,8 @@ void SettingsController::openLayoutFile(const QString& layoutId)
     // Resolve the layout's real on-disk path via the registry. Bundled
     // layouts ship under human-readable filenames (fibonacci.json,
     // grid-3x2.json, ...), not UUID-named files, so reconstructing the
-    // filename from the id (as openLayoutFile's locate-by-UUID fallback does)
+    // filename from the id (as AlgorithmService::openLayoutFile's
+    // locate-by-UUID fallback does)
     // never finds them. Layout::sourcePath() is the authoritative path set
     // when the registry loaded the file, and is correct for both bundled and
     // user layouts.
@@ -546,14 +524,18 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
 
 bool SettingsController::exportAlgorithm(const QString& algorithmId, const QString& destPath)
 {
-    return m_algorithmService->exportAlgorithm(algorithmId, destPath);
+    const QString safe = Utils::sanitizeIOPath(destPath);
+    if (safe.isEmpty()) {
+        qCWarning(lcCore) << "exportAlgorithm: refusing unsafe path" << destPath;
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("That export path is not allowed."));
+        return false;
+    }
+    return m_algorithmService->exportAlgorithm(algorithmId, safe);
 }
 
 QString SettingsController::createNewAlgorithm(const QString& name, const QString& baseTemplate,
-                                               bool supportsMasterCount, bool supportsSplitRatio,
-                                               bool producesOverlappingZones, bool supportsMemory)
+                                               const QVariantMap& capabilities)
 {
-    return m_algorithmService->createNewAlgorithm(name, baseTemplate, supportsMasterCount, supportsSplitRatio,
-                                                  producesOverlappingZones, supportsMemory);
+    return m_algorithmService->createNewAlgorithm(name, baseTemplate, capabilities);
 }
 } // namespace PlasmaZones

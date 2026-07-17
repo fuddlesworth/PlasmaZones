@@ -30,7 +30,7 @@ Kirigami.PromptDialog {
     signal discardConfirmed
 
     title: i18nc("@title:window", "Discard unsaved changes?")
-    subtitle: i18n("Your edits to this window rule will be lost. Discard them?")
+    subtitle: i18n("Your edits to this rule will be lost. Discard them?")
     standardButtons: Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
     // `discarded` is the built-in signal Kirigami.Dialog emits when the user
     // picks the Discard standard button. Forward it to our explicit

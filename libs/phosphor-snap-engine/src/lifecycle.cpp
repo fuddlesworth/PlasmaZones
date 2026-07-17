@@ -39,7 +39,7 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     // same window — e.g., effect calls windowOpened then D-Bus resolveWindowRestore).
     // Also consume the appId-based pending entry so other instances of the same app
     // (with different UUIDs) don't incorrectly steal this window's zone.
-    if (m_snapState->isWindowSnapped(windowId)) {
+    if (const SnapState* openState = stateForWindow(windowId); openState && openState->isWindowSnapped(windowId)) {
         m_windowTracker->consumePendingAssignment(windowId);
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "SnapEngine::windowOpened: window" << windowId << "already snapped, skipping";
@@ -62,7 +62,9 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     // appropriate. When the result came from the placement store,
     // resolveWindowRestore already consumed (took) the record. Last-used-zone
     // update is skipped by AutoRestored intent.
-    m_snapState->markAsAutoSnapped(windowId);
+    // Mark on the store the window is about to be committed into (result.screenId),
+    // so the auto-snapped flag lives with the window's other per-screen state.
+    stateForWindowOnScreen(windowId, result.screenId)->markAsAutoSnapped(windowId);
     const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
     if (zoneIds.size() > 1) {
         commitMultiZoneSnap(windowId, zoneIds, result.screenId, SnapIntent::AutoRestored, result.virtualDesktop);
@@ -359,8 +361,9 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                         // already snapped to these zones, just consume the pending
                         // entry and no-op — the float-back re-seed above is the only
                         // thing that needed doing.
-                        if (m_snapState->isWindowSnapped(windowId)
-                            && m_snapState->zonesForWindow(windowId) == zoneIds) {
+                        const SnapState* liveState = stateForWindow(windowId);
+                        if (liveState && liveState->isWindowSnapped(windowId)
+                            && liveState->zonesForWindow(windowId) == zoneIds) {
                             m_windowTracker->consumePendingAssignment(windowId);
                             qCInfo(PhosphorSnapEngine::lcSnapEngine)
                                 << "resolveWindowRestore: placement(snapped) already assigned, no-op for" << windowId;
@@ -368,7 +371,11 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                         }
                         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: placement(snapped) for"
                                                                  << windowId << "->" << geo << "freeGeo=" << freeGeo;
-                        return SnapResult{true, geo, zoneIds.first(), zoneIds, restoreScreen};
+                        return SnapResult{.shouldSnap = true,
+                                          .geometry = geo,
+                                          .zoneId = zoneIds.first(),
+                                          .zoneIds = zoneIds,
+                                          .screenId = restoreScreen};
                     }
                 }
                 // Disabled context, managed-restore opt-out
@@ -385,13 +392,14 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                 // That gate refuses to auto-SNAP a window onto a context the user
                 // disabled snapping for; a floated window is not being snapped into a
                 // zone, so restoring its floating state is correct regardless.
-                m_snapState->setFloatingOnScreen(windowId, restoreScreen,
-                                                 currentVirtualDesktopForScreen(restoreScreen));
+                SnapState* restoreState = stateForWindowOnScreen(windowId, restoreScreen);
+                restoreState->setFloatingOnScreen(windowId, restoreScreen,
+                                                  currentVirtualDesktopForScreen(restoreScreen));
                 if (!slot.zoneIds.isEmpty()) {
                     // A window floated FROM a snapped state carries its pre-float zones
                     // for the resnap path; a never-snapped floated window has none.
-                    m_snapState->addPreFloatZone(windowId, slot.zoneIds);
-                    m_snapState->addPreFloatScreen(windowId, restoreScreen);
+                    restoreState->addPreFloatZone(windowId, slot.zoneIds);
+                    restoreState->addPreFloatScreen(windowId, restoreScreen);
                 }
                 // The window is floating regardless of whether a position was recorded
                 // — tell the compositor unconditionally (matching toggleWindowFloat /
@@ -416,7 +424,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // no-op'd) must not fall through to the auto-snap policy chain and get
     // re-snapped into a different zone. Unreachable in the common path (capture
     // keeps a record for every snapped window), but cheap insurance.
-    if (m_snapState->isWindowSnapped(windowId)) {
+    if (const SnapState* snappedState = stateForWindow(windowId);
+        snappedState && snappedState->isWindowSnapped(windowId)) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore:" << windowId << "already snapped, skipping auto-snap";
         return SnapResult::noSnap();
@@ -478,13 +487,13 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // "floated" toast would be spurious (and would spam at login, where the
     // retry net re-resolves every floating window, including the now-default
     // floated ones). Interactive feedback lives in toggleWindowFloat.
-    if (m_snapState->isFloating(windowId)) {
+    if (isFloating(windowId)) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore: window" << windowId << "is floating, skipping snap";
         return SnapResult::noSnap();
     }
 
-    // A matched "Float this app" window rule opens the window floating, exactly
+    // A matched "Float this app" rule opens the window floating, exactly
     // as if the user had toggled float. Runs after the exclusion gate (excluded
     // windows return earlier), the already-floating guard, and the persisted-
     // placement restore (a window the user previously snapped reopens snapped —
@@ -492,7 +501,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // so a rule-floated window never auto-snaps to a zone.
     // Mirrors the no-match default-float terminal at the end of this function.
     if (m_floatPredicate && m_floatPredicate(windowId)) {
-        m_snapState->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
+        stateForWindowOnScreen(windowId, screenId)
+            ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "floated by rule";
         return SnapResult::noSnap();
@@ -550,7 +560,8 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // already-snapped guards above all return earlier, and the autotile-caller
     // short-circuit returns before the empty/last-zone chain — so this is always a
     // genuine snap-mode window with no zone match.
-    m_snapState->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
+    stateForWindowOnScreen(windowId, screenId)
+        ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
     Q_EMIT windowFloatingChanged(windowId, true, screenId);
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
         << "resolveWindowRestore:" << windowId << "no snap match — defaulting to floated on" << screenId;
@@ -591,7 +602,7 @@ bool SnapEngine::isEnabled() const noexcept
 std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(const QString& windowId) const
 {
     using PhosphorEngine::WindowPlacement;
-    if (windowId.isEmpty() || !m_snapState) {
+    if (windowId.isEmpty() || !m_globals) {
         return std::nullopt;
     }
 
@@ -633,14 +644,15 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
     // zone assignment (so a float-toggle can resnap it), so isWindowSnapped()
     // stays true while it floats. The active runtime state is floating — record
     // that, with the pre-float zones carried in the slot for the resnap path.
-    if (m_snapState->isFloating(windowId)) {
+    const SnapState* state = stateForWindow(windowId);
+    if (isFloating(windowId)) {
         slot.state = WindowPlacement::stateFloating();
-        slot.zoneIds = m_snapState->preFloatZones(windowId);
+        slot.zoneIds = state ? state->preFloatZones(windowId) : QStringList{};
         p.screenId = screenForTrackedWindow(windowId);
-    } else if (m_snapState->isWindowSnapped(windowId)) {
+    } else if (state && state->isWindowSnapped(windowId)) {
         slot.state = WindowPlacement::stateSnapped();
-        slot.zoneIds = m_snapState->zonesForWindow(windowId);
-        p.screenId = m_snapState->screenForWindow(windowId);
+        slot.zoneIds = state->zonesForWindow(windowId);
+        p.screenId = state->screenForWindow(windowId);
     } else {
         // Snapping has only two states — snapped (above) or floated. An unmanaged
         // window on a snap-mode screen is FLOATED (the retired `free` state). The

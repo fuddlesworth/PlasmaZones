@@ -8,6 +8,9 @@
 #include "../../core/logging.h"
 #include "../helpers/SettingsDbusQueries.h"
 
+#include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include "phosphor_i18n.h"
 #include "../../config/configdefaults.h"
 #include "../../config/configmigration.h"
@@ -23,9 +26,9 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
         return QString();
     }
 
-    // Check maximum length
-    if (name.length() > 100) {
-        return PhosphorI18n::tr("Zone name cannot exceed 100 characters");
+    // Check maximum length (shared with the daemon's D-Bus boundary clamp)
+    if (name.length() > MaxLayoutNameLength) {
+        return PhosphorI18n::tr("Zone name cannot exceed %1 characters").arg(MaxLayoutNameLength);
     }
 
     // Check for invalid characters (allow alphanumeric, spaces, hyphens, underscores)
@@ -208,12 +211,71 @@ void EditorController::loadEditorSettings()
 
 void EditorController::saveEditorSettings()
 {
-    // Creates an ephemeral backend — reads from disk, writes one group, syncs.
-    // If the daemon has unsaved in-memory changes to the same file, QSaveFile's
-    // atomic rename prevents corruption but the daemon's next sync will overwrite
-    // editor changes (and vice versa).  Proper fix requires IPC (D-Bus) for
-    // cross-process settings writes; acceptable for now since the editor only
-    // writes to the Editor group which the daemon doesn't modify at runtime.
+    // Queue, don't write. Every caller is a property setter, and QML drives some
+    // of them per mouse-move step (ControlBar binds snapIntervalX to
+    // Slider.onMoved), so writing here put a whole-document rewrite, an fsync
+    // and a full daemon config reparse on every tick of a drag. Restarting the
+    // timer on each call collapses the burst into one write once the value
+    // settles. setSnapInterval calls two setters for one logical change, which
+    // now costs one write instead of two.
+    m_editorSettingsSaveTimer.start();
+}
+
+void EditorController::flushEditorSettings()
+{
+    if (!writeEditorSettingsToDisk()) {
+        return;
+    }
+
+    // Hand the daemon the new on-disk state. Async, and the reply is logged
+    // rather than dropped: if the daemon is up but the reload errors, the editor
+    // would otherwise proceed believing the two agree, and writeEditorSettings-
+    // ToDisk's comment says what happens next — the daemon's following flush
+    // silently reverts the user's settings. A missing daemon is a legitimate
+    // no-op, so the failure is a log line and not a user-facing error.
+    //
+    // Not synchronous. The reason that used to be given here does not hold: the
+    // notification's only consumer is the daemon and nothing in this process is
+    // ordered against the reply (unlike the KCM, which clears a guard on it —
+    // see reloadDaemonSettingsBlocking). Blocking never closed the clobber
+    // window either, since the daemon can flush between the write and the
+    // reparse whether or not this call waits. All it bought was up to 500 ms of
+    // frozen UI on the settings path.
+    PhosphorProtocol::ClientHelpers::reloadDaemonSettings(this, QStringLiteral("editor settings reload"));
+}
+
+void EditorController::flushEditorSettingsBlocking()
+{
+    if (!writeEditorSettingsToDisk()) {
+        return;
+    }
+
+    // Teardown takes the blocking form. reloadDaemonSettings parents its reply
+    // watcher to `this`, and the only caller here is ~EditorController — the
+    // watcher would be a child of a half-destroyed object whose connection dies
+    // with it, and the process may exit before the message is even written to
+    // the bus. The reload would be silently lost, and the daemon would then
+    // revert the settings the user changed on their way out. One bounded call
+    // at exit buys delivery.
+    PhosphorProtocol::ClientHelpers::reloadDaemonSettingsBlocking();
+}
+
+bool EditorController::writeEditorSettingsToDisk()
+{
+    // Write-in-process-then-reload, the same contract the settings app follows
+    // (see src/settings/dbusutils.h — nothing in the tree writes a setting over
+    // D-Bus). The ephemeral backend reads config.json fresh off disk, applies
+    // the Editor.* groups below and flushes; the reload at the bottom then makes
+    // the daemon reparse.
+    //
+    // The reload is load-bearing, not a courtesy. JsonBackend::sync rewrites the
+    // WHOLE document from its in-memory root, and the daemon's root is only
+    // refreshed by a reparse. Without the reload the daemon would keep the
+    // pre-write snapshot and its next flush — any setting change, from any
+    // source — would put the stale Editor.* values back, silently reverting the
+    // editor's settings some arbitrary time later. Group ownership does not
+    // protect against that: the clobber is whole-file, so it does not matter
+    // that the daemon never edits Editor.* itself.
     auto backend = PlasmaZones::createDefaultConfigBackend();
 
     // Save editor snapping settings
@@ -242,7 +304,14 @@ void EditorController::saveEditorSettings()
         fillOnDrop->writeInt(ConfigDefaults::modifierKey(), m_fillOnDropModifier);
     }
 
-    backend->sync();
+    if (!backend->sync()) {
+        // Nothing reached disk, so there is nothing for the daemon to pick up
+        // and its snapshot is still the truth. Reporting failure keeps the
+        // callers from asking the daemon to reparse a file that never changed.
+        qCWarning(lcEditor) << "Failed to write editor settings to" << ConfigDefaults::configFilePath();
+        return false;
+    }
+    return true;
 }
 
 } // namespace PlasmaZones

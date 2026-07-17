@@ -8,6 +8,10 @@
 
 #include <PhosphorSnapEngine/ISnapSettings.h>
 
+#include <QHash>
+#include <QJsonDocument>
+#include <QSet>
+
 namespace PlasmaZones {
 
 /**
@@ -75,10 +79,16 @@ public:
     // IZoneActivationSettings
     bool snappingEnabled() const override
     {
-        return true;
+        return m_snappingEnabled;
     }
-    void setSnappingEnabled(bool) override
+    void setSnappingEnabled(bool value) override
     {
+        if (m_snappingEnabled == value) {
+            return;
+        }
+        m_snappingEnabled = value;
+        Q_EMIT snappingEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     QVariantList dragActivationTriggers() const override
     {
@@ -86,363 +96,989 @@ public:
     }
     void setDragActivationTriggers(const QVariantList& triggers) override
     {
+        if (m_dragActivationTriggers == triggers) {
+            return;
+        }
         m_dragActivationTriggers = triggers;
+        Q_EMIT dragActivationTriggersChanged();
+        Q_EMIT settingsChanged();
     }
     bool zoneSpanEnabled() const override
     {
-        return false;
+        return m_zoneSpanEnabled;
     }
-    void setZoneSpanEnabled(bool) override
+    void setZoneSpanEnabled(bool value) override
     {
+        if (m_zoneSpanEnabled == value) {
+            return;
+        }
+        m_zoneSpanEnabled = value;
+        Q_EMIT zoneSpanEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     DragModifier zoneSpanModifier() const override
     {
-        return DragModifier::Disabled;
+        return m_zoneSpanModifier;
     }
-    void setZoneSpanModifier(DragModifier) override
+    void setZoneSpanModifier(DragModifier value) override
     {
+        if (m_zoneSpanModifier == value) {
+            return;
+        }
+        m_zoneSpanModifier = value;
+        Q_EMIT zoneSpanModifierChanged();
+        Q_EMIT settingsChanged();
     }
     QVariantList zoneSpanTriggers() const override
     {
-        return {};
+        return m_zoneSpanTriggers;
     }
-    void setZoneSpanTriggers(const QVariantList&) override
+    void setZoneSpanTriggers(const QVariantList& value) override
     {
+        if (m_zoneSpanTriggers == value) {
+            return;
+        }
+        m_zoneSpanTriggers = value;
+        Q_EMIT zoneSpanTriggersChanged();
+        Q_EMIT settingsChanged();
     }
     bool zoneSpanToggleMode() const override
     {
-        return false;
+        return m_zoneSpanToggleMode;
     }
-    void setZoneSpanToggleMode(bool) override
+    void setZoneSpanToggleMode(bool value) override
     {
+        if (m_zoneSpanToggleMode == value) {
+            return;
+        }
+        m_zoneSpanToggleMode = value;
+        Q_EMIT zoneSpanToggleModeChanged();
+        Q_EMIT settingsChanged();
     }
     bool toggleActivation() const override
     {
-        return false;
+        return m_toggleActivation;
     }
-    void setToggleActivation(bool) override
+    void setToggleActivation(bool value) override
     {
+        if (m_toggleActivation == value) {
+            return;
+        }
+        m_toggleActivation = value;
+        Q_EMIT toggleActivationChanged();
+        Q_EMIT settingsChanged();
     }
 
     // IZoneVisualizationSettings
     bool showZonesOnAllMonitors() const override
     {
-        return false;
+        return m_showZonesOnAllMonitors;
     }
-    void setShowZonesOnAllMonitors(bool) override
+    void setShowZonesOnAllMonitors(bool value) override
     {
+        if (m_showZonesOnAllMonitors == value) {
+            return;
+        }
+        m_showZonesOnAllMonitors = value;
+        Q_EMIT showZonesOnAllMonitorsChanged();
+        Q_EMIT settingsChanged();
     }
-    QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode) const override
+    QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const override
     {
-        return {};
+        return m_disabledMonitors.value(static_cast<int>(mode));
     }
-    void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
+    void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override
     {
+        if (m_disabledMonitors.value(static_cast<int>(mode)) == entries) {
+            return;
+        }
+        m_disabledMonitors.insert(static_cast<int>(mode), entries);
+        Q_EMIT disabledMonitorsChanged(mode);
+        Q_EMIT settingsChanged();
     }
-    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode, const QString&) const override
+    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const override
     {
-        return false;
+        return m_disabledMonitors.value(static_cast<int>(mode)).contains(screenIdOrName);
     }
-    QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode) const override
+    QStringList disabledDesktops(PhosphorZones::AssignmentEntry::Mode mode) const override
     {
-        return {};
+        return m_disabledDesktops.value(static_cast<int>(mode));
     }
-    void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
+    void setDisabledDesktops(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override
     {
+        if (m_disabledDesktops.value(static_cast<int>(mode)) == entries) {
+            return;
+        }
+        m_disabledDesktops.insert(static_cast<int>(mode), entries);
+        Q_EMIT disabledDesktopsChanged(mode);
+        Q_EMIT settingsChanged();
     }
-    bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode, const QString& /*screenIdOrName*/, int) const override
+    bool isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                           int desktop) const override
     {
-        return false;
+        // Reads the member its setter writes. It used to return a hardcoded false, so the
+        // gate was permanently OPEN for every stub-backed test and set-then-query was
+        // unobservable — the exact defect class this fixture exists to disprove. Composite
+        // key and the desktop <= 0 guard both mirror production (settings.cpp).
+        if (desktop <= 0) {
+            return false;
+        }
+        const QString key = screenIdOrName + QLatin1Char('/') + QString::number(desktop);
+        return m_disabledDesktops.value(static_cast<int>(mode)).contains(key);
     }
-    QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode) const override
+    QStringList disabledActivities(PhosphorZones::AssignmentEntry::Mode mode) const override
     {
-        return {};
+        return m_disabledActivities.value(static_cast<int>(mode));
     }
-    void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode, const QStringList&) override
+    void setDisabledActivities(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& entries) override
     {
+        if (m_disabledActivities.value(static_cast<int>(mode)) == entries) {
+            return;
+        }
+        m_disabledActivities.insert(static_cast<int>(mode), entries);
+        Q_EMIT disabledActivitiesChanged(mode);
+        Q_EMIT settingsChanged();
     }
-    bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode, const QString& /*screenIdOrName*/,
-                            const QString&) const override
+    bool isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName,
+                            const QString& activityId) const override
     {
-        return false;
+        // See isDesktopDisabled: same hardcoded-false hazard, same composite key, and the
+        // empty-activity guard production applies.
+        if (activityId.isEmpty()) {
+            return false;
+        }
+        const QString key = screenIdOrName + QLatin1Char('/') + activityId;
+        return m_disabledActivities.value(static_cast<int>(mode)).contains(key);
     }
     bool showZoneNumbers() const override
     {
-        return true;
+        return m_showZoneNumbers;
     }
-    void setShowZoneNumbers(bool) override
+    void setShowZoneNumbers(bool value) override
     {
+        if (m_showZoneNumbers == value) {
+            return;
+        }
+        m_showZoneNumbers = value;
+        Q_EMIT showZoneNumbersChanged();
+        Q_EMIT settingsChanged();
     }
     bool flashZonesOnSwitch() const override
     {
-        return false;
+        return m_flashZonesOnSwitch;
     }
-    void setFlashZonesOnSwitch(bool) override
+    void setFlashZonesOnSwitch(bool value) override
     {
+        if (m_flashZonesOnSwitch == value) {
+            return;
+        }
+        m_flashZonesOnSwitch = value;
+        Q_EMIT flashZonesOnSwitchChanged();
+        Q_EMIT settingsChanged();
     }
     bool showOsdOnLayoutSwitch() const override
     {
-        return false;
+        return m_showOsdOnLayoutSwitch;
     }
-    void setShowOsdOnLayoutSwitch(bool) override
+    void setShowOsdOnLayoutSwitch(bool value) override
     {
+        if (m_showOsdOnLayoutSwitch == value) {
+            return;
+        }
+        m_showOsdOnLayoutSwitch = value;
+        Q_EMIT showOsdOnLayoutSwitchChanged();
+        Q_EMIT settingsChanged();
     }
     bool showOsdOnDesktopSwitch() const override
     {
-        return false;
+        return m_showOsdOnDesktopSwitch;
     }
-    void setShowOsdOnDesktopSwitch(bool) override
+    void setShowOsdOnDesktopSwitch(bool value) override
     {
+        if (m_showOsdOnDesktopSwitch == value) {
+            return;
+        }
+        m_showOsdOnDesktopSwitch = value;
+        Q_EMIT showOsdOnDesktopSwitchChanged();
+        Q_EMIT settingsChanged();
     }
     bool showNavigationOsd() const override
     {
-        return false;
+        return m_showNavigationOsd;
     }
-    void setShowNavigationOsd(bool) override
+    void setShowNavigationOsd(bool value) override
     {
+        if (m_showNavigationOsd == value) {
+            return;
+        }
+        m_showNavigationOsd = value;
+        Q_EMIT showNavigationOsdChanged();
+        Q_EMIT settingsChanged();
     }
     OsdStyle osdStyle() const override
     {
-        return OsdStyle::None;
+        return m_osdStyle;
     }
-    void setOsdStyle(OsdStyle) override
+    void setOsdStyle(OsdStyle value) override
     {
+        if (m_osdStyle == value) {
+            return;
+        }
+        m_osdStyle = value;
+        Q_EMIT osdStyleChanged();
+        Q_EMIT settingsChanged();
     }
     OverlayDisplayMode overlayDisplayMode() const override
     {
-        return OverlayDisplayMode::ZoneRectangles;
+        return m_overlayDisplayMode;
     }
-    void setOverlayDisplayMode(OverlayDisplayMode) override
+    void setOverlayDisplayMode(OverlayDisplayMode value) override
     {
+        if (m_overlayDisplayMode == value) {
+            return;
+        }
+        m_overlayDisplayMode = value;
+        Q_EMIT overlayDisplayModeChanged();
+        Q_EMIT settingsChanged();
     }
     bool useSystemColors() const override
     {
-        return false;
+        return m_useSystemColors;
     }
-    void setUseSystemColors(bool) override
+    void setUseSystemColors(bool value) override
     {
+        if (m_useSystemColors == value) {
+            return;
+        }
+        m_useSystemColors = value;
+        Q_EMIT useSystemColorsChanged();
+        Q_EMIT settingsChanged();
     }
     QColor highlightColor() const override
     {
-        return Qt::blue;
+        return m_highlightColor;
     }
-    void setHighlightColor(const QColor&) override
+    void setHighlightColor(const QColor& value) override
     {
+        if (m_highlightColor == value) {
+            return;
+        }
+        m_highlightColor = value;
+        Q_EMIT highlightColorChanged();
+        Q_EMIT settingsChanged();
     }
     QColor inactiveColor() const override
     {
-        return Qt::gray;
+        return m_inactiveColor;
     }
-    void setInactiveColor(const QColor&) override
+    void setInactiveColor(const QColor& value) override
     {
+        if (m_inactiveColor == value) {
+            return;
+        }
+        m_inactiveColor = value;
+        Q_EMIT inactiveColorChanged();
+        Q_EMIT settingsChanged();
     }
     QColor borderColor() const override
     {
-        return Qt::white;
+        return m_borderColor;
     }
-    void setBorderColor(const QColor&) override
+    void setBorderColor(const QColor& value) override
     {
+        if (m_borderColor == value) {
+            return;
+        }
+        m_borderColor = value;
+        Q_EMIT borderColorChanged();
+        Q_EMIT settingsChanged();
     }
     QColor labelFontColor() const override
     {
-        return Qt::white;
+        return m_labelFontColor;
     }
-    void setLabelFontColor(const QColor&) override
+    void setLabelFontColor(const QColor& value) override
     {
+        if (m_labelFontColor == value) {
+            return;
+        }
+        m_labelFontColor = value;
+        Q_EMIT labelFontColorChanged();
+        Q_EMIT settingsChanged();
     }
     qreal activeOpacity() const override
     {
-        return 0.5;
+        return m_activeOpacity;
     }
-    void setActiveOpacity(qreal) override
+    void setActiveOpacity(qreal value) override
     {
+        if (m_activeOpacity == value) {
+            return;
+        }
+        m_activeOpacity = value;
+        Q_EMIT activeOpacityChanged();
+        Q_EMIT settingsChanged();
     }
     qreal inactiveOpacity() const override
     {
-        return 0.3;
+        return m_inactiveOpacity;
     }
-    void setInactiveOpacity(qreal) override
+    void setInactiveOpacity(qreal value) override
     {
+        if (m_inactiveOpacity == value) {
+            return;
+        }
+        m_inactiveOpacity = value;
+        Q_EMIT inactiveOpacityChanged();
+        Q_EMIT settingsChanged();
     }
     int borderWidth() const override
     {
-        return 2;
+        return m_borderWidth;
     }
-    void setBorderWidth(int) override
+    void setBorderWidth(int value) override
     {
+        if (m_borderWidth == value) {
+            return;
+        }
+        m_borderWidth = value;
+        Q_EMIT borderWidthChanged();
+        Q_EMIT settingsChanged();
     }
     int borderRadius() const override
     {
-        return 8;
+        return m_borderRadius;
     }
-    void setBorderRadius(int) override
+    void setBorderRadius(int value) override
     {
-    }
-    bool enableBlur() const override
-    {
-        return false;
-    }
-    void setEnableBlur(bool) override
-    {
+        if (m_borderRadius == value) {
+            return;
+        }
+        m_borderRadius = value;
+        Q_EMIT borderRadiusChanged();
+        Q_EMIT settingsChanged();
     }
     QString labelFontFamily() const override
     {
-        return {};
+        return m_labelFontFamily;
     }
-    void setLabelFontFamily(const QString&) override
+    void setLabelFontFamily(const QString& value) override
     {
+        if (m_labelFontFamily == value) {
+            return;
+        }
+        m_labelFontFamily = value;
+        Q_EMIT labelFontFamilyChanged();
+        Q_EMIT settingsChanged();
     }
     qreal labelFontSizeScale() const override
     {
-        return 1.0;
+        return m_labelFontSizeScale;
     }
-    void setLabelFontSizeScale(qreal) override
+    void setLabelFontSizeScale(qreal value) override
     {
+        if (m_labelFontSizeScale == value) {
+            return;
+        }
+        m_labelFontSizeScale = value;
+        Q_EMIT labelFontSizeScaleChanged();
+        Q_EMIT settingsChanged();
     }
     int labelFontWeight() const override
     {
-        return 400;
+        return m_labelFontWeight;
     }
-    void setLabelFontWeight(int) override
+    void setLabelFontWeight(int value) override
     {
+        if (m_labelFontWeight == value) {
+            return;
+        }
+        m_labelFontWeight = value;
+        Q_EMIT labelFontWeightChanged();
+        Q_EMIT settingsChanged();
     }
     bool labelFontItalic() const override
     {
-        return false;
+        return m_labelFontItalic;
     }
-    void setLabelFontItalic(bool) override
+    void setLabelFontItalic(bool value) override
     {
+        if (m_labelFontItalic == value) {
+            return;
+        }
+        m_labelFontItalic = value;
+        Q_EMIT labelFontItalicChanged();
+        Q_EMIT settingsChanged();
     }
     bool labelFontUnderline() const override
     {
-        return false;
+        return m_labelFontUnderline;
     }
-    void setLabelFontUnderline(bool) override
+    void setLabelFontUnderline(bool value) override
     {
+        if (m_labelFontUnderline == value) {
+            return;
+        }
+        m_labelFontUnderline = value;
+        Q_EMIT labelFontUnderlineChanged();
+        Q_EMIT settingsChanged();
     }
     bool labelFontStrikeout() const override
     {
-        return false;
+        return m_labelFontStrikeout;
     }
-    void setLabelFontStrikeout(bool) override
+    void setLabelFontStrikeout(bool value) override
     {
-    }
-    bool enableShaderEffects() const override
-    {
-        return false;
-    }
-    void setEnableShaderEffects(bool) override
-    {
+        if (m_labelFontStrikeout == value) {
+            return;
+        }
+        m_labelFontStrikeout = value;
+        Q_EMIT labelFontStrikeoutChanged();
+        Q_EMIT settingsChanged();
     }
     int shaderFrameRate() const override
     {
-        return 60;
+        return m_shaderFrameRate;
     }
-    void setShaderFrameRate(int) override
+    void setShaderFrameRate(int value) override
     {
+        if (m_shaderFrameRate == value) {
+            return;
+        }
+        m_shaderFrameRate = value;
+        Q_EMIT shaderFrameRateChanged();
+        Q_EMIT settingsChanged();
     }
     bool enableAudioVisualizer() const override
     {
-        return false;
+        return m_enableAudioVisualizer;
     }
-    void setEnableAudioVisualizer(bool) override
+    void setEnableAudioVisualizer(bool value) override
     {
+        if (m_enableAudioVisualizer == value) {
+            return;
+        }
+        m_enableAudioVisualizer = value;
+        Q_EMIT enableAudioVisualizerChanged();
+        Q_EMIT settingsChanged();
     }
+    // Audio spectrum (Shaders.Audio) — routed through ConfigDefaults so a
+    // future default tweak flows into tests automatically (the file's
+    // standing anti-drift convention).
     int audioSpectrumBarCount() const override
     {
-        return 32;
+        return m_audioSpectrumBarCount;
     }
-    void setAudioSpectrumBarCount(int) override
+    void setAudioSpectrumBarCount(int value) override
     {
+        if (m_audioSpectrumBarCount == value) {
+            return;
+        }
+        m_audioSpectrumBarCount = value;
+        Q_EMIT audioSpectrumBarCountChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool audioAutosens() const override
+    {
+        return m_audioAutosens;
+    }
+    void setAudioAutosens(bool value) override
+    {
+        if (m_audioAutosens == value) {
+            return;
+        }
+        m_audioAutosens = value;
+        Q_EMIT audioAutosensChanged();
+        Q_EMIT settingsChanged();
+    }
+    int audioSensitivity() const override
+    {
+        return m_audioSensitivity;
+    }
+    void setAudioSensitivity(int value) override
+    {
+        if (m_audioSensitivity == value) {
+            return;
+        }
+        m_audioSensitivity = value;
+        Q_EMIT audioSensitivityChanged();
+        Q_EMIT settingsChanged();
+    }
+    int audioNoiseReduction() const override
+    {
+        return m_audioNoiseReduction;
+    }
+    void setAudioNoiseReduction(int value) override
+    {
+        if (m_audioNoiseReduction == value) {
+            return;
+        }
+        m_audioNoiseReduction = value;
+        Q_EMIT audioNoiseReductionChanged();
+        Q_EMIT settingsChanged();
+    }
+    int audioLowerCutoffHz() const override
+    {
+        return m_audioLowerCutoffHz;
+    }
+    void setAudioLowerCutoffHz(int value) override
+    {
+        if (m_audioLowerCutoffHz == value) {
+            return;
+        }
+        m_audioLowerCutoffHz = value;
+        Q_EMIT audioLowerCutoffHzChanged();
+        Q_EMIT settingsChanged();
+    }
+    int audioHigherCutoffHz() const override
+    {
+        return m_audioHigherCutoffHz;
+    }
+    void setAudioHigherCutoffHz(int value) override
+    {
+        if (m_audioHigherCutoffHz == value) {
+            return;
+        }
+        m_audioHigherCutoffHz = value;
+        Q_EMIT audioHigherCutoffHzChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool audioMonstercat() const override
+    {
+        return m_audioMonstercat;
+    }
+    void setAudioMonstercat(bool value) override
+    {
+        if (m_audioMonstercat == value) {
+            return;
+        }
+        m_audioMonstercat = value;
+        Q_EMIT audioMonstercatChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool audioWaves() const override
+    {
+        return m_audioWaves;
+    }
+    void setAudioWaves(bool value) override
+    {
+        if (m_audioWaves == value) {
+            return;
+        }
+        m_audioWaves = value;
+        Q_EMIT audioWavesChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString audioChannelMode() const override
+    {
+        return m_audioChannelMode;
+    }
+    void setAudioChannelMode(const QString& value) override
+    {
+        if (m_audioChannelMode == value) {
+            return;
+        }
+        m_audioChannelMode = value;
+        Q_EMIT audioChannelModeChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool audioReverse() const override
+    {
+        return m_audioReverse;
+    }
+    void setAudioReverse(bool value) override
+    {
+        if (m_audioReverse == value) {
+            return;
+        }
+        m_audioReverse = value;
+        Q_EMIT audioReverseChanged();
+        Q_EMIT settingsChanged();
+    }
+    int audioExtraSmoothing() const override
+    {
+        return m_audioExtraSmoothing;
+    }
+    void setAudioExtraSmoothing(int value) override
+    {
+        if (m_audioExtraSmoothing == value) {
+            return;
+        }
+        m_audioExtraSmoothing = value;
+        Q_EMIT audioExtraSmoothingChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString audioInputMethod() const override
+    {
+        return m_audioInputMethod;
+    }
+    void setAudioInputMethod(const QString& value) override
+    {
+        if (m_audioInputMethod == value) {
+            return;
+        }
+        m_audioInputMethod = value;
+        Q_EMIT audioInputMethodChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString audioInputSource() const override
+    {
+        return m_audioInputSource;
+    }
+    void setAudioInputSource(const QString& value) override
+    {
+        if (m_audioInputSource == value) {
+            return;
+        }
+        m_audioInputSource = value;
+        Q_EMIT audioInputSourceChanged();
+        Q_EMIT settingsChanged();
     }
 
-    // IZoneGeometrySettings
-    int zonePadding() const override
+    // IZoneGeometrySettings — gaps are config-backed again, so the interface
+    // carries setters. Member-backed here so tests can round-trip.
+    int innerGap() const override
     {
-        return 8;
+        return m_innerGap;
     }
-    void setZonePadding(int) override
+    void setInnerGap(int v) override
     {
+        if (m_innerGap == v) {
+            return;
+        }
+        m_innerGap = v;
+        Q_EMIT innerGapChanged();
+        Q_EMIT settingsChanged();
     }
     int outerGap() const override
     {
-        return 8;
+        return m_outerGap;
     }
-    void setOuterGap(int) override
+    void setOuterGap(int v) override
     {
+        if (m_outerGap == v) {
+            return;
+        }
+        m_outerGap = v;
+        Q_EMIT outerGapChanged();
+        Q_EMIT settingsChanged();
     }
     bool usePerSideOuterGap() const override
     {
-        return false;
+        return m_usePerSideOuterGap;
     }
-    void setUsePerSideOuterGap(bool) override
+    void setUsePerSideOuterGap(bool v) override
     {
+        if (m_usePerSideOuterGap == v) {
+            return;
+        }
+        m_usePerSideOuterGap = v;
+        Q_EMIT usePerSideOuterGapChanged();
+        Q_EMIT settingsChanged();
     }
     int outerGapTop() const override
     {
-        return 8;
+        return m_outerGapTop;
     }
-    void setOuterGapTop(int) override
+    void setOuterGapTop(int v) override
     {
+        if (m_outerGapTop == v) {
+            return;
+        }
+        m_outerGapTop = v;
+        Q_EMIT outerGapTopChanged();
+        Q_EMIT settingsChanged();
     }
     int outerGapBottom() const override
     {
-        return 8;
+        return m_outerGapBottom;
     }
-    void setOuterGapBottom(int) override
+    void setOuterGapBottom(int v) override
     {
+        if (m_outerGapBottom == v) {
+            return;
+        }
+        m_outerGapBottom = v;
+        Q_EMIT outerGapBottomChanged();
+        Q_EMIT settingsChanged();
     }
     int outerGapLeft() const override
     {
-        return 8;
+        return m_outerGapLeft;
     }
-    void setOuterGapLeft(int) override
+    void setOuterGapLeft(int v) override
     {
+        if (m_outerGapLeft == v) {
+            return;
+        }
+        m_outerGapLeft = v;
+        Q_EMIT outerGapLeftChanged();
+        Q_EMIT settingsChanged();
     }
     int outerGapRight() const override
     {
-        return 8;
+        return m_outerGapRight;
     }
-    void setOuterGapRight(int) override
+    void setOuterGapRight(int v) override
     {
+        if (m_outerGapRight == v) {
+            return;
+        }
+        m_outerGapRight = v;
+        Q_EMIT outerGapRightChanged();
+        Q_EMIT settingsChanged();
+    }
+
+    // Window appearance (config-backed border + title-bar defaults)
+    bool showWindowBorder() const override
+    {
+        return m_showWindowBorder;
+    }
+    void setShowWindowBorder(bool v) override
+    {
+        if (m_showWindowBorder == v) {
+            return;
+        }
+        m_showWindowBorder = v;
+        Q_EMIT showWindowBorderChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString windowBorderScope() const override
+    {
+        return m_windowBorderScope;
+    }
+    void setWindowBorderScope(const QString& v) override
+    {
+        if (m_windowBorderScope == v) {
+            return;
+        }
+        m_windowBorderScope = v;
+        Q_EMIT windowBorderScopeChanged();
+        Q_EMIT settingsChanged();
+    }
+    int windowBorderWidth() const override
+    {
+        return m_windowBorderWidth;
+    }
+    void setWindowBorderWidth(int v) override
+    {
+        if (m_windowBorderWidth == v) {
+            return;
+        }
+        m_windowBorderWidth = v;
+        Q_EMIT windowBorderWidthChanged();
+        Q_EMIT settingsChanged();
+    }
+    int windowBorderRadius() const override
+    {
+        return m_windowBorderRadius;
+    }
+    void setWindowBorderRadius(int v) override
+    {
+        if (m_windowBorderRadius == v) {
+            return;
+        }
+        m_windowBorderRadius = v;
+        Q_EMIT windowBorderRadiusChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString windowBorderColorActive() const override
+    {
+        return m_windowBorderColorActive;
+    }
+    void setWindowBorderColorActive(const QString& v) override
+    {
+        if (m_windowBorderColorActive == v) {
+            return;
+        }
+        m_windowBorderColorActive = v;
+        Q_EMIT windowBorderColorActiveChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString windowBorderColorInactive() const override
+    {
+        return m_windowBorderColorInactive;
+    }
+    void setWindowBorderColorInactive(const QString& v) override
+    {
+        if (m_windowBorderColorInactive == v) {
+            return;
+        }
+        m_windowBorderColorInactive = v;
+        Q_EMIT windowBorderColorInactiveChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool hideWindowTitleBars() const override
+    {
+        return m_hideWindowTitleBars;
+    }
+    void setHideWindowTitleBars(bool v) override
+    {
+        if (m_hideWindowTitleBars == v) {
+            return;
+        }
+        m_hideWindowTitleBars = v;
+        Q_EMIT hideWindowTitleBarsChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool showWindowOpacityTint() const override
+    {
+        return m_showWindowOpacityTint;
+    }
+    void setShowWindowOpacityTint(bool v) override
+    {
+        if (m_showWindowOpacityTint == v) {
+            return;
+        }
+        m_showWindowOpacityTint = v;
+        Q_EMIT showWindowOpacityTintChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString windowOpacityTintScope() const override
+    {
+        return m_windowOpacityTintScope;
+    }
+    void setWindowOpacityTintScope(const QString& v) override
+    {
+        if (m_windowOpacityTintScope == v) {
+            return;
+        }
+        m_windowOpacityTintScope = v;
+        Q_EMIT windowOpacityTintScopeChanged();
+        Q_EMIT settingsChanged();
+    }
+    double windowOpacity() const override
+    {
+        return m_windowOpacity;
+    }
+    void setWindowOpacity(double v) override
+    {
+        if (qFuzzyCompare(m_windowOpacity, v)) {
+            return;
+        }
+        m_windowOpacity = v;
+        Q_EMIT windowOpacityChanged();
+        Q_EMIT settingsChanged();
+    }
+    double windowTintStrength() const override
+    {
+        return m_windowTintStrength;
+    }
+    void setWindowTintStrength(double v) override
+    {
+        if (qFuzzyCompare(m_windowTintStrength, v)) {
+            return;
+        }
+        m_windowTintStrength = v;
+        Q_EMIT windowTintStrengthChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString windowTintColor() const override
+    {
+        return m_windowTintColor;
+    }
+    void setWindowTintColor(const QString& v) override
+    {
+        if (m_windowTintColor == v) {
+            return;
+        }
+        m_windowTintColor = v;
+        Q_EMIT windowTintColorChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString windowTitleBarScope() const override
+    {
+        return m_windowTitleBarScope;
+    }
+    void setWindowTitleBarScope(const QString& v) override
+    {
+        if (m_windowTitleBarScope == v) {
+            return;
+        }
+        m_windowTitleBarScope = v;
+        Q_EMIT windowTitleBarScopeChanged();
+        Q_EMIT settingsChanged();
+    }
+    int focusFadeDuration() const override
+    {
+        return m_focusFadeDuration;
+    }
+    void setFocusFadeDuration(int ms) override
+    {
+        if (m_focusFadeDuration == ms) {
+            return;
+        }
+        m_focusFadeDuration = ms;
+        Q_EMIT focusFadeDurationChanged();
+        Q_EMIT settingsChanged();
     }
     int adjacentThreshold() const override
     {
-        return 20;
+        return m_adjacentThreshold;
     }
-    void setAdjacentThreshold(int) override
+    void setAdjacentThreshold(int value) override
     {
+        if (m_adjacentThreshold == value) {
+            return;
+        }
+        m_adjacentThreshold = value;
+        Q_EMIT adjacentThresholdChanged();
+        Q_EMIT settingsChanged();
     }
     int pollIntervalMs() const override
     {
-        return 50;
+        return m_pollIntervalMs;
     }
-    void setPollIntervalMs(int) override
+    void setPollIntervalMs(int value) override
     {
+        if (m_pollIntervalMs == value) {
+            return;
+        }
+        m_pollIntervalMs = value;
+        Q_EMIT pollIntervalMsChanged();
+        Q_EMIT settingsChanged();
     }
     int minimumZoneSizePx() const override
     {
-        return 100;
+        return m_minimumZoneSizePx;
     }
-    void setMinimumZoneSizePx(int) override
+    void setMinimumZoneSizePx(int value) override
     {
+        if (m_minimumZoneSizePx == value) {
+            return;
+        }
+        m_minimumZoneSizePx = value;
+        Q_EMIT minimumZoneSizePxChanged();
+        Q_EMIT settingsChanged();
     }
     int minimumZoneDisplaySizePx() const override
     {
-        return 10;
+        return m_minimumZoneDisplaySizePx;
     }
-    void setMinimumZoneDisplaySizePx(int) override
+    void setMinimumZoneDisplaySizePx(int value) override
     {
+        if (m_minimumZoneDisplaySizePx == value) {
+            return;
+        }
+        m_minimumZoneDisplaySizePx = value;
+        Q_EMIT minimumZoneDisplaySizePxChanged();
+        Q_EMIT settingsChanged();
     }
 
     // IWindowExclusionSettings — the per-app / per-class exclusion list
-    // accessors retired in v4 (folded into unified WindowRule store).
+    // accessors retired in v4 (folded into unified Rule store).
     bool excludeTransientWindows() const override
     {
-        return false;
+        return m_excludeTransientWindows;
     }
-    void setExcludeTransientWindows(bool) override
+    void setExcludeTransientWindows(bool exclude) override
     {
+        if (m_excludeTransientWindows == exclude) {
+            return;
+        }
+        m_excludeTransientWindows = exclude;
+        Q_EMIT excludeTransientWindowsChanged();
+        Q_EMIT settingsChanged();
     }
     int minimumWindowWidth() const override
     {
@@ -450,7 +1086,12 @@ public:
     }
     void setMinimumWindowWidth(int w) override
     {
+        if (m_minimumWindowWidth == w) {
+            return;
+        }
         m_minimumWindowWidth = w;
+        Q_EMIT minimumWindowWidthChanged();
+        Q_EMIT settingsChanged();
     }
     int minimumWindowHeight() const override
     {
@@ -458,7 +1099,54 @@ public:
     }
     void setMinimumWindowHeight(int h) override
     {
+        if (m_minimumWindowHeight == h) {
+            return;
+        }
         m_minimumWindowHeight = h;
+        Q_EMIT minimumWindowHeightChanged();
+        Q_EMIT settingsChanged();
+    }
+
+    // Decoration window filtering — stub accessors backed by m_decoration*
+    // state, mirroring the animation-filter stubs below.
+    bool decorationExcludeTransientWindows() const override
+    {
+        return m_decorationExcludeTransientWindows;
+    }
+    void setDecorationExcludeTransientWindows(bool exclude) override
+    {
+        if (m_decorationExcludeTransientWindows == exclude) {
+            return;
+        }
+        m_decorationExcludeTransientWindows = exclude;
+        Q_EMIT decorationExcludeTransientWindowsChanged();
+        Q_EMIT settingsChanged();
+    }
+    int decorationMinimumWindowWidth() const override
+    {
+        return m_decorationMinimumWindowWidth;
+    }
+    void setDecorationMinimumWindowWidth(int width) override
+    {
+        if (m_decorationMinimumWindowWidth == width) {
+            return;
+        }
+        m_decorationMinimumWindowWidth = width;
+        Q_EMIT decorationMinimumWindowWidthChanged();
+        Q_EMIT settingsChanged();
+    }
+    int decorationMinimumWindowHeight() const override
+    {
+        return m_decorationMinimumWindowHeight;
+    }
+    void setDecorationMinimumWindowHeight(int height) override
+    {
+        if (m_decorationMinimumWindowHeight == height) {
+            return;
+        }
+        m_decorationMinimumWindowHeight = height;
+        Q_EMIT decorationMinimumWindowHeightChanged();
+        Q_EMIT settingsChanged();
     }
 
     // Animation window filtering — pure-stub no-op accessors backed by
@@ -520,94 +1208,166 @@ public:
     }
     // animationExcludedApplications / animationExcludedWindowClasses
     // overrides retired in v4 alongside the ISettings virtuals — the
-    // lists folded into ExcludeAnimations WindowRules.
+    // lists folded into ExcludeAnimations Rules.
 
     // IZoneSelectorSettings
     bool zoneSelectorEnabled() const override
     {
-        return true;
+        return m_zoneSelectorEnabled;
     }
-    void setZoneSelectorEnabled(bool) override
+    void setZoneSelectorEnabled(bool value) override
     {
+        if (m_zoneSelectorEnabled == value) {
+            return;
+        }
+        m_zoneSelectorEnabled = value;
+        Q_EMIT zoneSelectorEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     int zoneSelectorTriggerDistance() const override
     {
-        return 50;
+        return m_zoneSelectorTriggerDistance;
     }
-    void setZoneSelectorTriggerDistance(int) override
+    void setZoneSelectorTriggerDistance(int value) override
     {
+        if (m_zoneSelectorTriggerDistance == value) {
+            return;
+        }
+        m_zoneSelectorTriggerDistance = value;
+        Q_EMIT zoneSelectorTriggerDistanceChanged();
+        Q_EMIT settingsChanged();
     }
     ZoneSelectorPosition zoneSelectorPosition() const override
     {
-        return ZoneSelectorPosition::Top;
+        return m_zoneSelectorPosition;
     }
-    void setZoneSelectorPosition(ZoneSelectorPosition) override
+    void setZoneSelectorPosition(ZoneSelectorPosition value) override
     {
+        if (m_zoneSelectorPosition == value) {
+            return;
+        }
+        m_zoneSelectorPosition = value;
+        Q_EMIT zoneSelectorPositionChanged();
+        Q_EMIT settingsChanged();
     }
     ZoneSelectorLayoutMode zoneSelectorLayoutMode() const override
     {
-        return ZoneSelectorLayoutMode::Grid;
+        return m_zoneSelectorLayoutMode;
     }
-    void setZoneSelectorLayoutMode(ZoneSelectorLayoutMode) override
+    void setZoneSelectorLayoutMode(ZoneSelectorLayoutMode value) override
     {
+        if (m_zoneSelectorLayoutMode == value) {
+            return;
+        }
+        m_zoneSelectorLayoutMode = value;
+        Q_EMIT zoneSelectorLayoutModeChanged();
+        Q_EMIT settingsChanged();
     }
     int zoneSelectorPreviewWidth() const override
     {
-        return 180;
+        return m_zoneSelectorPreviewWidth;
     }
-    void setZoneSelectorPreviewWidth(int) override
+    void setZoneSelectorPreviewWidth(int value) override
     {
+        if (m_zoneSelectorPreviewWidth == value) {
+            return;
+        }
+        m_zoneSelectorPreviewWidth = value;
+        Q_EMIT zoneSelectorPreviewWidthChanged();
+        Q_EMIT settingsChanged();
     }
     int zoneSelectorPreviewHeight() const override
     {
-        return 101;
+        return m_zoneSelectorPreviewHeight;
     }
-    void setZoneSelectorPreviewHeight(int) override
+    void setZoneSelectorPreviewHeight(int value) override
     {
+        if (m_zoneSelectorPreviewHeight == value) {
+            return;
+        }
+        m_zoneSelectorPreviewHeight = value;
+        Q_EMIT zoneSelectorPreviewHeightChanged();
+        Q_EMIT settingsChanged();
     }
     bool zoneSelectorPreviewLockAspect() const override
     {
-        return true;
+        return m_zoneSelectorPreviewLockAspect;
     }
-    void setZoneSelectorPreviewLockAspect(bool) override
+    void setZoneSelectorPreviewLockAspect(bool value) override
     {
+        if (m_zoneSelectorPreviewLockAspect == value) {
+            return;
+        }
+        m_zoneSelectorPreviewLockAspect = value;
+        Q_EMIT zoneSelectorPreviewLockAspectChanged();
+        Q_EMIT settingsChanged();
     }
     int zoneSelectorGridColumns() const override
     {
-        return 5;
+        return m_zoneSelectorGridColumns;
     }
-    void setZoneSelectorGridColumns(int) override
+    void setZoneSelectorGridColumns(int value) override
     {
+        if (m_zoneSelectorGridColumns == value) {
+            return;
+        }
+        m_zoneSelectorGridColumns = value;
+        Q_EMIT zoneSelectorGridColumnsChanged();
+        Q_EMIT settingsChanged();
     }
     ZoneSelectorSizeMode zoneSelectorSizeMode() const override
     {
-        return ZoneSelectorSizeMode::Auto;
+        return m_zoneSelectorSizeMode;
     }
-    void setZoneSelectorSizeMode(ZoneSelectorSizeMode) override
+    void setZoneSelectorSizeMode(ZoneSelectorSizeMode value) override
     {
+        if (m_zoneSelectorSizeMode == value) {
+            return;
+        }
+        m_zoneSelectorSizeMode = value;
+        Q_EMIT zoneSelectorSizeModeChanged();
+        Q_EMIT settingsChanged();
     }
     int zoneSelectorMaxRows() const override
     {
-        return 4;
+        return m_zoneSelectorMaxRows;
     }
-    void setZoneSelectorMaxRows(int) override
+    void setZoneSelectorMaxRows(int value) override
     {
+        if (m_zoneSelectorMaxRows == value) {
+            return;
+        }
+        m_zoneSelectorMaxRows = value;
+        Q_EMIT zoneSelectorMaxRowsChanged();
+        Q_EMIT settingsChanged();
     }
 
     // IWindowBehaviorSettings
     bool keepWindowsInZonesOnResolutionChange() const override
     {
-        return true;
+        return m_keepWindowsInZonesOnResolutionChange;
     }
-    void setKeepWindowsInZonesOnResolutionChange(bool) override
+    void setKeepWindowsInZonesOnResolutionChange(bool value) override
     {
+        if (m_keepWindowsInZonesOnResolutionChange == value) {
+            return;
+        }
+        m_keepWindowsInZonesOnResolutionChange = value;
+        Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
+        Q_EMIT settingsChanged();
     }
     bool moveNewWindowsToLastZone() const override
     {
-        return false;
+        return m_moveNewWindowsToLastZone;
     }
-    void setMoveNewWindowsToLastZone(bool) override
+    void setMoveNewWindowsToLastZone(bool value) override
     {
+        if (m_moveNewWindowsToLastZone == value) {
+            return;
+        }
+        m_moveNewWindowsToLastZone = value;
+        Q_EMIT moveNewWindowsToLastZoneChanged();
+        Q_EMIT settingsChanged();
     }
     // ISnapSettings::focusNewWindows() — shares the ISettings snappingFocusNewWindows
     // member so a test can drive the snap engine's focus-new path.
@@ -617,24 +1377,42 @@ public:
     }
     bool restoreOriginalSizeOnUnsnap() const override
     {
-        return true;
+        return m_restoreOriginalSizeOnUnsnap;
     }
-    void setRestoreOriginalSizeOnUnsnap(bool) override
+    void setRestoreOriginalSizeOnUnsnap(bool value) override
     {
+        if (m_restoreOriginalSizeOnUnsnap == value) {
+            return;
+        }
+        m_restoreOriginalSizeOnUnsnap = value;
+        Q_EMIT restoreOriginalSizeOnUnsnapChanged();
+        Q_EMIT settingsChanged();
     }
     StickyWindowHandling snappingStickyWindowHandling() const override
     {
-        return StickyWindowHandling::TreatAsNormal;
+        return m_snappingStickyWindowHandling;
     }
-    void setSnappingStickyWindowHandling(StickyWindowHandling) override
+    void setSnappingStickyWindowHandling(StickyWindowHandling value) override
     {
+        if (m_snappingStickyWindowHandling == value) {
+            return;
+        }
+        m_snappingStickyWindowHandling = value;
+        Q_EMIT snappingStickyWindowHandlingChanged();
+        Q_EMIT settingsChanged();
     }
     bool restoreWindowsToZonesOnLogin() const override
     {
-        return true;
+        return m_restoreWindowsToZonesOnLogin;
     }
-    void setRestoreWindowsToZonesOnLogin(bool) override
+    void setRestoreWindowsToZonesOnLogin(bool value) override
     {
+        if (m_restoreWindowsToZonesOnLogin == value) {
+            return;
+        }
+        m_restoreWindowsToZonesOnLogin = value;
+        Q_EMIT restoreWindowsToZonesOnLoginChanged();
+        Q_EMIT settingsChanged();
     }
     bool snappingRestoreFloatedWindowsOnLogin() const override
     {
@@ -716,17 +1494,29 @@ public:
     }
     QVariantList snapAssistTriggers() const override
     {
-        return {};
+        return m_snapAssistTriggers;
     }
-    void setSnapAssistTriggers(const QVariantList&) override
+    void setSnapAssistTriggers(const QVariantList& value) override
     {
+        if (m_snapAssistTriggers == value) {
+            return;
+        }
+        m_snapAssistTriggers = value;
+        Q_EMIT snapAssistTriggersChanged();
+        Q_EMIT settingsChanged();
     }
     bool filterLayoutsByAspectRatio() const override
     {
-        return true;
+        return m_filterLayoutsByAspectRatio;
     }
-    void setFilterLayoutsByAspectRatio(bool) override
+    void setFilterLayoutsByAspectRatio(bool value) override
     {
+        if (m_filterLayoutsByAspectRatio == value) {
+            return;
+        }
+        m_filterLayoutsByAspectRatio = value;
+        Q_EMIT filterLayoutsByAspectRatioChanged();
+        Q_EMIT settingsChanged();
     }
 
     // IOrderingSettings
@@ -758,61 +1548,189 @@ public:
     // Animation settings (ISettings)
     bool animationsEnabled() const override
     {
-        return false;
+        return m_animationsEnabled;
     }
-    void setAnimationsEnabled(bool) override
+    void setAnimationsEnabled(bool value) override
     {
+        if (m_animationsEnabled == value) {
+            return;
+        }
+        m_animationsEnabled = value;
+        Q_EMIT animationsEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     int animationDuration() const override
     {
-        return 200;
+        return m_animationDuration;
     }
-    void setAnimationDuration(int) override
+    void setAnimationDuration(int value) override
     {
+        if (m_animationDuration == value) {
+            return;
+        }
+        m_animationDuration = value;
+        Q_EMIT animationDurationChanged();
+        Q_EMIT settingsChanged();
     }
     QString animationEasingCurve() const override
     {
-        return {};
+        return m_animationEasingCurve;
     }
-    void setAnimationEasingCurve(const QString&) override
+    void setAnimationEasingCurve(const QString& value) override
     {
+        if (m_animationEasingCurve == value) {
+            return;
+        }
+        m_animationEasingCurve = value;
+        Q_EMIT animationEasingCurveChanged();
+        Q_EMIT settingsChanged();
     }
     int animationMinDistance() const override
     {
-        return 10;
+        return m_animationMinDistance;
     }
-    void setAnimationMinDistance(int) override
+    void setAnimationMinDistance(int value) override
     {
+        if (m_animationMinDistance == value) {
+            return;
+        }
+        m_animationMinDistance = value;
+        Q_EMIT animationMinDistanceChanged();
+        Q_EMIT settingsChanged();
     }
     int animationSequenceMode() const override
     {
-        return 0;
+        return m_animationSequenceMode;
     }
-    void setAnimationSequenceMode(int) override
+    void setAnimationSequenceMode(int value) override
     {
+        if (m_animationSequenceMode == value) {
+            return;
+        }
+        m_animationSequenceMode = value;
+        Q_EMIT animationSequenceModeChanged();
+        Q_EMIT settingsChanged();
     }
     int animationStaggerInterval() const override
     {
-        return 50;
+        return m_animationStaggerInterval;
     }
-    void setAnimationStaggerInterval(int) override
+    void setAnimationStaggerInterval(int value) override
     {
+        if (m_animationStaggerInterval == value) {
+            return;
+        }
+        m_animationStaggerInterval = value;
+        Q_EMIT animationStaggerIntervalChanged();
+        Q_EMIT settingsChanged();
     }
     PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override
     {
-        return {};
+        return m_shaderProfileTree;
     }
-    void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree&) override
+    void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& value) override
     {
+        if (m_shaderProfileTree == value) {
+            return;
+        }
+        m_shaderProfileTree = value;
+        Q_EMIT shaderProfileTreeChanged();
+        Q_EMIT settingsChanged();
+    }
+    PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree() const override
+    {
+        return m_decorationProfileTree;
+    }
+    void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& value) override
+    {
+        if (m_decorationProfileTree == value) {
+            return;
+        }
+        m_decorationProfileTree = value;
+        Q_EMIT decorationProfileTreeChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString decorationProfileTreeJson() const override
+    {
+        // Serialize the SAME tree the typed accessor returns, so the two
+        // accessors stay coherent for any test that reads the JSON facade.
+        return QString::fromUtf8(QJsonDocument(decorationProfileTree().toJson()).toJson(QJsonDocument::Compact));
+    }
+    void setDecorationProfileTreeJson(const QString& json) override
+    {
+        // Parse into the SAME tree the typed accessor exposes, so set-then-get round-trips.
+        // Dropping the value made this the one key the effect fetches by SettingProperty
+        // that no stub-backed test could move — while the comment below boasted "real
+        // storage, not no-op setters".
+        const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        if (doc.isNull() || !doc.isObject()) {
+            return;
+        }
+        setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
+    }
+
+    // Decorations.Performance (ISettings). Real storage, not no-op setters: the
+    // daemon arms its idle ladder off decorationPauseWhenIdleChanged /
+    // decorationIdleTimeoutSecChanged, so a stub that could never emit them would make
+    // the whole idle relay untestable — and a setter that silently drops the value
+    // breaks the get-after-set contract every other settable here honours.
+    bool decorationAnimateFocusedOnly() const override
+    {
+        return m_decorationAnimateFocusedOnly;
+    }
+    void setDecorationAnimateFocusedOnly(bool value) override
+    {
+        if (m_decorationAnimateFocusedOnly == value) {
+            return;
+        }
+        m_decorationAnimateFocusedOnly = value;
+        Q_EMIT decorationAnimateFocusedOnlyChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool decorationPauseWhenIdle() const override
+    {
+        return m_decorationPauseWhenIdle;
+    }
+    void setDecorationPauseWhenIdle(bool value) override
+    {
+        if (m_decorationPauseWhenIdle == value) {
+            return;
+        }
+        m_decorationPauseWhenIdle = value;
+        Q_EMIT decorationPauseWhenIdleChanged();
+        Q_EMIT settingsChanged();
+    }
+    int decorationIdleTimeoutSec() const override
+    {
+        return m_decorationIdleTimeoutSec;
+    }
+    void setDecorationIdleTimeoutSec(int value) override
+    {
+        // Mirror the schema's clampInt so the stub cannot hand the daemon a timeout
+        // the real Settings would never produce.
+        const int clamped =
+            qBound(ConfigDefaults::decorationIdleTimeoutSecMin(), value, ConfigDefaults::decorationIdleTimeoutSecMax());
+        if (m_decorationIdleTimeoutSec == clamped) {
+            return;
+        }
+        m_decorationIdleTimeoutSec = clamped;
+        Q_EMIT decorationIdleTimeoutSecChanged();
+        Q_EMIT settingsChanged();
     }
 
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override
     {
-        return false;
+        return m_autotileFocusFollowsMouse;
     }
-    void setAutotileFocusFollowsMouse(bool) override
+    void setAutotileFocusFollowsMouse(bool value) override
     {
+        if (m_autotileFocusFollowsMouse == value) {
+            return;
+        }
+        m_autotileFocusFollowsMouse = value;
+        Q_EMIT autotileFocusFollowsMouseChanged();
+        Q_EMIT settingsChanged();
     }
     bool snappingFocusNewWindows() const override
     {
@@ -820,7 +1738,12 @@ public:
     }
     void setSnappingFocusNewWindows(bool v) override
     {
+        if (m_snappingFocusNewWindows == v) {
+            return;
+        }
         m_snappingFocusNewWindows = v;
+        Q_EMIT snappingFocusNewWindowsChanged();
+        Q_EMIT settingsChanged();
     }
     bool snappingFocusFollowsMouse() const override
     {
@@ -828,145 +1751,77 @@ public:
     }
     void setSnappingFocusFollowsMouse(bool v) override
     {
+        if (m_snappingFocusFollowsMouse == v) {
+            return;
+        }
         m_snappingFocusFollowsMouse = v;
-    }
-    bool autotileHideTitleBars() const override
-    {
-        return false;
-    }
-    void setAutotileHideTitleBars(bool) override
-    {
-    }
-    bool autotileShowBorder() const override
-    {
-        return false;
-    }
-    void setAutotileShowBorder(bool) override
-    {
-    }
-    int autotileBorderWidth() const override
-    {
-        return 2;
-    }
-    void setAutotileBorderWidth(int) override
-    {
-    }
-    int autotileBorderRadius() const override
-    {
-        return 0;
-    }
-    void setAutotileBorderRadius(int) override
-    {
-    }
-    QColor autotileBorderColor() const override
-    {
-        return Qt::white;
-    }
-    void setAutotileBorderColor(const QColor&) override
-    {
-    }
-    QColor autotileInactiveBorderColor() const override
-    {
-        return {};
-    }
-    void setAutotileInactiveBorderColor(const QColor&) override
-    {
-    }
-    bool autotileUseSystemBorderColors() const override
-    {
-        return false;
-    }
-    void setAutotileUseSystemBorderColors(bool) override
-    {
-    }
-    bool snappingHideTitleBars() const override
-    {
-        // Distinct from snappingShowBorder so the D-Bus batch test can detect a
-        // registration swap between the two adjacent bool keys via value-mirroring.
-        return true;
-    }
-    void setSnappingHideTitleBars(bool) override
-    {
-    }
-    bool snappingShowBorder() const override
-    {
-        return false;
-    }
-    void setSnappingShowBorder(bool) override
-    {
-    }
-    int snappingBorderWidth() const override
-    {
-        return 2;
-    }
-    void setSnappingBorderWidth(int) override
-    {
-    }
-    int snappingBorderRadius() const override
-    {
-        return 0;
-    }
-    void setSnappingBorderRadius(int) override
-    {
-    }
-    QColor snappingBorderColor() const override
-    {
-        return Qt::white;
-    }
-    void setSnappingBorderColor(const QColor&) override
-    {
-    }
-    QColor snappingInactiveBorderColor() const override
-    {
-        // A distinct, valid color (active is white) so the D-Bus batch test can
-        // round-trip it through HexArgb and catch an active/inactive swap.
-        return Qt::black;
-    }
-    void setSnappingInactiveBorderColor(const QColor&) override
-    {
-    }
-    bool snappingUseSystemBorderColors() const override
-    {
-        // Distinct from snappingShowBorder for the same batch-test swap detection.
-        return true;
-    }
-    void setSnappingUseSystemBorderColors(bool) override
-    {
+        Q_EMIT snappingFocusFollowsMouseChanged();
+        Q_EMIT settingsChanged();
     }
     StickyWindowHandling autotileStickyWindowHandling() const override
     {
-        return StickyWindowHandling::TreatAsNormal;
+        return m_autotileStickyWindowHandling;
     }
-    void setAutotileStickyWindowHandling(StickyWindowHandling) override
+    void setAutotileStickyWindowHandling(StickyWindowHandling value) override
     {
+        if (m_autotileStickyWindowHandling == value) {
+            return;
+        }
+        m_autotileStickyWindowHandling = value;
+        Q_EMIT autotileStickyWindowHandlingChanged();
+        Q_EMIT settingsChanged();
     }
     AutotileDragBehavior autotileDragBehavior() const override
     {
-        return AutotileDragBehavior::Float;
+        return m_autotileDragBehavior;
     }
-    void setAutotileDragBehavior(AutotileDragBehavior) override
+    void setAutotileDragBehavior(AutotileDragBehavior value) override
     {
+        if (m_autotileDragBehavior == value) {
+            return;
+        }
+        m_autotileDragBehavior = value;
+        Q_EMIT autotileDragBehaviorChanged();
+        Q_EMIT settingsChanged();
     }
     AutotileOverflowBehavior autotileOverflowBehavior() const override
     {
-        return AutotileOverflowBehavior::Float;
+        return m_autotileOverflowBehavior;
     }
-    void setAutotileOverflowBehavior(AutotileOverflowBehavior) override
+    void setAutotileOverflowBehavior(AutotileOverflowBehavior value) override
     {
+        if (m_autotileOverflowBehavior == value) {
+            return;
+        }
+        m_autotileOverflowBehavior = value;
+        Q_EMIT autotileOverflowBehaviorChanged();
+        Q_EMIT settingsChanged();
     }
     QVariantList autotileDragInsertTriggers() const override
     {
-        return ConfigDefaults::autotileDragInsertTriggers();
+        return m_autotileDragInsertTriggers;
     }
-    void setAutotileDragInsertTriggers(const QVariantList&) override
+    void setAutotileDragInsertTriggers(const QVariantList& value) override
     {
+        if (m_autotileDragInsertTriggers == value) {
+            return;
+        }
+        m_autotileDragInsertTriggers = value;
+        Q_EMIT autotileDragInsertTriggersChanged();
+        Q_EMIT settingsChanged();
     }
     bool autotileDragInsertToggle() const override
     {
-        return false;
+        return m_autotileDragInsertToggle;
     }
-    void setAutotileDragInsertToggle(bool) override
+    void setAutotileDragInsertToggle(bool value) override
     {
+        if (m_autotileDragInsertToggle == value) {
+            return;
+        }
+        m_autotileDragInsertToggle = value;
+        Q_EMIT autotileDragInsertToggleChanged();
+        Q_EMIT settingsChanged();
     }
     QVariantMap autotilePerAlgorithmSettings() const override
     {
@@ -1131,24 +1986,71 @@ public:
     }
     QStringList lockedScreens() const override
     {
-        return {};
+        return m_lockedScreens;
     }
-    void setLockedScreens(const QStringList&) override
+    void setLockedScreens(const QStringList& value) override
     {
+        if (m_lockedScreens == value) {
+            return;
+        }
+        m_lockedScreens = value;
+        Q_EMIT lockedScreensChanged();
+        Q_EMIT settingsChanged();
     }
-    bool isScreenLocked(const QString&) const override
+    // Context locks — mirrors Settings::isContextLocked / setContextLocked
+    // (settings.cpp). Mirrored exactly: the ':'-separated composite key format
+    // (bare name → whole-screen lock; "name:<desktop>" → per-desktop;
+    // "name:<desktop>:<activity>" → per-(desktop,activity)); locks living in
+    // the same lockedScreens list the plain lockedScreens()/setLockedScreens()
+    // accessors expose (so lockedScreensChanged fires on lock writes, as in
+    // production); the hierarchical lookup fallback composite → name:desktop →
+    // bare name; and the setter's refusal of the (screen, 0, activity) shape,
+    // which has no representable key in the lockedScreens schema.
+    // Simplified: production expands the queried name through
+    // PhosphorScreens::ScreenIdentity::variantsFor (connector-name <-> EDID-id
+    // aliases) before the lookup; the stub has no ScreenIdentity and checks
+    // the given name verbatim. Tests must lock and query the same spelling.
+    bool isScreenLocked(const QString& screenId) const override
     {
-        return false;
+        return isContextLocked(screenId, 0, QString());
     }
-    void setScreenLocked(const QString&, bool) override
+    void setScreenLocked(const QString& screenId, bool locked) override
     {
+        setContextLocked(screenId, 0, QString(), locked);
     }
-    bool isContextLocked(const QString&, int, const QString&) const override
+    bool isContextLocked(const QString& screenId, int desktop, const QString& activityId) const override
     {
-        return false;
+        if (desktop > 0 && !activityId.isEmpty()
+            && m_lockedScreens.contains(screenId + QLatin1Char(':') + QString::number(desktop) + QLatin1Char(':')
+                                        + activityId)) {
+            return true;
+        }
+        if (desktop > 0 && m_lockedScreens.contains(screenId + QLatin1Char(':') + QString::number(desktop))) {
+            return true;
+        }
+        return m_lockedScreens.contains(screenId);
     }
-    void setContextLocked(const QString&, int, const QString&, bool) override
+    void setContextLocked(const QString& screenId, int desktop, const QString& activityId, bool locked) override
     {
+        // Production refuses this shape: composing just the bare name would
+        // silently widen an activity-scoped lock to the whole screen.
+        if (desktop <= 0 && !activityId.isEmpty()) {
+            return;
+        }
+        QString key = screenId;
+        if (desktop > 0) {
+            key += QLatin1Char(':') + QString::number(desktop);
+            if (!activityId.isEmpty()) {
+                key += QLatin1Char(':') + activityId;
+            }
+        }
+        QStringList current = m_lockedScreens;
+        if (locked && !current.contains(key)) {
+            current.append(key);
+            setLockedScreens(current);
+        } else if (!locked && current.removeAll(key) > 0) {
+            setLockedScreens(current);
+        }
     }
 
     // Rendering (ISettings)
@@ -1166,6 +2068,86 @@ public:
         }
     }
 
+    // Per-screen autotile config (used by WindowAppearanceController's
+    // per-monitor gapValue/writeGap and the per-screen gap accessors). Stored in
+    // short-key form, mirroring the real Settings normalization so a test can
+    // write "AutotileInnerGap" and read back "InnerGap".
+    //
+    // DELIBERATE OMISSION: the real Settings resolves virtual sub-screen ids to
+    // their physical monitor (VirtualScreenId::extractPhysicalId fallback in
+    // perScreenGapOverrides / resolvedZoneSelectorConfig) and matches
+    // connector-name <-> EDID-id key variants (findPerScreenEntry). These stubs
+    // key the hash verbatim: every consumer test drives them with plain physical
+    // ids, and mirroring the resolution would drag PhosphorIdentity /
+    // PhosphorScreens (live QScreen lookups) into the stub. A test that needs
+    // virtual-id fallback semantics must use the real Settings.
+    QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const override
+    {
+        return m_perScreenAutotile.value(screenIdOrName);
+    }
+    void setPerScreenAutotileSetting(const QString& screenIdOrName, const QString& key, const QVariant& value) override
+    {
+        const QString shortKey =
+            key.startsWith(QLatin1String("Autotile")) ? key.mid(QLatin1String("Autotile").size()) : key;
+        m_perScreenAutotile[screenIdOrName][shortKey] = value;
+        Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool hasPerScreenAutotileSettings(const QString& screenIdOrName) const override
+    {
+        return !m_perScreenAutotile.value(screenIdOrName).isEmpty();
+    }
+    void clearPerScreenAutotileSettings(const QString& screenIdOrName) override
+    {
+        // Mirror the real Settings (settings/perscreen.cpp): removing the whole
+        // entry also drops any gap dimensions it held, and a gap change must
+        // fire the gap-resnap trigger (perScreenSnappingSettingsChanged) in
+        // parity with the gap-dimension write path. Note whether the entry
+        // carried a gap dimension BEFORE the erase.
+        const QVariantMap removed = m_perScreenAutotile.value(screenIdOrName);
+        bool hadGaps = false;
+        for (auto it = removed.constBegin(); it != removed.constEnd(); ++it) {
+            if (perScreenGapDimensionKeys().contains(it.key())) {
+                hadGaps = true;
+                break;
+            }
+        }
+        if (m_perScreenAutotile.remove(screenIdOrName) > 0) {
+            Q_EMIT perScreenAutotileSettingsChanged();
+            if (hadGaps) {
+                Q_EMIT perScreenSnappingSettingsChanged();
+            }
+            Q_EMIT settingsChanged();
+        }
+    }
+    QVariantMap perScreenGapOverrides(const QString& screenIdOrName) const override
+    {
+        QVariantMap gaps;
+        const QVariantMap all = m_perScreenAutotile.value(screenIdOrName);
+        for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
+            if (perScreenGapDimensionKeys().contains(it.key())) {
+                gaps.insert(it.key(), it.value());
+            }
+        }
+        return gaps;
+    }
+
+    // This set must mirror the 7 PerScreenSnappingKey gap dimensions and
+    // stay in sync with the production predicate isPerScreenGapDimensionKey
+    // (file-local in settings/perscreen.cpp, so not shareable here). A key
+    // added on one side but not the other silently drops (or leaks) a gap
+    // dimension from the stub's gap subset. Shared by perScreenGapOverrides
+    // and clearPerScreenAutotileSettings' gap-resnap parity check.
+    static const QSet<QString>& perScreenGapDimensionKeys()
+    {
+        static const QSet<QString> gapKeys = {
+            QStringLiteral("InnerGap"),      QStringLiteral("OuterGap"),       QStringLiteral("UsePerSideOuterGap"),
+            QStringLiteral("OuterGapTop"),   QStringLiteral("OuterGapBottom"), QStringLiteral("OuterGapLeft"),
+            QStringLiteral("OuterGapRight"),
+        };
+        return gapKeys;
+    }
+
     // Persistence (ISettings)
     void load() override
     {
@@ -1178,22 +2160,129 @@ public:
     }
 
 private:
+    QHash<QString, QVariantMap> m_perScreenAutotile;
     QString m_defaultLayoutId;
-    bool m_suppressDefaultLayoutAssignment = false;
+    bool m_suppressDefaultLayoutAssignment = ConfigDefaults::suppressDefaultLayoutAssignment();
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
-    bool m_snapAssistFeatureEnabled = false;
-    bool m_snapAssistEnabled = false;
-    bool m_autoAssignAllLayouts = false;
-    bool m_snappingRestoreFloatedWindowsOnLogin = true;
-    bool m_autotileRestoreFloatedWindowsOnLogin = true;
-    bool m_snapUnfloatFallbackToZone = false;
-    bool m_snappingFocusNewWindows = false;
-    bool m_snappingFocusFollowsMouse = false;
+    bool m_snapAssistFeatureEnabled = ConfigDefaults::snapAssistFeatureEnabled();
+    bool m_snapAssistEnabled = ConfigDefaults::snapAssistEnabled();
+    bool m_autoAssignAllLayouts = ConfigDefaults::autoAssignAllLayouts();
+    bool m_snappingRestoreFloatedWindowsOnLogin = ConfigDefaults::snappingRestoreFloatedWindowsOnLogin();
+    bool m_autotileRestoreFloatedWindowsOnLogin = ConfigDefaults::autotileRestoreFloatedWindowsOnLogin();
+    bool m_snapUnfloatFallbackToZone = ConfigDefaults::snapUnfloatFallbackToZone();
+    bool m_snappingFocusNewWindows = ConfigDefaults::snappingFocusNewWindows();
+    bool m_snappingFocusFollowsMouse = ConfigDefaults::snappingFocusFollowsMouse();
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
-    int m_minimumWindowWidth = 0;
-    int m_minimumWindowHeight = 0;
+    // Every remaining getter, member-backed and seeded from ConfigDefaults. They used to
+    // return hardcoded literals with no-op setters: a value no test could move, against a
+    // baseline production does not have. Fourteen disagreed with the real default outright,
+    // and two of those (snap assist, and the animations master gate) read FALSE against a
+    // default of TRUE — the same inversion the settings-registry tripwire exists to catch,
+    // sitting in the fixture meant to prove the absence of it.
+    AutotileDragBehavior m_autotileDragBehavior =
+        static_cast<AutotileDragBehavior>(ConfigDefaults::autotileDragBehavior());
+    AutotileOverflowBehavior m_autotileOverflowBehavior =
+        static_cast<AutotileOverflowBehavior>(ConfigDefaults::autotileOverflowBehavior());
+    DragModifier m_zoneSpanModifier = static_cast<DragModifier>(ConfigDefaults::zoneSpanModifier());
+    OsdStyle m_osdStyle = static_cast<OsdStyle>(ConfigDefaults::osdStyle());
+    OverlayDisplayMode m_overlayDisplayMode = static_cast<OverlayDisplayMode>(ConfigDefaults::overlayDisplayMode());
+    // Empty, matching ConfigDefaults::shaderProfileTree() — which is a QVariantMap and so
+    // cannot seed the tree type directly. The default IS the empty tree either way.
+    PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
+    PhosphorSurfaceShaders::DecorationProfileTree m_decorationProfileTree =
+        static_cast<PhosphorSurfaceShaders::DecorationProfileTree>(ConfigDefaults::decorationProfileTree());
+    QColor m_borderColor = ConfigDefaults::borderColor();
+    QColor m_highlightColor = ConfigDefaults::highlightColor();
+    QColor m_inactiveColor = ConfigDefaults::inactiveColor();
+    QColor m_labelFontColor = ConfigDefaults::labelFontColor();
+    QString m_animationEasingCurve = ConfigDefaults::animationEasingCurve();
+    QString m_audioChannelMode = ConfigDefaults::audioChannelMode();
+    QString m_audioInputMethod = ConfigDefaults::audioInputMethod();
+    QString m_audioInputSource = ConfigDefaults::audioInputSource();
+    QString m_labelFontFamily = ConfigDefaults::labelFontFamily();
+    // Per-mode disable lists, keyed by the AssignmentEntry::Mode int. Real storage: the
+    // setters used to drop the value entirely, so no test could ever disable anything.
+    QHash<int, QStringList> m_disabledMonitors;
+    QHash<int, QStringList> m_disabledDesktops;
+    QHash<int, QStringList> m_disabledActivities;
+    QStringList m_lockedScreens = ConfigDefaults::lockedScreens();
+    QVariantList m_autotileDragInsertTriggers = ConfigDefaults::autotileDragInsertTriggers();
+    QVariantList m_snapAssistTriggers = ConfigDefaults::snapAssistTriggers();
+    QVariantList m_zoneSpanTriggers = ConfigDefaults::zoneSpanTriggers();
+    StickyWindowHandling m_autotileStickyWindowHandling =
+        static_cast<StickyWindowHandling>(ConfigDefaults::autotileStickyWindowHandling());
+    StickyWindowHandling m_snappingStickyWindowHandling =
+        static_cast<StickyWindowHandling>(ConfigDefaults::snappingStickyWindowHandling());
+    ZoneSelectorLayoutMode m_zoneSelectorLayoutMode = static_cast<ZoneSelectorLayoutMode>(ConfigDefaults::layoutMode());
+    ZoneSelectorPosition m_zoneSelectorPosition = static_cast<ZoneSelectorPosition>(ConfigDefaults::position());
+    ZoneSelectorSizeMode m_zoneSelectorSizeMode = static_cast<ZoneSelectorSizeMode>(ConfigDefaults::sizeMode());
+    bool m_animationsEnabled = ConfigDefaults::animationsEnabled();
+    bool m_audioAutosens = ConfigDefaults::audioAutosens();
+    bool m_audioMonstercat = ConfigDefaults::audioMonstercat();
+    bool m_audioReverse = ConfigDefaults::audioReverse();
+    bool m_audioWaves = ConfigDefaults::audioWaves();
+    bool m_autotileDragInsertToggle = ConfigDefaults::autotileDragInsertToggle();
+    bool m_autotileFocusFollowsMouse = ConfigDefaults::autotileFocusFollowsMouse();
+    bool m_enableAudioVisualizer = ConfigDefaults::enableAudioVisualizer();
+    bool m_filterLayoutsByAspectRatio = ConfigDefaults::filterLayoutsByAspectRatio();
+    bool m_flashZonesOnSwitch = ConfigDefaults::flashOnSwitch();
+    bool m_keepWindowsInZonesOnResolutionChange = ConfigDefaults::keepWindowsInZonesOnResolutionChange();
+    bool m_labelFontItalic = ConfigDefaults::labelFontItalic();
+    bool m_labelFontStrikeout = ConfigDefaults::labelFontStrikeout();
+    bool m_labelFontUnderline = ConfigDefaults::labelFontUnderline();
+    bool m_moveNewWindowsToLastZone = ConfigDefaults::moveNewWindowsToLastZone();
+    bool m_restoreOriginalSizeOnUnsnap = ConfigDefaults::restoreOriginalSizeOnUnsnap();
+    bool m_restoreWindowsToZonesOnLogin = ConfigDefaults::restoreWindowsToZonesOnLogin();
+    bool m_showNavigationOsd = ConfigDefaults::showNavigationOsd();
+    bool m_showOsdOnDesktopSwitch = ConfigDefaults::showOsdOnDesktopSwitch();
+    bool m_showOsdOnLayoutSwitch = ConfigDefaults::showOsdOnLayoutSwitch();
+    bool m_showZoneNumbers = ConfigDefaults::showNumbers();
+    bool m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
+    bool m_snappingEnabled = ConfigDefaults::snappingEnabled();
+    bool m_toggleActivation = ConfigDefaults::toggleActivation();
+    bool m_useSystemColors = ConfigDefaults::useSystemColors();
+    bool m_zoneSelectorEnabled = ConfigDefaults::zoneSelectorEnabled();
+    bool m_zoneSelectorPreviewLockAspect = ConfigDefaults::previewLockAspect();
+    bool m_zoneSpanEnabled = ConfigDefaults::zoneSpanEnabled();
+    bool m_zoneSpanToggleMode = ConfigDefaults::zoneSpanToggleMode();
+    int m_adjacentThreshold = ConfigDefaults::adjacentThreshold();
+    int m_animationDuration = ConfigDefaults::animationDuration();
+    int m_animationMinDistance = ConfigDefaults::animationMinDistance();
+    int m_animationSequenceMode = ConfigDefaults::animationSequenceMode();
+    int m_animationStaggerInterval = ConfigDefaults::animationStaggerInterval();
+    int m_audioExtraSmoothing = ConfigDefaults::audioExtraSmoothing();
+    int m_audioHigherCutoffHz = ConfigDefaults::audioHigherCutoffHz();
+    int m_audioLowerCutoffHz = ConfigDefaults::audioLowerCutoffHz();
+    int m_audioNoiseReduction = ConfigDefaults::audioNoiseReduction();
+    int m_audioSensitivity = ConfigDefaults::audioSensitivity();
+    int m_audioSpectrumBarCount = ConfigDefaults::audioSpectrumBarCount();
+    int m_borderRadius = ConfigDefaults::borderRadius();
+    int m_borderWidth = ConfigDefaults::borderWidth();
+    int m_labelFontWeight = ConfigDefaults::labelFontWeight();
+    int m_minimumZoneDisplaySizePx = ConfigDefaults::minimumZoneDisplaySizePx();
+    int m_minimumZoneSizePx = ConfigDefaults::minimumZoneSizePx();
+    int m_pollIntervalMs = ConfigDefaults::pollIntervalMs();
+    int m_shaderFrameRate = ConfigDefaults::shaderFrameRate();
+    int m_zoneSelectorGridColumns = ConfigDefaults::gridColumns();
+    int m_zoneSelectorMaxRows = ConfigDefaults::maxRows();
+    int m_zoneSelectorPreviewHeight = ConfigDefaults::previewHeight();
+    int m_zoneSelectorPreviewWidth = ConfigDefaults::previewWidth();
+    int m_zoneSelectorTriggerDistance = ConfigDefaults::triggerDistance();
+    qreal m_activeOpacity = static_cast<qreal>(ConfigDefaults::activeOpacity());
+    qreal m_inactiveOpacity = static_cast<qreal>(ConfigDefaults::inactiveOpacity());
+    qreal m_labelFontSizeScale = static_cast<qreal>(ConfigDefaults::labelFontSizeScale());
+
+    // The window-exclusion defaults, from ConfigDefaults for the same reason the
+    // animation-filter ones below are. These three were hardcoded, and all three disagreed
+    // with production: excludeTransientWindows read false against a default of TRUE (and
+    // its setter was a no-op, so no test could even move it), and the two minimum sizes
+    // read 0 against 200x150 — so every stub-backed test of the size filter was exercising
+    // a filter that passes everything.
+    bool m_excludeTransientWindows = ConfigDefaults::excludeTransientWindows();
+    int m_minimumWindowWidth = ConfigDefaults::minimumWindowWidth();
+    int m_minimumWindowHeight = ConfigDefaults::minimumWindowHeight();
     // Animation-filter defaults routed through ConfigDefaults so a future
     // tweak to the production defaults flows into tests automatically — keeps
     // the stub from drifting into "tests pass against a stale baseline".
@@ -1201,6 +2290,11 @@ private:
     bool m_animationExcludeNotificationsAndOsd = ConfigDefaults::animationExcludeNotificationsAndOsd();
     int m_animationMinimumWindowWidth = ConfigDefaults::animationMinimumWindowWidth();
     int m_animationMinimumWindowHeight = ConfigDefaults::animationMinimumWindowHeight();
+    // Decoration-filter defaults, routed through ConfigDefaults like the
+    // animation-filter defaults above.
+    bool m_decorationExcludeTransientWindows = ConfigDefaults::decorationExcludeTransientWindows();
+    int m_decorationMinimumWindowWidth = ConfigDefaults::decorationMinimumWindowWidth();
+    int m_decorationMinimumWindowHeight = ConfigDefaults::decorationMinimumWindowHeight();
     QVariantMap m_autotilePerAlgorithmSettings;
     QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();
     QString m_editorSplitHorizontalShortcut = ConfigDefaults::editorSplitHorizontalShortcut();
@@ -1213,6 +2307,32 @@ private:
     int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
     bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
     int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
+    // Gaps — config-backed defaults routed through ConfigDefaults.
+    int m_innerGap = ConfigDefaults::innerGap();
+    int m_outerGap = ConfigDefaults::outerGap();
+    bool m_usePerSideOuterGap = ConfigDefaults::usePerSideOuterGap();
+    int m_outerGapTop = ConfigDefaults::outerGapTop();
+    int m_outerGapBottom = ConfigDefaults::outerGapBottom();
+    int m_outerGapLeft = ConfigDefaults::outerGapLeft();
+    int m_outerGapRight = ConfigDefaults::outerGapRight();
+    // Window appearance — config-backed defaults routed through ConfigDefaults.
+    bool m_showWindowBorder = ConfigDefaults::showWindowBorder();
+    QString m_windowBorderScope = ConfigDefaults::windowBorderScope();
+    int m_windowBorderWidth = ConfigDefaults::windowBorderWidth();
+    int m_windowBorderRadius = ConfigDefaults::windowBorderRadius();
+    QString m_windowBorderColorActive = ConfigDefaults::windowBorderColorActive();
+    QString m_windowBorderColorInactive = ConfigDefaults::windowBorderColorInactive();
+    bool m_hideWindowTitleBars = ConfigDefaults::hideWindowTitleBars();
+    QString m_windowTitleBarScope = ConfigDefaults::windowTitleBarScope();
+    int m_focusFadeDuration = ConfigDefaults::focusFadeDuration();
+    bool m_decorationAnimateFocusedOnly = ConfigDefaults::decorationAnimateFocusedOnly();
+    bool m_decorationPauseWhenIdle = ConfigDefaults::decorationPauseWhenIdle();
+    int m_decorationIdleTimeoutSec = ConfigDefaults::decorationIdleTimeoutSec();
+    bool m_showWindowOpacityTint = ConfigDefaults::showWindowOpacityTint();
+    QString m_windowOpacityTintScope = ConfigDefaults::windowOpacityTintScope();
+    double m_windowOpacity = ConfigDefaults::windowOpacity();
+    double m_windowTintStrength = ConfigDefaults::windowTintStrength();
+    QString m_windowTintColor = ConfigDefaults::windowTintColor();
 };
 
 } // namespace PlasmaZones

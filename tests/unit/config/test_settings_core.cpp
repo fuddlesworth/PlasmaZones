@@ -10,9 +10,9 @@
  * 2. save/load round-trip fidelity (P0)
  * 3. Signal emission on load and setters (P1)
  * 4. LabelFontWeight default (regression guard)
- * 5. Legacy activation migration
+ * 5. Activation setting load + default fallback
  *
- * Companion test files (split for the <800-line guideline):
+ * Companion test files:
  *   - test_settings_animation_profile.cpp — Profile JSON-blob storage,
  *     per-field signals, aggregate-setter merge semantics
  *   - test_settings_shader_tree.cpp       — ShaderProfileTree persistence,
@@ -116,44 +116,6 @@ private Q_SLOTS:
     }
 
     /**
-     * reset() must restore every snapped-window appearance setting
-     * (Snapping.Appearance.{Borders,Decorations,Colors}) to its ConfigDefaults
-     * value. reset() reverts them via its group-delete + reload path (like every
-     * other store-backed setting), so this pins dedicated reset coverage for them.
-     */
-    void testReset_restoresSnappingWindowAppearanceDefaults()
-    {
-        IsolatedConfigGuard guard;
-
-        Settings settings;
-
-        // Drive every snapping* setting away from its default.
-        settings.setSnappingHideTitleBars(!ConfigDefaults::snappingHideTitleBars());
-        settings.setSnappingShowBorder(!ConfigDefaults::snappingShowBorder());
-        settings.setSnappingUseSystemBorderColors(!ConfigDefaults::snappingUseSystemBorderColors());
-        settings.setSnappingBorderWidth(ConfigDefaults::snappingBorderWidth() + 1);
-        settings.setSnappingBorderRadius(ConfigDefaults::snappingBorderRadius() + 1);
-        settings.setSnappingBorderColor(QColor(10, 20, 30));
-        settings.setSnappingInactiveBorderColor(QColor(40, 50, 60));
-
-        settings.reset();
-
-        QCOMPARE(settings.snappingHideTitleBars(), ConfigDefaults::snappingHideTitleBars());
-        QCOMPARE(settings.snappingShowBorder(), ConfigDefaults::snappingShowBorder());
-        QCOMPARE(settings.snappingUseSystemBorderColors(), ConfigDefaults::snappingUseSystemBorderColors());
-        QCOMPARE(settings.snappingBorderWidth(), ConfigDefaults::snappingBorderWidth());
-        QCOMPARE(settings.snappingBorderRadius(), ConfigDefaults::snappingBorderRadius());
-        // The default snappingUseSystemBorderColors is true, so reset()'s
-        // reload drives the snap border colors to the (also-reset) zone
-        // highlight/inactive colors via applySnappingBorderSystemColor().
-        // Assert against the live zone colors — the actual contract when
-        // system colors are enabled — rather than the static ConfigDefaults
-        // border colors, which only apply when system colors are off.
-        QCOMPARE(settings.snappingBorderColor(), settings.highlightColor());
-        QCOMPARE(settings.snappingInactiveBorderColor(), settings.inactiveColor());
-    }
-
-    /**
      * Snapping focus-behavior settings default off and return to the default on
      * reset(). Both gate runtime focus changes (the daemon focus-new-windows emit
      * and the effect focus-follows-mouse), so a flipped default would silently
@@ -180,6 +142,35 @@ private Q_SLOTS:
     }
 
     /**
+     * The decoration window-filtering knobs (Decorations.WindowFiltering group)
+     * must return to their defaults on reset(). Regression: the group has to be
+     * listed in managedGroupNames() or reset() leaves the user's values on disk,
+     * and the schema-claimed group is never otherwise purged, so a factory reset
+     * would silently fail to restore the three Window Appearance filter knobs.
+     */
+    void testDecorationWindowFiltering_defaultsAndReset()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.decorationExcludeTransientWindows(), ConfigDefaults::decorationExcludeTransientWindows());
+        QCOMPARE(settings.decorationMinimumWindowWidth(), ConfigDefaults::decorationMinimumWindowWidth());
+        QCOMPARE(settings.decorationMinimumWindowHeight(), ConfigDefaults::decorationMinimumWindowHeight());
+
+        settings.setDecorationExcludeTransientWindows(false);
+        settings.setDecorationMinimumWindowWidth(300);
+        settings.setDecorationMinimumWindowHeight(200);
+        QCOMPARE(settings.decorationExcludeTransientWindows(), false);
+        QCOMPARE(settings.decorationMinimumWindowWidth(), 300);
+        QCOMPARE(settings.decorationMinimumWindowHeight(), 200);
+
+        settings.reset();
+        QCOMPARE(settings.decorationExcludeTransientWindows(), ConfigDefaults::decorationExcludeTransientWindows());
+        QCOMPARE(settings.decorationMinimumWindowWidth(), ConfigDefaults::decorationMinimumWindowWidth());
+        QCOMPARE(settings.decorationMinimumWindowHeight(), ConfigDefaults::decorationMinimumWindowHeight());
+    }
+
+    /**
      * After save() then load(), every property must equal what was set.
      * This validates the full round-trip for a representative subset of settings
      * across all config groups.
@@ -194,9 +185,10 @@ private Q_SLOTS:
 
         Settings settings;
 
-        // Set non-default values across different groups
-        settings.setZonePadding(15);
-        settings.setOuterGap(20);
+        // Set non-default values across different groups. Inner/outer gaps are
+        // config-backed (the Gaps group); their save/reload round-trip is covered
+        // by testConfigBackedGap_roundTripsAndEmits, so they're omitted here to
+        // avoid duplicating that coverage.
         settings.setBorderWidth(5);
         settings.setBorderRadius(25);
         settings.setActiveOpacity(0.8);
@@ -211,32 +203,15 @@ private Q_SLOTS:
         settings.setZoneSelectorGridColumns(3);
         settings.setAutotileSplitRatio(0.7);
         settings.setAutotileMasterCount(3);
-        settings.setAutotileInnerGap(12);
         settings.setAnimationDuration(300);
         settings.setAnimationSequenceMode(0);
         settings.setLabelFontWeight(400);
-        // Snapped-window appearance (Snapping.Appearance.{Borders,Decorations,Colors}).
-        // useSystemBorderColors=false so the explicit colors persist instead of
-        // being overwritten by the accent-derived system colors on load.
-        settings.setSnappingShowBorder(false);
-        settings.setSnappingHideTitleBars(false);
-        settings.setSnappingBorderWidth(4);
-        settings.setSnappingBorderRadius(8);
-        settings.setSnappingUseSystemBorderColors(false);
-        settings.setSnappingBorderColor(QColor(10, 20, 30));
-        settings.setSnappingInactiveBorderColor(QColor(40, 50, 60));
 
         settings.save();
 
         // Verify the round-trip by reading from a fresh config backend
         // (re-reads from disk after save() flushed). Uses v2 dot-path groups.
         auto backend = PlasmaZones::createDefaultConfigBackend();
-
-        {
-            auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
-            QCOMPARE(gaps->readInt(ConfigDefaults::innerKey(), 0), 15);
-            QCOMPARE(gaps->readInt(ConfigDefaults::outerKey(), 0), 20);
-        }
 
         {
             auto border = backend->group(ConfigDefaults::snappingZonesBorderGroup());
@@ -284,10 +259,6 @@ private Q_SLOTS:
                      qPrintable(QStringLiteral("SplitRatio: expected 0.7, got %1").arg(readRatio)));
             QCOMPARE(algo->readInt(ConfigDefaults::masterCountKey(), 0), 3);
         }
-        {
-            auto tilingGaps = backend->group(ConfigDefaults::tilingGapsGroup());
-            QCOMPARE(tilingGaps->readInt(ConfigDefaults::innerKey(), 0), 12);
-        }
 
         {
             // Phase 4 sub-commit 6: animation settings persist as a
@@ -303,44 +274,6 @@ private Q_SLOTS:
             QCOMPARE(obj.value(QLatin1String("duration")).toInt(), 300);
             QCOMPARE(obj.value(QLatin1String("sequenceMode")).toInt(), 0);
         }
-
-        {
-            // Snapped-window border decoration (Snapping.Appearance.Borders).
-            auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
-            QCOMPARE(borders->readBool(ConfigDefaults::showBorderKey(), true), false);
-            QCOMPARE(borders->readInt(ConfigDefaults::widthKey(), 0), 4);
-            QCOMPARE(borders->readInt(ConfigDefaults::radiusKey(), 0), 8);
-        }
-        {
-            // Snapped-window title-bar decoration (Snapping.Appearance.Decorations).
-            auto decorations = backend->group(ConfigDefaults::snappingAppearanceDecorationsGroup());
-            QCOMPARE(decorations->readBool(ConfigDefaults::hideTitleBarsKey(), true), false);
-        }
-        {
-            // Snapped-window border colors (Snapping.Appearance.Colors). Read the
-            // stored strings back through QColor so the on-disk serialization
-            // format is irrelevant to the comparison.
-            auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
-            QCOMPARE(colors->readBool(ConfigDefaults::useSystemKey(), true), false);
-            QCOMPARE(QColor(colors->readString(ConfigDefaults::activeKey(), QString())), QColor(10, 20, 30));
-            QCOMPARE(QColor(colors->readString(ConfigDefaults::inactiveKey(), QString())), QColor(40, 50, 60));
-        }
-
-        {
-            // Load-side getter round-trip: a freshly-constructed Settings must
-            // read every snapping* value back through its OWN getter. The
-            // on-disk assertions above only prove save() wrote the right keys;
-            // a getter wired to the wrong group/key would still pass them.
-            // Reading through the getters pins the read path too.
-            Settings reloaded;
-            QCOMPARE(reloaded.snappingShowBorder(), false);
-            QCOMPARE(reloaded.snappingHideTitleBars(), false);
-            QCOMPARE(reloaded.snappingBorderWidth(), 4);
-            QCOMPARE(reloaded.snappingBorderRadius(), 8);
-            QCOMPARE(reloaded.snappingUseSystemBorderColors(), false);
-            QCOMPARE(reloaded.snappingBorderColor(), QColor(10, 20, 30));
-            QCOMPARE(reloaded.snappingInactiveBorderColor(), QColor(40, 50, 60));
-        }
     }
 
     // =========================================================================
@@ -348,19 +281,77 @@ private Q_SLOTS:
     // =========================================================================
 
     /**
-     * load() must emit settingsChanged() so that listeners can re-read all values.
+     * load() must emit settingsChanged() exactly once when reloading actually
+     * changes values, so listeners re-read them. Exercised via the discard
+     * flow: an unsaved in-memory edit is reverted by load()'s reparse, which
+     * must announce the change through the single aggregate emission.
      */
     void testLoad_emitsSettingsChanged()
     {
         IsolatedConfigGuard guard;
 
         Settings settings;
+        const int committed = settings.adjacentThreshold();
+        settings.setAdjacentThreshold(committed == 15 ? 20 : 15);
+
         QSignalSpy spy(&settings, &Settings::settingsChanged);
         QVERIFY(spy.isValid());
 
         settings.load();
 
-        QVERIFY2(spy.count() >= 1, "load() must emit settingsChanged() at least once");
+        QCOMPARE(settings.adjacentThreshold(), committed);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    /**
+     * A reload that leaves the effective (palette-derived) values unchanged
+     * must stay silent. Pins the system-colors regression where load()'s
+     * palette re-derive routed through the public color setters, firing each
+     * color NOTIFY twice and settingsChanged several times per themed reload
+     * even when no value changed.
+     *
+     * The on-disk highlight color is deliberately made stale before load():
+     * with useSystemColors on, the mid-load derive silently restores the
+     * palette color, so no signal may fire. Without the load-suppression
+     * guard the derive would route the palette value through the public
+     * setter (disk value != palette value, so the same-value early-return
+     * cannot mask the regression) and emit highlightColorChanged +
+     * settingsChanged mid-load.
+     */
+    void testLoad_noSignal_whenUnchanged()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QVERIFY(settings.useSystemColors()); // default: themed reload path
+        settings.save(); // commit the constructor-derived state to disk
+
+        const QColor derivedHighlight = settings.highlightColor();
+
+        // Hand-write a stale highlight color to disk so load()'s reparse sees
+        // a value that differs from the palette-derived one.
+        const QColor staleHighlight(1, 2, 3);
+        QVERIFY(staleHighlight != derivedHighlight);
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
+            g->writeColor(ConfigDefaults::highlightKey(), staleHighlight);
+            backend->sync();
+        }
+
+        QSignalSpy spy(&settings, &Settings::settingsChanged);
+        QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
+        QSignalSpy fontColorSpy(&settings, &Settings::labelFontColorChanged);
+        QVERIFY(spy.isValid());
+
+        settings.load();
+
+        // The derive restored the palette color over the stale disk value...
+        QCOMPARE(settings.highlightColor(), derivedHighlight);
+        // ...without any signal traffic.
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(highlightSpy.count(), 0);
+        QCOMPARE(fontColorSpy.count(), 0);
     }
 
     /**
@@ -374,14 +365,14 @@ private Q_SLOTS:
         Settings settings;
 
         QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::zonePaddingChanged);
+        QSignalSpy specificSpy(&settings, &Settings::adjacentThresholdChanged);
         QVERIFY(generalSpy.isValid());
         QVERIFY(specificSpy.isValid());
 
-        int currentPadding = settings.zonePadding();
-        int newPadding = (currentPadding == 15) ? 20 : 15;
+        int current = settings.adjacentThreshold();
+        int next = (current == 15) ? 20 : 15;
 
-        settings.setZonePadding(newPadding);
+        settings.setAdjacentThreshold(next);
 
         QCOMPARE(specificSpy.count(), 1);
         QVERIFY(generalSpy.count() >= 1);
@@ -395,50 +386,15 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        settings.setZonePadding(15); // force a known value
+        settings.setAdjacentThreshold(15); // force a known value
 
         QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::zonePaddingChanged);
+        QSignalSpy specificSpy(&settings, &Settings::adjacentThresholdChanged);
 
-        settings.setZonePadding(15); // same value again
+        settings.setAdjacentThreshold(15); // same value again
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
-    }
-
-    /**
-     * The hand-written setSnappingUseSystemBorderColors setter (not
-     * macro-generated) must emit both its specific
-     * snappingUseSystemBorderColorsChanged signal and settingsChanged() on a
-     * real change, and stay silent on a no-op (set to the same value twice).
-     */
-    void testSetSnappingUseSystemBorderColors_emitsAndGuards()
-    {
-        IsolatedConfigGuard guard;
-
-        Settings settings;
-
-        const bool current = settings.snappingUseSystemBorderColors();
-        const bool toggled = !current;
-        settings.setSnappingUseSystemBorderColors(current); // force known value
-
-        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
-        QSignalSpy specificSpy(&settings, &Settings::snappingUseSystemBorderColorsChanged);
-        QVERIFY(generalSpy.isValid());
-        QVERIFY(specificSpy.isValid());
-
-        // Real change emits both signals.
-        settings.setSnappingUseSystemBorderColors(toggled);
-        QCOMPARE(specificSpy.count(), 1);
-        QVERIFY(generalSpy.count() >= 1);
-
-        const int specificBefore = specificSpy.count();
-        const int generalBefore = generalSpy.count();
-
-        // No-op (same value again) emits nothing.
-        settings.setSnappingUseSystemBorderColors(toggled);
-        QCOMPARE(specificSpy.count(), specificBefore);
-        QCOMPARE(generalSpy.count(), generalBefore);
     }
 
     /**
@@ -615,11 +571,27 @@ private Q_SLOTS:
             backend->sync();
         }
 
+        // Precondition: every stale key really is on disk, in the group it was
+        // written to. Without this the "it is gone after save()" assertions
+        // below cannot tell a working purge from a key that was never there —
+        // which is exactly how the Tiling.Algorithm case passed for so long
+        // while reading back from the wrong group.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            QVERIFY(backend->group(ConfigDefaults::snappingBehaviorGroup())
+                        ->hasKey(QStringLiteral("ObsoleteActivationKey")));
+            QVERIFY(backend->group(ConfigDefaults::snappingEffectsGroup())->hasKey(QStringLiteral("OldDisplayToggle")));
+            QVERIFY(backend->group(ConfigDefaults::snappingZonesColorsGroup())
+                        ->hasKey(QStringLiteral("DeprecatedThemeIndex")));
+            QVERIFY(backend->group(ConfigDefaults::tilingAlgorithmGroup())
+                        ->hasKey(QStringLiteral("RemovedAutotileSetting")));
+        }
+
         // Load picks up the stale keys from disk (but ignores them in members)
         Settings settings;
 
         // Mutate one value to ensure save actually writes
-        settings.setZonePadding(99);
+        settings.setAdjacentThreshold(99);
         settings.save();
 
         // Re-read the file and verify stale keys are gone
@@ -644,9 +616,16 @@ private Q_SLOTS:
                      "Stale key in Snapping.Zones.Colors group must be purged by save()");
         }
         {
-            auto g = backend->group(ConfigDefaults::tilingGroup());
+            // Read back from the group the key was WRITTEN to. Tiling.Algorithm
+            // and Tiling are distinct nested groups, so asking Tiling whether it
+            // holds a key only ever planted in Tiling.Algorithm is trivially
+            // true and left the purge unverified.
+            auto g = backend->group(ConfigDefaults::tilingAlgorithmGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("RemovedAutotileSetting")),
-                     "Stale key in Tiling group must be purged by save()");
+                     "Stale key in Tiling.Algorithm group must be purged by save()");
+        }
+        {
+            auto g = backend->group(ConfigDefaults::tilingGroup());
             QVERIFY2(g->hasKey(ConfigDefaults::enabledKey()), "Valid key Enabled must survive save()");
         }
     }
@@ -671,6 +650,17 @@ private Q_SLOTS:
             backend->sync();
         }
 
+        // Precondition, mirroring testSave_purgesStaleKeys: both keys really are
+        // on disk in that group before save() runs. Without it the absence
+        // assertion below cannot tell a working purge from a key that was never
+        // written.
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
+            QVERIFY(g->hasKey(ConfigDefaults::positionKey()));
+            QVERIFY(g->hasKey(QStringLiteral("ObsoletePerScreenKey")));
+        }
+
         Settings settings;
         settings.save();
 
@@ -679,18 +669,29 @@ private Q_SLOTS:
             auto g = backend->group(QStringLiteral("ZoneSelector:eDP-1"));
             QVERIFY2(!g->hasKey(QStringLiteral("ObsoletePerScreenKey")),
                      "Stale key in per-screen group must be purged by save()");
+            // Positive control for the mechanism: save() deletes every
+            // prefix-matching group and rewrites the ones it loaded, so the
+            // stale key vanishing only means "purged" if the group's valid key
+            // came back with it. Absence alone reads the same whether the key
+            // was dropped or the whole group was deleted, and the delete arm is
+            // the one that fires for a group Settings never loaded.
+            QVERIFY2(g->hasKey(ConfigDefaults::positionKey()),
+                     "Valid per-screen key must survive save() — the group was rewritten, not just deleted");
+            QCOMPARE(g->readInt(ConfigDefaults::positionKey(), -1), 2);
         }
     }
 
     /**
-     * save() must NOT purge groups it doesn't manage (e.g., Updates) — those
-     * are written independently and must survive a settings save.
+     * The legacy "Updates" group is retired: nothing writes or reads it since
+     * the dismissed-update-version moved to the settings app's QSettings, so
+     * save() sweeps any stale husk of it like every other unknown group
+     * (it used to be carved out of the purge as an "unmanaged" group).
      */
-    void testSave_preservesUnmanagedGroups()
+    void testSave_purgesRetiredUpdatesGroup()
     {
         IsolatedConfigGuard guard;
 
-        // Write to an unmanaged group
+        // Simulate a config written by an older build that still carried it
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             {
@@ -704,10 +705,8 @@ private Q_SLOTS:
         settings.save();
 
         auto backend = PlasmaZones::createDefaultConfigBackend();
-        {
-            auto g = backend->group(QStringLiteral("Updates"));
-            QCOMPARE(g->readString(QStringLiteral("DismissedUpdateVersion")), QStringLiteral("2.0.0"));
-        }
+        QVERIFY2(!backend->groupList().contains(QStringLiteral("Updates")),
+                 "Retired group 'Updates' must be purged by save()");
     }
 
     /**
@@ -738,11 +737,10 @@ private Q_SLOTS:
                 auto g = backend->group(QStringLiteral("TilingQuickLayoutSlots"));
                 g->writeString(QStringLiteral("1"), QStringLiteral("layout-id"));
             }
-            // Inject a valid unmanaged group to prove it survives
-            {
-                auto g = backend->group(QStringLiteral("Updates"));
-                g->writeString(QStringLiteral("LastCheck"), QStringLiteral("2026-04-07"));
-            }
+            // The retired Updates group is covered by
+            // testSave_purgesRetiredUpdatesGroup above; no root-level group
+            // outside the schema survives save() anymore (only the v4
+            // migration stash KEYS are carved out — see purgeStaleKeys).
             backend->sync();
         }
 
@@ -767,12 +765,6 @@ private Q_SLOTS:
         QVERIFY2(!hasObsolete, "Unknown root-level group 'ObsoleteFeature' must be purged by save()");
         QVERIFY2(!hasOldGroup, "Unknown root-level group 'OldGroupFromV0' must be purged by save()");
         QVERIFY2(!hasRetiredTilingSlots, "Retired group 'TilingQuickLayoutSlots' must be purged by save()");
-
-        // Unmanaged groups must survive
-        {
-            auto g = backend->group(QStringLiteral("Updates"));
-            QCOMPARE(g->readString(QStringLiteral("LastCheck")), QStringLiteral("2026-04-07"));
-        }
     }
 
     /**
@@ -818,7 +810,6 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         Settings settings;
-        settings.setZonePadding(42);
         settings.setBorderWidth(7);
         settings.setActiveOpacity(0.65);
         settings.setShowZoneNumbers(false);
@@ -828,12 +819,45 @@ private Q_SLOTS:
 
         // Reload from disk
         Settings reloaded;
-        QCOMPARE(reloaded.zonePadding(), 42);
         QCOMPARE(reloaded.borderWidth(), 7);
         QCOMPARE(reloaded.activeOpacity(), 0.65);
         QCOMPARE(reloaded.showZoneNumbers(), false);
         QCOMPARE(reloaded.autotileEnabled(), true);
         QCOMPARE(reloaded.animationDuration(), 500);
+    }
+
+    /**
+     * The shared inner/outer gap global default is config-backed: the getter reads
+     * the "Gaps" config group (compile default on a fresh config), the setter
+     * writes it and re-emits the per-property NOTIFY + settingsChanged exactly
+     * once per real change, and the value survives a save/reload.
+     */
+    void testConfigBackedGap_roundTripsAndEmits()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        // Fresh config → the compile default.
+        QCOMPARE(settings.innerGap(), ConfigDefaults::innerGap());
+
+        QSignalSpy specificSpy(&settings, &Settings::innerGapChanged);
+        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(specificSpy.isValid());
+        QVERIFY(generalSpy.isValid());
+
+        settings.setInnerGap(24);
+        QCOMPARE(settings.innerGap(), 24);
+        QCOMPARE(specificSpy.count(), 1);
+        QVERIFY(generalSpy.count() >= 1);
+
+        // A no-op write of the same value does not re-emit.
+        settings.setInnerGap(24);
+        QCOMPARE(specificSpy.count(), 1);
+
+        // The value persists across a save/reload.
+        settings.save();
+        Settings reloaded;
+        QCOMPARE(reloaded.innerGap(), 24);
     }
 };
 

@@ -117,9 +117,18 @@ else()
         # lua_pcall unwind path) and PIC (it links into our SHARED lib).
         foreach(_luau_tgt Luau.Ast Luau.Common Luau.Compiler Luau.VM Luau.Bytecode Luau.CodeGen Luau.Config)
             if(TARGET ${_luau_tgt})
+                # INTERPROCEDURAL_OPTIMIZATION OFF: with the project's Release
+                # LTO (CMAKE_INTERPROCEDURAL_OPTIMIZATION at the top level),
+                # the vendored TUs are re-analysed at the PhosphorScripting
+                # link step, where GCC's IPA pass re-emits third-party
+                # -Wmaybe-uninitialized diagnostics that the compile-time -w
+                # below cannot reach. Plain objects for the vendored static
+                # libs keep -w authoritative; the project's own LTO is
+                # unaffected.
                 set_target_properties(${_luau_tgt} PROPERTIES
                     POSITION_INDEPENDENT_CODE ON
-                    UNITY_BUILD OFF)
+                    UNITY_BUILD OFF
+                    INTERPROCEDURAL_OPTIMIZATION OFF)
                 # -w: the vendored sources inherit the project's warning set
                 # (KDECompilerSettings' -Wall/-Wextra/-Wpedantic) and drown a
                 # clean build in thousands of third-party diagnostics

@@ -5,12 +5,11 @@
 // helpers for the LayoutRegistry assignment cascade.
 //
 // These are pure functions with no LayoutRegistry-member dependency: they
-// classify and decode WindowRule / MatchExpression shapes, build the
+// classify and decode Rule / MatchExpression shapes, build the
 // windowless context query, and read an AssignmentEntry straight off a
-// rule's action list. Split out of layoutregistry_assignments.cpp so that
-// translation unit stays under the project's 800-line ceiling, and so any
-// sibling .cpp in phosphor-zones can share the one classifier set rather
-// than duplicating it.
+// rule's action list. They live here so any sibling .cpp in
+// phosphor-zones can share the one classifier set rather than
+// duplicating it.
 //
 // The functions live in the named PhosphorZones::RuleHelpers namespace
 // (not an anonymous one) precisely so they can be defined once in
@@ -20,18 +19,19 @@
 
 #include <PhosphorZones/AssignmentEntry.h>
 
-#include <PhosphorWindowRules/WindowQuery.h>
+#include <PhosphorRules/WindowQuery.h>
 
+#include <QList>
 #include <QString>
 
-namespace PhosphorWindowRules {
+namespace PhosphorRules {
 class MatchExpression;
-class WindowRule;
-} // namespace PhosphorWindowRules
+class Rule;
+} // namespace PhosphorRules
 
 namespace PhosphorZones::RuleHelpers {
 
-namespace PWR = PhosphorWindowRules;
+namespace PWR = PhosphorRules;
 
 // The decoded (screenId, virtualDesktop, activity) context a context-rule's
 // match expression pins. A non-context / nested-composite match leaves all
@@ -46,7 +46,13 @@ struct ContextDims
 // Build the windowless context query for a (screen, desktop, activity) tuple.
 // No window attributes are set — window-property predicates evaluate false,
 // so only context-only rules contribute. This reproduces the old cascade.
-PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity);
+// @p mode is the placement-mode wire token ("snapping" / "tiling"); it is set
+// only on the gap-cascade query (the snap engine vs. the autotile engine each
+// know which they are) so a per-mode `Mode Equals "…"` rule resolves. Left
+// empty for the mode-agnostic resolvers (assignment / lock / overlay), where
+// it stays a non-match for any Mode leaf.
+PWR::WindowQuery makeContextQuery(const QString& screenId, int virtualDesktop, const QString& activity,
+                                  const QString& mode = QString());
 
 // Human-readable label for a context assignment rule's (screen, desktop,
 // activity) tuple — the single place the " · Desktop N" / " · Activity"
@@ -63,7 +69,7 @@ ContextDims decodeDims(const PWR::MatchExpression& match);
 // would emit for that tuple. A match pinning more/fewer dimensions, pinning
 // different values, or carrying ANY window-property leaf is NOT an exact
 // match. This is what hasExplicitAssignment relies on to distinguish a stored
-// entry from a wider cascade entry or the synthesized provider default.
+// entry from a wider cascade entry or the gated default.
 //
 // contextDimsOf ignores window-property leaves, so a flat rule mixing a
 // window predicate with the context leaves (e.g. All{ ScreenId==DP-1,
@@ -74,18 +80,17 @@ ContextDims decodeDims(const PWR::MatchExpression& match);
 bool matchIsExactContext(const PWR::MatchExpression& match, const QString& screenId, int virtualDesktop,
                          const QString& activity);
 
-// True if @p rule carries a SetEngineMode action. Both context assignment
-// rules and the provider-default catch-all carry one; callers that must
-// exclude the catch-all do so explicitly (see resolveAssignmentEntry), and
-// the matchIsExactContext* shape filters reject a catch-all anyway.
-bool hasEngineModeAction(const PWR::WindowRule& rule);
+// True if @p rule carries a SetEngineMode action. Context assignment rules
+// carry one; the matchIsExactContext* shape filters reject a catch-all, so a
+// user-authored catch-all engine rule is handled by priority alone.
+bool hasEngineModeAction(const PWR::Rule& rule);
 
 // True if @p rule carries a SetSnappingLayout / SetTilingAlgorithm action. The
 // per-slot assignment resolver reads each layout slot independently of the
 // engine-mode slot, so a layout-only rule (no SetEngineMode) sets the layout
 // for its engine in a context without forcing the engine mode.
-bool hasSnappingLayoutAction(const PWR::WindowRule& rule);
-bool hasTilingAlgorithmAction(const PWR::WindowRule& rule);
+bool hasSnappingLayoutAction(const PWR::Rule& rule);
+bool hasTilingAlgorithmAction(const PWR::Rule& rule);
 
 // True when every action on @p rule is one of the three assignment slots
 // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). False on an
@@ -94,7 +99,7 @@ bool hasTilingAlgorithmAction(const PWR::WindowRule& rule);
 // carries non-assignment actions (SetOpacity, OverrideAnimation*, Float,
 // Exclude, ...) — admitting it would silently strip those actions
 // through the assignment-rebuild path.
-bool isPureAssignmentRule(const PWR::WindowRule& rule);
+bool isPureAssignmentRule(const PWR::Rule& rule);
 
 // Shape predicates for the per-screen-base / per-desktop / per-activity
 // context rule families — used by the batch setters to drop one family
@@ -115,10 +120,17 @@ bool matchIsExactContextActivity(const PWR::MatchExpression& match);
 // legitimate window-property rule carrying SetSnappingLayout / SetEngineMode
 // actions is never rebuilt — rebuilding force-injects SetEngineMode and
 // drops every other action, which would clobber a window-property rule.
-bool isContextAssignmentRule(const PWR::WindowRule& rule);
+bool isContextAssignmentRule(const PWR::Rule& rule);
 
 // Build the AssignmentEntry encoded directly by a rule's action list (no
 // evaluation — used by introspection helpers like desktopAssignments()).
-AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule);
+AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule);
+
+// The lowest priority that strictly outranks every existing context-assignment
+// rule in @p rules — (max isContextAssignmentRule priority) + 1, or the Context
+// band top (kContextBandBase + 99) when none exist. A freshly CREATED runtime
+// assignment seeds from this so it wins over any prior assignment (the
+// priority-wins model); an UPDATE preserves its own stored priority instead.
+int nextAssignmentPriority(const QList<PWR::Rule>& rules);
 
 } // namespace PhosphorZones::RuleHelpers

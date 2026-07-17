@@ -33,7 +33,11 @@ class ZoneManager : public QObject
 
 public:
     explicit ZoneManager(QObject* parent = nullptr);
-    ~ZoneManager() override = default;
+    // Defined in ZoneManager.cpp, where ZoneAutoFiller is complete: m_autoFiller
+    // is a unique_ptr to a type only forward-declared here, so a defaulted
+    // in-class destructor would instantiate default_delete against an incomplete
+    // type in every TU that includes this header without ZoneAutoFiller.h.
+    ~ZoneManager() override;
 
     // PhosphorZones::Zone CRUD operations
     QString addZone(qreal x, qreal y, qreal width, qreal height);
@@ -182,13 +186,17 @@ public:
      * @brief Adds a zone from complete QVariantMap (for paste operations)
      * @param zoneData Complete zone data including all properties (colors, appearance, etc.)
      * @param allowIdReuse If true, allows reusing existing zone IDs (for undo/redo operations)
+     * @param insertIndex Position in the list, and therefore the height in the stack, to insert
+     *        at. Negative, or past the end, means the top. Only an undo that puts a deleted zone
+     *        back where it came from passes a real index; paste, duplicate and the redo of an
+     *        add all belong on top.
      * @return PhosphorZones::Zone ID of the created zone, or empty string on failure
      *
      * Allows pasting zones with all their properties intact. Validates
      * zone data and creates new zone with specified properties.
-     * If allowIdReuse is true and zone ID already exists, deletes existing zone first.
+     * If allowIdReuse is true and zone ID already exists, updates the existing zone in place.
      */
-    QString addZoneFromMap(const QVariantMap& zoneData, bool allowIdReuse = false);
+    QString addZoneFromMap(const QVariantMap& zoneData, bool allowIdReuse = false, int insertIndex = -1);
 
     /**
      * @brief Get complete zone data by ID (for undo state and QML lookup)
@@ -221,7 +229,6 @@ Q_SIGNALS:
     void zoneNameChanged(const QString& zoneId);
     void zoneNumberChanged(const QString& zoneId);
     void zoneColorChanged(const QString& zoneId);
-    void zoneZOrderChanged(const QString& zoneId);
     void zoneAdded(const QString& zoneId);
     void zoneRemoved(const QString& zoneId);
     void zonesChanged();
@@ -237,9 +244,17 @@ private:
     QVariantMap createZone(const QString& name, int number, qreal x, qreal y, qreal width, qreal height);
 
     /**
-     * @brief Renumbers all zones sequentially starting from 1
+     * @brief Returns a fresh, unique zone number for a zone that needs one.
+     *
+     * Numbers are user-owned and unique but need not be dense. This hands out
+     * the next highest number, max(existing) + 1, clamped to 99. If a zone
+     * already holds 99 it falls back to the lowest unused number so the unique
+     * invariant always holds; if all 99 are taken it returns the overflow value,
+     * which the fresh-number callers stamp as-is (validateZoneNumber runs only on
+     * the Properties spinbox path, never here). Reads live m_zones on every call,
+     * so a batch of inserts each gets a distinct number.
      */
-    void renumberZones();
+    int nextAvailableZoneNumber() const;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Private Helper Methods
@@ -285,6 +300,11 @@ private:
 
     /**
      * @brief Signal types for deferred emission
+     *
+     * ZOrderChanged carries no per-zone signal of its own: restacking one zone
+     * renumbers at least one other zone's zOrder, so a signal naming a single
+     * zone would be wrong by construction. It emits the aggregate zonesChanged()
+     * and zonesModified() only.
      */
     enum class SignalType {
         ZoneAdded,
@@ -325,6 +345,8 @@ private:
     bool m_pendingZonesModified = false;
     QSet<QString> m_pendingColorChanges;
     QSet<QString> m_pendingGeometryChanges;
+    QSet<QString> m_pendingNameChanges;
+    QSet<QString> m_pendingNumberChanges;
     QSet<QString> m_pendingZoneAdded;
     QSet<QString> m_pendingZoneRemoved;
 

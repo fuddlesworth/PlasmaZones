@@ -12,6 +12,7 @@ import org.phosphor.control
  * Top-level settings application window.
  *
  * Wires the ApplicationController to the standard chrome layout:
+ *   headerBand (full-width, optional)
  *   sidebar | (breadcrumbs / pageHost / footer)
  *
  * Consumers create one of these per app, set `controller`, and optionally
@@ -26,6 +27,11 @@ Kirigami.ApplicationWindow {
     //* Optional content pinned to the RIGHT of the header-extras row (e.g. a
     //  status toggle), sharing the row with the centered headerExtras.
     property alias headerTrailing: headerTrailingLoader.sourceComponent
+    //* Optional content pinned to the RIGHT of the per-page breadcrumb row
+    //  (e.g. a page-scoped overflow/kebab menu). Sits on the same line as the
+    //  breadcrumbs, right-aligned; the row already reserves the leading space
+    //  via Breadcrumbs' Layout.fillWidth. Empty by default.
+    property alias breadcrumbTrailing: breadcrumbTrailingLoader.sourceComponent
     /** Alias onto the chrome Sidebar item so consumers can configure
      *  the two delegate slots and drive navigation:
      *
@@ -39,8 +45,8 @@ Kirigami.ApplicationWindow {
      *  Underscore-prefixed members on the underlying Sidebar
      *  (`_isExpanded`, `_refreshModel`, `_suppressAccordion`, …) are
      *  private by convention — do not read or assign them from
-     *  outside. A typed QtObject façade was attempted in audit pass
-     *  45 but breaks the grouped-property assignment syntax
+     *  outside. A typed QtObject façade was attempted for audit
+     *  finding 45 but breaks the grouped-property assignment syntax
      *  (`sidebar.trailingDelegate: Component { ... }`) that consumers
      *  rely on, so the alias was kept as the contract surface. */
     property alias sidebar: sidebarItem
@@ -59,6 +65,17 @@ Kirigami.ApplicationWindow {
      *  can override this binding (e.g. for tests or to force a
      *  collapsed rail) by reassigning the property. */
     property bool sidebarCompact: width < Kirigami.Units.gridUnit * 50
+    /** Gate for the built-in back/forward navigation inputs (the
+     *  Alt+Left / Alt+Right key handling on the chrome page and the
+     *  mouse back/forward buttons — the breadcrumb-row buttons are
+     *  ordinary click targets and stay active). Modal popups block
+     *  both inputs on their own (focus moves into the popup and mouse
+     *  input outside it is grabbed), but non-modal surfaces — a search
+     *  dropdown, a help overlay, a native child window — do not, so
+     *  apps bind this to their shortcut-guard expression (the same one
+     *  gating any page-step shortcuts) to keep history navigation from
+     *  firing under those. Defaults true. */
+    property bool navigationShortcutsEnabled: true
 
     /** Emitted when the user picked Apply in the close-confirmation
      *  prompt, applyAll() ran, and the controller is STILL dirty —
@@ -256,6 +273,77 @@ Kirigami.ApplicationWindow {
     pageStack.initialPage: Kirigami.Page {
         padding: 0
         title: root.title
+        // Rest keyboard focus inside the page so key events (and the
+        // ShortcutOverride pass below) route through it even before any
+        // control has taken focus.
+        focus: true
+
+        // ── Back / Forward history keys (Alt+Left / Alt+Right + the
+        // dedicated XF86Back/Forward keys) ──────────────────────────────
+        // NOT implemented as Shortcut items: Kirigami's PageRow installs
+        // its own always-enabled StandardKey.Back/Forward Shortcuts in
+        // this window (column/layer navigation, a no-op for this
+        // single-column chrome). A second Shortcut on the same sequence
+        // makes the pair AMBIGUOUS — Qt then activates neither, it only
+        // rotates activatedAmbiguously between them — so a competing
+        // Shortcut here would simply never fire. Instead, accept the
+        // keys in the ShortcutOverride pass (which preempts the whole
+        // shortcut map) and handle them as ordinary key presses bubbling
+        // up from the focused item.
+        // Claim a key only when the matching history direction has
+        // somewhere to go — an unusable Back/Forward key falls through
+        // to the shortcut map (Kirigami's no-op) instead of being
+        // silently consumed here, mirroring the enabled-gating the
+        // replaced Shortcut items had.
+        Keys.onShortcutOverride: event => {
+            if (!root.navigationShortcutsEnabled)
+                return;
+
+            if ((event.matches(StandardKey.Back) && root.controller.canGoBack) || (event.matches(StandardKey.Forward) && root.controller.canGoForward))
+                event.accepted = true;
+        }
+        Keys.onPressed: event => {
+            if (!root.navigationShortcutsEnabled)
+                return;
+
+            if (event.matches(StandardKey.Back) && root.controller.canGoBack) {
+                root.controller.goBack();
+                event.accepted = true;
+            } else if (event.matches(StandardKey.Forward) && root.controller.canGoForward) {
+                root.controller.goForward();
+                event.accepted = true;
+            }
+        }
+
+        // Mouse back/forward buttons drive the page history, matching
+        // the Alt+Left / Alt+Right keys. Declared before (so stacked
+        // underneath) the content column: the area accepts ONLY the two
+        // navigation buttons, and receives them only when no content
+        // item claimed the press first — left-button interaction
+        // everywhere is untouched. Modal popups block outside mouse
+        // input on their own, but the shortcut gate is honoured anyway
+        // for consistency with the keyboard path.
+        //
+        // Navigation happens on PRESS, not click: Kirigami's ColumnView
+        // (the PageRow's C++ container, which filters every descendant's
+        // mouse events) consumes the ForwardButton RELEASE outright —
+        // and the BackButton release too once its column index moves —
+        // so a clicked handler never fires for forward. The press is
+        // the only edge guaranteed to arrive; it also matches browser
+        // behaviour, where side-button navigation triggers on press.
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.BackButton | Qt.ForwardButton
+            onPressed: function (mouse) {
+                if (!root.navigationShortcutsEnabled)
+                    return;
+
+                if (mouse.button === Qt.BackButton)
+                    root.controller.goBack();
+                else if (mouse.button === Qt.ForwardButton)
+                    root.controller.goForward();
+            }
+        }
 
         ColumnLayout {
             anchors.fill: parent
@@ -264,51 +352,100 @@ Kirigami.ApplicationWindow {
             // Full-width header bar spanning the ENTIRE window, ABOVE both the
             // sidebar and the content panel: the headerExtras slot (e.g. global
             // search) centered across the whole window, with the optional
-            // headerTrailing slot (e.g. a status toggle) pinned right. The row
+            // headerTrailing slot (e.g. a status toggle) pinned right. The band
             // collapses when neither slot is filled. A left phantom the width of
             // the trailing keeps the centered slot window-centered (not biased
             // left by the trailing's width).
-            RowLayout {
-                id: headerExtrasRow
+            //
+            // The band declares the Header color set and paints its own
+            // backgroundColor so the chrome is truthful: slot content resolves
+            // Header roles, and schemes with a distinct Header hue (e.g.
+            // wallpaper-generated schemes carry the wallpaper's second hue
+            // there) actually show it instead of silently inheriting Window.
+            Item {
+                id: headerBand
+
+                Kirigami.Theme.colorSet: Kirigami.Theme.Header
+                Kirigami.Theme.inherit: false
 
                 Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.largeSpacing
-                Layout.topMargin: Kirigami.Units.largeSpacing
-                Layout.bottomMargin: Kirigami.Units.largeSpacing
-                spacing: 0
+                // Collapse to zero height when both slots are filled but
+                // their items are currently hidden (e.g. a consumer binds
+                // the slot content's `visible` to some mode). Reading the
+                // loaded items' `visible` here returns their EFFECTIVE
+                // visibility, which is safe in this direction: the band
+                // itself stays `visible` (the gate below checks item
+                // presence, not visibility), so the children's effective
+                // visibility tracks their own bindings and cannot latch —
+                // unlike routing the *visible* gate through a child, which
+                // would latch the band hidden. See the comment on `visible`
+                // below.
+                implicitHeight: (headerExtrasLoader.item !== null && headerExtrasLoader.item.visible) || (headerTrailingLoader.item !== null && headerTrailingLoader.item.visible) ? headerExtrasRow.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
+                // Gate on the Loaders directly, NOT on headerExtrasRow.visible:
+                // reading a child's `visible` returns its EFFECTIVE visibility,
+                // so routing the condition through the row would latch the band
+                // hidden forever once it first collapsed (same trap as the
+                // breadcrumb trailing slot below).
                 visible: headerExtrasLoader.item !== null || headerTrailingLoader.item !== null
 
-                Item {
-                    Layout.preferredWidth: headerTrailingLoader.width
+                Rectangle {
+                    anchors.fill: parent
+                    color: Kirigami.Theme.backgroundColor
                 }
 
-                Item {
-                    Layout.fillWidth: true
-                }
+                RowLayout {
+                    id: headerExtrasRow
 
-                // The Loaders adopt their loaded item's implicit size (slot
-                // contract: the consumer Component declares implicitWidth/Height).
-                Loader {
-                    id: headerExtrasLoader
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.largeSpacing
+                    spacing: 0
 
-                    Layout.alignment: Qt.AlignVCenter
-                }
+                    Item {
+                        // Mirror the trailing Loader's gated-width expression
+                        // rather than reading headerTrailingLoader.width, which
+                        // lags one layout-polish cycle behind the binding.
+                        Layout.preferredWidth: (headerTrailingLoader.item !== null && headerTrailingLoader.item.visible) ? headerTrailingLoader.item.implicitWidth : 0
+                    }
 
-                Item {
-                    Layout.fillWidth: true
-                }
+                    Item {
+                        Layout.fillWidth: true
+                    }
 
-                Loader {
-                    id: headerTrailingLoader
+                    // The Loaders adopt their loaded item's implicit size (slot
+                    // contract: the consumer Component declares implicitWidth/Height)
+                    // and collapse to zero size when the loaded item hides itself.
+                    // Gated via Layout.preferredWidth/Height, like the breadcrumb
+                    // trailing slot below (which gates width only) — see the
+                    // comment there for why the gate must not route through the
+                    // Loader's own `visible`.
+                    Loader {
+                        id: headerExtrasLoader
 
-                    Layout.alignment: Qt.AlignVCenter
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: (item !== null && item.visible) ? item.implicitWidth : 0
+                        Layout.preferredHeight: (item !== null && item.visible) ? item.implicitHeight : 0
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Loader {
+                        id: headerTrailingLoader
+
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: (item !== null && item.visible) ? item.implicitWidth : 0
+                        Layout.preferredHeight: (item !== null && item.visible) ? item.implicitHeight : 0
+                    }
                 }
             }
 
             Kirigami.Separator {
                 Layout.fillWidth: true
-                visible: headerExtrasRow.visible
+                // Also gate on implicitHeight: the band stays visible:true while
+                // collapsing to 0 height when both slot items self-hide, and the
+                // 1-px separator would otherwise render as a stray line.
+                visible: headerBand.visible && headerBand.implicitHeight > 0
             }
 
             // Sidebar + content panel sit BELOW the full-width header bar.
@@ -318,15 +455,17 @@ Kirigami.ApplicationWindow {
                 spacing: 0
 
                 Sidebar {
-                    // `sidebarItem` (not `sidebar`) — the root has a
-                    // `readonly property QtObject sidebar` façade above,
-                    // and JS scope chain would resolve a bare `sidebar`
-                    // identifier inside the façade's methods to the root
-                    // property (returning the façade itself) before
-                    // resolving it as a QML id. Naming the underlying
-                    // Sidebar item `sidebarItem` removes the collision so
-                    // the façade's `sidebarItem.drillInto(...)` etc. land
-                    // on the actual Sidebar.
+                    // `sidebarItem` (not `sidebar`) — the root exposes
+                    // this item through the `property alias sidebar`
+                    // declaration on root (the typed QtObject
+                    // façade attempted for audit finding 45 was reverted
+                    // because it broke grouped-property assignment).
+                    // The alias name and the id share the root's name
+                    // scope, so the id cannot also be `sidebar`: the
+                    // alias would then read `sidebar: sidebar`, a
+                    // self-referential declaration QML rejects. Naming
+                    // the underlying item `sidebarItem` keeps the alias
+                    // target unambiguous.
                     id: sidebarItem
 
                     // Single intermediate property drives all three Layout
@@ -392,10 +531,60 @@ Kirigami.ApplicationWindow {
                         Layout.bottomMargin: Kirigami.Units.smallSpacing
                         spacing: Kirigami.Units.smallSpacing
 
+                        // Back / Forward history buttons. Always present
+                        // (disabled when there's nowhere to go) so the
+                        // breadcrumb row doesn't reflow as history
+                        // accumulates.
+                        QQC2.ToolButton {
+                            Layout.alignment: Qt.AlignVCenter
+                            icon.name: "go-previous"
+                            display: QQC2.AbstractButton.IconOnly
+                            text: qsTr("Back")
+                            Accessible.name: text
+                            enabled: root.controller.canGoBack
+                            onClicked: root.controller.goBack()
+
+                            QQC2.ToolTip.visible: hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                            QQC2.ToolTip.text: text
+                        }
+
+                        QQC2.ToolButton {
+                            Layout.alignment: Qt.AlignVCenter
+                            icon.name: "go-next"
+                            display: QQC2.AbstractButton.IconOnly
+                            text: qsTr("Forward")
+                            Accessible.name: text
+                            enabled: root.controller.canGoForward
+                            onClicked: root.controller.goForward()
+
+                            QQC2.ToolTip.visible: hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                            QQC2.ToolTip.text: text
+                        }
+
                         Breadcrumbs {
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignVCenter
                             controller: root.controller
+                        }
+
+                        // Page-scoped trailing slot (e.g. a per-page overflow
+                        // menu). Adopts its loaded item's implicit size when the
+                        // item is shown, and collapses to zero width both when
+                        // unfilled and when the loaded item hides itself (a
+                        // self-gating slot shown only on some pages). The slot is
+                        // collapsed via Layout.preferredWidth rather than the
+                        // Loader's own `visible`: reading `item.visible` returns
+                        // the child's EFFECTIVE visibility, so gating the Loader's
+                        // visible on it would force the child invisible (parent
+                        // suppression) and latch `item.visible` false forever, so
+                        // the slot could never reappear once first hidden.
+                        Loader {
+                            id: breadcrumbTrailingLoader
+
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: (item !== null && item.visible) ? item.implicitWidth : 0
                         }
                     }
 

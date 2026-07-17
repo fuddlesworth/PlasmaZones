@@ -4,11 +4,12 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import PlasmaZones
 import org.plasmazones.common as PZCommon
+
+import "FontUtils.js" as FontUtils
 
 /**
  * @brief Detail view for a single shader effect (pack-agnostic).
@@ -22,7 +23,7 @@ import org.plasmazones.common as PZCommon
  * When the bridge also exposes a `previewController` (zone/overlay browser
  * only — see SnappingShadersPageController), the right pane is a LIVE
  * ZoneShaderItem preview and the left column an editable
- * ShaderParameterEditor whose changes are transient (never persisted). The
+ * ParameterEditor whose changes are transient (never persisted). The
  * animation browser has no previewController, so it shows no preview pane —
  * just a read-only parameter list.
  *
@@ -54,6 +55,15 @@ Kirigami.Dialog {
         return bridge.shaderEffectUsages(id);
     }
     readonly property bool _hasParameters: effect && effect.parameters && effect.parameters.length > 0
+
+    // Percent-encode a local file path for use in a file:// URL. `encodeURI`
+    // handles spaces and unicode while preserving path separators, but leaves
+    // `#` and `?` untouched, so those two are escaped explicitly or they would
+    // be parsed as fragment/query delimiters.
+    // Twin site: ShaderBrowserCard.qml preview Image source.
+    function _encodeFilePath(path) {
+        return encodeURI(path).replace(/#/g, "%23").replace(/\?/g, "%3F");
+    }
 
     // ── T3.1 live preview (zone/overlay browser only) ──────────────────
     // The zone-shader bridge exposes a shared ShaderPreviewController; the
@@ -96,7 +106,9 @@ Kirigami.Dialog {
         // tick — _shaderInfo is already set above, so the new item loads it.
         _rendererActive = false;
         Qt.callLater(function () {
-            root._rendererActive = root._livePreview;
+            // Guard on `opened` too: if the dialog was closed between the
+            // deferral and this call, don't re-arm the renderer.
+            root._rendererActive = root.opened && root._livePreview;
         });
     }
     function _recompute() {
@@ -109,12 +121,6 @@ Kirigami.Dialog {
         next[id] = value;
         _liveParams = next;
         _recompute();
-    }
-    // `selectedFile` from FileDialog is a percent-encoded file:// URL.
-    function _filePathFromUrl(url) {
-        if (!url)
-            return "";
-        return decodeURIComponent(url.toString().replace(/^file:\/\/+/, "/"));
     }
 
     onOpened: {
@@ -184,7 +190,8 @@ Kirigami.Dialog {
                     icon.name: "document-open"
                     Accessible.name: text
                     onClicked: {
-                        shaderPresetLoadDialog.currentFolder = Qt.resolvedUrl("file://" + root.previewController.shaderPresetDirectory());
+                        // See root._encodeFilePath for the encoding rationale.
+                        shaderPresetLoadDialog.currentFolder = Qt.resolvedUrl("file://" + root._encodeFilePath(root.previewController.shaderPresetDirectory()));
                         shaderPresetLoadDialog.open();
                     }
                 }
@@ -194,7 +201,8 @@ Kirigami.Dialog {
                     icon.name: "document-save"
                     Accessible.name: text
                     onClicked: {
-                        shaderPresetSaveDialog.currentFolder = Qt.resolvedUrl("file://" + root.previewController.shaderPresetDirectory());
+                        // See root._encodeFilePath for the encoding rationale.
+                        shaderPresetSaveDialog.currentFolder = Qt.resolvedUrl("file://" + root._encodeFilePath(root.previewController.shaderPresetDirectory()));
                         shaderPresetSaveDialog.open();
                     }
                 }
@@ -271,7 +279,7 @@ Kirigami.Dialog {
                             visible: root.effect && root.effect.isUserEffect
                             text: i18nc("@info shader source badge", "User")
                             font: Kirigami.Theme.smallFont
-                            color: Kirigami.Theme.positiveTextColor
+                            color: Kirigami.Theme.highlightColor
                         }
 
                         Item {
@@ -313,8 +321,12 @@ Kirigami.Dialog {
                                 return parts.join(" · ");
                             }
                             color: Kirigami.Theme.disabledTextColor
-                            font.italic: true
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                            // illegal duplicate binding that fails the whole document. FontUtils
+                            // passes only the size dimension the theme font actually carries.
+                            font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                                italic: true
+                            })
                             elide: Text.ElideRight
                         }
                     }
@@ -367,13 +379,29 @@ Kirigami.Dialog {
                     }
 
                     Kirigami.InlineMessage {
+                        id: presetErrorMessage
+
                         Layout.fillWidth: true
-                        visible: root._presetError.length > 0
+                        // Visibility is driven imperatively in one direction
+                        // only: the Connections below shows the message when a
+                        // new error lands, and the close button hides it. A
+                        // declarative `visible: _presetError.length > 0`
+                        // binding would be severed the first time the close
+                        // button imperatively wrote visible = false, so later
+                        // preset errors would never show again.
+                        visible: false
                         type: Kirigami.MessageType.Error
                         text: root._presetError
                         showCloseButton: true
                         onVisibleChanged: if (!visible)
                             root._presetError = ""
+
+                        Connections {
+                            target: root
+                            function on_PresetErrorChanged() {
+                                presetErrorMessage.visible = root._presetError.length > 0;
+                            }
+                        }
                     }
 
                     // ── Parameters ────────────────────────────────────────
@@ -394,12 +422,16 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
                         active: root._livePreview && root._hasParameters
 
-                        sourceComponent: PZCommon.ShaderParameterEditor {
+                        sourceComponent: PZCommon.ParameterEditor {
                             id: paramEditor
 
                             compact: false
                             enableLocking: true
                             enableRandomize: true
+                            // This dialog has its own "Default" reset button in
+                            // its footer, so suppress the editor's header reset
+                            // to avoid a duplicate affordance.
+                            enableReset: false
                             enableGroups: true
                             enableImage: true
                             parameters: root.effect && root.effect.parameters ? root.effect.parameters : []
@@ -441,7 +473,7 @@ Kirigami.Dialog {
                             Layout.fillWidth: true
                             implicitHeight: rowContent.implicitHeight + Kirigami.Units.smallSpacing
                             radius: Kirigami.Units.smallSpacing / 2
-                            color: index % 2 === 0 ? "transparent" : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
+                            color: index % 2 === 0 ? "transparent" : Kirigami.Theme.alternateBackgroundColor
 
                             RowLayout {
                                 id: rowContent
@@ -511,8 +543,8 @@ Kirigami.Dialog {
                     // shader renders over this, and a tinted background would
                     // contaminate the previewed colors.
                     color: "black"
-                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
-                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+                    border.width: 1
+                    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                     clip: true
 
                     // Zones the preview renders over — shared by the renderer,
@@ -685,7 +717,7 @@ Kirigami.Dialog {
 
         onAccepted: {
             if (paramId.length > 0)
-                root._setLiveParam(paramId, root._filePathFromUrl(selectedFile));
+                root._setLiveParam(paramId, settingsController.urlToLocalFile(selectedFile));
         }
     }
 
@@ -711,7 +743,7 @@ Kirigami.Dialog {
 
         onAccepted: {
             if (root.previewController && root.effect)
-                root.previewController.saveShaderPreset(root._filePathFromUrl(selectedFile), root.effect.id, root._liveParams, "");
+                root.previewController.saveShaderPreset(settingsController.urlToLocalFile(selectedFile), root.effect.id, root._liveParams, "");
         }
     }
 
@@ -725,7 +757,7 @@ Kirigami.Dialog {
         onAccepted: {
             if (!root.previewController || !root.effect)
                 return;
-            var r = root.previewController.loadShaderPreset(root._filePathFromUrl(selectedFile));
+            var r = root.previewController.loadShaderPreset(settingsController.urlToLocalFile(selectedFile));
             if (!r || !r.shaderParams)
                 return;
             // This detail dialog is bound to a single shader (root.effect) and
@@ -735,6 +767,10 @@ Kirigami.Dialog {
                 root._presetError = i18nc("@info", "This preset was saved for a different shader.");
                 return;
             }
+            // The load succeeded — drop any error left from an earlier
+            // failed save/load so the stale message doesn't sit next to a
+            // freshly applied preset.
+            root._presetError = "";
             // Apply the preset's values onto the current shader's parameter set
             // (preset value where present, else the param default), so a preset
             // saved for a slightly different param list still loads cleanly.
@@ -745,6 +781,21 @@ Kirigami.Dialog {
                 if (!p || p.id === undefined)
                     continue;
                 next[p.id] = (r.shaderParams[p.id] !== undefined) ? r.shaderParams[p.id] : (p.default !== undefined ? p.default : root._liveParams[p.id]);
+            }
+            // Carry SVG image params' `<id>_svgSize` companion (not a schema
+            // param, so the loop above skips it): preset value where present,
+            // else the current size. Without this, loading a preset would
+            // revert a custom SVG render size to the default, unlike the editor
+            // dialog and the randomize path which preserve it.
+            for (var j = 0; j < params.length; j++) {
+                var ip = params[j];
+                if (!ip || ip.id === undefined || ip.type !== "image")
+                    continue;
+                var svgKey = ip.id + "_svgSize";
+                if (r.shaderParams[svgKey] !== undefined)
+                    next[svgKey] = r.shaderParams[svgKey];
+                else if (root._liveParams[svgKey] !== undefined)
+                    next[svgKey] = root._liveParams[svgKey];
             }
             root._liveParams = next;
             root._recompute();

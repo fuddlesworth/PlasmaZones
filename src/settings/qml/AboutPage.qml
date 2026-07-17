@@ -8,9 +8,8 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.control as PhosphorUi
 
 // PhosphorUi.AboutPageShell hosts the standard chrome (icon + name +
-// version + description + license + homepage); PlasmaZones-specific
-// content (daemon toggle on top, link / license / credits cards in
-// extras) is injected through the shell's slots.
+// version + description + license + homepage). PlasmaZones-specific content
+// (the Links and Credits cards) is injected through the shell's extras slot.
 PhosphorUi.AboutPageShell {
     id: root
 
@@ -42,6 +41,12 @@ PhosphorUi.AboutPageShell {
                 }
 
                 LinkButton {
+                    linkText: i18n("Discord Community")
+                    linkIcon: "im-user"
+                    url: "https://discord.gg/9CQzAptdJ5"
+                }
+
+                LinkButton {
                     linkText: i18n("Documentation")
                     linkIcon: "documentation"
                     url: "https://phosphor-works.github.io/plasmazones/"
@@ -59,14 +64,13 @@ PhosphorUi.AboutPageShell {
                     horizontalPadding: Kirigami.Units.largeSpacing
                     Accessible.name: i18n("What's New")
                     onClicked: {
-                        // Defensive truthy-check: this AboutPage is also used
-                        // by the standalone phosphor-control demo, which
-                        // doesn't define `showWhatsNew`. Guard `window`
-                        // itself too — when AboutPage is hosted by the demo
-                        // (no chrome) the `window` context property may be
-                        // undefined, in which case reading `.showWhatsNew`
-                        // on it throws.
-                        if (window && window.showWhatsNew)
+                        // Defensive check: this AboutPage is also used by the
+                        // standalone phosphor-control demo, which declares no
+                        // `window` id at all. `window` is an ID lookup, not a
+                        // context property, so a bare `window && …` THROWS a
+                        // ReferenceError there before && can short-circuit;
+                        // only the typeof form degrades to false.
+                        if (typeof window !== "undefined" && window && window.showWhatsNew)
                             window.showWhatsNew();
                     }
 
@@ -128,36 +132,6 @@ PhosphorUi.AboutPageShell {
             }
         }
     ]
-
-    // ── Daemon enable/disable toggle, anchored above the header ──
-    topContent: Component {
-        RowLayout {
-            spacing: Kirigami.Units.smallSpacing
-
-            Label {
-                text: i18n("Enable PlasmaZones")
-                font.weight: Font.DemiBold
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            Label {
-                text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
-                opacity: 0.7
-            }
-
-            SettingsSwitch {
-                checked: settingsController.daemonRunning
-                enabled: !settingsController.daemonController.busy
-                onToggled: function (newValue) {
-                    settingsController.daemonController.setEnabled(newValue);
-                }
-                accessibleName: i18n("Enable PlasmaZones")
-            }
-        }
-    }
 
     component LinkButton: Button {
         id: linkButton

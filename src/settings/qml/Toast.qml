@@ -23,20 +23,20 @@ Rectangle {
 
     /// Last message passed to show(). Read-only externally — write via show().
     property string message: ""
-    // Toast surface tint — extracted to a single readonly so future
-    // theme tweaks live in one place (E32 follow-up).
-    readonly property color toastBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.85)
+    // Toast surface — the Tooltip color set is the theme's own inverted
+    // surface, replacing the earlier hand-inverted textColor fill.
+    readonly property color toastBg: Kirigami.Theme.backgroundColor
 
     /// Display `msg` immediately, replacing any in-flight toast.
     function show(msg: string) {
         root.message = msg;
         // AT-SPI Notification announcements — Orca / other screen
         // readers don't announce StaticText surfaces that aren't
-        // focused, so use Accessible.announcement to push the toast
-        // text into the AT consumer's speech queue regardless of
-        // focus state. Pairs with the Accessible.role: Notification
-        // below (Qt 6.6+).
-        root.Accessible.announcement = msg;
+        // focused, so call the attached Accessible.announce() method
+        // (Qt 6.8+) to push the toast text into the AT consumer's
+        // speech queue regardless of focus state. Pairs with the
+        // Accessible.role: Notification below.
+        root.Accessible.announce(msg);
         // Single SequentialAnimation — back-to-back show() calls
         // restart() the same animation cleanly, vs. the previous
         // shape where two concurrent animations could overlap if a
@@ -45,6 +45,8 @@ Rectangle {
         toastAnimation.restart();
     }
 
+    Kirigami.Theme.colorSet: Kirigami.Theme.Tooltip
+    Kirigami.Theme.inherit: false
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.bottom: parent.bottom
     anchors.bottomMargin: Kirigami.Units.largeSpacing * 4
@@ -56,9 +58,10 @@ Rectangle {
     visible: opacity > 0
     z: 100
     // Toast is a status-message surface — announce to AT consumers.
-    // Accessible.Notification (Qt 6.6+) is announced by Orca even
-    // when the toast doesn't have focus; StaticText was silent for
-    // screen-reader users because the toast never receives focus.
+    // The Notification role, plus the Accessible.announce() call in
+    // show(), gets the text spoken by Orca even though the toast
+    // never has focus; StaticText was silent for screen-reader users
+    // because unfocused static surfaces aren't announced.
     Accessible.role: Accessible.Notification
     Accessible.name: root.message
     Accessible.description: i18n("Toast notification")
@@ -68,7 +71,7 @@ Rectangle {
 
         anchors.centerIn: parent
         text: root.message
-        color: Kirigami.Theme.backgroundColor
+        color: Kirigami.Theme.textColor
         font.weight: Font.Medium
     }
 

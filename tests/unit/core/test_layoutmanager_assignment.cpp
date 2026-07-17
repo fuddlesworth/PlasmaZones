@@ -22,10 +22,10 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorWindowRules/ContextRuleBridge.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleStore.h>
 #include "core/constants.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -65,16 +65,15 @@ private:
     void addDefaultAssignmentRule(PhosphorZones::LayoutRegistry* mgr, const QString& screenId, int virtualDesktop,
                                   const QString& activity, bool allow)
     {
-        namespace PWR = PhosphorWindowRules;
-        auto* store = mgr->findChild<PWR::WindowRuleStore*>();
+        namespace PWR = PhosphorRules;
+        auto* store = mgr->findChild<PWR::RuleStore*>();
         QVERIFY(store != nullptr);
 
-        PWR::WindowRule rule;
+        PWR::Rule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("test-default-assignment");
         rule.enabled = true;
-        rule.priority =
-            PWR::ContextRuleBridge::contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
+        rule.priority = PWR::ContextRuleBridge::kContextBandBase;
         rule.match = PWR::ContextRuleBridge::makeContextMatch(screenId, virtualDesktop, activity);
 
         PWR::RuleAction action;
@@ -90,11 +89,12 @@ private:
     void addEngineModeRule(PhosphorZones::LayoutRegistry* mgr, const QString& screenId, int virtualDesktop,
                            const QString& activity, const QString& modeToken)
     {
-        namespace PWR = PhosphorWindowRules;
-        auto* store = mgr->findChild<PWR::WindowRuleStore*>();
+        namespace PWR = PhosphorRules;
+        auto* store = mgr->findChild<PWR::RuleStore*>();
         QVERIFY(store != nullptr);
-        const PWR::WindowRule rule = PWR::ContextRuleBridge::makeAssignmentRule(
-            QStringLiteral("test-mode"), screenId, virtualDesktop, activity, modeToken, QString(), QString());
+        const PWR::Rule rule = PWR::ContextRuleBridge::makeAssignmentRule(
+            QStringLiteral("test-mode"), screenId, virtualDesktop, activity, modeToken, QString(), QString(),
+            PWR::ContextRuleBridge::kContextBandBase);
         QVERIFY(store->addRule(rule));
     }
 
@@ -139,16 +139,17 @@ private Q_SLOTS:
         const auto roundTripped = mgr->combinedAssignments();
         QCOMPARE(roundTripped, combined);
 
-        // Cascade-resolution check: the rebuilt Combined rule must resolve
-        // through the live cascade at its (screen, desktop, activity) tuple.
-        // A regression that mis-builds the rule with a transposed-arg
-        // signature would still produce a hash-equal projection (because
-        // the reader re-reads from the same wrong tuple); this assertion
-        // catches that class of bug.
+        // Resolution check at the (screen, desktop, activity) tuple. Precedence
+        // is plain priority now (no specificity): both the Combined rule
+        // (DP-1, 3, work → LayoutA) and the broader Activity rule (DP-1, work →
+        // LayoutB) match this query, and the Activity rule was authored later so
+        // it seeded a higher priority and wins. The transposed-arg regression
+        // this used to guard is still caught by the round-trip hash equality
+        // above (a mis-built Combined rule reads back a different key).
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 3, QStringLiteral("work"))->name(),
-                 QStringLiteral("LayoutA"));
+                 QStringLiteral("LayoutB"));
 
-        // The pure-Activity rule survives untouched.
+        // The pure-Activity rule resolves at a desktop with no Combined entry.
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 1, QStringLiteral("work"))->name(),
                  QStringLiteral("LayoutB"));
         // The pure-Desktop rule survives untouched.
@@ -159,7 +160,7 @@ private Q_SLOTS:
     // applyBatchAssignments's OldEntrySnapshot capture (Pass 1 P2 audit
     // finding), so disabled→enabled regression is structurally shared with
     // the Activity / Desktop / Screen batches. A dedicated test would need
-    // a public WindowRuleStore accessor on LayoutRegistry to flip the
+    // a public RuleStore accessor on LayoutRegistry to flip the
     // rule's enabled flag — none exists today, and adding one solely for
     // test scaffolding would be an SRP violation. The shared
     // applyBatchAssignments + OldEntrySnapshot path covers the four
@@ -1019,7 +1020,7 @@ private Q_SLOTS:
 
     void testIsContextSuppressed_pinnedModeOnlyRule_overridesGlobalSuppress()
     {
-        // A window rule that sets only the engine mode (no layout) on a monitor
+        // A rule that sets only the engine mode (no layout) on a monitor
         // must override the global suppress setting — the context stays active so
         // the overlay / zone selector show and the layout falls back to default.
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());

@@ -14,8 +14,6 @@
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/core/settings_interfaces.h" // ZoneSelectorConfig struct tripwire
 
-#include <PhosphorCompositor/DecorationDefaults.h>
-
 using namespace PlasmaZones;
 
 class TestConfigDefaults : public QObject
@@ -23,17 +21,6 @@ class TestConfigDefaults : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-
-    /**
-     * dismissedUpdateVersion() must return an empty QString for fresh installs.
-     * This is hardcoded in ConfigDefaults because KConfigXT does not generate
-     * a defaultDismissedUpdateVersionValue() for empty <default></default> strings.
-     */
-    void testDismissedUpdateVersion_accessor_returnsEmpty()
-    {
-        QVERIFY2(ConfigDefaults::dismissedUpdateVersion().isEmpty(),
-                 "dismissedUpdateVersion default must be empty string");
-    }
 
     /**
      * labelFontFamily() must return an empty QString (system default font).
@@ -58,9 +45,10 @@ private Q_SLOTS:
      */
     void testAllDefaults_withinKcfgBounds()
     {
-        // Activation
-        QVERIFY(ConfigDefaults::zoneSpanModifier() >= 0);
-        QVERIFY(ConfigDefaults::zoneSpanModifier() <= 10);
+        // Activation. Enum-valued settings derive their bounds from the enum
+        // (not magic literals) so the tripwire tracks the enum if it grows.
+        QVERIFY(ConfigDefaults::zoneSpanModifier() >= static_cast<int>(DragModifier::Disabled));
+        QVERIFY(ConfigDefaults::zoneSpanModifier() <= static_cast<int>(DragModifier::CtrlAltMeta));
 
         // Display
         QVERIFY(ConfigDefaults::osdStyle() >= ConfigDefaults::osdStyleMin());
@@ -81,8 +69,8 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::labelFontWeight() <= ConfigDefaults::labelFontWeightMax());
 
         // Zones
-        QVERIFY(ConfigDefaults::zonePadding() >= ConfigDefaults::zonePaddingMin());
-        QVERIFY(ConfigDefaults::zonePadding() <= ConfigDefaults::zonePaddingMax());
+        QVERIFY(ConfigDefaults::innerGap() >= ConfigDefaults::innerGapMin());
+        QVERIFY(ConfigDefaults::innerGap() <= ConfigDefaults::innerGapMax());
         QVERIFY(ConfigDefaults::outerGap() >= ConfigDefaults::outerGapMin());
         QVERIFY(ConfigDefaults::outerGap() <= ConfigDefaults::outerGapMax());
         QVERIFY(ConfigDefaults::outerGapTop() >= ConfigDefaults::outerGapTopMin());
@@ -103,22 +91,29 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::minimumZoneDisplaySizePx() <= ConfigDefaults::minimumZoneDisplaySizePxMax());
 
         // Behavior
-        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() >= 0);
-        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() <= 2);
+        QVERIFY(ConfigDefaults::snappingStickyWindowHandling()
+                >= static_cast<int>(StickyWindowHandling::TreatAsNormal));
+        QVERIFY(ConfigDefaults::snappingStickyWindowHandling() <= static_cast<int>(StickyWindowHandling::IgnoreAll));
         QVERIFY(ConfigDefaults::minimumWindowWidth() >= ConfigDefaults::minimumWindowWidthMin());
         QVERIFY(ConfigDefaults::minimumWindowWidth() <= ConfigDefaults::minimumWindowWidthMax());
         QVERIFY(ConfigDefaults::minimumWindowHeight() >= ConfigDefaults::minimumWindowHeightMin());
         QVERIFY(ConfigDefaults::minimumWindowHeight() <= ConfigDefaults::minimumWindowHeightMax());
 
+        // Decoration window filtering
+        QVERIFY(ConfigDefaults::decorationMinimumWindowWidth() >= ConfigDefaults::decorationMinimumWindowWidthMin());
+        QVERIFY(ConfigDefaults::decorationMinimumWindowWidth() <= ConfigDefaults::decorationMinimumWindowWidthMax());
+        QVERIFY(ConfigDefaults::decorationMinimumWindowHeight() >= ConfigDefaults::decorationMinimumWindowHeightMin());
+        QVERIFY(ConfigDefaults::decorationMinimumWindowHeight() <= ConfigDefaults::decorationMinimumWindowHeightMax());
+
         // PhosphorZones::Zone Selector
         QVERIFY(ConfigDefaults::triggerDistance() >= ConfigDefaults::triggerDistanceMin());
         QVERIFY(ConfigDefaults::triggerDistance() <= ConfigDefaults::triggerDistanceMax());
-        QVERIFY(ConfigDefaults::position() >= 0);
-        QVERIFY(ConfigDefaults::position() <= 8);
-        QVERIFY(ConfigDefaults::layoutMode() >= 0);
-        QVERIFY(ConfigDefaults::layoutMode() <= 2);
-        QVERIFY(ConfigDefaults::sizeMode() >= 0);
-        QVERIFY(ConfigDefaults::sizeMode() <= 1);
+        QVERIFY(ConfigDefaults::position() >= static_cast<int>(ZoneSelectorPosition::TopLeft));
+        QVERIFY(ConfigDefaults::position() <= static_cast<int>(ZoneSelectorPosition::BottomRight));
+        QVERIFY(ConfigDefaults::layoutMode() >= static_cast<int>(ZoneSelectorLayoutMode::Grid));
+        QVERIFY(ConfigDefaults::layoutMode() <= static_cast<int>(ZoneSelectorLayoutMode::Vertical));
+        QVERIFY(ConfigDefaults::sizeMode() >= static_cast<int>(ZoneSelectorSizeMode::Auto));
+        QVERIFY(ConfigDefaults::sizeMode() <= static_cast<int>(ZoneSelectorSizeMode::Manual));
         QVERIFY(ConfigDefaults::maxRows() >= ConfigDefaults::maxRowsMin());
         QVERIFY(ConfigDefaults::maxRows() <= ConfigDefaults::maxRowsMax());
         QVERIFY(ConfigDefaults::previewWidth() >= ConfigDefaults::previewWidthMin());
@@ -140,30 +135,11 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::autotileMasterCount() >= ConfigDefaults::autotileMasterCountMin());
         QVERIFY(ConfigDefaults::autotileMasterCount() <= ConfigDefaults::autotileMasterCountMax());
 
-        QVERIFY(ConfigDefaults::autotileInnerGap() >= ConfigDefaults::autotileInnerGapMin());
-        QVERIFY(ConfigDefaults::autotileInnerGap() <= ConfigDefaults::autotileInnerGapMax());
-        QVERIFY(ConfigDefaults::autotileOuterGap() >= ConfigDefaults::autotileOuterGapMin());
-        QVERIFY(ConfigDefaults::autotileOuterGap() <= ConfigDefaults::autotileOuterGapMax());
+        // Inner/outer gaps are unified with snapping (tested above as innerGap/outerGap).
         QVERIFY(ConfigDefaults::autotileMaxWindows() >= ConfigDefaults::autotileMaxWindowsMin());
         QVERIFY(ConfigDefaults::autotileMaxWindows() <= ConfigDefaults::autotileMaxWindowsMax());
         QVERIFY(ConfigDefaults::autotileInsertPosition() >= ConfigDefaults::autotileInsertPositionMin());
         QVERIFY(ConfigDefaults::autotileInsertPosition() <= ConfigDefaults::autotileInsertPositionMax());
-        QVERIFY(ConfigDefaults::autotileBorderWidth() >= ConfigDefaults::autotileBorderWidthMin());
-        QVERIFY(ConfigDefaults::autotileBorderWidth() <= ConfigDefaults::autotileBorderWidthMax());
-        QVERIFY(ConfigDefaults::autotileBorderRadius() >= ConfigDefaults::autotileBorderRadiusMin());
-        QVERIFY(ConfigDefaults::autotileBorderRadius() <= ConfigDefaults::autotileBorderRadiusMax());
-        QVERIFY(ConfigDefaults::snappingBorderWidth() >= ConfigDefaults::snappingBorderWidthMin());
-        QVERIFY(ConfigDefaults::snappingBorderWidth() <= ConfigDefaults::snappingBorderWidthMax());
-        QVERIFY(ConfigDefaults::snappingBorderRadius() >= ConfigDefaults::snappingBorderRadiusMin());
-        QVERIFY(ConfigDefaults::snappingBorderRadius() <= ConfigDefaults::snappingBorderRadiusMax());
-        QVERIFY(ConfigDefaults::autotileOuterGapTop() >= ConfigDefaults::autotileOuterGapTopMin());
-        QVERIFY(ConfigDefaults::autotileOuterGapTop() <= ConfigDefaults::autotileOuterGapTopMax());
-        QVERIFY(ConfigDefaults::autotileOuterGapBottom() >= ConfigDefaults::autotileOuterGapBottomMin());
-        QVERIFY(ConfigDefaults::autotileOuterGapBottom() <= ConfigDefaults::autotileOuterGapBottomMax());
-        QVERIFY(ConfigDefaults::autotileOuterGapLeft() >= ConfigDefaults::autotileOuterGapLeftMin());
-        QVERIFY(ConfigDefaults::autotileOuterGapLeft() <= ConfigDefaults::autotileOuterGapLeftMax());
-        QVERIFY(ConfigDefaults::autotileOuterGapRight() >= ConfigDefaults::autotileOuterGapRightMin());
-        QVERIFY(ConfigDefaults::autotileOuterGapRight() <= ConfigDefaults::autotileOuterGapRightMax());
 
         // Animations
         QVERIFY(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDurationMin());
@@ -174,6 +150,10 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax());
         QVERIFY(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin());
         QVERIFY(ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax());
+
+        // Window decoration focus cross-fade
+        QVERIFY(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDurationMin());
+        QVERIFY(ConfigDefaults::focusFadeDuration() <= ConfigDefaults::focusFadeDurationMax());
     }
 
     /**
@@ -199,50 +179,6 @@ private Q_SLOTS:
     void testZoneSpanToggleMode_default_isFalse()
     {
         QCOMPARE(ConfigDefaults::zoneSpanToggleMode(), false);
-    }
-
-    /**
-     * Snapped-window appearance defaults must be IDENTICAL to the autotile*
-     * window appearance defaults — the two modes start a window from the same
-     * chrome (every snapping* default delegates to its autotile* counterpart).
-     * Assert each pair is equal rather than pinning literals so a single change
-     * to an autotile default moves both in lockstep without staling this test.
-     * The concrete shipped values are pinned separately below.
-     */
-    void testSnappingWindowAppearance_defaults()
-    {
-        QCOMPARE(ConfigDefaults::snappingHideTitleBars(), ConfigDefaults::autotileHideTitleBars());
-        QCOMPARE(ConfigDefaults::snappingShowBorder(), ConfigDefaults::autotileShowBorder());
-        QCOMPARE(ConfigDefaults::snappingUseSystemBorderColors(), ConfigDefaults::autotileUseSystemBorderColors());
-        QCOMPARE(ConfigDefaults::snappingBorderColor(), ConfigDefaults::autotileBorderColor());
-        QCOMPARE(ConfigDefaults::snappingInactiveBorderColor(), ConfigDefaults::autotileInactiveBorderColor());
-        QCOMPARE(ConfigDefaults::snappingBorderWidth(), ConfigDefaults::autotileBorderWidth());
-        QCOMPARE(ConfigDefaults::snappingBorderRadius(), ConfigDefaults::autotileBorderRadius());
-
-        // Pin the concrete shipped defaults (shared by both modes) against the
-        // shared DecorationDefaults constants — the same symbols the effect's
-        // BorderState member-initializers use. This is the drift tripwire: if
-        // either side stops delegating, pre-settings-load rendering in the
-        // effect diverges from the daemon's persisted defaults. Colors are
-        // compared against the zone color accessors so a palette change can't
-        // stale the test.
-        QCOMPARE(ConfigDefaults::snappingHideTitleBars(), ::PhosphorCompositor::DecorationDefaults::HideTitleBars);
-        QCOMPARE(ConfigDefaults::snappingShowBorder(), ::PhosphorCompositor::DecorationDefaults::ShowBorder);
-        QCOMPARE(ConfigDefaults::snappingBorderColor(), ConfigDefaults::highlightColor());
-        QCOMPARE(ConfigDefaults::snappingInactiveBorderColor(), ConfigDefaults::inactiveColor());
-        QCOMPARE(ConfigDefaults::snappingBorderWidth(), ::PhosphorCompositor::DecorationDefaults::BorderWidth);
-        QCOMPARE(ConfigDefaults::snappingBorderRadius(), ::PhosphorCompositor::DecorationDefaults::BorderRadius);
-        QCOMPARE(ConfigDefaults::autotileBorderWidthMin(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMin);
-        QCOMPARE(ConfigDefaults::autotileBorderWidthMax(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMax);
-        QCOMPARE(ConfigDefaults::autotileBorderRadiusMin(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin);
-        QCOMPARE(ConfigDefaults::autotileBorderRadiusMax(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax);
-        // The snapping bounds must track the same shared constants — without
-        // these four they could drift independently while everything above
-        // stays green.
-        QCOMPARE(ConfigDefaults::snappingBorderWidthMin(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMin);
-        QCOMPARE(ConfigDefaults::snappingBorderWidthMax(), ::PhosphorCompositor::DecorationDefaults::BorderWidthMax);
-        QCOMPARE(ConfigDefaults::snappingBorderRadiusMin(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin);
-        QCOMPARE(ConfigDefaults::snappingBorderRadiusMax(), ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax);
     }
 
     /**

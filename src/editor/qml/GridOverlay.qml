@@ -16,17 +16,20 @@ Canvas {
     // Required references
     required property var editorController
 
+    // Hoisted so the binding re-evaluates on theme changes and can trigger a repaint
+    readonly property color gridLineColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+
     anchors.fill: parent
     visible: editorController ? (editorController.gridOverlayVisible && editorController.gridSnappingEnabled) : false
     opacity: 0.25
     onPaint: {
         // Validate dimensions before drawing
         if (width <= 0 || height <= 0 || !isFinite(width) || !isFinite(height))
-            return ;
+            return;
 
         var ctx = getContext("2d");
         ctx.clearRect(0, 0, width, height);
-        ctx.strokeStyle = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3);
+        ctx.strokeStyle = gridOverlay.gridLineColor;
         ctx.lineWidth = 1;
         var intervalX = editorController ? editorController.snapIntervalX : 0.1;
         var intervalY = editorController ? editorController.snapIntervalY : 0.1;
@@ -41,7 +44,7 @@ Canvas {
         var stepY = height * intervalY;
         // Validate step sizes
         if (stepX <= 0 || !isFinite(stepX) || stepY <= 0 || !isFinite(stepY))
-            return ;
+            return;
 
         ctx.beginPath();
         // Draw vertical lines - edge to edge (from 0 to width)
@@ -64,6 +67,8 @@ Canvas {
         }
         ctx.stroke();
     }
+    // Repaint when the theme-derived line color changes
+    onGridLineColorChanged: requestPaint()
     // Repaint when canvas size changes
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
@@ -93,5 +98,4 @@ Canvas {
         target: gridOverlay.editorController
         enabled: gridOverlay.editorController !== null
     }
-
 }

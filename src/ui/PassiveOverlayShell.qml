@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 /**
  * Passive overlay shell — single per-screen wlr-layer-shell host that
@@ -19,20 +20,22 @@ import org.kde.kirigami as Kirigami
  *     blocks the faster one's. With every passive overlay riding the
  *     shell's single window, all per-content animations share one
  *     polishAndSync — no inter-content contention.
- *   - The shell wl_surface is permanently mapped after first show, so
- *     the Vulkan swapchain + RHI pipelines warm once and stay hot for
- *     every subsequent per-content show. No per-show wl_surface
- *     map/unmap and the cold-pipeline first-paint cost is paid once at
- *     daemon start.
+ *   - The shell wl_surface is kept mapped across hides while shaders or
+ *     animations are enabled (keepMappedOnHide is effects-gated in
+ *     createWarmedOsdSurface), so the Vulkan swapchain + RHI pipelines
+ *     warm once and stay hot for every subsequent per-content show —
+ *     no per-show wl_surface map/unmap, and the cold-pipeline
+ *     first-paint cost is paid once at daemon start. With both effects
+ *     off, syncPassiveShellSurfaceState unmaps the wl_surface when all
+ *     slots are hidden.
  *
  * This shell is the kbd-None grouping. Modal kbd-Exclusive overlays
  * (snap-assist, layout picker) historically lived in their own per-show
  * wl_surfaces because layer-shell binds keyboard interactivity at first
  * commit and KWin doesn't re-evaluate it on already-mapped surfaces.
- * The unified-shell migration pulls them into THIS same shell with kbd
- * routed via global accelerators (KGlobalAccel) instead — see the
- * matching `snap-assist` / `layout-picker` slots below (added in
- * subsequent migration steps).
+ * The unified shell hosts them in THIS same shell with kbd routed via
+ * global accelerators (KGlobalAccel) instead — see the matching
+ * `snapAssistSlot` / `layoutPickerSlot` Items below.
  *
  * C++ side accesses each slot Item via the `osdSlotItem` (etc.) alias
  * exposed on this Window root; property writes target the slot Item
@@ -44,9 +47,11 @@ Window {
     // the per-mode Component below) carries `property bool shaderAnchor:
     // true` so vertex shaders bind to the visible OSD body rather than
     // the fullscreen slot Item.
-    // Future slots (subsequent migration steps): zoneSelector,
-    // mainOverlay, snapAssist, layoutPicker. Each is a sibling Item with
-    // its own properties + Loader, animated independently via the
+    // Sibling slots below: snapAssistSlot (z=2), layoutPickerSlot (z=2),
+    // zoneSelectorSlot (z=1), mainOverlaySlot (z=0). The osdSlot's z is
+    // dynamic (3 normally, 1.5 while a modal slot is visible — see the
+    // binding on osdSlot). Each is a sibling Item with its own
+    // properties + Loader, animated independently via the
     // SurfaceAnimator's per-(Surface, target) keying.
 
     id: root
@@ -77,8 +82,9 @@ Window {
     readonly property alias mainOverlaySlotItem: mainOverlaySlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
-    /// the slot-hide animation start (not Surface::hide() — the shell
-    /// stays mapped permanently, only the slot's opacity animates).
+    /// the slot-hide animation start (not Surface::hide() — only the
+    /// slot's opacity animates; the shell stays mapped across hides
+    /// while shaders or animations are enabled).
     signal osdDismissRequested
     /// Forwarded from snap-assist's `windowSelected` signal — host wires
     /// to onSnapAssistWindowSelected.
@@ -92,8 +98,10 @@ Window {
     signal layoutPickerDismissRequested
 
     // Qt::WindowTransparentForInput is driven imperatively by C++ from
-    // syncPassiveShellSurfaceState (via Surface::show()/hide() with
-    // keepMappedOnHide=true) — when no slot is visible, the shell's
+    // syncPassiveShellSurfaceState (via Surface::show()/hide();
+    // keepMappedOnHide is effects-gated, see createWarmedOsdSurface,
+    // so the surface is kept mapped on hide only while shaders or
+    // animations are enabled) — when no slot is visible, the shell's
     // wl_surface input region is set empty so clicks pass through.
     // Driving it from a QML flags binding here would race the C++
     // path: a slot visibility change triggers BOTH a binding
@@ -119,9 +127,10 @@ Window {
     // card above the screen top with the bottom partially cut off.
     // Leaving the size to C++ entirely closes the race.
     // Start hidden; first per-content show flips visible=true. The
-    // surface stays mapped (keepMappedOnHide=true) for the daemon's
-    // lifetime so swapchain + RHI pipelines stay warm across show
-    // cycles.
+    // surface stays mapped across hides while shaders or animations
+    // are enabled (effects-gated keepMappedOnHide) so swapchain + RHI
+    // pipelines stay warm across show cycles; with both effects off
+    // the wl_surface unmaps once all slots are hidden.
     visible: false
 
     Item {
@@ -138,7 +147,20 @@ Window {
         property var zones: []
         property color backgroundColor: Kirigami.Theme.backgroundColor
         property color textColor: Kirigami.Theme.textColor
-        property color highlightColor: Kirigami.Theme.highlightColor
+        property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+        // MUST be declared: the daemon pushes these with setProperty
+        // (osd.cpp pushLayoutOsdContent) and the layoutOsdComp bindings
+        // below forward them — an undeclared name silently becomes a
+        // dynamic property no binding observes, so the forwarding would
+        // bind undefined and the OSD preview would never recolor.
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
+        // Zone fill opacities for the OSD preview. Same declare-and-forward
+        // contract as the colors above: osd.cpp pushLayoutOsdContent writes
+        // the settings/override-resolved pair; the defaults match
+        // LayoutOsdContent's own.
+        property real activeOpacity: 0.6
+        property real inactiveOpacity: 0.3
         property string layoutId: ""
         property string layoutName: ""
         property int category: 0
@@ -167,6 +189,27 @@ Window {
         property int windowCount: 1
         property color errorColor: Kirigami.Theme.negativeTextColor
 
+        // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
+        // resolves the "osd" pack from DecorationProfileTree and writes these
+        // before each show; empty source = no decoration (card draws natively).
+        // Consumed by the SurfaceDecoration sibling below, which captures the
+        // loaded card's PopupFrame shaderAnchor and re-renders it rounded.
+        // Resolved decoration chain: ordered stage list ({source,
+        // vertexSource, preamble, params, animated} per pack), plus the
+        // chain's largest declared outer margin (logical px, e.g. glow's
+        // glowSize) the decoration host inflates its capture by. MUST be
+        // declared + forwarded: C++ writes them with setProperty, and an
+        // undeclared name silently becomes a dynamic property no binding
+        // observes — the decoration would never update.
+        property var decorationChain: []
+        property real decorationOuterPadding: 0
+        // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
+        // Same declare-and-forward contract as decorationChain: C++ writes it
+        // with setProperty, so an undeclared name would silently become a dead
+        // dynamic property no binding observes and audio would never reach the
+        // decoration shader.
+        property var audioSpectrum: []
+
         /// Restart the loaded OSD content's auto-dismiss timer. C++
         /// invokes this after every OSD show via QMetaObject::invokeMethod.
         function restartDismissTimer() {
@@ -177,10 +220,23 @@ Window {
         }
 
         anchors.fill: parent
-        // Topmost slot: notifications/OSDs paint above every other content
-        // type so a layout-OSD or nav-OSD reads cleanly even when stacked
-        // over an active zone overlay or open snap-assist.
-        z: 3
+        // Topmost slot while no modal is up: notifications/OSDs paint
+        // above the passive content types (main overlay z=0, zone
+        // selector z=1) so a layout-OSD or nav-OSD reads cleanly over an
+        // active zone overlay or drag-time selector. While a MODAL slot
+        // (snap-assist / layout picker, both z=2) is visible the OSD
+        // drops to 1.5 — still above the passive tiers, but below the
+        // modal — so a concurrently-fired OSD card neither occludes
+        // modal content for its ~1.5s display nor lets its
+        // click-to-dismiss MouseArea eat clicks meant for the modal
+        // (the shell grabs input only while a modal is up, so an
+        // OSD-above-modal card would otherwise sit first in hit-test
+        // order over its rect). `visible` is the right predicate: it
+        // flips true at modal show and back to false only when the
+        // hide animation completes (onSnapAssistSlotHideCompleted /
+        // the picker equivalent), covering the modal's full on-screen
+        // span; `loaded` blips false→true on every re-show.
+        z: (snapAssistSlot.visible || layoutPickerSlot.visible) ? 1.5 : 3
         // SurfaceAnimator drives this Item's opacity. Start at 0 so the
         // first paint pre-show doesn't flash the OSD at full opacity.
         opacity: 0
@@ -226,6 +282,10 @@ Window {
                 backgroundColor: osdSlot.backgroundColor
                 textColor: osdSlot.textColor
                 highlightColor: osdSlot.highlightColor
+                inactiveColor: osdSlot.inactiveColor
+                borderColor: osdSlot.borderColor
+                activeOpacity: osdSlot.activeOpacity
+                inactiveOpacity: osdSlot.inactiveOpacity
                 layoutId: osdSlot.layoutId
                 layoutName: osdSlot.layoutName
                 category: osdSlot.category
@@ -266,6 +326,20 @@ Window {
                 errorColor: osdSlot.errorColor
             }
         }
+
+        // Surface-shader decoration (Stage d). SIBLING of osdLoader (never an
+        // ancestor of the captured card — a feedback loop). Captures the loaded
+        // card's PopupFrame shaderAnchor and re-renders it through the resolved
+        // "osd" surface pack (rounded corners + border), suppressing the card's
+        // own square-cornered direct draw via the snapshot's hideSource. Inert
+        // when decorationShaderSource is empty — the card then draws natively.
+        SurfaceDecoration {
+            anchors.fill: parent
+            contentItem: osdLoader.item
+            decorationChain: osdSlot.decorationChain
+            decorationOuterPadding: osdSlot.decorationOuterPadding
+            audioSpectrum: osdSlot.audioSpectrum
+        }
     }
 
     Item {
@@ -277,9 +351,9 @@ Window {
         property var candidates: []
         property int screenWidth: 1920
         property int screenHeight: 1080
-        property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-        property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-        property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+        property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor
         property real activeOpacity: 0.5
         property real inactiveOpacity: 0.3
         property int borderWidth: Kirigami.Units.smallSpacing
@@ -290,9 +364,30 @@ Window {
         // on subsequent vertex-shader transitions.
         property bool loaded: false
 
+        // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
+        // resolves the "popup.snapAssist" pack and writes these before each show;
+        // empty source = no decoration (card draws natively). Consumed by the
+        // SurfaceDecoration sibling below.
+        // Resolved decoration chain: ordered stage list ({source,
+        // vertexSource, preamble, params, animated} per pack), plus the
+        // chain's largest declared outer margin (logical px, e.g. glow's
+        // glowSize) the decoration host inflates its capture by. MUST be
+        // declared + forwarded: C++ writes them with setProperty, and an
+        // undeclared name silently becomes a dynamic property no binding
+        // observes — the decoration would never update.
+        property var decorationChain: []
+        property real decorationOuterPadding: 0
+        // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
+        // Same declare-and-forward contract as decorationChain: C++ writes it
+        // with setProperty, so an undeclared name would silently become a dead
+        // dynamic property no binding observes and audio would never reach the
+        // decoration shader.
+        property var audioSpectrum: []
+
         anchors.fill: parent
         // Popup tier — modal pickers paint above the zone selector and
-        // main overlay but below notifications/OSDs (z=3).
+        // main overlay, and above OSDs too while visible (the osdSlot
+        // drops from z=3 to 1.5 whenever a modal slot is visible).
         z: 2
         opacity: 0
         visible: false
@@ -302,12 +397,16 @@ Window {
 
             anchors.fill: parent
             active: snapAssistSlot.loaded
-            // asynchronous: true keeps the GUI thread responsive while
-            // the snap-assist body (Repeater of zones × Repeater of
-            // candidate cards) is instantiated. Without async loading a
-            // sibling slot's animation (e.g. an OSD fly-in) stalls
-            // mid-flight while this content mounts.
-            asynchronous: true
+            // SYNCHRONOUS by contract: the C++ show path toggles `loaded`
+            // and calls SurfaceAnimator::beginShow in the SAME tick, and
+            // beginShow resolves the shaderAnchor from the live item tree.
+            // An asynchronous load loses that race intermittently — no
+            // anchor exists yet, the animator falls back to the bare slot
+            // (no capture, no sibling hiding), the shader leg snaps opacity
+            // to 1.0, and the content + decoration then mount mid-leg as a
+            // STATIC fully-decorated surface that pops at completion. The
+            // mount jank a sync load costs is the OSD loader's long-proven
+            // behaviour; a correct entrance animation outranks it.
             sourceComponent: snapAssistContentComp
             onLoaded: {
                 if (snapAssistLoader.item) {
@@ -334,6 +433,18 @@ Window {
                 borderRadius: snapAssistSlot.borderRadius
             }
         }
+
+        // Surface-shader decoration (Stage d). SIBLING of snapAssistLoader.
+        // Captures the loaded content's shaderAnchor (the SnapAssistContent root
+        // itself carries `shaderAnchor: true`) and re-renders it through the
+        // resolved "popup.snapAssist" surface pack. Inert when the source is empty.
+        SurfaceDecoration {
+            anchors.fill: parent
+            contentItem: snapAssistLoader.item
+            decorationChain: snapAssistSlot.decorationChain
+            decorationOuterPadding: snapAssistSlot.decorationOuterPadding
+            audioSpectrum: snapAssistSlot.audioSpectrum
+        }
     }
 
     Item {
@@ -347,23 +458,41 @@ Window {
         property bool locked: false
         property color backgroundColor: Kirigami.Theme.backgroundColor
         property color textColor: Kirigami.Theme.textColor
-        property color highlightColor: Kirigami.Theme.highlightColor
-        property color inactiveColor: Kirigami.Theme.disabledTextColor
-        property color borderColor: Kirigami.Theme.textColor
+        property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
         property real activeOpacity: 0.5
         property real inactiveOpacity: 0.3
-        property int borderWidth: Kirigami.Units.smallSpacing
-        property int borderRadius: Kirigami.Units.gridUnit
         property string fontFamily: ""
         property real fontSizeScale: 1
         property int fontWeight: Font.Bold
         property bool fontItalic: false
         property bool fontUnderline: false
         property bool fontStrikeout: false
-        property color labelFontColor: Kirigami.Theme.textColor
+        // No labelFontColor here: picker previews deliberately don't wire label color, consistent with the selector and OSD slots.
         // OSD-style content lifecycle gate. C++ toggles false→true around
         // each show so LayoutPickerContent is re-instantiated.
         property bool loaded: false
+
+        // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
+        // resolves the "popup.layoutPicker" pack and writes these before each
+        // show; empty source = no decoration. Consumed by the SurfaceDecoration
+        // sibling below.
+        // Resolved decoration chain: ordered stage list ({source,
+        // vertexSource, preamble, params, animated} per pack), plus the
+        // chain's largest declared outer margin (logical px, e.g. glow's
+        // glowSize) the decoration host inflates its capture by. MUST be
+        // declared + forwarded: C++ writes them with setProperty, and an
+        // undeclared name silently becomes a dynamic property no binding
+        // observes — the decoration would never update.
+        property var decorationChain: []
+        property real decorationOuterPadding: 0
+        // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
+        // Same declare-and-forward contract as decorationChain: C++ writes it
+        // with setProperty, so an undeclared name would silently become a dead
+        // dynamic property no binding observes and audio would never reach the
+        // decoration shader.
+        property var audioSpectrum: []
 
         // Forwards to LayoutPickerContent.moveSelection / confirmSelection
         // — invoked by C++ on global-accel callbacks since the shell is
@@ -380,7 +509,9 @@ Window {
 
         anchors.fill: parent
         // Popup tier — same z as snap-assist (the two are mutually
-        // exclusive at any given moment) and below OSDs (z=3).
+        // exclusive at any given moment); above OSDs while visible
+        // (the osdSlot drops from z=3 to 1.5 whenever a modal slot is
+        // visible).
         z: 2
         opacity: 0
         visible: false
@@ -390,19 +521,15 @@ Window {
 
             anchors.fill: parent
             active: layoutPickerSlot.loaded
-            asynchronous: true
+            // SYNCHRONOUS by contract — see snapAssistLoader: beginShow
+            // resolves the shaderAnchor in the same tick as the `loaded`
+            // toggle; an async mount races it and the entrance animation
+            // intermittently degrades to a static surface + end pop.
             sourceComponent: layoutPickerContentComp
             onLoaded: {
                 if (layoutPickerLoader.item) {
                     layoutPickerLoader.item.layoutSelected.connect(root.layoutPickerSelected);
                     layoutPickerLoader.item.dismissRequested.connect(root.layoutPickerDismissRequested);
-                    // Seed _shortcutsActive so the LayoutPickerContent's
-                    // backdrop dismiss + selection bindings are live (the
-                    // content uses this to gate side-effects). The QML
-                    // Shortcuts inside LayoutPickerContent stay defined
-                    // but never fire (shell is kbd-None) — global accels
-                    // drive the picker instead.
-                    layoutPickerLoader.item._shortcutsActive = true;
                 }
             }
         }
@@ -431,6 +558,18 @@ Window {
                 locked: layoutPickerSlot.locked
             }
         }
+
+        // Surface-shader decoration (Stage d). SIBLING of layoutPickerLoader.
+        // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
+        // through the resolved "popup.layoutPicker" surface pack. Inert when the
+        // source is empty.
+        SurfaceDecoration {
+            anchors.fill: parent
+            contentItem: layoutPickerLoader.item
+            decorationChain: layoutPickerSlot.decorationChain
+            decorationOuterPadding: layoutPickerSlot.decorationOuterPadding
+            audioSpectrum: layoutPickerSlot.audioSpectrum
+        }
     }
 
     Item {
@@ -439,9 +578,23 @@ Window {
         // Selector data properties — C++ writes these per-show. The
         // ZoneSelectorContent inside the Loader picks them up via QML
         // lexical scope.
+        //
+        // Declared-but-unforwarded contract: 16 of these properties are
+        // written by C++ (selector.cpp / selector_update.cpp) but NOT
+        // forwarded to ZoneSelectorContent below, whose consumers were
+        // removed when the content derives those values itself:
+        //   screenAspectRatio, screenWidth, selectorLayoutMode,
+        //   selectorGridColumns, previewWidth, previewHeight,
+        //   previewLockAspect, positionIsVertical, layoutRows, barHeight,
+        //   barWidth, totalRows, previewScale, zonePadding,
+        //   zoneBorderWidth, zoneBorderRadius
+        // They MUST stay declared: C++ pushes them with setProperty, and
+        // deleting a declaration would silently demote the write to a
+        // dynamic property (masking the contract) while C++-side reads of
+        // the slot's current values would break. Do not remove them
+        // without also removing the corresponding C++ writes.
         property var layouts: []
         property string activeLayoutId: ""
-        property string hoveredLayoutId: ""
         property bool globalAutoAssign: false
         property string selectedLayoutId: ""
         property int selectedZoneIndex: -1
@@ -492,9 +645,9 @@ Window {
         property int scaledBorderWidth: 1
         property int scaledBorderRadius: 2
         property bool locked: false
-        property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-        property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-        property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+        property color highlightColor: QFZCommon.ZoneColorDefaults.previewActiveZoneColor
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.previewInactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.previewZoneBorderColor
         property string fontFamily: ""
         property real fontSizeScale: 1
         property int fontWeight: Font.Bold
@@ -506,22 +659,45 @@ Window {
         property real activeOpacity: 0.5
         property real inactiveOpacity: 0.3
 
+        // Surface-shader decoration (Stage d). C++ OverlayService::applyDecoration
+        // resolves the "popup.zoneSelector" pack and writes these before each
+        // show; empty source = no decoration. Consumed by the SurfaceDecoration
+        // sibling below.
+        // Resolved decoration chain: ordered stage list ({source,
+        // vertexSource, preamble, params, animated} per pack), plus the
+        // chain's largest declared outer margin (logical px, e.g. glow's
+        // glowSize) the decoration host inflates its capture by. MUST be
+        // declared + forwarded: C++ writes them with setProperty, and an
+        // undeclared name silently becomes a dynamic property no binding
+        // observes — the decoration would never update.
+        property var decorationChain: []
+        property real decorationOuterPadding: 0
+        // Live CAVA audio spectrum, forwarded to the SurfaceDecoration below.
+        // Same declare-and-forward contract as decorationChain: C++ writes it
+        // with setProperty, so an undeclared name would silently become a dead
+        // dynamic property no binding observes and audio would never reach the
+        // decoration shader.
+        property var audioSpectrum: []
+
         function applyScrollDelta(angleDeltaY) {
             if (zoneSelectorLoader.item)
                 zoneSelectorLoader.item.applyScrollDelta(angleDeltaY);
         }
 
+        // Clears slot-level cursor state only. The content's cursorX /
+        // cursorY are bindings onto these slot properties (forwarded in
+        // zoneSelectorContentComp below), so writing the slot props is
+        // sufficient — assigning on the content item would sever those
+        // bindings for the rest of the content's lifetime.
         function resetCursorState() {
-            if (zoneSelectorLoader.item)
-                zoneSelectorLoader.item.resetCursorState();
-
             zoneSelectorSlot.cursorX = -1;
             zoneSelectorSlot.cursorY = -1;
         }
 
         anchors.fill: parent
         // Mid tier — paints above the main zone overlay (z=0) and below
-        // popups (z=2) / OSDs (z=3). Drag-time selector card sits in
+        // popups (z=2) / OSDs (z=3, or 1.5 while a modal is visible —
+        // still above this slot). Drag-time selector card sits in
         // front of the zone-overlay layer the user sees during the drag.
         z: 1
         opacity: 0
@@ -532,10 +708,13 @@ Window {
 
             anchors.fill: parent
             active: zoneSelectorSlot.loaded
-            asynchronous: true
+            // SYNCHRONOUS by contract — see snapAssistLoader: beginShow
+            // resolves the shaderAnchor in the same tick as the `loaded`
+            // toggle; an async mount races it and the entrance animation
+            // intermittently degrades to a static surface + end pop.
             sourceComponent: zoneSelectorContentComp
             // No signal wiring: the zone-selector slot is input-transparent by
-            // design (see ZoneSelectorContent's `interactive: false`). Cursor
+            // design (its zone previews declare no pointer handlers). Cursor
             // tracking and commit both go through C++ (updateSelectorPosition
             // + drop.cpp), so QML never needs to forward a selection event.
         }
@@ -546,27 +725,17 @@ Window {
             ZoneSelectorContent {
                 layouts: zoneSelectorSlot.layouts
                 activeLayoutId: zoneSelectorSlot.activeLayoutId
-                hoveredLayoutId: zoneSelectorSlot.hoveredLayoutId
                 globalAutoAssign: zoneSelectorSlot.globalAutoAssign
                 selectedLayoutId: zoneSelectorSlot.selectedLayoutId
                 selectedZoneIndex: zoneSelectorSlot.selectedZoneIndex
                 minZoneSize: zoneSelectorSlot.minZoneSize
                 cursorX: zoneSelectorSlot.cursorX
                 cursorY: zoneSelectorSlot.cursorY
-                screenAspectRatio: zoneSelectorSlot.screenAspectRatio
-                screenWidth: zoneSelectorSlot.screenWidth
                 selectorPosition: zoneSelectorSlot.selectorPosition
-                selectorLayoutMode: zoneSelectorSlot.selectorLayoutMode
-                selectorGridColumns: zoneSelectorSlot.selectorGridColumns
-                previewWidth: zoneSelectorSlot.previewWidth
-                previewHeight: zoneSelectorSlot.previewHeight
-                previewLockAspect: zoneSelectorSlot.previewLockAspect
-                positionIsVertical: zoneSelectorSlot.positionIsVertical
                 indicatorWidth: zoneSelectorSlot.indicatorWidth
                 indicatorHeight: zoneSelectorSlot.indicatorHeight
                 indicatorSpacing: zoneSelectorSlot.indicatorSpacing
                 layoutColumns: zoneSelectorSlot.layoutColumns
-                layoutRows: zoneSelectorSlot.layoutRows
                 contentWidth: zoneSelectorSlot.contentWidth
                 contentHeight: zoneSelectorSlot.contentHeight
                 containerPadding: zoneSelectorSlot.containerPadding
@@ -581,17 +750,10 @@ Window {
                 cardSidePadding: zoneSelectorSlot.cardSidePadding
                 containerWidth: zoneSelectorSlot.containerWidth
                 containerHeight: zoneSelectorSlot.containerHeight
-                barHeight: zoneSelectorSlot.barHeight
-                barWidth: zoneSelectorSlot.barWidth
-                totalRows: zoneSelectorSlot.totalRows
                 scrollContentHeight: zoneSelectorSlot.scrollContentHeight
                 scrollContentWidth: zoneSelectorSlot.scrollContentWidth
                 needsScrolling: zoneSelectorSlot.needsScrolling
                 needsHorizontalScrolling: zoneSelectorSlot.needsHorizontalScrolling
-                previewScale: zoneSelectorSlot.previewScale
-                zonePadding: zoneSelectorSlot.zonePadding
-                zoneBorderWidth: zoneSelectorSlot.zoneBorderWidth
-                zoneBorderRadius: zoneSelectorSlot.zoneBorderRadius
                 scaledPadding: zoneSelectorSlot.scaledPadding
                 scaledBorderWidth: zoneSelectorSlot.scaledBorderWidth
                 scaledBorderRadius: zoneSelectorSlot.scaledBorderRadius
@@ -611,6 +773,18 @@ Window {
                 inactiveOpacity: zoneSelectorSlot.inactiveOpacity
             }
         }
+
+        // Surface-shader decoration (Stage d). SIBLING of zoneSelectorLoader.
+        // Captures the loaded content's PopupFrame shaderAnchor and re-renders it
+        // through the resolved "popup.zoneSelector" surface pack. Inert when the
+        // source is empty.
+        SurfaceDecoration {
+            anchors.fill: parent
+            contentItem: zoneSelectorLoader.item
+            decorationChain: zoneSelectorSlot.decorationChain
+            decorationOuterPadding: zoneSelectorSlot.decorationOuterPadding
+            audioSpectrum: zoneSelectorSlot.audioSpectrum
+        }
     }
 
     Item {
@@ -626,9 +800,9 @@ Window {
         property var highlightedZoneIds: []
         property bool showNumbers: true
         property var previewZones: []
-        property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-        property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-        property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+        property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
+        property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
+        property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor
         property color labelFontColor: Kirigami.Theme.textColor
         property string fontFamily: ""
         property real fontSizeScale: 1
@@ -672,21 +846,6 @@ Window {
                 mainOverlayLoader.item.flash();
         }
 
-        function highlightZone(zoneId) {
-            if (mainOverlayLoader.item && mainOverlayLoader.item.highlightZone)
-                mainOverlayLoader.item.highlightZone(zoneId);
-        }
-
-        function highlightZones(zoneIds) {
-            if (mainOverlayLoader.item && mainOverlayLoader.item.highlightZones)
-                mainOverlayLoader.item.highlightZones(zoneIds);
-        }
-
-        function clearHighlight() {
-            if (mainOverlayLoader.item && mainOverlayLoader.item.clearHighlight)
-                mainOverlayLoader.item.clearHighlight();
-        }
-
         function reloadShader() {
             if (mainOverlayLoader.item && mainOverlayLoader.item.reloadShader)
                 mainOverlayLoader.item.reloadShader();
@@ -695,7 +854,7 @@ Window {
         anchors.fill: parent
         // Bottom tier — zone overlay during a window drag is the
         // backdrop content; selector (z=1), popups (z=2), and OSDs
-        // (z=3) all paint over it.
+        // (z=3, or 1.5 under a visible modal) all paint over it.
         z: 0
         opacity: 0
         visible: false
@@ -705,7 +864,10 @@ Window {
 
             anchors.fill: parent
             active: mainOverlaySlot.loaded
-            asynchronous: true
+            // SYNCHRONOUS by contract — see snapAssistLoader: beginShow
+            // resolves the shaderAnchor in the same tick as the `loaded`
+            // toggle; an async mount races it and the entrance animation
+            // intermittently degrades to a static surface + end pop.
             sourceComponent: mainOverlaySlot.useShader ? renderNodeContentComp : zoneOverlayContentComp
         }
 

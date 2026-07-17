@@ -71,8 +71,9 @@ struct alignas(16) BaseUniforms
     int iAudioSpectrumSize; // offset 576
     int iFlipBufferY; // offset 580 — always 1 for Y-flip
     // The two pad ints at offsets 584 and 588 are explicitly written as zero
-    // by the C-side upload path (see shadernoderhiuniforms.cpp's syncBaseUniforms)
-    // — readers should not assume the bytes are skipped on the wire. On the
+    // by the C-side upload path (see BaseUniformProfile::fill in
+    // baseuniformprofile.cpp) — readers should not assume the bytes are skipped
+    // on the wire. On the
     // GLSL side they are absorbed by std140's vec4 alignment of the following
     // `iTextureResolution` (vec4[4]) member, which forces the next field onto
     // a 16-byte boundary at offset 592. Removing the pad would shift the
@@ -97,8 +98,8 @@ struct alignas(16) BaseUniforms
     // branch on it. Carved out of the trailing std140 pad so total
     // struct size stays 672 bytes.
     int iIsReversed; // offset 660
-    // Ditto: trailing pad zeroed by value-init (`m_baseUniforms = {}`) and
-    // covered by K_SCENE_HEADER. See the expanded `_pad_after_audioSpectrum`
+    // Ditto: trailing pad zeroed by value-init (BaseUniformProfile's `m_u = {}`)
+    // and covered by K_SCENE_HEADER. See the expanded `_pad_after_audioSpectrum`
     // comment above for the full std140 / upload-region rationale.
     int _pad_after_iIsReversed[2]; // std140 struct alignment, total 672 bytes
 };
@@ -120,7 +121,7 @@ static_assert(sizeof(BaseUniforms) == 672, "BaseUniforms must be exactly 672 byt
 // Every field declared in `animation_uniforms.glsl` is pinned here. A
 // previous revision asserted only iTime / iResolution / customParams /
 // customColors, which left the door open to a reorder that swapped
-// {iTimeDelta, iFrame, _appField0, _appField1, iMouse, iDate} amongst
+// {iTimeDelta, iFrame, appField0, appField1, iMouse, iDate} amongst
 // themselves while preserving the four asserted offsets — silent
 // miscompile for any future animation shader that reads the in-between
 // fields. The full coverage below catches that.
@@ -175,7 +176,7 @@ constexpr size_t K_TIME_BLOCK_SIZE = sizeof(float) + sizeof(float) + sizeof(int)
 // App-fields block (appField0, appField1) — 8 bytes at offset 88.
 // Uploaded as a tiny standalone region when ONLY the consumer's escape-hatch
 // fields changed. Without this granular region, every appField update would
-// trigger a full scene-header re-upload (~512 bytes).
+// trigger a full scene-header re-upload (~592 bytes).
 constexpr size_t K_APP_FIELDS_OFFSET = offsetof(BaseUniforms, appField0);
 constexpr size_t K_APP_FIELDS_SIZE = sizeof(int) * 2;
 

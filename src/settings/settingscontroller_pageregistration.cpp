@@ -1,21 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Page-registration + sidebar topology methods for SettingsController:
+// Page-registration methods for SettingsController:
 //   * buildApplicationController() — wires the PhosphorControl
 //     PageRegistry with PlasmaZones' settings pages and sidebar categories
 //     (the navigable leaf pages are enumerated in validPageNames()).
 //   * What's-New dismissal + last-seen-version state.
-//   * Static accessors for the sidebar's parent/child topology
-//     (parentPageRedirects, pageGroupChildren, validPageNames) used by
-//     isPageDirty() to propagate dirtiness up collapsed categories
-//     and by --page CLI / D-Bus selection to redirect virtual parents
-//     to a sensible leaf.
 //
-// Split out of settingscontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). All methods here are members of
-// PlasmaZones::SettingsController — same class, separate translation
-// unit, no API change.
+// The static sidebar parent/child topology accessors (parentPageRedirects,
+// pageGroupChildren, pageOwnedConfigKeys, validPageNames) live in the sibling
+// settingscontroller_pagetopology.cpp.
+//
+// All methods here are members of PlasmaZones::SettingsController. Same class
+// as settingscontroller.cpp, separate translation unit, no API change.
 
 #include "settingscontroller.h"
 
@@ -71,10 +68,10 @@ void SettingsController::buildApplicationController()
     // Top-level entries. The rail reads top → bottom as three blocks split by
     // two dividers: (1) top/global — Overview (status dashboard) + General
     // (global settings); (2) per-feature configuration — Display, Placement,
-    // Animations, Window Rules; (3) tools & meta — Editor, About.
+    // Animations, Rules; (3) tools & meta — Editor, About.
     // `divider` flags mark only those two seams (after General, after Window
     // Rules) plus one inside the feature block (after Placement, to set the
-    // placement categories apart from Animations/Window Rules).
+    // placement categories apart from Animations/Rules).
 
     // ── Block 1: top / global ──
     regVirtual(QStringLiteral("overview"), QString(), PhosphorI18n::tr("Overview"),
@@ -90,27 +87,49 @@ void SettingsController::buildApplicationController()
     // Placement groups the two placement modes (Snapping / Tiling) as an
     // inline-collapsible category, matching Display. Divider after it (i.e.
     // above Animations) sets the placement categories apart from the
-    // Animations / Window Rules pages that follow.
+    // Animations / Rules pages that follow.
     regVirtual(QStringLiteral("placement"), QString(), PhosphorI18n::tr("Placement"), QString(),
                QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    // "animations" is a no-QML drill-down parent — register it as a virtual
-    // navigation node (like display / placement / snapping / tiling), NOT as
-    // m_animationsPage's own id. The AnimationsPageController is the staging
-    // controller for animation edits; it carries the distinct id
+    // Appearance groups the visual surfaces — the Animations tree and the
+    // Decoration tree (which owns the window border / title-bar / gap page) — as an
+    // inline-collapsible category (matching Display / Placement). No QML of its
+    // own; redirects to its first leaf.
+    regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
+               QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
+    // "animations" is a no-QML drill-down parent under Appearance — register it as
+    // a virtual navigation node (like display / placement / snapping / tiling),
+    // NOT as m_animationsPage's own id. The AnimationsPageController is the
+    // staging controller for animation edits; it carries the distinct id
     // "animations-staging" and is wired into the framework's dirty/apply
     // machinery as a headless domain below. Splitting the two means the nav
     // handle ("animations", redirected to "animations-general") and the
     // staging controller are independently addressable by QML / D-Bus.
-    regVirtual(QStringLiteral("animations"), QString(), PhosphorI18n::tr("Animations"), QString(),
+    regVirtual(QStringLiteral("animations"), QStringLiteral("appearance"), PhosphorI18n::tr("Animations"), QString(),
                QStringLiteral("media-playback-start"));
     // Headless staging domain — trackDomain() connects dirtyChanged + appends
     // to m_domains so applyAllAsync walks it, exactly as registerPage would
     // have, but without claiming a sidebar/registry id of its own.
     m_app->registerDomain(m_animationsPage);
-    // Window Rules is a top-level leaf (its old "Rules" parent retired after
+    // Decoration — a no-QML drill-down parent UNDER Appearance, alongside
+    // Windows and Animations (all visual-surface pages live in that group).
+    // PER-SURFACE scope: per-surface CHAINS of decoration shader packs,
+    // resolved through a DecorationProfileTree (walk-up inheritance). Each
+    // surface family (window / popup) is its own alwaysEnabled root. The nav
+    // handle ("decoration") redirects to its General page (the config-backed
+    // window-appearance page, registered below with the decoration children).
+    // The DecorationPageController is wired in
+    // as a headless staging domain below; it has no per-page staged state —
+    // dirty tracking rides the global decorationProfileTreeChanged NOTIFY loop.
+    regVirtual(QStringLiteral("decorations"), QStringLiteral("appearance"), PhosphorI18n::tr("Decorations"), QString(),
+               QStringLiteral("preferences-desktop-theme"));
+    // Headless staging domain — trackDomain() connects dirtyChanged + appends
+    // to m_domains so applyAllAsync walks it, exactly as registerPage would,
+    // but without claiming a sidebar/registry id of its own.
+    m_app->registerDomain(m_decorationPage);
+    // Rules is a top-level leaf (its old "Rules" parent retired after
     // the v4 fold left a single rule surface). Divider after it closes the
     // feature block and opens the tools-and-meta block below.
-    regPage(m_windowRulesPage, QString(), PhosphorI18n::tr("Window Rules"), QStringLiteral("WindowRulesPage.qml"),
+    regPage(m_rulesPage, QString(), PhosphorI18n::tr("Rules"), QStringLiteral("RulesPage.qml"),
             QStringLiteral("view-list-details"), /*collapsible=*/false, /*divider=*/true);
 
     // ── Block 3: tools & meta ──
@@ -163,16 +182,12 @@ void SettingsController::buildApplicationController()
                QStringLiteral("SnappingZoneSelectorPage.qml"), QStringLiteral("view-choose"), /*collapsible=*/false,
                /*divider=*/true);
 
-    regVirtual(QStringLiteral("snapping-window-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Window"), QString(),
-               QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    regVirtual(QStringLiteral("snapping-window-behavior"), QStringLiteral("snapping-window-cat"),
-               PhosphorI18n::tr("Behavior"), QStringLiteral("SnappingWindowBehaviorPage.qml"),
-               QStringLiteral("preferences-system"));
-    // Window Appearance keeps its dedicated controller (border-width/radius
-    // bounds + the snapping gap bounds the moved Gaps card now reads), so it
-    // stays a regPage.
-    regPage(m_snappingWindowAppearancePage, QStringLiteral("snapping-window-cat"), PhosphorI18n::tr("Appearance"),
-            QStringLiteral("SnappingWindowAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
+    // Snapping → Window holds just the per-mode Behavior page now. The window
+    // border / title-bar appearance moved to the shared, top-level Window
+    // Appearance page (config-backed, shared, mode-neutral).
+    regVirtual(QStringLiteral("snapping-window-behavior"), QStringLiteral("snapping"), PhosphorI18n::tr("Window"),
+               QStringLiteral("SnappingWindowBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
+               /*collapsible=*/false, /*divider=*/true);
 
     regVirtual(QStringLiteral("snapping-config-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Configuration"),
                QString(), QStringLiteral("configure"), /*collapsible=*/true);
@@ -191,12 +206,12 @@ void SettingsController::buildApplicationController()
     // onto Window → Appearance. Page IDs are unchanged (tiling has a single
     // Behavior/Appearance pair, so they need no overlay/selector disambiguation) —
     // only the parents changed, keeping the per-page controller ids stable.
-    regVirtual(QStringLiteral("tiling-window-cat"), QStringLiteral("tiling"), PhosphorI18n::tr("Window"), QString(),
-               QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    regPage(m_tilingBehaviorPage, QStringLiteral("tiling-window-cat"), PhosphorI18n::tr("Behavior"),
-            QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system"));
-    regPage(m_tilingAppearancePage, QStringLiteral("tiling-window-cat"), PhosphorI18n::tr("Appearance"),
-            QStringLiteral("TilingAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
+    // Tiling → Window holds just the per-mode Behavior page now. The window
+    // border / title-bar appearance moved to the shared, top-level Window
+    // Appearance page (config-backed, shared, mode-neutral).
+    regPage(m_tilingBehaviorPage, QStringLiteral("tiling"), PhosphorI18n::tr("Window"),
+            QStringLiteral("TilingBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
+            /*collapsible=*/false, /*divider=*/true);
 
     // Algorithm is a top-level leaf under Tiling (no snapping peer — snapping's
     // layout equivalent lives under Display → Layouts). Divider after it sets the
@@ -213,28 +228,54 @@ void SettingsController::buildApplicationController()
                PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("TilingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"));
 
-    // Animations children — Surfaces / Library categories drill in.
+    // Animations children — Transitions / Motion / Library categories drill in.
     regVirtual(QStringLiteral("animations-general"), QStringLiteral("animations"), PhosphorI18n::tr("General"),
                QStringLiteral("AnimationsGeneralPage.qml"), QStringLiteral("configure"), /*collapsible=*/false,
                /*divider=*/true);
-    regVirtual(QStringLiteral("animations-surfaces"), QStringLiteral("animations"), PhosphorI18n::tr("Surfaces"),
-               QString(), QStringLiteral("preferences-desktop-multimedia"), /*collapsible=*/true);
+    // Transitions — shader-driven appearance and reveal events (window
+    // open/close/minimize, OSDs, overlays, desktop switch), grouped so each child
+    // page carries ONE shader contract. This keeps the per-row shader picker
+    // coherent: every effect it offers actually applies.
+    regVirtual(QStringLiteral("animations-transitions"), QStringLiteral("animations"), PhosphorI18n::tr("Transitions"),
+               QString(), QStringLiteral("preferences-desktop-multimedia"),
+               /*collapsible=*/true);
+    // Motion — movement and geometry events. Window motion (maximize / snap /
+    // layout switch) carries the geometry shader contract, so its page still
+    // shows a shader picker; the held drag is its own opt-in `move` class on
+    // the Window Dragging child page; side panels, widgets and the editor are
+    // timing/curve only.
+    regVirtual(QStringLiteral("animations-motion"), QStringLiteral("animations"), PhosphorI18n::tr("Motion"), QString(),
+               QStringLiteral("chronometer"), /*collapsible=*/true);
     regVirtual(QStringLiteral("animations-library"), QStringLiteral("animations"), PhosphorI18n::tr("Library"),
                QString(), QStringLiteral("folder-open"), /*collapsible=*/true);
 
-    regVirtual(QStringLiteral("animations-windows"), QStringLiteral("animations-surfaces"), PhosphorI18n::tr("Windows"),
-               QStringLiteral("AnimationsWindowsPage.qml"), QStringLiteral("window-new"));
-    regVirtual(QStringLiteral("animations-osds"), QStringLiteral("animations-surfaces"), PhosphorI18n::tr("OSDs"),
+    regVirtual(QStringLiteral("animations-windows"), QStringLiteral("animations-transitions"),
+               PhosphorI18n::tr("Windows"), QStringLiteral("AnimationsWindowsPage.qml"), QStringLiteral("window-new"));
+    regVirtual(QStringLiteral("animations-osds"), QStringLiteral("animations-transitions"), PhosphorI18n::tr("OSDs"),
                QStringLiteral("AnimationsOsdsPage.qml"), QStringLiteral("dialog-information"));
-    regVirtual(QStringLiteral("animations-overlays"), QStringLiteral("animations-surfaces"),
+    regVirtual(QStringLiteral("animations-overlays"), QStringLiteral("animations-transitions"),
                PhosphorI18n::tr("Overlays"), QStringLiteral("AnimationsOverlaysPage.qml"),
                QStringLiteral("view-presentation"));
-    regVirtual(QStringLiteral("animations-side-panels"), QStringLiteral("animations-surfaces"),
+    regVirtual(QStringLiteral("animations-desktops"), QStringLiteral("animations-transitions"),
+               PhosphorI18n::tr("Desktop"), QStringLiteral("AnimationsDesktopsPage.qml"),
+               QStringLiteral("virtual-desktops"));
+
+    regVirtual(QStringLiteral("animations-window-motion"), QStringLiteral("animations-motion"),
+               PhosphorI18n::tr("Window Motion"), QStringLiteral("AnimationsWindowMotionPage.qml"),
+               QStringLiteral("window-new"));
+    // Window Dragging is deliberately its own page, not a row under Window
+    // Motion: the drag event is its own opt-in shader class (`move`) that
+    // takes no inherited shader, so parking it under the "All Windows"
+    // cascade parent would misrepresent the inheritance.
+    regVirtual(QStringLiteral("animations-window-dragging"), QStringLiteral("animations-motion"),
+               PhosphorI18n::tr("Window Dragging"), QStringLiteral("AnimationsWindowDraggingPage.qml"),
+               QStringLiteral("transform-move"));
+    regVirtual(QStringLiteral("animations-side-panels"), QStringLiteral("animations-motion"),
                PhosphorI18n::tr("Side Panels"), QStringLiteral("AnimationsSidePanelsPage.qml"),
                QStringLiteral("sidebar-collapse-symbolic"));
-    regVirtual(QStringLiteral("animations-widgets"), QStringLiteral("animations-surfaces"), PhosphorI18n::tr("Widgets"),
+    regVirtual(QStringLiteral("animations-widgets"), QStringLiteral("animations-motion"), PhosphorI18n::tr("Widgets"),
                QStringLiteral("AnimationsWidgetsPage.qml"), QStringLiteral("preferences-desktop-theme"));
-    regVirtual(QStringLiteral("animations-editor"), QStringLiteral("animations-surfaces"),
+    regVirtual(QStringLiteral("animations-editor"), QStringLiteral("animations-motion"),
                PhosphorI18n::tr("Layout Editor"), QStringLiteral("AnimationsEditorPage.qml"),
                QStringLiteral("document-edit"));
 
@@ -245,6 +286,41 @@ void SettingsController::buildApplicationController()
                QStringLiteral("color-palette"));
     regVirtual(QStringLiteral("animations-shaders"), QStringLiteral("animations-library"), PhosphorI18n::tr("Shaders"),
                QStringLiteral("AnimationsShadersPage.qml"), QStringLiteral("preferences-desktop-display"));
+
+    // Decoration children — Surfaces / Library categories drill in, the same
+    // two-bucket shape as animations. Unlike animations there is NO General
+    // page: decoration has no meaningful global default (borders and title
+    // bars are window-only; daemon surfaces default to no decoration), so
+    // Surfaces fans straight out to the per-surface override pages and
+    // Library holds the installed-pack browser.
+    // Decoration → General: the shared, mode-neutral window-appearance page
+    // (config-backed window border / title bar Windows.* + the unified gap
+    // model Gaps.*). Lives under Decoration as its General page — the same
+    // slot animations-general occupies — keeping its historical
+    // "window-appearance" id so dirty tracking, the per-page reset manifest,
+    // and deep links stay stable.
+    regPage(m_windowAppearancePage, QStringLiteral("decorations"), PhosphorI18n::tr("General"),
+            QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("configure"), /*collapsible=*/false,
+            /*divider=*/true);
+
+    regVirtual(QStringLiteral("decorations-surfaces"), QStringLiteral("decorations"), PhosphorI18n::tr("Surfaces"),
+               QString(), QStringLiteral("preferences-desktop-multimedia"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("decorations-library"), QStringLiteral("decorations"), PhosphorI18n::tr("Library"),
+               QString(), QStringLiteral("folder-open"), /*collapsible=*/true);
+
+    regVirtual(QStringLiteral("decorations-windows"), QStringLiteral("decorations-surfaces"),
+               PhosphorI18n::tr("Windows"), QStringLiteral("DecorationWindowsPage.qml"), QStringLiteral("window-new"));
+    regVirtual(QStringLiteral("decorations-osds"), QStringLiteral("decorations-surfaces"), PhosphorI18n::tr("OSDs"),
+               QStringLiteral("DecorationOsdsPage.qml"), QStringLiteral("dialog-information"));
+    regVirtual(QStringLiteral("decorations-popups"), QStringLiteral("decorations-surfaces"), PhosphorI18n::tr("Popups"),
+               QStringLiteral("DecorationPopupsPage.qml"), QStringLiteral("view-presentation"));
+
+    regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"),
+               PhosphorI18n::tr("Decoration Sets"), QStringLiteral("DecorationSetsPage.qml"),
+               QStringLiteral("color-palette"));
+    regVirtual(QStringLiteral("decorations-shaders"), QStringLiteral("decorations-library"),
+               PhosphorI18n::tr("Shaders"), QStringLiteral("DecorationShadersPage.qml"),
+               QStringLiteral("preferences-desktop-display"));
 
     // Bridge SettingsController.save/load to the framework's Apply/Cancel
     // (and to the global dirty flag QML chrome binds to).
@@ -343,194 +419,6 @@ void SettingsController::markWhatsNewSeen()
         appSettings.setValue(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey(), latest);
         Q_EMIT lastSeenWhatsNewVersionChanged();
     }
-}
-
-const QHash<QString, QString>& SettingsController::parentPageRedirects()
-{
-    // Parent sidebar categories have no QML component — resolve them to their
-    // first child so D-Bus / CLI / Q_INVOKABLE callers get a sensible result.
-    // Includes both top-level parents AND mid-level virtual parents
-    // (`animations-surfaces`, `animations-library`) so any of those names
-    // passed via `--page` or D-Bus lands on a real leaf instead of triggering
-    // the generic "Unknown settings page" warning.
-    static const QHash<QString, QString> redirects{
-        {QStringLiteral("display"), QStringLiteral("virtualscreens")},
-        // "placement" is the inline-collapsible parent of snapping/tiling; it
-        // has no page of its own, so a --page=placement / D-Bus call lands on
-        // the first leaf of its first child (snapping → snapping-overlay-behavior).
-        {QStringLiteral("placement"), QStringLiteral("snapping-overlay-behavior")},
-        {QStringLiteral("snapping"), QStringLiteral("snapping-overlay-behavior")},
-        // Tiling's first child is the Window category → its first leaf is Behavior.
-        {QStringLiteral("tiling"), QStringLiteral("tiling-behavior")},
-        {QStringLiteral("animations"), QStringLiteral("animations-general")},
-        {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
-        {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
-        // The "rules" parent virtual retired when Window Rules promoted
-        // to a top-level entry; no redirect needed because there is no
-        // longer a parent id to land on.
-        // The *-cat virtual headers (registered as collapsible category
-        // entries in buildApplicationController above) are real entries
-        // in the framework PageRegistry — without an explicit redirect,
-        // anything that drives setCurrentPageId("snapping-overlay-cat")
-        // would land on a page id that isn't in validPageNames() and
-        // m_activePage would diverge from m_app->currentPageId(). Map
-        // each *-cat to its first leaf so the active-page state stays
-        // coherent regardless of how the id was reached.
-        {QStringLiteral("snapping-overlay-cat"), QStringLiteral("snapping-overlay-behavior")},
-        {QStringLiteral("snapping-window-cat"), QStringLiteral("snapping-window-behavior")},
-        {QStringLiteral("snapping-config-cat"), QStringLiteral("snapping-ordering")},
-        {QStringLiteral("tiling-window-cat"), QStringLiteral("tiling-behavior")},
-        {QStringLiteral("tiling-config-cat"), QStringLiteral("tiling-ordering")},
-    };
-    return redirects;
-}
-
-const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
-{
-    // Single source of truth: parent name → set of leaf child page
-    // names. Used by `isPageDirty` to propagate dirty state from a
-    // leaf to any group it belongs to. Covers parents at every level:
-    // top-level categories (placement / display / animations) AND the
-    // mid-level virtual parents nested beneath them (snapping / tiling
-    // under placement; animations-surfaces / animations-library; the
-    // *-cat headers) whose children don't share their name prefix — the
-    // explicit set sidesteps the asymmetry between prefix-walk and
-    // direct membership lookup.
-    //
-    // The "animations" entry is built at static-init by unioning the
-    // virtual sub-buckets (`animations-surfaces`, `animations-library`)
-    // with the leaf that hangs directly off `animations` (general).
-    // Without this, a future leaf added to a virtual parent only would
-    // silently miss the top-level dirty propagation.
-    //
-    // Keep the per-group leaf lists in sync with the parentId arguments
-    // in `buildApplicationController()` above — that function is the
-    // registry's source of truth for the page tree; this static map
-    // exists because `isPageDirty()` is a hot path and the per-call walk
-    // over `m_app->pageRegistry()->allPages()` to derive the parent→leaf
-    // mapping would otherwise re-scan every page on every dirty-check.
-    // (The historical "_childItems" reference in Main.qml is obsolete —
-    // the chrome now consumes registry topology directly via Sidebar.qml.)
-    static const QSet<QString> kAnimationsSurfacesChildren{
-        QStringLiteral("animations-windows"),  QStringLiteral("animations-osds"),
-        QStringLiteral("animations-overlays"), QStringLiteral("animations-side-panels"),
-        QStringLiteral("animations-widgets"),  QStringLiteral("animations-editor")};
-    static const QSet<QString> kAnimationsLibraryChildren{QStringLiteral("animations-presets"),
-                                                          QStringLiteral("animations-motionsets"),
-                                                          QStringLiteral("animations-shaders")};
-    static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general")};
-    static const QSet<QString> kAnimationsAllLeaves =
-        kAnimationsDirectChildren + kAnimationsSurfacesChildren + kAnimationsLibraryChildren;
-    // Mid-level *-cat collapsible category headers under the snapping /
-    // tiling drill-down parents. Sidebar.qml renders these as collapsible
-    // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
-    // Main.qml calls isPageDirty(<*-cat>) to decide whether to light the
-    // badge. Without these entries that lookup would always
-    // return false even when a leaf inside the collapsed section is
-    // dirty (mirrors the snapping/tiling parent entries above, just one
-    // level deeper). Keep in sync with the regVirtual *-cat registrations
-    // in buildApplicationController() above.
-    static const QSet<QString> kSnappingOverlayChildren{
-        QStringLiteral("snapping-overlay-behavior"),
-        QStringLiteral("snapping-overlay-appearance"),
-    };
-    // Zone Selector is a standalone top leaf under "snapping" (no category, no
-    // Behavior/Appearance split) — folded directly into the parent sets below.
-    static const QString kSnappingZoneSelector = QStringLiteral("snapping-zoneselector");
-    static const QSet<QString> kSnappingWindowChildren{
-        QStringLiteral("snapping-window-behavior"),
-        QStringLiteral("snapping-window-appearance"),
-    };
-    static const QSet<QString> kSnappingConfigChildren{
-        QStringLiteral("snapping-ordering"),
-        QStringLiteral("snapping-shortcuts"),
-        QStringLiteral("snapping-shaders"),
-    };
-    static const QSet<QString> kSnappingAllLeaves = kSnappingOverlayChildren + QSet<QString>{kSnappingZoneSelector}
-        + kSnappingWindowChildren + kSnappingConfigChildren;
-    static const QSet<QString> kTilingWindowChildren{
-        QStringLiteral("tiling-behavior"),
-        QStringLiteral("tiling-appearance"),
-    };
-    // Algorithm is a standalone top leaf under "tiling" (no category), so it has
-    // no *-cat group of its own; it is folded directly into the tiling/placement
-    // parent sets below.
-    static const QString kTilingAlgorithm = QStringLiteral("tiling-algorithm");
-    static const QSet<QString> kTilingConfigChildren{
-        QStringLiteral("tiling-ordering"),
-        QStringLiteral("tiling-shortcuts"),
-    };
-    static const QSet<QString> kTilingAllLeaves =
-        kTilingWindowChildren + QSet<QString>{kTilingAlgorithm} + kTilingConfigChildren;
-    static const QHash<QString, QSet<QString>> groups{
-        {QStringLiteral("snapping"), kSnappingAllLeaves},
-        {QStringLiteral("tiling"), kTilingAllLeaves},
-        // "placement" is the inline-collapsible parent of snapping + tiling;
-        // when collapsed its dirty badge must light if any snapping OR tiling
-        // leaf is dirty, so its leaf set is the union of both modes' leaves.
-        {QStringLiteral("placement"), kSnappingAllLeaves + kTilingAllLeaves},
-        {QStringLiteral("snapping-overlay-cat"), kSnappingOverlayChildren},
-        {QStringLiteral("snapping-window-cat"), kSnappingWindowChildren},
-        {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
-        {QStringLiteral("tiling-window-cat"), kTilingWindowChildren},
-        {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
-        {QStringLiteral("animations"), kAnimationsAllLeaves},
-        {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
-        {QStringLiteral("animations-library"), kAnimationsLibraryChildren},
-        // Top-level inline-collapsible parents must also propagate
-        // dirty state from their leaves — without these entries the
-        // sidebar's collapsed dirty badge stays cold even when a
-        // child page is dirty. Mirrors the registry topology in
-        // buildApplicationController() above.
-        {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
-        // No "rules" entry — Window Rules is a top-level leaf so its
-        // dirty state propagates without a parent-bucket intermediary.
-    };
-    return groups;
-}
-
-const QSet<QString>& SettingsController::validPageNames()
-{
-    // Keep in sync with the `regPage` / `regVirtual` registrations in
-    // `buildApplicationController` above — every entry here must resolve
-    // to a registered page, otherwise external --page invocations and
-    // sidebar navigation will silently fall through to the default page.
-    // (The legacy `_pageComponents` Main.qml map this comment used to
-    // name was retired when Main.qml moved to PhosphorUi.SettingsAppWindow's
-    // framework-driven PageHost Loader, keyed off the registry.)
-    static const QSet<QString> pages{
-        QStringLiteral("overview"),
-        QStringLiteral("layouts"),
-        QStringLiteral("snapping-overlay-behavior"),
-        QStringLiteral("snapping-overlay-appearance"),
-        QStringLiteral("snapping-zoneselector"),
-        QStringLiteral("snapping-window-behavior"),
-        QStringLiteral("snapping-window-appearance"),
-        QStringLiteral("snapping-shaders"),
-        QStringLiteral("snapping-shortcuts"),
-        QStringLiteral("tiling-appearance"),
-        QStringLiteral("tiling-behavior"),
-        QStringLiteral("tiling-algorithm"),
-        QStringLiteral("tiling-shortcuts"),
-        QStringLiteral("snapping-ordering"),
-        QStringLiteral("tiling-ordering"),
-        QStringLiteral("window-rules"),
-        QStringLiteral("editor"),
-        QStringLiteral("general"),
-        QStringLiteral("about"),
-        QStringLiteral("virtualscreens"),
-        QStringLiteral("animations-general"),
-        QStringLiteral("animations-windows"),
-        QStringLiteral("animations-editor"),
-        QStringLiteral("animations-osds"),
-        QStringLiteral("animations-overlays"),
-        QStringLiteral("animations-side-panels"),
-        QStringLiteral("animations-widgets"),
-        QStringLiteral("animations-presets"),
-        QStringLiteral("animations-motionsets"),
-        QStringLiteral("animations-shaders"),
-    };
-    return pages;
 }
 
 } // namespace PlasmaZones

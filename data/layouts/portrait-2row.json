@@ -3,7 +3,6 @@
     "name": "Portrait 2-Row",
     "description": "Two stacked rows optimized for vertical monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "portrait",
     "zones": [

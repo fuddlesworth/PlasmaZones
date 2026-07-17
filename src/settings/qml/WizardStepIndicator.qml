@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
+
+import "FontUtils.js" as FontUtils
 
 /**
  * @brief Step indicator for multi-step wizard dialogs.
@@ -44,15 +45,25 @@ RowLayout {
                     if (stepIndicator.index < root.currentStep)
                         return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
 
-                    return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15);
+                    return Kirigami.Theme.alternateBackgroundColor;
                 }
 
                 Label {
                     anchors.centerIn: parent
                     text: (stepIndicator.index + 1).toString()
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    font.weight: Font.Bold
-                    color: stepIndicator.index <= root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                    // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                    // illegal duplicate binding that fails the whole document. FontUtils
+                    // passes only the size dimension the theme font actually carries.
+                    font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                        bold: true
+                    })
+                    // Only the current step sits on a solid highlight fill, so
+                    // only it takes highlightedTextColor. Completed steps sit on
+                    // a 0.4-alpha highlight wash over the regular background —
+                    // there highlightedTextColor goes light-on-light in light
+                    // themes, while textColor stays readable against a blend
+                    // still dominated by the background.
+                    color: stepIndicator.index === root.currentStep ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     opacity: stepIndicator.index <= root.currentStep ? 1 : 0.4
                 }
 
@@ -80,9 +91,9 @@ RowLayout {
 
                 visible: stepIndicator.index < root.stepLabels.length - 1
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 3
-                Layout.preferredHeight: Math.round(Screen.devicePixelRatio * 2)
+                Layout.preferredHeight: 2
                 radius: height / 2
-                color: completed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+                color: completed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                 Behavior on color {
                     PhosphorMotionAnimation {

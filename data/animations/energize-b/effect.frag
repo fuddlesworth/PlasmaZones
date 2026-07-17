@@ -111,7 +111,7 @@ vec4 pTransition(vec2 uv, float t)
     // ----- Particle field -------------------------------------------------
 
     // Match the defence-in-depth pattern in energize-a/effect.frag: even
-    // though `pScale` is already clamped above (line 78), the
+    // though `pScale` is already clamped at the top of pTransition, the
     // redundant max here makes a future refactor that drops the
     // source-side clamp safe. Without it, energize-a and energize-b
     // would diverge — energize-a still floors at the divide site,
@@ -119,7 +119,7 @@ vec4 pTransition(vec2 uv, float t)
     // Floor iResolution so a first-frame zero-sized surface doesn't
     // collapse pixelUV to (0,0) and flatten the entire particle field
     // for one paint. Matches the energize-a defence at the same site.
-    vec2 pixelUV = (uv - 0.5) * max(iResolution, vec2(1.0)) / max(pScale, 0.05);
+    vec2 pixelUV = (uv - 0.5) * resolutionSafe() / max(pScale, 0.05);
 
     // Shower band sparkles — added on top of the band itself for a
     // glittery beam edge. Fine cells, twinkle via animated offset.

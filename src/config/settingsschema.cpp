@@ -35,6 +35,9 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendActivationSchema(s);
     appendBehaviorSchema(s);
     appendAutotilingSchema(s);
+    appendWindowsSchema(s);
+    appendGapsSchema(s);
+    appendDecorationsSchema(s);
 
     return s;
 }
@@ -79,6 +82,42 @@ auto validIntOr(std::initializer_list<int> valid, int fallback)
     return [valid = QVector<int>(valid), fallback](const QVariant& v) -> QVariant {
         const int raw = v.toInt();
         return valid.contains(raw) ? raw : fallback;
+    };
+}
+
+/// Snap-to-default string-enum validator: the closed-set string analogue of
+/// validIntOr. Accept the value only if it is one of @p valid, otherwise return
+/// @p fallback. Used for closed-set tokens (e.g. the appearance "Apply to" scope)
+/// so a hand-edited garbage token in the on-disk file can't flow to the effect.
+auto validStringOr(std::initializer_list<QLatin1String> valid, QString fallback)
+{
+    return [valid = QVector<QLatin1String>(valid), fallback = std::move(fallback)](const QVariant& v) -> QVariant {
+        const QString raw = v.toString();
+        for (const QLatin1String& tok : valid) {
+            if (raw == tok) {
+                return raw;
+            }
+        }
+        return fallback;
+    };
+}
+
+/// Window-border colour validator. The value is a string that is EITHER the
+/// "accent" sentinel (which the effect resolves to the live system colour) OR any
+/// string QColor accepts (a #hex or a named colour, matching what the effect
+/// parses); snap anything else to @p fallback. Kept as a string round-trip
+/// (not validColorOr, which coerces to QColor and would drop the sentinel) so a
+/// hand-edited garbage colour in the on-disk file can't flow to the effect. The
+/// bare "accent" literal mirrors ConfigDefaults::windowBorderColorActive (the
+/// config layer deliberately avoids pulling PhosphorRules::BorderColorToken in).
+auto validBorderColorOr(QString fallback)
+{
+    return [fallback = std::move(fallback)](const QVariant& v) -> QVariant {
+        const QString raw = v.toString();
+        if (raw == QLatin1String("accent") || QColor(raw).isValid()) {
+            return raw;
+        }
+        return fallback;
     };
 }
 
@@ -143,35 +182,83 @@ QVariant sanitizePerAlgorithmSettings(const QVariant& v)
 } // namespace
 
 // ─── Shaders ────────────────────────────────────────────────────────────────
-// Controls: overall effect toggle, frame rate, audio visualizer, bar count.
+// Controls: frame rate, plus the full audio-spectrum parameter set in the
+// Shaders.Audio sub-group. String choices are coerced by the ConfigDefaults
+// normalizers so hand-edited configs can't persist garbage; the input source
+// is free-form (the provider sanitizes it before it reaches cava).
 
 void appendShadersSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::shadersGroup()] = {
-        {CD::enabledKey(), CD::enableShaderEffects(), QMetaType::Bool},
         {CD::frameRateKey(),
          CD::shaderFrameRate(),
          QMetaType::Int,
          {},
          clampInt(CD::shaderFrameRateMin(), CD::shaderFrameRateMax())},
-        {CD::audioVisualizerKey(), CD::enableAudioVisualizer(), QMetaType::Bool},
-        {CD::audioSpectrumBarCountKey(),
+    };
+    schema.groups[CD::shadersAudioGroup()] = {
+        {CD::enabledKey(), CD::enableAudioVisualizer(), QMetaType::Bool},
+        {CD::barsKey(),
          CD::audioSpectrumBarCount(),
          QMetaType::Int,
          {},
          clampInt(CD::audioSpectrumBarCountMin(), CD::audioSpectrumBarCountMax())},
+        {CD::autosensKey(), CD::audioAutosens(), QMetaType::Bool},
+        {CD::sensitivityKey(),
+         CD::audioSensitivity(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::audioSensitivityMin(), CD::audioSensitivityMax())},
+        {CD::noiseReductionKey(),
+         CD::audioNoiseReduction(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::audioNoiseReductionMin(), CD::audioNoiseReductionMax())},
+        {CD::lowerCutoffHzKey(),
+         CD::audioLowerCutoffHz(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::audioLowerCutoffHzMin(), CD::audioLowerCutoffHzMax())},
+        {CD::higherCutoffHzKey(),
+         CD::audioHigherCutoffHz(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::audioHigherCutoffHzMin(), CD::audioHigherCutoffHzMax())},
+        {CD::monstercatKey(), CD::audioMonstercat(), QMetaType::Bool},
+        {CD::wavesKey(), CD::audioWaves(), QMetaType::Bool},
+        {CD::channelModeKey(),
+         CD::audioChannelMode(),
+         QMetaType::QString,
+         {},
+         [](const QVariant& v) {
+             return QVariant(CD::normalizeAudioChannelMode(v.toString()));
+         }},
+        {CD::reverseKey(), CD::audioReverse(), QMetaType::Bool},
+        {CD::extraSmoothingKey(),
+         CD::audioExtraSmoothing(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::audioExtraSmoothingMin(), CD::audioExtraSmoothingMax())},
+        {CD::inputMethodKey(),
+         CD::audioInputMethod(),
+         QMetaType::QString,
+         {},
+         [](const QVariant& v) {
+             return QVariant(CD::normalizeAudioInputMethod(v.toString()));
+         }},
+        {CD::inputSourceKey(), CD::audioInputSource(), QMetaType::QString},
     };
 }
 
 // ─── Appearance ─────────────────────────────────────────────────────────────
-// Declares seven groups. Four zone-overlay sub-groups under Snapping.Zones.*:
-// Colors (system toggle + 3 zone colors), Labels (font family/color/scale/weight
-// + italic/underline/strikeout toggles), Opacity (active + inactive), Border
-// (width + radius). (Effects.Blur is a zone-overlay setting too but shares the
-// Effects container declared in appendDisplaySchema.) Plus three
-// Snapping.Appearance.{Colors,Decorations,Borders} snapped-window decoration
-// groups (parallel to Tiling.Appearance.*).
+// Declares four zone-overlay sub-groups under Snapping.Zones.*: Colors (system
+// toggle + 3 zone colors), Labels (font family/color/scale/weight + italic/
+// underline/strikeout toggles), Opacity (active + inactive), Border (width +
+// radius). The per-mode snapped-window
+// decoration groups that used to live here are gone — window border and title-bar
+// appearance moved to the top-level mode-neutral Windows config group (see
+// appendWindowsSchema).
 
 void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
@@ -223,40 +310,9 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
          {},
          clampInt(CD::borderRadiusMin(), CD::borderRadiusMax())},
     };
-    // Effects.Blur lives in the Effects group alongside the display-OSD keys;
-    // the whole Effects group is declared in one shot by appendDisplaySchema
-    // below to avoid split-across-two-call-sites ordering bugs.
-
-    // Snapping.Appearance.* — the snapped window's border / title-bar
-    // decoration (parallel to Tiling.Appearance.* in appendAutotilingSchema;
-    // defaults via snapping* in ConfigDefaults).
-    schema.groups[CD::snappingAppearanceColorsGroup()] = {
-        {CD::activeKey(), CD::snappingBorderColor(), QMetaType::QColor, {}, validColorOr(CD::snappingBorderColor())},
-        {CD::inactiveKey(),
-         CD::snappingInactiveBorderColor(),
-         QMetaType::QColor,
-         {},
-         validColorOr(CD::snappingInactiveBorderColor())},
-        {CD::useSystemKey(), CD::snappingUseSystemBorderColors(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::snappingAppearanceDecorationsGroup()] = {
-        {CD::hideTitleBarsKey(), CD::snappingHideTitleBars(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::snappingAppearanceBordersGroup()] = {
-        {CD::showBorderKey(), CD::snappingShowBorder(), QMetaType::Bool},
-        {CD::widthKey(),
-         CD::snappingBorderWidth(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::snappingBorderWidthMin(), CD::snappingBorderWidthMax())},
-        {CD::radiusKey(),
-         CD::snappingBorderRadius(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::snappingBorderRadiusMin(), CD::snappingBorderRadiusMax())},
-    };
+    // The Effects group (display-OSD keys) is declared in one shot by
+    // appendDisplaySchema below to avoid split-across-two-call-sites
+    // ordering bugs.
 }
 
 // ─── Ordering ───────────────────────────────────────────────────────────────
@@ -364,22 +420,10 @@ void appendPerformanceSchema(PhosphorConfig::Schema& schema)
 void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
+    // The shared inner/outer gaps live in the top-level Gaps group
+    // (appendGapsSchema); the Window Appearance page edits them as plain config.
+    // Snapping.Gaps keeps only the snapping-specific adjacency threshold.
     schema.groups[CD::snappingGapsGroup()] = {
-        {CD::innerKey(), CD::zonePadding(), QMetaType::Int, {}, clampInt(CD::zonePaddingMin(), CD::zonePaddingMax())},
-        {CD::outerKey(), CD::outerGap(), QMetaType::Int, {}, clampInt(CD::outerGapMin(), CD::outerGapMax())},
-        {CD::usePerSideKey(), CD::usePerSideOuterGap(), QMetaType::Bool},
-        {CD::topKey(), CD::outerGapTop(), QMetaType::Int, {}, clampInt(CD::outerGapTopMin(), CD::outerGapTopMax())},
-        {CD::bottomKey(),
-         CD::outerGapBottom(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::outerGapBottomMin(), CD::outerGapBottomMax())},
-        {CD::leftKey(), CD::outerGapLeft(), QMetaType::Int, {}, clampInt(CD::outerGapLeftMin(), CD::outerGapLeftMax())},
-        {CD::rightKey(),
-         CD::outerGapRight(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
         {CD::adjacentThresholdKey(),
          CD::adjacentThreshold(),
          QMetaType::Int,
@@ -528,15 +572,16 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
     };
 }
 
-// ─── Exclusions + Animation Window Filtering ────────────────────────────────
-// Two distinct schema groups declared together:
+// ─── Exclusions + Animation + Decoration Window Filtering ───────────────────
+// Three distinct schema groups declared together:
 //   1. `Exclusions` — snapping/tiling minimum-size + transient-window
 //      globals.
 //   2. `Animations.WindowFiltering` — animation-side equivalents plus a
 //      NotificationsAndOsd knob.
-// Both retired their per-app / per-class string lists in v4 (folded into
-// Application-subject WindowRules); only the global behavioural knobs
-// survive. Ints are clamped via schema validators.
+//   3. `Decorations.WindowFiltering` — border/decoration-side equivalents.
+// The first two retired their per-app / per-class string lists in v4 (folded
+// into Application-subject Rules); only the global behavioural knobs survive.
+// Ints are clamped via schema validators.
 
 void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 {
@@ -544,7 +589,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::exclusionsGroup()] = {
         // The `Applications` / `WindowClasses` leaf keys retired in v4 —
         // the v4 migration drains them into Application-subject Exclude
-        // WindowRules. Re-declaring them here would let the schema-driven
+        // Rules. Re-declaring them here would let the schema-driven
         // backend silently re-write dead defaults under the Exclusions
         // group, re-introducing keys we explicitly migrated out in v3→v4.
         // Only the three global knobs survive in this group.
@@ -567,7 +612,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
     // (or vice versa).
     schema.groups[CD::animationsWindowFilteringGroup()] = {
         // The `Applications` / `WindowClasses` leaf keys retired in v4 —
-        // the v4 migration drains them into ExcludeAnimations WindowRules.
+        // the v4 migration drains them into ExcludeAnimations Rules.
         // Only the four global knobs survive in this group.
         {CD::transientWindowsKey(), CD::animationExcludeTransientWindows(), QMetaType::Bool},
         {CD::notificationsAndOsdKey(), CD::animationExcludeNotificationsAndOsd(), QMetaType::Bool},
@@ -582,16 +627,33 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
          {},
          clampInt(CD::animationMinimumWindowHeightMin(), CD::animationMinimumWindowHeightMax())},
     };
+
+    // Decoration window filtering — same shape as the Exclusions group,
+    // stored independently so the KWin effect's border pass can be tuned
+    // separately from snapping and animation filtering. Reuses the shared
+    // leaf keys; only the group differs.
+    schema.groups[CD::decorationsWindowFilteringGroup()] = {
+        {CD::transientWindowsKey(), CD::decorationExcludeTransientWindows(), QMetaType::Bool},
+        {CD::minimumWindowWidthKey(),
+         CD::decorationMinimumWindowWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::decorationMinimumWindowWidthMin(), CD::decorationMinimumWindowWidthMax())},
+        {CD::minimumWindowHeightKey(),
+         CD::decorationMinimumWindowHeight(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::decorationMinimumWindowHeightMin(), CD::decorationMinimumWindowHeightMax())},
+    };
 }
 
 // ─── Display ────────────────────────────────────────────────────────────────
-// Snapping.Behavior.Display plus the Effects sub-group entries that aren't
-// the blur toggle (already migrated via Appearance). Enum ints (OsdStyle,
+// Snapping.Behavior.Display plus the Effects sub-group. Enum ints (OsdStyle,
 // OverlayDisplayMode) get clamp validators; lists use canonicalCommaList.
 //
 // Per-mode disable lists (formerly Display.{Snapping,Autotile}Disabled*)
 // are NOT in the schema: as of the window-rule refactor (PR #477) every
-// read/write routes through `windowrules.json` via Settings::disableEntriesFor
+// read/write routes through `rules.json` via Settings::disableEntriesFor
 // / writeDisableEntries. Re-declaring them here would let the schema-driven
 // backend silently re-write dead defaults under the mode-neutral Display
 // group, re-introducing keys we explicitly migrated out in v3→v4. The v3
@@ -607,12 +669,12 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
         {CD::filterByAspectRatioKey(), CD::filterLayoutsByAspectRatio(), QMetaType::Bool},
     };
 
-    // Full Effects group declared here in one shot. Blur is logically an
-    // appearance-level setting but shares the Effects JSON container with
-    // the display-OSD keys below; declaring the whole container from one
-    // call site keeps the schema build order-independent.
+    // Full Effects group declared here in one shot; declaring the whole
+    // container from one call site keeps the schema build order-independent.
+    // The retired blur toggle ("Blur") is intentionally NOT declared:
+    // purgeStaleKeys() evicts the leftover key from existing user configs
+    // on the next save().
     schema.groups[CD::snappingEffectsGroup()] = {
-        {CD::blurKey(), CD::enableBlur(), QMetaType::Bool},
         {CD::showNumbersKey(), CD::showNumbers(), QMetaType::Bool},
         {CD::flashOnSwitchKey(), CD::flashOnSwitch(), QMetaType::Bool},
         {CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool},
@@ -642,8 +704,17 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::triggerDistanceMin(), CD::triggerDistanceMax())},
-        {CD::positionKey(), CD::position(), QMetaType::Int, {}, clampInt(0, 8)},
-        {CD::layoutModeKey(), CD::layoutMode(), QMetaType::Int, {}, clampInt(0, 2)},
+        {CD::positionKey(),
+         CD::position(),
+         QMetaType::Int,
+         {},
+         clampInt(static_cast<int>(ZoneSelectorPosition::TopLeft),
+                  static_cast<int>(ZoneSelectorPosition::BottomRight))},
+        {CD::layoutModeKey(),
+         CD::layoutMode(),
+         QMetaType::Int,
+         {},
+         clampInt(static_cast<int>(ZoneSelectorLayoutMode::Grid), static_cast<int>(ZoneSelectorLayoutMode::Vertical))},
         {CD::previewWidthKey(),
          CD::previewWidth(),
          QMetaType::Int,
@@ -660,7 +731,11 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::gridColumnsMin(), CD::gridColumnsMax())},
-        {CD::sizeModeKey(), CD::sizeMode(), QMetaType::Int, {}, clampInt(0, 2)},
+        {CD::sizeModeKey(),
+         CD::sizeMode(),
+         QMetaType::Int,
+         {},
+         clampInt(static_cast<int>(ZoneSelectorSizeMode::Auto), static_cast<int>(ZoneSelectorSizeMode::Manual))},
         {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
     };
 }
@@ -742,9 +817,11 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Autotiling ─────────────────────────────────────────────────────────────
-// The biggest group — Tiling.* has six sub-groups: Algorithm, Behavior,
-// Appearance.{Colors,Decorations,Borders}, Gaps. Plus the top-level
-// Tiling.Enabled toggle. PerAlgorithmSettings is a JSON-encoded QVariantMap;
+// Tiling.* has three sub-groups: Algorithm, Behavior, Gaps. Plus the top-level
+// Tiling.Enabled toggle. (The Appearance.{Colors,Decorations,Borders} groups
+// that used to live here are gone — window border and title-bar appearance moved
+// to the top-level mode-neutral Windows config group, see appendWindowsSchema.)
+// PerAlgorithmSettings is a JSON-encoded QVariantMap;
 // LockedScreens is a comma list; DragInsert triggers are a JSON list.
 
 void appendAutotilingSchema(PhosphorConfig::Schema& schema)
@@ -814,67 +891,166 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
     };
 
-    schema.groups[CD::tilingAppearanceColorsGroup()] = {
-        {CD::activeKey(), CD::autotileBorderColor(), QMetaType::QColor, {}, validColorOr(CD::autotileBorderColor())},
-        {CD::inactiveKey(),
-         CD::autotileInactiveBorderColor(),
-         QMetaType::QColor,
-         {},
-         validColorOr(CD::autotileInactiveBorderColor())},
-        {CD::useSystemKey(), CD::autotileUseSystemBorderColors(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::tilingAppearanceDecorationsGroup()] = {
-        {CD::hideTitleBarsKey(), CD::autotileHideTitleBars(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::tilingAppearanceBordersGroup()] = {
-        {CD::showBorderKey(), CD::autotileShowBorder(), QMetaType::Bool},
-        {CD::widthKey(),
-         CD::autotileBorderWidth(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileBorderWidthMin(), CD::autotileBorderWidthMax())},
-        {CD::radiusKey(),
-         CD::autotileBorderRadius(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileBorderRadiusMin(), CD::autotileBorderRadiusMax())},
-    };
-
+    // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle. The shared
+    // inner/outer gaps live in the top-level Gaps group (appendGapsSchema).
     schema.groups[CD::tilingGapsGroup()] = {
-        {CD::innerKey(),
-         CD::autotileInnerGap(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileInnerGapMin(), CD::autotileInnerGapMax())},
-        {CD::outerKey(),
-         CD::autotileOuterGap(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapMin(), CD::autotileOuterGapMax())},
-        {CD::usePerSideKey(), CD::autotileUsePerSideOuterGap(), QMetaType::Bool},
-        {CD::topKey(),
-         CD::autotileOuterGapTop(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapTopMin(), CD::autotileOuterGapTopMax())},
-        {CD::bottomKey(),
-         CD::autotileOuterGapBottom(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapBottomMin(), CD::autotileOuterGapBottomMax())},
-        {CD::leftKey(),
-         CD::autotileOuterGapLeft(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapLeftMin(), CD::autotileOuterGapLeftMax())},
-        {CD::rightKey(),
-         CD::autotileOuterGapRight(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileOuterGapRightMin(), CD::autotileOuterGapRightMax())},
         {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
+    };
+}
+
+// ─── Windows (window decoration appearance) ─────────────────────────────────
+// Mode-neutral window border + title bar. Border colours are strings (the
+// "accent" sentinel, or a hex/named colour) validated by the string-form
+// validBorderColorOr rather than the QColor-coercing validColorOr. The
+// border/title-bar scope is a closed-set token ("tiled" / "normal" / "all")
+// the Appearance page and the effect agree on, snapped to the default on an
+// unknown on-disk value.
+// Width/radius are clamped ints reusing the generic Width/Radius keys (the Windows
+// group disambiguates them from the Snapping.Zones.Border keys of the same spelling).
+// FocusFadeDuration is a clamped int: the decoration focus cross-fade in ms
+// (uSurfaceFocused ramp), 0 = instant.
+
+void appendWindowsSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    // The "Apply to" scope is a closed set of tokens the Appearance page and the
+    // effect agree on ("tiled" / "normal" / "all"); snap an unknown on-disk token
+    // to the key's own default so garbage can't reach the effect.
+    namespace WAS = ::PhosphorCompositor::WindowAppearanceScope;
+    const auto scopeValidator = [](const QString& fallback) {
+        return validStringOr({WAS::Tiled, WAS::Normal, WAS::All}, fallback);
+    };
+    schema.groups[CD::windowsAppearanceGroup()] = {
+        {CD::showBorderKey(), CD::showWindowBorder(), QMetaType::Bool},
+        {CD::borderScopeKey(),
+         CD::windowBorderScope(),
+         QMetaType::QString,
+         {},
+         scopeValidator(CD::windowBorderScope())},
+        {CD::widthKey(),
+         CD::windowBorderWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::windowBorderWidthMin(), CD::windowBorderWidthMax())},
+        {CD::radiusKey(),
+         CD::windowBorderRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::windowBorderRadiusMin(), CD::windowBorderRadiusMax())},
+        {CD::borderColorActiveKey(),
+         CD::windowBorderColorActive(),
+         QMetaType::QString,
+         {},
+         validBorderColorOr(CD::windowBorderColorActive())},
+        {CD::borderColorInactiveKey(),
+         CD::windowBorderColorInactive(),
+         QMetaType::QString,
+         {},
+         validBorderColorOr(CD::windowBorderColorInactive())},
+        {CD::hideTitleBarsKey(), CD::hideWindowTitleBars(), QMetaType::Bool},
+        {CD::titleBarScopeKey(),
+         CD::windowTitleBarScope(),
+         QMetaType::QString,
+         {},
+         scopeValidator(CD::windowTitleBarScope())},
+        {CD::focusFadeDurationKey(),
+         CD::focusFadeDuration(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::focusFadeDurationMin(), CD::focusFadeDurationMax())},
+        // Plain opacity+tint layer: opacity/strength are [0.0, 1.0] doubles,
+        // the tint colour shares the border-colour shape (#AARRGGBB or the
+        // accent sentinel) and the scope shares the closed token set.
+        {CD::showOpacityTintKey(), CD::showWindowOpacityTint(), QMetaType::Bool},
+        {CD::opacityTintScopeKey(),
+         CD::windowOpacityTintScope(),
+         QMetaType::QString,
+         {},
+         scopeValidator(CD::windowOpacityTintScope())},
+        {CD::opacityKey(),
+         CD::windowOpacity(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::windowOpacityMin(), CD::windowOpacityMax())},
+        {CD::tintStrengthKey(),
+         CD::windowTintStrength(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::windowTintStrengthMin(), CD::windowTintStrengthMax())},
+        {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString, {}, validBorderColorOr(CD::windowTintColor())},
+    };
+}
+
+// ─── Gaps (shared inner/outer gap model) ────────────────────────────────────
+// The single inter-window gap model used by BOTH snapping and tiling. Uniform
+// inner/outer plus the per-side outer overrides (gated by UsePerSide). All ints
+// clamped to the shared gap range.
+
+void appendGapsSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::gapsGroup()] = {
+        {CD::innerGapKey(), CD::innerGap(), QMetaType::Int, {}, clampInt(CD::innerGapMin(), CD::innerGapMax())},
+        {CD::outerGapKey(), CD::outerGap(), QMetaType::Int, {}, clampInt(CD::outerGapMin(), CD::outerGapMax())},
+        {CD::usePerSideOuterGapKey(), CD::usePerSideOuterGap(), QMetaType::Bool},
+        {CD::outerGapTopKey(),
+         CD::outerGapTop(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::outerGapTopMin(), CD::outerGapTopMax())},
+        {CD::outerGapBottomKey(),
+         CD::outerGapBottom(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::outerGapBottomMin(), CD::outerGapBottomMax())},
+        {CD::outerGapLeftKey(),
+         CD::outerGapLeft(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::outerGapLeftMin(), CD::outerGapLeftMax())},
+        {CD::outerGapRightKey(),
+         CD::outerGapRight(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
+    };
+}
+
+// ─── Decorations ──────────────────────────────────────────────────────────────
+// Per-surface decoration tree: a DecorationProfileTree (the user-applied surface
+// shader-pack chain) keyed on a dot-path surface namespace, persisted as a nested
+// JSON object — same QVariantMap storage shape as the autotile PerAlgorithmSettings
+// entry above and the animation ShaderProfileTree blob, with no sanitizer because
+// the per-pack override schema is not known to the config layer. The blob is a
+// leaf key under Decorations, mirroring ShaderProfileTree under Animations; the
+// Decorations.WindowFiltering sub-group is registered separately.
+
+void appendDecorationsSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::decorationsGroup()] = {
+        // Per-surface decoration tree. The default is the (empty) ConfigDefaults
+        // baseline serialized to a map; a user engages packs from the Decoration
+        // pages.
+        {CD::decorationProfileTreeKey(), CD::decorationProfileTree().toJson().toVariantMap(), QMetaType::QVariantMap},
+    };
+    // What the decoration chain is allowed to keep redrawing. An animated pack
+    // repaints every window carrying it on every vsync, which never lets the GPU
+    // leave its top performance state.
+    schema.groups[CD::decorationsPerformanceGroup()] = {
+        {CD::animateFocusedOnlyKey(), CD::decorationAnimateFocusedOnly(), QMetaType::Bool},
+        {CD::pauseWhenIdleKey(), CD::decorationPauseWhenIdle(), QMetaType::Bool},
+        // Clamped here, not in the UI. P_STORE_SET_INT delegates range enforcement
+        // to the schema validator, and the daemon feeds this straight into an
+        // ext-idle-notify-v1 timeout as `value * 1000` — a hand-edited 0 or -1 in
+        // config.json would otherwise arm a nonsensical timer (fire-immediately, or
+        // rejected outright, so the pause never engages). The slider's from/to are a
+        // UI affordance, not a validation boundary.
+        {CD::idleTimeoutSecKey(),
+         CD::decorationIdleTimeoutSec(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::decorationIdleTimeoutSecMin(), CD::decorationIdleTimeoutSecMax())},
     };
 }
 

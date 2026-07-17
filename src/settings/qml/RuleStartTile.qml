@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -36,14 +35,17 @@ Rectangle {
     Accessible.name: tile.label
     Accessible.description: tile.description
     Accessible.role: Accessible.Button
+    Accessible.focusable: true
     activeFocusOnTab: true
     implicitWidth: Kirigami.Units.gridUnit * 10
     implicitHeight: tile.tileHeight
     radius: Kirigami.Units.smallSpacing
-    color: tileMouse.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.25) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
-    border.width: Math.round(Screen.devicePixelRatio)
-    border.color: tileMouse.containsMouse || tile.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+    color: tileMouse.pressed ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.highlightColor, 0.25)) : tileMouse.containsMouse ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.12)) : Kirigami.Theme.alternateBackgroundColor
+    border.width: 1
+    border.color: tile.activeFocus ? Kirigami.Theme.focusColor : tileMouse.containsMouse ? Kirigami.Theme.hoverColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     Keys.onReturnPressed: tile.activated()
+    // Numpad Enter alias, matching the sibling card components.
+    Keys.onEnterPressed: tile.activated()
     Keys.onSpacePressed: tile.activated()
 
     MouseArea {
@@ -52,7 +54,13 @@ Rectangle {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         hoverEnabled: true
-        onClicked: tile.activated()
+        onClicked: {
+            // Move active focus to the clicked tile so a previously
+            // keyboard-focused sibling doesn't keep the focus ring and the key
+            // handlers.
+            tile.forceActiveFocus();
+            tile.activated();
+        }
     }
 
     ColumnLayout {
@@ -80,7 +88,7 @@ Rectangle {
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
             elide: Text.ElideRight
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.smallFont
             horizontalAlignment: Text.AlignHCenter
             maximumLineCount: 3
             opacity: 0.7
@@ -94,13 +102,15 @@ Rectangle {
     // every tile in the app moves with the same easing curve.
     Behavior on color {
         PhosphorMotionAnimation {
-            profile: "popup"
+            profile: "widget.hover"
+            durationOverride: Kirigami.Units.shortDuration
         }
     }
 
     Behavior on border.color {
         PhosphorMotionAnimation {
-            profile: "popup"
+            profile: "widget.hover"
+            durationOverride: Kirigami.Units.shortDuration
         }
     }
 }

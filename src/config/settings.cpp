@@ -15,9 +15,15 @@
 #include "../core/utils.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorWindowRules/ContextRuleBridge.h>
+#include <PhosphorConfig/JsonBackend.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
 
+#include <QEvent>
 #include <QGuiApplication>
+#include <QScopedValueRollback>
 #include <QMetaMethod>
 #include <QMetaProperty>
 #include <QPalette>
@@ -25,8 +31,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QSet>
 #include <QUuid>
+
+#include <optional>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -46,17 +55,114 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
     ConfigMigration::ensureJsonConfig();
     return createDefaultConfigBackend();
 }
+
+// ── Per-mode disable-list helpers ────────────────────────────────────────────
+// Declared up here rather than beside the disable-list section further down
+// because load()'s change detection is the first user of them. See that
+// section for what the (axis, mode) rule families are.
+
+// Disable-axis enum mirrors the persisted (axis, mode) family layout. Distinct
+// from `ContextRuleBridge::ContextAxis` only because the bridge enum also
+// carries `CatchAll` and `Combined`, neither of which is a managed disable
+// family — see `axisOf` for why `Combined` is excluded.
+enum class DisableAxis {
+    Monitor,
+    Desktop,
+    Activity
+};
+
+// Resolve a connector name ("DP-2") to its stable screen id
+// ("Manuf:Model:Serial"), or return @p screen unchanged.
+//
+// The ONE resolution rule for the disable lists, shared by the getter
+// (disabledMonitors, which resolves on every read) and by
+// canonicalDisableEntries. The two must agree exactly: if the canonical form
+// resolved an entry differently from the getter, re-saving an unchanged list
+// would look like a change and misfire disabled*Changed.
+//
+// An unresolvable name falls through to the name itself, which is what we want:
+// canonicalizing an entry down to an empty screen segment would erase which
+// screen it names. That fall-through is idForName's own contract — when no live
+// screen carries the connector (an unplugged monitor, a name from another
+// machine) it returns the NAME UNCHANGED, never empty. So there is nothing to
+// guard against here: for a connector name the result is either the resolved id
+// or the name back, and a non-connector name (which includes the empty string,
+// isConnectorName rejects it) is already canonical. Mirrors the fall-through in
+// ScreenIdentity::variantsFor.
+QString resolveScreenId(const QString& screen)
+{
+    if (PhosphorScreens::ScreenIdentity::isConnectorName(screen)) {
+        return PhosphorScreens::ScreenIdentity::idForName(screen);
+    }
+    return screen;
+}
+
+// The canonical form of a disable list for @p axis: entries trimmed, their
+// screen segment resolved through resolveScreenId, malformed entries dropped,
+// duplicates collapsed, and the result sorted.
+//
+// This is what "the same disable list" means. Two lists are the same set of
+// disable rules iff their canonical forms are equal — the store returns
+// entries in rule order, so a raw list compare would report a change for a
+// mere reordering (setAllRules rewrites the whole list, so rule order churns
+// for reasons that have nothing to do with this axis).
+//
+// For Desktop/Activity the entry is a composite (`screenId/desktop`,
+// `screenId/activity`); split on the LAST '/' so a screen id that legitimately
+// contains one (the disambiguated `Manuf:Model:Serial/CONNECTOR` shape) isn't
+// truncated. Entries the write path's parse loop would reject (missing or edge
+// '/', and for Desktop a non-positive or non-numeric desktop segment) are
+// dropped here as well: the canonical form has to be the EFFECTIVE set, or a
+// write whose every kept entry already matches the current rules would look
+// like a change.
+QStringList canonicalDisableEntries(DisableAxis axis, const QStringList& list)
+{
+    QStringList c;
+    for (const QString& raw : list) {
+        QString value = raw.trimmed();
+        if (axis == DisableAxis::Monitor) {
+            value = resolveScreenId(value);
+        } else {
+            const int slash = value.lastIndexOf(QLatin1Char('/'));
+            if (slash <= 0 || slash == value.size() - 1) {
+                continue;
+            }
+            const QString screen = resolveScreenId(value.left(slash));
+            if (axis == DisableAxis::Desktop) {
+                bool ok = false;
+                const int desktop = value.mid(slash + 1).toInt(&ok);
+                if (!ok || desktop <= 0) {
+                    continue;
+                }
+                // Rebuild the desktop segment via QString::number so the
+                // canonical form matches the getter's serialization
+                // (disableEntriesFor) — otherwise numeric aliases like "+3" or
+                // "03" survive as distinct entries, defeat the write path's
+                // no-op guard, and produce a second disable rule with the same
+                // deterministic UUID.
+                value = screen + QLatin1Char('/') + QString::number(desktop);
+            } else {
+                value = screen + QLatin1Char('/') + value.mid(slash + 1);
+            }
+        }
+        if (!value.isEmpty() && !c.contains(value)) {
+            c.append(value);
+        }
+    }
+    c.sort();
+    return c;
+}
+
 } // namespace
 
 Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
-                   PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent)
+                   PhosphorRules::RuleStore* ruleStore, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
     , m_store(std::make_unique<PhosphorConfig::Store>(backend, buildSettingsSchema(), this))
-    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
-                                             : std::make_unique<PhosphorWindowRules::WindowRuleStore>(
-                                                   ConfigDefaults::windowRulesFilePath(), this))
-    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
+    , m_ownedRuleStore(ruleStore ? nullptr
+                                 : std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), this))
+    , m_ruleStore(ruleStore ? ruleStore : m_ownedRuleStore.get())
     , m_curveRegistry(curveRegistry)
 {
     // Contract: @p backend MUST already be pointing at a migrated config
@@ -77,6 +183,8 @@ Settings::Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRe
     // (The owning ctor below routes through migrateAndCreateOwnedBackend
     // which performs the migration itself for standalone tools and tests.)
     load();
+    connectRuleStoreGapReactivity();
+    trackSystemPaletteChanges();
 }
 
 Settings::Settings(QObject* parent)
@@ -84,9 +192,8 @@ Settings::Settings(QObject* parent)
     , m_ownedBackend(migrateAndCreateOwnedBackend())
     , m_configBackend(m_ownedBackend.get())
     , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
-    , m_ownedWindowRuleStore(
-          std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), this))
-    , m_windowRuleStore(m_ownedWindowRuleStore.get())
+    , m_ownedRuleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), this))
+    , m_ruleStore(m_ownedRuleStore.get())
 {
     // m_curveRegistry is left null; `animationProfile()` /
     // `setAnimationEasingCurve()` fall back to `fallbackCurveRegistry()`.
@@ -100,9 +207,11 @@ Settings::Settings(QObject* parent)
     // fixture and standalone-settings launch.
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
+    connectRuleStoreGapReactivity();
+    trackSystemPaletteChanges();
 }
 
-Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObject* parent)
+Settings::Settings(PhosphorRules::RuleStore* ruleStore, QObject* parent)
     : ISettings(parent)
     , m_ownedBackend(migrateAndCreateOwnedBackend())
     , m_configBackend(m_ownedBackend.get())
@@ -110,10 +219,9 @@ Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObjec
     // Borrow the caller's store when provided; degrade to owning one when null
     // (mirrors the backend-injecting ctor's defensive borrow-or-own so a stray
     // null still yields a usable store rather than a null deref).
-    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
-                                             : std::make_unique<PhosphorWindowRules::WindowRuleStore>(
-                                                   ConfigDefaults::windowRulesFilePath(), this))
-    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
+    , m_ownedRuleStore(ruleStore ? nullptr
+                                 : std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), this))
+    , m_ruleStore(ruleStore ? ruleStore : m_ownedRuleStore.get())
 {
     // Standalone backend + process-static curve fallback (m_curveRegistry left
     // null), exactly like Settings(QObject*); the only difference is the
@@ -121,6 +229,8 @@ Settings::Settings(PhosphorWindowRules::WindowRuleStore* windowRuleStore, QObjec
     // preserved across the Settings ↔ daemon boundary in this configuration.
     qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
     load();
+    connectRuleStoreGapReactivity();
+    trackSystemPaletteChanges();
 }
 
 // ── Helper Methods ───────────────────────────────────────────────────────────
@@ -161,16 +271,7 @@ void Settings::load()
     // QVariant comparison is meaningful (Qt builtins, POD enums,
     // QVariantMap, QStringList). Custom Q_GADGETs without a registered
     // operator== will silently miscompare here.
-    const QMetaObject* mo = metaObject();
-    const int propCount = mo->propertyCount();
-    const int firstOwnProp = QObject::staticMetaObject.propertyCount();
-    QVector<QVariant> snapshot;
-    snapshot.resize(propCount);
-    for (int i = firstOwnProp; i < propCount; ++i) {
-        const QMetaProperty prop = mo->property(i);
-        if (prop.hasNotifySignal() && prop.isReadable())
-            snapshot[i] = prop.read(this);
-    }
+    const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
 
     // Per-mode disable lists are NOT Q_PROPERTYs (their getters take a Mode
     // argument, which Q_PROPERTY can't express). Snapshot them explicitly
@@ -184,19 +285,26 @@ void Settings::load()
     // Iterating PhosphorZones::allModes() keeps the snapshot in lockstep
     // with the enum: adding a future mode automatically gets snapshotted +
     // re-emitted without touching this block.
+    //
+    // Snapshot the CANONICAL form, and compare canonically below. The getters
+    // return entries in rule order, and setAllRules rewrites the whole rule
+    // list, so a reload can hand back the same disable set in a different order
+    // for reasons that have nothing to do with these lists. A raw compare would
+    // read that as a change and fire disabled*Changed + settingsChanged, which
+    // on the daemon side means a retile nobody asked for.
     using Mode = PhosphorZones::AssignmentEntry::Mode;
     QHash<Mode, QStringList> monitorsBefore;
     QHash<Mode, QStringList> desktopsBefore;
     QHash<Mode, QStringList> activitiesBefore;
     for (const Mode mode : PhosphorZones::allModes()) {
-        monitorsBefore.insert(mode, disabledMonitors(mode));
-        desktopsBefore.insert(mode, disabledDesktops(mode));
-        activitiesBefore.insert(mode, disabledActivities(mode));
+        monitorsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)));
+        desktopsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)));
+        activitiesBefore.insert(mode, canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)));
     }
 
     m_configBackend->reparseConfiguration();
 
-    // Per-mode disable lists live in windowrules.json, a separate file the
+    // Per-mode disable lists live in rules.json, a separate file the
     // config backend's reparseConfiguration() does not touch. Reload the
     // rule store explicitly so a cross-process write (daemon shortcut, KCM
     // D-Bus call) surfaces — the per-mode signal re-emission below compares
@@ -208,18 +316,18 @@ void Settings::load()
     // and a load() here would clobber unflushed in-memory edits — exactly the
     // dual-store race this borrow pattern exists to avoid. The borrowed-store
     // path relies on the owner to drive reloads (the daemon via its on-startup
-    // load + WindowRuleAdaptor; the settings app via
+    // load + RuleAdaptor; the settings app via
     // SettingsController::reloadLocalRuleStore on the daemon's rulesChanged
-    // D-Bus signal and on Discard, plus a WindowRuleStoreWatcher that reloads
+    // D-Bus signal and on Discard, plus a RuleStoreWatcher that reloads
     // on external file writes when no daemon is running).
-    if (m_ownedWindowRuleStore) {
-        m_ownedWindowRuleStore->load();
+    if (m_ownedRuleStore) {
+        m_ownedRuleStore->load();
     }
 
-    // Store-backed groups (Shaders, Appearance, Ordering, Animations,
-    // Rendering, Performance, ZoneGeometry, Shortcuts, Editor, Exclusions,
-    // Display, ZoneSelector, Activation, Behavior, Autotiling) don't need
-    // explicit load calls — their getters read through m_store on demand.
+    // Every schema-declared, store-backed group (the full set buildSettingsSchema
+    // registers, e.g. Windows, Gaps, Decorations, Shaders, Animations, ...) needs no
+    // explicit load call — their getters read through m_store on demand. Enumerating the
+    // groups here just drifts as new ones are added, so it is left to the schema.
     // Per-screen override maps are not Q_PROPERTYs, so the snapshot loop above
     // doesn't cover them. Capture them around the reload so settingsChanged()
     // can fire when a reload (e.g. the daemon's reloadSettings after a Save)
@@ -228,24 +336,33 @@ void Settings::load()
     // so per-monitor gaps never take effect on save (discussion #661).
     const QHash<QString, QVariantMap> perScreenZoneSelectorBefore = m_perScreenZoneSelectorSettings;
     const QHash<QString, QVariantMap> perScreenAutotileBefore = m_perScreenAutotileSettings;
-    const QHash<QString, QVariantMap> perScreenSnappingBefore = m_perScreenSnappingSettings;
 
     loadPerScreenOverrides(m_configBackend);
     loadVirtualScreenConfigs(m_configBackend);
 
     const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
     const bool perScreenAutotileChanged = perScreenAutotileBefore != m_perScreenAutotileSettings;
-    const bool perScreenSnappingChanged = perScreenSnappingBefore != m_perScreenSnappingSettings;
-    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged || perScreenSnappingChanged;
+    // Per-monitor gaps are config-backed and live in the per-screen autotile store.
+    // A gap change must resnap already-snapped windows, the same way a global gap
+    // change or a context gap rule does; the daemon binds that resnap to
+    // perScreenSnappingSettingsChanged. Fire it only when the gap-dimension subset
+    // changed, so an algorithm/split-only per-screen edit doesn't trigger a spurious
+    // gap resnap.
+    const bool perScreenGapChanged =
+        Settings::perScreenGapDimensionsDiffer(perScreenAutotileBefore, m_perScreenAutotileSettings);
+    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged;
 
     if (useSystemColors()) {
+        // The derive routes through the public color setters. Squelch their
+        // per-setter NOTIFY + settingsChanged emissions for this call only:
+        // emitChangedNotifyProperties() below compares the post-derive values
+        // against the pre-reparse snapshot and fires each changed NOTIFY
+        // exactly once, and the aggregate settingsChanged fires once at the
+        // end of load(). eventFilter()'s palette re-derive batches with the
+        // same flag; only setUseSystemColors relies on the setters emitting
+        // normally.
+        QScopedValueRollback<bool> squelch(m_suppressDerivedColorEmissions, true);
         applySystemColorScheme();
-    }
-    if (autotileUseSystemBorderColors()) {
-        applyAutotileBorderSystemColor();
-    }
-    if (snappingUseSystemBorderColors()) {
-        applySnappingBorderSystemColor();
     }
 
     qCInfo(lcConfig) << "Settings loaded";
@@ -253,18 +370,7 @@ void Settings::load()
     // Emit NOTIFY signals for every Q_PROPERTY whose value changed. load()
     // sets members directly (not via setters), so without this loop QML
     // bindings would never see reloaded values after discard / reset.
-    bool anyChanged = false;
-    for (int i = firstOwnProp; i < propCount; ++i) {
-        const QMetaProperty prop = mo->property(i);
-        if (!prop.hasNotifySignal() || !prop.isReadable())
-            continue;
-        const QVariant newValue = prop.read(this);
-        if (newValue != snapshot[i]) {
-            anyChanged = true;
-            const QMetaMethod notify = prop.notifySignal();
-            notify.invoke(this, Qt::DirectConnection);
-        }
-    }
+    const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
 
     // Per-mode disable lists: emit one signal per Mode whose list changed.
     // Mirrors the Q_PROPERTY loop above but keyed by (signal, mode) instead
@@ -272,15 +378,15 @@ void Settings::load()
     // automatically participate without touching this block.
     bool anyDisableChanged = false;
     for (const Mode mode : PhosphorZones::allModes()) {
-        if (disabledMonitors(mode) != monitorsBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)) != monitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);
             anyDisableChanged = true;
         }
-        if (disabledDesktops(mode) != desktopsBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)) != desktopsBefore.value(mode)) {
             Q_EMIT disabledDesktopsChanged(mode);
             anyDisableChanged = true;
         }
-        if (disabledActivities(mode) != activitiesBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)) != activitiesBefore.value(mode)) {
             Q_EMIT disabledActivitiesChanged(mode);
             anyDisableChanged = true;
         }
@@ -302,26 +408,31 @@ void Settings::load()
         Q_EMIT perScreenZoneSelectorSettingsChanged();
     if (perScreenAutotileChanged)
         Q_EMIT perScreenAutotileSettingsChanged();
-    if (perScreenSnappingChanged)
+    if (perScreenGapChanged)
         Q_EMIT perScreenSnappingSettingsChanged();
 
     if (anyChanged || anyDisableChanged || perScreenChanged)
         Q_EMIT settingsChanged();
+
+    // The store now mirrors disk — refresh the committed baseline that
+    // per-page Discard reverts to and isKeyModified() compares against.
+    captureBaseline();
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
 
 // Groups that reset() deletes exhaustively. NOT used by save() — save()
-// iterates the schema and lets purgeStaleKeys() handle cleanup. Does NOT
-// include unmanaged groups (Updates) which are written independently and
-// must survive a forced default-restore.
+// iterates the schema and lets purgeStaleKeys() handle cleanup. The legacy
+// "Updates" group is deliberately absent: nothing writes it anymore (the
+// dismissed-update-version moved to the settings app's QSettings), so it is
+// swept by reset() as a stale husk rather than managed here.
 QStringList Settings::managedGroupNames()
 {
     return {
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
-        ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to windowrules.json);
+        ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to rules.json);
                                         // listed so reset() drops any partial-v3 migration husk left in this group
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
@@ -332,6 +443,12 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::animationsWindowFilteringGroup(), // "Animations.WindowFiltering"
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
         ConfigDefaults::orderingGroup(), // "Ordering"
+        ConfigDefaults::windowsAppearanceGroup(), // "Windows" — window border + title bar decoration
+        ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
+        ConfigDefaults::decorationsPerformanceGroup(), // "Decorations.Performance" — idle/focused-only animation gating
+        ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
+        ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
+                                            // + WindowFiltering + Performance sub-groups
     };
 }
 
@@ -357,18 +474,21 @@ void Settings::purgeStaleKeys()
 {
     // Root-level groups that must survive a save() cycle — written
     // independently of Settings::save(). Assignment rules live in
-    // windowrules.json (rule-store sidecar) and QuickLayout slots live
+    // rules.json (rule-store sidecar) and QuickLayout slots live
     // in quicklayouts.json (separate sidecar) — neither is visible to
     // this purge after the v4 migration retired assignments.json.
     //
-    // "General" is preserved because JsonBackend uses it as the default
-    // rootGroupName for writeRootString/readRootString — any caller
-    // that persists a root-level key (current or future: KCM metadata,
-    // first-run markers, etc.) lands there. Wiping it on every save
-    // would silently destroy those values.
-    // Mixed list of (a) root-level GROUP names that must survive Pass 2's
-    // blanket-delete loop ("General", "Updates")
-    // and (b) root-level KEYS holding stash data — `_v4DisableStash`,
+    // The backend's root container (where writeRootString / readRootString put
+    // ungrouped keys) needs no entry here: IBackend::groupList()'s
+    // reserved-name contract requires every backend to keep it out of the
+    // enumeration, so Pass 2 cannot reach it. This holds against the interface
+    // and not just the JsonBackend we happen to construct today.
+    //
+    // Root-level KEYS holding stash data that must survive Pass 2's
+    // blanket-delete loop. (The legacy "Updates" group used to be carved out
+    // here too; nothing writes or reads it since the dismissed-update-version
+    // moved to the settings app's QSettings, so Pass 2 now sweeps any stale
+    // husk of it like every other unmanaged group.) `_v4DisableStash`,
     // `_v4ExclusionStash` and `_v4AnimationExclusionStash` are JSON
     // OBJECTS and survive Pass 2 via `preservedGroups.contains(topLevel)`
     // membership in the loop body below (without that short-circuit Pass
@@ -379,8 +499,6 @@ void Settings::purgeStaleKeys()
     // against future Pass 2 restructuring. All four stashes feed the v4
     // chain-stall retry path in configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {
-        ConfigDefaults::generalGroup(),
-        ConfigDefaults::updatesGroup(),
         ConfigKeys::Legacy::v4DisableStashKey(),
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
         ConfigKeys::Legacy::v4ExclusionStashKey(),
@@ -534,25 +652,201 @@ void Settings::save()
     saveAllPerScreenOverrides(m_configBackend);
     saveVirtualScreenConfigs(m_configBackend);
 
-    m_configBackend->sync();
+    // commit(), not sync(): the baseline moves below on a true return, so this
+    // has to be a "the bytes landed" answer. sync() is allowed to return true
+    // for a write it merely scheduled (JsonBackend's Deferred policy debounces
+    // it), which would advance the baseline against a write that has not
+    // happened and may still fail.
+    if (!m_configBackend->commit()) {
+        // Nothing reached disk. The backend stays dirty and retries on the next
+        // sync, so the values are not lost — but the baseline must NOT move:
+        // it is the "what disk holds" reference per-page Discard reverts to and
+        // isKeyModified() compares against. Advancing it here would tell the
+        // user their unsaved edits were saved and take away their ability to
+        // discard them.
+        qCWarning(lcConfig) << "save: failed to write the configuration to disk — keeping the previous baseline so "
+                               "the unsaved values stay discardable; the next save retries";
+        return;
+    }
+
+    // Disk now holds the flushed store — the just-saved values become the new
+    // committed baseline for per-page Discard / dirty checks.
+    captureBaseline();
+}
+
+bool Settings::exportTo(const QString& filePath)
+{
+    auto* json = dynamic_cast<PhosphorConfig::JsonBackend*>(m_configBackend);
+    if (!json) {
+        qCWarning(lcConfig) << "exportTo: backend is not JSON-backed, cannot export";
+        return false;
+    }
+
+    // Store-backed groups persist through their setters on every write, so the
+    // backend's in-memory root already carries whatever the user currently has,
+    // saved or not. The non-Store groups (per-screen overrides, virtual screen
+    // configs) only reach it during save(), so write them in as well. The
+    // helpers can only stage into the LIVE root, and anything left there would
+    // be committed by a later sync() or the backend's flush-on-destruction.
+    // So: snapshot the root and dirty flag first, stage, take the export
+    // snapshot, then restore both — the staged groups reach the export
+    // document only, never the live config.
+    const QJsonObject liveRoot = json->jsonRootSnapshot();
+    const bool wasDirty = json->isDirty();
+
+    saveAllPerScreenOverrides(m_configBackend);
+    saveVirtualScreenConfigs(m_configBackend);
+    QJsonObject exportRoot = json->jsonRootSnapshot();
+    // sync() stamps the schema version on its way to disk, so a store that has
+    // never synced carries no `_version` in memory. Apply the same stamp here
+    // or the export reads back as version-less and re-runs the entire migration
+    // chain when someone imports it.
+    json->applyVersionStamp(exportRoot);
+
+    json->replaceRoot(liveRoot);
+    if (!wasDirty) {
+        // replaceRoot marks dirty as a precaution; the root we put back is
+        // exactly the one that matched disk, so restore the clean state.
+        json->clearDirty();
+    }
+
+    // Deliberately no sync() and no captureBaseline(). Exporting must not
+    // commit pending edits to the live config, and must not move the baseline
+    // that per-page Discard reverts to.
+    return PhosphorConfig::JsonBackend::writeJsonAtomically(filePath, exportRoot);
+}
+
+// ── Per-page reset / discard support ────────────────────────────────────────
+
+QVector<QVariant> Settings::snapshotNotifyProperties() const
+{
+    // Index-aligned to the metaobject property table so the paired
+    // emitChangedNotifyProperties() can compare position-for-position.
+    // Inherited QObject properties (objectName) are skipped — only Settings'
+    // own NOTIFY-able readable properties participate.
+    const QMetaObject* mo = metaObject();
+    const int propCount = mo->propertyCount();
+    const int firstOwnProp = QObject::staticMetaObject.propertyCount();
+    QVector<QVariant> snapshot;
+    snapshot.resize(propCount);
+    for (int i = firstOwnProp; i < propCount; ++i) {
+        const QMetaProperty prop = mo->property(i);
+        if (prop.hasNotifySignal() && prop.isReadable())
+            snapshot[i] = prop.read(this);
+    }
+    return snapshot;
+}
+
+bool Settings::emitChangedNotifyProperties(const QVector<QVariant>& before)
+{
+    const QMetaObject* mo = metaObject();
+    const int propCount = mo->propertyCount();
+    const int firstOwnProp = QObject::staticMetaObject.propertyCount();
+    bool anyChanged = false;
+    for (int i = firstOwnProp; i < propCount; ++i) {
+        const QMetaProperty prop = mo->property(i);
+        if (!prop.hasNotifySignal() || !prop.isReadable())
+            continue;
+        const QVariant newValue = prop.read(this);
+        if (newValue != before.value(i)) {
+            anyChanged = true;
+            const QMetaMethod notify = prop.notifySignal();
+            notify.invoke(this, Qt::DirectConnection);
+        }
+    }
+    return anyChanged;
+}
+
+void Settings::captureBaseline()
+{
+    m_baseline.clear();
+    const auto& schema = m_store->schema();
+    for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+        QVariantMap groupMap;
+        for (const auto& def : it.value()) {
+            // readVariant returns the schema default for never-written keys, so
+            // the baseline always carries a concrete value per declared key.
+            groupMap.insert(def.key, m_store->readVariant(it.key(), def.key));
+        }
+        m_baseline.insert(it.key(), groupMap);
+    }
+}
+
+void Settings::rebaselineDerivedColorKeys()
+{
+    // System-colors mode owns the four zone-color keys: applySystemColorScheme()
+    // DERIVES them from the application palette, so a runtime palette change
+    // writes them through m_store AFTER the settings app captured its baseline
+    // — without this refresh, isKeyModified() reports a phantom unsaved edit
+    // and Discard reverts to the stale pre-switch colors.
+    //
+    // Callable ONLY from the ApplicationPaletteChange path (eventFilter) —
+    // and even there only when the useSystemColors toggle is COMMITTED
+    // (!isKeyModified on the useSystem key). If the toggle is a pending
+    // unsaved edit, the toggle and the colors it derived are ONE user edit
+    // and must stay discardable together; rebaselining mid-edit would let
+    // Discard revert the toggle to off while pinning the palette-derived
+    // colors as the new baseline.
+    //
+    // applySystemColorScheme() is not Q_INVOKABLE (no QML caller), so its
+    // call sites are exactly three; the other two must not rebaseline:
+    // - setUseSystemColors(true) is a USER edit; the toggle and the colors it
+    //   derives must stay discardable together. Rebaselining there would let
+    //   Discard revert the toggle to off while pinning the system-derived
+    //   colors as the new baseline.
+    // - load() derives BEFORE captureBaseline(), so the full baseline already
+    //   carries the derived values.
+    const ConfigKeyList derivedKeys{
+        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::highlightKey()},
+        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::inactiveKey()},
+        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::borderKey()},
+        {ConfigDefaults::snappingZonesLabelsGroup(), ConfigDefaults::fontColorKey()},
+    };
+    for (const ConfigKey& gk : derivedKeys) {
+        m_baseline[gk.first].insert(gk.second, m_store->readVariant(gk.first, gk.second));
+    }
+}
+
+bool Settings::isKeyModified(const QString& group, const QString& key) const
+{
+    return m_store->readVariant(group, key) != m_baseline.value(group).value(key);
+}
+
+void Settings::discardKeys(const ConfigKeyList& keys)
+{
+    const QVector<QVariant> before = snapshotNotifyProperties();
+    for (const ConfigKey& gk : keys) {
+        // Only keys captured in the committed baseline (i.e. schema-declared) can
+        // be reverted; a mistyped manifest entry would otherwise write a default-
+        // constructed QVariant() over a live value. Skip it instead.
+        const auto groupIt = m_baseline.constFind(gk.first);
+        if (groupIt == m_baseline.constEnd())
+            continue;
+        const auto keyIt = groupIt->constFind(gk.second);
+        if (keyIt == groupIt->constEnd())
+            continue;
+        // Revert to the committed baseline, but only when it actually differs, so
+        // an unmodified key in the list is not needlessly re-written. write() runs
+        // the schema validator, so the reverted value lands in its canonical form
+        // (matching what a fresh load() would produce).
+        if (m_store->readVariant(gk.first, gk.second) != *keyIt)
+            m_store->write(gk.first, gk.second, *keyIt);
+    }
+    if (emitChangedNotifyProperties(before))
+        Q_EMIT settingsChanged();
+}
+
+void Settings::resetKeys(const ConfigKeyList& keys)
+{
+    const QVector<QVariant> before = snapshotNotifyProperties();
+    for (const ConfigKey& gk : keys) {
+        m_store->reset(gk.first, gk.second);
+    }
+    if (emitChangedNotifyProperties(before))
+        Q_EMIT settingsChanged();
 }
 
 // ── Shaders (PhosphorConfig::Store-backed) ──────────────────────────────────
-
-bool Settings::enableShaderEffects() const
-{
-    return m_store->read<bool>(ConfigDefaults::shadersGroup(), ConfigDefaults::enabledKey());
-}
-
-void Settings::setEnableShaderEffects(bool enable)
-{
-    if (enableShaderEffects() == enable) {
-        return;
-    }
-    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::enabledKey(), enable);
-    Q_EMIT enableShaderEffectsChanged();
-    Q_EMIT settingsChanged();
-}
 
 int Settings::shaderFrameRate() const
 {
@@ -574,7 +868,7 @@ void Settings::setShaderFrameRate(int fps)
 
 bool Settings::enableAudioVisualizer() const
 {
-    return m_store->read<bool>(ConfigDefaults::shadersGroup(), ConfigDefaults::audioVisualizerKey());
+    return m_store->read<bool>(ConfigDefaults::shadersAudioGroup(), ConfigDefaults::enabledKey());
 }
 
 void Settings::setEnableAudioVisualizer(bool enable)
@@ -582,20 +876,20 @@ void Settings::setEnableAudioVisualizer(bool enable)
     if (enableAudioVisualizer() == enable) {
         return;
     }
-    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::audioVisualizerKey(), enable);
+    m_store->write(ConfigDefaults::shadersAudioGroup(), ConfigDefaults::enabledKey(), enable);
     Q_EMIT enableAudioVisualizerChanged();
     Q_EMIT settingsChanged();
 }
 
 int Settings::audioSpectrumBarCount() const
 {
-    return m_store->read<int>(ConfigDefaults::shadersGroup(), ConfigDefaults::audioSpectrumBarCountKey());
+    return m_store->read<int>(ConfigDefaults::shadersAudioGroup(), ConfigDefaults::barsKey());
 }
 
 void Settings::setAudioSpectrumBarCount(int count)
 {
     const int before = audioSpectrumBarCount();
-    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::audioSpectrumBarCountKey(), count);
+    m_store->write(ConfigDefaults::shadersAudioGroup(), ConfigDefaults::barsKey(), count);
     if (audioSpectrumBarCount() == before) {
         return;
     }
@@ -666,6 +960,13 @@ void Settings::setAudioSpectrumBarCount(int count)
         if (after == before) {                                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
+        /* applySystemColorScheme() derives under this flag in load() AND in                                           \
+           eventFilter()'s palette re-derive: both announce once themselves                                            \
+           (snapshot/diff + a single settingsChanged) — a setter-level                                               \
+           emission here would duplicate both. */                                                                      \
+        if (m_suppressDerivedColorEmissions) {                                                                         \
+            return;                                                                                                    \
+        }                                                                                                              \
         Q_EMIT signal();                                                                                               \
         Q_EMIT settingsChanged();                                                                                      \
     }
@@ -732,10 +1033,6 @@ P_STORE_GET(int, borderWidth, snappingZonesBorderGroup, widthKey, int)
 P_STORE_SET_INT(setBorderWidth, snappingZonesBorderGroup, widthKey, borderWidthChanged)
 P_STORE_GET(int, borderRadius, snappingZonesBorderGroup, radiusKey, int)
 P_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadiusChanged)
-
-// Effects group (blur lives here for historical reasons)
-P_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
-P_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChanged)
 
 // ── Ordering (PhosphorConfig::Store-backed) ─────────────────────────────────
 // On disk: comma-joined QString. In API: QStringList. The schema validator
@@ -1100,8 +1397,14 @@ void Settings::setAnimationEasingCurve(const QString& curve)
         // resolves to a slightly-different-precision canonical form).
         toStore = resolved->toString();
     } else {
-        qCWarning(lcConfig) << "setAnimationEasingCurve: curve spec" << curve
-                            << "did not resolve — persisting raw (library default will apply at animation time)";
+        // DEBUG, and the spec is NOT echoed. `curve` is the caller's raw string, and
+        // animationEasingCurve is a registered STRING setting — so any session-bus peer
+        // reaches this with content of its own choosing, unbounded in length and rate. That
+        // is the same log-injection vector the per-screen writers were demoted for, one call
+        // frame deeper still. "It did not resolve" is the signal; the failing text is not
+        // worth an attacker-writable line in the daemon's log.
+        qCDebug(lcConfig) << "setAnimationEasingCurve: curve spec did not resolve — persisting raw "
+                             "(the library default applies at animation time)";
         toStore = curve;
     }
 
@@ -1216,6 +1519,94 @@ void Settings::setShaderProfileTreeJson(const QString& json)
     setShaderProfileTree(PhosphorAnimationShaders::ShaderProfileTree::fromJson(doc.object()));
 }
 
+// ── Decorations tree (PhosphorConfig::Store-backed) ─────────────────────────
+// Persisted as one nested JSON entry under Decorations/DecorationProfileTree,
+// mirroring how the animation shaderProfileTree persists under
+// Animations/ShaderProfileTree. The read-side falls back to the
+// ConfigDefaults tree (EMPTY / neutral: no baseline chain, no overrides —
+// border and titlebar visuals are owned by the window rules, see
+// ConfigDefaults::decorationProfileTree) when the store holds no entry, so a
+// fresh config starts with no shader-pack decoration.
+
+PhosphorSurfaceShaders::DecorationProfileTree Settings::decorationProfileTree() const
+{
+    const QVariantMap map =
+        m_store->read<QVariantMap>(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey());
+    // The Decorations schema registers a NON-empty default for this key (the
+    // serialized ConfigDefaults::decorationProfileTree), so a store built with
+    // the schema never returns empty here. The guard covers a store constructed
+    // WITHOUT the schema default (e.g. a bare test stub): fall back to the same
+    // canonical default rather than to an empty tree.
+    if (map.isEmpty())
+        return ConfigDefaults::decorationProfileTree();
+    return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map));
+}
+
+void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
+{
+    // Prune the incoming tree at the persistence boundary — same
+    // belt-and-braces rationale as setShaderProfileTree. fromJson is the
+    // tree's canonical unsupported-path filter (setOverride itself does not
+    // validate), so a toJson→fromJson round trip IS the prune: a Q_INVOKABLE
+    // write from scripting/tests cannot stamp unsupported-path entries onto
+    // disk. The read side (decorationProfileTree) passes through the same
+    // filter, so the comparison below is pruned-vs-pruned.
+    const auto pruned = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(tree.toJson());
+    // Value-equality compare so a same-tree write doesn't fire a spurious
+    // changed signal. Compare against the effective current tree (the
+    // ConfigDefaults default when the store is empty) so writing the default
+    // back over an empty store is correctly a no-op.
+    if (pruned == decorationProfileTree())
+        return;
+    m_store->write(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey(),
+                   pruned.toJson().toVariantMap());
+    Q_EMIT decorationProfileTreeChanged();
+    Q_EMIT settingsChanged();
+}
+
+QString Settings::decorationProfileTreeJson() const
+{
+    return QString::fromUtf8(QJsonDocument(decorationProfileTree().toJson()).toJson(QJsonDocument::Compact));
+}
+
+void Settings::setDecorationProfileTreeJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        // Empty string = reset to the canonical default, exactly like the
+        // animation shaderProfileTree facade. That default is the EMPTY /
+        // neutral tree (ConfigDefaults::decorationProfileTree — border and
+        // titlebar visuals are rule-owned, the tree carries only opt-in
+        // shader-pack decoration), so clearing restores "no decoration".
+        setDecorationProfileTree(ConfigDefaults::decorationProfileTree());
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject()) {
+        qCWarning(lcConfig) << "setDecorationProfileTreeJson: malformed JSON, ignoring";
+        return;
+    }
+    setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree::fromJson(doc.object()));
+}
+
+// ── Decorations.Performance (PhosphorConfig::Store-backed) ──────────────────
+// These bound WHEN the decoration chain animates, not how much work it does per
+// frame. An animated pack repaints every window carrying it on every vsync, and
+// that alone holds the GPU in its top performance state however cheap the frame
+// is — so the only lever that returns the card to its idle clocks is to stop
+// drawing when nothing needs to change.
+
+P_STORE_GET(bool, decorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey, bool)
+P_STORE_SET_BOOL(setDecorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey,
+                 decorationAnimateFocusedOnlyChanged)
+
+P_STORE_GET(bool, decorationPauseWhenIdle, decorationsPerformanceGroup, pauseWhenIdleKey, bool)
+P_STORE_SET_BOOL(setDecorationPauseWhenIdle, decorationsPerformanceGroup, pauseWhenIdleKey,
+                 decorationPauseWhenIdleChanged)
+
+P_STORE_GET(int, decorationIdleTimeoutSec, decorationsPerformanceGroup, idleTimeoutSecKey, int)
+P_STORE_SET_INT(setDecorationIdleTimeoutSec, decorationsPerformanceGroup, idleTimeoutSecKey,
+                decorationIdleTimeoutSecChanged)
+
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values
 // to a known backend, so a hand-edited "Rendering.Backend = foobar" reads
@@ -1223,6 +1614,35 @@ void Settings::setShaderProfileTreeJson(const QString& json)
 
 P_STORE_GET(QString, renderingBackend, renderingGroup, backendKey, QString)
 P_STORE_SET_STRING(setRenderingBackend, renderingGroup, backendKey, renderingBackendChanged)
+
+// Shaders.Audio (ISettings) — the audio-spectrum analysis parameter set.
+// enableAudioVisualizer / audioSpectrumBarCount live with the other
+// handwritten shader accessors above; the rest are uniform store-backed
+// scalars, so the macros apply.
+P_STORE_GET(bool, audioAutosens, shadersAudioGroup, autosensKey, bool)
+P_STORE_SET_BOOL(setAudioAutosens, shadersAudioGroup, autosensKey, audioAutosensChanged)
+P_STORE_GET(int, audioSensitivity, shadersAudioGroup, sensitivityKey, int)
+P_STORE_SET_INT(setAudioSensitivity, shadersAudioGroup, sensitivityKey, audioSensitivityChanged)
+P_STORE_GET(int, audioNoiseReduction, shadersAudioGroup, noiseReductionKey, int)
+P_STORE_SET_INT(setAudioNoiseReduction, shadersAudioGroup, noiseReductionKey, audioNoiseReductionChanged)
+P_STORE_GET(int, audioLowerCutoffHz, shadersAudioGroup, lowerCutoffHzKey, int)
+P_STORE_SET_INT(setAudioLowerCutoffHz, shadersAudioGroup, lowerCutoffHzKey, audioLowerCutoffHzChanged)
+P_STORE_GET(int, audioHigherCutoffHz, shadersAudioGroup, higherCutoffHzKey, int)
+P_STORE_SET_INT(setAudioHigherCutoffHz, shadersAudioGroup, higherCutoffHzKey, audioHigherCutoffHzChanged)
+P_STORE_GET(bool, audioMonstercat, shadersAudioGroup, monstercatKey, bool)
+P_STORE_SET_BOOL(setAudioMonstercat, shadersAudioGroup, monstercatKey, audioMonstercatChanged)
+P_STORE_GET(bool, audioWaves, shadersAudioGroup, wavesKey, bool)
+P_STORE_SET_BOOL(setAudioWaves, shadersAudioGroup, wavesKey, audioWavesChanged)
+P_STORE_GET(QString, audioChannelMode, shadersAudioGroup, channelModeKey, QString)
+P_STORE_SET_STRING(setAudioChannelMode, shadersAudioGroup, channelModeKey, audioChannelModeChanged)
+P_STORE_GET(bool, audioReverse, shadersAudioGroup, reverseKey, bool)
+P_STORE_SET_BOOL(setAudioReverse, shadersAudioGroup, reverseKey, audioReverseChanged)
+P_STORE_GET(int, audioExtraSmoothing, shadersAudioGroup, extraSmoothingKey, int)
+P_STORE_SET_INT(setAudioExtraSmoothing, shadersAudioGroup, extraSmoothingKey, audioExtraSmoothingChanged)
+P_STORE_GET(QString, audioInputMethod, shadersAudioGroup, inputMethodKey, QString)
+P_STORE_SET_STRING(setAudioInputMethod, shadersAudioGroup, inputMethodKey, audioInputMethodChanged)
+P_STORE_GET(QString, audioInputSource, shadersAudioGroup, inputSourceKey, QString)
+P_STORE_SET_STRING(setAudioInputSource, shadersAudioGroup, inputSourceKey, audioInputSourceChanged)
 
 // ── Performance (PhosphorConfig::Store-backed) ──────────────────────────────
 
@@ -1238,26 +1658,138 @@ P_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDispla
 // Inner/outer gaps (uniform + per-side) plus adjacency threshold. Schema
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
-P_STORE_GET(int, zonePadding, snappingGapsGroup, innerKey, int)
-P_STORE_SET_INT(setZonePadding, snappingGapsGroup, innerKey, zonePaddingChanged)
-P_STORE_GET(int, outerGap, snappingGapsGroup, outerKey, int)
-P_STORE_SET_INT(setOuterGap, snappingGapsGroup, outerKey, outerGapChanged)
-P_STORE_GET(bool, usePerSideOuterGap, snappingGapsGroup, usePerSideKey, bool)
-P_STORE_SET_BOOL(setUsePerSideOuterGap, snappingGapsGroup, usePerSideKey, usePerSideOuterGapChanged)
-P_STORE_GET(int, outerGapTop, snappingGapsGroup, topKey, int)
-P_STORE_SET_INT(setOuterGapTop, snappingGapsGroup, topKey, outerGapTopChanged)
-P_STORE_GET(int, outerGapBottom, snappingGapsGroup, bottomKey, int)
-P_STORE_SET_INT(setOuterGapBottom, snappingGapsGroup, bottomKey, outerGapBottomChanged)
-P_STORE_GET(int, outerGapLeft, snappingGapsGroup, leftKey, int)
-P_STORE_SET_INT(setOuterGapLeft, snappingGapsGroup, leftKey, outerGapLeftChanged)
-P_STORE_GET(int, outerGapRight, snappingGapsGroup, rightKey, int)
-P_STORE_SET_INT(setOuterGapRight, snappingGapsGroup, rightKey, outerGapRightChanged)
+// ── Shared inner/outer gaps (PhosphorConfig::Store-backed, "Gaps" group) ─────
+// Read on demand through m_store (validator clamps to the declared gap range);
+// setters route the write through the store and emit only on a real change.
+// The autotile* gap forwarders in settings.h delegate to these getters, so
+// tiling and snapping always resolve the same values.
+P_STORE_GET(int, innerGap, gapsGroup, innerGapKey, int)
+P_STORE_SET_INT(setInnerGap, gapsGroup, innerGapKey, innerGapChanged)
+P_STORE_GET(int, outerGap, gapsGroup, outerGapKey, int)
+P_STORE_SET_INT(setOuterGap, gapsGroup, outerGapKey, outerGapChanged)
+P_STORE_GET(bool, usePerSideOuterGap, gapsGroup, usePerSideOuterGapKey, bool)
+P_STORE_SET_BOOL(setUsePerSideOuterGap, gapsGroup, usePerSideOuterGapKey, usePerSideOuterGapChanged)
+P_STORE_GET(int, outerGapTop, gapsGroup, outerGapTopKey, int)
+P_STORE_SET_INT(setOuterGapTop, gapsGroup, outerGapTopKey, outerGapTopChanged)
+P_STORE_GET(int, outerGapBottom, gapsGroup, outerGapBottomKey, int)
+P_STORE_SET_INT(setOuterGapBottom, gapsGroup, outerGapBottomKey, outerGapBottomChanged)
+P_STORE_GET(int, outerGapLeft, gapsGroup, outerGapLeftKey, int)
+P_STORE_SET_INT(setOuterGapLeft, gapsGroup, outerGapLeftKey, outerGapLeftChanged)
+P_STORE_GET(int, outerGapRight, gapsGroup, outerGapRightKey, int)
+P_STORE_SET_INT(setOuterGapRight, gapsGroup, outerGapRightKey, outerGapRightChanged)
+
+// ── Window decoration appearance (Store-backed, "Windows" group) ─────────────
+P_STORE_GET(bool, showWindowBorder, windowsAppearanceGroup, showBorderKey, bool)
+P_STORE_SET_BOOL(setShowWindowBorder, windowsAppearanceGroup, showBorderKey, showWindowBorderChanged)
+P_STORE_GET(QString, windowBorderScope, windowsAppearanceGroup, borderScopeKey, QString)
+P_STORE_SET_STRING(setWindowBorderScope, windowsAppearanceGroup, borderScopeKey, windowBorderScopeChanged)
+P_STORE_GET(int, windowBorderWidth, windowsAppearanceGroup, widthKey, int)
+P_STORE_SET_INT(setWindowBorderWidth, windowsAppearanceGroup, widthKey, windowBorderWidthChanged)
+P_STORE_GET(int, windowBorderRadius, windowsAppearanceGroup, radiusKey, int)
+P_STORE_SET_INT(setWindowBorderRadius, windowsAppearanceGroup, radiusKey, windowBorderRadiusChanged)
+P_STORE_GET(QString, windowBorderColorActive, windowsAppearanceGroup, borderColorActiveKey, QString)
+P_STORE_SET_STRING(setWindowBorderColorActive, windowsAppearanceGroup, borderColorActiveKey,
+                   windowBorderColorActiveChanged)
+P_STORE_GET(QString, windowBorderColorInactive, windowsAppearanceGroup, borderColorInactiveKey, QString)
+P_STORE_SET_STRING(setWindowBorderColorInactive, windowsAppearanceGroup, borderColorInactiveKey,
+                   windowBorderColorInactiveChanged)
+P_STORE_GET(bool, hideWindowTitleBars, windowsAppearanceGroup, hideTitleBarsKey, bool)
+P_STORE_SET_BOOL(setHideWindowTitleBars, windowsAppearanceGroup, hideTitleBarsKey, hideWindowTitleBarsChanged)
+P_STORE_GET(QString, windowTitleBarScope, windowsAppearanceGroup, titleBarScopeKey, QString)
+P_STORE_SET_STRING(setWindowTitleBarScope, windowsAppearanceGroup, titleBarScopeKey, windowTitleBarScopeChanged)
+P_STORE_GET(int, focusFadeDuration, windowsAppearanceGroup, focusFadeDurationKey, int)
+P_STORE_SET_INT(setFocusFadeDuration, windowsAppearanceGroup, focusFadeDurationKey, focusFadeDurationChanged)
+// Plain opacity+tint layer (same "Windows" group).
+P_STORE_GET(bool, showWindowOpacityTint, windowsAppearanceGroup, showOpacityTintKey, bool)
+P_STORE_SET_BOOL(setShowWindowOpacityTint, windowsAppearanceGroup, showOpacityTintKey, showWindowOpacityTintChanged)
+P_STORE_GET(QString, windowOpacityTintScope, windowsAppearanceGroup, opacityTintScopeKey, QString)
+P_STORE_SET_STRING(setWindowOpacityTintScope, windowsAppearanceGroup, opacityTintScopeKey,
+                   windowOpacityTintScopeChanged)
+P_STORE_GET(double, windowOpacity, windowsAppearanceGroup, opacityKey, double)
+P_STORE_SET_DOUBLE(setWindowOpacity, windowsAppearanceGroup, opacityKey, windowOpacityChanged)
+P_STORE_GET(double, windowTintStrength, windowsAppearanceGroup, tintStrengthKey, double)
+P_STORE_SET_DOUBLE(setWindowTintStrength, windowsAppearanceGroup, tintStrengthKey, windowTintStrengthChanged)
+P_STORE_GET(QString, windowTintColor, windowsAppearanceGroup, tintColorKey, QString)
+P_STORE_SET_STRING(setWindowTintColor, windowsAppearanceGroup, tintColorKey, windowTintColorChanged)
+
+void Settings::connectRuleStoreGapReactivity()
+{
+    if (m_ruleStore == nullptr) {
+        return;
+    }
+    // The global and per-screen gaps are config-backed now, so nothing here
+    // seeds them. Only the context (per-mode / per-desktop / per-activity) gap
+    // rules remain rule-backed and feed the geometry cascade — seed their
+    // fingerprint so the first rulesChanged emit compares against a real snapshot.
+    m_cachedGapFingerprint = gapRulesFingerprint();
+    connect(m_ruleStore, &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
+        onRuleStoreChanged();
+    });
+}
+
+void Settings::onRuleStoreChanged()
+{
+    // Global inner/outer gaps are config-backed; their NOTIFY is owned by the
+    // gap setters, not this handler.
+    //
+    // A rule edit can also change a context (per-mode / per-desktop / per-
+    // activity) gap rule, which feeds the geometry cascade (mergeConfigPerScreen-
+    // Gaps folds config per-monitor gaps under these rule overrides). Re-sync the
+    // geometry consumers — the daemon's perScreenSnappingSettingsChanged handler
+    // reschedules the gap resnap, and its settingsChanged handler re-runs the
+    // per-screen autotile config (updateAutotileScreens) plus
+    // refreshConfigFromSettings — but ONLY when a gap action somewhere in the rule
+    // set actually changed. Emitting on every rulesChanged made a mode/assignment
+    // toggle (also a rule write) fire settingsChanged, which drove the daemon to
+    // re-resolve the default assignment and immediately revert the toggle. The
+    // fingerprint covers every gap action across all rules, so non-gap rule writes
+    // no longer trigger a gap re-sync.
+    const QString gapFingerprint = gapRulesFingerprint();
+    if (gapFingerprint != m_cachedGapFingerprint) {
+        m_cachedGapFingerprint = gapFingerprint;
+        Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT perScreenSnappingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+// Fingerprint of every gap action across the whole rule set (the context per-
+// mode / per-desktop / per-activity gap rules), used to gate the gap re-sync in
+// onRuleStoreChanged so only real gap edits fire it — never a mode/assignment/
+// border rule write.
+QString Settings::gapRulesFingerprint() const
+{
+    if (m_ruleStore == nullptr) {
+        return QString();
+    }
+    static const QSet<QString> gapTypes = {
+        QString(PhosphorRules::ActionType::SetInnerGap),           QString(PhosphorRules::ActionType::SetOuterGap),
+        QString(PhosphorRules::ActionType::SetUsePerSideOuterGap), QString(PhosphorRules::ActionType::SetOuterGapTop),
+        QString(PhosphorRules::ActionType::SetOuterGapBottom),     QString(PhosphorRules::ActionType::SetOuterGapLeft),
+        QString(PhosphorRules::ActionType::SetOuterGapRight)};
+    QString fingerprint;
+    const QString valueKey = QString(PhosphorRules::ActionParam::Value);
+    for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
+        for (const PhosphorRules::RuleAction& action : rule.actions) {
+            if (gapTypes.contains(action.type)) {
+                fingerprint += rule.id.toString();
+                fingerprint += QLatin1Char('|');
+                fingerprint += action.type;
+                fingerprint += QLatin1Char('=');
+                fingerprint += action.params.value(valueKey).toVariant().toString();
+                fingerprint += QLatin1Char(';');
+            }
+        }
+    }
+    return fingerprint;
+}
+
 P_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)
 P_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, adjacentThresholdChanged)
 
 // ── Display (PhosphorConfig::Store-backed) ──────────────────────────────────
 // Display.* keys live in snappingBehaviorDisplayGroup; OSD + Effects keys
-// share snappingEffectsGroup with the already-migrated Appearance.Blur.
+// live in snappingEffectsGroup.
 // QStringList keys go over the wire as comma-joined strings; the getters
 // parse back via parseCommaList (defined above in the Ordering section).
 
@@ -1268,7 +1800,7 @@ P_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOn
 // ── Per-mode disable lists — rule-backed (Phase 3b) ─────────────────────────
 //
 // Per-mode disable entries are `DisableEngine` context rules in the unified
-// WindowRule store (windowrules.json), NOT config.json keys. A disable rule
+// Rule store (rules.json), NOT config.json keys. A disable rule
 // pins exactly the context dimensions of its axis:
 //   - monitor  : ScreenId only
 //   - desktop  : ScreenId + VirtualDesktop
@@ -1280,73 +1812,115 @@ P_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOn
 
 namespace {
 
-// Disable-axis enum mirrors the persisted (axis, mode) family layout. Distinct
-// from `ContextRuleBridge::ContextAxis` only because the bridge enum also
-// carries `CatchAll` and `Combined` — the disable list classifies a tuple as
-// Activity-axis whether or not it also pins a desktop (mirroring the historic
-// per-activity disable family), so we project the bridge axis through here.
-enum class DisableAxis {
-    Monitor,
-    Desktop,
-    Activity
-};
-
-// Classify a context rule's pinned-dimension shape into a disable axis.
-// Returns nullopt for a catch-all or a shape that pins no screen — those are
-// not valid disable rules. Delegates to the bridge so the cascade-axis
-// formula lives in one place.
-std::optional<DisableAxis> axisOf(const QString& screenId, int virtualDesktop, const QString& activity)
+// Classify a disable rule's MATCH into a disable axis. Returns nullopt for a
+// shape no disable axis can represent — those are not managed disable entries,
+// so the getter must not report them and the write path's kept-walk must not
+// rewrite them. Routed through `ContextRuleBridge::contextAxisFor` so the
+// cascade-axis formula lives in one place, and so the three admission gates that
+// formula folds in apply here identically to the assignment side:
+//   - `isContextOnly()` — a rule carrying a window-property leaf is not a
+//     context rule at all. Rebuilding it from the decoded dims would drop that
+//     leaf, and `disableEntryFor` has nowhere to put it.
+//   - `pinsNonDimensionContextField()` — a rule pinning Mode /
+//     TiledWindowCount / ScreenOrientation / ActiveLayout is more specific than
+//     the (screen, desktop, activity) shape the entry strings can key. Taking it
+//     as a bare axis rule would BOTH over-report the gate (an
+//     `All{ScreenId==A, ScreenOrientation=="portrait"}` disable would switch the
+//     engine off on screen A in every orientation) and destroy the extra leaf on
+//     the next rebuild of the family.
+//   - the axis decode itself, below.
+//
+// STRICT, like the assignment side's `matchIsExactContextActivityStrict`: a
+// Combined (screen+desktop+activity) tuple is NOT the Activity axis. The three
+// disable-list keys are `screenId`, `screenId/desktop` and `screenId/activity`
+// — none of them can carry all three dimensions, so projecting a Combined rule
+// onto the Activity axis loses information both ways:
+//   - disableEntriesFor() would serialize it as `screenId/activity`, dropping
+//     the desktop pin, and the rebuild loop below would recreate it from that
+//     entry with desktop=0 — silently widening a rule that gated ONE desktop
+//     into one that gates ALL desktops (under a different disableRuleIdFor
+//     UUID, so it is a different rule, not an edit).
+//   - a Combined rule and a plain Activity rule for the same (screen,
+//     activity) produce the SAME entry string, so canonicalDisableEntries'
+//     de-duplication would collapse the pair and the rebuild would emit only
+//     one — losing the other outright.
+// Excluded here instead, a Combined disable rule is invisible to the disable
+// lists (it cannot be keyed by them) and the rebuild's kept-walk preserves it
+// untouched, exactly as it already does for a rule that pins a non-dimension
+// context field. Nothing in-tree authors one — the v3→v4 migration emits
+// desktop-only and activity-only disables — so this is only reachable for a
+// rule hand-built in the rule editor, which is precisely the rule the disable
+// lists must not rewrite.
+std::optional<DisableAxis> axisOf(const PhosphorRules::MatchExpression& match)
 {
-    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
-    switch (CRB::contextAxisOf(screenId, virtualDesktop, activity)) {
+    namespace CRB = PhosphorRules::ContextRuleBridge;
+    switch (CRB::contextAxisFor(match)) {
     case CRB::ContextAxis::Monitor:
         return DisableAxis::Monitor;
     case CRB::ContextAxis::Desktop:
         return DisableAxis::Desktop;
     case CRB::ContextAxis::Activity:
-    case CRB::ContextAxis::Combined:
-        // A combined (screen+desktop+activity) tuple is treated as
-        // Activity-axis for disable-list purposes — mirrors the legacy
-        // classifier which only checked the activity dimension.
         return DisableAxis::Activity;
+    case CRB::ContextAxis::Combined:
     case CRB::ContextAxis::CatchAll:
         return std::nullopt;
     }
     return std::nullopt;
 }
 
+// Serialize a decoded (screen, desktop, activity) tuple into the disable-list
+// entry string for @p axis. The ONE place the entry shape is spelled, shared by
+// the getter (disableEntriesFor) and the write path's kept-walk — the two have
+// to agree on what "the entry for this rule" is, or the kept-walk would fail to
+// recognise the very entries the getter produced.
+QString disableEntryFor(DisableAxis axis, const QString& screenId, int desktop, const QString& activity)
+{
+    switch (axis) {
+    case DisableAxis::Monitor:
+        return screenId;
+    case DisableAxis::Desktop:
+        return screenId + QLatin1Char('/') + QString::number(desktop);
+    case DisableAxis::Activity:
+        return screenId + QLatin1Char('/') + activity;
+    }
+    return QString();
+}
+
 } // namespace
 
 QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mode, int axisInt) const
 {
-    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    namespace CRB = PhosphorRules::ContextRuleBridge;
     const auto axis = static_cast<DisableAxis>(axisInt);
     const QString wantToken = PhosphorZones::modeToWireString(mode);
     QStringList out;
-    for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+    for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
+        if (!rule.enabled) {
+            // A disabled rule does not gate anything. The evaluator skips
+            // !enabled before filling any slot, and these lists ARE the gate
+            // (isMonitorDisabled reads them straight), so honouring a disabled
+            // rule here would keep an engine switched off that the user had
+            // explicitly toggled off in the rule editor. The rule itself is
+            // preserved — see the kept-walk in writeDisableEntries, which must
+            // not delete what this getter no longer reports.
+            continue;
+        }
         const auto ruleToken = CRB::disableRuleMode(rule);
         if (!ruleToken || *ruleToken != wantToken) {
             continue; // not a disable rule, or scoped to a different mode
+        }
+        // axisOf() is the single admission gate — see its comment for the three
+        // shapes it refuses (window-property leaves, a pinned non-dimension
+        // context field, an axis the entry strings cannot key).
+        const auto ruleAxis = axisOf(rule.match);
+        if (!ruleAxis || *ruleAxis != axis) {
+            continue;
         }
         QString screenId;
         int desktop = 0;
         QString activity;
         CRB::contextDimsOf(rule.match, screenId, desktop, activity);
-        const auto ruleAxis = axisOf(screenId, desktop, activity);
-        if (!ruleAxis || *ruleAxis != axis) {
-            continue;
-        }
-        switch (axis) {
-        case DisableAxis::Monitor:
-            out.append(screenId);
-            break;
-        case DisableAxis::Desktop:
-            out.append(screenId + QLatin1Char('/') + QString::number(desktop));
-            break;
-        case DisableAxis::Activity:
-            out.append(screenId + QLatin1Char('/') + activity);
-            break;
-        }
+        out.append(disableEntryFor(axis, screenId, desktop, activity));
     }
     return out;
 }
@@ -1354,61 +1928,16 @@ QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mod
 void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, int axisInt, const QStringList& entries,
                                    DisableModeSignalFn signalFn)
 {
-    namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+    namespace CRB = PhosphorRules::ContextRuleBridge;
     const auto axis = static_cast<DisableAxis>(axisInt);
     const QString modeToken = PhosphorZones::modeToWireString(mode);
 
-    // Snapshot the current entries for this (axis, mode) so a no-op write
-    // does not fire a spurious changed signal. Compare canonically — both
-    // sides are de-duplicated, whitespace-trimmed sets. The Monitor axis
-    // additionally resolves connector names → stable screen ids so the
-    // comparison matches the public getter (disabledMonitors), which always
-    // resolves on read: without this, re-saving a list that stores a
-    // connector name where the getter reports the canonical id would look
-    // like a change and misfire the changed signal.
-    // Resolve the SCREEN segment of any composite entry to its canonical id.
-    // For Monitor axis the entry IS the screen id; for Desktop/Activity the
-    // entry is `screenId/desktop` or `screenId/activity` and the leading
-    // segment needs the same resolution. Without this, a write that mixes
-    // connector-name and canonical-id forms produces two separate WindowRules
-    // (different UUIDs via disableRuleIdFor) covering the same logical
-    // context, and the no-op short-circuit below misfires because the
-    // pre/post sets look different.
-    const auto canonical = [axis](const QStringList& list) {
-        const auto resolveScreen = [](const QString& screen) {
-            if (PhosphorScreens::ScreenIdentity::isConnectorName(screen)) {
-                const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screen);
-                if (resolved != screen) {
-                    return resolved;
-                }
-            }
-            return screen;
-        };
-        QStringList c;
-        for (const QString& raw : list) {
-            QString value = raw.trimmed();
-            if (axis == DisableAxis::Monitor) {
-                value = resolveScreen(value);
-            } else if (axis == DisableAxis::Desktop || axis == DisableAxis::Activity) {
-                // Composite entry: split on the LAST '/' so a screen id
-                // that happens to contain a '/' (rare but legal in the
-                // disambiguated `Manuf:Model:Serial/CONNECTOR` shape)
-                // doesn't truncate.
-                const int slash = value.lastIndexOf(QLatin1Char('/'));
-                if (slash > 0 && slash < value.size() - 1) {
-                    const QString screen = resolveScreen(value.left(slash));
-                    value = screen + QLatin1Char('/') + value.mid(slash + 1);
-                }
-            }
-            if (!value.isEmpty() && !c.contains(value)) {
-                c.append(value);
-            }
-        }
-        c.sort();
-        return c;
-    };
-    const QStringList before = canonical(disableEntriesFor(mode, axisInt));
-    const QStringList after = canonical(entries);
+    // Snapshot the current entries for this (axis, mode) so a no-op write does
+    // not fire a spurious changed signal. Both sides go through
+    // canonicalDisableEntries — see it for what the canonical form is and why
+    // a raw compare is not enough.
+    const QStringList before = canonicalDisableEntries(axis, disableEntriesFor(mode, axisInt));
+    const QStringList after = canonicalDisableEntries(axis, entries);
 
     // No-op guard: when the canonical disable sets are equal there is nothing
     // to persist. Skip the kept-rebuild + setAllRules walk entirely — the
@@ -1416,7 +1945,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     // (makeDisableRule is deterministic via disableRuleIdFor's createUuidV5
     // over (screenId, desktop, activity, modeToken), so the ids match
     // byte-for-byte and setAllRules would correctly detect "no change"),
-    // but walking every rule in the store and allocating fresh WindowRule
+    // but walking every rule in the store and allocating fresh Rule
     // copies just to discover that is wasted work. Pure micro-optimisation,
     // not a correctness guard against UUID churn.
     if (before == after) {
@@ -1425,17 +1954,46 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
 
     // Rebuild the rule list: keep every rule that is NOT a disable rule of
     // this exact (axis, mode) family, then append the new entries.
-    QList<PhosphorWindowRules::WindowRule> kept;
-    for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+    QList<PhosphorRules::Rule> kept;
+    for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
         const auto ruleToken = CRB::disableRuleMode(rule);
+        // axisOf() gates admission with exactly the shapes disableEntriesFor
+        // reports, so this walk drops only rules the append loop below rebuilds.
+        // Anything it refuses — a window-property leaf, a pinned non-dimension
+        // context field (Mode / TiledWindowCount / ScreenOrientation /
+        // ActiveLayout), a Combined tuple — is NOT the pure (screen, desktop,
+        // activity) shape this (axis, mode) rewrite owns, so it falls through to
+        // `kept` untouched. Dropping it would destroy the rule outright: the
+        // append loop rebuilds only the bare tuple, so the extra leaf would be
+        // gone and the rule's derived UUID with it.
         if (ruleToken && *ruleToken == modeToken) {
-            QString screenId;
-            int desktop = 0;
-            QString activity;
-            CRB::contextDimsOf(rule.match, screenId, desktop, activity);
-            const auto ruleAxis = axisOf(screenId, desktop, activity);
+            const auto ruleAxis = axisOf(rule.match);
             if (ruleAxis && *ruleAxis == axis) {
-                continue; // drop — replaced below
+                QString screenId;
+                int desktop = 0;
+                QString activity;
+                CRB::contextDimsOf(rule.match, screenId, desktop, activity);
+                // A DISABLED rule of this family is invisible to
+                // disableEntriesFor, so it is in neither `before` nor `after` and
+                // the append loop below will not recreate it. Dropping it here
+                // would silently delete the user's rule on the next unrelated
+                // write to this (axis, mode) family. Keep it — unless this write
+                // re-asserts its exact entry, in which case the append loop
+                // rebuilds the same tuple as an ENABLED rule with the same
+                // deterministic id. The append loop runs after this walk, so
+                // keeping the disabled one too would hand setAllRules the
+                // disabled rule first, and RuleSet::setRules keeps the FIRST
+                // entry for any id and drops later collisions — the rebuilt
+                // ENABLED rule would be the one thrown away, leaving the
+                // re-enable a silent no-op. Ticking a monitor back on in the UI
+                // is precisely that case, and re-enabling the rule is what the
+                // user asked for.
+                const QStringList canonical =
+                    canonicalDisableEntries(axis, {disableEntryFor(axis, screenId, desktop, activity)});
+                const bool reasserted = !canonical.isEmpty() && after.contains(canonical.first());
+                if (rule.enabled || reasserted) {
+                    continue; // drop — replaced below
+                }
             }
         }
         kept.append(rule);
@@ -1450,17 +2008,15 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             screenId = canonicalEntry;
             break;
         case DisableAxis::Desktop: {
+            // No shape check: `after` came out of canonicalDisableEntries, which
+            // already dropped every entry this loop could reject and rebuilt the
+            // survivors as `<non-empty screen>/<QString::number(desktop > 0)>`.
+            // The screen segment is non-empty (resolveScreenId returns its input
+            // unchanged when it doesn't resolve) and the desktop segment never
+            // contains '/', so lastIndexOf always lands on the separator we put
+            // there and the tail always parses back to the same positive int.
             const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
-            if (slash <= 0 || slash == canonicalEntry.size() - 1) {
-                qCWarning(lcConfig) << "Skipping malformed desktop disable entry:" << canonicalEntry;
-                continue;
-            }
-            bool ok = false;
-            desktop = canonicalEntry.mid(slash + 1).toInt(&ok);
-            if (!ok || desktop <= 0) {
-                qCWarning(lcConfig) << "Skipping malformed desktop disable entry:" << canonicalEntry;
-                continue;
-            }
+            desktop = canonicalEntry.mid(slash + 1).toInt();
             screenId = canonicalEntry.left(slash);
             break;
         }
@@ -1471,12 +2027,9 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             // splits at the activity boundary, not at the connector
             // boundary inside the screen ID. Activity UUIDs are
             // canonical and never contain `/`, so the trailing segment
-            // is unambiguous. Mirrors the Desktop axis above.
+            // is unambiguous. Mirrors the Desktop axis above, including
+            // the shape guarantee canonicalDisableEntries provides.
             const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
-            if (slash <= 0 || slash == canonicalEntry.size() - 1) {
-                qCWarning(lcConfig) << "Skipping malformed activity disable entry:" << canonicalEntry;
-                continue;
-            }
             screenId = canonicalEntry.left(slash);
             activity = canonicalEntry.mid(slash + 1);
             break;
@@ -1498,26 +2051,55 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         } else if (axis == DisableAxis::Activity) {
             name += disableRuleActivitySuffix();
         }
-        kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, modeToken));
+        kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, modeToken, CRB::kContextBandBase));
     }
 
-    if (!m_windowRuleStore->setAllRules(kept)) {
+    if (!m_ruleStore->setAllRules(kept)) {
         // Persistence failed — the in-memory rule set still advanced,
         // so consumers wired to `rulesChanged(persisted=false)` already
         // know. Surface it on the settings-side log too so users
-        // grepping `lcConfig` see the failure, and skip the aggregate
-        // `settingsChanged()` emit so dirty-state trackers don't
-        // believe the write made it to disk. Roll the in-memory store
-        // back to its on-disk state (mirrors the reset() rollback
-        // below) so subsequent reads through this Settings instance
-        // return the same view as cross-process consumers reading the
-        // unmodified file — without this, the in-memory state would
-        // diverge from disk indefinitely until the next save/load
-        // cycle.
+        // grepping `lcConfig` see the failure. Then try to roll the
+        // in-memory store back to its on-disk state (mirrors the
+        // reset() rollback below) so subsequent reads through this
+        // Settings instance return the same view as cross-process
+        // consumers reading the unmodified file.
+        //
+        // The aggregate `settingsChanged()` emit is GATED on whether that
+        // rollback actually restored the original set (see the
+        // emit-on-change note below it), NOT skipped outright. In the
+        // double-failure case the rollback leaves the value diverged and
+        // the emit does fire, so a dirty-state tracker can re-read the
+        // advanced in-memory value and mark itself clean while disk still
+        // holds the old list. That is the lesser of the two divergences:
+        // staying silent instead strands every disable-list UI on a set
+        // the getters no longer report.
+        //
+        // BEST-EFFORT, not guaranteed: load() deliberately keeps the
+        // in-memory set when it cannot read the file, and an unreadable
+        // file is a plausible reason the persist failed in the first
+        // place. In that double failure the in-memory state stays
+        // diverged from disk until the next successful save or load.
+        // Nothing better is available here — inventing a second recovery
+        // path for a store we already know we cannot write would be
+        // guessing.
         qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
                             << axisInt;
-        m_windowRuleStore->load();
-        Q_EMIT(this->*signalFn)(mode);
+        m_ruleStore->load();
+        // Emit only if the rollback did NOT restore the original set — which is exactly the
+        // emit-on-change rule, applied to the state we actually ended up in.
+        //
+        // The usual case is that load() puts the entries back where they started, so nothing
+        // changed and nothing is announced; firing then would make every disable-list UI
+        // re-read a set identical to the one it is already showing. But load() is best-effort
+        // (it keeps the advanced in-memory set when it cannot read the file, and an unreadable
+        // file is a plausible reason the write failed in the first place), so the rollback can
+        // leave the value MOVED. Announcing nothing there would strand every UI on the old
+        // list while the getters report the new one — which is the same silent divergence,
+        // just from the other side.
+        if (canonicalDisableEntries(axis, disableEntriesFor(mode, axisInt)) != before) {
+            Q_EMIT(this->*signalFn)(mode);
+            Q_EMIT settingsChanged();
+        }
         return;
     }
 
@@ -1527,22 +2109,34 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
 
 QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    // Resolve connector names → stable screen ids on every read. Stored
-    // connector names stay human-readable; consumers see canonical ids.
+    // Resolve connector names → stable screen ids on every read, through the
+    // same resolveScreenId helper canonicalDisableEntries uses — an
+    // unresolvable name therefore stays the name here too, instead of
+    // collapsing to an empty entry. Stored connector names stay human-readable;
+    // consumers see canonical ids.
     // Desktop/activity getters intentionally skip this resolution because
     // their composite keys (`screenId/desktop`, `screenId/activity`) embed
     // the screen id in a non-isolatable way; the connector↔id matching is
     // done at lookup time inside isDesktopDisabled / isActivityDisabled.
     QStringList entries = disableEntriesFor(mode, static_cast<int>(DisableAxis::Monitor));
     for (auto& name : entries) {
-        if (PhosphorScreens::ScreenIdentity::isConnectorName(name)) {
-            const QString resolved = PhosphorScreens::ScreenIdentity::idForName(name);
-            if (resolved != name) {
-                name = resolved;
-            }
+        name = resolveScreenId(name);
+    }
+    // Order-preserving dedup: a connector-name entry and an id-form entry can
+    // resolve to the same screen id, and consumers expect one entry per screen.
+    // The QSet carries the membership check so the pass stays O(n) instead of
+    // the O(n^2) list-contains scan; the list preserves first-seen order.
+    QStringList deduped;
+    deduped.reserve(entries.size());
+    QSet<QString> seen;
+    seen.reserve(entries.size());
+    for (const QString& entry : std::as_const(entries)) {
+        if (!seen.contains(entry)) {
+            seen.insert(entry);
+            deduped.append(entry);
         }
     }
-    return entries;
+    return deduped;
 }
 
 void Settings::setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames)
@@ -1704,9 +2298,9 @@ P_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, fi
 // `excludeTransientWindows` (boolean), `minimumWindowWidth` (int px),
 // `minimumWindowHeight` (int px). Per-app / per-class exclusion lists
 // retired in v4 — the migration in src/config/configmigration.cpp drains
-// the legacy lists into Application-subject WindowRules, and runtime
+// the legacy lists into Application-subject Rules, and runtime
 // evaluators in SnapEngine, the KWin effect, and the WTA
-// pending-restore prune route through `PhosphorWindowRules::ExclusionRules`
+// pending-restore prune route through `PhosphorRules::ExclusionRules`
 // over the unified store.
 //
 // The on-disk group name `"Exclusions"` is INTENTIONALLY kept after the
@@ -1732,7 +2326,7 @@ P_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey,
 // the Exclusions block above (plus a NotificationsAndOsd knob), stored
 // independently so a user can disable animations for an app while still
 // snapping it (or vice versa). Per-app / per-class animation exclusion
-// lists retired in v4 — they fold into ExcludeAnimations WindowRules.
+// lists retired in v4 — they fold into ExcludeAnimations Rules.
 
 P_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
 P_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
@@ -1747,10 +2341,30 @@ P_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, m
 P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
                 animationMinimumWindowHeightChanged)
 
+// ── Decoration Window Filtering (PhosphorConfig::Store-backed) ─────────────
+//
+// Three global decoration-filtering knobs in `Decorations.WindowFiltering`:
+// `decorationExcludeTransientWindows`, `decorationMinimumWindowWidth`,
+// `decorationMinimumWindowHeight`. Mirrors the Exclusions block, stored
+// independently so the KWin effect's border pass can be tuned separately
+// from snapping and animation filtering. Reuses the shared leaf keys; only
+// the group differs. Consumed effect-side via the generic settingsChanged
+// D-Bus broadcast (see kwin-effect loadCachedSettings).
+
+P_STORE_GET(bool, decorationExcludeTransientWindows, decorationsWindowFilteringGroup, transientWindowsKey, bool)
+P_STORE_SET_BOOL(setDecorationExcludeTransientWindows, decorationsWindowFilteringGroup, transientWindowsKey,
+                 decorationExcludeTransientWindowsChanged)
+P_STORE_GET(int, decorationMinimumWindowWidth, decorationsWindowFilteringGroup, minimumWindowWidthKey, int)
+P_STORE_SET_INT(setDecorationMinimumWindowWidth, decorationsWindowFilteringGroup, minimumWindowWidthKey,
+                decorationMinimumWindowWidthChanged)
+P_STORE_GET(int, decorationMinimumWindowHeight, decorationsWindowFilteringGroup, minimumWindowHeightKey, int)
+P_STORE_SET_INT(setDecorationMinimumWindowHeight, decorationsWindowFilteringGroup, minimumWindowHeightKey,
+                decorationMinimumWindowHeightChanged)
+
 // animationExcludedApplications / animationExcludedWindowClasses (+ their
 // add*/remove* convenience methods) retired in v4 — the v4 migration drains
 // the Animations.WindowFiltering group's Applications / WindowClasses leaves
-// into `ExcludeAnimations` WindowRules. The settings accessors had no
+// into `ExcludeAnimations` Rules. The settings accessors had no
 // consumers after the KWin effect rewired off the loadSettingAsync fetches.
 
 // ── PhosphorZones::Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
@@ -1785,7 +2399,7 @@ void Settings::setZoneSelectorPosition(ZoneSelectorPosition value)
 }
 void Settings::setZoneSelectorPositionInt(int value)
 {
-    if (value >= 0 && value <= 8) {
+    if (value >= 0 && value <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
         setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
     }
 }
@@ -1937,6 +2551,11 @@ void Settings::setZoneSpanModifier(DragModifier modifier)
     // baked in because the synthesis below ran with the raw input.
     const int before =
         m_store->read<int>(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey());
+    // Snapshot the trigger list BEFORE writing the modifier: on configs with no
+    // stored trigger list, zoneSpanTriggers() synthesizes its result from the
+    // modifier key, so a post-write snapshot would already reflect the new
+    // modifier and the trigger-change comparison below could never fire.
+    const QVariantList beforeTriggers = zoneSpanTriggers();
     m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey(),
                    static_cast<int>(modifier));
     const int after =
@@ -1949,7 +2568,6 @@ void Settings::setZoneSpanModifier(DragModifier modifier)
     // the validator-coerced `after` value, not the raw input, so an invalid
     // request that was snapped to the default doesn't smuggle a
     // {modifier: 99} phantom into the trigger list.
-    const QVariantList beforeTriggers = zoneSpanTriggers();
     QVariantList triggers = beforeTriggers;
     if (!triggers.isEmpty()) {
         QVariantMap first = triggers.first().toMap();
@@ -2225,20 +2843,9 @@ void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
 }
 
 // Tiling.Gaps
-P_STORE_GET(int, autotileInnerGap, tilingGapsGroup, innerKey, int)
-P_STORE_SET_INT(setAutotileInnerGap, tilingGapsGroup, innerKey, autotileInnerGapChanged)
-P_STORE_GET(int, autotileOuterGap, tilingGapsGroup, outerKey, int)
-P_STORE_SET_INT(setAutotileOuterGap, tilingGapsGroup, outerKey, autotileOuterGapChanged)
-P_STORE_GET(bool, autotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, bool)
-P_STORE_SET_BOOL(setAutotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, autotileUsePerSideOuterGapChanged)
-P_STORE_GET(int, autotileOuterGapTop, tilingGapsGroup, topKey, int)
-P_STORE_SET_INT(setAutotileOuterGapTop, tilingGapsGroup, topKey, autotileOuterGapTopChanged)
-P_STORE_GET(int, autotileOuterGapBottom, tilingGapsGroup, bottomKey, int)
-P_STORE_SET_INT(setAutotileOuterGapBottom, tilingGapsGroup, bottomKey, autotileOuterGapBottomChanged)
-P_STORE_GET(int, autotileOuterGapLeft, tilingGapsGroup, leftKey, int)
-P_STORE_SET_INT(setAutotileOuterGapLeft, tilingGapsGroup, leftKey, autotileOuterGapLeftChanged)
-P_STORE_GET(int, autotileOuterGapRight, tilingGapsGroup, rightKey, int)
-P_STORE_SET_INT(setAutotileOuterGapRight, tilingGapsGroup, rightKey, autotileOuterGapRightChanged)
+// Autotile inner/outer gaps are unified with snapping — the IAutotileSettings
+// gap getters forward to the shared innerGap()/outerGap*() accessors (see
+// settings.h). Only the tiling-specific SmartGaps remains stored here.
 P_STORE_GET(bool, autotileSmartGaps, tilingGapsGroup, smartGapsKey, bool)
 P_STORE_SET_BOOL(setAutotileSmartGaps, tilingGapsGroup, smartGapsKey, autotileSmartGapsChanged)
 
@@ -2423,14 +3030,13 @@ bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop
     const QStringList namesToCheck = PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName);
     for (const QString& name : namesToCheck) {
         if (virtualDesktop > 0 && !activity.isEmpty()) {
-            const QString k =
-                name + QStringLiteral(":") + QString::number(virtualDesktop) + QStringLiteral(":") + activity;
+            const QString k = name + QLatin1Char(':') + QString::number(virtualDesktop) + QLatin1Char(':') + activity;
             if (locked.contains(k)) {
                 return true;
             }
         }
         if (virtualDesktop > 0) {
-            const QString k = name + QStringLiteral(":") + QString::number(virtualDesktop);
+            const QString k = name + QLatin1Char(':') + QString::number(virtualDesktop);
             if (locked.contains(k)) {
                 return true;
             }
@@ -2463,9 +3069,9 @@ void Settings::setContextLocked(const QString& screenIdOrName, int virtualDeskto
     }
     QString key = screenIdOrName;
     if (virtualDesktop > 0) {
-        key += QStringLiteral(":") + QString::number(virtualDesktop);
+        key += QLatin1Char(':') + QString::number(virtualDesktop);
         if (!activity.isEmpty()) {
-            key += QStringLiteral(":") + activity;
+            key += QLatin1Char(':') + activity;
         }
     }
     QStringList current = lockedScreens();
@@ -2490,85 +3096,46 @@ void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
 P_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, autotileDragInsertToggleChanged)
 
-// Tiling.Appearance
-P_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
-P_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)
-P_STORE_GET(QColor, autotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey, QColor)
-P_STORE_SET_COLOR(setAutotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey,
-                  autotileInactiveBorderColorChanged)
-
-P_STORE_GET(bool, autotileUseSystemBorderColors, tilingAppearanceColorsGroup, useSystemKey, bool)
-void Settings::setAutotileUseSystemBorderColors(bool use)
-{
-    if (autotileUseSystemBorderColors() == use) {
-        return;
-    }
-    m_store->write(ConfigDefaults::tilingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
-    if (use) {
-        applyAutotileBorderSystemColor();
-    }
-    Q_EMIT autotileUseSystemBorderColorsChanged();
-    Q_EMIT settingsChanged();
-}
-
-P_STORE_GET(bool, autotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
-P_STORE_SET_BOOL(setAutotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey,
-                 autotileHideTitleBarsChanged)
-P_STORE_GET(bool, autotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, bool)
-P_STORE_SET_BOOL(setAutotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, autotileShowBorderChanged)
-P_STORE_GET(int, autotileBorderWidth, tilingAppearanceBordersGroup, widthKey, int)
-P_STORE_SET_INT(setAutotileBorderWidth, tilingAppearanceBordersGroup, widthKey, autotileBorderWidthChanged)
-P_STORE_GET(int, autotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, int)
-P_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, autotileBorderRadiusChanged)
-
-// Snapping.Appearance — the snapped window's border / title-bar (parallel to
-// Tiling.Appearance above; distinct from the Snapping.Zones.* drag overlay).
-P_STORE_GET(QColor, snappingBorderColor, snappingAppearanceColorsGroup, activeKey, QColor)
-P_STORE_SET_COLOR(setSnappingBorderColor, snappingAppearanceColorsGroup, activeKey, snappingBorderColorChanged)
-P_STORE_GET(QColor, snappingInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
-P_STORE_SET_COLOR(setSnappingInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey,
-                  snappingInactiveBorderColorChanged)
-
-P_STORE_GET(bool, snappingUseSystemBorderColors, snappingAppearanceColorsGroup, useSystemKey, bool)
-void Settings::setSnappingUseSystemBorderColors(bool use)
-{
-    if (snappingUseSystemBorderColors() == use) {
-        return;
-    }
-    m_store->write(ConfigDefaults::snappingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
-    if (use) {
-        applySnappingBorderSystemColor();
-    }
-    Q_EMIT snappingUseSystemBorderColorsChanged();
-    Q_EMIT settingsChanged();
-}
-
-P_STORE_GET(bool, snappingHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
-P_STORE_SET_BOOL(setSnappingHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey,
-                 snappingHideTitleBarsChanged)
-P_STORE_GET(bool, snappingShowBorder, snappingAppearanceBordersGroup, showBorderKey, bool)
-P_STORE_SET_BOOL(setSnappingShowBorder, snappingAppearanceBordersGroup, showBorderKey, snappingShowBorderChanged)
-P_STORE_GET(int, snappingBorderWidth, snappingAppearanceBordersGroup, widthKey, int)
-P_STORE_SET_INT(setSnappingBorderWidth, snappingAppearanceBordersGroup, widthKey, snappingBorderWidthChanged)
-P_STORE_GET(int, snappingBorderRadius, snappingAppearanceBordersGroup, radiusKey, int)
-P_STORE_SET_INT(setSnappingBorderRadius, snappingAppearanceBordersGroup, radiusKey, snappingBorderRadiusChanged)
-
 // ── reset / color helpers ────────────────────────────────────────────────────
 
 void Settings::reset()
 {
-    // Delete all managed groups plus unmanaged groups (reset nukes everything)
+    // Delete all managed groups (reset nukes everything). The explicit
+    // "Updates" sweep scrubs the retired legacy group from configs written by
+    // older builds — nothing writes or reads it anymore (dismissed-update-
+    // version lives in the settings app's QSettings).
     for (const QString& groupName : managedGroupNames()) {
         m_configBackend->deleteGroup(groupName);
     }
     m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
+    deletePerScreenGroups(m_configBackend);
+    // commit(), not sync(), for the same reason save() uses it: sync() is
+    // allowed to return true for a write it merely scheduled (JsonBackend's
+    // Deferred policy debounces it), and the result gates whether the other two
+    // stores are touched at all.
+    //
+    // config.json goes FIRST, and a failure returns before the session file and
+    // the rule store are touched. reset() spans three files with no journal, so
+    // the only ordering that cannot half-apply is: do the one that can fail
+    // cleanly (nothing has been destroyed yet) before the two that are
+    // irreversible. Returning here is safe precisely because deleteGroup only
+    // mutated the backend's in-memory root, and the load() below reparses from
+    // disk, discarding those deletions and restoring the live state.
+    if (!m_configBackend->commit()) {
+        qCWarning(lcConfig) << "reset: failed to write the cleared configuration to disk — the deletions were "
+                               "dropped and the previous values remain";
+        // Reparse from disk so the in-memory store stops reporting the dropped
+        // deletions, and re-baseline onto what disk actually holds. The session
+        // file and the rule store were never touched, so there is nothing else
+        // to undo.
+        load();
+        return;
+    }
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
     }
-    deletePerScreenGroups(m_configBackend);
-    m_configBackend->sync();
 
-    // Per-mode disable lists live in windowrules.json as DisableEngine
+    // Per-mode disable lists live in rules.json as DisableEngine
     // context rules — drop every such rule from the store (assignment /
     // animation / exclude rules are untouched: reset() only owns the
     // settings surface). The store persists on setAllRules, so the final
@@ -2589,21 +3156,25 @@ void Settings::reset()
     QHash<Mode, QStringList> resetMonitorsBefore;
     QHash<Mode, QStringList> resetDesktopsBefore;
     QHash<Mode, QStringList> resetActivitiesBefore;
+    // Snapshot in canonical form — the same canonicalDisableEntries mechanism
+    // load() uses — so entries that canonicalize away (unresolvable connector
+    // names, formatting variants) don't produce spurious change signals when
+    // the raw pre-clear list differs only cosmetically from the post-load one.
     for (const Mode mode : PhosphorZones::allModes()) {
-        resetMonitorsBefore.insert(mode, disabledMonitors(mode));
-        resetDesktopsBefore.insert(mode, disabledDesktops(mode));
-        resetActivitiesBefore.insert(mode, disabledActivities(mode));
+        resetMonitorsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)));
+        resetDesktopsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)));
+        resetActivitiesBefore.insert(mode, canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)));
     }
     {
-        namespace CRB = PhosphorWindowRules::ContextRuleBridge;
-        QList<PhosphorWindowRules::WindowRule> kept;
-        for (const PhosphorWindowRules::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
+        namespace CRB = PhosphorRules::ContextRuleBridge;
+        QList<PhosphorRules::Rule> kept;
+        for (const PhosphorRules::Rule& rule : m_ruleStore->ruleSet().rules()) {
             if (!CRB::disableRuleMode(rule)) {
                 kept.append(rule); // not a DisableEngine rule — preserve
             }
         }
-        if (kept.size() != m_windowRuleStore->count()) {
-            if (!m_windowRuleStore->setAllRules(kept)) {
+        if (kept.size() != m_ruleStore->count()) {
+            if (!m_ruleStore->setAllRules(kept)) {
                 // Persistence failed — the in-memory store advanced but the
                 // on-disk file is stale. Roll back the in-memory state by
                 // reloading from disk so the per-mode re-emit loop below
@@ -2619,12 +3190,16 @@ void Settings::reset()
                 qCWarning(lcConfig)
                     << "reset: failed to persist window-rule store — rolling back in-memory state; disable "
                        "rules will reappear on next launch";
-                m_windowRuleStore->load();
+                m_ruleStore->load();
             }
         }
     }
 
     load();
+
+    // No baseline fix-up here: load() reparses config.json from disk and closes
+    // with captureBaseline(), so the baseline already describes exactly what
+    // disk holds.
 
     // Re-emit per-mode disable signals against the pre-clear snapshot taken
     // above. load()'s internal snapshot saw the already-cleared store, so it
@@ -2637,15 +3212,16 @@ void Settings::reset()
     // aggregate.
     bool anyDisableChanged = false;
     for (const Mode mode : PhosphorZones::allModes()) {
-        if (disabledMonitors(mode) != resetMonitorsBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)) != resetMonitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);
             anyDisableChanged = true;
         }
-        if (disabledDesktops(mode) != resetDesktopsBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)) != resetDesktopsBefore.value(mode)) {
             Q_EMIT disabledDesktopsChanged(mode);
             anyDisableChanged = true;
         }
-        if (disabledActivities(mode) != resetActivitiesBefore.value(mode)) {
+        if (canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode))
+            != resetActivitiesBefore.value(mode)) {
             Q_EMIT disabledActivitiesChanged(mode);
             anyDisableChanged = true;
         }
@@ -2926,6 +3502,105 @@ QString Settings::loadColorsFromFile(const QString& filePath)
     return QString(); // Success - no error
 }
 
+void Settings::trackSystemPaletteChanges()
+{
+    // Track system palette changes at runtime. load() derives the zone
+    // colors from the CURRENT QGuiApplication palette when useSystemColors
+    // is on — a one-time snapshot. The palette changes underneath every
+    // long-running process whenever the desktop color scheme changes
+    // (wallpaper-driven schemes switch often), so without re-deriving, the
+    // daemon's overlays and the settings app's previews render colors from
+    // whichever scheme was active when the process started — they only
+    // matched again after a daemon restart. Qt 6 delivers
+    // QEvent::ApplicationPaletteChange to the application object; there is
+    // no signal for it, hence the event filter. Guarded: the config
+    // library is also used by non-GUI tools where qGuiApp is null.
+    //
+    // Cost note: the filter is installed on the application object, so it
+    // sees EVERY event delivered in the process; the leading guard in
+    // eventFilter() keeps the per-event cost to two compares (watched
+    // pointer + event type). That per-event tax also scales with instance
+    // count — Settings must remain a per-process near-singleton.
+    //
+    // Thread note: installEventFilter() requires the filter object and the
+    // filtered object to live on the same thread, and qGuiApp lives on the
+    // main (GUI) thread — so Settings must be constructed on the main thread
+    // for palette tracking to engage. Every current composition root does
+    // that; the guard below turns a future regression into a loud warning
+    // (with palette tracking disabled) instead of a Qt-internal one.
+    if (qGuiApp) {
+        if (thread() != qGuiApp->thread()) {
+            qCWarning(lcConfig) << "Settings constructed off the main thread — system palette tracking disabled "
+                                   "(installEventFilter requires same-thread objects)";
+            return;
+        }
+        qGuiApp->installEventFilter(this);
+    }
+}
+
+bool Settings::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == qGuiApp && event->type() == QEvent::ApplicationPaletteChange && useSystemColors()) {
+        // Derived values, not user edits. TWO mechanisms keep a runtime theme
+        // switch from reading as unsaved changes:
+        //  1. m_applyingSystemPalette (RAII, restored even if a setter throws)
+        //     is up for the whole synchronous re-derive, so
+        //     SettingsController::onSettingsPropertyChanged() — wired to every
+        //     color NOTIFY — sees isApplyingSystemPalette() and skips
+        //     setNeedsSave(true), keeping the global footer quiet.
+        //  2. rebaselineDerivedColorKeys() refreshes the committed baseline so
+        //     value-based isKeyModified() checks stay false afterwards. See
+        //     that function for why ONLY this path rebaselines — and it is
+        //     further gated here: when the useSystemColors toggle itself is a
+        //     PENDING unsaved edit, the toggle and the colors it derived must
+        //     stay discardable together, so the baseline is left alone.
+        QScopedValueRollback<bool> applying(m_applyingSystemPalette, true);
+        // Batch the announcement like load(): snapshot the four derived
+        // colors, run the derive with the per-setter NOTIFY + settingsChanged
+        // emissions squelched, then emit each changed NOTIFY exactly once plus
+        // ONE aggregate settingsChanged. Without the squelch a single palette
+        // event fired up to 4 settingsChanged (one per color setter), each of
+        // which re-ran every aggregate consumer (daemon refreshConfigFrom-
+        // Settings, KWin effect reload) mid-derive with partially-applied
+        // colors. The explicit emissions stay INSIDE the m_applyingSystemPalette
+        // scope so NOTIFY-driven dirty tracking still sees the flag up.
+        //
+        // Known (theoretical) misclassification: the derive window is
+        // synchronous, but a NOTIFY handler above could re-enter a color
+        // setter with a genuine user edit; that write lands while the squelch
+        // flag is up, so it is announced by THIS batch (fine) yet also counted
+        // as palette-derived by the rebaseline below (its baseline entry would
+        // absorb the user's value). No in-tree handler writes colors from a
+        // color NOTIFY, so this stays a documented hazard rather than code.
+        const QColor highlightBefore = highlightColor();
+        const QColor inactiveBefore = inactiveColor();
+        const QColor borderBefore = borderColor();
+        const QColor labelFontBefore = labelFontColor();
+        {
+            QScopedValueRollback<bool> squelch(m_suppressDerivedColorEmissions, true);
+            applySystemColorScheme();
+        }
+        const bool highlightChanged = highlightColor() != highlightBefore;
+        const bool inactiveChanged = inactiveColor() != inactiveBefore;
+        const bool borderChanged = borderColor() != borderBefore;
+        const bool labelFontChanged = labelFontColor() != labelFontBefore;
+        if (highlightChanged)
+            Q_EMIT highlightColorChanged();
+        if (inactiveChanged)
+            Q_EMIT inactiveColorChanged();
+        if (borderChanged)
+            Q_EMIT borderColorChanged();
+        if (labelFontChanged)
+            Q_EMIT labelFontColorChanged();
+        if (highlightChanged || inactiveChanged || borderChanged || labelFontChanged)
+            Q_EMIT settingsChanged();
+        if (!isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey())) {
+            rebaselineDerivedColorKeys();
+        }
+    }
+    return ISettings::eventFilter(watched, event);
+}
+
 void Settings::applySystemColorScheme()
 {
     // QPalette respects QT_QPA_PLATFORMTHEME — on non-KDE desktops, Qt reads
@@ -2936,35 +3611,21 @@ void Settings::applySystemColorScheme()
     highlight.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
     setHighlightColor(highlight);
 
-    QColor inactive = pal.color(QPalette::Active, QPalette::Text);
+    // Inactive fill and border derive from the background family, not Text.
+    // Text-at-alpha renders as a washed grey film on every dark scheme (the
+    // same fabrication the QML side eliminated); AlternateBase is the View
+    // alternate surface, and Mid is the palette's separator-grade shade, so
+    // both follow the active color scheme with the intended emphasis.
+    QColor inactive = pal.color(QPalette::Active, QPalette::AlternateBase);
     inactive.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
     setInactiveColor(inactive);
 
-    QColor border = pal.color(QPalette::Active, QPalette::Text);
+    QColor border = pal.color(QPalette::Active, QPalette::Mid);
     border.setAlpha(::PhosphorZones::ZoneDefaults::BorderAlpha);
     setBorderColor(border);
 
     const QColor fontColor = pal.color(QPalette::Active, QPalette::Text);
     setLabelFontColor(fontColor);
-}
-
-void Settings::applyAutotileBorderSystemColor()
-{
-    // Use the exact snapping zone highlight/inactive colors including their
-    // alpha. Route through the setters so the Store stays the source of
-    // truth (and the NOTIFY signals fire as a side effect).
-    setAutotileBorderColor(highlightColor());
-    setAutotileInactiveBorderColor(inactiveColor());
-}
-
-void Settings::applySnappingBorderSystemColor()
-{
-    // Mirror applyAutotileBorderSystemColor: adopt the zone highlight/inactive
-    // colors (which themselves track the system accent) so the snapped-window
-    // border follows the system accent. Route through the setters so the Store
-    // stays the source of truth and NOTIFY signals fire.
-    setSnappingBorderColor(highlightColor());
-    setSnappingInactiveBorderColor(inactiveColor());
 }
 
 #undef P_STORE_GET

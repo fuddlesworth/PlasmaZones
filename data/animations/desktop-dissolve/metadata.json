@@ -1,0 +1,28 @@
+{
+    "id": "desktop-dissolve",
+    "name": "Desktop Dissolve",
+    "description": "Dissolves the outgoing desktop into the incoming one through a field of random speckles.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Dissolve",
+    "appliesTo": ["desktop"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "scale",
+            "name": "Speckle Size",
+            "type": "float",
+            "default": 180.0,
+            "min": 20.0,
+            "max": 400.0
+        },
+        {
+            "id": "softness",
+            "name": "Softness",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.0,
+            "max": 0.5
+        }
+    ]
+}

@@ -10,7 +10,7 @@
 - Window shading (collapse to title bar height, animated)
 - Effects pipeline: dual-kawase blur, box shadows, SDF rounded corners, inactive dim
 - Zone-aware decoration theming (highlight active zone)
-- Decoration state driven by window rules + phosphor-theme
+- Decoration state driven by rules + phosphor-theme
 
 ## Class Hierarchy
 

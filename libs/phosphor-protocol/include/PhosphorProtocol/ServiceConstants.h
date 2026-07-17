@@ -27,7 +27,7 @@ inline constexpr QLatin1String Screen("org.plasmazones.Screen");
 inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
 inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridge");
 inline constexpr QLatin1String Snap("org.plasmazones.Snap");
-inline constexpr QLatin1String WindowRules("org.plasmazones.WindowRules");
+inline constexpr QLatin1String Rules("org.plasmazones.Rules");
 }
 
 /// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised
@@ -48,6 +48,7 @@ namespace SettingProperty {
 inline constexpr QLatin1String ShaderProfileTree("shaderProfileTree");
 inline constexpr QLatin1String MotionProfileTree("motionProfileTree");
 inline constexpr QLatin1String AnimationShaderSearchPaths("animationShaderSearchPaths");
+inline constexpr QLatin1String DecorationProfileTree("decorationProfileTree");
 }
 
 /// Keys for the extended-window-property QVariantMap (the trailing a{sv} argument
@@ -72,6 +73,8 @@ inline constexpr QLatin1String SkipSwitcher("skipSwitcher");
 inline constexpr QLatin1String IsModal("isModal");
 inline constexpr QLatin1String HasDecoration("hasDecoration");
 inline constexpr QLatin1String IsResizable("isResizable");
+inline constexpr QLatin1String IsMovable("isMovable");
+inline constexpr QLatin1String IsMaximizable("isMaximizable");
 inline constexpr QLatin1String Width("width");
 inline constexpr QLatin1String Height("height");
 inline constexpr QLatin1String PositionX("positionX");

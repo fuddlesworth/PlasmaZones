@@ -3,6 +3,10 @@
 
 #include "../plasmazoneseffect.h"
 
+#include <PhosphorAnimation/AnimationShaderEffect.h> // shaderEffectAppliesToEventPath (peek suppression gate)
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -60,15 +64,30 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_motionClockFallback(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_shaderManager(this)
+    , m_desktopTransition(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(*this))
     , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
 {
     PhosphorProtocol::registerWireTypes();
 
+    // Latch compositor shutdown so the destructor can tell a runtime unload
+    // (KCM toggle — restore the suppressed show-desktop effects) from session
+    // teardown (do NOT call loadEffect into the list KWin is unloading).
+    // aboutToQuit fires when the event loop exits, before destructors run.
+    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [this]() {
+        m_compositorShuttingDown = true;
+    });
+
     // Decoration-manager wiring (veto + signal connections) lives with the
-    // rest of the border/decoration code in borders.cpp.
+    // rest of the border/decoration code in decorations.cpp.
     setupDecorationManager();
+
+    // Seed the decoration profile tree with the empty/neutral default so the
+    // pre-fetch state is well-defined; the async `decorationProfileTreeJson`
+    // fetch overwrites the whole tree on arrival. Borders are rule-owned and
+    // render correctly before the fetch, so no placeholder tree is needed.
+    seedDecorationTreeBaseline();
 
     // Sub-pixel vertex precision. KWin's default snapping rounds quad
     // vertex positions to integer pixels before rasterising, which is
@@ -139,6 +158,29 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     });
     connect(&m_shaderManager.m_animationShaderRegistry,
             &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this, [this]() {
+                // Make the GL context current FIRST. This fires from the registry's file
+                // watcher, between frames, where the compositor's context is not current
+                // — and everything below is GL: endShaderTransition hands the redirect
+                // back (KWin destroys the offscreen framebuffer), and the two cache
+                // clears destroy GLShaders and GLTextures, i.e. glDeleteProgram and
+                // glDeleteTextures. Its SIBLING handler (the surface registry's, below)
+                // has done this from the start and explains why.
+                //
+                // It is NOT enough that endShaderTransition makes the context current
+                // itself: it only runs from the drain loop, once per LIVE transition, and
+                // the ordinary hot-reload (a user saves a .glsl, no window mid-animation)
+                // drains nothing at all. The cache clears below then run against no
+                // context. An earlier pass removed this call on exactly that reasoning and
+                // left this paragraph standing over the hole.
+                ensureGlContextCurrent();
+
+                // Drain UNCONDITIONALLY. Gating the drain on the context bought nothing —
+                // and worse, the residual self-heal below would notice the undrained
+                // transitions, log a CRITICAL, and then drain them anyway, which made the
+                // gate a false-alarm generator rather than a safety measure. Bailing
+                // outright, which this first did, was worse still: it left the caches
+                // populated, so a hot-reloaded pack kept rendering from its OLD compiled
+                // shader for the rest of the session.
                 QVarLengthArray<KWin::EffectWindow*, 8> windows;
                 for (auto& [w, _] : m_shaderManager.shaderTransitions())
                     windows.push_back(w);
@@ -187,7 +229,65 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 ++m_shaderManager.m_textureCacheGeneration;
                 m_shaderManager.m_textureLoadsInFlight.clear();
                 m_shaderManager.m_textureCache.clear();
+                // Desktop-switch packs are served by the SAME AnimationShaderRegistry
+                // as the per-window effects, so a reloaded `desktop.switch` pack must
+                // invalidate the DesktopTransitionManager's parallel compiled-shader
+                // cache too — otherwise the next switch renders with the stale shader.
+                m_desktopTransition.invalidateShaderCache();
+                // A pack reload can flip a pack's `audio` metadata flag, which
+                // feeds the cava run gate via hasAudioReactiveAnimation().
+                scheduleEffectAudioSync();
+                // The registry commit is also the FIRST moment (bringup) and
+                // the ONLY moment (pack install/uninstall) the desktop.peek
+                // pack's validity can change without a tree edit: the profile
+                // tree arrives on an EARLIER D-Bus reply than the registry
+                // scan, so the tree-load sync at loadShaderProfileFromDbus
+                // resolves against an empty registry on session start, and
+                // deleting the assigned pack from disk never touches the tree
+                // at all. Re-run the suppression sync here so KWin's
+                // show-desktop effects are unloaded exactly when the peek pack
+                // becomes runnable and restored the moment it stops being.
+                syncShowDesktopEffectSuppression();
             });
+
+    // Surface shader pack hot-reload: when a data/surface pack changes on disk,
+    // drop EVERY compiled surface pack so the next paint recompiles each
+    // referenced pack against the new source, and repaint so decorated windows
+    // pick it up. Also drop the per-window multipass FBO state: a recompiled pack
+    // whose buffer-pass COUNT changed would otherwise under-render, because the
+    // composite path's chainBufferTex realloc keys on the chain pack-id list (and
+    // size), not on each pack's buffer-pass count — only clearing it here forces
+    // the next paint to reallocate against the new pass count. The next
+    // compiledPack() call recompiles lazily per pack id.
+    connect(&m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this, [this]() {
+        // This fires from the registry's file watcher between frames, where the
+        // compositor's GL context is NOT current. m_compiledPacks owns GLShaders
+        // and m_surfaceMultipass owns GLTextures, so their destruction issues
+        // glDelete* calls that want a current context (the same discipline
+        // compiledPack()/surfacePresentShader() apply for off-paint callers).
+        // Best-effort make-current on the normal path; the only false case is
+        // compositor teardown (!KWin::effects), where GL is being torn down and
+        // the driver reclaims the objects regardless, so the clears are safe
+        // either way.
+        if (KWin::effects) {
+            KWin::effects->makeOpenGLContextCurrent();
+        }
+        m_compiledPacks.clear();
+        m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
+        m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
+        m_surfaceMultipass.clear();
+        // Repaint whenever there is a compositor, NOT only when the context went current: a
+        // repaint is not GL work. Gating it on the make-current result meant a transient
+        // failure dropped the caches but never asked the screen to redraw, so the reloaded
+        // packs would not appear until something incidental damaged the scene.
+        if (KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
+        // A pack reload can flip a decoration pack's `audio` metadata flag,
+        // which feeds the cava run gate via hasAudioReactiveDecoration() —
+        // mirror the animation registry's effectsChanged handler above.
+        scheduleEffectAudioSync();
+    });
 
     // Frame-geometry shadow flush timer. Debounces per-window
     // windowFrameGeometryChanged signals and pushes the latest geometry to
@@ -200,15 +300,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     m_frameGeometryFlushTimer->setInterval(50);
     connect(m_frameGeometryFlushTimer, &QTimer::timeout, this, &PlasmaZonesEffect::flushPendingFrameGeometry);
 
-    // WindowRules.rulesChanged debounce. See slotWindowRulesChanged: the
+    // Rules.rulesChanged debounce. See slotRulesChanged: the
     // daemon emits one signal per per-rule mutation, so without coalescing a
     // 50-rule batch edit fires 50 full-ruleset fetches + parses. 50ms matches
     // the frame-geometry flush above — single edits feel instant, bursts
     // collapse to a single fetch at the trailing edge.
     m_animationRulesRefreshDebounce.setSingleShot(true);
     m_animationRulesRefreshDebounce.setInterval(50);
-    connect(&m_animationRulesRefreshDebounce, &QTimer::timeout, this,
-            &PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus);
+    connect(&m_animationRulesRefreshDebounce, &QTimer::timeout, this, &PlasmaZonesEffect::loadRuleAnimationsFromDbus);
 
     // Connect DragTracker signals
     //
@@ -221,15 +320,23 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             qCDebug(lcEffect) << "Window move started -" << w->windowClass()
                               << "current modifiers:" << static_cast<int>(m_currentModifiers);
 
+            // Capture the floating state at drag start, before any float
+            // transition (the autotile-bypass fast path below floats tiled
+            // windows). The drag-stop ApplyFloat path uses this to decide
+            // whether to restore the pre-autotile size: a window that was
+            // already floating is just being moved and must keep its current
+            // user-chosen size, not snap back to the stale pre-autotile rect.
+            m_dragStartedFloating = isWindowFloating(windowId);
+
             // Note: `cursor.drag` is intentionally NOT wired here. The
             // OffscreenEffect pipeline operates on window content; firing
             // a shader at drag start through it is indistinguishable from
             // `window.move`, and synchronously colliding with the
             // `windowStartUserMovedResized` lambda's `window.move` install
             // means whichever fires second wins (it would be `window.move`
-            // here). See `ProfilePaths::CursorDrag` doc comment — the path
-            // is reserved for a future cursor-decoration / drag-shadow
-            // surface.
+            // here). The `cursor` class (`ProfilePaths::Cursor`, with its
+            // `CursorHover` / `CursorClick` leaves) is reserved for a future
+            // cursor-decoration / drag-shadow surface and carries no drag leaf.
 
             // Fire beginDrag async to get a daemon-authoritative policy.
             // While the reply is pending, we
@@ -463,16 +570,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &PlasmaZonesEffect::slotWindowAdded);
     connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &PlasmaZonesEffect::slotWindowClosed);
 
-    // Panel (dock) lifecycle drives KWin's work area: a panel added, removed,
-    // or resized changes the strut-excluded clientArea. Route dock windows to
+    // Panel lifecycle drives KWin's work area: a panel added, removed, or
+    // resized changes the strut-excluded clientArea. Route panel windows to
     // the screen-change handler so it re-pushes the authoritative work area
-    // to the daemon. trackDockWindow / onWindowClosed no-op for non-docks.
+    // to the daemon. Covers docks AND unmovable layer-shell surfaces (a
+    // third-party shell's exclusive-zone panel is not isDock() to KWin);
+    // trackDockWindow / onWindowClosed no-op for every other window.
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, m_screenChangeHandler.get(),
             &ScreenChangeHandler::trackDockWindow);
     connect(KWin::effects, &KWin::EffectsHandler::windowClosed, m_screenChangeHandler.get(),
             &ScreenChangeHandler::onWindowClosed);
     // Panels mapped before the effect loaded never fire windowAdded — hook the
-    // already-present docks now so a later resize of one still re-reports.
+    // already-present panels now so a later resize of one still re-reports.
     // Skip close-grabbed dying windows: other effects' close animations can
     // hold deleted windows in the stacking order across an effect (re)load.
     for (KWin::EffectWindow* existing : KWin::effects->stackingOrder()) {
@@ -489,12 +598,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             &ScreenChangeHandler::scheduleClientAreaReport);
 
     // Border overlays are built only for current-desktop windows (markWindowSnapped
-    // and updateAllBorders both gate on isOnCurrentDesktop), so the overlay for a
+    // and updateAllDecorations both gate on isOnCurrentDesktop), so the overlay for a
     // window snapped while on another desktop isn't created until that desktop
     // becomes current. Rebuild on every desktop switch so those borders appear
     // without waiting for the window to be re-activated.
     connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, [this]() {
-        updateAllBorders();
+        updateAllDecorations();
     });
 
     // Per-output virtual desktops (Plasma 6.7 "switch desktops independently for
@@ -522,6 +631,100 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 }
             });
 
+    // Full-screen desktop-switch TRANSITION (separate from the daemon-reporting
+    // connection above). Resolve the `desktop.switch` shader from the profile
+    // tree; when one is assigned, run the two-desktop blend. An empty resolve
+    // (default state / user picked None) is a no-op, so KWin's normal switch —
+    // or its built-in Slide — proceeds untouched.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this,
+            [this](KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
+                   KWin::LogicalOutput* output) {
+                if (!oldDesktop || !newDesktop) {
+                    return;
+                }
+                // Honour the global animations master toggle, exactly as the two
+                // per-window shader paths do (beginShaderTransition /
+                // tryBeginShaderForEvent). `animationsEnabled` drives
+                // m_windowAnimator->setEnabled(); a user who turns all animations
+                // off must not still get a full-screen desktop-switch blend.
+                if (!m_windowAnimator->isEnabled()) {
+                    return;
+                }
+                const PhosphorAnimationShaders::ShaderProfile profile =
+                    PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
+                                                                       PhosphorAnimation::ProfilePaths::DesktopSwitch);
+                const QString effectId = profile.effectiveEffectId();
+                if (effectId.isEmpty()) {
+                    return;
+                }
+                // Per-event motion profile (curve + duration) for the desktop
+                // switch in ONE walk via the shared SSOT: global animator profile
+                // → `desktop` → `desktop.switch` motion-tree overrides. The base
+                // is the global animator profile, so with no override the switch
+                // inherits the master animation duration + curve (the global
+                // slider retimes it), and BOTH duration and curve come from the
+                // same base. desktop.switch is a windowless event (no per-window
+                // rule scope), so pass an empty WindowQuery — the rule layer is
+                // then skipped. paintOutput eases iTime through `.curve` so the
+                // node's curve shapes the switch.
+                const PhosphorAnimation::Profile eventMotion = resolveEventMotionProfile(
+                    PhosphorAnimation::ProfilePaths::DesktopSwitch, PhosphorRules::WindowQuery{}, QString());
+                const int durationMs = qRound(eventMotion.effectiveDuration());
+                m_desktopTransition.begin(oldDesktop, newDesktop, output, effectId, profile.effectiveParameters(),
+                                          durationMs, eventMotion.curve);
+            });
+
+    // Full-screen show-desktop PEEK transition, the sibling of the desktop
+    // switch above. Resolve the `desktop.peek` shader; when one is assigned,
+    // run the windows-scene / bare-desktop blend (hide leg on true, show-back
+    // leg on false). One node drives both legs over the same endpoints; the
+    // show leg reverses the blend rather than swapping the captures, so an
+    // asymmetric pack retraces its own motion (see paintOutput). An empty
+    // resolve is a no-op, so KWin's default show-desktop behaviour proceeds
+    // untouched.
+    // While a pack IS assigned, KWin's windowaperture / eyeonscreen script
+    // effects are unloaded (syncShowDesktopEffectSuppression) — they ignore
+    // the fullscreen claim, and left loaded they would leak their transforms
+    // into the peek captures.
+    connect(KWin::effects, &KWin::EffectsHandler::showingDesktopChanged, this, [this](bool showing) {
+        // Honour the global animations master toggle, exactly as the
+        // desktop-switch handler above does — folded into the resolve so the
+        // empty-id call below still happens.
+        QString effectId;
+        PhosphorAnimationShaders::ShaderProfile profile;
+        if (m_windowAnimator->isEnabled()) {
+            profile = PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(),
+                                                                         PhosphorAnimation::ProfilePaths::DesktopPeek);
+            effectId = profile.effectiveEffectId();
+        }
+        if (effectId.isEmpty()) {
+            // No pack runnable for THIS toggle — but beginPeek must still see
+            // the signal: its empty-id contract reaps any live peek leg, so a
+            // hide leg begun while a pack WAS assigned (since unassigned, or
+            // animations since disabled) cannot keep blending against the
+            // reversed toggle or poison the bare-desktop cache.
+            m_desktopTransition.beginPeek(showing, QString(), QVariantMap(), 0, nullptr);
+            return;
+        }
+        // Same one-walk motion resolve as desktop.switch: global animator
+        // profile → `desktop` → `desktop.peek` motion-tree overrides. Peek is
+        // a windowless event, so the empty WindowQuery skips the rule layer.
+        const PhosphorAnimation::Profile eventMotion = resolveEventMotionProfile(
+            PhosphorAnimation::ProfilePaths::DesktopPeek, PhosphorRules::WindowQuery{}, QString());
+        m_desktopTransition.beginPeek(showing, effectId, profile.effectiveParameters(),
+                                      qRound(eventMotion.effectiveDuration()), eventMotion.curve);
+    });
+
+    // Reap any live desktop transition whose OUTGOING desktop is removed from the
+    // pager mid-switch: it captured a raw VirtualDesktop* in begin() that the
+    // deferred captureDesktop() still COMPARES (isOnDesktop) up to the
+    // transition's duration later. It never derefs it, so this is not a crash
+    // guard — a freed pointer must simply not linger and be matched against a
+    // live desktop.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopRemoved, this, [this](KWin::VirtualDesktop* desktop) {
+        m_desktopTransition.desktopRemoved(desktop);
+    });
+
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred
     // timer re-adds one between windowClosed and windowDeleted, the Item tree
     // will be torn down while an animation entry still references the window.
@@ -534,6 +737,28 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         if (m_windowIdCache.contains(w)) {
             const QString cachedId = m_windowIdCache.take(w);
             m_windowIdReverse.remove(cachedId);
+            // Free the border entry AND its multipass FBO targets keyed by this
+            // window id. Normally removeWindowDecoration (run from slotWindowClosed)
+            // already cleared both; the explicit call here is defence-in-depth
+            // for a window deleted without a preceding close. Pass the window
+            // pointer so the GL release (setShader(nullptr) + unredirect) can
+            // still run — findWindowById returns null post-delete. Critically
+            // this also drops the m_windowDecorations entry, so a delete-without-
+            // close can't strand it and keep isActive() pinned true.
+            removeWindowDecoration(cachedId, w);
+            // Belt-and-suspenders for the not-expected case of a multipass entry
+            // without a border entry (removeWindowDecoration's no-border early-return
+            // would otherwise skip the FBO cleanup).
+            //
+            // Its own make-current, not one borrowed from the endShaderTransition above:
+            // this destroys GLTextures and GLFramebuffers, we are off the paint cycle, and
+            // the day that neighbour grows an early return this would silently become
+            // glDelete* against no context. The window is gone, so the transition guard
+            // releaseSurfaceState applies has nothing left to protect — erase directly.
+            if (m_surfaceMultipass.contains(cachedId)) {
+                ensureGlContextCurrent();
+                m_surfaceMultipass.erase(cachedId);
+            }
             // Mirror the m_pendingFrameGeometry cleanup that
             // slotWindowClosed runs (window_lifecycle.cpp). A
             // windowFrameGeometryChanged emission between
@@ -545,14 +770,38 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // appId|uuid) which is the same key the pending map
             // uses on the push side.
             m_pendingFrameGeometry.remove(cachedId);
+            // Same belt-and-suspenders as m_frameOpacityCache below: a closing
+            // decorated window keeps painting under its close animation, and
+            // pushBorderUniforms re-creates the m_focusFade entry via operator[]
+            // on every such frame AFTER slotWindowClosed already scrubbed it. So
+            // the slotWindowClosed removal alone is not enough; drop it here too
+            // (keyed by the frozen cachedId) or the entry leaks for the session.
+            m_focusFade.remove(cachedId);
+            // Same delete-without-close defence for the layer snapshot: the
+            // normal removal lives in slotWindowClosed, which a window deleted
+            // without a preceding close never reaches. No restore is possible
+            // (the window is gone); this only keeps the map bounded.
+            m_ruleWindowLayerSnapshots.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);
+        // Spurious-minimize-pair stamp — raw-pointer-keyed like its
+        // siblings below, so erase here both to stay bounded and so a
+        // reused address can't inherit a stale stamp that would swallow
+        // the new window's first genuine un-minimize animation.
+        m_minimizeShaderStamp.remove(w);
         // Drop per-window shader-event bookkeeping. m_lastFocusShaderWindow is
         // a QPointer that auto-nulls on destroy, so it's already cleaned up;
         // m_shaderManager.m_lastFullyMaximized is a raw-pointer-keyed QHash so we explicitly
         // erase here to keep it bounded across long sessions.
         m_shaderManager.m_lastFullyMaximized.remove(w);
+        // Sibling raw-pointer-keyed hashes — the maximize morph's departure
+        // rect and the deferred-install entry. Same bounded-across-long-
+        // sessions rationale as above, plus address-reuse safety for the
+        // pending entry (a stale entry at a reused address would fire a
+        // bogus morph on the new window's first resize).
+        m_shaderManager.m_preMaximizeFrame.remove(w);
+        m_shaderManager.m_pendingMaximizeMorph.remove(w);
         // Drop the queued-expiry guard for this raw pointer. KWin reuses
         // EffectWindow heap addresses freely, so a stale entry surviving
         // past windowDeleted would cause the next window allocated at the
@@ -663,6 +912,20 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         qCWarning(lcEffect) << "Failed to connect to daemon motionProfileTreeChanged D-Bus signal";
     }
 
+    // Session idle. The daemon owns the detection (ext-idle-notify-v1 is a Wayland
+    // CLIENT protocol, and this effect lives inside the compositor that serves it),
+    // so the effect only ever sees the resolved boolean and pauses / resumes the
+    // decoration chain on it.
+    const bool idleConnected = QDBusConnection::sessionBus().connect(
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("sessionIdleChanged"), this,
+        SLOT(slotSessionIdleChanged(bool)));
+    if (idleConnected) {
+        qCInfo(lcEffect) << "Connected to daemon sessionIdleChanged D-Bus signal";
+    } else {
+        qCWarning(lcEffect) << "Failed to connect to daemon sessionIdleChanged D-Bus signal";
+    }
+
     // Connect to keyboard navigation D-Bus signals
     connectNavigationSignals();
 
@@ -721,6 +984,28 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(serviceWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon service unregistered";
         m_daemonServiceRegistered = false;
+        // Release the idle latch. m_sessionIdle is daemon-pushed state whose ONLY
+        // route back to false is a sessionIdleChanged(false) broadcast — and a
+        // restarted daemon arms a fresh ext-idle-notify-v1 notification on a seat
+        // that is already active, which never produces an idle->active edge and so
+        // never sends one. Left set, every decorated window's chain would stay
+        // frozen for the rest of the session. Repaint them so a chain paused under
+        // the latch is put back in the paint loop (a paused chain emits no damage
+        // of its own).
+        if (m_sessionIdle) {
+            m_sessionIdle = false;
+            repaintAllDecorations();
+        }
+        // Drop the virtual-screen readiness immediately. The defs from the
+        // previous daemon cycle are now stale; without clearing the flag here,
+        // the windowFrameGeometryChanged VS-crossing detector would keep
+        // resolving against stale virtual-screen boundaries during the gap
+        // between unregistration and the next daemon's fetch. continueDaemonReady
+        // setup re-clears and refetches on bringup; this closes the gap before it.
+        m_virtualScreensReady = false;
+        // The stale floating-window set is dropped further down in this same
+        // handler (clearAllFloatingState beside clearAllZoneState, paired with
+        // the rule-cache invalidation) — no separate clear here.
         // Also clear the bridge-registration in-flight gate. Without
         // this, a daemon-restart racing the in-flight registerBridge
         // reply leaves the gate set: the new daemon's `daemonReady`
@@ -746,14 +1031,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // daemonReady serviceRegistered handler addresses); without this
         // disconnect, every daemon restart accumulates one extra match
         // rule, and each rulesChanged emission then dispatches N times
-        // to slotWindowRulesChanged across N restarts. The debounce
+        // to slotRulesChanged across N restarts. The debounce
         // collapses the work to a single fetch, but each dispatch still
         // pays D-Bus delivery + Qt slot invocation.
         QDBusConnection::sessionBus().disconnect(QString(PhosphorProtocol::Service::Name),
                                                  QString(PhosphorProtocol::Service::ObjectPath),
-                                                 QString(PhosphorProtocol::Service::Interface::WindowRules),
-                                                 QStringLiteral("rulesChanged"), this, SLOT(slotWindowRulesChanged()));
-        m_windowRulesSubscribed = false;
+                                                 QString(PhosphorProtocol::Service::Interface::Rules),
+                                                 QStringLiteral("rulesChanged"), this, SLOT(slotRulesChanged()));
+        m_rulesSubscribed = false;
         // Release any pending first-frame open suppression. Without the
         // daemon there is no `resolveWindowRestore` reply coming and no
         // autotile reposition either, so the suppression entry would just
@@ -770,13 +1055,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // gone. Clear the handlers' tiled tracking FIRST: restoreAll() emits
         // windowDecorationRestored per window, and the rebuild-on-restore
         // handler would otherwise recreate a border item for every still-
-        // tracked window only for clearAllBorders() to destroy it moments
-        // later. With tracking cleared, resolveBorderStateFor returns null
-        // for mode-tracked windows during the restore burst and the handler
-        // drops their items. Windows matched by a still-live SetBorder rule
+        // tracked window only for clearAllDecorations() to destroy it moments
+        // later. With tracking cleared, resolveSurfacePathFor resolves
+        // mode-tracked windows to window.floating during the restore burst and
+        // the handler drops their items. Windows matched by a still-live SetBorder rule
         // (the rule sets deliberately survive daemon loss, see below) can
         // still get an item recreated and immediately torn down by
-        // clearAllBorders() — bounded, invisible churn that is cheaper than
+        // clearAllDecorations() — bounded, invisible churn that is cheaper than
         // suppressing the handler across the burst.
         m_autotileHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
@@ -792,14 +1077,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_navigationHandler->clearAllFloatingState();
         // The placement caches above feed placement-scoped rule match inputs. A
         // SetOpacity rule keyed on IsSnapped/IsFloating/Zone caches its verdict
-        // per (windowId, ruleSet revision) — neither moves here — so without this
-        // the window keeps its stale opacity (borders revert via restoreAll /
-        // clearAllBorders below, but opacity would not). Re-resolve every opacity
-        // window against the now-cleared placement, matching the border teardown.
+        // per (windowId, ruleSet revision) — neither moves here — so drop the
+        // whole match cache; any decoration built after this resolves against
+        // the cleared placement. The folded opacity itself reverts with the
+        // decorations (clearAllDecorations below tears down the opacity-tint
+        // layer along with the border), so no repaint or re-fold is needed here.
+        // Also carries the window-layer sweep (see invalidateAllRuleCaches): a
+        // `WHEN IsFloating` layer rule releases its keep-above here (snapshot
+        // restore) instead of stranding it for the daemon-down interval.
         invalidateAllRuleCaches();
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
-        clearAllBorders();
+        clearAllDecorations();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
         // `m_animationExclusionRuleSet`, or the shader manager's animation
         // rule set. Across a daemon restart the user's last-known rule set
@@ -807,7 +1096,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // exclusion / animation override during the bringup race, flashing
         // un-filtered animations and unstyled snaps until the new daemon
         // replays its rulesChanged broadcast. The sets get refreshed once
-        // the new daemon's `loadWindowRuleAnimationsFromDbus` reply lands.
+        // the new daemon's `loadRuleAnimationsFromDbus` reply lands.
     });
     connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon registered: waiting for daemonReady signal";
@@ -830,8 +1119,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                                               QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
     });
 
-    // NOTE: syncFloatingWindowsFromDaemon() and loadCachedSettings() are NOT
-    // called here. m_daemonServiceRegistered is false at this point (set only by
+    // NOTE: daemon state sync (floating windows, cached settings) is NOT done
+    // here. m_daemonServiceRegistered is false at this point (set only by
     // slotDaemonReady), so any ensureInterface() call would bail out immediately.
     // All daemon state sync is deferred to slotDaemonReady().
 
@@ -870,16 +1159,147 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
 {
     qCInfo(lcEffect) << "Clearing daemon compositor drag/overlay state before effect shutdown";
 
+    // Drop any in-flight desktop-switch transition and release its
+    // active-fullscreen-effect claim. reset() is null-safe (it guards every
+    // KWin::effects access), so it is fine to run here even though this can be
+    // reached from the destructor before the KWin::effects teardown guards.
+    m_desktopTransition.reset();
+
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
                                                 QStringLiteral("clearForCompositorReconnect"));
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Overlay,
                                                 QStringLiteral("hideOverlay"));
 }
 
+void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
+{
+    if (!KWin::effects) {
+        return;
+    }
+    // Our peek owns the show-desktop animation only when the resolved pack
+    // would actually RUN: animations enabled, installed, AND a desktop-contract
+    // pack. Mirrors the whole peek path's runnability gates, not just the
+    // showingDesktopChanged handler's: the handler itself only checks the
+    // animations toggle and a non-empty id, while the isValid/appliesTo pair
+    // lives downstream in DesktopTransitionManager::prepareTransitionPrototype.
+    // This has to be the stricter of the two — a stale or inherited non-desktop
+    // override (or a pack assigned while the animations master toggle is off)
+    // must not unload KWin's effects and then bail at the signal, leaving the
+    // user with no show-desktop animation at all.
+    //
+    // The gate covers ASSIGNMENT and CONTRACT, not COMPILE. Compilation happens
+    // on the GL thread at paint time, so a pack whose metadata is valid but
+    // whose .frag fails to compile still unloads the builtins here and then
+    // draws nothing (compiledShader's null sentinel abandons the leg). That
+    // leaves no show-desktop animation for as long as the pack stays assigned.
+    // Accepted rather than plumbed: routing a paint-thread compile result back
+    // into this predicate would make the suppression depend on frame timing,
+    // and a bundled pack that fails to compile is a build-time bug the shader
+    // validator catches, not a runtime state to design around.
+    bool wantOurs = false;
+    const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::resolveShaderWithDefault(
+        m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::DesktopPeek);
+    const QString effectId = profile.effectiveEffectId();
+    if (!effectId.isEmpty() && m_windowAnimator->isEnabled()) {
+        const PhosphorAnimationShaders::AnimationShaderEffect eff = m_shaderManager.shaderRegistry().effect(effectId);
+        wantOurs = eff.isValid()
+            && PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff,
+                                                                        PhosphorAnimation::ProfilePaths::DesktopPeek);
+    }
+    static const QString kBuiltinShowDesktopEffects[] = {QStringLiteral("windowaperture"),
+                                                         QStringLiteral("eyeonscreen")};
+    if (wantOurs) {
+        for (const QString& name : kBuiltinShowDesktopEffects) {
+            // Record then unload only what is actually loaded, so the restore
+            // path re-loads exactly the user's own configuration and never
+            // force-loads an effect they had disabled.
+            if (KWin::effects->isEffectLoaded(name)) {
+                if (!m_suppressedShowDesktopEffects.contains(name)) {
+                    m_suppressedShowDesktopEffects.append(name);
+                }
+                KWin::effects->unloadEffect(name);
+            }
+        }
+        return;
+    }
+    // Keep names whose re-load failed: the wantOurs=false branch re-runs on
+    // every later sync (see the four trigger sites on the header decl), so a
+    // transient loader failure gets a free retry instead of permanently
+    // dropping the restore obligation for the session. Already-loaded names
+    // are satisfied as-is (a KCM reconcile can re-load them behind our back,
+    // and loadEffect returns false for a loaded effect — treating that as a
+    // failure would pin the name in the retry list forever, warning on every
+    // sync for an effect that is in fact running).
+    QStringList failed;
+    for (const QString& name : std::as_const(m_suppressedShowDesktopEffects)) {
+        if (KWin::effects->isEffectLoaded(name)) {
+            continue;
+        }
+        if (!KWin::effects->loadEffect(name)) {
+            qCWarning(lcEffect) << "failed to restore show-desktop effect" << name << "— will retry on next sync";
+            failed.append(name);
+        }
+    }
+    m_suppressedShowDesktopEffects = failed;
+}
+
 PlasmaZonesEffect::~PlasmaZonesEffect()
 {
-    // Sever the registry's `effectsChanged` connection BEFORE anything
-    // else runs. The slot lambda touches `m_shaderManager.m_shaderTransitions`,
+    // Give KWin back the show-desktop script effects the peek suppression
+    // unloaded — a runtime unload of THIS effect (KCM toggle) must not leave
+    // the user with no show-desktop animation. First, while everything is
+    // still alive. Skipped during compositor shutdown (the aboutToQuit latch):
+    // there the destructor runs from EffectsHandler's own unload-everything
+    // sequence, and loadEffect would re-instantiate a script effect into the
+    // list KWin is tearing down mid-iteration. Nothing is lost by skipping —
+    // the next session loads the effects from kwinrc, which the suppression
+    // never writes to.
+    if (KWin::effects && !m_compositorShuttingDown) {
+        // The latch is not what makes this safe against mid-iteration mutation
+        // — the defer below is. What it buys is not queueing a load at all
+        // during compositor shutdown: the destructor then runs from
+        // EffectsHandler's own unload-everything sequence, and while the
+        // stopped event loop means the lambda could never fire anyway, that is
+        // a property of the shutdown path rather than a guarantee this code
+        // should lean on.
+        //
+        // Deferred, detached (no `this` context — we are dying): this
+        // destructor runs from KWin's unloadEffect, and if that unload
+        // originated from a KCM-apply reconcile iterating the loaded-effects
+        // list, a synchronous loadEffect here would mutate the container
+        // mid-iteration — the same hazard reconfigure() defers around.
+        const QStringList toRestore = m_suppressedShowDesktopEffects;
+        QTimer::singleShot(0, [toRestore]() {
+            if (!KWin::effects) {
+                return;
+            }
+            // Restore UNCONDITIONALLY, even when a rapid unload→reload has
+            // already constructed a new PlasmaZones instance. Skipping in that
+            // case would lose the suppression record for good: the new
+            // instance records only what is currently loaded (nothing), so a
+            // later pack unassign could never bring the builtins back until a
+            // KCM apply or relogin. The cost of restoring is bounded — the new
+            // instance re-unloads during its daemon bringup (a few sequential
+            // D-Bus round trips plus the registry rescan, sub-second in
+            // practice; indefinitely if no daemon is running, in which case no
+            // peek pack resolves either), a window where both animations could
+            // race.
+            for (const QString& name : toRestore) {
+                // Already loaded (a KCM reconcile beat us to it) is satisfied,
+                // not a failure — loadEffect returns false for a loaded effect.
+                if (!KWin::effects->isEffectLoaded(name) && !KWin::effects->loadEffect(name)) {
+                    qCWarning(lcEffect) << "failed to restore show-desktop effect" << name;
+                }
+            }
+        });
+        m_suppressedShowDesktopEffects.clear();
+    }
+
+    // Sever the registry's `effectsChanged` connection BEFORE any shader or
+    // cache teardown runs. (The suppressed-effect restore above is deliberately
+    // ahead of it: it only reads a QStringList and posts a detached timer, so
+    // it can neither re-enter the registry nor touch the caches this guards.)
+    // The slot lambda touches `m_shaderManager.m_shaderTransitions`,
     // `m_shaderManager.m_shaderCache`, and `m_shaderManager.m_textureCache` — all
     // declared AFTER `m_animationShaderRegistry` in shadertransitionmanager.h,
     // so they destruct FIRST in C++ reverse-declaration order. The registry
@@ -888,6 +1308,37 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // cache members are gone — UAF. Disconnect now while everything is still
     // alive.
     disconnect(&m_shaderManager.m_animationShaderRegistry, nullptr, this, nullptr);
+    disconnect(&m_surfaceShaderRegistry, nullptr, this, nullptr);
+
+    // Make the context current for the WHOLE destructor, member destruction included.
+    //
+    // The teardown calls below each make it current themselves — but only if they have
+    // something to tear down. Unload the effect with no decorated windows and no live
+    // transition (a KCM toggle on an idle desktop) and clearAllDecorations() iterates nothing,
+    // the drain loop runs zero times, and nothing makes the context current at all. Then the
+    // members go: m_compiledPacks, m_shaderCache, m_textureCache — glDeleteProgram,
+    // glDeleteTextures, glDeleteFramebuffers, against whatever context happens to be current.
+    // Making it current is sticky per-thread, so one call here covers the body and everything
+    // the members destroy afterwards.
+    ensureGlContextCurrent();
+
+    // Stop the audio-spectrum provider (terminates its cava child process) and
+    // sever its signal before teardown, so a late spectrumUpdated can't dispatch
+    // to onEffectAudioSpectrum against half-destroyed members.
+    if (m_audioProvider) {
+        disconnect(m_audioProvider.get(), nullptr, this, nullptr);
+        m_audioProvider->stop();
+    }
+    // Force the audio run gate off BEFORE the posted-event drain below. Teardown
+    // (clearAllDecorations → removeWindowDecoration) posts fresh
+    // scheduleEffectAudioSync MetaCalls, and the QEvent::MetaCall drain would run
+    // syncEffectAudioState while decorations still exist — respawning cava moments
+    // before member destruction kills it again. With the toggle forced off,
+    // wantRun is false so the drained sync takes the harmless not-wanted branch.
+    // Clear the spectrum size too so that branch's `wasLive` is false and it
+    // requests no spurious full repaint during shutdown.
+    m_enableAudioVisualizer = false;
+    m_audioSpectrumSize = 0;
 
     // Drain the texture loader pool before any other teardown. A
     // worker that's mid-rasterise would otherwise post a queued
@@ -922,7 +1373,8 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         m_snapHandler->clearSnapTracking();
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
-        clearAllBorders();
+        restoreAllRuleWindowLayers();
+        clearAllDecorations();
     }
 
     if (m_keyboardGrabbed && KWin::effects) {
@@ -945,7 +1397,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // bookkeeping ran. Iterates a snapshot because endShaderTransition
     // erases from `m_shaderManager.m_shaderTransitions` mid-loop.
     //
-    // Guarded by `if (KWin::effects)` matching the clearAllBorders /
+    // Guarded by `if (KWin::effects)` matching the clearAllDecorations /
     // ungrabKeyboard guards above: during compositor teardown the global
     // is null and `endShaderTransition` dereferences it (setShader,
     // unredirect, refWindow). The compositor's own teardown reclaims
@@ -973,6 +1425,16 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // synchronous dispatch from the dtor body is sound.
         QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
     }
+    // When KWin::effects is null (compositor teardown) the drain above is
+    // skipped and any still-installed ShaderTransition is destroyed by
+    // member destruction instead. Each entry's `visibleRef` dtor then
+    // dereferences its stored EffectWindow* (`unrefVisible`) — there is no
+    // way to neutralise an EffectWindowVisibleRef without touching the
+    // window. This relies on KWin destroying effects before it destroys
+    // windows, which is the same lifetime assumption KWin's own Magic
+    // Lamp / Squash effects make: both hold visible refs in member
+    // containers destroyed at effect destruction with no null-effects
+    // special-casing.
 }
 
 } // namespace PlasmaZones

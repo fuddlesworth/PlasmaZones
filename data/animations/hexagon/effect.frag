@@ -81,7 +81,7 @@ vec4 pTransition(vec2 uv, float t)
     // Floor iResolution so an early-frame surface size of 0 doesn't
     // produce a zero-component texScale (which would divide-by-zero in
     // the lookupOffset below).
-    vec2 texScale = 0.1 * max(iResolution, vec2(1.0)) / max(p_tileScale, 0.05);
+    vec2 texScale = 0.1 * resolutionSafe() / max(p_tileScale, 0.05);
     vec4 hex      = getHexagons(uv * texScale);
 
     vec4 oColor = vec4(0.0);

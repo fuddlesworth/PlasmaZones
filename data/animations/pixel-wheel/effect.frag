@@ -44,7 +44,7 @@ vec4 pTransition(vec2 uv, float t)
     // Floor iResolution so an early-frame zero-sized surface doesn't
     // divide-by-zero into an infinite pixelGrid. Real frames replace
     // this with the actual surface size.
-    vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));
+    vec2 pixelGrid  = vec2(pixelSize) / resolutionSafe();
     vec2 cellUV     = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
     // boundaryMask (see noise.glsl) crops the right/bottom-edge cell
     // whose centre can exceed 1.0 by up to half a cell. Without it,

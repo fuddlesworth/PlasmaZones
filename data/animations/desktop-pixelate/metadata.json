@@ -1,0 +1,20 @@
+{
+    "id": "desktop-pixelate",
+    "name": "Desktop Pixelate",
+    "description": "Cross-fades between desktops through a mosaic of pixel blocks that grow then shrink.",
+    "author": "PlasmaZones (ported from GL-Transitions pixelize by gre, MIT)",
+    "version": "1.0",
+    "category": "Pixelate",
+    "appliesTo": ["desktop"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "blocks",
+            "name": "Block Count",
+            "type": "float",
+            "default": 20.0,
+            "min": 4.0,
+            "max": 80.0
+        }
+    ]
+}

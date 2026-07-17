@@ -6,11 +6,11 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
-// Shared Gaps card for both Tiling → Appearance and Snapping → Window
-// Appearance. The two modes differ only in labels and whether Smart gaps is
-// shown, so they are exposed as properties; the per-screen wiring lives in the
-// host page, which feeds the *Value properties and handles the *Modified
-// signals.
+// Reusable Gaps card. Its current host is the Window Appearance page; the
+// label and Smart-gaps surfaces stay exposed as properties so the card can
+// serve other hosts (the Window Appearance page gates Smart gaps off). The
+// per-screen wiring lives in the host page, which feeds the *Value properties
+// and handles the *Modified signals.
 SettingsCard {
     id: root
 
@@ -32,6 +32,10 @@ SettingsCard {
     // Smart gaps is autotile-only; snapping hides the row.
     property bool showSmartGaps: true
     property bool smartGapsValue: false
+    // Per-monitor scoping is the SettingsCard header chip (scopeEnabled +
+    // scopeAppSettings + scopeHasOverridesMethod/scopeClearerMethod), shared with
+    // every other per-monitor card. The host page binds the gap values to the
+    // chip's current scope (settingsController.scopeScreenName).
     // Defaults; hosts may override the label/description per mode. Tiling and
     // snapping currently share "Inner gap" / "Outer gap" for cross-mode
     // consistency (snapping just overrides the descriptions).

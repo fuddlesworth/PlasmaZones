@@ -12,22 +12,32 @@
 
 namespace PhosphorEngine {
 
-struct TilingStateKey
+/// Identity of a per-screen placement state: a window's placement is scoped to
+/// the (screen, virtual desktop, activity) triple it was created in. Both the
+/// snap engine and the autotile engine key their per-screen state on this so a
+/// window keeps distinct placement per context (e.g. per desktop) and migrates
+/// between contexts as the window crosses monitors / desktops.
+struct PlacementStateKey
 {
     QString screenId;
     int desktop = 1;
     QString activity;
 
-    bool operator==(const TilingStateKey& other) const
+    bool operator==(const PlacementStateKey& other) const
     {
         return screenId == other.screenId && desktop == other.desktop && activity == other.activity;
     }
 };
 
-inline size_t qHash(const TilingStateKey& key, size_t seed = 0)
+inline size_t qHash(const PlacementStateKey& key, size_t seed = 0)
 {
     return qHashMulti(seed, key.screenId, key.desktop, key.activity);
 }
+
+/// Backwards-compatible spelling for autotile's existing sources. The autotile
+/// engine predates the shared base primitives and refers to this triple as
+/// `TilingStateKey`; keep the alias so that source keeps compiling unchanged.
+using TilingStateKey = PlacementStateKey;
 
 enum class SnapIntent {
     UserInitiated,
@@ -101,7 +111,10 @@ struct SnapResult
 
     static SnapResult noSnap()
     {
-        return SnapResult{false, QRect(), QString(), QStringList(), QString()};
+        // Value-initialize so every field takes its in-class default; a
+        // positional initializer here would silently stop covering fields
+        // added to the struct later.
+        return SnapResult{};
     }
 };
 
@@ -115,12 +128,18 @@ struct UnfloatResult
 
 struct ZoneAssignmentEntry
 {
-    QString windowId{};
-    QString sourceZoneId{};
-    QString targetZoneId{};
-    QStringList targetZoneIds{};
-    QRect targetGeometry{};
-    QString targetScreenId{};
+    QString windowId;
+    QString sourceZoneId;
+    QString targetZoneId;
+    QStringList targetZoneIds;
+    QRect targetGeometry;
+    QString targetScreenId;
+    /// Virtual desktop to record the assignment on (1-based). 0 means "the
+    /// window's current desktop" — the historical behaviour. Resnap producers
+    /// stamp the window's recorded desktop here so a batch commit preserves it
+    /// instead of re-stamping whatever desktop is currently active (which
+    /// corrupts off-desktop windows caught in a cross-desktop batch).
+    int virtualDesktop = 0;
 };
 
 enum class StickyWindowHandling {

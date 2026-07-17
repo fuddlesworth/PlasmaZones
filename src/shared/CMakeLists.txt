@@ -28,6 +28,11 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # the rest of the project's warning discipline intact.
 set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
 
+# Registered as a QML singleton (mirrors the CurvePresets.qml pattern in
+# src/settings/CMakeLists.txt): the source property must be set before the
+# qt_add_qml_module call so the generated qmldir marks the type singleton.
+set_source_files_properties(ZoneColorDefaults.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(plasmazones_shared_qml
     URI org.plasmazones.common
     VERSION 1.0
@@ -42,10 +47,12 @@ qt_add_qml_module(plasmazones_shared_qml
         LayoutCard.qml
         PopupFrame.qml
         ShaderCompileErrorBanner.qml
-        ShaderParameterEditor.qml
-        ShaderParameterRow.qml
-        ShaderParameterSection.qml
+        ParameterEditor.qml
+        ShaderParamsEditor.qml
+        ParameterRow.qml
+        ParameterSection.qml
         CategoryMenuButton.qml
+        ZoneColorDefaults.qml
         ZonePreview.qml
         ZoneShaderRenderer.qml
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/plasmazones/common

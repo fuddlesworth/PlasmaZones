@@ -7,8 +7,10 @@
 #include <QHash>
 #include <QRectF>
 #include <QJsonObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QUuid>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QtCore/qnamespace.h>
@@ -19,10 +21,18 @@
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
-#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorTiles/AutotileConstants.h>
 // Animation duration / stagger UI bounds — generic policy, not autotile-specific.
 #include <PhosphorAnimation/AnimationLimits.h>
+// Window decoration (border + title bar) defaults — shared across the D-Bus
+// boundary with the compositor plugin so the daemon persists the same values
+// the effect renders with before the async settings load lands.
+#include <PhosphorCompositor/DecorationDefaults.h>
+// Surface-shader decoration tree — the user-applied pack stack. The `border`
+// PACK (data/surface/border) lives in that stack like any other pack; the
+// window-manager border/title-bar APPEARANCE defaults live in the
+// config-backed window-appearance settings above, not in this tree's default.
+#include <PhosphorSurface/DecorationProfileTree.h>
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -233,10 +243,6 @@ public:
     {
         return 50;
     }
-    static bool enableBlur()
-    {
-        return true;
-    }
     static QString labelFontFamily()
     {
         return QString();
@@ -279,18 +285,154 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Window Decoration Appearance (Windows.*) Settings
+    //
+    // Tiled/snapped window border + title bar defaults. Distinct from the
+    // zone-overlay border constants above: these come from the shared
+    // PhosphorCompositor::DecorationDefaults so the daemon and the compositor
+    // plugin never drift. Border colours default to the "accent" sentinel
+    // (resolved to the system accent colour at render time); the border/title-bar
+    // scope defaults to "tiled" (apply only to tiled/snapped windows).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool showWindowBorder()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::ShowBorder;
+    }
+    static int windowBorderWidth()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
+    }
+    static constexpr int windowBorderWidthMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMin;
+    }
+    static constexpr int windowBorderWidthMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMax;
+    }
+    static int windowBorderRadius()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
+    }
+    static constexpr int windowBorderRadiusMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin;
+    }
+    static constexpr int windowBorderRadiusMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
+    }
+    // Decoration focus cross-fade (uSurfaceFocused ramp) duration, ms. A
+    // standalone decoration setting, independent of the window animation
+    // system; 0 switches instantly.
+    static constexpr int focusFadeDuration()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMs;
+    }
+    static constexpr int focusFadeDurationMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMsMin;
+    }
+    static constexpr int focusFadeDurationMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::FocusFadeMsMax;
+    }
+    static bool hideWindowTitleBars()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
+    }
+    // The "accent" sentinel (PhosphorRules::BorderColorToken::Accent) — the effect
+    // resolves it to the live system accent / inactive colour at paint time. Kept
+    // as a bare literal here rather than pulling PhosphorRules into this
+    // widely-included header; the inactive default mirrors the active one.
+    static QString windowBorderColorActive()
+    {
+        return QStringLiteral("accent");
+    }
+    static QString windowBorderColorInactive()
+    {
+        return windowBorderColorActive();
+    }
+    // Concrete opaque colour the settings app seeds into config when the user
+    // leaves "follow the system accent" mode (KDE accent blue, #AARRGGBB). Lives
+    // here so the settings page's fallback stays single-sourced with the config
+    // layer rather than hardcoded in QML.
+    static QString windowBorderColorAccentFallbackHex()
+    {
+        return QStringLiteral("#FF3DAEE9");
+    }
+    // Fresh-install "Apply to" scope for both the border and the title bar. The
+    // token set lives in PhosphorCompositor::WindowAppearanceScope (shared with the
+    // schema validator and the effect).
+    static QString windowBorderScope()
+    {
+        return QString(::PhosphorCompositor::WindowAppearanceScope::Tiled);
+    }
+    static QString windowTitleBarScope()
+    {
+        return windowBorderScope();
+    }
+
+    // ── Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*) ──
+    // The opacity analogue of the plain border: config-backed, rendered by the
+    // built-in "opacity-tint" surface pack in easy mode (no user decoration
+    // packs), suppressed wholesale by any user pack. Defaults mirror the
+    // pack's own parameter defaults (full opacity, no tint) so enabling the
+    // toggle changes nothing until the user moves a slider; the tint colour
+    // defaults to the accent sentinel like the border colours.
+    static bool showWindowOpacityTint()
+    {
+        return false;
+    }
+    static double windowOpacity()
+    {
+        return 1.0;
+    }
+    static constexpr qreal windowOpacityMin()
+    {
+        return 0.0;
+    }
+    static constexpr qreal windowOpacityMax()
+    {
+        return 1.0;
+    }
+    static double windowTintStrength()
+    {
+        return 0.0;
+    }
+    static constexpr qreal windowTintStrengthMin()
+    {
+        return 0.0;
+    }
+    static constexpr qreal windowTintStrengthMax()
+    {
+        return 1.0;
+    }
+    static QString windowTintColor()
+    {
+        return windowBorderColorActive();
+    }
+    static QString windowOpacityTintScope()
+    {
+        return windowBorderScope();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Zone Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static int zonePadding()
+    // Inner gap: the single shared inter-window gap used by BOTH snapping and
+    // tiling (replaces the former snapping zonePadding + tiling autotileInnerGap).
+    static int innerGap()
     {
-        return Defaults::ZonePadding;
+        return Defaults::InnerGap;
     }
-    static constexpr int zonePaddingMin()
+    static constexpr int innerGapMin()
     {
         return 0;
     }
-    static constexpr int zonePaddingMax()
+    static constexpr int innerGapMax()
     {
         return Defaults::MaxGap;
     }
@@ -458,7 +600,7 @@ public:
     // Off by default: every context still gets the synthesized level-1 default
     // layout (today's behavior). When on, no context is assigned an active
     // snapping or autotiling layout until the user explicitly assigns one —
-    // overridable per context by a DefaultLayoutAssignment window rule.
+    // overridable per context by a DefaultLayoutAssignment rule.
     static bool suppressDefaultLayoutAssignment()
     {
         return false;
@@ -561,6 +703,48 @@ public:
         return 0;
     }
     static constexpr int animationMinimumWindowHeightMax()
+    {
+        return 2000;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Decoration Window Filtering Settings
+    //
+    // Mirrors the Animation Window Filtering settings but lives in its own
+    // `Decorations.WindowFiltering` group so a user can tune which windows get a
+    // border independently of which windows snap or animate. The defaults
+    // preserve the pre-existing decoration behavior: transients were already
+    // never decorated (the effect's app-window gate rejected them structurally),
+    // so exclude-transient defaults on; no size threshold was ever applied, so
+    // the min-size axes default off (0). On upgrade nothing changes until the
+    // user opts into decorating transients or into a size threshold.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool decorationExcludeTransientWindows()
+    {
+        return true;
+    }
+    static int decorationMinimumWindowWidth()
+    {
+        return 0;
+    }
+    static constexpr int decorationMinimumWindowWidthMin()
+    {
+        return 0;
+    }
+    static constexpr int decorationMinimumWindowWidthMax()
+    {
+        return 2000;
+    }
+    static int decorationMinimumWindowHeight()
+    {
+        return 0;
+    }
+    static constexpr int decorationMinimumWindowHeightMin()
+    {
+        return 0;
+    }
+    static constexpr int decorationMinimumWindowHeightMax()
     {
         return 2000;
     }
@@ -675,22 +859,61 @@ public:
     // and high-frequency session state saves.
     PLASMAZONES_EXPORT static QString sessionFilePath();
 
-    // Returns the absolute path to windowrules.json (the unified WindowRule
+    // Returns the absolute path to rules.json (the unified Rule
     // store — schema v4). Separate from config.json so frequent daemon-driven
     // rule writes do not churn the cold user-settings blob. The daemon is the
-    // sole writer; see docs/window-rule-refactor-design.md §5.
-    PLASMAZONES_EXPORT static QString windowRulesFilePath();
+    // sole writer.
+    PLASMAZONES_EXPORT static QString rulesFilePath();
+
+    // Window appearance (border / title bar / gap) defaults live in the config
+    // store now (the Windows.* / Gaps.* groups), NOT in managed baseline rules.
+    // These three ids no longer identify seeded rules — they exist only so the
+    // daemon (and the D-Bus Restore Defaults path) can STRIP any stale managed
+    // baseline appearance rules an older build wrote to rules.json. See
+    // managedAppearanceBaselineIds() and the strips in daemon.cpp / ruleadaptor.cpp.
+    //
+    // UUID suffix `...001` is RETIRED — it was the never-shipped single combined
+    // "Default appearance" baseline rule, since split into the three ids below
+    // (`...002`/`...003`/`...004`). Do not reuse it.
+
+    /// Stable id of the (now-stripped) managed baseline BORDER rule.
+    static QUuid baselineBorderRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000002}"));
+    }
+
+    /// Stable id of the (now-stripped) managed baseline TITLE BAR rule.
+    static QUuid baselineTitleBarRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000003}"));
+    }
+
+    /// Stable id of the (now-stripped) managed baseline GAP rule. Per-monitor gap
+    /// overrides are config-backed now, so this id is no longer used to namespace
+    /// them; it survives only as a strip target.
+    static QUuid baselineGapRuleId()
+    {
+        return QUuid(QStringLiteral("{0a5e1b00-0000-4000-8000-000000000004}"));
+    }
+
+    /// The three fixed ids above as a set — the single source of truth for the
+    /// stale-managed-appearance-baseline strip, shared by the daemon's startup
+    /// cleanup and the D-Bus Restore Defaults path so the two can't drift.
+    static QSet<QUuid> managedAppearanceBaselineIds()
+    {
+        return {baselineBorderRuleId(), baselineTitleBarRuleId(), baselineGapRuleId()};
+    }
 
     // Returns the absolute path to quicklayouts.json (the numbered quick-layout
-    // shortcut slots 1..9). Quick-layout slots are NOT window rules, so they
-    // sit in a sibling sidecar next to windowrules.json rather than in the
+    // shortcut slots 1..9). Quick-layout slots are NOT rules, so they
+    // sit in a sibling sidecar next to rules.json rather than in the
     // rule store. LayoutRegistry reads/writes this file directly.
     PLASMAZONES_EXPORT static QString quickLayoutsFilePath();
 
     // Returns the absolute path to layout-settings.json — the per-layout
     // settings sidecar (keyed by layout UUID). Per-layout settings are NOT part
     // of the structural layout definition, so they live in a sibling sidecar
-    // next to windowrules.json rather than inside each layout file.
+    // next to rules.json rather than inside each layout file.
     PLASMAZONES_EXPORT static QString layoutSettingsFilePath();
 
     // Curated default picker visibility, seeded into layout-settings.json on a
@@ -791,10 +1014,6 @@ public:
     // Shader Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static bool enableShaderEffects()
-    {
-        return true;
-    }
     static int shaderFrameRate()
     {
         return 60;
@@ -822,6 +1041,196 @@ public:
     static constexpr int audioSpectrumBarCountMax()
     {
         return 256;
+    }
+
+    // Audio spectrum analysis parameters (Shaders.Audio group). Values and
+    // ranges mirror PhosphorAudio::Defaults — the provider re-clamps to the
+    // same bounds, so schema and library agree on the canonical range.
+    static bool audioAutosens()
+    {
+        return true;
+    }
+    static int audioSensitivity()
+    {
+        return 100;
+    }
+    static constexpr int audioSensitivityMin()
+    {
+        return 10;
+    }
+    static constexpr int audioSensitivityMax()
+    {
+        return 500;
+    }
+    static int audioNoiseReduction()
+    {
+        return 77;
+    }
+    static constexpr int audioNoiseReductionMin()
+    {
+        return 0;
+    }
+    static constexpr int audioNoiseReductionMax()
+    {
+        return 100;
+    }
+    static int audioLowerCutoffHz()
+    {
+        return 50;
+    }
+    static constexpr int audioLowerCutoffHzMin()
+    {
+        return 20;
+    }
+    static constexpr int audioLowerCutoffHzMax()
+    {
+        return 500;
+    }
+    static int audioHigherCutoffHz()
+    {
+        return 10000;
+    }
+    static constexpr int audioHigherCutoffHzMin()
+    {
+        return 1000;
+    }
+    static constexpr int audioHigherCutoffHzMax()
+    {
+        return 20000;
+    }
+    static bool audioMonstercat()
+    {
+        return false;
+    }
+    static bool audioWaves()
+    {
+        return false;
+    }
+    static bool audioReverse()
+    {
+        return false;
+    }
+    // Provider-side extra smoothing on top of noise reduction, stored as a
+    // percent (the provider consumes it as a 0-0.95 fraction).
+    static int audioExtraSmoothing()
+    {
+        return 50;
+    }
+    static constexpr int audioExtraSmoothingMin()
+    {
+        return 0;
+    }
+    static constexpr int audioExtraSmoothingMax()
+    {
+        return 95;
+    }
+
+    static QString audioChannelMode()
+    {
+        return QStringLiteral("stereo");
+    }
+    static const QStringList& audioChannelModeOptions()
+    {
+        static const QStringList opts = {QStringLiteral("stereo"), QStringLiteral("mono-average"),
+                                         QStringLiteral("mono-left"), QStringLiteral("mono-right")};
+        return opts;
+    }
+    static QString normalizeAudioChannelMode(const QString& raw)
+    {
+        const QString normalized = raw.toLower().trimmed();
+        return audioChannelModeOptions().contains(normalized) ? normalized : audioChannelMode();
+    }
+
+    static QString audioInputMethod()
+    {
+        return QStringLiteral("auto");
+    }
+    static const QStringList& audioInputMethodOptions()
+    {
+        // "auto" = provider detection (pipewire/pulse probe). The rest mirror
+        // the capture backends upstream cava can be built with; the settings
+        // UI offers auto/pipewire/pulse and the remainder stay valid for
+        // hand-edited configs.
+        static const QStringList opts = {QStringLiteral("auto"), QStringLiteral("pipewire"),  QStringLiteral("pulse"),
+                                         QStringLiteral("alsa"), QStringLiteral("jack"),      QStringLiteral("sndio"),
+                                         QStringLiteral("oss"),  QStringLiteral("portaudio"), QStringLiteral("fifo"),
+                                         QStringLiteral("shmem")};
+        return opts;
+    }
+    static QString normalizeAudioInputMethod(const QString& raw)
+    {
+        const QString normalized = raw.toLower().trimmed();
+        return audioInputMethodOptions().contains(normalized) ? normalized : audioInputMethod();
+    }
+
+    static QString audioInputSource()
+    {
+        return QStringLiteral("auto");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Decoration shader Settings
+    //
+    // The group/key accessors (decorationsGroup / decorationProfileTreeKey) are
+    // inherited from ConfigKeys — no forwarding accessors needed here (same as
+    // every other group: ConfigDefaults derives from ConfigKeys).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Default DecorationProfileTree — the fallback the typed
+    /// `Settings::decorationProfileTree()` returns when the Decorations group
+    /// holds no `DecorationProfileTree` entry.
+    ///
+    /// The decoration tree is the user-applied surface-shader pack stack. Window
+    /// border and title-bar appearance are owned by the window rules, not by this
+    /// tree, so the default auto-inserts NOTHING: it is an empty/neutral tree and
+    /// every surface (window / osd / popup) starts undecorated until the user
+    /// engages a pack (e.g. glow) from the Decoration pages.
+    static ::PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree()
+    {
+        return ::PhosphorSurfaceShaders::DecorationProfileTree{};
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Decorations.Performance
+    //
+    // An animated pack repaints every window carrying it on every vsync. That
+    // never lets the GPU leave its top performance state — measured at ~110 W and
+    // +12 C over an idle desktop with the effect unloaded, on a GPU that is only
+    // ~45% busy. What costs is not the work per frame but that there IS work every
+    // frame, so these bound WHEN the chain animates, not how much it does.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Animate only the focused window's decoration; unfocused windows hold their
+    /// last composite. Divides the continuous redraw by the number of decorated
+    /// windows on screen. Off by default: it visibly changes what the desktop
+    /// looks like (only the window you are using shimmers), so it is the user's
+    /// call, not ours.
+    static bool decorationAnimateFocusedOnly()
+    {
+        return false;
+    }
+
+    /// Stop animating the decoration chain once the session has been idle for
+    /// decorationIdleTimeoutSec, and resume on the first input. On by default:
+    /// nobody is looking at an animation they walked away from, and this is where
+    /// most of the wasted power actually goes.
+    static bool decorationPauseWhenIdle()
+    {
+        return true;
+    }
+
+    /// Seconds of no input before decoration animation pauses.
+    static constexpr int decorationIdleTimeoutSec()
+    {
+        return 30;
+    }
+    static constexpr int decorationIdleTimeoutSecMin()
+    {
+        return 5;
+    }
+    static constexpr int decorationIdleTimeoutSecMax()
+    {
+        return 3600;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -879,82 +1288,9 @@ public:
     {
         return PhosphorTiles::AutotileDefaults::MaxMasterCount;
     }
-    static constexpr int autotileInnerGap()
-    {
-        return Defaults::ZonePadding;
-    }
-    static constexpr int autotileInnerGapMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileInnerGapMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static constexpr int autotileOuterGap()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static bool autotileUsePerSideOuterGap()
-    {
-        return false;
-    }
-    static int autotileOuterGapTop()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapTopMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapTopMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static int autotileOuterGapBottom()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapBottomMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapBottomMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static int autotileOuterGapLeft()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapLeftMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapLeftMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
-    static int autotileOuterGapRight()
-    {
-        return Defaults::OuterGap;
-    }
-    static constexpr int autotileOuterGapRightMin()
-    {
-        return PhosphorTiles::AutotileDefaults::MinGap;
-    }
-    static constexpr int autotileOuterGapRightMax()
-    {
-        return PhosphorTiles::AutotileDefaults::MaxGap;
-    }
+    // Autotile inner/outer gaps are unified with snapping — see innerGap() /
+    // outerGap*() above. Tiling reads the same shared accessors; no autotile-
+    // specific gap defaults remain.
     static constexpr bool autotileFocusNewWindows()
     {
         return true;
@@ -1075,110 +1411,6 @@ public:
     {
         return true;
     }
-    // Window-decoration hide/show/width/radius defaults delegate to the
-    // shared PhosphorCompositor::DecorationDefaults constants — the same
-    // symbols the effect's BorderState member-initializers use — so the
-    // daemon's persisted defaults and the effect's pre-settings-load
-    // rendering can't drift. (ZoneDefaults is the zone OVERLAY's constants,
-    // a different visual concept; the old width/radius delegation to it was
-    // an accident of equal values.) The border COLORS below intentionally
-    // remain ZoneDefaults-sourced: DecorationDefaults carries no color
-    // constants because colors are daemon-resolved (system accent) and
-    // pushed via settings — nothing renders pre-load (ShowBorder defaults
-    // false), so there is no drift concern to share symbols over.
-    static bool autotileHideTitleBars()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
-    }
-    static bool autotileShowBorder()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::ShowBorder;
-    }
-    static int autotileBorderWidth()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidth;
-    }
-    static constexpr int autotileBorderWidthMin()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMin;
-    }
-    static constexpr int autotileBorderWidthMax()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderWidthMax;
-    }
-    static int autotileBorderRadius()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadius;
-    }
-    static constexpr int autotileBorderRadiusMin()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMin;
-    }
-    static constexpr int autotileBorderRadiusMax()
-    {
-        return ::PhosphorCompositor::DecorationDefaults::BorderRadiusMax;
-    }
-    static QColor autotileBorderColor()
-    {
-        return ::PhosphorZones::ZoneDefaults::HighlightColor;
-    }
-    static QColor autotileInactiveBorderColor()
-    {
-        return ::PhosphorZones::ZoneDefaults::InactiveColor;
-    }
-    static bool autotileUseSystemBorderColors()
-    {
-        return true;
-    }
-
-    // Snapping window appearance — the snapped window's border / title-bar
-    // decoration (stored under Snapping.Appearance.*). Every default delegates to
-    // its autotile* counterpart so the two modes start from identical window
-    // appearance: a single edit to the autotile default moves both in lockstep.
-    static bool snappingHideTitleBars()
-    {
-        return autotileHideTitleBars();
-    }
-    static bool snappingShowBorder()
-    {
-        return autotileShowBorder();
-    }
-    static int snappingBorderWidth()
-    {
-        return autotileBorderWidth();
-    }
-    static constexpr int snappingBorderWidthMin()
-    {
-        return autotileBorderWidthMin();
-    }
-    static constexpr int snappingBorderWidthMax()
-    {
-        return autotileBorderWidthMax();
-    }
-    static int snappingBorderRadius()
-    {
-        return autotileBorderRadius();
-    }
-    static constexpr int snappingBorderRadiusMin()
-    {
-        return autotileBorderRadiusMin();
-    }
-    static constexpr int snappingBorderRadiusMax()
-    {
-        return autotileBorderRadiusMax();
-    }
-    static QColor snappingBorderColor()
-    {
-        return autotileBorderColor();
-    }
-    static QColor snappingInactiveBorderColor()
-    {
-        return autotileInactiveBorderColor();
-    }
-    static bool snappingUseSystemBorderColors()
-    {
-        return autotileUseSystemBorderColors();
-    }
     static int autotileStickyWindowHandling()
     {
         return 0;
@@ -1214,12 +1446,6 @@ public:
     static QRectF defaultVirtualScreenRegion()
     {
         return QRectF(0.0, 0.0, 1.0, 1.0);
-    }
-
-    /// Tolerance for validating that virtual screen regions cover the full physical screen.
-    static constexpr qreal areaCoverageTolerance()
-    {
-        return 0.05;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1302,15 +1528,6 @@ public:
     static int fillOnDropModifier()
     {
         return static_cast<int>(Qt::ControlModifier);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Update Notification Settings
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static QString dismissedUpdateVersion()
-    {
-        return QString();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1596,13 +1813,29 @@ public:
     {
         return QStringLiteral("/plasmazones/motionsets");
     }
-    /// Snapping overlay shader packs (the `data/shaders/` family — wallpaper
+    /// Snapping overlay shader packs (the `data/overlays/` family — wallpaper
     /// drift, neon-city, cosmic-flow, etc.). Mirrors the
     /// `userAnimationsSubdir()` convention so settings + daemon code share
     /// one source of truth for the on-disk location.
     static QString userOverlayShadersSubdir()
     {
-        return QStringLiteral("/plasmazones/shaders");
+        return QStringLiteral("/plasmazones/overlays");
+    }
+
+    /// Decoration sets — named snapshots of the decoration profile tree
+    /// (the surface-pack chains + parameters across all surfaces), the
+    /// decoration twin of `userMotionSetsSubdir()`.
+    static QString userDecorationSetsSubdir()
+    {
+        return QStringLiteral("/plasmazones/decorationsets");
+    }
+
+    /// Surface shader packs (the `data/surface/` family — border, etc.).
+    /// Mirrors the `userAnimationsSubdir()` convention so settings + daemon
+    /// + compositor code share one source of truth for the on-disk location.
+    static QString userSurfaceSubdir()
+    {
+        return QStringLiteral("/plasmazones/surface");
     }
 
 private:
@@ -1610,8 +1843,9 @@ private:
     ConfigDefaults() = delete;
 };
 
-// Compile-time bound checks for retuned animation defaults so a future
-// bump can never silently exceed the declared slider range. Mirrors the
+// Compile-time bound checks for defaults that declare min/max accessors,
+// so a future bump can never silently exceed the declared slider range.
+// Mirrors the
 // pattern in AnimationLimits.h where library defaults assert against
 // their own min/max. Mirrored at runtime by QVERIFY in
 // tests/unit/config/test_configdefaults.cpp; the compile-time form
@@ -1620,11 +1854,37 @@ private:
 static_assert(ConfigDefaults::animationDuration() >= ConfigDefaults::animationDurationMin()
                   && ConfigDefaults::animationDuration() <= ConfigDefaults::animationDurationMax(),
               "ConfigDefaults::animationDuration() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDurationMin()
+                  && ConfigDefaults::focusFadeDuration() <= ConfigDefaults::focusFadeDurationMax(),
+              "ConfigDefaults::focusFadeDuration() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::decorationIdleTimeoutSec() >= ConfigDefaults::decorationIdleTimeoutSecMin()
+                  && ConfigDefaults::decorationIdleTimeoutSec() <= ConfigDefaults::decorationIdleTimeoutSecMax(),
+              "ConfigDefaults::decorationIdleTimeoutSec() outside declared [min, max] slider range");
 static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin()
                   && ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax(),
               "ConfigDefaults::animationStaggerInterval() outside declared [min, max] slider range");
 static_assert(ConfigDefaults::animationSequenceMode() >= ConfigDefaults::animationSequenceModeMin()
                   && ConfigDefaults::animationSequenceMode() <= ConfigDefaults::animationSequenceModeMax(),
               "ConfigDefaults::animationSequenceMode() outside declared [min, max] range");
+// The autotile five. Every OTHER constexpr accessor that declares a [min, max] was checked
+// here and these were not, for no reason anyone could name — the guard is free, and a
+// default outside its own declared slider range is a bug the compiler can simply refuse.
+// (The many non-constexpr accessors cannot be checked this way; test_configdefaults.cpp
+// covers those at runtime.)
+static_assert(ConfigDefaults::autotileInsertPosition() >= ConfigDefaults::autotileInsertPositionMin()
+                  && ConfigDefaults::autotileInsertPosition() <= ConfigDefaults::autotileInsertPositionMax(),
+              "ConfigDefaults::autotileInsertPosition() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileMasterCount() >= ConfigDefaults::autotileMasterCountMin()
+                  && ConfigDefaults::autotileMasterCount() <= ConfigDefaults::autotileMasterCountMax(),
+              "ConfigDefaults::autotileMasterCount() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileMaxWindows() >= ConfigDefaults::autotileMaxWindowsMin()
+                  && ConfigDefaults::autotileMaxWindows() <= ConfigDefaults::autotileMaxWindowsMax(),
+              "ConfigDefaults::autotileMaxWindows() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileSplitRatio() >= ConfigDefaults::autotileSplitRatioMin()
+                  && ConfigDefaults::autotileSplitRatio() <= ConfigDefaults::autotileSplitRatioMax(),
+              "ConfigDefaults::autotileSplitRatio() outside declared [min, max] range");
+static_assert(ConfigDefaults::autotileSplitRatioStep() >= ConfigDefaults::autotileSplitRatioStepMin()
+                  && ConfigDefaults::autotileSplitRatioStep() <= ConfigDefaults::autotileSplitRatioStepMax(),
+              "ConfigDefaults::autotileSplitRatioStep() outside declared [min, max] range");
 
 } // namespace PlasmaZones

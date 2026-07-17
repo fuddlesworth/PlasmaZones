@@ -109,8 +109,24 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
     if (!w) {
         return QString();
     }
-    const QPointF c = w->frameGeometry().center();
-    return resolveEffectiveScreenId(QPoint(qRound(c.x()), qRound(c.y())), w->screen());
+    const QPointF cf = w->frameGeometry().center();
+    const QPoint c(qRound(cf.x()), qRound(cf.y()));
+
+    // Resolve the monitor by the window's POSITION — the KWin output whose geometry
+    // contains the window centre — NOT w->screen(). KWin can assign a window the
+    // wrong one of two identical-model outputs, so trusting w->screen() made the
+    // effect disagree with the daemon about which monitor a window sits on, which
+    // then bounced a snapped window off to the other monitor (Discussion #724).
+    // outputScreenId derives the id from the KWin output's OWN EDID (manufacturer /
+    // model / connector), which agrees with the daemon per-output — the bug was only
+    // the window→output trust. Mirrors the snap-assist path in snaphandler.cpp.
+    // (QScreen can't be used here: inside the compositor QScreen::manufacturer() /
+    // model() are empty, so a QScreen-derived id degrades to "::serial".)
+    const KWin::LogicalOutput* output = KWin::effects->screenAt(c);
+    if (!output) {
+        output = w->screen();
+    }
+    return resolveEffectiveScreenId(c, output);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -119,7 +135,11 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
 
 QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const KWin::LogicalOutput* output) const
 {
-    const QString physId = outputScreenId(output);
+    return resolveEffectiveScreenId(pos, outputScreenId(output));
+}
+
+QString PlasmaZonesEffect::resolveEffectiveScreenId(const QPoint& pos, const QString& physId) const
+{
     if (physId.isEmpty()) {
         return physId;
     }
@@ -322,9 +342,10 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                         continue;
                     }
                     {
-                        const QPointF cf = window->frameGeometry().center();
-                        const QPoint center(qRound(cf.x()), qRound(cf.y()));
-                        const QString newScreenId = self->resolveEffectiveScreenId(center, window->screen());
+                        // Position-based resolution (getWindowScreenId), consistent
+                        // with the daemon — do not trust window->screen() for
+                        // identical-model monitors.
+                        const QString newScreenId = self->getWindowScreenId(window);
                         if (!newScreenId.isEmpty()) {
                             it.value() = newScreenId;
                             // Also update the autotile handler's notified screen map
@@ -440,6 +461,14 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // a disconnected connector. Runs before the motion-clock early-return below
     // so it fires even for an output that never had an animation clock.
     m_lastScreenDesktop.remove(outputScreenId(output));
+
+    // Drop any live desktop-switch transition on this output. A disconnected
+    // LogicalOutput* left in the transition manager's active map would dangle:
+    // scheduleRepaints()/paintOutput() deref the key, and the fullscreen-effect
+    // claim would never release once its output vanished mid-transition. Runs
+    // before the motion-clock early-return so it fires even for an output that
+    // never had an animation clock.
+    m_desktopTransition.outputRemoved(output);
 
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the

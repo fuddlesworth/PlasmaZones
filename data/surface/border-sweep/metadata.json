@@ -1,0 +1,54 @@
+{
+    "id": "border-sweep",
+    "name": "Sweep Border",
+    "description": "Rounded corners and a window border with a moving colour sweep. Two colours circulate around the border band, and the sweep dims when the surface loses focus. Width, corner radius, sweep speed and the two colours are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Borders",
+    "providesBorder": true,
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "borderWidth",
+            "name": "Border width",
+            "type": "int",
+            "default": 2,
+            "min": 0,
+            "max": 10,
+            "description": "Thickness of the coloured border (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "sweepSpeed",
+            "name": "Sweep speed",
+            "type": "float",
+            "default": 0.25,
+            "min": 0.02,
+            "max": 2.0,
+            "description": "How many times per second the colours travel around the border"
+        },
+        {
+            "id": "colorA",
+            "name": "First colour",
+            "type": "color",
+            "default": "#ff3daee9",
+            "description": "First colour of the travelling sweep"
+        },
+        {
+            "id": "colorB",
+            "name": "Second colour",
+            "type": "color",
+            "default": "#ff9b59b6",
+            "description": "Second colour of the travelling sweep"
+        }
+    ]
+}

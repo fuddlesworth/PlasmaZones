@@ -62,7 +62,7 @@
 #include "../../../src/dbus/shaderadaptor.h"
 #include "../../../src/dbus/snapadaptor.h"
 #include "../../../src/dbus/windowdragadaptor.h"
-#include "../../../src/dbus/windowruleadaptor.h"
+#include "../../../src/dbus/ruleadaptor.h"
 #include "../../../src/dbus/windowtrackingadaptor.h"
 #include "../../../src/dbus/zonedetectionadaptor.h"
 
@@ -611,9 +611,9 @@ private Q_SLOTS:
                        {QStringLiteral("clearForCompositorReconnect")});
     }
 
-    void testWindowRulesContract()
+    void testRulesContract()
     {
-        verifyContract(WindowRuleAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.WindowRules"));
+        verifyContract(RuleAdaptor::staticMetaObject, QStringLiteral("org.plasmazones.Rules"));
     }
 
     void testZoneDetectionContract()
@@ -638,7 +638,7 @@ private Q_SLOTS:
             QStringLiteral("org.plasmazones.Overlay.xml"),       QStringLiteral("org.plasmazones.Screen.xml"),
             QStringLiteral("org.plasmazones.Settings.xml"),      QStringLiteral("org.plasmazones.Shader.xml"),
             QStringLiteral("org.plasmazones.Snap.xml"),          QStringLiteral("org.plasmazones.WindowDrag.xml"),
-            QStringLiteral("org.plasmazones.WindowRules.xml"),   QStringLiteral("org.plasmazones.WindowTracking.xml"),
+            QStringLiteral("org.plasmazones.Rules.xml"),         QStringLiteral("org.plasmazones.WindowTracking.xml"),
             QStringLiteral("org.plasmazones.ZoneDetection.xml"),
         };
         static const QSet<QString> documentedOutOfScope = {

@@ -16,6 +16,25 @@ namespace PhosphorAnimationShaders {
 
 ShaderProfile ShaderProfileTree::resolve(const QString& path) const
 {
+    // The interactive-drag leaf takes NO inherited shader. Every pack a user
+    // can assign on an ancestor ("window.movement", "window", the baseline)
+    // is a single-surface crossfade — the pickers refuse move-class packs
+    // everywhere but this leaf — and a crossfade cannot drive the held drag
+    // transition (no from/to plays while the pointer is down). Inheriting one
+    // here would install a dead transition that pins full-output repaints for
+    // the whole drag, and would show a "current shader" in settings that
+    // never visibly runs. Only a direct override at the leaf applies; timing
+    // inheritance is unaffected (that lives in the motion ProfileTree).
+    // Membership is defined by shaderPathResolvesInIsolation (below) so UI
+    // helpers that reason about shadowing share the resolver's definition.
+    if (shaderPathResolvesInIsolation(path)) {
+        ShaderProfile effective;
+        auto it = m_overrides.constFind(path);
+        if (it != m_overrides.constEnd())
+            ShaderProfile::overlay(effective, it.value());
+        return effective.withDefaults();
+    }
+
     QStringList chain;
     QString cursor = path;
     while (!cursor.isEmpty()) {
@@ -145,6 +164,15 @@ bool ShaderProfileTree::operator==(const ShaderProfileTree& other) const
             return false;
     }
     return true;
+}
+
+bool shaderPathResolvesInIsolation(const QString& path)
+{
+    // Exactly the interactive-drag leaf today — see the resolve() note above.
+    // Any future leaf that opts out of the walk-up overlay joins this
+    // predicate so resolve() and every shadowing-aware consumer move in
+    // lockstep.
+    return path == PhosphorAnimation::ProfilePaths::WindowMove;
 }
 
 ShaderProfile resolveShaderWithDefault(const ShaderProfileTree& tree, const QString& path)

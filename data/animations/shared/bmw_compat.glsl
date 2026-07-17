@@ -50,23 +50,30 @@
 // `layout(location = 0) out vec4 fragColor;` BEFORE this include for
 // `iTexCoord` and `setOutputColor` to compile.
 //
-// Helpers from BMW's common.glsl that overlap with our LGPL
-// `<noise.glsl>` (`hash22`, `simplex2D`, `simplex2DFractal`) are NOT
-// re-defined here — those are byte-equivalent independent ports of
-// the same Inigo Quilez patterns. Include `<noise.glsl>` separately
-// when a BMW shader needs them. The combined-work license stays
-// GPL-3.0-or-later because this file pulls in BMW-derived bodies.
+// This file includes `<noise.glsl>` directly (see the include below), so
+// its `hash22`, `simplex2D`, `simplex2DFractal`, and `hash12` are in scope
+// for every BMW shader without a separate include — those are byte-equivalent
+// independent ports of the same Inigo Quilez patterns, and `hash12` in
+// particular is now sourced from noise.glsl rather than duplicated here. The
+// combined-work license stays GPL-3.0-or-later because this file also pulls
+// in BMW-derived bodies.
 //
-// Hash coverage: only `hash11` and `hash33` (the inputs simplex3D
-// needs) are mirrored from BMW. The other hashNN variants in BMW's
-// common.glsl (`hash12`, `hash13`, `hash21`, `hash23`, `hash31`,
-// `hash32`, `hash41..44`) are not ported here — a future shader that
-// needs one keeps its own file-scope copy until enough consumers
-// justify lifting it. `hash22` is provided by `<noise.glsl>` and is
-// byte-equivalent to BMW's; reuse that instead of defining a local.
+// Hash coverage: only `hash11` and `hash33` (the inputs simplex3D needs) are
+// mirrored from BMW here. The other hashNN variants in BMW's common.glsl
+// (`hash13`, `hash21`, `hash23`, `hash31`, `hash32`, `hash41..44`) are not
+// ported — a future shader that needs one keeps its own file-scope copy until
+// enough consumers justify lifting it.
 
 #ifndef PHOSPHOR_BMW_COMPAT_GLSL
 #define PHOSPHOR_BMW_COMPAT_GLSL
+
+// Shared LGPL primitives this shim builds on: `hash12`, `hash22`, and the
+// simplex-noise helpers live in noise.glsl; the four easing curves live in
+// easing.glsl. Including both here means every BMW shader gets them without a
+// separate include (noise.glsl's guard makes a redundant include harmless). A
+// GPL work including LGPL headers is fine.
+#include <noise.glsl>
+#include <easing.glsl>
 
 // ── Uniform-name aliases ─────────────────────────────────────────────
 #define iTexCoord     vTexCoord
@@ -92,8 +99,14 @@ vec4 getInputColor(vec2 coords) {
     return color;
 }
 
+// Routes through PZ_FINALIZE_COLOR (identity by default; the kwin-effect
+// window-animation path overrides it with the sRGB → output-colorspace
+// conversion) so BMW packs with a hand-written main() — which bypass the
+// entry scaffold's generated fragColor write — still get colour-managed
+// on HDR. The macro comes from animation_uniforms.glsl, which the caller
+// contract above already requires be included before this header.
 void setOutputColor(vec4 outColor) {
-    fragColor = vec4(outColor.rgb * outColor.a, outColor.a);
+    fragColor = PZ_FINALIZE_COLOR(vec4(outColor.rgb * outColor.a, outColor.a));
 }
 
 // ── Composition: BMW common.glsl:189 verbatim ───────────────────────
@@ -105,16 +118,10 @@ vec4 alphaOver(vec4 under, vec4 over) {
     return vec4(mix(under.rgb * under.a, over.rgb, over.a) / alpha, alpha);
 }
 
-// ── Easing curves: BMW common.glsl verbatim ─────────────────────────
-float easeOutQuad(float x) { return -1.0 * x * (x - 2.0); }
-float easeInQuad(float x)  { return x * x; }
-float easeOutCubic(float t) {
-    float f = t - 1.0;
-    return f * f * f + 1.0;
-}
-float easeInOutCubic(float t) {
-    return t < 0.5 ? 4.0 * t * t * t : (t - 1.0) * (2.0 * t - 2.0) * (2.0 * t - 2.0) + 1.0;
-}
+// ── Easing curves ────────────────────────────────────────────────────
+// easeOutQuad / easeInQuad / easeOutCubic / easeInOutCubic now live in the
+// shared LGPL easing.glsl (included above); the canonical Penner bodies
+// (the same forms BMW uses) are unchanged there.
 
 // ── Hue rotation: BMW common.glsl:218 verbatim ──────────────────────
 vec3 offsetHue(vec3 color, float hueOffset) {
@@ -225,16 +232,10 @@ float simplex3DFractal(vec3 m) {
            0.0666667 * simplex3D(8.0 * m);
 }
 
-// ── hash12: BMW common.glsl:489 verbatim ────────────────────────────
-// 1D hash from vec2 input using BMW's IQ-style `fract(p3 * 0.1031)`
-// chain (distinct from `noise.glsl::niriHash`'s `sin(dot(...))`
-// pattern). Used by aura-glow, tv-glitch, and wisps; lifted to
-// remove the per-shader duplicates.
-float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
-}
+// ── hash12 ──────────────────────────────────────────────────────────
+// hash12 (BMW's IQ-style `fract(p3 * 0.1031)` chain, byte-equivalent to
+// BMW common.glsl:489) now lives in the shared LGPL noise.glsl, included
+// above. BMW shaders that need it (tv-glitch, wisps) resolve it from there.
 
 // ── tritone: BMW common.glsl:201 verbatim ───────────────────────────
 // Maps val ∈ [0, 1] to a 3-color gradient (shadows → midtones →

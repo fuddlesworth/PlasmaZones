@@ -26,37 +26,21 @@ NavigationHandler::NavigationHandler(PlasmaZonesEffect* effect, QObject* parent)
 // Floating window tracking — sync methods use D-Bus helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void NavigationHandler::syncFloatingWindowsFromDaemon()
+void NavigationHandler::seedFloatingWindows(const QStringList& floatingIds)
 {
-    if (!m_effect->isDaemonReady("sync floating windows")) {
-        return;
+    // Bulk re-seed from a daemon snapshot: clear stale entries (so a reconnect
+    // drops windows the daemon no longer reports as floating) and write the cache
+    // DIRECTLY, without the per-window rule invalidation setWindowFloating would
+    // run. The caller pairs this with a single invalidateAllRuleCaches, mirroring
+    // the direct m_zoneCache writes in syncZonesFromDaemon.
+    m_floatingCache.clear();
+    for (const QString& id : floatingIds) {
+        m_floatingCache.insert(id);
     }
-
-    QDBusPendingCall pendingCall = PhosphorProtocol::ClientHelpers::asyncCall(
-        PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
-    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
-
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-
-        QDBusPendingReply<QStringList> reply = *w;
-        if (!reply.isValid()) {
-            qCDebug(lcEffect) << "Failed to get floating windows from daemon";
-            return;
-        }
-
-        QStringList floatingIds = reply.value();
-        m_floatingCache.clear();
-
-        for (const QString& id : floatingIds) {
-            m_floatingCache.insert(id);
-        }
-
-        // Report the count of synced entries, not m_floatingCache.size() — the
-        // latter sums the instance and app-wide keyspaces and would misreport when
-        // both carry entries for the same app.
-        qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
-    });
+    // Report the count of synced entries, not m_floatingCache.size() — the latter
+    // sums the instance and app-wide keyspaces and would misreport when both
+    // carry entries for the same app.
+    qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
 }
 
 void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)
@@ -77,11 +61,11 @@ void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)
         QDBusPendingReply<bool> reply = *w;
         if (reply.isValid()) {
             bool floating = reply.value();
+            // Per-window sync goes through setWindowFloating so a real change
+            // re-resolves this window's IsFloating-scoped rules.
+            setWindowFloating(windowId, floating);
             if (floating) {
-                m_floatingCache.insert(windowId);
                 qCDebug(lcEffect) << "Synced floating state for window" << windowId << "- is floating";
-            } else {
-                m_floatingCache.remove(windowId);
             }
         }
         w->deleteLater();
@@ -110,24 +94,76 @@ void NavigationHandler::syncZonesFromDaemon()
         QDBusPendingReply<PhosphorProtocol::WindowStateList> reply = *w;
         if (!reply.isValid()) {
             qCDebug(lcEffect) << "Failed to get window states from daemon";
+            // The unconditional clear above still changed the IsSnapped / Zone
+            // match inputs, so the stale placement-scoped verdicts must drop
+            // (and zone-scoped layer rules release via the sweep inside) on
+            // the failure path too — mirrors the getFloatingWindows reply
+            // handler in daemon_bringup.cpp, which documents the same
+            // invalid-reply reasoning. The border sweep re-folds every
+            // decorated window's placement-scoped appearance slots (opacity,
+            // tint, border colour) against the cleared placement — the cache
+            // clear alone revives nothing now that those slots bake at
+            // updateWindowDecoration time.
+            m_effect->invalidateAllRuleCaches();
+            m_effect->scheduleBorderSweep();
             return;
         }
 
         // Seed every snapped window's zone. A window with an empty zoneId (floating
-        // / unmanaged) carries no entry. setWindowZone keys by instanceId (see header).
+        // / unmanaged) carries no entry. Write the cache DIRECTLY (not setWindowZone)
+        // so this bulk re-seed doesn't enqueue a per-window rule invalidation for
+        // each window — the single invalidateAllRuleCaches below covers the whole
+        // batch. setZone keys by instanceId (see ZoneCache).
         const PhosphorProtocol::WindowStateList states = reply.value();
         for (const PhosphorProtocol::WindowStateEntry& state : states) {
             if (!state.zoneId.isEmpty()) {
-                setWindowZone(state.windowId, state.zoneId);
+                m_zoneCache.setZone(state.windowId, state.zoneId);
             }
         }
         qCDebug(lcEffect) << "Synced" << zoneEntryCount() << "snapped-window zones from daemon";
-        // Re-seeding the zone cache changes the IsSnapped / Zone match inputs; drop
-        // the stale placement-scoped opacity verdicts so a `WHEN isSnapped` /
-        // `Zone(...)` SetOpacity rule re-resolves against the fresh state on the
-        // next frame (mirrors the daemon-loss invalidation).
+        // Re-seeding the zone cache changes the IsSnapped / Zone match inputs;
+        // drop the stale placement-scoped verdicts, then schedule a border
+        // sweep so every decorated window re-folds its appearance slots (a
+        // `WHEN isSnapped` / `Zone(...)` SetOpacity or border rule bakes into
+        // the decoration at updateWindowDecoration time, so a cache clear
+        // without a rebuild would leave the folded values stale). The sweep
+        // is coalesced, so this and the getFloatingWindows re-seed collapse
+        // into one updateAllDecorations pass.
         m_effect->invalidateAllRuleCaches();
+        m_effect->scheduleBorderSweep();
     });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Placement-state writes — each re-resolves the window's rules on a real change.
+//
+// These are the single chokepoints for the IsFloating / IsSnapped / Zone / Mode
+// rule-match inputs. Welding the invalidation to the write (rather than asking
+// every caller to remember a follow-up invalidateRuleCacheForStateChange) is what
+// keeps a placement change from silently leaving a scoped border / title-bar /
+// opacity rule resolved against stale state. The cache setters return whether the
+// value actually changed, so a redundant re-assert costs nothing.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void NavigationHandler::setWindowFloating(const QString& windowId, bool floating)
+{
+    if (m_floatingCache.setFloating(windowId, floating)) {
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
+}
+
+void NavigationHandler::setWindowZone(const QString& windowId, const QString& zoneId)
+{
+    if (m_zoneCache.setZone(windowId, zoneId)) {
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
+}
+
+void NavigationHandler::clearWindowZone(const QString& windowId)
+{
+    if (m_zoneCache.remove(windowId)) {
+        m_effect->invalidateRuleCacheForStateChange(windowId);
+    }
 }
 
 } // namespace PlasmaZones

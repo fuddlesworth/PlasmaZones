@@ -137,6 +137,10 @@ void Daemon::connectScreenSignals()
                             GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
                     }
                 }
+                // Record the new screen's resolved assignment so a later
+                // (unrelated) rule edit doesn't diff it as a change and
+                // spuriously resnap it — the screen-add path lays it out here.
+                diffActiveAssignments();
             });
 
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenRemoved, this,
@@ -163,6 +167,15 @@ void Daemon::connectScreenSignals()
                     m_layoutManager->clearCurrentVirtualDesktopForScreen(removedScreenId);
                 }
 
+                // The snap engine's per-(screen,desktop,activity) stores are created
+                // lazily on placement, not from an autotile-screens set, so the removed
+                // output's stores must be pruned explicitly here (autotile self-prunes
+                // via updateAutotileScreens). Matches every virtual sub-screen of the
+                // removed physical id.
+                if (m_snapEngine) {
+                    m_snapEngine->pruneStatesForRemovedScreen(removedScreenId);
+                }
+
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
                 PhosphorScreens::ScreenIdentity::invalidateEdidCache(removedName);
 
@@ -179,6 +192,10 @@ void Daemon::connectScreenSignals()
                         layout->setAllowedScreens(allowed);
                     }
                 }
+                // Drop the removed screen from the assignment snapshot so it
+                // doesn't linger as a stale entry (kept consistent with the
+                // add / context-switch / apply refresh points).
+                diffActiveAssignments();
             });
 
     connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenGeometryChanged, this, [this] {
@@ -253,6 +270,12 @@ void Daemon::connectDesktopActivity()
                 if (m_autotileEngine) {
                     m_autotileEngine->setCurrentDesktopForScreen(screenId, desktop);
                 }
+                // Feed the SAME per-output desktop into the snap engine so its
+                // per-(screen,desktop,activity) key tracker resolves the right store
+                // (symmetric with autotile; per-monitor keying is the #724 fix).
+                if (m_snapEngine) {
+                    m_snapEngine->setCurrentDesktopForScreen(screenId, desktop);
+                }
                 // [SEQ D] Per-screen layout/overlay resolution context. The
                 // overlay service delegates to the layout registry for per-output
                 // desktop resolution, so this one push drives both (#648).
@@ -266,6 +289,11 @@ void Daemon::connectDesktopActivity()
                 }
                 // OSD on the ONE screen that switched (#648).
                 showDesktopSwitchOsdForScreen(screenId, currentActivity());
+                // A context switch lays out its own (different) windows, so
+                // refresh the active-assignment snapshot without applying —
+                // otherwise the next rule edit would diff the new-context
+                // assignment against the old and falsely re-resnap this screen.
+                diffActiveAssignments();
             });
 
     // Prune stale PhosphorTiles::TilingState entries and disabled-desktop numbers when desktops are removed
@@ -293,16 +321,19 @@ void Daemon::connectDesktopActivity()
                     }
                 }
 
-                if (m_autotileEngine) {
-                    // Desktop numbers are 1-based. Any state with desktop > newCount
-                    // is stale. desktopsWithActiveState() returns the set of desktops
-                    // currently holding tiling state — we filter that for anything
-                    // past the new count and prune, avoiding the arbitrary upper
-                    // bound of the old newCount+20 sweep.
-                    const QSet<int> active = m_autotileEngine->desktopsWithActiveState();
+                // Desktop numbers are 1-based. Any state with desktop > newCount is
+                // stale. desktopsWithActiveState() returns the desktops currently
+                // holding state — filter for anything past the new count and prune,
+                // avoiding the arbitrary upper bound of the old newCount+20 sweep. Both
+                // per-monitor engines carry their own stores, so prune both.
+                for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_snapEngine.get()}) {
+                    if (!engine) {
+                        continue;
+                    }
+                    const QSet<int> active = engine->desktopsWithActiveState();
                     for (int d : active) {
                         if (d > newCount) {
-                            m_autotileEngine->pruneStatesForDesktop(d);
+                            engine->pruneStatesForDesktop(d);
                         }
                     }
                 }
@@ -317,6 +348,9 @@ void Daemon::connectDesktopActivity()
     m_layoutManager->setCurrentVirtualDesktop(initialDesktop);
     if (m_autotileEngine) {
         m_autotileEngine->setCurrentDesktop(initialDesktop);
+    }
+    if (m_snapEngine) {
+        m_snapEngine->setCurrentDesktop(initialDesktop);
     }
 
     // Initialize and start activity manager
@@ -348,8 +382,12 @@ void Daemon::connectDesktopActivity()
                 }
             }
 
-            if (m_autotileEngine) {
-                m_autotileEngine->pruneStatesForActivities(activities);
+            // Both per-monitor engines carry their own per-(screen,desktop,activity)
+            // stores, so prune removed activities from both.
+            for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_snapEngine.get()}) {
+                if (engine) {
+                    engine->pruneStatesForActivities(activities);
+                }
             }
             pruneContextMapsForActivities(validSet);
         });
@@ -360,6 +398,9 @@ void Daemon::connectDesktopActivity()
         m_layoutManager->setCurrentActivity(initialActivity);
         if (m_autotileEngine) {
             m_autotileEngine->setCurrentActivity(initialActivity);
+        }
+        if (m_snapEngine) {
+            m_snapEngine->setCurrentActivity(initialActivity);
         }
 
         // Connect activity changes: update all components
@@ -386,6 +427,9 @@ void Daemon::connectDesktopActivity()
                     if (m_autotileEngine) {
                         m_autotileEngine->setCurrentActivity(activityId);
                     }
+                    if (m_snapEngine) {
+                        m_snapEngine->setCurrentActivity(activityId);
+                    }
                     // Per-activity assignments may differ — recompute autotile screens
                     updateAutotileScreens();
                     // Sync mode, layout filter, and controller state from per-activity assignments.
@@ -395,6 +439,11 @@ void Daemon::connectDesktopActivity()
                     }
 
                     showDesktopSwitchOsd(activityId);
+                    // Refresh the active-assignment snapshot for the new activity
+                    // context (no apply — the switch handles its own windows) so a
+                    // later rule edit doesn't falsely re-resnap. Mirrors the
+                    // per-screen desktop-switch handler above.
+                    diffActiveAssignments();
                 });
     }
 }
@@ -592,7 +641,17 @@ void Daemon::connectShortcutSignals()
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         updateLayoutFilterForScreen(screenId);
         m_overlayService->showLayoutPicker(screenId);
-        if (m_windowDragAdaptor) {
+        // Bind the picker's KGlobalAccel grabs only if the picker actually
+        // became visible. showLayoutPicker() bails without setting
+        // m_layoutPickerVisible when the screen, shell, or layout list is
+        // missing, and the only releaser of the nav grabs is
+        // layoutPickerDismissed, which never fires for an invisible picker —
+        // so binding on a failed show would leak the Escape + arrow/Return/Enter
+        // grabs system-wide (swallowed even over fullscreen games) until the
+        // next successful open+dismiss or a compositor reconnect. Re-press of an
+        // already-visible picker is fine: isLayoutPickerVisible() is true and
+        // registration is idempotent.
+        if (m_windowDragAdaptor && m_overlayService->isLayoutPickerVisible()) {
             m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
             // Picker navigation accels — registered while picker is
             // shown, dropped on dismiss. The unified PassiveOverlayShell
@@ -626,14 +685,13 @@ void Daemon::connectShortcutSignals()
                 }
             });
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
-        // Only release the Escape grab if no drag is currently active —
-        // otherwise the in-progress drag's own cancel-overlay shortcut
-        // would be torn down underneath it. WindowDragAdaptor's drag-end
-        // path will release on its own when appropriate.
-        if (m_windowDragAdaptor && !m_windowDragAdaptor->isDragActive()) {
-            m_windowDragAdaptor->releaseCancelOverlayShortcut();
-        }
+        // Release the shared Escape grab only when no other consumer (snap
+        // assist) still needs it — releaseCancelOverlayShortcutIfIdle() is the
+        // canonical cross-consumer guard (the picker is already hidden by the
+        // time this fires). The 6 picker-nav grabs are picker-only, so always
+        // drop them.
         if (m_windowDragAdaptor) {
+            m_windowDragAdaptor->releaseCancelOverlayShortcutIfIdle();
             m_windowDragAdaptor->releaseLayoutPickerNavShortcuts();
         }
     });
@@ -817,6 +875,18 @@ void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenI
         if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key().screenId) == physicalScreenId
             && !keepIds.contains(it.key().screenId)) {
             it = m_lastAutotileOrders.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // The per-screen tiled-count cache (the placementChanged re-resolve gate) is
+    // keyed by the same screen ids, so prune it on the same boundary to keep it
+    // from accumulating dead entries across virtual-screen reconfigures.
+    for (auto it = m_lastTiledCountByScreen.begin(); it != m_lastTiledCountByScreen.end();) {
+        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) == physicalScreenId
+            && !keepIds.contains(it.key())) {
+            it = m_lastTiledCountByScreen.erase(it);
         } else {
             ++it;
         }

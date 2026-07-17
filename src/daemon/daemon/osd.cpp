@@ -32,6 +32,8 @@
 #include "phosphor_i18n.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include <utility>
+
 namespace PlasmaZones {
 
 namespace {
@@ -81,6 +83,19 @@ bool Daemon::isOverlayVisible() const
 void Daemon::clearHighlight()
 {
     m_zoneDetector->clearHighlights();
+}
+
+void Daemon::armResnapOsdSuppression(int count)
+{
+    if (count <= 0) {
+        return;
+    }
+    // ADD, never clobber: overlapping async resnap streams each pre-arm before
+    // emitting, and their feedbacks drain this counter one-by-one. Overwriting
+    // would drop a concurrent stream's outstanding count (one OSD wrongly shown,
+    // a later one wrongly suppressed). The watchdog floors a stuck count.
+    m_suppressResnapOsd += count;
+    m_suppressResnapOsdWatchdog.start();
 }
 
 bool Daemon::shouldSuppressOsd() const
@@ -287,7 +302,10 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             int windowCount = 0;
             int masterCount = 1;
             if (m_autotileEngine) {
-                const auto* state = m_autotileEngine->stateForScreen(screenId);
+                // const overload: a non-creating lookup. The non-const overload
+                // would lazily allocate an empty TilingState for a known screen
+                // during this read-only OSD preview build.
+                const auto* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
                 if (state) {
                     windowCount = state->tiledWindowCount();
                     masterCount = state->masterCount();

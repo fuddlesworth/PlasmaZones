@@ -18,8 +18,8 @@ using PhosphorEngine::ZoneAssignmentEntry;
 void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
                                 SnapIntent intent, int virtualDesktop)
 {
-    Q_ASSERT(m_snapState);
-    if (!m_snapState) {
+    Q_ASSERT(m_globals);
+    if (!m_globals) {
         return;
     }
     Q_ASSERT(!zoneIds.isEmpty());
@@ -41,9 +41,15 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
         }
     }
 
-    // A RouteToDesktop placement pins the assignment to its destination desktop
-    // (virtualDesktop >= 1); every other commit path records on the window's
-    // current desktop. Tracking the right desktop keeps zone occupancy, snap-assist,
+    // A pinned desktop (virtualDesktop >= 1) is preserved as-is: RouteToDesktop
+    // placements pin their destination desktop, and resnap batch entries pin each
+    // window's recorded desktop (ZoneAssignmentEntry::virtualDesktop) so a
+    // cross-desktop batch never re-stamps an off-desktop window. Unpinned (0)
+    // commits record on the window's current desktop — which means a window whose
+    // RECORDED desktop was 0 (all-desktops) re-records on the current desktop when
+    // a resnap batch re-commits it; desktop-0 stickiness is not round-tripped here
+    // (sticky visibility itself is separate WTS state), matching the pre-batch
+    // behaviour. Tracking the right desktop keeps zone occupancy, snap-assist,
     // and empty-zone detection correct on both the source and destination desktops.
     const int assignmentDesktop = virtualDesktop >= 1 ? virtualDesktop : currentVirtualDesktopForScreen(screenId);
     if (zoneIds.size() > 1) {
@@ -106,15 +112,15 @@ void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList&
 
 void SnapEngine::uncommitSnap(const QString& windowId)
 {
-    Q_ASSERT(m_snapState);
-    if (!m_snapState) {
+    Q_ASSERT(m_globals);
+    if (!m_globals) {
         return;
     }
     if (windowId.isEmpty()) {
         return;
     }
 
-    const QString previousZoneId = m_snapState->zoneForWindow(windowId);
+    const QString previousZoneId = zoneForWindow(windowId);
     if (previousZoneId.isEmpty()) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "uncommitSnap: window not in any zone:" << windowId;
         return;
@@ -141,11 +147,11 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
     }
 
     // Every non-restore entry below routes through commitSnap/commitMultiZoneSnap,
-    // which require a live m_snapState. Guard the whole batch symmetrically with
+    // which require a live engine. Guard the whole batch symmetrically with
     // commitSnapImpl/uncommitSnap rather than doing the full per-entry resolution
     // pass against a half-dead engine.
-    Q_ASSERT(m_snapState);
-    if (!m_snapState) {
+    Q_ASSERT(m_globals);
+    if (!m_globals) {
         return geometries;
     }
 
@@ -227,9 +233,9 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
         }
 
         if (entry.targetZoneIds.size() > 1) {
-            commitMultiZoneSnap(entry.windowId, entry.targetZoneIds, screenId, intent);
+            commitMultiZoneSnap(entry.windowId, entry.targetZoneIds, screenId, intent, entry.virtualDesktop);
         } else {
-            commitSnap(entry.windowId, entry.targetZoneId, screenId, intent);
+            commitSnap(entry.windowId, entry.targetZoneId, screenId, intent, entry.virtualDesktop);
         }
         resolvedScreens.append(screenId);
     }

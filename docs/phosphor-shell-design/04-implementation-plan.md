@@ -890,54 +890,94 @@ A bounded timeout guards step 3 (see Risks) so a missing or slow lock never wedg
 
 **Goal:** end-user-visible building blocks that we'll glue together in Phase 4. Each is a runnable demo, not a real shell surface yet.
 
-### 3.1: `Phosphor*` atom library
+### 3.1: `Phosphor*` atom library *(in progress)*
 
-| Deliverable                                                                  | Notes                                                                            |
-|------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| `qml/Phosphor/Widgets/` (or `libs/phosphor-shell-widgets/qml/`)              | `PhosphorButton`, `PhosphorSlider`, `PhosphorTextField`, `PhosphorCard`, `PhosphorRipple`, `PhosphorPill`, `ElevationShadow`, `StateLayer`, `Motion`-aware transitions |
-| `examples/phosphor-widgets-kitchen-sink/`                                    | One window listing every atom in every state (default / hover / pressed / focused / disabled). Theme-switch button at top. |
+Lives in a dedicated `libs/phosphor-shell-widgets/` library shipping the `Phosphor.Widgets` QML module (chosen over folding the atoms into `phosphor-shell` so the seam stays clean and the library-first philosophy holds). `StateLayer` and `Motion` are NOT re-created here: they already ship as singletons in `phosphor-theme`'s `Phosphor.Theme` module, and the atoms consume them directly. The new components are the seven below.
+
+| Deliverable                                                                  | Status | Notes                                                                            |
+|------------------------------------------------------------------------------|--------|----------------------------------------------------------------------------------|
+| `libs/phosphor-shell-widgets/qml/Phosphor/Widgets/`                          | scaffolded | `PhosphorButton` (4 variants), `PhosphorSlider`, `PhosphorTextField`, `PhosphorCard`, `PhosphorPill`, `PhosphorRipple` (shared hover/press state-layer + touch ripple), `ElevationShadow` (M3 levels 0-5, used as a `layer.effect`). Pure QML; all colours via `Theme.*`, all timing via `Motion.*`, all state opacities via `StateLayer.*`. |
+| `libs/phosphor-shell-widgets/{CMakeLists.txt, …Config.cmake.in, README.md}`  | scaffolded | Static QML module mirroring the `phosphor-theme` / `phosphor-popout` split (glue TU + `qt_add_qml_module`, `IMPORTS Phosphor.Theme QtQuick.Effects`, links the theme QML plugin). Canonical phosphor-* README. |
+| `libs/phosphor-shell-widgets/tests/`                                         | scaffolded | QtQuickTest harness (`tst_atoms.qml`) pinning each atom's default property surface + the pure logic (slider ratio clamp, `from == to` safety, elevation level clamp). Offscreen QPA, ctest-integrated. |
+| `examples/phosphor-widgets-kitchen-sink/`                                    | scaffolded | One scrollable window listing every atom in enabled/disabled states; hover/press/focus are live on the enabled specimens. Header cycles the accent token (`applyTokens`) and resets the palette to prove live retinting. |
 
 **Acceptance:** every atom respects the theme tokens; states use M3 state-layer opacities; ripple uses Motion timing.
+- [ ] Build + kitchen-sink demo runnable (pending a `-DBUILD_PHOSPHOR_SHELL=ON` build on a KDE/Qt host)
+- [ ] Accent cycle retints every atom live
+- [x] All colours/timing/state opacities route through `Theme` / `Motion` / `StateLayer` (no literals)
+
+**Known limitation:** `PhosphorRipple`'s expanding circle is not rounded-clipped (`Item.clip` is rectangular). The resting state-layer tint honours `radius`. Adopts the shared rounded-clip primitive when 3.2 lands.
 
 **Effort:** M (~2 weeks)
 
 ### 3.2: `ConnectedCorner` / `ConnectedShape` / `BarCanvas`
 
-The connected-corner geometry primitive, central to the visual identity.
+The connected-corner geometry primitive, central to the visual identity. *(scaffolded)*
 
-| Deliverable                                                                          | Notes                                                                                   |
-|--------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
-| `qml/Phosphor/Widgets/{ConnectedShape,ConnectedCorner,BarCanvas}.qml`               | QML `Shape` + JS geometry (`ConnectorGeometry.js`). Sockets are a binding; geometry recomputes on socket change with `Behavior on …` Motion easing. |
-| `examples/phosphor-bar-canvas-demo/`                                                 | A standalone bar with one button that opens a popout. The popout grows out of the bar with the inverted-corner join, exactly the animation from `mockups/control-center.svg`. |
+Lives in `phosphor-shell-widgets` alongside the 3.1 atoms (same `Phosphor.Widgets` module), so the bar surface and the widgets it hosts share one import.
+
+| Deliverable                                                                          | Status | Notes                                                                                   |
+|--------------------------------------------------------------------------------------|--------|-----------------------------------------------------------------------------------------|
+| `qml/Phosphor/Widgets/ConnectorGeometry.js`                                          | scaffolded | `.pragma library` path math: builds the SVG `d` string for the bar outline weaving sockets into its bottom edge (convex pocket-floor corners, concave/inverted top corners, sweep flags matching the mockups). Degrades to a flat edge at `depth <= 0.5`. |
+| `qml/Phosphor/Widgets/ConnectedShape.qml`                                            | scaffolded | Generic `Shape` + `ShapePath` + `PathSvg` painter for a path string; `CurveRenderer` antialiasing; theme fill retints live. The renderer behind `BarCanvas`. |
+| `qml/Phosphor/Widgets/ConnectedCorner.qml`                                           | scaffolded | Standalone concave / convex quarter-fillet primitive for hand-composing joins. |
+| `qml/Phosphor/Widgets/BarCanvas.qml`                                                 | scaffolded | Bar surface: `sockets` ([{x,width,depth}]) drives the path; default children land in the bar strip; `pathData` exposed for tests. The host animates a socket's `depth` to morph the shape. |
+| `examples/phosphor-bar-canvas-demo/`                                                 | scaffolded | Floating bar with a "Control Center" button. Toggling it grows a centred popout out of the bar with the inverted-corner join (the `control-center.svg` animation). Routes through a real `PopoutController` via a minimal `SocketPopoutTransport`; pocket content reuses the 3.1 atoms. |
+| `libs/phosphor-shell-widgets/tests/tst_connector.qml`                                | scaffolded | Geometry contract via `BarCanvas.pathData`: 4 arcs socketless, 8 with an open socket, exactly one sweep-0 (left inverted) corner, zero-depth collapses to flat, `implicitHeight` reserves pocket depth. |
 
 **Acceptance:** opening/closing the popout morphs the shared Shape; one popout per bar; uses `PopoutService` from Phase 1.2.
+- [x] Socket morph: `pathData` grows/collapses with `depth` (unit-tested); demo animates `depth` via `Behavior` + Motion `emphasized`.
+- [x] One popout per bar: enforced by the `PopoutController` (Cooperative, single scope).
+- [x] Uses `PopoutService`: the demo's button toggles through `PopoutController`; the socket binds the controller's open-state.
+- [x] Visual match to the mockup confirmed via an offscreen render (bar floats on the wallpaper, popout grows out of it, concave/inverted joins correct). A human eyeball pass on a live GPU session is still nice-to-have.
+
+**Note:** the demo backdrop is a darkened brand gradient (wallpaper-like) on purpose. An early flat-navy backdrop was near-identical to `surface_container`, which made the (correct) painted pocket read as an inverted notch. A real shell sits on a photo wallpaper, so this is a demo-presentation fix, not a geometry change.
 
 **Effort:** L (~3 weeks, the geometry math is the bulk)
 
-### 3.3: OSD framework + first OSDs
+### 3.3: OSD framework + first OSDs *(scaffolded)*
 
-| Deliverable                                                  | Notes                                                                                       |
-|--------------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `qml/Phosphor/OSD/OSDHost.qml`                               | Single layer-shell surface per screen. Owns timers / debounce / dedupe.                     |
-| Built-in OSDs (`VolumeOSD`, `BrightnessOSD`, `MicOSD`, `CapsLockOSD`) | Registered via `IOSDFactory`.                                                       |
-| `examples/phosphor-osd-demo/`                                | Standalone window that displays the OSD layer overlay; `phosphorctl call osd.show volume 62` triggers it. |
+Lives in a new `phosphor-shell-osd` library (module `Phosphor.OSD`), depending on theme + widgets. `OSDHost` is screen-agnostic and routed by name (compose one per monitor via `PerScreen`); the layer-shell surface is the shell's job in Phase 4, so the framework renders into whatever item it's parented to.
+
+| Deliverable                                                  | Status | Notes                                                                                       |
+|--------------------------------------------------------------|--------|---------------------------------------------------------------------------------------------|
+| `libs/phosphor-shell-osd/qml/Phosphor/OSD/OSDHost.qml`       | scaffolded | One-at-a-time OSD surface manager: hold timer, debounce/dedupe (repeat = update + restart, not recreate), state-driven opacity+scale fade (Motion tokens), and `screenName`/`targetScreen` routing. Delegates come from a `provider` (createOSD(kind, parent)). |
+| `OSDCard` + `VolumeOSD` / `BrightnessOSD` / `MicOSD` / `CapsLockOSD` | scaffolded | Shared elevated card chrome (glyph + label + optional progress) and the four built-ins (QtQuick.Shapes glyphs). Registered via `IOSDFactory` (the demo wraps each in a `QmlComponentOSDFactory` held in a `Registry<IOSDFactory>`). |
+| `libs/phosphor-shell-osd/tests/`                             | scaffolded | QtQuickTest (9 cases): creation, dedupe, kind-swap, per-screen routing, empty-target broadcast, the shown signal, and the full auto-hide lifecycle. |
+| `examples/phosphor-osd-demo/`                                | scaffolded | OSDHost overlay driven by in-window buttons and by `phosphorctl call osd.show --arg kind=volume --arg value=62` (an `osd` IpcTarget). The four OSDs come from OSDController's `Registry<IOSDFactory>`. |
 
 **Acceptance:** repeated triggers restart the timer; multi-screen routing works; theme-tinted; uses Motion tokens for fade.
+- [x] Repeat restarts the timer (dedupe path reuses the delegate; unit-tested).
+- [x] Multi-screen routing (by `screenName`/`targetScreen`; unit-tested) — one OSDHost per monitor via PerScreen in production.
+- [x] Theme-tinted + Motion-token fade (card uses theme tokens; show/hide transitions use Motion emphasized/standard).
+- [x] `phosphorctl call osd.show` triggers every OSD end-to-end (verified live against the running demo).
+
+**Note:** `OSDHost` defers delegate teardown via `Qt.callLater`. `show()` is dispatched synchronously from C++ by the IPC router (meta-object call); destroying a QML object inline inside such a call corrupts the invoked function's return-value marshalling (the caller saw `false`). Deferring the destroy fixes that and is the right place to tear down anyway. The drop shadow (ElevationShadow / MultiEffect) needs a GPU; it does not render under the headless software/offscreen path used for CI screenshots, but does on a real session.
 
 **Effort:** M (~2 weeks)
 
-### 3.4: Toast framework
+### 3.4: Toast framework *(scaffolded)*
 
-| Deliverable                                                  | Notes                                                                                            |
-|--------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
-| `qml/Phosphor/Notifications/ToastHost.qml` + `Toast.qml`     | Layer-shell surface per screen, stacks toasts top-right. Slide-in from edge, auto-dismiss, hover-to-pause. |
-| `examples/phosphor-toast-demo/`                              | Send a notification via `notify-send` and a toast appears. Uses `phosphor-service-notifications` from Phase 2.5. |
+Lives in a new `phosphor-shell-notifications` library (module `Phosphor.Notifications`), depending on theme + widgets. `ToastHost` renders into whatever it's parented to; the layer-shell surface per screen is the shell's job in Phase 4 (compose via `PerScreen`).
+
+| Deliverable                                                  | Status | Notes                                                                                            |
+|--------------------------------------------------------------|--------|--------------------------------------------------------------------------------------------------|
+| `libs/phosphor-shell-notifications/qml/Phosphor/Notifications/ToastHost.qml` | scaffolded | Top-right stack: shows up to `maxVisible`, queues the rest, dismiss + promote. Slide-in / slide-out / reflow via ListView add/remove/displaced transitions (Motion). Per-app-rules seam (`rules.evaluate(toast) -> {suppress, timeout}`). |
+| `Toast.qml`                                                  | scaffolded | A toast card: optional image, app name, summary, rich-text (`StyledText`) body, close, critical-urgency accent stripe, hover-to-pause auto-dismiss. |
+| `libs/phosphor-shell-notifications/tests/`                   | scaffolded | QtQuickTest (9 cases): show, queue beyond max, dismiss + promote, the dismissed signal, unknown-id safety, clear, and the rules seam (suppress + pass-through). |
+| `examples/phosphor-toast-demo/`                              | scaffolded | ToastHost overlay fed by a real `NotificationServer` (so `notify-send` raises a toast when this process owns the bus name) plus in-window buttons; a Do-Not-Disturb pill exercises the rules seam. |
 
 **Acceptance:** toasts queue, dismiss correctly; rich text + image support; the per-app-rules consumption seam exists and applies any rules supplied by the rules service. The rules editor and its persistence layer belong to Phase 4.3 (Notification center) and wire into this seam without changes to ToastHost.
+- [x] Queue + dismiss + promote (unit-tested).
+- [x] Rich text + image (verified in an offscreen render: bold body markup, image avatar, critical accent stripe).
+- [x] Per-app-rules seam applies (suppress unit-tested; DND pill in the demo).
+- [ ] `notify-send` → toast on a live session owning the bus name (offscreen can't own it; wired and ready for a real-session check).
+
+**Note:** toast/card backgrounds use `ElevationShadow` (MultiEffect), which needs a GPU and does not render under the headless offscreen path; content (text/image/stripe) renders regardless.
 
 **Effort:** M (~2 weeks)
 
-**Phase 3 gate:** All four examples runnable. The connected-corner bar demo is the headline, visually identical to the mockup. Tag `phosphor-ui-primitives-0.1`.
+**Phase 3 gate:** All four examples runnable (`phosphor-widgets-kitchen-sink`, `phosphor-bar-canvas-demo`, `phosphor-osd-demo`, `phosphor-toast-demo`). The connected-corner bar demo is the headline, visually identical to the mockup. Tag `phosphor-ui-primitives-0.1`.
 
 ---
 

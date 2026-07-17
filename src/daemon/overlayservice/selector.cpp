@@ -18,17 +18,33 @@
 #include "../../core/zoneselectorlayout.h"
 #include "../config/configdefaults.h"
 #include <QCursor>
+#include <QHash>
 #include <QScreen>
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
 #include <QVector>
+#include <algorithm>
+#include <utility>
 
 #include <PhosphorLayer/Surface.h>
 #include "phosphor_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
+
+namespace {
+
+/// A layout card the QML layout pass has positioned, as read back from the
+/// scene graph. `rect` is in the zone-selector slot's coordinates, matching the
+/// cursor coordinates updateSelectorPosition hit-tests with.
+struct LaidOutCard
+{
+    QQuickItem* item = nullptr;
+    QRectF rect;
+};
+
+} // namespace
 
 void OverlayService::showZoneSelector(const QString& targetScreenId)
 {
@@ -69,6 +85,10 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         }
         updateZoneSelectorWindow(screenId);
         auto* slot = state->zoneSelectorSlot();
+        // Stage d: resolve + push the zone-selector surface-shader decoration
+        // (same SurfaceDecoration host the OSD uses, retargeted to the
+        // "popup.zoneSelector" surface path). Empty source = no decoration.
+        applyDecoration(slot, QStringLiteral("popup.zoneSelector"));
         // OSD-style content lifecycle: toggle `loaded` false→true so the
         // Loader re-instantiates ZoneSelectorContent fresh per show.
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
@@ -187,7 +207,6 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         return;
     }
 
-    auto* mgr = m_screenManager;
     // Clear selection highlight on all OTHER zone selector slots when cursor
     // moves to a different VS, preventing stale highlights from previous VS.
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
@@ -235,129 +254,77 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             return;
         }
 
-        const int layoutCount = layouts.size();
-        const ZoneSelectorConfig selectorConfig =
-            m_settings ? m_settings->resolvedZoneSelectorConfig(cursorScreenId) : defaultZoneSelectorConfig();
-        // Use virtual screen geometry for layout computation when available
-        const QRect vsGeom = mgr ? mgr->screenGeometry(cursorScreenId) : QRect();
-        const QRect effectiveGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
-        const ZoneSelectorLayout layout = computeZoneSelectorLayout(selectorConfig, effectiveGeom, layoutCount);
-
-        // Get grid position from QML - it knows exactly where the content is rendered
-        int contentGridX = 0;
-        int contentGridY = 0;
-        QSizeF gridActualSize;
-
-        // Per-cell actual positions, populated from the GridLayout's child
-        // items in declaration order. Computing positions from
-        // (cellWidth + indicatorSpacing) is wrong: when the GridLayout's
-        // explicit width (= scrollContentWidth, sized for `gridColumns`
-        // columns) exceeds the natural content width (when fewer cards than
-        // gridColumns are populated), Qt distributes the slack across the
-        // populated columns. Cards 1..N-1 then drift further right than the
-        // C++ math predicts, with cumulative error per card. Reading
-        // mapRectToItem on each cell is the only way to track this exactly.
-        QVector<QRectF> cellRectsInWindow;
-        cellRectsInWindow.reserve(layouts.size());
+        // Where QML actually rendered each card, keyed by the delegate's model
+        // index. Computing positions from (cellWidth + indicatorSpacing) is
+        // wrong: when the GridLayout's explicit width (= scrollContentWidth,
+        // sized for `gridColumns` columns) exceeds the natural content width
+        // (when fewer cards than gridColumns are populated), Qt distributes the
+        // slack across the populated columns. Cards 1..N-1 then drift further
+        // right than the C++ math predicts, with cumulative error per card.
+        // Reading the rendered geometry back is the only way to track this
+        // exactly, and it has to be the CLIPPED geometry: the ScrollView clips
+        // once the list overflows, and a card scrolled out of the viewport keeps
+        // a position that would otherwise still match the cursor.
+        //
+        // Keyed by each delegate's own `index` rather than by traversal
+        // position: the grid's children are the Repeater plus its delegates, so
+        // a positional walk has to guess which children are cards, and any
+        // delegate the layout pass has not sized yet would shift every
+        // subsequent card onto the wrong entry in `layouts` — selecting a zone
+        // from one layout while recording another layout's id. Reading `index`
+        // removes the guess. The Repeater itself carries no `index` and drops
+        // out for free.
+        QHash<int, LaidOutCard> cards;
+        cards.reserve(layouts.size());
 
         // Walk the slot subtree (the shell's contentItem hosts multiple
         // sibling slot Items; rooting traversal at the zone-selector slot
         // limits results to that slot's content).
         QQuickItem* contentRoot = slot;
         if (auto* gridItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContentGrid"))) {
-            QRectF gridRect = gridItem->mapRectToItem(contentRoot, QRectF(0, 0, gridItem->width(), gridItem->height()));
-            contentGridX = qRound(gridRect.x());
-            contentGridY = qRound(gridRect.y());
-            gridActualSize = QSizeF(gridItem->width(), gridItem->height());
-
             const auto kids = gridItem->childItems();
             for (QQuickItem* cell : kids) {
                 if (!cell) {
                     continue;
                 }
-                if (cell->width() <= 0 || cell->height() <= 0) {
+                bool indexOk = false;
+                const int cardIndex = cell->property("index").toInt(&indexOk);
+                if (!indexOk || cardIndex < 0 || cardIndex >= layouts.size()) {
                     continue;
                 }
-                cellRectsInWindow.append(cell->mapRectToItem(contentRoot, QRectF(0, 0, cell->width(), cell->height())));
-                if (cellRectsInWindow.size() >= layouts.size()) {
-                    break;
-                }
+                cards.insert(cardIndex, LaidOutCard{cell, mapVisibleRectToItem(cell, contentRoot)});
             }
         }
 
         if (farMoved && lcOverlay().isDebugEnabled()) {
-            qCDebug(lcOverlay) << "selector layout:"
-                               << "columns=" << layout.columns << "rows=" << layout.rows
-                               << "cellWxH=" << layout.cellWidth << "x" << layout.cellHeight
-                               << "indicatorWxH=" << layout.indicatorWidth << "x" << layout.indicatorHeight
-                               << "spacing=" << layout.indicatorSpacing << "cardSidePad=" << layout.cardSidePadding
-                               << "cardTopMargin=" << layout.cardTopMargin << "gridOriginInWindow=(" << contentGridX
-                               << "," << contentGridY << ")"
-                               << "gridActualSize=" << gridActualSize << "predictedGridSize=("
-                               << layout.columns * layout.cellWidth + (layout.columns - 1) * layout.indicatorSpacing
-                               << "x"
-                               << layout.totalRows * layout.cellHeight
-                    + (layout.totalRows - 1) * layout.indicatorSpacing
-                               << ")";
-
-            // contentRoot is the same value resolved at line 251 above.
-            // Re-using that binding inside the debug block keeps the cell-
-            // dump traversal rooted at the slot Item.
-            if (auto* gridItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContentGrid"))) {
-                const auto kids = gridItem->childItems();
-                const int dumped = std::min<int>(kids.size(), 8);
-                for (int k = 0; k < dumped; ++k) {
-                    QQuickItem* cell = kids.at(k);
-                    if (!cell) {
-                        continue;
-                    }
-                    const QRectF cellRect =
-                        cell->mapRectToItem(contentRoot, QRectF(0, 0, cell->width(), cell->height()));
-                    qCDebug(lcOverlay) << "  actual cell[" << k << "]"
-                                       << "topLeftInWindow=(" << cellRect.x() << "," << cellRect.y() << ")"
-                                       << "size=" << cellRect.width() << "x" << cellRect.height();
+            qCDebug(lcOverlay) << "selector cards:" << cards.size() << "laid out of" << layouts.size();
+            for (int k = 0; k < std::min<int>(layouts.size(), 8); ++k) {
+                const auto dumpIt = cards.constFind(k);
+                if (dumpIt == cards.constEnd()) {
+                    qCDebug(lcOverlay) << "  card[" << k << "] not laid out";
+                } else {
+                    qCDebug(lcOverlay) << "  card[" << k << "]" << dumpIt->rect;
                 }
             }
         }
 
-        // Check each layout indicator
+        // Check each layout card. The card is the coarse filter; the zones
+        // inside it are hit-tested precisely further down.
         for (int i = 0; i < layouts.size(); ++i) {
-            int indicatorX;
-            int indicatorY;
-            if (i < cellRectsInWindow.size()) {
-                // Authoritative: read where QML actually rendered this card.
-                // The previewArea inside the LayoutCard is offset by
-                // cardSidePadding horizontally (anchors.horizontalCenter
-                // resolves to that within an Item of width
-                // indicatorWidth + 2*cardSidePadding) and cardTopMargin
-                // vertically (anchors.top + topMargin = Kirigami.Units.gridUnit
-                // in card mode).
-                const QRectF& cellRect = cellRectsInWindow.at(i);
-                indicatorX = qRound(cellRect.x()) + layout.cardSidePadding;
-                indicatorY = qRound(cellRect.y()) + layout.cardTopMargin;
-            } else {
-                // Fallback when QML traversal missed: derive from layout math.
-                // Hits the same drift bug as before, but only fires when the
-                // child enumeration produced fewer cells than expected (e.g.
-                // before the first frame is laid out).
-                int row = (layout.columns > 0) ? (i / layout.columns) : 0;
-                int col = (layout.columns > 0) ? (i % layout.columns) : 0;
-                indicatorX = contentGridX + col * (layout.cellWidth + layout.indicatorSpacing) + layout.cardSidePadding;
-                indicatorY = contentGridY + row * (layout.cellHeight + layout.indicatorSpacing) + layout.cardTopMargin;
+            // Only cards QML has actually laid out can be hit. Deriving a card
+            // box from layout math instead drifted twice over: LayoutCard offsets
+            // the preview from the card's top by Kirigami.Units.gridUnit, which
+            // tracks the user's font metrics rather than the 18 the C++ side used
+            // to hardcode, and the GridLayout redistributes slack across populated
+            // columns (see the card walk above). Before the first layout pass
+            // nothing is painted, so there is correctly nothing to select.
+            const auto cardIt = cards.constFind(i);
+            if (cardIt == cards.constEnd()) {
+                continue;
             }
+            const QRectF& cardRect = cardIt->rect;
 
-            if (farMoved && lcOverlay().isDebugEnabled()) {
-                qCDebug(lcOverlay) << "  card[" << i << "]"
-                                   << "indicator=(" << indicatorX << "," << indicatorY << ")"
-                                   << "size=" << layout.indicatorWidth << "x" << layout.indicatorHeight
-                                   << "containsCursor="
-                                   << (localX >= indicatorX && localX < indicatorX + layout.indicatorWidth
-                                       && localY >= indicatorY && localY < indicatorY + layout.indicatorHeight);
-            }
-
-            // Check if cursor is over this indicator
-            if (localX >= indicatorX && localX < indicatorX + layout.indicatorWidth && localY >= indicatorY
-                && localY < indicatorY + layout.indicatorHeight) {
+            if (cardRect.contains(localX, localY)) {
                 QVariantMap layoutMap = layouts[i].toMap();
                 QString layoutId = layoutMap[QStringLiteral("id")].toString();
 
@@ -376,25 +343,59 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     }
                 }
 
-                // Per-zone hit testing
+                // Per-zone hit testing against the rects QML actually rendered.
+                //
+                // Replaying ZonePreview's layout math here drifted from what the
+                // user sees, because LayoutCard fits `previewBackground` to the
+                // layout's aspectRatioClass (letterboxing it inside the indicator
+                // box), insets ZonePreview by smallSpacing in card mode, applies
+                // edgeGap only at the preview's outer edges (zonePadding/2
+                // between neighbours), and drops both gaps entirely for
+                // overlapping layouts. Reading the delegates keeps this in step
+                // with QML by construction — the same reason the card walk above
+                // reads back rendered geometry instead of predicting origins.
                 QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
-                int scaledPadding = slot->property("scaledPadding").toInt();
-                if (scaledPadding <= 0)
-                    scaledPadding = 1;
-                int minZoneSize = slot->property("minZoneSize").toInt();
-                if (minZoneSize <= 0)
-                    minZoneSize = 8;
+
+                // Keyed by each delegate's own `index`, for the same reason the
+                // card walk above is: collectQmlItemsByName descends the whole
+                // card subtree, so the order it returns is an artifact of that
+                // traversal rather than model order.
+                QHash<int, QRectF> zoneRectsInSlot;
+                zoneRectsInSlot.reserve(zones.size());
+                QVector<QQuickItem*> zoneItems;
+                collectQmlItemsByName(cardIt->item, QStringLiteral("zonePreviewZone"), zoneItems);
+                for (QQuickItem* zoneItem : std::as_const(zoneItems)) {
+                    bool zoneIndexOk = false;
+                    const int zoneIndex = zoneItem->property("index").toInt(&zoneIndexOk);
+                    if (!zoneIndexOk || zoneIndex < 0) {
+                        continue;
+                    }
+                    zoneRectsInSlot.insert(zoneIndex, mapVisibleRectToItem(zoneItem, contentRoot));
+                }
 
                 for (int z = 0; z < zones.size(); ++z) {
+                    // No delegate for this index means nothing is painted there
+                    // yet (first frame not laid out). Nothing to highlight.
+                    const auto zoneRectIt = zoneRectsInSlot.constFind(z);
+                    if (zoneRectIt == zoneRectsInSlot.constEnd()) {
+                        continue;
+                    }
+                    if (!zoneRectIt->contains(localX, localY)) {
+                        continue;
+                    }
+
                     QVariantMap zoneMap = zones[z].toMap();
+                    // Relative geometry for m_selectedZoneRelGeo, which backs
+                    // getSelectedZoneGeometry's fallback path at drop time.
+                    //
                     // LayoutPreview serializes zones with flat x/y/width/height
                     // (layoutpreviewserialize.cpp::zoneMap). The legacy
                     // zonesToVariantList path produced a nested relativeGeometry
                     // sub-map. Match ZonePreview.qml's resolution order: prefer
                     // flat keys, fall back to nested. Reading nested-only made
                     // every rx/ry/rw/rh come out as 0 once LayoutPreview became
-                    // the canonical wire format, collapsing every zone hit-rect
-                    // to a tiny box at the indicator's top-left corner.
+                    // the canonical wire format, handing the drop path a
+                    // zero-sized zone rect.
                     const QVariantMap relGeo = zoneMap.value(QStringLiteral("relativeGeometry")).toMap();
                     auto coord = [&](QLatin1String flatKey, QLatin1String nestedKey) {
                         const QVariant flat = zoneMap.value(flatKey);
@@ -403,28 +404,19 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                         }
                         return relGeo.value(nestedKey).toReal();
                     };
-                    qreal rx = coord(QLatin1String("x"), QLatin1String("x"));
-                    qreal ry = coord(QLatin1String("y"), QLatin1String("y"));
-                    qreal rw = coord(QLatin1String("width"), QLatin1String("width"));
-                    qreal rh = coord(QLatin1String("height"), QLatin1String("height"));
+                    const qreal rx = coord(QLatin1String("x"), QLatin1String("x"));
+                    const qreal ry = coord(QLatin1String("y"), QLatin1String("y"));
+                    const qreal rw = coord(QLatin1String("width"), QLatin1String("width"));
+                    const qreal rh = coord(QLatin1String("height"), QLatin1String("height"));
 
-                    // Calculate zone rectangle exactly as QML does
-                    int zoneX = indicatorX + static_cast<int>(rx * layout.indicatorWidth) + scaledPadding;
-                    int zoneY = indicatorY + static_cast<int>(ry * layout.indicatorHeight) + scaledPadding;
-                    int zoneW = std::max(minZoneSize, static_cast<int>(rw * layout.indicatorWidth) - scaledPadding * 2);
-                    int zoneH =
-                        std::max(minZoneSize, static_cast<int>(rh * layout.indicatorHeight) - scaledPadding * 2);
-
-                    if (localX >= zoneX && localX < zoneX + zoneW && localY >= zoneY && localY < zoneY + zoneH) {
-                        if (m_selectedLayoutId != layoutId || m_selectedZoneIndex != z) {
-                            m_selectedLayoutId = layoutId;
-                            m_selectedZoneIndex = z;
-                            m_selectedZoneRelGeo = QRectF(rx, ry, rw, rh);
-                            writeQmlProperty(slot, QStringLiteral("selectedLayoutId"), layoutId);
-                            writeQmlProperty(slot, QStringLiteral("selectedZoneIndex"), z);
-                        }
-                        return;
+                    if (m_selectedLayoutId != layoutId || m_selectedZoneIndex != z) {
+                        m_selectedLayoutId = layoutId;
+                        m_selectedZoneIndex = z;
+                        m_selectedZoneRelGeo = QRectF(rx, ry, rw, rh);
+                        writeQmlProperty(slot, QStringLiteral("selectedLayoutId"), layoutId);
+                        writeQmlProperty(slot, QStringLiteral("selectedZoneIndex"), z);
                     }
+                    return;
                 }
                 if (!m_selectedLayoutId.isEmpty() || m_selectedZoneIndex >= 0) {
                     m_selectedLayoutId.clear();
@@ -474,12 +466,22 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     writeQmlProperty(slot, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(slot, QStringLiteral("screenWidth"), screenGeom.width());
     if (m_settings) {
-        // Zone padding honors per-screen overrides (per-screen → global →
-        // default); border width/radius are global-only (no per-screen key).
-        writeQmlProperty(slot, QStringLiteral("zonePadding"),
-                         GeometryUtils::getEffectiveZonePadding(nullptr, m_settings, screenId));
-        writeQmlProperty(slot, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
-        writeQmlProperty(slot, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
+        // Zone padding honors per-monitor gap RULES (context-rule override →
+        // global → default) via the layout registry's current context. The
+        // selector preview passes no layout, so the per-layout tier does not
+        // apply here; border width/radius layer the context overlay rule over
+        // the global config value, matching updateZoneSelectorWindow (every show
+        // path re-runs the update, so these seed values are consistent with it).
+        const PhosphorZones::ContextOverlayOverride overlayOverride =
+            overlayOverrideForScreen(m_layoutManager, screenId);
+        writeQmlProperty(
+            slot, QStringLiteral("zonePadding"),
+            GeometryUtils::getEffectiveInnerGap(
+                nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId)));
+        writeQmlProperty(slot, QStringLiteral("zoneBorderWidth"),
+                         overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
+        writeQmlProperty(slot, QStringLiteral("zoneBorderRadius"),
+                         overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
     }
     const ZoneSelectorConfig config =
         m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();

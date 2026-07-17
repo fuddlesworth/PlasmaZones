@@ -4,6 +4,8 @@
 #include "kwin_compositor_bridge.h"
 #include "plasmazoneseffect.h"
 
+#include <QLoggingCategory>
+
 #include <PhosphorCompositor/GeometryHelpers.h>
 #include <PhosphorIdentity/WindowId.h>
 
@@ -13,6 +15,8 @@
 #include <workspace.h>
 
 namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 using namespace PhosphorCompositor;
 
@@ -176,7 +180,12 @@ WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
     info.isOnCurrentDesktop = ew->isOnCurrentDesktop();
     info.isOnCurrentActivity = ew->isOnCurrentActivity();
     info.isNormalWindow = ew->isNormalWindow();
-    info.keepAbove = ew->keepAbove();
+    // The window's OWN keep-above — pre-rule snapshot while a SetWindowLayer
+    // rule holds the pair. No in-tree WindowInfo consumer reads this field
+    // today; it is kept own-flag-correct so a future engine gate cannot read
+    // a rule's own output back as user state (the applyOwnLayerFlags
+    // invariant every keep-above export shares).
+    info.keepAbove = m_effect.windowOwnKeepAbove(ew);
     info.pid = ew->pid();
 
     info.hasDecoration = ew->hasDecoration();
@@ -252,6 +261,18 @@ void KWinCompositorBridge::activateWindow(WindowHandle w)
     auto* ew = toEffectWindow(w);
     if (!ew)
         return;
+    // Showing-desktop guard: Workspace::activateWindow on a hidden window
+    // synchronously cancels a peek, so this carries the same policy as every
+    // direct activateWindow site in the effect (see
+    // PlasmaZonesEffect::isShowingDesktop). Nothing calls this today — real
+    // activations route engine → activateWindowRequested → D-Bus →
+    // slotActivateWindowRequested, which is guarded separately — so the guard is
+    // here to keep the bridge honest the day something does, not because a live
+    // path needs it.
+    if (PlasmaZonesEffect::isShowingDesktop()) {
+        qCDebug(lcEffect) << "bridge activateWindow: dropped during show desktop";
+        return;
+    }
     KWin::effects->activateWindow(ew);
 }
 

@@ -6,7 +6,7 @@
 //                   diff, ensure schema migration, hydrate algorithm
 //                   ordering, refresh local layouts.
 //   * save()      — flush dirty settings to disk, commit per-page
-//                   stagers (animations + window rules), notify the
+//                   stagers (animations + rules), notify the
 //                   daemon to reload, push quick-slot + assignment
 //                   state through D-Bus.
 //   * defaults()  — restore factory defaults and replay the page-
@@ -15,9 +15,7 @@
 //   * onSettingsPropertyChanged / onExternalSettingsChanged — the
 //     two ISettings change-tracking hooks that flow into setNeedsSave.
 //
-// Split out of settingscontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). Same class, separate TU, no API
-// change.
+// Same class as settingscontroller.cpp, separate TU, no API change.
 
 #include "settingscontroller.h"
 
@@ -49,18 +47,33 @@ void SettingsController::load()
     // page controller's pre-edit snapshot rewinds those files. Shader
     // overrides don't need this — they ride Settings::load()'s
     // Q_PROPERTY re-emit like every other page setting.
-    if (m_animationsPage)
-        m_animationsPage->revertPending();
-    // Window rules are owned by the daemon (windowrules.json); Discard
+    // A refusal has two causes and they mean opposite things here.
+    //
+    // On the global Discard path this page's async revert is dispatched FIRST, so
+    // by the time the settings domain calls load() the worker already owns the
+    // snapshot map and revertPending() refuses. That is the restore proceeding
+    // normally, not a failure: the worker finishes the job and re-raises
+    // pendingChangesChanged itself if it has to retain a file. Treating it as
+    // "not clean" left every dirty badge lit after a discard that succeeded.
+    //
+    // A refusal with no worker running, or a partial restore failure, IS a page
+    // that is still dirty, and forcing needsSave false there would strand the
+    // snapshots for the next Discard to write back over the new state.
+    const bool animationsClean =
+        !m_animationsPage || m_animationsPage->asyncRevertInFlight() || m_animationsPage->revertPending();
+    if (!animationsClean) {
+        qCWarning(lcConfig) << "load: animation snapshots are still staged after the revert";
+    }
+    // Rules are owned by the daemon (rules.json); Discard
     // re-fetches the daemon's authoritative set, dropping staged edits.
-    if (m_windowRulesPage)
-        m_windowRulesPage->revert();
+    if (m_rulesPage)
+        m_rulesPage->revert();
     m_settings.load();
     // m_settings borrows the shared m_localRuleStore, so Settings::load() above
     // deliberately does NOT reload it (the owner drives reloads — see the
     // borrowed-store note in Settings::load()). As that owner, re-read
-    // windowrules.json here so Discard reverts the store to its on-disk state.
-    // Idempotent: WindowRuleStore::load() only emits when the content differs,
+    // rules.json here so Discard reverts the store to its on-disk state.
+    // Idempotent: RuleStore::load() only emits when the content differs,
     // mirroring the daemon-rulesChanged path in reloadLocalRuleStore().
     if (m_localRuleStore)
         m_localRuleStore->load();
@@ -86,7 +99,9 @@ void SettingsController::load()
     if (hadStagedTile)
         Q_EMIT stagedTilingOrderChanged();
     m_loading = false;
-    setNeedsSave(false);
+    if (animationsClean) {
+        setNeedsSave(false);
+    }
 }
 
 void SettingsController::save()
@@ -121,18 +136,18 @@ void SettingsController::save()
     // Save main settings (includes editor settings + VS configs persisted above)
     m_settings.save();
 
-    // WindowRuleController and AnimationsPageController are registered
+    // RuleController and AnimationsPageController are registered
     // as their own StagingDomains and the framework's applyAllAsync
     // walks them directly. Both registrations happen in
     // settingscontroller_pageregistration.cpp and route through
     // trackDomain() (which connects dirtyChanged + appends the
-    // controller to m_domains): WindowRuleController via regPage(...) →
+    // controller to m_domains): RuleController via regPage(...) →
     // ApplicationController::registerPage(...), and AnimationsPageController
     // via an explicit registerDomain(...) call (it is a headless staging
     // controller, distinct from the "animations" nav-parent node).
-    // Their own apply() methods drive the async D-Bus push (windowrules)
+    // Their own apply() methods drive the async D-Bus push (rules)
     // and the snapshot clear (animations). Calling commit/commitPending here
-    // would double-dispatch (and for window rules, ALSO send a
+    // would double-dispatch (and for rules, ALSO send a
     // synchronous setAllRules over D-Bus *before* the async one
     // returned, hitting the daemon twice in the same save tick). The
     // framework owns those terminal signals; this save() handles only
@@ -196,7 +211,7 @@ void SettingsController::save()
     // reset through singleShot(0) drains those queued signals first, so
     // onExternalSettingsChanged() sees m_saving=true and returns early.
     setNeedsSave(false);
-    // Window-rule failure handling moved to WindowRuleController itself
+    // Window-rule failure handling moved to RuleController itself
     // (see pushToDaemonAsync): a failed/partial-drop push keeps the page
     // m_dirty=true and emits applyResult(false), and the framework's
     // applyAllComplete carries the error. SettingsController::save()
@@ -204,14 +219,14 @@ void SettingsController::save()
     // there is no commit-result to re-flag here.
     if (!assignmentsCommitOk) {
         // Surface the assignment-flush failure to the user — same shape
-        // as the window-rules retry path. Without this, a failed batch
+        // as the rules retry path. Without this, a failed batch
         // looks "saved" in the UI while the daemon never applied the
         // edits, so the next launch silently shows stale assignments.
         // MUST wrap in an external-edit envelope targeting "overview" —
         // assignments are edited from MonitorStatePage (Overview), so
         // re-flagging the active page would dirty whatever page the user
         // happens to be viewing at save time, not the page that actually
-        // has the unsaved data. Same shape as the window-rules block above.
+        // has the unsaved data. Same shape as the rules block above.
         ExternalEditScope scope(*this, QStringLiteral("overview"));
         setNeedsSave(true);
     }
@@ -256,8 +271,18 @@ void SettingsController::defaults()
     // per-event JSON files are a separate concern — reset() doesn't
     // touch them, and the user would need a dedicated "reset all
     // animation customizations" entry point to clear those).
-    if (m_animationsPage) {
-        m_animationsPage->revertPending();
+    if (m_animationsPage && !m_animationsPage->revertPending()) {
+        // Refused because an async discard is still in flight. The reset leaves
+        // the per-event override files as they are, so say so rather than
+        // reporting defaults that are only half applied.
+        //
+        // Deliberately NOT the asyncRevertInFlight() shortcut load() takes: on
+        // the Discard path the worker owns the restore and finishing it IS the
+        // goal, but defaults() wants the files reset NOW, so treating a busy
+        // worker as clean would silently skip that work. Same posture as
+        // importAllSettings().
+        qCWarning(lcConfig) << "defaults: animation snapshots are still staged after the revert (a discard is in "
+                               "flight, or a restore failed)";
     }
 
     // Refresh screen list — symmetric with load(), which calls this
@@ -269,6 +294,18 @@ void SettingsController::defaults()
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
 
+    // Reset the daemon's managed baseline rules to factory and drop any staged
+    // rule edits. resetManagedDefaults() asks the daemon to overwrite just the
+    // managed baselines (preserving user rules) and broadcast rulesChanged; the
+    // paired revert() reloads the model from the reset set (ordered after the
+    // reset on the same D-Bus connection). The window border / title bar / gap
+    // values are plain config now (reset by m_settings.reset() above), so this is
+    // purely about the daemon-side managed rules, not the Windows appearance page.
+    if (m_rulesPage) {
+        m_rulesPage->resetManagedDefaults();
+        m_rulesPage->revert();
+    }
+
     // Defaults is a global action — mark every valid page dirty so the
     // unsaved indicator appears next to each of them. Guard the emit
     // on actual change so a back-to-back `defaults()` (or one called
@@ -276,17 +313,17 @@ void SettingsController::defaults()
     // a spurious `dirtyPagesChanged`, matching the emit-on-change
     // discipline used by `setNeedsSave` everywhere else in this file.
     //
-    // "window-rules" is INTENTIONALLY excluded from the blanket-mark:
-    // its source of truth is the daemon's `windowrules.json` (not the
-    // KConfig store reset() clears), and `WindowRuleController::asyncCommit()`
-    // is a no-op when the controller is clean. Marking the page dirty
-    // here would surface a stale "unsaved changes" indicator that a
-    // subsequent Save would never actually clear (asyncCommit short-circuits,
-    // leaving the page dirty in perpetuity until the user touches it).
-    // Window-rule defaults are out of scope for this entry point —
-    // resetting them requires a separate daemon-side "reset rules" path.
+    // "rules" is INTENTIONALLY excluded from the blanket-mark: it is rule-backed
+    // (its source of truth is the daemon's `rules.json`, not the KConfig store
+    // reset() clears). The managed baselines ARE reset above (resetManagedDefaults
+    // + revert), but that path is LIVE (daemon-persisted, model reloaded) rather
+    // than staged — so the Rules page lands clean, not dirty. Marking it here would
+    // surface a stale "unsaved changes" indicator a subsequent Save could never
+    // clear. The Windows appearance page is a plain config page now (its Windows.*
+    // / Gaps.* keys were reset by m_settings.reset()), so it stays in the blanket
+    // mark like every other config page.
     QSet<QString> fullSet = validPageNames();
-    fullSet.remove(QStringLiteral("window-rules"));
+    fullSet.remove(QStringLiteral("rules"));
     m_loading = false;
     if (m_dirtyPages != fullSet) {
         m_dirtyPages = fullSet;

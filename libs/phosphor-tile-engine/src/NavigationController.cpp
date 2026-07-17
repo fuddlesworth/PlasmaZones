@@ -207,7 +207,7 @@ QRect NavigationController::rectForWindowInState(PhosphorTiles::TilingState* sta
 QString NavigationController::entryWindowOnScreen(const QString& screenId, const QString& direction) const
 {
     // Non-creating lookup: a miss must not persist an empty state.
-    PhosphorTiles::TilingState* state = m_engine->m_screenStates.value(m_engine->currentKeyForScreen(screenId));
+    PhosphorTiles::TilingState* state = m_engine->m_states.stateForKey(m_engine->currentKeyForScreen(screenId));
     if (!state) {
         return QString();
     }
@@ -223,7 +223,12 @@ QString NavigationController::entryWindowOnScreen(const QString& screenId, const
     }
     // The entry edge faces back toward the source: a crossing moving "right"
     // enters the target's LEFT edge, "down" its TOP, etc. Pick the extreme tile
-    // on that edge.
+    // on that edge. An unrecognised direction matches no arm below, which would
+    // leave `best` at 0 and silently pass off the first tile as an entry window —
+    // reject it instead of guessing.
+    if (!PhosphorGeometry::directionFromString(direction).has_value()) {
+        return QString();
+    }
     int best = 0;
     for (int i = 1; i < zones.size(); ++i) {
         const QRect& r = zones.at(i);
@@ -243,7 +248,7 @@ QString NavigationController::entryWindowOnScreen(const QString& screenId, const
 
 int NavigationController::windowOrderIndexOnScreen(const QString& screenId, const QString& windowId) const
 {
-    PhosphorTiles::TilingState* state = m_engine->m_screenStates.value(m_engine->currentKeyForScreen(screenId));
+    PhosphorTiles::TilingState* state = m_engine->m_states.stateForKey(m_engine->currentKeyForScreen(screenId));
     if (!state) {
         return -1;
     }
@@ -268,7 +273,7 @@ QString NavigationController::crossOutputFocusTarget(const QString& sourceScreen
     // would CREATE and persist an empty TilingState for the neighbour on a miss,
     // leaking a state on every directional-focus keypress at a layout edge with
     // no neighbour window.
-    PhosphorTiles::TilingState* neighborState = m_engine->m_screenStates.value(m_engine->currentKeyForScreen(neighbor));
+    PhosphorTiles::TilingState* neighborState = m_engine->m_states.stateForKey(m_engine->currentKeyForScreen(neighbor));
     if (!neighborState) {
         return QString();
     }
@@ -288,7 +293,7 @@ QString NavigationController::crossOutputFocusTarget(const QString& sourceScreen
     // true), and rectForWindowInState null-guards its argument, so a miss yields
     // the same first-tiled-window fallback without persisting an empty state.
     const QRect focusRect =
-        rectForWindowInState(m_engine->m_screenStates.value(m_engine->currentKeyForScreen(sourceScreenId)), focused);
+        rectForWindowInState(m_engine->m_states.stateForKey(m_engine->currentKeyForScreen(sourceScreenId)), focused);
     const auto dir = PhosphorGeometry::directionFromString(direction);
     const QVector<QRect> neighborZones = neighborState->calculatedZones();
     if (dir.has_value() && focusRect.isValid() && neighborZones.size() == neighborWindows.size()) {
@@ -318,8 +323,10 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // The resolver returns ANY connected output in the direction — it has no
     // autotile knowledge, and even an autotile destination can be full.
     // migrateWindowBetweenKeys removes the window from the source state and only
-    // re-adds it when the neighbour is an autotile screen under its maxWindows
-    // cap (onWindowAdded rejects WITHOUT inserting otherwise). Committing the
+    // re-adds it when onWindowAdded accepts it there: the neighbour must be an
+    // autotile screen, the window must tile on it, and the destination must be
+    // under its maxWindows cap. onWindowAdded rejects WITHOUT inserting
+    // otherwise. Committing the
     // move toward a destination that won't accept the window would remove it
     // from the source, re-key it to a screen with no TilingState, and strand it
     // (tracked nowhere) — the exact failure the cross-desktop path was rewritten
@@ -351,7 +358,20 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // window without returning a partner.
     const PhosphorEngine::TilingStateKey oldKey = m_engine->currentKeyForScreen(sourceScreenId);
     const PhosphorEngine::TilingStateKey newKey = m_engine->currentKeyForScreen(neighbor);
-    if (const PhosphorTiles::TilingState* destState = m_engine->m_screenStates.value(newKey);
+    // The BARE cap applies here, with no float-rule exemption. Every window that
+    // reaches this point is TILED: the shouldTileWindow gate below rejects a
+    // floating one, and swapFocusedInDirection only routes here after
+    // directionalNeighborWindow reported geometry, which it does only for a
+    // window present in the state's tiledWindows(). A tiled window occupies a
+    // tile slot on the destination — it migrates tiled (insertWindow carries its
+    // live float state across rather than re-running the open-time "Float this
+    // app" rule) — so a full destination genuinely cannot take it. Exempting a
+    // float-ruled window here, as onWindowAdded does for an OPENING window,
+    // would apply open-time semantics to a live migration: the rule stays matched
+    // for a window the user has since tiled with Meta+F, so the exemption would
+    // wave a tiled window onto a full output. Refuse instead — swapFocusedInDirection
+    // falls through to cross-desktop / no_neighbor and reports the refusal.
+    if (const PhosphorTiles::TilingState* destState = m_engine->m_states.stateForKey(newKey);
         destState && destState->tiledWindowCount() >= m_engine->effectiveMaxWindows(neighbor)) {
         return false;
     }
@@ -367,7 +387,7 @@ bool NavigationController::crossOutputMove(const QString& sourceScreenId, const 
     // windowFocused() path does: migrateWindowBetweenKeys re-adds the window via
     // onWindowAdded() → screenForWindow(), which reads this map. Without the
     // update it would resolve back to the source screen and re-add it there.
-    m_engine->m_windowToStateKey[focused] = newKey;
+    m_engine->m_states.setKeyForWindow(focused, newKey);
     // migrateWindowBetweenKeys removes the window from the source state (with
     // its onWindowRemoved lifecycle) and adds it on the neighbour output. It
     // schedules DEFERRED retiles for both — but those can be raced by the
@@ -399,19 +419,21 @@ QString NavigationController::crossDesktopFocusTarget(const QString& sourceScree
     }
     // Base the neighbour-desktop arithmetic on the source screen's EFFECTIVE
     // desktop, not the global current desktop: a screen sticky-pinned by the
-    // "virtualdesktopsonlyonprimary" model (m_screenDesktopOverride) shows — and
-    // its TilingState is keyed on — its pinned desktop, which currentKeyForScreen
-    // resolves. For unpinned screens this is identical to m_currentDesktop.
+    // "virtualdesktopsonlyonprimary" model (a per-output desktop pin in m_context)
+    // shows — and its TilingState is keyed on — its pinned desktop, which
+    // currentKeyForScreen resolves. For unpinned screens this is identical to
+    // m_context's global desktop.
     const int baseDesktop = m_engine->currentKeyForScreen(sourceScreenId).desktop;
     const int targetDesktop = m_engine->m_crossSurfaceResolver->neighborDesktopInDirection(baseDesktop, direction);
     if (targetDesktop <= 0) {
         return QString();
     }
-    const PhosphorEngine::TilingStateKey targetKey{sourceScreenId, targetDesktop, m_engine->m_currentActivity};
+    const PhosphorEngine::TilingStateKey targetKey{sourceScreenId, targetDesktop,
+                                                   m_engine->m_context.currentActivity()};
     // Non-creating lookup: stateForKey would CREATE and persist an empty
     // TilingState for the target desktop on a miss, leaking a state on every
     // cross-desktop focus probe to a desktop with no tiled windows.
-    PhosphorTiles::TilingState* targetState = m_engine->m_screenStates.value(targetKey);
+    PhosphorTiles::TilingState* targetState = m_engine->m_states.stateForKey(targetKey);
     if (!targetState) {
         return QString();
     }
@@ -434,7 +456,7 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     }
     // Base on the source screen's effective desktop (sticky-pin aware), exactly
     // as crossDesktopFocusTarget does — for unpinned screens this equals
-    // m_currentDesktop.
+    // m_context's global desktop.
     const int baseDesktop = m_engine->currentKeyForScreen(sourceScreenId).desktop;
     const int targetDesktop = m_engine->m_crossSurfaceResolver->neighborDesktopInDirection(baseDesktop, direction);
     if (targetDesktop <= 0) {
@@ -445,7 +467,8 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     // the window into the equivalent zone on the target snap desktop. The daemon
     // slot is a direct (synchronous) connection.
     if (m_engine->m_layoutManager
-        && m_engine->m_layoutManager->modeForScreen(sourceScreenId, targetDesktop, m_engine->m_currentActivity)
+        && m_engine->m_layoutManager->modeForScreen(sourceScreenId, targetDesktop,
+                                                    m_engine->m_context.currentActivity())
             == PhosphorZones::AssignmentEntry::Snapping) {
         // Only a MOVE reaches here (swap doesn't cross desktops), so this is
         // always the one-way cross-mode move into the equivalent snap zone.
@@ -462,7 +485,7 @@ bool NavigationController::crossDesktopMove(const QString& sourceScreenId, const
     // windowOpened, which tiles it there.
     //
     // Do NOT touch the source/target TilingStates here. The previous version
-    // added the window to the target state and re-pointed m_windowToStateKey at
+    // added the window to the target state and re-pointed m_states at
     // it — but the effect's windowClosed then removed it from that very state,
     // leaving the window tracked NOWHERE: stuck decoration, broken tiling. The
     // compositor is the single source of truth for which desktop a window is on.
@@ -662,12 +685,13 @@ void NavigationController::increaseMasterRatio(qreal delta)
             // (applyPerScreenConfig reads the stored override).
             m_engine->updatePerScreenOverride(screenId, PerScreenKeys::SplitRatio, resultRatio);
         } else {
-            // No override: keep the adjustment local to the active screen+desktop's
-            // TilingState (set above, serialized with the session state). Mark it
-            // user-tuned so propagateGlobalSplitRatio leaves it alone on a settings
-            // refresh, and deliberately do NOT write the global config / settings —
-            // a per-desktop ratio tweak is not a new global default and must not
-            // bleed to sibling screens or other desktops.
+            // No override: keep the adjustment local to the active
+            // screen+desktop+activity's TilingState (set above, serialized with the
+            // session state). Mark it user-tuned so propagateGlobalSplitRatio leaves
+            // it alone on a settings refresh, and deliberately do NOT write the
+            // global config / settings — a per-desktop ratio tweak is not a new
+            // global default and must not bleed to sibling screens, other desktops,
+            // or other activities.
             m_engine->noteSplitRatioUserTuned(screenId);
         }
 
@@ -676,7 +700,8 @@ void NavigationController::increaseMasterRatio(qreal delta)
         }
     }
 
-    // Always show OSD with the clamped value — even at min/max bounds
+    // Always show OSD with the clamped value — even at min/max bounds.
+    // A zero delta reads as "increased", matching adjustMasterCount.
     int pct = qRound(resultRatio * 100.0);
     QString reason = (delta >= 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(pct);
     Q_EMIT m_engine->navigationFeedback(changed, QStringLiteral("master_ratio"), reason, QString(), QString(),
@@ -693,8 +718,15 @@ void NavigationController::setGlobalSplitRatio(qreal ratio)
     ratio = std::clamp(ratio, PhosphorTiles::AutotileDefaults::MinSplitRatio,
                        PhosphorTiles::AutotileDefaults::MaxSplitRatio);
     m_engine->config()->splitRatio = ratio;
-    applyToAllStates([ratio](PhosphorTiles::TilingState* state) {
+    applyToAllStates([this, ratio](const QString& screenId, PhosphorTiles::TilingState* state) {
+        // Screens carrying an explicit per-screen SplitRatio override keep it,
+        // mirroring propagateGlobalSplitRatio — writing them here would only
+        // last until the next settings refresh resurfaces the override.
+        if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::SplitRatio)) {
+            return false;
+        }
         state->setSplitRatio(ratio);
+        return true;
     });
 }
 
@@ -703,8 +735,14 @@ void NavigationController::setGlobalMasterCount(int count)
     count = std::clamp(count, PhosphorTiles::AutotileDefaults::MinMasterCount,
                        PhosphorTiles::AutotileDefaults::MaxMasterCount);
     m_engine->config()->masterCount = count;
-    applyToAllStates([count](PhosphorTiles::TilingState* state) {
+    applyToAllStates([this, count](const QString& screenId, PhosphorTiles::TilingState* state) {
+        // Screens carrying an explicit per-screen MasterCount override keep
+        // it, mirroring propagateGlobalMasterCount.
+        if (m_engine->hasPerScreenOverride(screenId, PerScreenKeys::MasterCount)) {
+            return false;
+        }
         state->setMasterCount(count);
+        return true;
     });
 }
 
@@ -733,11 +771,12 @@ void NavigationController::adjustMasterCount(int delta)
             // settings reloads (applyPerScreenConfig reads the stored override).
             m_engine->updatePerScreenOverride(screenId, PerScreenKeys::MasterCount, resultCount);
         } else {
-            // No override: keep the adjustment local to the active screen+desktop's
-            // TilingState (set above, serialized with the session state). Mark it
-            // user-tuned so propagateGlobalMasterCount leaves it alone on a refresh,
-            // and deliberately do NOT write the global config / settings — a
-            // per-desktop master-count tweak is not a new global default.
+            // No override: keep the adjustment local to the active
+            // screen+desktop+activity's TilingState (set above, serialized with
+            // the session state). Mark it user-tuned so propagateGlobalMasterCount
+            // leaves it alone on a refresh, and deliberately do NOT write the
+            // global config / settings — a per-desktop master-count tweak is not
+            // a new global default.
             m_engine->noteMasterCountUserTuned(screenId);
         }
 
@@ -746,9 +785,10 @@ void NavigationController::adjustMasterCount(int delta)
         }
     }
 
-    // Always show OSD with the clamped value — even at bounds
+    // Always show OSD with the clamped value — even at bounds. A zero delta
+    // reads as "increased", matching increaseMasterRatio.
     QString reason =
-        (delta > 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(resultCount);
+        (delta >= 0 ? QStringLiteral("increased:") : QStringLiteral("decreased:")) + QString::number(resultCount);
     Q_EMIT m_engine->navigationFeedback(changed, QStringLiteral("master_count"), reason, QString(), QString(),
                                         screenId);
 }
@@ -765,11 +805,7 @@ PhosphorTiles::TilingState* NavigationController::resolveActiveState(QString& ou
     }
 
     const auto key = m_engine->currentKeyForScreen(outScreenId);
-    auto sit = m_engine->m_screenStates.find(key);
-    if (sit == m_engine->m_screenStates.end() || !sit.value()) {
-        return nullptr;
-    }
-    return sit.value();
+    return m_engine->m_states.stateForKey(key);
 }
 
 QString NavigationController::resolveActiveScreen() const
@@ -814,15 +850,16 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     // through floating, snapped, or never-tracked windows that don't update
     // it — using the daemon's value avoids operating on the wrong window.
     if (!explicitWindowId.isEmpty()) {
-        for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
+        for (auto it = m_engine->m_states.states().constBegin(); it != m_engine->m_states.states().constEnd(); ++it) {
             // Match each screen's EFFECTIVE desktop, not the raw global one: a
             // screen sticky-pinned by the "virtualdesktopsonlyonprimary" model
-            // (m_screenDesktopOverride) keeps its TilingState on its pinned
-            // desktop, so a bare `!= m_currentDesktop` would skip the pinned
-            // screen and miss the explicit window living there. currentKeyForScreen
-            // resolves the override; for unpinned screens it is m_currentDesktop.
+            // (a per-output desktop pin in m_context) keeps its TilingState on its
+            // pinned desktop, so a bare `!= m_context's global desktop` would skip
+            // the pinned screen and miss the explicit window living there.
+            // currentKeyForScreen resolves the override; for unpinned screens it is
+            // m_context's global desktop.
             if (it.key().desktop != m_engine->currentKeyForScreen(it.key().screenId).desktop
-                || it.key().activity != m_engine->m_currentActivity) {
+                || it.key().activity != m_engine->m_context.currentActivity()) {
                 continue;
             }
             PhosphorTiles::TilingState* state = it.value();
@@ -840,8 +877,8 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     // non-deterministic QHash iteration when multiple screens have focused windows
     if (!m_engine->m_activeScreen.isEmpty()) {
         const auto key = m_engine->currentKeyForScreen(m_engine->m_activeScreen);
-        auto sit = m_engine->m_screenStates.constFind(key);
-        if (sit != m_engine->m_screenStates.constEnd()) {
+        auto sit = m_engine->m_states.states().constFind(key);
+        if (sit != m_engine->m_states.states().constEnd()) {
             PhosphorTiles::TilingState* state = sit.value();
             if (state && !state->focusedWindow().isEmpty()) {
                 outScreenId = m_engine->m_activeScreen;
@@ -853,9 +890,9 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
 
     // Fallback: scan states for current desktop/activity (e.g., if m_activeScreen is stale).
     // Same sticky-pin-aware desktop match as the explicit-window scan above.
-    for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
+    for (auto it = m_engine->m_states.states().constBegin(); it != m_engine->m_states.states().constEnd(); ++it) {
         if (it.key().desktop != m_engine->currentKeyForScreen(it.key().screenId).desktop
-            || it.key().activity != m_engine->m_currentActivity) {
+            || it.key().activity != m_engine->m_context.currentActivity()) {
             continue;
         }
         PhosphorTiles::TilingState* state = it.value();
@@ -872,8 +909,8 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     if (primaryScreen.isValid()) {
         outScreenId = primaryScreen.identifier;
         const auto key = m_engine->currentKeyForScreen(outScreenId);
-        auto sit = m_engine->m_screenStates.constFind(key);
-        if (sit != m_engine->m_screenStates.constEnd() && sit.value()) {
+        auto sit = m_engine->m_states.states().constFind(key);
+        if (sit != m_engine->m_states.states().constEnd() && sit.value()) {
             outState = sit.value();
             return sit.value()->tiledWindows();
         }
@@ -883,23 +920,39 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     return {};
 }
 
-void NavigationController::applyToAllStates(const std::function<void(PhosphorTiles::TilingState*)>& operation)
+void NavigationController::applyToAllStates(
+    const std::function<bool(const QString& screenId, PhosphorTiles::TilingState*)>& operation)
 {
-    if (m_engine->m_screenStates.isEmpty()) {
+    if (m_engine->m_states.states().isEmpty()) {
         return; // No states to modify
     }
 
-    // Only apply to states for each screen's current desktop/activity. Under
-    // per-output virtual desktops (#648) the desktop is resolved per-screen,
-    // matching propagateGlobalSplitRatio/propagateGlobalMasterCount.
-    for (auto it = m_engine->m_screenStates.begin(); it != m_engine->m_screenStates.end(); ++it) {
+    // Every state, on every desktop and activity — see the header for why this
+    // must not be narrowed to the current context the way the passive
+    // propagateGlobalSplitRatio/propagateGlobalMasterCount refresh is.
+    //
+    // Only a write to a state in the CURRENT context can change anything on
+    // screen: retile() reflows the current desktop/activity's autotile screens
+    // and nothing else. Track that case specifically, so a pass that wrote only
+    // other desktops (or wrote nothing at all, e.g. every screen carries a
+    // per-screen override of this key) does not trigger a pointless full retile.
+    bool wroteCurrentContext = false;
+    for (auto it = m_engine->m_states.states().constBegin(); it != m_engine->m_states.states().constEnd(); ++it) {
+        if (!it.value()) {
+            continue;
+        }
+        if (!operation(it.key().screenId, it.value())) {
+            continue;
+        }
+        // Under per-output virtual desktops (#648) the desktop is resolved
+        // per-screen, so "current" is a per-screen question.
         if (it.key().desktop == m_engine->currentKeyForScreen(it.key().screenId).desktop
-            && it.key().activity == m_engine->m_currentActivity && it.value()) {
-            operation(it.value());
+            && it.key().activity == m_engine->m_context.currentActivity()) {
+            wroteCurrentContext = true;
         }
     }
 
-    if (m_engine->isEnabled()) {
+    if (wroteCurrentContext && m_engine->isEnabled()) {
         m_engine->retile();
     }
 }

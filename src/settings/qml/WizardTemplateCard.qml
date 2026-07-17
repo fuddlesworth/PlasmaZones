@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
@@ -24,7 +23,7 @@ Item {
     default property alias previewContent: previewArea.data
     property bool isHovered: false
     // Card colors sourced from WizardUtils (DRY — shared with wizard dialogs)
-    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
+    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.alternateBackgroundColor, Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast), Kirigami.Theme.highlightColor, Kirigami.Theme.hoverColor)
     readonly property color _highlightBg: _colors.highlightBg
     readonly property color _hoverBg: _colors.hoverBg
     readonly property color _defaultBg: _colors.defaultBg
@@ -35,6 +34,8 @@ Item {
     signal clicked
     signal doubleClicked
 
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
     Layout.fillWidth: true
     Layout.preferredHeight: Kirigami.Units.gridUnit * 10
     Accessible.name: root.templateName
@@ -54,7 +55,14 @@ Item {
         anchors.fill: parent
         hoverEnabled: false
         cursorShape: Qt.PointingHandCursor
-        onClicked: root.clicked()
+        onClicked: {
+            // Move active focus to the clicked card so a previously
+            // keyboard-focused sibling doesn't keep the focus ring and the key
+            // handlers. onDoubleClicked delivers `clicked` first, so the
+            // double-click path picks the focus up from here.
+            root.forceActiveFocus();
+            root.clicked();
+        }
         onDoubleClicked: root.doubleClicked()
     }
 
@@ -64,8 +72,8 @@ Item {
         anchors.fill: parent
         radius: Kirigami.Units.smallSpacing * 2
         color: root.selected ? root._highlightBg : root.isHovered ? root._hoverBg : root._defaultBg
-        border.width: root.activeFocus ? Math.round(Screen.devicePixelRatio * 2) : root.selected ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
-        border.color: root.activeFocus ? Kirigami.Theme.highlightColor : root.selected ? root._selectedBorder : root.isHovered ? root._hoverBorder : root._defaultBorder
+        border.width: root.activeFocus ? 2 : root.selected ? 2 : 1
+        border.color: root.activeFocus ? Kirigami.Theme.focusColor : root.selected ? root._selectedBorder : root.isHovered ? root._hoverBorder : root._defaultBorder
         transform: [
             Scale {
                 origin.x: templateCard.width / 2
@@ -76,14 +84,14 @@ Item {
                 Behavior on xScale {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
-                        durationOverride: 200
+                        durationOverride: Kirigami.Units.longDuration
                     }
                 }
 
                 Behavior on yScale {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
-                        durationOverride: 200
+                        durationOverride: Kirigami.Units.longDuration
                     }
                 }
             },
@@ -93,7 +101,7 @@ Item {
                 Behavior on y {
                     PhosphorMotionAnimation {
                         profile: "widget.hover"
-                        durationOverride: 200
+                        durationOverride: Kirigami.Units.longDuration
                     }
                 }
             }
@@ -153,21 +161,21 @@ Item {
         Behavior on color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
-                durationOverride: 200
+                durationOverride: Kirigami.Units.longDuration
             }
         }
 
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
-                durationOverride: 200
+                durationOverride: Kirigami.Units.longDuration
             }
         }
 
         Behavior on border.width {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
-                durationOverride: 200
+                durationOverride: Kirigami.Units.longDuration
             }
         }
     }

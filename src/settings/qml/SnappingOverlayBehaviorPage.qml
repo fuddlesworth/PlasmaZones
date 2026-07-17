@@ -177,11 +177,23 @@ SettingsFlickable {
                         description: i18n("Distance from zone edge for multi-zone selection")
 
                         SettingsSpinBox {
+                            id: edgeThresholdSpin
+
+                            accessibleName: i18n("Edge threshold")
                             from: root.settingsBridge.adjacentThresholdMin
                             to: root.thresholdMax
-                            value: appSettings.adjacentThreshold
                             onValueModified: value => {
                                 return appSettings.adjacentThreshold = value;
+                            }
+                            // Feed value through a guarded Binding so a config change
+                            // keeps refreshing the control: a plain `value:` binding is
+                            // destroyed by SettingsSpinBox's own edit echo after the
+                            // first edit. RestoreNone + the focus gate keeps a live edit
+                            // from being clobbered.
+                            Binding on value {
+                                value: appSettings.adjacentThreshold
+                                when: !edgeThresholdSpin.editing
+                                restoreMode: Binding.RestoreNone
                             }
                         }
                     }

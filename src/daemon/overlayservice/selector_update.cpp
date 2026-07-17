@@ -24,7 +24,8 @@ namespace {
 
 void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, QObject* window, QScreen* screen,
                                           const QString& virtualScreenId, const ZoneSelectorConfig& config,
-                                          ISettings* settings, const ZoneSelectorLayout& layout)
+                                          ISettings* settings, const ZoneSelectorLayout& layout,
+                                          PhosphorZones::IZoneLayoutRegistry* layoutRegistry)
 {
     if (!window || !screen) {
         return;
@@ -44,13 +45,19 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
     writeQmlProperty(window, QStringLiteral("positionIsVertical"),
                      (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
 
-    // Compute scaled zone appearance values. Zone padding honors per-screen
-    // overrides (resolution cascade: per-screen → global → default); border
-    // width/radius are global-only settings (no per-screen key exists).
+    // Compute scaled zone appearance values. Zone padding honors per-monitor gap
+    // RULES (cascade: context-rule override → global → default) via the layout
+    // registry's current context. This preview passes no layout, so the per-layout
+    // tier does not apply here; border width/radius honor a SetOverlayBorderWidth /
+    // SetOverlayBorderRadius context rule over the global setting, matching the
+    // zoneBorderWidth/Radius written for the same window in updateZoneSelectorWindow.
     if (settings) {
-        const int zonePadding = GeometryUtils::getEffectiveZonePadding(nullptr, settings, virtualScreenId);
-        const int zoneBorderWidth = settings->borderWidth();
-        const int zoneBorderRadius = settings->borderRadius();
+        const PhosphorZones::ContextOverlayOverride overlayOverride =
+            overlayOverrideForScreen(layoutRegistry, virtualScreenId);
+        const int zonePadding = GeometryUtils::getEffectiveInnerGap(
+            nullptr, settings, GeometryUtils::currentContextGapOverride(layoutRegistry, settings, virtualScreenId));
+        const int zoneBorderWidth = overlayOverride.borderWidth.value_or(settings->borderWidth());
+        const int zoneBorderRadius = overlayOverride.borderRadius.value_or(settings->borderRadius());
 
         const int scaledPadding = std::max(1, qRound(zonePadding * previewScale));
         const int scaledBorderWidth = std::max(1, qRound(zoneBorderWidth * previewScale * 2));
@@ -119,12 +126,15 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         return;
     }
 
-    auto* window = m_screenStates.value(screenId).zoneSelectorSlot();
+    const auto it = m_screenStates.constFind(screenId);
+    if (it == m_screenStates.constEnd()) {
+        return;
+    }
+    auto* window = it->zoneSelectorSlot();
     if (!window) {
         return;
     }
-
-    QScreen* screen = m_screenStates.value(screenId).zoneSelectorPhysScreen;
+    QScreen* screen = it->zoneSelectorPhysScreen;
     if (!screen) {
         return;
     }
@@ -143,16 +153,26 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
 
     // Update settings-based properties
     if (m_settings) {
-        writeColorSettings(window, m_settings);
+        // Context overlay-appearance overrides layer over config for this
+        // screen's live context, matching the main zone overlay.
+        const PhosphorZones::ContextOverlayOverride overlayOverride =
+            overlayOverrideForScreen(m_layoutManager, screenId);
+        writeColorSettings(window, m_settings, &overlayOverride);
         // PhosphorZones::Zone appearance for the scaled preview. Zone padding
-        // honors per-screen overrides (per-screen → global → default); border
-        // width/radius are global-only (no per-screen key exists).
-        writeQmlProperty(window, QStringLiteral("zonePadding"),
-                         GeometryUtils::getEffectiveZonePadding(nullptr, m_settings, screenId));
-        writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
-        writeQmlProperty(window, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
+        // honors per-monitor gap RULES (context-rule override → global → default)
+        // via the layout registry's current context. This preview passes no
+        // layout, so the per-layout tier does not apply here; border width/radius
+        // layer the context overlay rule over the global config value.
+        writeQmlProperty(
+            window, QStringLiteral("zonePadding"),
+            GeometryUtils::getEffectiveInnerGap(
+                nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId)));
+        writeQmlProperty(window, QStringLiteral("zoneBorderWidth"),
+                         overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
+        writeQmlProperty(window, QStringLiteral("zoneBorderRadius"),
+                         overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
         // Font settings for zone number labels
-        writeFontProperties(window, m_settings);
+        writeFontProperties(window, m_settings, /*includeLabelFontColor=*/false);
     }
     // Pass resolved per-screen config values to QML
     writeQmlProperty(window, QStringLiteral("selectorPosition"), config.position);
@@ -172,13 +192,9 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     writeQmlProperty(window, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
 
     // Set active layout ID for this screen
-    // Per-screen assignment takes priority so each monitor highlights its own layout
-    QString activeLayoutId;
-    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
-    if (screenLayout) {
-        activeLayoutId = screenLayout->id().toString();
-    }
-    writeQmlProperty(window, QStringLiteral("activeLayoutId"), activeLayoutId);
+    // Per-screen assignment takes priority so each monitor highlights its own
+    // layout (or its autotile algorithm, via the "autotile:<algorithm>" id).
+    writeQmlProperty(window, QStringLiteral("activeLayoutId"), activeLayoutIdForScreen(screenId));
 
     // Push lock state so QML disables non-active layout interaction.
     // isAnyModeLocked checks a LockContext rule first, then both manual modes -
@@ -205,9 +221,10 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     applyZoneSelectorLayout(window, layout);
 
     // Update computed properties that depend on layout and settings
-    updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout);
+    updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout,
+                                         m_layoutManager);
 
-    // Positioning is entirely QML-internal: ZoneSelectorWindow.qml's
+    // Positioning is entirely QML-internal: ZoneSelectorContent.qml's
     // selectorPosition state anchors the inner container to the requested
     // corner of the full-screen transparent surface. Anchors/margins are
     // baked at attach time (AnchorAll) and never mutated afterwards.

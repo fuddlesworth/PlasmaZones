@@ -19,7 +19,8 @@ Kirigami.Dialog {
     required property var editorController
 
     title: i18nc("@title:window", "Zone Selector Visibility")
-    standardButtons: Kirigami.Dialog.NoButton
+    // Close only: every toggle applies immediately, the button never "applies"
+    standardButtons: Kirigami.Dialog.Close
     preferredWidth: Kirigami.Units.gridUnit * 18
     padding: Kirigami.Units.largeSpacing
 
@@ -76,7 +77,6 @@ Kirigami.Dialog {
                     onClicked: {
                         if (root.editorController)
                             root.editorController.toggleScreenAllowed(modelData);
-
                     }
 
                     Connections {
@@ -86,11 +86,8 @@ Kirigami.Dialog {
 
                         target: root.editorController
                     }
-
                 }
-
             }
-
         }
 
         Kirigami.Separator {
@@ -128,13 +125,12 @@ Kirigami.Dialog {
                         return list.length === 0 || list.indexOf(Number(desktop)) >= 0;
                     }
 
-                    text: root.editorController.virtualDesktopNames[index] || (i18nc("@label", "Desktop %1", desktop))
+                    text: (root.editorController && root.editorController.virtualDesktopNames[index]) || (i18nc("@label", "Desktop %1", desktop))
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     checked: isChecked()
                     onClicked: {
                         if (root.editorController)
                             root.editorController.toggleDesktopAllowed(desktop);
-
                     }
 
                     Connections {
@@ -144,11 +140,8 @@ Kirigami.Dialog {
 
                         target: root.editorController
                     }
-
                 }
-
             }
-
         }
 
         Kirigami.Separator {
@@ -160,7 +153,10 @@ Kirigami.Dialog {
         ColumnLayout {
             id: activitiesSection
 
-            visible: root.editorController && root.editorController.activitiesAvailable
+            // Require more than one activity, matching the screens/desktops
+            // sections: with a single activity the only checkbox cannot be
+            // meaningfully unchecked (the controller rejects an empty result).
+            visible: root.editorController && root.editorController.activitiesAvailable && root.editorController.availableActivities.length > 1
             spacing: Kirigami.Units.smallSpacing
             Layout.fillWidth: true
 
@@ -193,7 +189,6 @@ Kirigami.Dialog {
                     onClicked: {
                         if (root.editorController)
                             root.editorController.toggleActivityAllowed(activityId);
-
                     }
 
                     Connections {
@@ -203,37 +198,8 @@ Kirigami.Dialog {
 
                         target: root.editorController
                     }
-
                 }
-
             }
-
         }
-
     }
-
-    footer: Item {
-        implicitHeight: footerLayout.implicitHeight + Kirigami.Units.largeSpacing * 2
-        implicitWidth: footerLayout.implicitWidth
-
-        RowLayout {
-            id: footerLayout
-
-            anchors.fill: parent
-            anchors.margins: Kirigami.Units.largeSpacing
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            Button {
-                text: i18nc("@action:button", "Apply")
-                icon.name: "dialog-ok-apply"
-                onClicked: root.close()
-            }
-
-        }
-
-    }
-
 }

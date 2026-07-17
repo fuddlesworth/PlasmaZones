@@ -107,6 +107,11 @@ jobs:
           # headless without xvfb. Tests that need an RHI surface (e.g.
           # shader-render tool tests) launch xvfb-run themselves.
           QT_QPA_PLATFORM: offscreen
+          # Force Mesa's software rasteriser (llvmpipe) so the GL-dependent
+          # shader-bake test (test_animation_shader_kwin_bake) gets a real
+          # GL >= 4.5 context on this headless runner and actually compiles the
+          # KWin-branch shaders instead of QSKIP-ing. mesa is installed above.
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           # The container has no session, so XDG_RUNTIME_DIR is unset and Qt
           # emits a "QStandardPaths: XDG_RUNTIME_DIR not set" warning the first
@@ -193,6 +198,9 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
+          # Software GL (llvmpipe) so the shader-bake test gets a GL >= 4.5
+          # context instead of QSKIP-ing (see the default build job's rationale).
+          LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           # Private XDG_RUNTIME_DIR so Qt's "XDG_RUNTIME_DIR not set" warning
           # does not pollute tests that assert no warnings (see the default
@@ -313,6 +321,35 @@ jobs:
             echo "No QML files changed — skipping qmlformat"
           fi
 
+  # ─── JSON Schema: validate every bundled data file against the committed
+  # schemas under data/schemas/. These are the same schema files runtime
+  # validation compiles (phosphor-fsloader's SchemaValidator via valijson), so
+  # this is the author-time gate that keeps malformed layouts (and future
+  # document types) out of the tree. Mirrors the lefthook `json-schema` hook;
+  # hard gate here, best-effort there. Validates the full set on every run
+  # (cheap) so a schema change re-checks all governed documents.
+  json-schema:
+    name: JSON Schema
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install jsonschema
+        # The [format] extra matches the lefthook bootstrap venv and enables
+        # string-format checks (e.g. format:"date"), so CI and the local hook
+        # validate identical surfaces.
+        run: pip install "jsonschema[format]"
+
+      - name: Validate bundled data against schemas
+        run: python3 scripts/validate-json-schemas.py
+
   # ─── Luau static analysis: type-check + lint the bundled tiling algorithms
   # and the pluau standard library with luau-analyze. Catches parse and type
   # errors (a broken bundled .luau would otherwise only surface at runtime as
@@ -366,6 +403,39 @@ jobs:
           ./luau-cli/luau-analyze \
             data/algorithms/*.luau \
             libs/phosphor-tiles/src/pluau/pluau.luau
+
+      - name: Analyze the pluau type stubs
+        run: |
+          set -euo pipefail
+          # pluau.d.luau could not be checked the way it is normally used. As a
+          # source file its `declare` lines are a syntax error. And this
+          # analyzer has no defs flag at all — it takes an unknown `--` argument
+          # without a word and carries on, so a run "with" the stub reads it
+          # never. Either way the stub shipped ungated, and a typo'd or dangling
+          # type in it reached editors intact.
+          #
+          # The `declare` lines are the only part that is not valid source, and
+          # they carry no type information of their own. Strip them and analyze
+          # the type definitions, which is the whole rest of the file.
+          #
+          # This gates the stub's syntax and its internal type consistency. It
+          # cannot check the stub against the runtime it describes — that
+          # agreement is reviewed by hand.
+          # The stripped copy sits next to the file it is a copy of, so any
+          # .luaurc that would govern the real stub in this tree governs the
+          # copy too. No such config exists today (the repo's only .luaurc is
+          # data/algorithms/.luaurc, which is out of this path's lookup), so
+          # right now this resolves the same default config /tmp would. The
+          # trap clears the copy on the failing path too, where `set -e` would
+          # otherwise leave it behind.
+          #
+          # An all-declare file would strip to nothing; grep exits 1 on no
+          # match, so `set -e` fails the step rather than analyzing an empty
+          # file and passing.
+          stub_copy=libs/phosphor-tiles/src/pluau/pluau-stub-check.luau
+          trap 'rm -f "$stub_copy"' EXIT
+          grep -v '^declare ' libs/phosphor-tiles/src/pluau/pluau.d.luau > "$stub_copy"
+          ./luau-cli/luau-analyze "$stub_copy"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Nix Flake CI (x86_64 + aarch64)

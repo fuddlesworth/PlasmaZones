@@ -7,11 +7,24 @@
 
 #include <QObject>
 #include <QString>
+#include <QLatin1String>
 #include <QVariantList>
 
 #include <memory>
 
 namespace PhosphorServiceIdle {
+
+/// Field names of one entry in the idle ladder passed to IdleService::setStages.
+///
+/// Named here because they are a contract ACROSS a library boundary: the caller builds
+/// the maps and this library reads them, with nothing but the spelling holding the two
+/// together. A typo produced a stage with a zero timeout, which the parser drops as
+/// meaningless, so the ladder came out empty and idle detection simply never fired.
+/// Silent, and identical in appearance to the feature being switched off.
+namespace StageKey {
+inline constexpr QLatin1String Name("name");
+inline constexpr QLatin1String TimeoutMs("timeoutMs");
+} // namespace StageKey
 
 /**
  * @brief Session idle-management host for Phosphor-based desktop shells.
@@ -54,9 +67,37 @@ public:
 
     /// The idle ladder, as a list of `{ name: string, timeoutMs: int }` maps,
     /// sorted by ascending timeout. Entries with a non-positive `timeoutMs` are
-    /// ignored.
+    /// ignored. Build the maps with the StageKey constants above rather than spelling
+    /// the field names out: they are a wire contract between this library and its
+    /// callers, and a typo on either side silently produces a zero timeout, which
+    /// toStages then DROPS — leaving an empty ladder that never fires, with no warning
+    /// anywhere.
     [[nodiscard]] QVariantList stages() const;
+    /// Reconfiguring the ladder to a DIFFERENT one resets the session to active. The
+    /// old sources are destroyed and new ones armed, and a compositor arms a fresh
+    /// notification from the active state — so if the session was idle, `resumed()`
+    /// fires and `currentStage` returns to 0. Passing an empty list therefore both
+    /// disarms idle detection AND releases an already-idle session. That is contract, not
+    /// incidental behaviour, and it is pinned by IdleStateMachine's
+    /// clearStagesWhileIdleResumes test: whatever a consumer gated on idleness must be
+    /// released when idle detection goes away, or it stays gated on a fact nobody is
+    /// reporting any more.
+    ///
+    /// Setting the ladder it already has is a no-op: it does NOT re-arm and does NOT
+    /// resume. That is what makes it safe to call on every settings change.
     void setStages(const QVariantList& stages);
+
+    /// Did the current ladder actually ARM?
+    ///
+    /// isSupported() answers "does the compositor speak the protocol". This answers "did we
+    /// manage to use it", and the two genuinely differ: arming needs a seat with its input
+    /// devices advertised, and a client that starts while the compositor is still bringing
+    /// the seat up arms nothing at all. Idle detection is then dead for the session while
+    /// isSupported() cheerfully keeps saying true. False for an empty ladder (nothing is
+    /// being watched). A caller that wants to survive that race must be able to ask, and to
+    /// rebuild: clear the ladder and set it again, which is a real change and so is not
+    /// swallowed by the no-op rule above.
+    [[nodiscard]] bool isArmed() const;
 
     /// 0 when active; otherwise the 1-based index of the deepest stage currently
     /// reached.

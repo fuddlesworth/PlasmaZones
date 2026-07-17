@@ -63,12 +63,16 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
 
     /// Event-class tokens this effect is meaningful on. Each token is one
     /// of `PhosphorAnimation::ProfilePaths::EventClassAppearance`
-    /// ("appearance" — open/close/minimize/focus + OSD/popup show/hide) or
-    /// `EventClassGeometry` ("geometry" — move/resize/snap*/layoutSwitch/
-    /// maximize). EMPTY (the default) means "universal" — the effect applies
-    /// to every event class, which is the right answer for the bulk of
-    /// transitions (fade, glitch, dissolve …) that operate on a single
-    /// surface and need no before/after geometry.
+    /// ("appearance" — open/close/minimize/focus + OSD/popup show/hide),
+    /// `EventClassGeometry` ("geometry" — snap*/layoutSwitch/maximize),
+    /// `EventClassDesktop` ("desktop" — the two-texture
+    /// full-screen switch) or `EventClassMove` ("move" — the held
+    /// interactive drag, driven by the move-physics inputs). EMPTY (the
+    /// default) means "universal" — the effect applies to every
+    /// single-surface event class, which is the right answer for the bulk
+    /// of transitions (fade, glitch, dissolve …) that operate on a single
+    /// surface and need no before/after geometry. The desktop and move
+    /// classes are opt-in and never covered by "universal".
     ///
     /// A geometry-only effect like `window-morph` cross-fades an old rect
     /// into a new rect (`iFromRect → iToRect`); that pair only exists on
@@ -145,6 +149,17 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// can sample window depth. Daemon-only.
     bool useDepthBuffer = false;
 
+    /// Audio-reactive opt-in (JSON key `audio`, matching the surface pack
+    /// vocabulary). The pack samples the CAVA spectrum via
+    /// `data/animations/shared/audio.glsl`. Unlike the overlay family, where
+    /// audio is implicit/session-global, animation packs must declare it:
+    /// the kwin-effect keys its CAVA run-gate on this flag (an assigned
+    /// audio pack keeps the provider warm so a transition's first frame has
+    /// a spectrum), and the daemon's SurfaceAnimator feeds the spectrum
+    /// unconditionally. Helpers read 0 (render static) when the visualizer
+    /// is off or cava is unavailable.
+    bool useAudio = false;
+
     /// How wide the shader effect's render target is — relative to its
     /// anchor (default), or filling the surface scene root.
     ///
@@ -174,7 +189,7 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     FboExtentKind fboExtentKind = FboExtentKind::Anchor;
 
     /// Per-axis subdivision count for geometry shaders that deform the
-    /// drawn quad in the vertex stage (e.g. the `flow` window-move
+    /// drawn quad in the vertex stage (e.g. the `flow` geometry
     /// effect, whose grid rows lag behind the leading edge so the
     /// window streams into its destination zone). 0 (the default) keeps
     /// the single output-spanning quad every other surface-extent
@@ -227,10 +242,10 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     QList<ParameterInfo> parameters;
 
     /// User texture slot. Each entry binds an asset file to one of the
-    /// canonical samplers `iChannel1` / `iChannel2` / `iChannel3` (slots
+    /// canonical samplers `uTexture1` / `uTexture2` / `uTexture3` (slots
     /// 0 / 1 / 2 here, which the runtimes map to texture-unit
     /// allocations 1 / 2 / 3 — slot 0 of the binding-7+ region is the
-    /// surface itself / `iChannel0`, never user-declared).
+    /// surface itself / `uTexture0`, never user-declared).
     ///
     /// `path` is resolved relative to the effect's `sourceDir`. Loading
     /// failures are non-fatal — the effect still installs and the
@@ -243,8 +258,8 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
     /// the default rather than silently re-persisting the typo. Filter
     /// mode is not exposed here — both runtimes use linear filtering
     /// for user textures today. The slot index is the 0-based position
-    /// in this list: the first entry binds to `iChannel1`, the second
-    /// to `iChannel2`, etc. Up to three textures per effect; surplus
+    /// in this list: the first entry binds to `uTexture1`, the second
+    /// to `uTexture2`, etc. Up to three textures per effect; surplus
     /// entries are silently dropped at parse time.
     struct TextureSlot
     {
@@ -281,12 +296,17 @@ struct PHOSPHORANIMATION_EXPORT AnimationShaderEffect
 /// True iff @p effect may meaningfully run on event @p path.
 ///
 /// An effect with an empty `appliesTo` is universal and always returns
-/// true. Otherwise the predicate maps @p path to its event class via
+/// true on single-surface paths (the opt-in desktop and move classes are
+/// excluded). Otherwise the predicate maps @p path to its event class via
 /// `PhosphorAnimation::ProfilePaths::eventClassForPath` and checks
 /// membership. A path with no determinable class (a mixed ancestor like
 /// `window`, or a non-window/overlay path) also returns true — the
 /// predicate only reports false when it can PROVE a mismatch, so it never
-/// over-restricts a row whose class is ambiguous.
+/// over-restricts a row whose class is ambiguous. The exceptions on
+/// ambiguous rows are effects that provably cannot drive anything the row
+/// cascades to: desktop-declaring packs (unbound second sampler) and
+/// packs declaring neither geometry nor appearance (move-only — the move
+/// leaf takes no inherited shader).
 ///
 /// This is the (effect × path) analogue of
 /// `PlasmaZones::eventPathSupportsShaderLeg(path)`, which gates whether a

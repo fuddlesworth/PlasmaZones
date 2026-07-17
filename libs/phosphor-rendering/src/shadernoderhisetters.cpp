@@ -36,6 +36,21 @@ void ShaderNodeRhi::setUniformExtension(std::shared_ptr<PhosphorShaders::IUnifor
     m_ubo.reset();
     m_initialized = false;
     m_didFullUploadOnce = false;
+    // The prepare() init block (gated on !m_initialized) unconditionally
+    // recreates the fullscreen-quad VBO, but the quad upload is gated on
+    // !m_vboUploaded. Clear it here so the recreated VBO is repopulated;
+    // otherwise a runtime extension attach/swap/resize after the first frame
+    // would draw the quad from an uninitialized vertex buffer (blank/garbage).
+    // Mirrors releaseRhiResources(), which resets the same buffers.
+    m_vboUploaded = false;
+    // The recreated UBO starts uninitialized. Mark uniforms dirty so the next
+    // upload takes the full-upload path (which is gated on m_uniformsDirty) and
+    // re-writes the base region. Without this, a resize landing on an
+    // otherwise-clean frame would recreate m_ubo, then hit the
+    // m_uniformsDirty==false branch and leave the base region uninitialized
+    // (garbage uniforms). Mirrors releaseRhiResources(), which resets the same
+    // trio and also sets m_uniformsDirty.
+    m_uniformsDirty = true;
     // Resize staging buffer to match. Keep capacity to avoid churn if the size
     // oscillates. Actual memset/fill happens on upload.
     m_extensionStaging.resize(newSize);
@@ -147,27 +162,104 @@ void ShaderNodeRhi::setCustomColor(int index, const QColor& color)
 }
 
 // ============================================================================
+// Surface-only state
+// ============================================================================
+//
+// Each of these lands in the surface UBO's scene region (a SurfaceUniformProfile
+// reads them from UboFrameState; a BaseUniformProfile ignores them), so they
+// mark m_sceneDataDirty just like the custom params/colours above.
+
+void ShaderNodeRhi::setSurfaceOpacity(float opacity)
+{
+    if (m_surfaceOpacity != opacity) {
+        m_surfaceOpacity = opacity;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+void ShaderNodeRhi::setSurfaceScale(float scale)
+{
+    if (m_surfaceScale != scale) {
+        m_surfaceScale = scale;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+void ShaderNodeRhi::setSurfaceFocused(bool focused)
+{
+    if (m_surfaceFocused != focused) {
+        m_surfaceFocused = focused;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+void ShaderNodeRhi::setSurfaceSize(float width, float height)
+{
+    if (m_surfaceSize[0] != width || m_surfaceSize[1] != height) {
+        m_surfaceSize[0] = width;
+        m_surfaceSize[1] = height;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+void ShaderNodeRhi::setSurfaceFrameTopLeft(float x, float y)
+{
+    if (m_surfaceFrameTopLeft[0] != x || m_surfaceFrameTopLeft[1] != y) {
+        m_surfaceFrameTopLeft[0] = x;
+        m_surfaceFrameTopLeft[1] = y;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+void ShaderNodeRhi::setSurfaceFrameSize(float width, float height)
+{
+    if (m_surfaceFrameSize[0] != width || m_surfaceFrameSize[1] != height) {
+        m_surfaceFrameSize[0] = width;
+        m_surfaceFrameSize[1] = height;
+        m_uniformsDirty = true;
+        m_sceneDataDirty = true;
+    }
+}
+
+// ============================================================================
 // App Fields
 // ============================================================================
 
 void ShaderNodeRhi::setAppField0(int value)
 {
-    if (m_baseUniforms.appField0 == value) {
+    // A profile that doesn't expose the app-field slots must never see them
+    // marked dirty: its dirtyRegions() could otherwise emit a K_APP_FIELDS
+    // region past the end of a leaner UBO. Gate on the profile's declared
+    // capability so only profiles that own appField0/1 pay the granular path.
+    if (!m_uboProfile->hasAppFields()) {
         return;
     }
-    m_baseUniforms.appField0 = value;
+    if (m_appField0 == value) {
+        return;
+    }
+    m_appField0 = value;
+    m_uboProfile->setAppField0(value);
     m_uniformsDirty = true;
     // Use the granular K_APP_FIELDS region (8 bytes) instead of the full
-    // scene header (~512 bytes). Phosphor updates these on every hover.
+    // scene header (~592 bytes). Phosphor updates these on every hover.
     m_appFieldsDirty = true;
 }
 
 void ShaderNodeRhi::setAppField1(int value)
 {
-    if (m_baseUniforms.appField1 == value) {
+    if (!m_uboProfile->hasAppFields()) {
         return;
     }
-    m_baseUniforms.appField1 = value;
+    if (m_appField1 == value) {
+        return;
+    }
+    m_appField1 = value;
+    m_uboProfile->setAppField1(value);
     m_uniformsDirty = true;
     m_appFieldsDirty = true;
 }
@@ -262,7 +354,23 @@ void ShaderNodeRhi::setSourceTextureProvider(QSGTextureProvider* provider)
     if (m_sourceTextureProvider.data() == provider) {
         return;
     }
+    // Re-wire the textureChanged → dirty bridge to the new provider. The
+    // scene graph cannot see a dependency held as a raw provider pointer:
+    // when the sampled ShaderEffectSource layer re-renders, nothing marks
+    // THIS node dirty, so an enclosing QSGLayer capturing this node's item
+    // (SurfaceAnimator's transition capture) never re-grabs and freezes on
+    // its creation-time — possibly empty — grab for a whole animation leg.
+    // The connection is context-less, so delivery is direct on the emitting
+    // (render) thread, where this node lives; markDirty from the render
+    // thread is the stock QSGRhiShaderEffectNode pattern. Disconnected here
+    // on swap and in the destructor; provider destruction auto-disconnects.
+    QObject::disconnect(m_sourceTextureChangedConn);
     m_sourceTextureProvider = provider;
+    if (provider) {
+        m_sourceTextureChangedConn = QObject::connect(provider, &QSGTextureProvider::textureChanged, [this]() {
+            markDirty(QSGNode::DirtyMaterial);
+        });
+    }
     // Clear the cached binding-7 texture pointer so the SRB build sees
     // a "different texture" on the next prepare() and rebuilds bindings.
     // The asymmetric "only on provider→null" reset that lived here briefly

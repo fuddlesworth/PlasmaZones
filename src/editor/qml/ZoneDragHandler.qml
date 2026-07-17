@@ -28,16 +28,22 @@ MouseArea {
     property var fillRegion: null
     property var committedFillRegion: null // Preserve fill region even after modifier key released
     property bool hasDragged: false // Track if actual drag movement occurred
+    readonly property int dragThreshold: 5 // Minimum drag distance before a press counts as a drag (mirrors CanvasMouseHandler)
+    // Last snapped/clamped drag position computed in onPositionChanged. Committed on
+    // release instead of visualX/visualY, because the visual properties have Behaviors
+    // and may hold a mid-animation (interpolated) value at release time.
+    property real lastFinalX: 0
+    property real lastFinalY: 0
 
     anchors.fill: parent
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton | Qt.RightButton
     z: 1 // Below handles and buttons
     focus: false
-    onClicked: function(mouse) {
+    onClicked: function (mouse) {
         // Don't handle clicks if over buttons or handles
         if (zoneRoot.anyButtonHovered || zoneRoot.anyHandleHovered)
-            return ;
+            return;
 
         if (mouse.button === Qt.RightButton)
             zoneRoot.contextMenuRequested();
@@ -46,39 +52,44 @@ MouseArea {
         // Ensure parent drawingArea maintains focus for keyboard navigation
         var parentItem = zoneRoot.parent;
         while (parentItem) {
-            if (parentItem.objectName === "drawingArea" || parentItem.id === "drawingArea") {
-                Qt.callLater(function() {
+            if (parentItem.objectName === "drawingArea") {
+                Qt.callLater(function () {
                     if (parentItem)
                         parentItem.forceActiveFocus();
-
                 });
                 break;
             }
             parentItem = parentItem.parent;
         }
     }
-    onPressed: function(mouse) {
+    onPressed: function (mouse) {
         // Check hover state first
         if (zoneRoot.anyButtonHovered || zoneRoot.anyHandleHovered) {
             mouse.accepted = false;
-            return ;
+            return;
         }
         var mx = mouse.x, my = mouse.y;
         var zw = zoneRoot.width, zh = zoneRoot.height;
         // Geometric check: detect if click is near a corner/edge handle
-        var handleHitSize = 24;
-        var edgeHandleHalfSize = zoneRoot.handleSize * 3;
+        var handleHitSize = zoneRoot.handleHitSize;
+        var edgeHandleHalfSize = zoneRoot.handleEdgeLength / 2 + zoneRoot.handleHitMargin;
         var nearCornerOrEdge = ((mx < handleHitSize && my < handleHitSize) || (mx > zw - handleHitSize && my < handleHitSize) || (mx < handleHitSize && my > zh - handleHitSize) || (mx > zw - handleHitSize && my > zh - handleHitSize) || (mx > zw / 2 - edgeHandleHalfSize && mx < zw / 2 + edgeHandleHalfSize && my < handleHitSize) || (mx > zw / 2 - edgeHandleHalfSize && mx < zw / 2 + edgeHandleHalfSize && my > zh - handleHitSize) || (my > zh / 2 - edgeHandleHalfSize && my < zh / 2 + edgeHandleHalfSize && mx < handleHitSize) || (my > zh / 2 - edgeHandleHalfSize && my < zh / 2 + edgeHandleHalfSize && mx > zw - handleHitSize));
         if (nearCornerOrEdge) {
             mouse.accepted = false;
-            return ;
+            return;
         }
         if (mouse.button === Qt.LeftButton && zoneRoot.operationState === 0) {
             // EditorZone.State.Idle = 0
             mouse.accepted = true;
+            // Abort any running fill animation before capturing start geometry:
+            // it writes visualX/Y/Width/Height directly (bypassing the Behavior
+            // gate) and its onFinished would commit underneath this drag.
+            zoneRoot.stopFillAnimation();
             zoneRoot.operationState = 1; // EditorZone.State.Dragging = 1
             dragStart = Qt.point(zoneRoot.visualX, zoneRoot.visualY);
             originalSize = Qt.size(zoneRoot.visualWidth, zoneRoot.visualHeight);
+            lastFinalX = dragStart.x;
+            lastFinalY = dragStart.y;
             animateOffTimer.stop();
             fillPreviewActive = false;
             fillRegion = null;
@@ -97,22 +108,22 @@ MouseArea {
             }
         }
     }
-    onPositionChanged: function(mouse) {
+    onPositionChanged: function (mouse) {
         if (pressed && zoneRoot.operationState === 1) {
             // Dragging
             mouse.accepted = true;
             if (zoneRoot.operationState !== 1)
-                return ;
+                return;
 
             // Validate canvas dimensions
             if (zoneRoot.canvasWidth <= 0 || zoneRoot.canvasHeight <= 0 || !isFinite(zoneRoot.canvasWidth) || !isFinite(zoneRoot.canvasHeight))
-                return ;
+                return;
 
             var canvasItem = zoneRoot.parent;
             var currentMouseInCanvas = dragHandler.mapToItem(canvasItem, mouse.x, mouse.y);
             // Validate mouse coordinates
             if (!isFinite(currentMouseInCanvas.x) || isNaN(currentMouseInCanvas.x) || !isFinite(currentMouseInCanvas.y) || isNaN(currentMouseInCanvas.y))
-                return ;
+                return;
 
             var dx = currentMouseInCanvas.x - mouseStart.x;
             var dy = currentMouseInCanvas.y - mouseStart.y;
@@ -123,8 +134,7 @@ MouseArea {
             if (!isFinite(dy) || isNaN(dy))
                 dy = 0;
 
-            // Only mark as dragged if movement exceeds threshold (5 pixels)
-            var dragThreshold = 5;
+            // Only mark as dragged if movement exceeds dragThreshold
             if (!hasDragged && (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold))
                 hasDragged = true;
 
@@ -201,13 +211,16 @@ MouseArea {
                 } else {
                     if (snapIndicator)
                         snapIndicator.clearSnapLines();
-
                 }
             } else {
                 if (snapIndicator)
                     snapIndicator.clearSnapLines();
-
             }
+            // Remember the final (snapped, clamped) position for commit on release.
+            // onReleased must not read visualX/visualY: those have Behaviors attached
+            // and can be mid-animation at release time.
+            lastFinalX = finalX;
+            lastFinalY = finalY;
             // Fill preview (reuse variables already computed above)
             var ctrlHeld = fillModifierHeld;
             if (ctrlHeld && controller && zoneRoot.zoneId) {
@@ -263,15 +276,17 @@ MouseArea {
                 }
             }
             zoneRoot.operationUpdated(zoneRoot.zoneId, zoneRoot.visualX, zoneRoot.visualY, zoneRoot.visualWidth, zoneRoot.visualHeight);
-            // Update multi-zone drag if active (move other selected zones by the same delta)
+            // Update multi-zone drag if active (move other selected zones by the same delta).
+            // Feed the last snapped/clamped drag position, not visualX/visualY: the visual
+            // properties have Behaviors and may hold interpolated mid-animation values.
             if (controller && controller.isMultiZoneDragActive() && zoneRoot.canvasWidth > 0 && zoneRoot.canvasHeight > 0) {
-                var relX = zoneRoot.visualX / zoneRoot.canvasWidth;
-                var relY = zoneRoot.visualY / zoneRoot.canvasHeight;
+                var relX = lastFinalX / zoneRoot.canvasWidth;
+                var relY = lastFinalY / zoneRoot.canvasHeight;
                 controller.updateMultiZoneDrag(zoneRoot.zoneId, relX, relY);
             }
         }
     }
-    onReleased: function(mouse) {
+    onReleased: function (mouse) {
         if (zoneRoot.operationState === 1) {
             // Dragging
             if (snapIndicator)
@@ -283,20 +298,29 @@ MouseArea {
             // Only update geometry if actual drag movement occurred
             if (hasDragged) {
                 var relX, relY, relW, relH;
-                // Use committed fill region if available (even if modifier key was released)
+                // Commit targets, never visualX/visualY/visualWidth/visualHeight: the
+                // visual properties have Behaviors and hold interpolated mid-animation
+                // values if the mouse is released while a fill preview (or its revert)
+                // is still animating. Committing them would persist a transient
+                // rectangle as undoable state.
                 if (committedFillRegion) {
-                    relX = committedFillRegion.x;
-                    relY = committedFillRegion.y;
-                    relW = committedFillRegion.width;
-                    relH = committedFillRegion.height;
-                } else if (fillRegion) {
-                    relX = fillRegion.x;
-                    relY = fillRegion.y;
-                    relW = fillRegion.width;
-                    relH = fillRegion.height;
+                    // Use the committed fill region TARGET (fillRegion is set/cleared
+                    // strictly together with committedFillRegion, so checking one
+                    // suffices). Route through the converters: for fixed zones they
+                    // produce screen pixels (raw normalized region coords would be
+                    // rejected by C++ as sub-minimum pixel sizes), and for relative
+                    // zones they are identity-equivalent to the region's normalized
+                    // coords.
+                    relX = zoneRoot.toRelativeX(committedFillRegion.x * zoneRoot.canvasWidth);
+                    relY = zoneRoot.toRelativeY(committedFillRegion.y * zoneRoot.canvasHeight);
+                    relW = zoneRoot.toRelativeW(committedFillRegion.width * zoneRoot.canvasWidth);
+                    relH = zoneRoot.toRelativeH(committedFillRegion.height * zoneRoot.canvasHeight);
                 } else {
-                    relX = zoneRoot.toRelativeX(zoneRoot.visualX);
-                    relY = zoneRoot.toRelativeY(zoneRoot.visualY);
+                    // Plain drag: use the last final position computed in
+                    // onPositionChanged (already snapped and clamped), not the
+                    // possibly mid-animation visual position.
+                    relX = zoneRoot.toRelativeX(lastFinalX);
+                    relY = zoneRoot.toRelativeY(lastFinalY);
                     relW = zoneRoot.toRelativeW(originalSize.width);
                     relH = zoneRoot.toRelativeH(originalSize.height);
                 }
@@ -308,12 +332,10 @@ MouseArea {
                 // End multi-zone drag with commit
                 if (controller && controller.isMultiZoneDragActive())
                     controller.endMultiZoneDrag(true);
-
             } else {
                 // No actual drag movement - cancel multi-zone drag without commit
                 if (controller && controller.isMultiZoneDragActive())
                     controller.endMultiZoneDrag(false);
-
             }
             fillRegion = null;
             committedFillRegion = null; // Clear after commit
@@ -351,8 +373,7 @@ MouseArea {
     Timer {
         id: animateOffTimer
 
-        interval: 200
+        interval: Kirigami.Units.longDuration
         onTriggered: zoneRoot.animateFillPreview = false
     }
-
 }

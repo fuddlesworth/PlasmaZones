@@ -12,7 +12,7 @@
  * Uses `setUserProfilesDirOverride()` to redirect file I/O into a
  * tmpdir so the test never touches the real user XDG dir.
  *
- * Companion test files (split for the <800-line guideline):
+ * Companion test files:
  *   - test_animations_motion_sets.cpp      — preset / motion-set / pending
  *   - test_animations_shader_overrides.cpp — shader-effect overrides
  */
@@ -54,24 +54,33 @@ private Q_SLOTS:
 
     // ─── Slider bounds ────────────────────────────────────────────────────
 
-    void springBounds_matchPhosphorAnimationSpringDoc()
+    void springBounds_areUsableSubsetOfEngineClamp()
     {
         AnimationsPageController c;
-        // Bounds are documented in PhosphorAnimation/Spring.h:
-        //   omega ∈ [0.1, 200], zeta ∈ [0.0, 10.0]
-        // The controller exposes them as CONSTANT properties so QML
-        // sliders can bind once.
-        QCOMPARE(c.springOmegaMin(), 0.1);
-        QCOMPARE(c.springOmegaMax(), 200.0);
-        QCOMPARE(c.springZetaMin(), 0.0);
-        QCOMPARE(c.springZetaMax(), 10.0);
+        // The engine clamps to omega ∈ [0.1, 200], zeta ∈ [0, 10]
+        // (PhosphorAnimation/Spring.h). The slider exposes a deliberately
+        // narrower, usable band within that clamp: above omega ~40 the spring
+        // settles visually instantly, and zeta > ~4 is a barely-moving crawl;
+        // zeta is floored at 0.1 so the edited spring always settles.
+        QCOMPARE(c.springOmegaMin(), 1.0);
+        QCOMPARE(c.springOmegaMax(), 40.0);
+        QCOMPARE(c.springZetaMin(), 0.1);
+        QCOMPARE(c.springZetaMax(), 4.0);
+
+        // The slider band stays inside the engine's accepted clamp range.
+        QVERIFY(c.springOmegaMin() >= 0.1);
+        QVERIFY(c.springOmegaMax() <= 200.0);
+        QVERIFY(c.springZetaMin() >= 0.0);
+        QVERIFY(c.springZetaMax() <= 10.0);
     }
 
     // ─── Path discovery ───────────────────────────────────────────────────
 
-    void sectionForPath_extractsFirstSegment()
+    void sectionForPath_mapsTopLevelToUiSection()
     {
         AnimationsPageController c;
+        // sectionForPath maps a path's top level to its UI section — which is NOT
+        // always the first segment: osd/popup/panel all collapse into "overlays".
         QCOMPARE(c.sectionForPath(QStringLiteral("global")), QStringLiteral("global"));
         QCOMPARE(c.sectionForPath(QStringLiteral("editor")), QStringLiteral("editor"));
         QCOMPARE(c.sectionForPath(QStringLiteral("editor.snapIn")), QStringLiteral("editor"));
@@ -123,9 +132,8 @@ private Q_SLOTS:
         QCOMPARE(totalListed, paths.size());
 
         // Every listed path is a built-in path.
-        const QStringList builtIn = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
         for (const QString& p : allListed) {
-            QVERIFY2(builtIn.contains(p), qPrintable(QStringLiteral("unknown path in UI: ") + p));
+            QVERIFY2(paths.contains(p), qPrintable(QStringLiteral("unknown path in UI: ") + p));
         }
     }
 
@@ -266,6 +274,29 @@ private Q_SLOTS:
         QSignalSpy spy(&c, &AnimationsPageController::overrideChanged);
         QVERIFY(!c.setOverride(QString(), {{QStringLiteral("duration"), 100}}));
         QCOMPARE(spy.count(), 0);
+    }
+
+    // Backs the per-page "Reset to defaults" on the animation pages: clears
+    // every per-event override file, returning them to built-in defaults.
+    void clearAllOverrides_removesEveryOverrideFile()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        const QVariantMap profile{{QStringLiteral("duration"), 250},
+                                  {QStringLiteral("curve"), QStringLiteral("0.33,1,0.68,1")}};
+        QVERIFY(c.setOverride(QStringLiteral("editor.snapIn"), profile));
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), profile));
+        QVERIFY(c.hasOverride(QStringLiteral("editor.snapIn")));
+        QVERIFY(c.hasOverride(QStringLiteral("osd.show")));
+
+        QCOMPARE(c.clearAllOverrides(), 2);
+        QVERIFY(!c.hasOverride(QStringLiteral("editor.snapIn")));
+        QVERIFY(!c.hasOverride(QStringLiteral("osd.show")));
+        // Nothing left — a second sweep removes zero files.
+        QCOMPARE(c.clearAllOverrides(), 0);
     }
 
     // ─── Effective resolution ─────────────────────────────────────────────
@@ -413,15 +444,24 @@ private Q_SLOTS:
 
     // ─── Shader-leg support gate ──────────────────────────────────────────
 
-    /// Pin the shader-leg-support predicate against the daemon-side list.
-    /// `supportsShaderLeg` is the predicate the QML shader-picker visibility
-    /// is bound to; if the surface set in
-    /// `src/core/animationshadersupportedpaths.h` drifts away from the
-    /// `resolveShaderEffect` call sites in
-    /// `src/daemon/overlayservice.cpp`, the QML would either expose
-    /// pickers that do nothing (drift in one direction) or hide pickers
-    /// for events that DO produce shader legs (drift in the other).
-    void supportsShaderLeg_matchesDaemonOverlayConsumers()
+    /// Pin the shader-leg-support predicate against the call sites that
+    /// actually consume a leg. `supportsShaderLeg` is the predicate the QML
+    /// shader-picker visibility is bound to; if the surface set in
+    /// `src/core/animationshadersupportedpaths.h` drifts away from those call
+    /// sites, the QML would either expose pickers that do nothing (drift in one
+    /// direction) or hide pickers for events that DO produce shader legs (drift
+    /// in the other). Per that header, consumption runs through three
+    /// mechanisms, not just the daemon's: `resolveShaderEffect` from
+    /// `OverlayService::buildOsdConfig` / `buildLayoutPickerConfig` /
+    /// `buildZoneSelectorConfig` / `buildSnapAssistConfig` (osd + popup
+    /// families), `tryBeginShaderForEvent` under
+    /// `kwin-effect/plasmazoneseffect/` (window_lifecycle for
+    /// open/close/move/maximize/focus, daemon_apply for minimize), and
+    /// `resolveShaderWithDefault`, driving both DesktopTransitionManager from
+    /// `kwin-effect/plasmazoneseffect/lifecycle.cpp` (the screen-level desktop
+    /// switch and peek legs) and the snap geometry legs through
+    /// `applyWindowGeometry` in `kwin-effect/plasmazoneseffect/drag_snap.cpp`.
+    void supportsShaderLeg_matchesConsumedLegCallSites()
     {
         AnimationsPageController c;
 
@@ -437,22 +477,45 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.show")));
         QVERIFY(c.supportsShaderLeg(QStringLiteral("popup.snapAssist.hide")));
 
-        // Window family — consumed leaves driven by the KWin effect's
-        // tryBeginShaderForEvent at kwin-effect/plasmazoneseffect.cpp.
-        // Each maps to a window-lifecycle hook (windowAdded, windowClosed,
-        // windowFinishUserMovedResized, maximized, minimized,
-        // focusChanged) and runs the resolved shader on the
-        // OffscreenEffect's redirected texture quad.
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.open")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.close")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.minimize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.maximize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.move")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.resize")));
-        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.focus")));
+        // Window family — consumed leaves driven by the KWin effect under
+        // kwin-effect/plasmazoneseffect/. The lifecycle legs go through
+        // tryBeginShaderForEvent (window_lifecycle for windowAdded,
+        // windowClosed, windowStartUserMovedResized for the held move,
+        // windowMaximizedStateChanged and windowActivated; daemon_apply for
+        // minimizedChanged), while the snap geometry legs resolve through
+        // applyWindowGeometry in drag_snap.cpp. Both run the resolved shader
+        // on the OffscreenEffect's redirected texture quad.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.open")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.close")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.minimize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.maximize")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.move")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.snapIn")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.snapOut")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement.layoutSwitch")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance.focus")));
+        // The resize legs were dropped from the taxonomy: the interactive
+        // edge-drag has no discrete before/after for a shader to play, and
+        // snapResize never had a callsite. Stale config overrides on these
+        // paths must prune, so they stay unsupported.
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.resize")));
+        QVERIFY(!c.supportsShaderLeg(QStringLiteral("window.movement.snapResize")));
+        // Desktop family — the two-texture switch and the show-desktop peek
+        // are consumed leaves too (the KWin effect's DesktopTransitionManager
+        // resolves them in the desktopChanged / showingDesktopChanged handlers,
+        // not per-window tryBeginShaderForEvent legs).
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.switch")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop.peek")));
+        // The "All Desktop Events" parent row is the desktop family root, and
+        // an ancestor of the consumed switch and peek leaves. It is
+        // shader-pickable too (its picker binds to this), and a pack set there
+        // cascades to both legs — so it is supported for the same reason the
+        // popup/osd parents below are, not merely as an ancestor of a consumed
+        // leaf.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("desktop")));
 
         // Ancestors of consumed leaves — supported because the
-        // daemon's resolver walks them on the way to the leaf, so a
+        // resolver walks them on the way to the leaf, so a
         // shader override here cascades to every descendant. Without
         // this, the user would have to set the same shader on every
         // popup leaf individually instead of once at the parent.
@@ -469,6 +532,9 @@ private Q_SLOTS:
         // `window` itself is now a consumable ancestor — setting a
         // shader at the family root cascades to every leaf above.
         QVERIFY(c.supportsShaderLeg(QStringLiteral("window")));
+        // The intermediate cascade parents the parent-card UX relies on.
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.movement")));
+        QVERIFY(c.supportsShaderLeg(QStringLiteral("window.appearance")));
 
         // Paths the resolver never walks through — any assignment would
         // be runtime-dead and silently shadow what the user thought

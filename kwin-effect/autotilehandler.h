@@ -6,7 +6,6 @@
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 
-#include <QColor>
 #include <QHash>
 #include <QObject>
 #include <QPair>
@@ -41,8 +40,8 @@ class PlasmaZonesEffect;
  * Manages the autotile D-Bus interface, screen tracking, window tiling,
  * monocle mode, tiled-tracking for border rendering, and pre-autotile
  * geometry preservation. Title-bar (borderless) state is owned by the
- * effect's DecorationManager — this handler only acquires/releases its
- * per-screen Autotile ownership there.
+ * effect's DecorationManager and driven by rules — this handler does
+ * not touch decorations.
  *
  * Delegates window lookups, geometry application, and animation back to the effect.
  */
@@ -153,14 +152,6 @@ public:
     /// pair this with DecorationManager::restoreAll().
     void clearTiledTracking();
 
-    // Settings update: toggle hide-title-bars with border restore on disable.
-    // Returns true if the value actually changed (so the caller can skip a
-    // redundant updateAllBorders() stacking-order walk on a no-op reload).
-    bool updateHideTitleBarsSetting(bool enabled);
-    /// Returns true if the value actually changed (so the caller can skip a
-    /// redundant updateAllBorders() stacking-order walk on a no-op reload).
-    bool updateShowBorderSetting(bool enabled);
-
     // Focus follows mouse: focus autotile window under cursor
     void setFocusFollowsMouse(bool enabled);
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
@@ -195,54 +186,26 @@ public:
         }
     }
 
-    // Border rendering accessors — delegate to shared AutotileStateHelpers
+    // Tiled-membership accessor — delegates to shared AutotileStateHelpers. The
+    // membership set feeds the IsTiled rule field; per-window border appearance
+    // and title-bar hiding are resolved from rules, not from this state.
     bool isTiledWindow(const QString& windowId) const
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
     }
-    bool shouldShowBorderForWindow(const QString& windowId) const
-    {
-        return AutotileStateHelpers::shouldShowBorderForWindow(m_border, windowId);
-    }
-    int borderWidth() const
-    {
-        return m_border.width;
-    }
-    void setBorderWidth(int w)
-    {
-        m_border.width = w;
-    }
-    QColor borderColor() const
-    {
-        return m_border.color;
-    }
-    void setBorderColor(const QColor& c)
-    {
-        m_border.color = c;
-    }
-    QColor inactiveBorderColor() const
-    {
-        return m_border.inactiveColor;
-    }
-    void setInactiveBorderColor(const QColor& c)
-    {
-        m_border.inactiveColor = c;
-    }
-    int borderRadius() const
-    {
-        return m_border.radius;
-    }
-    void setBorderRadius(int r)
-    {
-        m_border.radius = r;
-    }
-    /// Read-only view of the autotile border state. The effect's mode-aware
-    /// border resolution reads this alongside the parallel snap BorderState so
-    /// each window draws with the settings of the mode that manages it.
-    const BorderState& borderState() const
-    {
-        return m_border;
-    }
+
+    // Tiled-set mutators that re-resolve the window's rules whenever its overall
+    // tiled status flips (IsTiled is a match field). Welding the invalidation to
+    // the write mirrors NavigationHandler's snap/float setters, so a caller can't
+    // change tiling membership and forget to re-resolve a tiled-scoped border /
+    // title-bar / opacity rule. markWindowTiled only invalidates on a genuine
+    // not-tiled→tiled transition (re-adding an already-tiled window is a no-op),
+    // so a cross-screen transfer that first runs removeFromOtherScreens does
+    // invalidate (the window is briefly not-tiled), while a same-screen re-assert
+    // does not.
+    void markWindowTiled(const QString& screenId, const QString& windowId);
+    void clearWindowTiledAllScreens(const QString& windowId);
+    void clearWindowTiledOnScreen(const QString& screenId, const QString& windowId);
 
     // Set a window to re-activate after the next autotile raise loop completes.
     // Used by slotDaemonReady() to preserve focus of non-tiled windows (e.g. KCM).
@@ -283,11 +246,10 @@ private:
     /**
      * @brief Shared float-state cleanup for a window being floated
      *
-     * Updates the float cache, releases autotile's DecorationManager
-     * ownership (the manager restores the title bar unless another owner
-     * remains), clears tiled tracking, removes the border overlay, and
-     * unmaximizes monocle. Used by both slotWindowFloatingChanged
-     * (per-window D-Bus signal path) and slotWindowsTileRequested (batch float path).
+     * Updates the float cache, clears tiled tracking, removes the border
+     * overlay, and unmaximizes monocle (title-bar restores flow through the
+     * rule path). Used by both slotWindowFloatingChanged (per-window D-Bus
+     * signal path) and slotWindowsTileRequested (batch float path).
      */
     void applyFloatCleanup(const QString& windowId);
 
@@ -322,13 +284,16 @@ private:
     /**
      * @brief Save the pre-autotile free-float geometry for @p windowId.
      *
-     * The caller passes the window's current frame. The default safety
-     * guard skips the save when the window is not currently floating —
-     * snapped/tiled windows have zone dimensions in frameGeometry() and
-     * capturing them would poison the pre-tile entry. Invalid input and
-     * deliberately-skipped saves are both silent no-ops (logged at debug);
+     * The caller passes the window's current frame in @p frameIn; it is corrected
+     * for a maximized/fullscreen window via PlasmaZonesEffect::freeGeometryForCapture
+     * (the pre-maximize restore rect) so a full-monitor frame is never stored as the
+     * free-float geometry. The default safety guard skips the save when the window is
+     * not currently floating — snapped/tiled windows have zone dimensions in
+     * frameGeometry() and capturing them would poison the pre-tile entry. Invalid
+     * input and deliberately-skipped saves are both silent no-ops (logged at debug);
      * no caller distinguishes them.
      *
+     * @param w The window, used to read its maximize/fullscreen restore rect.
      * @param knownFreeFloating Bypass the isWindowFloating guard when the
      *        caller knows the frame is authoritatively a free-float rect.
      *        Use true from the window-added paths (notifyWindowAdded and
@@ -336,8 +301,8 @@ private:
      *        the FloatingCache yet, so isWindowFloating() returns false
      *        and would incorrectly reject the one-shot initial capture.
      */
-    void saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, const QRectF& frame,
-                                          bool knownFreeFloating = false);
+    void saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, KWin::EffectWindow* w,
+                                          const QRectF& frameIn, bool knownFreeFloating = false);
 
     /**
      * @brief All-bucket pre-autotile geometry lookup.

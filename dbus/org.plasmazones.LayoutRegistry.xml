@@ -68,7 +68,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="createLayout">
             <annotation name="org.gtk.GDBus.DocString" value="Create a new empty layout. Returns the new layout UUID."/>
             <arg name="name" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Display name for the layout."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Display name for the layout. Names longer than 40 characters are shortened to fit."/>
             </arg>
             <arg name="type" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Layout type (e.g. custom)."/>
@@ -84,7 +84,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="duplicateLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Create a copy of an existing layout. Returns the new layout UUID."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Create a copy of an existing layout. Returns the new layout UUID. The copy's name is shortened to 40 characters if needed."/>
             <arg name="id" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to duplicate."/>
             </arg>
@@ -93,7 +93,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="importLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Import a layout from a JSON file. Returns the imported layout UUID."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Import a layout from a JSON file. Returns the imported layout UUID. Layout and zone names longer than 40 characters are shortened to fit."/>
             <arg name="filePath" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Absolute path to the JSON file."/>
             </arg>
@@ -102,12 +102,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="exportLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Export a layout to a JSON file at the given path."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Export a layout to a JSON file at the given path. Returns whether the export was written."/>
             <arg name="layoutId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to export."/>
             </arg>
             <arg name="filePath" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Destination file path."/>
+            </arg>
+            <arg name="written" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the layout reached the destination. False when it could not be opened, written or committed; the destination is left untouched in that case."/>
             </arg>
         </method>
         <method name="setLayoutHidden">
@@ -138,7 +141,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="updateLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Replace an existing layout with the supplied full layout JSON (editor save path). The layout's UUID is taken from the JSON."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Replace an existing layout with the supplied full layout JSON (editor save path). The layout's UUID is taken from the JSON. Layout and zone names longer than 40 characters are shortened to fit."/>
             <arg name="layoutJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
             </arg>
@@ -147,7 +150,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="createLayoutFromJson">
-            <annotation name="org.gtk.GDBus.DocString" value="Create a new layout from the supplied full layout JSON (editor new-layout save, KZones import)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Create a new layout from the supplied full layout JSON (editor new-layout save, KZones import). Layout and zone names longer than 40 characters are shortened to fit."/>
             <arg name="layoutJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
             </arg>

@@ -18,7 +18,7 @@ inline void appendUniquePath(QStringList& paths, const QString& path)
 
 inline QStringList trustedShaderRoots()
 {
-    return QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"),
+    return QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/overlays"),
                                      QStandardPaths::LocateDirectory);
 }
 

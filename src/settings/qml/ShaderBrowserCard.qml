@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -42,12 +41,34 @@ import org.phosphor.animation
 ItemDelegate {
     id: root
 
+    // On the delegate root (not just the background Rectangle) so the fill,
+    // the content chrome, and the labels all resolve the same View set.
+    Kirigami.Theme.colorSet: Kirigami.Theme.View
+    Kirigami.Theme.inherit: false
+
+    // ItemDelegate defaults to Qt.NoFocus, which left every shader card out of the
+    // tab chain: opening a pack's details was mouse-only, and the focus-border
+    // branch below could never fire. AbstractButton gives Space to clicked() for
+    // free, but only Space — Return and Enter have to be wired, and they are the
+    // keys a user actually reaches for. Same trio as SettingsCard's header.
+    focusPolicy: Qt.StrongFocus
+    Keys.onReturnPressed: root.clicked()
+    Keys.onEnterPressed: root.clicked()
+
     required property var effect
     required property var bridge
     property int usagesRev: 0
     property var usageChipTextFn: function (count) {
         return i18ncp("@info shader usage count", "%n use", "%n uses", count);
     }
+    /// Returns a short capability label for the card badge (e.g. "Geometry"),
+    /// or "" to render no badge (universal shaders, the default majority). The
+    /// host supplies the mapping so the badge stays consistent with the
+    /// browser's Type filter and Type grouping.
+    property var typeBadgeFn: function (e) {
+        return "";
+    }
+    readonly property string _typeBadge: (root.effect && root.typeBadgeFn) ? String(root.typeBadgeFn(root.effect)) : ""
 
     signal showDetails(var effect)
 
@@ -72,19 +93,19 @@ ItemDelegate {
 
     background: Rectangle {
         radius: Kirigami.Units.smallSpacing
-        // Match the SettingsCard standard: keep the fill subtle and signal
-        // hover through an accent-tinted border, rather than flooding the
-        // whole card with hoverColor.
-        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, root.hovered ? 0.06 : 0.04)
-        border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+        // Subtle altBg fill; hover signals through the hover border plus a
+        // faint hover tint on the fill itself (this card tints its fill on
+        // hover, unlike SettingsCard's border-only hover).
+        color: root.hovered ? Qt.tint(Kirigami.Theme.alternateBackgroundColor, Qt.alpha(Kirigami.Theme.hoverColor, 0.1)) : Kirigami.Theme.alternateBackgroundColor
+        border.width: 1
         border.color: {
             if (root.activeFocus)
                 return Kirigami.Theme.focusColor;
 
             if (root.hovered)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4);
+                return Kirigami.Theme.hoverColor;
 
-            return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12);
+            return Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast);
         }
 
         Behavior on border.color {
@@ -107,25 +128,28 @@ ItemDelegate {
             spacing: Kirigami.Units.smallSpacing
 
             Rectangle {
-                readonly property bool _hasPreview: root.effect && root.effect.previewPath && root.effect.previewPath.length > 0
+                readonly property bool _hasPreview: !!(root.effect && root.effect.previewPath && root.effect.previewPath.length > 0)
 
                 Layout.fillWidth: true
                 Layout.preferredHeight: width * 9 / 16
                 visible: _hasPreview
                 radius: Kirigami.Units.smallSpacing
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-                border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
-                border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+                color: Kirigami.Theme.alternateBackgroundColor
+                border.width: 1
+                border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 clip: true
 
                 Image {
                     anchors.fill: parent
-                    anchors.margins: Math.max(1, Math.round(Screen.devicePixelRatio))
+                    anchors.margins: 1
                     // `encodeURI` percent-encodes spaces and unicode while
                     // preserving path separators, which a raw `"file://" + path`
                     // concat would silently break on (e.g. user-installed packs
-                    // under `~/My Shaders/`).
-                    source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath) : ""
+                    // under `~/My Shaders/`). It leaves `#` and `?` untouched,
+                    // so those two are escaped explicitly or they would be
+                    // parsed as fragment/query delimiters in the file:// URL.
+                    // Twin site: ShaderBrowserDetailDialog.qml preset dialogs.
+                    source: parent._hasPreview ? "file://" + encodeURI(root.effect.previewPath).replace(/#/g, "%23").replace(/\?/g, "%3F") : ""
                     fillMode: Image.PreserveAspectCrop
                     sourceSize.width: width * 2
                     sourceSize.height: height * 2
@@ -146,11 +170,22 @@ ItemDelegate {
                     elide: Text.ElideRight
                 }
 
+                // Capability badge — a small rounded chip showing which event
+                // class this shader targets (Geometry / Appearance / Desktop).
+                // Hidden for universal shaders so the grid only calls out the
+                // ones that behave differently.
+                MetadataChip {
+                    visible: root._typeBadge.length > 0
+                    text: root._typeBadge
+                    highlighted: true
+                    pill: true
+                }
+
                 Label {
                     visible: root.effect && root.effect.isUserEffect
                     text: i18nc("@info shader source badge", "User")
                     font: Kirigami.Theme.smallFont
-                    color: Kirigami.Theme.positiveTextColor
+                    color: Kirigami.Theme.highlightColor
                 }
             }
 
@@ -200,7 +235,7 @@ ItemDelegate {
                     text: root.usageChipTextFn(_usages.length)
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
-                    ToolTip.visible: hovered.hovered && _usages.length > 0
+                    ToolTip.visible: chipHover.hovered && _usages.length > 0
                     ToolTip.text: {
                         var names = [];
                         for (var i = 0; i < _usages.length; i++)
@@ -210,7 +245,7 @@ ItemDelegate {
                     ToolTip.delay: Kirigami.Units.toolTipDelay
 
                     HoverHandler {
-                        id: hovered
+                        id: chipHover
                     }
                 }
             }

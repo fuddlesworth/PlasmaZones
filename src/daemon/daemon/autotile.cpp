@@ -17,6 +17,7 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorContext/ContextResolver.h>
 #include "../../config/settings.h"
+#include "../../dbus/layoutadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -120,14 +121,34 @@ void Daemon::updateAutotileScreens()
         for (const QString& screenId : effectiveIds) {
             if (!autotileScreens.contains(screenId))
                 continue;
-            // Virtual->physical fallback (mirrors getPerScreenSnappingWithFallback):
-            // a per-screen autotile override stored on a physical monitor must
-            // still apply when this screenId is one of its virtual sub-screens.
+            // Virtual->physical fallback: a per-screen autotile override stored on
+            // a physical monitor must still apply when this screenId is one of its
+            // virtual sub-screens.
             QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
             if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
                 overrides = m_settings->getPerScreenAutotileSettings(
                     PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
             }
+            // Resolve per-context tiling-parameter RULES up front — the effective
+            // overflow behavior gates the algorithm-default MaxWindows injection
+            // below (an Unlimited context must not receive a finite injected cap).
+            const int ctxDesktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+            const QString ctxActivity = m_layoutManager->currentActivity();
+            const PhosphorZones::ContextTilingParams tilingParams =
+                m_layoutManager->resolveContextTilingParams(screenId, ctxDesktop, ctxActivity);
+            // Effective overflow mirrors effectiveOverflowBehavior's cascade: a
+            // SetOverflowBehavior rule wins, else a per-screen config override, else
+            // global config. Clamp before the enum compare exactly as the resolver
+            // does (qBound), so a corrupt out-of-range stored value can't make the two
+            // determinations drift (which would reintroduce the injected-cap defeat).
+            const int effectiveOverflow = qBound(
+                PhosphorTiles::AutotileDefaults::MinOverflowBehavior,
+                tilingParams.overflowBehavior.value_or(overrides.contains(PerScreenKeys::OverflowBehavior)
+                                                           ? overrides.value(PerScreenKeys::OverflowBehavior).toInt()
+                                                           : m_settings->autotileOverflowBehaviorInt()),
+                PhosphorTiles::AutotileDefaults::MaxOverflowBehavior);
+            const bool contextUnlimited =
+                effectiveOverflow == static_cast<int>(PhosphorTiles::AutotileOverflowBehavior::Unlimited);
             // Inject algorithm from layout assignment (authoritative source)
             if (screenAlgorithms.contains(screenId)) {
                 const QString screenAlgo = screenAlgorithms.value(screenId);
@@ -152,8 +173,17 @@ void Daemon::updateAutotileScreens()
                 // effectiveMaxWindows() has identical fallback logic (step 2) that
                 // dynamically derives the correct MaxWindows at retile time even
                 // without a per-screen override. The override here is an optimization.
+                //
+                // Skip the injection entirely when the context is Unlimited: the
+                // injected finite default would sit at effectiveMaxWindows step 1,
+                // ahead of the Unlimited sentinel at step 2, silently defeating the
+                // SetOverflowBehavior=Unlimited request. The injection is only an
+                // optimization for the mixed-algorithm case (step 3), which never
+                // applies under Unlimited (step 2 returns first). A user's explicit
+                // per-screen-config or rule MaxWindows still caps even under Unlimited
+                // — those land in `overrides` directly and are untouched here.
                 const QString globalAlgo = m_autotileEngine->algorithmId();
-                if (screenAlgo != globalAlgo && !overrides.contains(PerScreenKeys::MaxWindows)) {
+                if (screenAlgo != globalAlgo && !overrides.contains(PerScreenKeys::MaxWindows) && !contextUnlimited) {
                     auto* screenAlgoPtr = m_algorithmRegistry->algorithm(screenAlgo);
                     auto* globalAlgoPtr = m_algorithmRegistry->algorithm(globalAlgo);
                     if (screenAlgoPtr) {
@@ -175,6 +205,49 @@ void Daemon::updateAutotileScreens()
                     }
                 }
             }
+            // Layer per-context tiling-parameter RULES on top of the config-derived
+            // override map (config stays the base; a matched SetMaxWindows /
+            // SetSplitRatio / SetMasterCount rule wins, and also overrides the
+            // algorithm-default MaxWindows injected above). Resolved above (the
+            // overflow result gated the MaxWindows injection).
+            if (tilingParams.maxWindows) {
+                overrides[PerScreenKeys::MaxWindows] = *tilingParams.maxWindows;
+            }
+            if (tilingParams.splitRatio) {
+                overrides[PerScreenKeys::SplitRatio] = *tilingParams.splitRatio;
+            }
+            if (tilingParams.masterCount) {
+                overrides[PerScreenKeys::MasterCount] = *tilingParams.masterCount;
+            }
+            if (tilingParams.insertPosition) {
+                overrides[PerScreenKeys::InsertPosition] = *tilingParams.insertPosition;
+            }
+            if (tilingParams.overflowBehavior) {
+                overrides[PerScreenKeys::OverflowBehavior] = *tilingParams.overflowBehavior;
+            }
+            // Custom-parameter override applies only when the rule's target
+            // algorithm is this screen's effective algorithm — the daemon knows
+            // both, so the algorithm guard lives here. The engine's hasCustomParam
+            // filter is a second guard for the current algo's declared params.
+            //
+            // A bare-autotile screen (mode on, no concrete assigned algorithm) is
+            // absent from screenAlgorithms yet still runs the global-default
+            // algorithm (m_autotileEngine->algorithmId(), the value the engine's
+            // effectiveAlgorithm resolves at steady state), so fall back to it rather
+            // than gating on contains() — otherwise a rule targeting the default
+            // algorithm is silently dropped on those screens. During a mid-cycle
+            // applyEntry this runs before setAlgorithm() updates the global id, so a
+            // bare screen may see the prior algorithm for one pass. Unlike the
+            // MaxWindows staleness above (which the engine re-derives at retile time
+            // via effectiveMaxWindows), the engine has no retile-time re-resolution
+            // for custom params, so a dropped CustomParams override persists until the
+            // next updateAutotileScreens (window open, desktop switch, cycle) rather
+            // than healing at the next retile.
+            const QString effectiveAlgo = screenAlgorithms.value(screenId, m_autotileEngine->algorithmId());
+            if (!tilingParams.algorithmParamTarget.isEmpty() && tilingParams.algorithmParamTarget == effectiveAlgo) {
+                overrides[PerScreenKeys::CustomParams] = tilingParams.algorithmParams;
+            }
+
             // Compare against currently applied overrides to avoid redundant retiles
             QVariantMap current = m_autotileEngine->perScreenOverrides(screenId);
             if (overrides != current) {
@@ -191,15 +264,25 @@ void Daemon::updateAutotileScreens()
     // any already created by applyPerScreenConfig above) and retiles them.
     // Because per-screen overrides are set first, retileAfterOperation inside
     // setActiveScreens uses effectiveAlgorithm() with the correct per-screen algo.
-    const bool setChanged = (m_autotileEngine->activeScreens() != autotileScreens);
     m_autotileEngine->setActiveScreens(autotileScreens);
 
-    // When the autotile set didn't change (e.g., VS inherited autotile from
-    // the physical screen's cascade before the explicit assignment was written),
-    // setActiveScreens early-returns without retiling. Force a retile for
-    // screens that are in the set so mode-swap toggles always take effect.
-    if (!setChanged) {
-        for (const QString& screenId : autotileScreens) {
+    // setActiveScreens only retiles screens that were newly ADDED to the set; a
+    // screen that was already active gets no retile from it. Force a retile for
+    // every ALREADY-ACTIVE screen so (1) a mode-swap toggle with a stable set takes
+    // effect, and (2) a rule edit that changes tiling GEOMETRY without changing the
+    // per-screen overrides map is still applied live. Case (2) is load-bearing for
+    // GAP rules (SetInnerGap / SetOuterGap*): they resolve through the context-gap
+    // PROVIDER at retile time, not the overrides map, so `overrides != current` above
+    // never sees them — only a retile pulls the fresh gaps (via the provider's
+    // authoritative "tiling"-mode context). Skipping the added screens avoids
+    // retiling them twice (setActiveScreens already did). Diffing gaps here to skip
+    // the retile on truly-unrelated edits (appearance/lock/exclude) would have to
+    // replicate that exact provider context and risk silently dropping gap
+    // application; the blanket retile is the simple correct choice. Cost is bounded:
+    // rulesChanged fires only on a user rule save, the retile is deferred + coalesced,
+    // and it produces identical geometry (no window movement) when nothing changed.
+    for (const QString& screenId : autotileScreens) {
+        if (!addedScreens.contains(screenId)) {
             m_autotileEngine->scheduleRetileForScreen(screenId);
         }
     }
@@ -220,6 +303,61 @@ void Daemon::updateAutotileScreens()
     }
 
     qCDebug(lcDaemon) << "Updated autotile screens=" << autotileScreens;
+}
+
+QSet<QString> Daemon::diffActiveAssignments()
+{
+    QSet<QString> changed;
+    if (!m_screenManager || !m_layoutManager) {
+        return changed;
+    }
+    const QString activity = currentActivity();
+    QHash<QString, QString> next;
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    next.reserve(effectiveIds.size());
+    for (const QString& screenId : effectiveIds) {
+        // Per-output virtual desktops (#648): each screen resolves its own desktop.
+        const int desktop = currentDesktopForScreen(screenId);
+        // assignmentIdForScreen returns the ACTIVE id (snapping layout uuid, or
+        // "autotile:<algo>"), so this fires only when the visible layout changes
+        // — e.g. a tiling-algorithm edit while the screen is in snapping mode
+        // resolves to the same snapping id and is correctly ignored.
+        const QString id = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        next.insert(screenId, id);
+        if (m_activeAssignmentByScreen.value(screenId) != id) {
+            changed.insert(screenId);
+        }
+    }
+    // Replace wholesale so screens that went away drop out of the snapshot.
+    m_activeAssignmentByScreen = std::move(next);
+    return changed;
+}
+
+void Daemon::reconcileActiveAssignments()
+{
+    const QSet<QString> changed = diffActiveAssignments();
+    // Per-context tiling rules change a screen's resolved layout WITHOUT changing
+    // its assignment id, so they never appear in `changed` (diffActiveAssignments
+    // only tracks the active snapping-layout uuid / "autotile:<algo>" id). Two
+    // families need updateAutotileScreens() to apply them live: tiling-PARAM rules
+    // (SetMaxWindows / SetSplitRatio / SetMasterCount / SetInsertPosition /
+    // SetOverflowBehavior / SetAlgorithmParam), which land in the per-screen overrides
+    // map and self-retile via applyPerScreenConfig; and GAP rules, which resolve
+    // through the context-gap provider at retile time and rely on the force-retile
+    // inside updateAutotileScreens (see the comment there). SetDragBehavior needs no
+    // retile — it is read live by the drag adaptor.
+    updateAutotileScreens();
+    if (changed.isEmpty()) {
+        return;
+    }
+    // Snapping screens resnap via the shared legacy apply path: mark the changed
+    // screens on the adaptor and trigger the same assignmentChangesApplied handler
+    // the KCM batch uses, so rule-driven and assignment-driven changes run identical
+    // code. Gated on `changed` because only an assignment-id change moves windows.
+    if (m_layoutAdaptor) {
+        m_layoutAdaptor->markScreensChanged(changed);
+        m_layoutAdaptor->applyAssignmentChanges();
+    }
 }
 
 /**

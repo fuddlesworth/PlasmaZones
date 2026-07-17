@@ -3,7 +3,8 @@
 #
 # PhosphorConfig — declarative Qt6 configuration library
 #
-# Pluggable config backends (JSON, QSettings/INI), schema-driven defaults,
+# Pluggable config backends (JSON), a legacy INI reader for migration,
+# schema-driven defaults,
 # and a versioned migration runner. Built standalone or as a subdirectory
 # of Phosphor.
 

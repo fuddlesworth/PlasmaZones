@@ -26,6 +26,7 @@ import "SearchAnchorHelpers.js" as SearchAnchors
  *
  *   AnimationEventCardList {
  *       Accessible.name: i18n("Window animation events")
+ *       headerText: i18n("…optional orientation banner…")
  *       eventModel: [ { eventPath, eventLabel, isParentNode }, ... ]
  *   }
  */
@@ -35,6 +36,10 @@ SettingsFlickable {
     /// Ordered list of `{ eventPath: string, eventLabel: string,
     /// isParentNode: bool }` — one AnimationEventCard per entry, in order.
     property var eventModel: []
+    /// Optional orientation banner rendered above the cards. Empty = none.
+    /// Pages with an "All" cascade parent use it for a short inheritance
+    /// explainer, mirroring the decoration surface pages.
+    property string headerText: ""
 
     // Build-ahead margin above/below the visible viewport so a card is
     // built slightly before it scrolls into view — keeps a fast flick from
@@ -54,6 +59,18 @@ SettingsFlickable {
 
         width: page.width
         spacing: Kirigami.Units.smallSpacing
+
+        // Optional page-level orientation banner, mirroring the decoration
+        // surface pages. Pages with an "All" cascade parent set `headerText`
+        // to a short inheritance explainer; pages without one leave it empty
+        // and rely on the per-card banners alone.
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            Layout.bottomMargin: Kirigami.Units.smallSpacing
+            type: Kirigami.MessageType.Information
+            visible: page.headerText.length > 0
+            text: page.headerText
+        }
 
         Repeater {
             model: page.eventModel
@@ -161,6 +178,19 @@ SettingsFlickable {
                     if (pg)
                         pg.unregisterSearchAnchor(cardLoader.searchAnchor);
                 }
+                // Once the card is built, re-register the anchor WITH its
+                // SettingsCard so revealAnchor can expand a collapsed card
+                // before scrolling (the initial registration passes a null
+                // card because the card doesn't exist until it scrolls in).
+                onLoaded: {
+                    if (!cardLoader.searchable)
+                        return;
+
+                    var pg = SearchAnchors.pageFor(cardLoader);
+                    var built = cardLoader.item as AnimationEventCard;
+                    if (pg && built)
+                        pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader, built.settingsCard);
+                }
 
                 Connections {
                     target: page
@@ -179,6 +209,7 @@ SettingsFlickable {
                     eventPath: cardLoader.modelData.eventPath
                     eventLabel: cardLoader.modelData.eventLabel
                     isParentNode: cardLoader.modelData.isParentNode === true
+                    collapsible: true
                 }
             }
         }

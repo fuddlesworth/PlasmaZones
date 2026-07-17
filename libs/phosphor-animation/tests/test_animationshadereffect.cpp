@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QTest>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
@@ -139,6 +139,7 @@ private Q_SLOTS:
         original.bufferFilter = QStringLiteral("linear");
         original.bufferFilters = {QStringLiteral("nearest"), QStringLiteral("linear")};
         original.useDepthBuffer = true;
+        original.useAudio = true;
         original.geometryGridSubdivisions = 40;
 
         const AnimationShaderEffect restored = AnimationShaderEffect::fromJson(original.toJson());
@@ -273,6 +274,22 @@ private Q_SLOTS:
         universal.fragmentShaderPath = QStringLiteral("effect.frag");
         QVERIFY(!universal.toJson().contains(QLatin1String("appliesTo")));
         QVERIFY(AnimationShaderEffect::fromJson(universal.toJson()).appliesTo.isEmpty());
+
+        // The opt-in classes round-trip too — a serializer regression that
+        // handled only "geometry" would strip a desktop or move pack's
+        // constraint on save, turning it universal (and then refused
+        // everywhere by the opt-in rule).
+        AnimationShaderEffect moveOnly;
+        moveOnly.id = QStringLiteral("wobble");
+        moveOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        moveOnly.appliesTo = QStringList{QStringLiteral("move")};
+        QCOMPARE(AnimationShaderEffect::fromJson(moveOnly.toJson()).appliesTo, moveOnly.appliesTo);
+
+        AnimationShaderEffect desktopOnly;
+        desktopOnly.id = QStringLiteral("desktop-cube");
+        desktopOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        desktopOnly.appliesTo = QStringList{QStringLiteral("desktop")};
+        QCOMPARE(AnimationShaderEffect::fromJson(desktopOnly.toJson()).appliesTo, desktopOnly.appliesTo);
     }
 
     /// Unknown / duplicate tokens are dropped at parse time; a list that
@@ -290,6 +307,27 @@ private Q_SLOTS:
 
         const AnimationShaderEffect e = AnimationShaderEffect::fromJson(obj);
         QCOMPARE(e.appliesTo, (QStringList{QStringLiteral("geometry")}));
+
+        // "desktop" is part of the accepted vocabulary (the two-texture switch
+        // contract). A regression that dropped it would silently discard every
+        // desktop pack's constraint, making it universal (and then refused
+        // everywhere by the opt-in rule), so pin it explicitly.
+        QJsonObject desktopObj;
+        desktopObj.insert(QLatin1String("id"), QStringLiteral("d"));
+        desktopObj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray desktopArr;
+        desktopArr.append(QStringLiteral("desktop"));
+        desktopObj.insert(QLatin1String("appliesTo"), desktopArr);
+        QCOMPARE(AnimationShaderEffect::fromJson(desktopObj).appliesTo, (QStringList{QStringLiteral("desktop")}));
+
+        // "move" (the held interactive drag) is part of the accepted vocabulary.
+        QJsonObject moveObj;
+        moveObj.insert(QLatin1String("id"), QStringLiteral("m"));
+        moveObj.insert(QLatin1String("fragmentShader"), QStringLiteral("effect.frag"));
+        QJsonArray moveArr;
+        moveArr.append(QStringLiteral("move"));
+        moveObj.insert(QLatin1String("appliesTo"), moveArr);
+        QCOMPARE(AnimationShaderEffect::fromJson(moveObj).appliesTo, (QStringList{QStringLiteral("move")}));
 
         QJsonObject allBad = obj;
         QJsonArray bad;
@@ -327,29 +365,48 @@ private Q_SLOTS:
         morph.fragmentShaderPath = QStringLiteral("effect.frag");
         morph.appliesTo = QStringList{QStringLiteral("geometry")};
 
-        // Every geometry leg eventClassForPath classifies must be compatible
-        // with a geometry-only effect — pin the full disjunction so dropping
-        // any leg from the classifier is caught.
-        for (const char* geo : {"window.move", "window.resize", "window.snapIn", "window.snapOut", "window.snapResize",
-                                "window.layoutSwitch", "window.maximize"}) {
-            QVERIFY2(shaderEffectAppliesToEventPath(morph, QString::fromLatin1(geo)), geo);
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        // Every geometry leg eventClassForPath classifies must be compatible with
+        // a geometry-only effect. Reference the taxonomy constants (not literals)
+        // so a leaf rename can't silently keep these passing, and pin the full
+        // disjunction so dropping any leg from the classifier is caught.
+        // `WindowMove` is NOT in this set: the interactive-drag leaf is its own
+        // opt-in `move` class (see the move-effect block below). Neither is
+        // `WindowMovement` — geometry-classed, but a cascade parent rather
+        // than a leg; it gets its own compatibility check further down. There
+        // are no resize legs at all — the interactive-resize and snapResize
+        // events were dropped from the taxonomy.
+        for (const QString& geo : {PP::WindowSnapIn, PP::WindowSnapOut, PP::WindowLayoutSwitch, PP::WindowMaximize}) {
+            QVERIFY2(shaderEffectAppliesToEventPath(morph, geo), qPrintable(geo));
         }
+        // The geometry-classed cascade parent accepts a geometry effect too
+        // (it is a category row, not a leg — the move-only refusal on the
+        // same row is pinned in the move-effect block below).
+        QVERIFY(shaderEffectAppliesToEventPath(morph, PP::WindowMovement));
         // Every appearance leg must be incompatible with a geometry-only effect.
-        for (const char* app : {"window.open", "window.close", "window.minimize", "window.focus", "osd.show",
-                                "osd.hide", "popup.layoutPicker.show", "popup.zoneSelector.hide"}) {
-            QVERIFY2(!shaderEffectAppliesToEventPath(morph, QString::fromLatin1(app)), app);
+        for (const QString& app : {PP::WindowOpen, PP::WindowClose, PP::WindowMinimize, PP::WindowFocus, PP::OsdShow,
+                                   PP::OsdHide, PP::PopupLayoutPickerShow, PP::PopupZoneSelectorHide}) {
+            QVERIFY2(!shaderEffectAppliesToEventPath(morph, app), qPrintable(app));
         }
         // Unclassified paths (mixed `window` root, non-window families) are
         // never provably incompatible — the predicate stays permissive.
-        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("window")));
-        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("editor.snapIn")));
-        QVERIFY(shaderEffectAppliesToEventPath(morph, QStringLiteral("panel.slideIn")));
+        QVERIFY(shaderEffectAppliesToEventPath(morph, PP::Window));
+        QVERIFY(shaderEffectAppliesToEventPath(morph, PP::EditorSnapIn));
+        QVERIFY(shaderEffectAppliesToEventPath(morph, PP::PanelSlideIn));
 
         AnimationShaderEffect fade; // universal (no appliesTo)
         fade.id = QStringLiteral("fade");
         fade.fragmentShaderPath = QStringLiteral("effect.frag");
-        QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.open")));
-        QVERIFY(shaderEffectAppliesToEventPath(fade, QStringLiteral("window.move")));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowOpen));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::WindowSnapIn));
+        // The desktop class is opt-in: a universal single-surface effect must NOT
+        // bleed onto a desktop path (its lone surface sampler would be unbound).
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::DesktopPeek));
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::Desktop));
+        // The move class is opt-in for the same structural reason: a universal
+        // pack cannot drive the held interactive drag.
+        QVERIFY(!shaderEffectAppliesToEventPath(fade, PP::WindowMove));
 
         // Appearance-only effect: mirror image — incompatible on geometry legs,
         // compatible on appearance legs.
@@ -357,8 +414,72 @@ private Q_SLOTS:
         appearanceOnly.id = QStringLiteral("aretha-materialize");
         appearanceOnly.fragmentShaderPath = QStringLiteral("effect.frag");
         appearanceOnly.appliesTo = QStringList{QStringLiteral("appearance")};
-        QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, QStringLiteral("window.open")));
-        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, QStringLiteral("window.move")));
+        QVERIFY(shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowOpen));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowSnapIn));
+        // A single-surface (non-desktop) effect never runs on a desktop path.
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::DesktopPeek));
+
+        // Desktop two-texture effect: accepted ONLY on desktop paths, refused on
+        // every single-surface (window / OSD) leg.
+        AnimationShaderEffect desktop;
+        desktop.id = QStringLiteral("desktop-cube");
+        desktop.fragmentShaderPath = QStringLiteral("effect.frag");
+        desktop.appliesTo = QStringList{QStringLiteral("desktop")};
+        QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::DesktopSwitch));
+        // The show-desktop peek leaf accepts the same desktop-contract packs.
+        QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::DesktopPeek));
+        QVERIFY(shaderEffectAppliesToEventPath(desktop, PP::Desktop));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::WindowOpen));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::WindowMove));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::OsdShow));
+        // Also refused on AMBIGUOUS rows (empty class): the mixed `window` root
+        // and the `global` baseline. A two-texture desktop pack must never be
+        // offered on a non-desktop row, even one that resolves to no class —
+        // symmetric with the universal-effect exclusion from desktop paths.
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::Window));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktop, PP::Global));
+        // A universal effect stays permissive on those same ambiguous rows.
+        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::Window));
+        QVERIFY(shaderEffectAppliesToEventPath(fade, PP::Global));
+
+        // Move (interactive drag) effect: opt-in exactly like desktop.
+        // Accepted only on the move leaf; refused on the crossfade movement
+        // legs and their cascade parent, appearance legs, desktop paths, and
+        // ambiguous rows (the move leaf takes no inherited shader, so a
+        // move-only pack on an ancestor row is provably runtime-dead).
+        AnimationShaderEffect moveOnly;
+        moveOnly.id = QStringLiteral("wobble");
+        moveOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        moveOnly.appliesTo = QStringList{QStringLiteral("move")};
+        QVERIFY(shaderEffectAppliesToEventPath(moveOnly, PP::WindowMove));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowMovement));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowSnapIn));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::WindowOpen));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::DesktopPeek));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::Window));
+        QVERIFY(!shaderEffectAppliesToEventPath(moveOnly, PP::Global));
+        // Geometry-only and appearance-only effects are refused on the move
+        // leaf (opt-in in both directions).
+        QVERIFY(!shaderEffectAppliesToEventPath(morph, PP::WindowMove));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearanceOnly, PP::WindowMove));
+        // A hybrid declaring geometry AND move drives both sides and stays
+        // available on ambiguous rows (it can feed the geometry legs there).
+        AnimationShaderEffect hybrid;
+        hybrid.id = QStringLiteral("hybrid");
+        hybrid.fragmentShaderPath = QStringLiteral("effect.frag");
+        hybrid.appliesTo = QStringList{QStringLiteral("geometry"), QStringLiteral("move")};
+        QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::WindowMove));
+        QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::WindowSnapIn));
+        QVERIFY(shaderEffectAppliesToEventPath(hybrid, PP::Window));
+        QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::WindowOpen));
+        // A hybrid that does NOT declare "desktop" is still refused on the
+        // desktop paths — the geometry/move branches must not leak onto the
+        // two-texture legs, whose samplers a single-surface pack never binds.
+        QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::DesktopPeek));
+        QVERIFY(!shaderEffectAppliesToEventPath(hybrid, PP::Desktop));
     }
 };
 

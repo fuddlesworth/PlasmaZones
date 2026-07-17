@@ -27,7 +27,7 @@ namespace {
 // Run the defaultFallbackCurve() invariant check exactly once per
 // process, not once per PhosphorMotionAnimation instantiation. Every
 // `Behavior on X { PhosphorMotionAnimation { … } }` site in the shell's
-// 28+ migrated QML files would otherwise re-pay the dynamic_cast on
+// migrated QML files would otherwise re-pay the dynamic_cast on
 // every scene instantiation. A Meyers-local static gives us the "fail
 // hard in release builds on a broken library" property with no per-
 // instance cost. The lambda body matches the original invariant: the
@@ -117,9 +117,15 @@ void PhosphorMotionAnimation::setDurationOverride(int ms)
     // every bound animation. Duration only feeds QQuickPropertyAnimation's
     // timing machinery, not the easing curve shape, so the direct
     // setDuration is both correct and cheaper.
-    const int durationMs = m_durationOverride > 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
-    QQuickPropertyAnimation::setDuration(durationMs);
+    QQuickPropertyAnimation::setDuration(effectiveDurationMs());
     Q_EMIT durationOverrideChanged();
+}
+
+// The override/profile sentinel rule lives in one place — see the rationale
+// on the declaration in PhosphorMotionAnimation.h.
+int PhosphorMotionAnimation::effectiveDurationMs() const
+{
+    return m_durationOverride >= 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
 }
 
 const Profile& PhosphorMotionAnimation::resolvedProfile() const
@@ -129,16 +135,7 @@ const Profile& PhosphorMotionAnimation::resolvedProfile() const
 
 void PhosphorMotionAnimation::applyResolvedEasing()
 {
-    // Duration: override wins when > 0, otherwise the profile's
-    // effective duration. The override exists so QML authors can bind
-    // `durationOverride: Kirigami.Units.longDuration` onto a shared
-    // profile JSON — the profile provides the curve shape while the
-    // caller's theme-scaled value drives the timing (Plasma's system
-    // animation-speed preference still applies). A zero / negative
-    // override means "use the profile's duration" — this is the
-    // default and the common case.
-    const int durationMs = m_durationOverride > 0 ? m_durationOverride : qRound(m_resolvedProfile.effectiveDuration());
-    QQuickPropertyAnimation::setDuration(durationMs);
+    QQuickPropertyAnimation::setDuration(effectiveDurationMs());
 
     // If no curve is set, fall back to the library default (OutCubic).
     const auto curve = m_resolvedProfile.curve ? m_resolvedProfile.curve : defaultFallbackCurve();
@@ -174,12 +171,16 @@ void PhosphorMotionAnimation::applyResolvedEasing()
         const qreal tMid1 = t0 + (t1 - t0) / 3.0;
         const qreal tMid2 = t0 + 2.0 * (t1 - t0) / 3.0;
 
-        const QPointF c1(tMid1, curve->evaluate(tMid1));
-        const QPointF c2(tMid2, curve->evaluate(tMid2));
+        // Bound the sampled control points to the overshoot envelope, the same one
+        // AnimatedValue interpolates within. This spline IS the curve as far as a
+        // QML-hosted animation is concerned, so leaving it unbounded would let the
+        // same named curve overshoot further in QML than in the compositor.
+        const QPointF c1(tMid1, boundCurveProgress(curve->evaluate(tMid1)));
+        const QPointF c2(tMid2, boundCurveProgress(curve->evaluate(tMid2)));
         // Force the terminal endpoint to exactly (1,1) so the spline
         // terminates canonically even when the source curve overshoots
         // (springs/elastics often return != 1 at t=1).
-        const QPointF end(t1, (i == kSegments - 1) ? qreal(1.0) : curve->evaluate(t1));
+        const QPointF end(t1, (i == kSegments - 1) ? qreal(1.0) : boundCurveProgress(curve->evaluate(t1)));
         ec.addCubicBezierSegment(c1, c2, end);
     }
 

@@ -45,14 +45,17 @@ class AlgorithmService : public QObject
     Q_OBJECT
 
 public:
-    AlgorithmService(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
-                     PhosphorTiles::ScriptedAlgorithmLoader* loader, QObject* parent = nullptr);
+    /// The three collaborators are mandatory and are dereferenced unguarded
+    /// throughout, so they arrive by reference to make null unrepresentable
+    /// rather than debug-only-asserted (matching TilingAlgorithmController).
+    AlgorithmService(Settings& settings, PhosphorTiles::AlgorithmRegistry& registry,
+                     PhosphorTiles::ScriptedAlgorithmLoader& loader, QObject* parent = nullptr);
     ~AlgorithmService() override;
 
     // ── Catalog queries ─────────────────────────────────────────────────
     QVariantList availableAlgorithms() const;
     QVariantList generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
-                                          int masterCount) const;
+                                          int masterCount, const QVariantMap& customParams) const;
     QVariantList generateAlgorithmDefaultPreview(const QString& algorithmId) const;
 
     // ── Filesystem CRUD ─────────────────────────────────────────────────
@@ -63,8 +66,16 @@ public:
     bool deleteAlgorithm(const QString& algorithmId);
     bool duplicateAlgorithm(const QString& algorithmId);
     bool exportAlgorithm(const QString& algorithmId, const QString& destPath);
-    QString createNewAlgorithm(const QString& name, const QString& baseTemplate, bool supportsMasterCount,
-                               bool supportsSplitRatio, bool producesOverlappingZones, bool supportsMemory);
+    /// Create a new user algorithm. For a non-blank @p baseTemplate the
+    /// bundled template's metadata is preserved (only name/id are rewritten)
+    /// and @p capabilities is ignored; a template that cannot be located,
+    /// read, or spliced fails the whole operation (algorithmOperationFailed +
+    /// empty return) rather than degrading to the blank scaffold. For the
+    /// blank scaffold @p capabilities holds metadata flag names
+    /// (supportsMasterCount, supportsSplitRatio, producesOverlappingZones,
+    /// supportsMemory, supportsScriptState, supportsSingleWindow,
+    /// retileOnFocus) mapped to bools.
+    QString createNewAlgorithm(const QString& name, const QString& baseTemplate, const QVariantMap& capabilities);
 
 Q_SIGNALS:
     void availableAlgorithmsChanged();
@@ -80,7 +91,16 @@ private:
     PhosphorTiles::AlgorithmRegistry* m_registry = nullptr;
     PhosphorTiles::ScriptedAlgorithmLoader* m_loader = nullptr;
 
-    QHash<QString, QMetaObject::Connection> m_algorithmWatchers;
+    /// One registration watcher per expected algorithm id. The generation
+    /// pins each watcher's timeout timer to the watcher it was armed with,
+    /// so a stale timer cannot tear down a successor watching the same id.
+    struct RegistrationWatcher
+    {
+        QMetaObject::Connection connection;
+        quint64 generation = 0;
+    };
+    QHash<QString, RegistrationWatcher> m_algorithmWatchers;
+    quint64 m_watcherGeneration = 0;
 };
 
 } // namespace PlasmaZones

@@ -28,7 +28,17 @@ Item {
     required property real zeta
     required property bool previewEnabled
 
-    onVisibleChanged: if (!visible) { springAnimTimer.stop(); springReplayDelay.stop(); }
+    onVisibleChanged: if (!visible) {
+        springAnimTimer.stop();
+        springReplayDelay.stop();
+    }
+    // Disabling the preview mid-animation must stop the running box animation,
+    // mirroring the hide branch above, and park the box at its start position.
+    onPreviewEnabledChanged: if (!previewEnabled) {
+        springAnimTimer.stop();
+        springReplayDelay.stop();
+        boxTrack.animBox.x = 0;
+    }
     // Match EasingPreview dimensions exactly
     readonly property int canvasHeight: Kirigami.Units.gridUnit * 15
     readonly property int boxTrackHeight: Kirigami.Units.gridUnit * 2
@@ -56,12 +66,15 @@ Item {
     }
 
     function replay() {
+        // Repaint before the previewEnabled gate: the graph must track
+        // parameter changes even while the animated preview is disabled,
+        // otherwise it shows a stale curve when the box animation is off.
+        springCanvas.requestPaint();
         if (!root.previewEnabled)
-            return ;
+            return;
 
         springAnimTimer.stop();
         boxTrack.animBox.x = 0;
-        springCanvas.requestPaint();
         springReplayDelay.restart();
     }
 
@@ -121,7 +134,7 @@ Item {
                     // Resolve colors fresh each paint so theme context is always current
                     var accentStr = Kirigami.Theme.highlightColor.toString();
                     var accentDimStr = Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2).toString();
-                    var gridStr = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08).toString();
+                    var gridStr = Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast).toString();
                     var w = width;
                     var h = height;
                     var pad = root.canvasPad;
@@ -152,8 +165,7 @@ Item {
                     // Reference lines at y=0 and y=1 (dashed)
                     var targetPy = yToPixel(1, pad, gh, yOffset, yRange);
                     var zeroPy = yToPixel(0, pad, gh, yOffset, yRange);
-                    var pc = Kirigami.Theme.positiveTextColor;
-                    ctx.strokeStyle = Qt.rgba(pc.r, pc.g, pc.b, 0.6).toString();
+                    ctx.strokeStyle = Qt.alpha(Kirigami.Theme.highlightColor, 0.6).toString();
                     ctx.lineWidth = 1;
                     ctx.setLineDash([6, 4]);
                     ctx.beginPath();
@@ -224,28 +236,23 @@ Item {
                         ctx.setLineDash([]);
                     }
                     // Axis labels
-                    ctx.fillStyle = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4).toString();
-                    ctx.font = Kirigami.Theme.smallFont.pointSize + "pt sans-serif";
+                    ctx.fillStyle = Kirigami.Theme.disabledTextColor.toString();
+                    // Themes may define fonts in pixels only, in which case
+                    // pointSize is -1 and "-1pt sans-serif" would be rejected,
+                    // silently keeping the canvas's previous font. Fall back
+                    // to a pixel spec built from pixelSize in that case.
+                    ctx.font = Kirigami.Theme.smallFont.pointSize > 0 ? Kirigami.Theme.smallFont.pointSize + "pt sans-serif" : Kirigami.Theme.smallFont.pixelSize + "px sans-serif";
                     ctx.textAlign = "right";
                     ctx.fillText("1", pad - 4, targetPy + 4);
                     ctx.fillText("0", pad - 4, yToPixel(0, pad, gh, yOffset, yRange) + 4);
                 }
             }
 
+            // onPaint samples highlight, text, background and disabled-text
+            // colours. Every PlatformTheme colour shares the one `colorsChanged`
+            // notify signal, so this one handler covers all of them.
             Connections {
-                function onHighlightColorChanged() {
-                    springCanvas.requestPaint();
-                }
-
-                function onTextColorChanged() {
-                    springCanvas.requestPaint();
-                }
-
-                function onBackgroundColorChanged() {
-                    springCanvas.requestPaint();
-                }
-
-                function onPositiveTextColorChanged() {
+                function onColorsChanged() {
                     springCanvas.requestPaint();
                 }
 
@@ -260,7 +267,6 @@ Item {
                 Accessible.role: Accessible.Button
                 onClicked: root.replay()
             }
-
         }
 
         // ── Spring description label ──────────────────────────────────
@@ -282,7 +288,6 @@ Item {
             Layout.preferredHeight: root.boxTrackHeight
             boxSize: root.boxSize
         }
-
     }
 
     // Replay delay (matches EasingPreview pattern)
@@ -324,5 +329,4 @@ Item {
             }
         }
     }
-
 }

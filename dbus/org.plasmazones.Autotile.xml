@@ -28,11 +28,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <property name="masterCount" type="i" access="readwrite">
             <annotation name="org.gtk.GDBus.DocString" value="Number of windows in master area (1 to 5)."/>
         </property>
-        <property name="innerGap" type="i" access="readwrite">
-            <annotation name="org.gtk.GDBus.DocString" value="Gap between tiled windows in pixels (0 to 50)."/>
+        <property name="innerGap" type="i" access="read">
+            <annotation name="org.gtk.GDBus.DocString" value="Gap between tiled windows in pixels. Read-only: gaps are rule-backed, set them via org.plasmazones.Rules."/>
         </property>
-        <property name="outerGap" type="i" access="readwrite">
-            <annotation name="org.gtk.GDBus.DocString" value="Gap from screen edges in pixels (0 to 50)."/>
+        <property name="outerGap" type="i" access="read">
+            <annotation name="org.gtk.GDBus.DocString" value="Gap from screen edges in pixels. Read-only: gaps are rule-backed, set them via org.plasmazones.Rules."/>
         </property>
         <property name="smartGaps" type="b" access="readwrite">
             <annotation name="org.gtk.GDBus.DocString" value="Hide gaps when only one window is tiled."/>
@@ -148,9 +148,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="algorithmId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Algorithm ID to query."/>
             </arg>
-            <arg name="info" type="(sssbbbbdibsbb)" direction="out">
+            <arg name="info" type="(sssbbbbdibsbbb)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::AlgorithmInfoEntry"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Struct: (id, name, description, supportsMasterCount, supportsSplitRatio, centerLayout, producesOverlappingZones, defaultSplitRatio, defaultMaxWindows, isScripted, zoneNumberDisplay, isUserScript, supportsMemory)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Struct: (id, name, description, supportsMasterCount, supportsSplitRatio, centerLayout, producesOverlappingZones, defaultSplitRatio, defaultMaxWindows, isScripted, zoneNumberDisplay, isUserScript, supportsMemory, supportsSingleWindow)."/>
             </arg>
         </method>
 

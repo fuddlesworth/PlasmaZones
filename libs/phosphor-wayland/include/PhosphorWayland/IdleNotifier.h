@@ -28,6 +28,16 @@ public:
 
     static bool isSupported();
 
+    /// Whether an ext-idle-notification object is actually ARMED right now.
+    ///
+    /// Distinct from isSupported(), and the difference is the whole point: the compositor
+    /// can advertise the protocol while arming still fails, because arming needs a seat and
+    /// the seat's input devices may not have been advertised yet (a daemon that starts
+    /// before the compositor finishes bringing the seat up). Arming then silently does
+    /// nothing, isSupported() keeps saying true, and idle detection is dead for the session
+    /// with one warning to show for it. A caller that wants to retry has to be able to ask.
+    [[nodiscard]] bool isArmed() const;
+
 Q_SIGNALS:
     void timeoutChanged();
     void idleChanged();

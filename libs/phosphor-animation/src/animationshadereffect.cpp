@@ -137,6 +137,8 @@ QJsonObject AnimationShaderEffect::toJson() const
     }
     if (useDepthBuffer)
         obj.insert(QLatin1String("depthBuffer"), true);
+    if (useAudio)
+        obj.insert(QLatin1String("audio"), true);
 
     if (!parameters.isEmpty()) {
         QJsonArray params;
@@ -203,24 +205,26 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.version = obj.value(QLatin1String("version")).toString();
     e.category = obj.value(QLatin1String("category")).toString();
     // `appliesTo` (array of event-class tokens). Only the documented
-    // vocabulary — "geometry" / "appearance" — is accepted; an unknown
-    // token is a typo or a foreign import and is dropped with a warning so
-    // it neither restricts the picker on a class that doesn't exist nor
-    // round-trips the typo back to disk via toJson. An array that validates
-    // down to empty is indistinguishable from "universal", which is the
-    // correct fallback (the effect applies everywhere).
+    // vocabulary — "geometry" / "appearance" / "desktop" / "move" — is
+    // accepted; an unknown token is a typo or a foreign import and is dropped
+    // with a warning so it neither restricts the picker on a class that
+    // doesn't exist nor round-trips the typo back to disk via toJson. An array
+    // that validates down to empty is indistinguishable from "universal",
+    // which is the correct fallback (the effect applies everywhere except the
+    // opt-in desktop and move classes — see shaderEffectAppliesToEventPath).
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
         const QJsonArray appliesArr = obj.value(QLatin1String("appliesTo")).toArray();
         for (const QJsonValue& v : appliesArr) {
             const QString token = v.toString().trimmed();
-            if (token == PP::EventClassGeometry || token == PP::EventClassAppearance) {
+            if (token == PP::EventClassGeometry || token == PP::EventClassAppearance || token == PP::EventClassDesktop
+                || token == PP::EventClassMove) {
                 if (!e.appliesTo.contains(token))
                     e.appliesTo.append(token);
             } else if (!token.isEmpty()) {
                 qCWarning(lcAnimationShader)
                     << "AnimationShaderEffect::fromJson: unknown appliesTo token" << token << "for effect" << e.id
-                    << "— accepted values are \"geometry\" and \"appearance\"; dropping.";
+                    << "— accepted values are \"geometry\", \"appearance\", \"desktop\" and \"move\"; dropping.";
             }
         }
     }
@@ -252,6 +256,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
             e.bufferFilters.append(f);
     }
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
+    e.useAudio = obj.value(QLatin1String("audio")).toBool(false);
 
     // `fboExtent` (string). Accepted forms:
     //   "anchor"        Anchor extent — FBO == captured anchor (default)
@@ -293,7 +298,7 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     }
 
     // Cap the texture list at the contract budget. Surplus entries are
-    // silently dropped — the canonical UBO only declares iChannel1..3
+    // silently dropped — the canonical UBO only declares uTexture1..3
     // and exposing more would require both runtimes to grow more
     // sampler bindings. A future contract bump (kMaxUserTextureSlots > 3)
     // would loosen this cap automatically.
@@ -330,8 +335,8 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
         // slot-index field; an empty entry preceding a populated one
         // SHIFTS the populated entry's runtime slot. e.g. authoring
         // [{path:""}, {path:"foo.png"}, {path:"bar.png"}] yields
-        // textures bound at iChannel1+iChannel2 instead of iChannel2+
-        // iChannel3 as the metadata reads. Loud so authors notice the
+        // textures bound at uTexture1+uTexture2 instead of uTexture2+
+        // uTexture3 as the metadata reads. Loud so authors notice the
         // implicit re-mapping.
         if (t.path.isEmpty()) {
             ++droppedEmpty;
@@ -379,7 +384,7 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
     if (geometryGridSubdivisions != other.geometryGridSubdivisions)
         return false;
     if (isMultipass != other.isMultipass || useWallpaper != other.useWallpaper || bufferFeedback != other.bufferFeedback
-        || useDepthBuffer != other.useDepthBuffer)
+        || useDepthBuffer != other.useDepthBuffer || useAudio != other.useAudio)
         return false;
     if (!qFuzzyCompare(bufferScale + 1.0, other.bufferScale + 1.0))
         return false;
@@ -407,16 +412,46 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
 
 bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const QString& path)
 {
-    // Universal effect (no declared constraint) runs everywhere.
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    const QString cls = PP::eventClassForPath(path);
+    // The desktop class is a SEPARATE two-texture (from/to) contract, so it is
+    // opt-in rather than universal-permissive: only an effect that explicitly
+    // lists `desktop` in appliesTo runs on a desktop path. A universal
+    // single-surface effect (empty appliesTo) must NOT bleed onto desktop
+    // paths, where its lone surface sampler would be unbound; conversely a
+    // desktop effect declaring appliesTo:["desktop"] is dimmed on window/OSD
+    // paths (their class isn't `desktop`) by the concrete-mismatch check below.
+    if (cls == PP::EventClassDesktop)
+        return effect.appliesTo.contains(cls);
+    // The move class (the held interactive drag) is opt-in for the same
+    // structural reason: a drag installs a held transition with no old→new
+    // crossfade, so only a pack consuming the move-physics inputs — declared
+    // via `appliesTo: ["move"]` — does anything there. A universal or
+    // geometry pack on the move leaf would install a dead transition that
+    // pins full-output repaints for the whole drag.
+    if (cls == PP::EventClassMove)
+        return effect.appliesTo.contains(cls);
+    // Universal effect (no declared constraint) runs on every single-surface path.
     if (effect.appliesTo.isEmpty())
         return true;
     // Only report false on a PROVABLE mismatch: the path resolves to a
     // concrete class AND the effect doesn't list it. An ambiguous row
     // (mixed ancestor / non-window path → empty class) is left compatible
-    // so the picker never dims an effect on a row it can't classify.
-    const QString cls = PhosphorAnimation::ProfilePaths::eventClassForPath(path);
-    if (cls.isEmpty())
-        return true;
+    // so the picker never dims an effect on a row it can't classify — EXCEPT
+    // effects that provably cannot drive anything the row cascades to:
+    //   • A desktop-declaring effect. Its two-texture (from/to) contract must
+    //     never be offered on a non-desktop or ambiguous row, where its second
+    //     sampler is unbound. This is the inverse of the universal-excluded-
+    //     from-desktop rule above, keeping the desktop opt-in symmetric.
+    //   • An effect declaring neither geometry nor appearance (i.e. move-only,
+    //     once desktop is excluded). The move leaf takes no inherited shader
+    //     (ShaderProfileTree::resolve), so an ancestor row can only ever feed
+    //     geometry / appearance legs — a move-only pack there is runtime-dead.
+    if (cls.isEmpty()) {
+        if (effect.appliesTo.contains(PP::EventClassDesktop))
+            return false;
+        return effect.appliesTo.contains(PP::EventClassGeometry) || effect.appliesTo.contains(PP::EventClassAppearance);
+    }
     return effect.appliesTo.contains(cls);
 }
 

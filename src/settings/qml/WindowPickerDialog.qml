@@ -11,7 +11,7 @@ import org.kde.kirigami as Kirigami
  *
  * Shows a filterable list of running windows with their window class and
  * caption. Emits picked(value) when a window is selected. Hosted by the
- * Window Rules page (WindowRulesPage); MatchLeafEditor calls the
+ * Rules page (RulesPage); MatchLeafEditor calls the
  * appropriate openFor* helper based on the match leaf's Field so the
  * user can pick an AppId / WindowClass / DesktopFile / Title without
  * typing it.
@@ -212,6 +212,13 @@ Kirigami.Dialog {
             Layout.fillHeight: true
             Layout.preferredHeight: Kirigami.Units.gridUnit * 14
             clip: true
+            // Don't auto-highlight the first row on open. Rows commit on
+            // click, so there's no keyboard cursor to seed — a pre-selected
+            // top item just reads as a mistaken default. Re-clear after every
+            // model change, since reassigning the model snaps currentIndex
+            // back to 0.
+            currentIndex: -1
+            onCountChanged: currentIndex = -1
             model: {
                 // `_baseRows` is the mode-stable pre-pruned list (titles mode
                 // drops captionless rows; other modes keep everything). It
@@ -243,6 +250,8 @@ Kirigami.Dialog {
             }
 
             delegate: ItemDelegate {
+                id: windowDelegate
+
                 // Strict QML requires the delegate's context property to be
                 // declared before it's read in bindings.
                 required property var modelData
@@ -262,13 +271,22 @@ Kirigami.Dialog {
                 readonly property string secondaryText: !valueAvailable ? (dialog.mode === "desktopFiles" ? i18n("(no desktop file)") : dialog.mode === "titles" ? i18n("(no title)") : "") : dialog.mode === "titles" ? (modelData.windowClass || "") : (modelData.caption || "")
 
                 width: ListView.view.width
-                highlighted: ListView.isCurrentItem
+                // Rows commit on click, so hovering is how a row gets
+                // "selected" — highlight on hover too, not just the keyboard
+                // current item, so the active row always reads as the target.
+                highlighted: ListView.isCurrentItem || hovered
                 enabled: valueAvailable
                 opacity: valueAvailable ? 1 : 0.5
                 Accessible.name: primaryText + (secondaryText.length > 0 ? ", " + secondaryText : "")
                 onClicked: {
                     dialog.picked(rawValue);
                     dialog.close();
+                }
+
+                // Use the accent fill from the combo/list convention rather
+                // than the default ItemDelegate selection wash.
+                background: Rectangle {
+                    color: windowDelegate.highlighted ? Kirigami.Theme.highlightColor : "transparent"
                 }
 
                 contentItem: RowLayout {
@@ -279,6 +297,9 @@ Kirigami.Dialog {
                         Layout.preferredWidth: Kirigami.Units.iconSizes.small
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small
                         Layout.alignment: Qt.AlignVCenter
+                        // Recolors symbolic icons to track the (highlighted)
+                        // text; full-color icons ignore `color`.
+                        color: windowDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     }
 
                     ColumnLayout {
@@ -289,13 +310,15 @@ Kirigami.Dialog {
                             text: primaryText
                             Layout.fillWidth: true
                             elide: Text.ElideRight
+                            color: windowDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                         }
 
                         Label {
                             text: secondaryText
                             Layout.fillWidth: true
                             font: Kirigami.Theme.smallFont
-                            opacity: 0.7
+                            color: windowDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
+                            opacity: windowDelegate.highlighted ? 0.85 : 0.7
                             elide: Text.ElideRight
                             visible: secondaryText.length > 0
                         }

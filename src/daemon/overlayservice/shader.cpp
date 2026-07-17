@@ -7,6 +7,8 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
+
+#include <QQuickItem>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
@@ -121,9 +123,6 @@ bool OverlayService::anyScreenUsesShader() const
     if (!canUseShaders()) {
         return false;
     }
-    if (m_settings && !m_settings->enableShaderEffects()) {
-        return false;
-    }
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
         if (useShaderForScreen(it.key())) {
             return true;
@@ -135,9 +134,6 @@ bool OverlayService::anyScreenUsesShader() const
 bool OverlayService::useShaderForScreen(const QString& screenId) const
 {
     if (!canUseShaders()) {
-        return false;
-    }
-    if (m_settings && !m_settings->enableShaderEffects()) {
         return false;
     }
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
@@ -184,10 +180,13 @@ void OverlayService::startShaderAnimation()
     const int interval = qRound(1000.0 / frameRate);
     m_shaderUpdateTimer->start(interval);
 
-    // CAVA runs independently (started in setSettings / enableAudioVisualizerChanged).
-    // Just sync config in case frame rate changed since CAVA was started.
+    // CAVA runs independently (spun up lazily by syncCavaState when audio-viz
+    // is enabled and something audio-reactive is on screen). Just sync config
+    // in case frame rate changed since CAVA was started.
     if (m_audioProvider && m_audioProvider->isRunning() && m_settings) {
-        m_audioProvider->setFramerate(frameRate);
+        PhosphorAudio::SpectrumOptions opts = m_audioProvider->options();
+        opts.framerate = frameRate;
+        m_audioProvider->setOptions(opts);
     }
 
     qCDebug(lcOverlay) << "Shader animation started at" << (1000 / interval) << "fps";
@@ -229,6 +228,25 @@ void OverlayService::stopShaderAnimation()
     }
 }
 
+QList<QQuickItem*> OverlayService::visibleAudioDecorationSlots() const
+{
+    // The decoration hosts are the OSD + the three popups, per screen; each is a
+    // SurfaceDecoration carrying an audioSpectrum property. A slot is fed audio
+    // only while it is visible AND its current chain has an audio-reactive pack
+    // (recorded by applyDecoration as the dynamic _wantsAudioDecoration flag).
+    QList<QQuickItem*> out;
+    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+        const PerScreenOverlayState& st = it.value();
+        for (QQuickItem* slot : {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot()}) {
+            if (slot && slot->isVisible()
+                && slot->property(OverlayQmlPropertyNames::WantsAudioDecoration.data()).toBool()) {
+                out.append(slot);
+            }
+        }
+    }
+    return out;
+}
+
 void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
 {
     // Pass QVector<float> wrapped in QVariant to avoid per-element QVariant boxing.
@@ -263,6 +281,15 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     // item and caches it for items that attach mid-stream.
     if (m_surfaceAnimator) {
         m_surfaceAnimator->setAudioSpectrum(spectrum);
+    }
+
+    // Daemon-surface decoration audio: feed the same spectrum to any displaying
+    // OSD / popup whose decoration chain carries an audio-reactive pack, so its
+    // SurfaceDecoration forwards it to each stage's SurfaceShaderItem. Empty (a
+    // no-op) unless such a surface is visible — which is also what keeps CAVA
+    // running, so this only fires when there is a real audio spectrum to push.
+    for (QQuickItem* slot : visibleAudioDecorationSlots()) {
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), wrapped);
     }
 }
 

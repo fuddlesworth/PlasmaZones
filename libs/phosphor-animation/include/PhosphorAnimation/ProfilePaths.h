@@ -17,8 +17,10 @@ namespace PhosphorAnimation {
 /// Naming convention (apply to new paths):
 ///   show / hide                 — ephemeral surfaces (osd, popup, badge)
 ///   open / close                — persistent surfaces with a stateful open/closed
-///   <verb>In / <verb>Out        — directional motion (slideIn, snapIn, switchIn,
-///                                 fadeIn, layoutSwitchIn …)
+///   <verb>In / <verb>Out        — directional motion (slideIn, snapIn,
+///                                 fadeIn …); `switch`, `layoutSwitch` and
+///                                 `peek` are bidirectional-leg exceptions
+///                                 with no In/Out suffix
 ///   expand / collapse           — size reveal of inline content (accordion)
 ///   on / off                    — bistable controls (toggle)
 ///   <event>.<variant>           — speed/intensity variants (pulse.fast, tint.fast)
@@ -33,17 +35,38 @@ PHOSPHORANIMATION_EXPORT extern const QString Global;
 // interaction (the WINDOW animates when it snaps into/out of a zone
 // or when a layout switch repositions it).
 PHOSPHORANIMATION_EXPORT extern const QString Window;
+// window.appearance.* — a window surface materialising / dissolving (the
+// appearance shader contract). WindowAppearance is the cascade parent.
+PHOSPHORANIMATION_EXPORT extern const QString WindowAppearance;
 PHOSPHORANIMATION_EXPORT extern const QString WindowOpen;
 PHOSPHORANIMATION_EXPORT extern const QString WindowClose;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMinimize;
+PHOSPHORANIMATION_EXPORT extern const QString WindowFocus;
+// window.movement.* — a window changing geometry, old-rect → new-rect (the
+// geometry-morph shader contract). WindowMovement is the cascade parent.
+// WindowMove is the exception: the held interactive drag, its own opt-in
+// `move` class (see EventClassMove below). There are NO resize legs — the
+// interactive edge-drag resize and the never-routed snapResize were dropped
+// (see the rationale note in profilepaths.cpp); discrete resizes are
+// covered by snapIn / layoutSwitch / maximize.
+PHOSPHORANIMATION_EXPORT extern const QString WindowMovement;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMaximize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowMove;
-PHOSPHORANIMATION_EXPORT extern const QString WindowResize;
-PHOSPHORANIMATION_EXPORT extern const QString WindowFocus;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString WindowSnapOut;
-PHOSPHORANIMATION_EXPORT extern const QString WindowSnapResize;
 PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
+
+// desktop.* — full-screen two-texture transitions driven by the kwin-effect's
+// screen-level paint pass. Unlike the per-window window.* events, these blend
+// two full-screen scene captures, so they use the desktop event class and its
+// own two-texture shader contract rather than the single-surface pipeline.
+// `switch` blends the OUTGOING desktop against the INCOMING desktop; `peek`
+// (show desktop) blends the windows scene against the bare desktop, and its
+// show-back leg reuses the same node, running the same blend with time
+// reversed so an asymmetric pack retraces its own motion.
+PHOSPHORANIMATION_EXPORT extern const QString Desktop;
+PHOSPHORANIMATION_EXPORT extern const QString DesktopSwitch;
+PHOSPHORANIMATION_EXPORT extern const QString DesktopPeek;
 
 // editor.* — Layout-editor-only zone manipulation animations
 // (fill-preview, drag-resize-preview). NOT triggered by runtime
@@ -95,10 +118,10 @@ PHOSPHORANIMATION_EXPORT extern const QString ShaderSwitch;
 
 // widget.* — per-archetype paths so library defaults preserve original motion.
 PHOSPHORANIMATION_EXPORT extern const QString Widget;
-PHOSPHORANIMATION_EXPORT extern const QString WidgetHover; ///< 150 ms OutCubic
+PHOSPHORANIMATION_EXPORT extern const QString WidgetHover; ///< 150 ms OutCubic (family seed)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPress; ///< 100 ms OutCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetDim; ///< 200 ms OutCubic
-PHOSPHORANIMATION_EXPORT extern const QString WidgetTint; ///< 300 ms Linear (family root)
+PHOSPHORANIMATION_EXPORT extern const QString WidgetTint; ///< 300 ms widget-out (family root)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetTintFast; ///< 120 ms (variant)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetToggleOn; ///< 250 ms OutBack (spring feel)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetToggleOff; ///< 250 ms OutBack
@@ -109,12 +132,12 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetAccordionExpand; ///< 250 ms
 PHOSPHORANIMATION_EXPORT extern const QString WidgetAccordionCollapse; ///< 180 ms InCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetFadeIn; ///< 200 ms OutCubic
 PHOSPHORANIMATION_EXPORT extern const QString WidgetFadeOut; ///< 400 ms InCubic
-PHOSPHORANIMATION_EXPORT extern const QString WidgetReorder; ///< 200 ms OutCubic
-PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 200 ms OutCubic
+PHOSPHORANIMATION_EXPORT extern const QString WidgetReorder; ///< 150 ms OutCubic (family seed)
+PHOSPHORANIMATION_EXPORT extern const QString WidgetProgress; ///< 150 ms OutCubic (family seed)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulse; ///< 1000 ms sinusoidal (family root)
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulseFast; ///< 500 ms
 PHOSPHORANIMATION_EXPORT extern const QString WidgetPulseSlow; ///< 1500 ms
-// Zone-rect widget (used by ZoneItem.qml, LayoutPreview.qml,
+// Zone-rect widget (used by ZoneItem.qml,
 // ZonePreview.qml — i.e. the reusable QML zone-rectangle that gets
 // embedded in the runtime overlay, settings dialogs, layout
 // thumbnails, etc.). The animation lives with the widget; the
@@ -138,34 +161,61 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 // can't drive. These string tokens are the SSOT for that vocabulary —
 // matched verbatim against `appliesTo` entries and `eventClassForPath`.
 
-/// Geometry transitions: move, resize, snapIn/snapOut/snapResize,
-/// layoutSwitch, maximize — every leg that carries an old and new rect.
+/// Geometry transitions: snapIn/snapOut, layoutSwitch, maximize — every leg
+/// that carries an old and new rect.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassGeometry;
 
 /// Appearance transitions: open, close, minimize, focus, and every OSD /
 /// popup show/hide — a single surface materialising or dissolving.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassAppearance;
 
+/// Desktop transitions: full-screen blends of two scene captures — the
+/// virtual-desktop switch (outgoing desktop against incoming one) and the
+/// show-desktop peek (windows scene against bare desktop). A distinct
+/// TWO-texture contract (from/to full-screen samplers), incompatible with the
+/// single-surface geometry/appearance shaders — a shader must opt into it
+/// explicitly via `appliesTo: ["desktop"]`. A universal single-surface effect
+/// (empty `appliesTo`) does NOT apply to desktop paths, because its lone
+/// surface sampler would be unbound in the two-texture pass.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassDesktop;
+
+/// Interactive-drag transitions: the `window.movement.move` leaf only. A drag
+/// installs a HELD transition — no old→new crossfade plays (iFromRect stays
+/// invalid, progress clamps while the pointer is down), so a geometry
+/// crossfade pack is a guaranteed no-op there. Only a position / mesh backed
+/// pack consuming the move-physics inputs (iMoveMesh / iMoveOffset /
+/// iMoveVelocity* / iMoveTrail) can drive it, and it must opt in explicitly
+/// via `appliesTo: ["move"]` (wobble). Like `desktop`, this class is opt-in
+/// rather than universal-permissive, and the move leaf takes NO inherited
+/// shader from its ancestors (see ShaderProfileTree::resolve).
+PHOSPHORANIMATION_EXPORT extern const QString EventClassMove;
+
 /// Classify @p path into an event class, or empty string when the path has
 /// no single class (a mixed ancestor like `window`, or a path outside the
-/// window/OSD/popup families — editor / panel / widget / cursor / shader /
-/// global). Resolution is leaf-aware: the OSD and popup roots and all their
-/// descendants are `appearance`; the window leaves split by
-/// motion-vs-lifecycle; the `window` root itself is mixed → empty.
+/// classified families — editor / panel / widget / cursor / shader / global).
+/// Resolution is leaf-aware: the OSD and popup roots and all their descendants
+/// are `appearance`; the window leaves split by motion-vs-lifecycle; the
+/// `window.movement.move` leaf is `move` (held interactive drag) while the
+/// rest of the movement sub-tree is `geometry`; the `desktop` root and every
+/// `desktop.*` leaf are `desktop`; the `window` root itself is mixed → empty.
 PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 
 /// Full list of built-in paths in taxonomy order.
 PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();
 
-/// Walk @p path up one level ("window.open" -> "window" -> "global" -> "").
+/// Walk @p path up one level
+/// ("window.appearance.open" -> "window.appearance" -> "window" -> "global" -> "").
 PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 
 /// Built-in default shader effect id for an event @p path, or empty for none.
 ///
 /// SSOT for "what shader does this event animate with out of the box". Two
 /// families default to a shader:
-///   • Window MOVE/RESIZE (snap, tile, layout-switch, move, resize) →
-///     "window-morph" (geometry cross-fade), run by the kwin-effect.
+///   • Window SNAP (snap in/out, layout-switch) → "window-morph" (geometry
+///     cross-fade), run by the kwin-effect. The interactive-drag leaf
+///     (`window.movement.move`) carries NO default — a crossfade pack
+///     cannot drive a held drag, and the move-class packs (wobble) stay
+///     opt-in.
 ///   • Overlay show/hide leaves (osd.{show,hide},
 ///     popup.{zoneSelector,layoutPicker,snapAssist}.{show,hide}) → "fade"
 ///     (fade-and-scale), run by the daemon SurfaceAnimator instead of its C++

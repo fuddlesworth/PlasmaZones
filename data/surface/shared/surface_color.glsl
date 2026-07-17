@@ -1,0 +1,72 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Opt-in colour-space helpers for SURFACE shader packs. `#include
+// <surface_color.glsl>` only in packs that need them (hue-cycling borders,
+// perceptual saturation). The sRGB <-> linear <-> OKLab suite is the canonical
+// Ottosson reference implementation (public); hsv2rgb is the standard hue-wheel
+// form. Both are generic colour science, not pack-specific look code.
+
+#ifndef PLASMAZONES_SURFACE_COLOR_GLSL
+#define PLASMAZONES_SURFACE_COLOR_GLSL
+
+// Rec.709 relative-luminance weights (the sRGB primaries' Y coefficients).
+float luma709(vec3 c) {
+    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+// Rec.601 luma weights (the classic NTSC greyscale mix). A different convention
+// from luma709 on purpose — packs pick the one their look was tuned against.
+float luma601(vec3 c) {
+    return dot(c, vec3(0.299, 0.587, 0.114));
+}
+
+// HSV -> RGB (h,s,v in [0,1]).
+vec3 hsv2rgb(vec3 c) {
+    vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+    return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
+
+// sRGB <-> linear.
+vec3 srgbToLinear(vec3 c) {
+    return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+}
+vec3 linearToSrgb(vec3 c) {
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+}
+
+// linear <-> OKLab (Ottosson reference matrices).
+vec3 linearToOklab(vec3 c) {
+    float l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
+    float m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
+    float s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
+    float l_ = pow(max(l, 0.0), 1.0 / 3.0);
+    float m_ = pow(max(m, 0.0), 1.0 / 3.0);
+    float s_ = pow(max(s, 0.0), 1.0 / 3.0);
+    return vec3(0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+                1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+                0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_);
+}
+vec3 oklabToLinear(vec3 c) {
+    float l_ = c.r + 0.3963377774 * c.g + 0.2158037573 * c.b;
+    float m_ = c.r - 0.1055613458 * c.g - 0.0638541728 * c.b;
+    float s_ = c.r - 0.0894841775 * c.g - 1.2914855480 * c.b;
+    float l = l_ * l_ * l_;
+    float m = m_ * m_ * m_;
+    float s = s_ * s_ * s_;
+    return vec3(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+                -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+                -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
+}
+
+// Perceptual saturation in OKLab (a,b scaled by `saturation`); identity at 1.0.
+vec3 oklabSaturate(vec3 srgb, float saturation) {
+    if (abs(saturation - 1.0) < 0.001) {
+        return srgb;
+    }
+    vec3 lab = linearToOklab(srgbToLinear(clamp(srgb, 0.0, 1.0)));
+    lab.gb *= saturation;
+    return linearToSrgb(clamp(oklabToLinear(lab), 0.0, 1.0));
+}
+
+#endif // PLASMAZONES_SURFACE_COLOR_GLSL

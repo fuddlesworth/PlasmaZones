@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
@@ -201,7 +200,7 @@ Flickable {
         z: 100
         radius: Kirigami.Units.smallSpacing
         color: "transparent"
-        border.width: Math.max(1, Math.round(Screen.devicePixelRatio * 2))
+        border.width: 2
         border.color: Kirigami.Theme.highlightColor
         opacity: 0
         visible: opacity > 0

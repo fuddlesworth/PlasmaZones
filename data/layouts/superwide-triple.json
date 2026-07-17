@@ -3,7 +3,6 @@
     "name": "Super-Ultrawide Triple",
     "description": "Three virtual sections with master center for 32:9 monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "super-ultrawide",
     "zones": [

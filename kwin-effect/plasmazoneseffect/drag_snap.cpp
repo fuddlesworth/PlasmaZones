@@ -73,9 +73,9 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                               reply.argumentAt<3>());
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
                     if (storePreSnap)
-                        // `window` is non-null inside this branch (guarded by the
-                        // `reply.argumentAt<4>() && window` check above), so the
-                        // ternary fall-through to QRectF() is unreachable.
+                        // `window` is non-null inside this branch (guarded by
+                        // the `reply.argumentAt<4>() && window` check above),
+                        // so frameGeometry() needs no null-guard here.
                         m_snapHandler->ensurePreSnapGeometryStored(window, windowId, QRectF(window->frameGeometry()));
                     applyWindowGeometry(window, geo, false, skipAnimation);
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
@@ -89,10 +89,18 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // commit path; idempotent vs the daemon broadcast.
                         m_navigationHandler->setWindowFloating(windowId, false);
                         m_snapHandler->markWindowSnapped(windowId, asyncScr);
+                        // Floating → snapped changes the Mode / IsSnapped rule
+                        // match fields. Invalidate the per-window match cache so a
+                        // placement-scoped border / opacity rule re-resolves now,
+                        // rather than waiting for the daemon's windowStateChanged
+                        // broadcast (self-contained, mirrors the autotile path).
+                        invalidateRuleCacheForStateChange(windowId);
                     } else {
                         // Same discriminator epilogue as the other commit
                         // paths: drop stale snap tracking instead of skipping.
                         m_snapHandler->clearWindowSnapped(windowId);
+                        // Symmetric with the snap-tracked branch: re-resolve rules.
+                        invalidateRuleCacheForStateChange(windowId);
                     }
                     // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {
@@ -199,7 +207,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     // precision and on fractional-scale outputs may keep sub-pixel residue
     // from prior moveResize commits, so a float-bit-exact equality against
     // an integer `geo` would silently miss and run a redundant moveResize.
-    if (QRectF(geo) == window->frameGeometry().toRect() && !m_windowAnimator->hasAnimation(window)) {
+    if (geo == window->frameGeometry().toRect() && !m_windowAnimator->hasAnimation(window)) {
         qCDebug(lcEffect) << "moveResize: window already at target geometry, skipping:" << geo;
         // Release first-frame open suppression here. The settle-detection
         // hook on windowFrameGeometryChanged would otherwise wait forever
@@ -246,24 +254,25 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     //
     // `shouldAnimateWindow` adds the user's per-animation Window
     // Filtering gate (transient / min-size / app / class) and lets a
-    // WindowRule carrying any OverrideAnimation* action override the
-    // filter when the rule's class matcher matches. Falling through to
+    // Rule carrying any effect-consumed (Tag::Effect) action override
+    // the filter when the rule's match expression resolves. Falling through to
     // the non-animated path just runs the moveResize without the snap
     // motion / shader.
     //
-    // First-placement-on-open carve-out: a window moved into its zone/tile
-    // moments after opening still has its window.open shader in flight —
-    // uniquely marked by the held WindowAddedGrabRole (addedGrabHeld, set only
-    // by the slotWindowAdded open path). Installing the snap/tile morph would
-    // supersede it (one transition per window), so the open animation never
-    // plays. Skip the morph and fall through to the plain moveResize: the
-    // first-frame open suppression keeps the window hidden until the move
-    // lands, so the open shader plays into the destination rect. Later moves
-    // (no open shader in flight) morph normally.
-    const auto* inFlightTransition = m_shaderManager.findTransition(window);
-    const bool firstPlacementWithOpenShader = inFlightTransition && inFlightTransition->addedGrabHeld;
-
-    if (!skipAnimation && !allowDuringDrag && !firstPlacementWithOpenShader && m_windowAnimator->isEnabled()
+    // BUT never let the geometry morph supersede an in-flight
+    // window.open animation. A window that is snapped / placed AS IT OPENS
+    // (snap-restore, autotile, daemon placement) should show its OPEN animation
+    // at the snapped position, not a snap morph — otherwise the geometry morph
+    // (the snap default) installs over the just-started open transition
+    // and the open animation never plays. The open transition holds the
+    // WindowAddedGrabRole (addedGrabHeld), so detect it and fall through to the
+    // instant-moveResize path below: the window jumps to its snapped geometry and
+    // the open animation plays over it. A snap that is NOT on a freshly-opened
+    // window (drag-snap, retile, focus move) has no such transition and morphs
+    // normally.
+    const ShaderTransition* const inFlight = m_shaderManager.findTransition(window);
+    const bool openAnimationInFlight = inFlight && inFlight->addedGrabHeld;
+    if (!skipAnimation && !allowDuringDrag && !openAnimationInFlight && m_windowAnimator->isEnabled()
         && shouldAnimateWindow(window)) {
         const QRectF targetFrame(geo);
 
@@ -287,35 +296,43 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             kw->moveResize(targetFrame);
         }
 
-        // Per-window animation motion-cascade: a Timing WindowRule for
-        // this (windowClass, eventPath) replaces the global animator
-        // profile's curve / duration for THIS animation only. No rule →
-        // resolver returns the base profile unchanged and no override is
-        // passed, preserving the historical fast-path. Retarget intentionally does
+        // Per-window animation motion-cascade: rule → per-event motion node
+        // (incl. the `window.movement` "All") → global animator profile. A
+        // Timing Rule for this (windowClass, eventPath) wins; below it, the
+        // motion ProfileTree's per-event / "All" duration override applies;
+        // the global animator profile is the floor. Retarget intentionally does
         // not re-apply the cascade — once an animation is in flight, it
         // stays on the curve that started it for visual continuity.
-        //
-        // Empty-rule-list short-circuit: when the user has no app rules
-        // configured (the default-state case for most users), skip both
-        // the resolver call AND the deep `Profile::operator!=` (which
-        // walks `curve->equals` virtual + 5 std::optional comparisons)
-        // — the cost is paid on every animated snap otherwise.
         //
         // Build the full per-window query once and reuse for the shader
         // resolver call below — matches the shape `shouldAnimateWindow`
         // uses for its rule-override gate, so a rule that gates the
         // animation also resolves its curve / timing / shader slots.
-        const PhosphorWindowRules::WindowQuery query = windowRuleQuery(window);
+        const PhosphorRules::WindowQuery query = ruleQuery(window);
+        const QString windowId = getWindowId(window);
         const auto& baseProfile = m_windowAnimator->profile();
+        // Resolve the fully-cascaded motion profile for this event (curve +
+        // duration): global animator profile → category "All" → per-node
+        // motion-tree override → per-window Rule. Shared SSOT with the
+        // time-driven shader path (tryBeginShaderForEvent), so an autotile
+        // rotate / mode-change / snap reposition animates on the SAME per-event
+        // curve + duration the user configured — including a `window.movement`
+        // "All" override. The WindowAnimator consumes the whole profile, so the
+        // per-event curve rides along; without this the morph always used the
+        // global animator profile.
+        //
+        // Gated on a non-empty tree OR rule set so the default-state user keeps
+        // the historical fast-path — no resolve, no deep `Profile::operator!=`
+        // (which walks `curve->equals` virtual + 5 std::optional comparisons).
+        // Compared against the animator's own `baseProfile` so the override is
+        // passed whenever the effective profile differs from what the animator
+        // would use unaided.
+        const bool hasMotionOverrides = m_shaderManager.motionProfileTree().hasAnyOverride();
+        const bool hasAnimationRules = !m_shaderManager.animationRuleSet().isEmpty();
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;
-        // Empty-rule-set short-circuit: a no-rules user skips both the
-        // resolver call AND the deep `Profile::operator!=`. Resolution routes
-        // through the unified RuleEvaluator via the effect-local shim.
-        if (!m_shaderManager.animationRuleSet().isEmpty()) {
-            motionProfile =
-                PlasmaZones::resolveAnimationMotionProfile(m_shaderManager.animationRuleEvaluator(), baseProfile, query,
-                                                           profilePath, getWindowId(window), m_curveRegistry);
+        if (hasMotionOverrides || hasAnimationRules) {
+            motionProfile = resolveEventMotionProfile(profilePath, query, windowId);
             if (motionProfile != baseProfile)
                 motionOverridePtr = &motionProfile;
         }
@@ -355,12 +372,14 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // the tree fallthrough. Reuse the `query` local from the
             // motion-cascade above instead of rebuilding the WindowQuery.
             //
-            // Route through `resolveAnimationShaderAndDuration` (which
-            // uses `evaluator.resolveCached(windowId, query)`). The
-            // sister `resolveAnimationMotionProfile` call above already
-            // populated the per-window cache slot for this query, so
-            // this cached read is a hit. The earlier shape called a
-            // standalone uncached shader-profile resolver here, which
+            // Route through `resolveAnimationShaderProfile` (which
+            // uses `evaluator.resolveCached(windowId, query)`). When a rule
+            // set is configured, the sister `resolveEventMotionProfile`
+            // call above already warmed the per-window cache slot for this
+            // query, so this cached read is a hit. (With an empty rule set
+            // that resolver never touches the evaluator, but then there is
+            // no priority-order walk to pay for either.) The earlier shape
+            // called a standalone uncached shader-profile resolver here, which
             // paid an extra priority-order walk per snap on every
             // non-empty rule set — same regression the shim was
             // introduced to fix for `tryBeginShaderForEvent` (see the
@@ -373,24 +392,65 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // via `motionProfile` above (driving the animator's
             // duration), so the shader still terminates with the
             // rule-overridden snap motion.
-            const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
-                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), getWindowId(window), query,
-                profilePath, /*defaultDurationMs=*/0);
+            const auto resolved = PlasmaZones::resolveAnimationShaderProfile(
+                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), windowId, query, profilePath);
             auto shaderProfile = resolved.profile;
             if (!resolved.shaderSlotFromRule && shaderProfile.effectiveEffectId().isEmpty()) {
                 // No rule matched and no tree override resolved a shader for
-                // this move event — apply the built-in per-event default
-                // (window-morph for snap/move/resize) via the shared SSOT,
+                // this snap event — apply the built-in per-event default
+                // (window-morph for snap / layoutSwitch) via the shared SSOT,
                 // which respects an explicit tree "None". Keeps the default
                 // consistent with what the settings UI shows
                 // (resolvedShaderProfile uses the same helper) without
                 // persisting it into config. Gated on `!shaderSlotFromRule`: a
-                // per-app window rule that set "None" (engaged-empty effectId)
+                // per-app rule that set "None" (engaged-empty effectId)
                 // is a deliberate opt-out and must NOT be overridden here.
                 shaderProfile =
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);
             }
-            if (!shaderProfile.effectiveEffectId().isEmpty()) {
+            // Runtime applicability gate — same canonical-predicate check
+            // as tryBeginShaderForEvent (resolvedShaderAppliesToEvent): the
+            // rule layer or a stale config can deliver a pack that provably
+            // cannot drive this snap leg (a move-physics or desktop pack).
+            // Refusing here keeps the C++ WindowAnimator geometry animation
+            // as the fallback instead of paying capture + paint cost for an
+            // identity no-op transition.
+            const QString snapShaderId = shaderProfile.effectiveEffectId();
+            const bool snapShaderApplies =
+                !snapShaderId.isEmpty() && resolvedShaderAppliesToEvent(snapShaderId, profilePath);
+            // Tear down a live transition this snap leg is NOT going to replace.
+            // Both no-install outcomes leave a stale-morph hazard, so both are
+            // handled here (only reachable when the rule set or tree is edited
+            // mid-drag — every applyWindowGeometry path shares the geometry class,
+            // so the gate cannot flip between retargets otherwise; an open leg can
+            // never reach here either, it holds addedGrabHeld and the enclosing
+            // block is skipped via openAnimationInFlight):
+            //
+            //  1. A REFUSED pack (non-empty id that provably cannot drive this
+            //     leg): clear ANY live transition — a morph from an earlier leg of
+            //     this drag, or a settling wobble / in-flight focus leg — for a
+            //     clean slate.
+            //  2. An EMPTY id (the tree or a rule was edited to "None" mid-drag):
+            //     clear only a transition that OWNS GEOMETRY (declares iFromRect).
+            //     Its from/to rects are frozen at the PREVIOUS leg's endpoints and
+            //     nothing retargets them, so leaving it would keep painting toward
+            //     the OLD target while the WindowAnimator (retargeted above) heads
+            //     to the new one — the identical stale-morph failure case 1 exists
+            //     to prevent. A NON-geometry transition is deliberately left alone
+            //     here: a settling wobble rings out over the WindowAnimator
+            //     translate, exactly as on a long drag that snaps mid-settle. The
+            //     bundled move pack declares no iFromRect, so shaderOwnsGeometry
+            //     stays false, the animator keeps the geometry, and the two
+            //     compose. A hybrid move+geometry pack that DOES declare iFromRect
+            //     would own geometry — and is therefore torn down, correctly.
+            if (!snapShaderApplies) {
+                const ShaderTransition* live = m_shaderManager.findTransition(window);
+                const bool liveOwnsGeometry = live && live->cached && live->cached->iFromRectLoc >= 0;
+                if (live && (!snapShaderId.isEmpty() || liveOwnsGeometry)) {
+                    endShaderTransition(window);
+                }
+            }
+            if (snapShaderApplies) {
                 beginShaderTransition(window, shaderProfile);
                 // If the installed shader is a geometry morph (declares
                 // iFromRect), hand it the old/new frames and request the
@@ -418,6 +478,23 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                         mt->needsSnapshot = true;
                     }
                 }
+            }
+        } else {
+            // The animator DECLINED this leg — SnapPolicy refused the spec, or the
+            // move fell under Profile::minDistance with no size change (a
+            // user-settable 0-200px threshold, so this is reachable in a default-ish
+            // config, not just a corner case). The whole install block above is
+            // therefore skipped, including its stale-morph teardown — but the
+            // moveResize higher up has ALREADY committed the new geometry.
+            //
+            // A live transition that OWNS GEOMETRY (declares iFromRect) froze its
+            // from/to rects at the previous leg's endpoints and nothing retargets
+            // them, so it would go on painting toward the OLD target across a window
+            // that already sits at the new one. Same hazard the in-branch teardown
+            // exists to prevent, on the path where the animator never ran.
+            if (const ShaderTransition* live = m_shaderManager.findTransition(window);
+                live && live->cached && live->cached->iFromRectLoc >= 0) {
+                endShaderTransition(window);
             }
         }
 

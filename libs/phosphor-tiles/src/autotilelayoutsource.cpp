@@ -40,6 +40,9 @@ PhosphorLayout::AlgorithmMetadata buildMetadata(PhosphorTiles::TilingAlgorithm* 
     // split ratios) or scripted algorithms with the onWindowResized hook.
     meta.reflowsOnResize = algorithm->supportsMemory() || algorithm->supportsResizeHook();
     meta.supportsScriptState = algorithm->supportsScriptState();
+    meta.supportsSingleWindow = algorithm->supportsSingleWindow();
+    // Rearranges as focus moves between tiled windows (e.g. a spotlight layout).
+    meta.reflowsOnFocus = algorithm->retilesOnFocusChange();
     meta.isScripted = algorithm->isScripted();
     meta.isUserScript = algorithm->isUserScript();
     meta.zoneNumberDisplay = PhosphorLayout::zoneNumberDisplayFromString(algorithm->zoneNumberDisplay());
@@ -105,9 +108,20 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
     qreal splitRatio = algorithm->defaultSplitRatio();
     int effectiveCount = windowCount;
+    // Per-algorithm custom-param values for the preview. Sourced below from the
+    // saved per-algorithm entry (which the engine serialises for EVERY
+    // algorithm, active or not), then handed to calculateZones — without this
+    // the thumbnail/list previews ignored custom parameters entirely while the
+    // live tiler honoured them.
+    QVariantMap customParams;
     if (registry) {
         const auto& params = registry->previewParams();
         const bool isActive = !params.algorithmId.isEmpty() && registry->algorithm(params.algorithmId) == algorithm;
+        // The per-algorithm saved entry feeds both the inactive-algorithm
+        // master/split fallback and the custom-param resolution below, so look
+        // it up once here.
+        const auto savedIt = params.savedAlgorithmSettings.constFind(algorithmId);
+        const bool hasSaved = savedIt != params.savedAlgorithmSettings.constEnd();
         if (isActive) {
             if (params.masterCount > 0) {
                 masterCount = params.masterCount;
@@ -118,17 +132,27 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
             if (effectiveCount <= 0 && params.maxWindows > 0) {
                 effectiveCount = params.maxWindows;
             }
-        } else {
-            auto it = params.savedAlgorithmSettings.constFind(algorithmId);
-            if (it != params.savedAlgorithmSettings.constEnd()) {
-                const QVariantMap& saved = it.value();
-                const int savedMaster = saved.value(PhosphorTiles::AutotileJsonKeys::MasterCount, -1).toInt();
-                const qreal savedRatio = saved.value(PhosphorTiles::AutotileJsonKeys::SplitRatio, -1.0).toDouble();
-                if (savedMaster > 0) {
-                    masterCount = savedMaster;
-                }
-                if (savedRatio > 0.0) {
-                    splitRatio = savedRatio;
+        } else if (hasSaved) {
+            const QVariantMap& saved = savedIt.value();
+            const int savedMaster = saved.value(PhosphorTiles::AutotileJsonKeys::MasterCount, -1).toInt();
+            const qreal savedRatio = saved.value(PhosphorTiles::AutotileJsonKeys::SplitRatio, -1.0).toDouble();
+            if (savedMaster > 0) {
+                masterCount = savedMaster;
+            }
+            if (savedRatio > 0.0) {
+                splitRatio = savedRatio;
+            }
+        }
+        // Custom params live in the per-algorithm saved entry regardless of
+        // whether this is the active algorithm, so resolve them outside the
+        // active/saved split above. Filter to the algorithm's currently
+        // declared params (mirrors AutotileEngine::recalculateLayout) so a stale
+        // value from an edited script can't reach calculateZones.
+        if (hasSaved && algorithm->supportsCustomParams()) {
+            const QVariantMap declared = savedIt.value().value(PhosphorTiles::AutotileJsonKeys::CustomParams).toMap();
+            for (auto pit = declared.constBegin(); pit != declared.constEnd(); ++pit) {
+                if (algorithm->hasCustomParam(pit.key())) {
+                    customParams.insert(pit.key(), pit.value());
                 }
             }
         }
@@ -141,6 +165,7 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     previewState.setMasterCount(masterCount);
     previewState.setSplitRatio(splitRatio);
     PhosphorTiles::TilingParams params = PhosphorTiles::TilingParams::forPreview(effectiveCount, canvas, &previewState);
+    params.customParams = customParams;
 
     const QVector<QRect> rects = algorithm->calculateZones(params);
 
@@ -148,6 +173,10 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     preview.displayName = algorithm->name();
     preview.description = algorithm->description();
     preview.zoneCount = rects.size();
+    // Publish the same master count `previewState` above computed the geometry
+    // with, so a renderer marking the leading zones as masters agrees with the
+    // rects it draws them over.
+    preview.masterCount = masterCount;
     // Setting preview.algorithm = ... makes isAutotile() return true.
     preview.algorithm = buildMetadata(algorithm);
     // Built-in C++ algorithms and system-installed scripts are system

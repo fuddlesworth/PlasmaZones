@@ -26,6 +26,7 @@ add_subdirectory(shared)
 set(plasmazones_core_SRCS
     phosphor_qml_i18n.h
     core/constants.h
+    core/baselinecleanup.h
     core/logging.h
     core/logging.cpp
     core/translationloader.h
@@ -63,7 +64,7 @@ set(plasmazones_core_SRCS
     # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
     # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ -
     # consumers include <PhosphorZones/...> directly and construct the registry
-    # with a borrowed PhosphorWindowRules::WindowRuleStore* + the
+    # with a borrowed PhosphorRules::RuleStore* + the
     # "plasmazones/layouts" subdir inline.
     core/unifiedlayoutlist.cpp
     core/unifiedlayoutlist.h
@@ -112,6 +113,8 @@ set(plasmazones_core_SRCS
     dbus/layoutadaptor/editor.cpp
     dbus/layoutadaptor.h
     dbus/settingsadaptor.cpp
+    dbus/settingsadaptor_batch.cpp
+    dbus/settingsadaptor_registry.cpp
     dbus/settingsadaptor.h
     dbus/shaderadaptor.cpp
     dbus/shaderadaptor.h
@@ -123,8 +126,8 @@ set(plasmazones_core_SRCS
     dbus/overlayadaptor.h
     dbus/zonedetectionadaptor.cpp
     dbus/zonedetectionadaptor.h
-    dbus/windowruleadaptor.cpp
-    dbus/windowruleadaptor.h
+    dbus/ruleadaptor.cpp
+    dbus/ruleadaptor.h
     # snapnavigationtargets moved to libs/phosphor-snap-engine/
     dbus/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
@@ -218,12 +221,19 @@ target_link_libraries(plasmazones_core
         # default constants ConfigDefaults delegates to (PUBLIC because
         # configdefaults.h includes the header).
         PhosphorCompositor::PhosphorCompositor
-        # PhosphorWindowRules: the unified LGPL rule engine. PUBLIC since
-        # Phase 3 — config/settings.h owns a WindowRuleStore for the per-mode
-        # disable lists, the WindowRuleAdaptor exposes the store on D-Bus, and
+        # PhosphorSurface: DecorationProfileTree / DecorationProfile — the
+        # per-surface decoration tree type. PUBLIC because configdefaults.h,
+        # config/settings.h and core/isettings.h expose the type by value in
+        # their public API (the decorationProfileTree accessors + the
+        # ConfigDefaults baseline), so consumers linking plasmazones_core need
+        # the include path + link edge.
+        PhosphorSurface::PhosphorSurface
+        # PhosphorRules: the unified LGPL rule engine. PUBLIC since
+        # Phase 3 — config/settings.h owns a RuleStore for the per-mode
+        # disable lists, the RuleAdaptor exposes the store on D-Bus, and
         # config/configmigration.cpp builds rules during the v3→v4 conversion,
         # so consumers of plasmazones_core need the include path + link edge.
-        PhosphorWindowRules::PhosphorWindowRules
+        PhosphorRules::PhosphorRules
         # Frozen-snapshot per-screen mode + disable/lock resolver. PUBLIC
         # because D-Bus adaptors compiled into plasmazones_core
         # (windowdragadaptor / windowtrackingadaptor / snapadaptor) hold
@@ -338,6 +348,8 @@ set(plasmazones_rendering_SRCS
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp
     daemon/rendering/zoneshaderitem/setters.cpp
+    daemon/rendering/surfaceshaderitem.h
+    daemon/rendering/surfaceshaderitem.cpp
     daemon/rendering/zonelabeltexturebuilder.h
     daemon/rendering/zonelabeltexturebuilder.cpp
 )
@@ -354,6 +366,12 @@ target_link_libraries(plasmazones_rendering
         plasmazones_core
         Qt6::Quick
         PhosphorRendering::PhosphorRendering
+        # SurfaceShaderItem constructs a PhosphorSurfaceShaders::SurfaceUniformProfile
+        # to drive the shared render node's surface UBO. Reachable transitively via
+        # plasmazones_core (which PUBLIC-links it for DecorationProfileTree), but
+        # named explicitly here because surfaceshaderitem.{h,cpp} depend on the
+        # surface library's symbols directly.
+        PhosphorSurface::PhosphorSurface
     PRIVATE
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
@@ -434,6 +452,7 @@ set(plasmazones_daemon_SRCS
     daemon/enginefactory.cpp
     daemon/daemon/start.cpp
     daemon/daemon/signals.cpp
+    daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
     daemon/daemon/osd.cpp
@@ -462,6 +481,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/shader.cpp
     daemon/overlayservice/snapassist.cpp
     daemon/overlayservice.h
+    daemon/overlayservice_types.h
     daemon/overlayservice/internal.h
     daemon/snapassistthumbnailprovider.cpp
     daemon/snapassistthumbnailprovider.h
@@ -505,6 +525,7 @@ target_link_libraries(plasmazonesd
         PhosphorShortcuts::PhosphorShortcuts  # ShortcutManager / Registry / backends
         PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
         PhosphorSurfaces::PhosphorSurfaces  # managed surface lifecycle (engine, keep-alive)
+        PhosphorServiceIdle::PhosphorServiceIdle  # ext-idle-notify-v1; the daemon owns session-idle detection and pushes it to the KWin effect (a compositor SERVES that protocol, it cannot consume it)
         PhosphorOverlay::PhosphorOverlay  # per-screen shell-host + slot mechanism (Phase 2 onward)
         # Frozen-snapshot per-screen mode + disable/lock cascade façade.
         # The daemon owns a `ContextResolver` over three local adapters
@@ -847,13 +868,18 @@ install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 # only, no GPU/Wayland). The CI gate for the bundled sets; pre-commit-friendly for
 # pack authors. Links plasmazones_rendering for the zone entry scaffold and
 # PhosphorAnimation for the animation effect parser + entry scaffold.
-add_executable(plasmazones-shader-validate shadervalidate/main.cpp)
+add_executable(plasmazones-shader-validate
+    shadervalidate/main.cpp
+    shadervalidate/packvalidators.cpp
+    shadervalidate/packvalidatorcommon.cpp
+)
 target_link_libraries(plasmazones-shader-validate
     PRIVATE
         plasmazones_rendering
         PhosphorRendering::PhosphorRendering
         PhosphorShaders::PhosphorShaders
         PhosphorAnimation::PhosphorAnimation
+        PhosphorSurface::PhosphorSurface
         Qt6::Core
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate
@@ -862,14 +888,16 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 
 # CI gate: every bundled pack must parse + bake clean. Headless glslang, so this
 # runs in CI with no GPU/Wayland — exactly like luau-analyze for algorithms. Zone
-# packs (data/shaders) and animation packs (--animation, data/animations) are
-# distinct authoring models with different entry conventions, so each gets its own
-# invocation.
+# packs (data/overlays), animation packs (--animation, data/animations), and
+# surface packs (--surface, data/surface) are distinct authoring models with
+# different entry conventions, so each gets its own invocation.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled
-             COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/shaders)
+             COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/overlays)
     add_test(NAME shader_validate_animations
              COMMAND plasmazones-shader-validate --animation ${PROJECT_SOURCE_DIR}/data/animations)
+    add_test(NAME shader_validate_surface
+             COMMAND plasmazones-shader-validate --surface ${PROJECT_SOURCE_DIR}/data/surface)
 endif()
 
 # Standalone settings app (no KDE Frameworks required)

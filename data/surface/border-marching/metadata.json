@@ -1,0 +1,72 @@
+{
+    "id": "border-marching",
+    "name": "Marching Ants",
+    "description": "Rounded corners and a dashed window border whose dashes march around the frame, the classic selection marquee. Dash count, fill, march speed and the dash and gap colours are this pack's own parameters, and the motion dims when the surface loses focus.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Borders",
+    "providesBorder": true,
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "borderWidth",
+            "name": "Border width",
+            "type": "int",
+            "default": 2,
+            "min": 0,
+            "max": 10,
+            "description": "Thickness of the dashed border (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "dashCount",
+            "name": "Dash count",
+            "type": "int",
+            "default": 24,
+            "min": 4,
+            "max": 96,
+            "description": "How many dashes fit around the border"
+        },
+        {
+            "id": "dashFill",
+            "name": "Dash fill",
+            "type": "float",
+            "default": 0.55,
+            "min": 0.1,
+            "max": 0.9,
+            "description": "How much of each dash cell the dash occupies"
+        },
+        {
+            "id": "marchSpeed",
+            "name": "March speed",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.02,
+            "max": 1.0,
+            "description": "How many times per second the dashes travel around the border"
+        },
+        {
+            "id": "colorA",
+            "name": "Dash colour",
+            "type": "color",
+            "default": "#ff3daee9",
+            "description": "Colour of the marching dashes"
+        },
+        {
+            "id": "colorB",
+            "name": "Gap colour",
+            "type": "color",
+            "default": "#00000000",
+            "description": "Colour between dashes, transparent by default"
+        }
+    ]
+}

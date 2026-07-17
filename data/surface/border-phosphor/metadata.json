@@ -1,0 +1,95 @@
+{
+    "id": "border-phosphor",
+    "name": "Phosphor Border",
+    "description": "Rounded corners and a window border carrying the Phosphor brand gradient from cyan to rose, flowing slowly around the frame with a soft gleam orbiting the band. The whole band dims when the surface loses focus. Width, corner radius, flow speed, gleam and the four gradient stops are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Borders",
+    "providesBorder": true,
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "borderWidth",
+            "name": "Border width",
+            "type": "int",
+            "default": 4,
+            "min": 2,
+            "max": 12,
+            "description": "Thickness of the gradient band (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "flowSpeed",
+            "name": "Flow speed",
+            "type": "float",
+            "default": 0.06,
+            "min": 0.0,
+            "max": 0.5,
+            "description": "How many times per second the gradient flows around the border"
+        },
+        {
+            "id": "gleamSpeed",
+            "name": "Gleam speed",
+            "type": "float",
+            "default": 0.12,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How many times per second the gleam travels around the border"
+        },
+        {
+            "id": "gleamStrength",
+            "name": "Gleam strength",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "Brightness of the travelling gleam, 0 to disable"
+        },
+        {
+            "id": "opacity",
+            "name": "Opacity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.1,
+            "max": 1.0,
+            "description": "Overall opacity of the border band"
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient cyan",
+            "type": "color",
+            "default": "#ff22d3ee",
+            "description": "First stop of the brand gradient"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient blue",
+            "type": "color",
+            "default": "#ff3b82f6",
+            "description": "Second stop of the brand gradient"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient purple",
+            "type": "color",
+            "default": "#ffa855f7",
+            "description": "Third stop of the brand gradient"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient rose",
+            "type": "color",
+            "default": "#fff43f5e",
+            "description": "Fourth stop of the brand gradient"
+        }
+    ]
+}

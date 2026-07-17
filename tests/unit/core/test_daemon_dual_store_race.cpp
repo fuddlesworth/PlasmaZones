@@ -3,11 +3,11 @@
 
 /**
  * @file test_daemon_dual_store_race.cpp
- * @brief Regression guard for the in-process dual-WindowRuleStore data-loss race.
+ * @brief Regression guard for the in-process dual-RuleStore data-loss race.
  *
- * Pre-fix, the daemon constructed a @c WindowRuleStore for @c LayoutRegistry /
- * @c WindowRuleAdaptor and a SECOND store inside @c Settings, both pointed at
- * @c windowrules.json. Both loaded the same snapshot on boot; neither watched
+ * Pre-fix, the daemon constructed a @c RuleStore for @c LayoutRegistry /
+ * @c RuleAdaptor and a SECOND store inside @c Settings, both pointed at
+ * @c rules.json. Both loaded the same snapshot on boot; neither watched
  * the file. Once one store wrote (e.g., an assignment rule added via the KCM
  * D-Bus path → @c LayoutRegistry → store ① ), the other store still held the
  * pre-write snapshot. When @c Settings::writeDisableEntries later rebuilt its
@@ -16,7 +16,7 @@
  * added assignment rule) back to disk, silently dropping it.
  *
  * The fix routes the daemon's single store through @c Settings via the
- * borrowing ctor — every in-process writer mutates one @c WindowRuleSet, so
+ * borrowing ctor — every in-process writer mutates one @c RuleSet, so
  * no rebuild can ever see a stale snapshot of its peer's rule.
  *
  * This test instantiates the daemon's exact composition (one owned store,
@@ -30,9 +30,9 @@
 #include <QUuid>
 #include <memory>
 
-#include <PhosphorWindowRules/ContextRuleBridge.h>
-#include <PhosphorWindowRules/WindowRule.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleStore.h>
 
 #include "../../../src/config/configbackends.h"
 #include "../../../src/config/configdefaults.h"
@@ -46,25 +46,42 @@ using Mode = PhosphorZones::AssignmentEntry::Mode;
 
 namespace {
 
+// Stable-id-shaped screen names, for the same reason spelled out at the top of
+// tests/unit/config/test_settings_disable_per_mode.cpp: every assertion below
+// compares a screen name the code stored and handed back through
+// Settings::disabledMonitors, which resolves connector names on EVERY read.
+//
+// `resolveScreenId` only rewrites CONNECTOR names, which ScreenIdentity defines
+// as "contains no ':'", so a "Manuf:Model:Serial" string canonicalizes to itself
+// on every machine. A connector name like "DP-2" would instead resolve against
+// whatever is actually plugged into the box running the suite, and
+// `QCOMPARE(disabledMonitors(...), {"DP-2"})` would come back as that monitor's
+// EDID id. Under QT_QPA_PLATFORM=offscreen no connector matches and the name
+// falls through untouched, which is why such a test passes ctest and fails a
+// bare run on a host that owns the connector.
+const QString kDisabledScreenSnapping = QStringLiteral("TestVendor:PanelA:0001");
+const QString kDisabledScreenAutotile = QStringLiteral("TestVendor:PanelB:0002");
+const QString kDisabledScreenBorrow = QStringLiteral("TestVendor:PanelC:0003");
+
 /// Mint a deterministic assignment rule representing what the daemon's
-/// LayoutRegistry / WindowRuleAdaptor writes when the KCM saves a per-screen
+/// LayoutRegistry / RuleAdaptor writes when the KCM saves a per-screen
 /// layout choice. The exact action shape doesn't matter for the race test;
 /// what matters is that this rule exists in the in-memory set BEFORE the
 /// Settings-side disable write runs.
-PhosphorWindowRules::WindowRule makeTestAssignmentRule()
+PhosphorRules::Rule makeTestAssignmentRule()
 {
-    return PhosphorWindowRules::ContextRuleBridge::makeAssignmentRule(
+    return PhosphorRules::ContextRuleBridge::makeAssignmentRule(
         QStringLiteral("Test assignment rule"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"),
-        QUuid::createUuid().toString(), QString());
+        QUuid::createUuid().toString(), QString(), PhosphorRules::ContextRuleBridge::kContextBandBase);
 }
 
 /// True iff @p store contains a rule with the assignment-action shape — i.e.,
 /// not a per-mode disable rule. Used as the "the assignment write survived"
 /// predicate without coupling the test to the rule's exact id.
-bool hasAssignmentRule(const PhosphorWindowRules::WindowRuleStore& store)
+bool hasAssignmentRule(const PhosphorRules::RuleStore& store)
 {
-    for (const PhosphorWindowRules::WindowRule& rule : store.ruleSet().rules()) {
-        if (!PhosphorWindowRules::ContextRuleBridge::disableRuleMode(rule)) {
+    for (const PhosphorRules::Rule& rule : store.ruleSet().rules()) {
+        if (!PhosphorRules::ContextRuleBridge::disableRuleMode(rule)) {
             return true;
         }
     }
@@ -88,14 +105,13 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
-        // The daemon's composition root: one backend, one WindowRuleStore.
+        // The daemon's composition root: one backend, one RuleStore.
         auto backend = createDefaultConfigBackend();
-        auto daemonStore =
-            std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), nullptr);
+        auto daemonStore = std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), nullptr);
         daemonStore->load();
 
         // Settings shares the daemon's store via the borrow ctor. Mirrors
-        // Daemon::Daemon line passing m_windowRuleStore.get() — when this
+        // Daemon::Daemon line passing m_ruleStore.get() — when this
         // pointer is non-null Settings does NOT mint a second store.
         Settings settings(backend.get(), /*curveRegistry=*/nullptr, daemonStore.get(), nullptr);
 
@@ -103,8 +119,8 @@ private Q_SLOTS:
 
         // (1) Daemon-side writer adds an assignment rule. This is the
         // canonical KCM-saves-an-assignment path: LayoutRegistry /
-        // WindowRuleAdaptor mutate the daemon's store directly.
-        const PhosphorWindowRules::WindowRule assignment = makeTestAssignmentRule();
+        // RuleAdaptor mutate the daemon's store directly.
+        const PhosphorRules::Rule assignment = makeTestAssignmentRule();
         QVERIFY(daemonStore->addRule(assignment));
         QCOMPARE(daemonStore->count(), 1);
         QVERIFY(hasAssignmentRule(*daemonStore));
@@ -114,7 +130,7 @@ private Q_SLOTS:
         // before step 1) and called setAllRules({disableRule}), clobbering
         // the assignment from disk. With one shared store, the rebuild
         // sees the assignment in ruleSet() and carries it forward.
-        const QString disabledScreen = QStringLiteral("HDMI-A-1");
+        const QString& disabledScreen = kDisabledScreenSnapping;
         settings.setDisabledMonitors(Mode::Snapping, {disabledScreen});
 
         // In-memory invariant — both writes are present in the one live
@@ -130,11 +146,10 @@ private Q_SLOTS:
         // Pre-fix Settings's setAllRules wrote `{disableRule}` only, so
         // this reload would see one rule and hasAssignmentRule() would be
         // false. With the fix, the on-disk file holds both rules.
-        PhosphorWindowRules::WindowRuleStore reloaded(ConfigDefaults::windowRulesFilePath(), nullptr);
+        PhosphorRules::RuleStore reloaded(ConfigDefaults::rulesFilePath(), nullptr);
         reloaded.load();
         QCOMPARE(reloaded.count(), 2);
-        QVERIFY2(hasAssignmentRule(reloaded),
-                 "assignment rule was dropped from windowrules.json by the dual-store race");
+        QVERIFY2(hasAssignmentRule(reloaded), "assignment rule was dropped from rules.json by the dual-store race");
     }
 
     /// Symmetrical case: Settings writes the disable first, daemon writes
@@ -148,13 +163,12 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         auto backend = createDefaultConfigBackend();
-        auto daemonStore =
-            std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), nullptr);
+        auto daemonStore = std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), nullptr);
         daemonStore->load();
         Settings settings(backend.get(), /*curveRegistry=*/nullptr, daemonStore.get(), nullptr);
 
         // (1) Settings-side writer first.
-        const QString disabledScreen = QStringLiteral("DP-2");
+        const QString& disabledScreen = kDisabledScreenAutotile;
         settings.setDisabledMonitors(Mode::Autotile, {disabledScreen});
         QCOMPARE(daemonStore->count(), 1);
 
@@ -167,7 +181,7 @@ private Q_SLOTS:
         QCOMPARE(daemonStore->count(), 2);
 
         // On-disk round-trip.
-        PhosphorWindowRules::WindowRuleStore reloaded(ConfigDefaults::windowRulesFilePath(), nullptr);
+        PhosphorRules::RuleStore reloaded(ConfigDefaults::rulesFilePath(), nullptr);
         reloaded.load();
         QCOMPARE(reloaded.count(), 2);
         QVERIFY(hasAssignmentRule(reloaded));
@@ -184,16 +198,16 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
 
         auto backend = createDefaultConfigBackend();
-        auto daemonStore =
-            std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath(), nullptr);
+        auto daemonStore = std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath(), nullptr);
         daemonStore->load();
         Settings settings(backend.get(), nullptr, daemonStore.get(), nullptr);
 
         // Inject a disable rule directly through the daemon-owned store
-        // (the path WindowRuleAdaptor takes when KCM edits a rule by id).
-        const QString disabledScreen = QStringLiteral("eDP-1");
-        const auto rule = PhosphorWindowRules::ContextRuleBridge::makeDisableRule(
-            QStringLiteral("Snapping off · eDP-1"), disabledScreen, 0, QString(), QStringLiteral("snapping"));
+        // (the path RuleAdaptor takes when KCM edits a rule by id).
+        const QString& disabledScreen = kDisabledScreenBorrow;
+        const auto rule = PhosphorRules::ContextRuleBridge::makeDisableRule(
+            QStringLiteral("Snapping off · %1").arg(disabledScreen), disabledScreen, 0, QString(),
+            QStringLiteral("snapping"), PhosphorRules::ContextRuleBridge::kContextBandBase);
         QVERIFY(daemonStore->addRule(rule));
 
         // Settings reads through the same store, so the disable is visible

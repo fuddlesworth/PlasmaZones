@@ -152,8 +152,7 @@ void WindowTrackingAdaptor::saveState()
         for (const QString& windowClass : m_service->userSnappedClasses()) {
             userSnappedArray.append(windowClass);
         }
-        tracking->writeString(ConfigKeys::userSnappedClassesKey(),
-                              QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
+        tracking->writeJson(ConfigKeys::userSnappedClassesKey(), userSnappedArray);
     }
 
     // Autotile window orders and pending restores are no longer persisted as
@@ -185,8 +184,7 @@ void WindowTrackingAdaptor::saveState()
                     && !isPersistedContextDisabled(p.screenId, p.virtualDesktop, p.activity);
             });
         if (!placements.isEmpty()) {
-            tracking->writeString(ConfigKeys::windowPlacementsKey(),
-                                  QString::fromUtf8(QJsonDocument(placements).toJson(QJsonDocument::Compact)));
+            tracking->writeJson(ConfigKeys::windowPlacementsKey(), placements);
         } else {
             tracking->deleteKey(ConfigKeys::windowPlacementsKey());
         }
@@ -271,8 +269,9 @@ void WindowTrackingAdaptor::loadState()
 {
     // Read config via the PhosphorConfig::IBackend group API (readString/readInt).
     // This correctly handles values stored as native JSON objects/arrays
-    // (e.g. PendingRestoreQueues, PreTileGeometries) — the group's readString()
-    // serializes them back to compact JSON strings.
+    // (UserSnappedClasses, WindowPlacements) — the group's readString()
+    // serializes them back to compact JSON strings, so the same fromJson parse
+    // below also reads a pre-native session.json where these were escaped strings.
     //
     // The previous approach used readJsonConfigFromDisk() which flattened the
     // entire config into a QMap. Its flattener recursed into native JSON objects

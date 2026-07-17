@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
@@ -18,21 +17,29 @@ Rectangle {
     width: buttonSize
     height: buttonSize
     radius: Kirigami.Units.smallSpacing
-    border.color: activeFocus ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
+    border.color: activeFocus ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
     border.width: activeFocus ? 2 : 1
     // Accessibility
     Accessible.name: i18n("Color picker")
     Accessible.description: i18n("Current color: %1", root.color.toString())
     Accessible.role: Accessible.Button
+    Accessible.focusable: true
     // Keyboard and focus support
     activeFocusOnTab: true
     Keys.onReturnPressed: root.clicked()
+    // Numpad Enter alias, matching the sibling card components.
+    Keys.onEnterPressed: root.clicked()
     Keys.onSpacePressed: root.clicked()
 
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: root.clicked()
+        onClicked: {
+            // Move active focus here on click so a previously keyboard-focused
+            // sibling doesn't keep the focus ring and the key handlers.
+            root.forceActiveFocus();
+            root.clicked();
+        }
     }
 
     // Checkerboard pattern for transparency preview
@@ -40,7 +47,7 @@ Rectangle {
         id: checkerboard
 
         anchors.fill: parent
-        anchors.margins: Math.round(Screen.devicePixelRatio)
+        anchors.margins: 1
         visible: root.color.a < 1
         // Repaint when visibility changes (color alpha changed)
         onVisibleChanged: {
@@ -60,12 +67,24 @@ Rectangle {
                 }
             }
         }
+
+        // onPaint samples disabledTextColor and backgroundColor, so a light/dark
+        // switch while the swatch is visible would otherwise leave the
+        // checkerboard in the old palette. Every PlatformTheme colour shares the
+        // one `colorsChanged` notify signal, so this covers both reads.
+        Connections {
+            function onColorsChanged() {
+                checkerboard.requestPaint();
+            }
+
+            target: Kirigami.Theme
+        }
     }
 
     Rectangle {
         anchors.fill: parent
-        anchors.margins: Math.round(Screen.devicePixelRatio)
-        radius: Math.max(0, parent.radius - Math.round(Screen.devicePixelRatio))
+        anchors.margins: 1
+        radius: Math.max(0, parent.radius - 1)
         color: root.color
     }
 }

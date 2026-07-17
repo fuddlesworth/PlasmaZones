@@ -3,7 +3,6 @@
 
 import QtCore
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -45,47 +44,60 @@ RowLayout {
     property bool showCustomParams: true
     property bool showReflowsOnResize: true
     property bool showScriptState: true
-    // Whether any non-default filter is active (drives badge visibility)
-    readonly property bool hasActiveFilters: {
-        if (filterText.length > 0)
-            return true;
-
-        if (root.viewMode === 0)
-            return !showAspectAny || !showAspectStandard || !showAspectUltrawide || !showAspectSuperUltrawide || !showAspectPortrait || !showHidden || !showAutoLayouts || !showManualLayouts || !showBuiltInLayouts || !showUserLayouts;
-        else
-            return !showBuiltInAlgorithms || !showUserAlgorithms || !showHidden || !showMasterCount || !showSplitRatio || !showOverlapping || !showPersistent || !showCustomParams || !showReflowsOnResize || !showScriptState;
-    }
+    property bool showSingleWindow: true
+    property bool showReflowsOnFocus: true
+    // Whether any non-default filter is active (drives badge visibility).
+    // Derived from the active mode's filter button rather than a hand-written
+    // list: its `excluded` already tracks every bool filter that is off, via
+    // _excludedKeys over the button's own group entries.
+    readonly property bool hasActiveFilters: filterText.length > 0 || (viewMode === 0 ? snappingFilterButton : tilingFilterButton).excluded.length > 0
     // ── Group-by index constants (must match model order below) ───────────
     // Snapping
     readonly property int groupAspectRatio: 0
     readonly property int groupZoneCount: 1
     readonly property int groupAutoManual: 2
     readonly property int groupSource: 3
-    readonly property int groupSnappingNone: 4
-    // Tiling
+    readonly property int groupVisibility: 4
+    readonly property int groupSnappingNone: 5
+    // Tiling. "Persistent" was dropped — it was a degenerate yes/no split already
+    // covered by the Capability grouping's "Persistent (Memory)" bucket.
     readonly property int groupCapability: 0
     readonly property int groupTilingSource: 1
-    readonly property int groupPersistent: 2
+    readonly property int groupTilingVisibility: 2
     readonly property int groupTilingNone: 3
     // Static ComboBox models (avoids inline array recreation that resets currentIndex)
-    readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("None")]
-    readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Persistent"), i18n("None")]
-    readonly property var snappingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Custom")]
-    readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Custom")]
+    readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("Visibility"), i18n("None")]
+    readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Visibility"), i18n("None")]
+    // "Priority" sorts by the order set on the Configuration → Priority page
+    // (snappingLayoutOrder / tilingAlgorithmOrder). Falls back to Name order when
+    // no priority has been set yet.
+    readonly property var snappingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
+    readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
     // Guard to suppress redundant filterSettingsChanged during batch resets
     property bool _resetting: false
     property int _previousViewMode: 0
+    // Cached "a priority order exists for the current mode" — hasCustom*Order()
+    // is a non-reactive Q_INVOKABLE, so refresh it on completion, mode switch,
+    // and the staged-order signals. Drives the Priority sort option's availability
+    // in the GroupSortBar (its last sort entry).
+    property bool _hasPriorityOrder: false
+
+    function _refreshHasPriorityOrder() {
+        _hasPriorityOrder = viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder();
+    }
     // Property-name maps for data-driven save/load.
     // Each entry: [rootPropertyName, persistedStatePropertyName].
     // NOTE: adding a filter requires updating ALL of: property declaration,
     // _defaultValues, the relevant _snapping/_tilingStateMap, persistedState,
-    // hasActiveFilters, the menu item, and the JS filter logic (see the same
+    // the filter button's group entry, and the JS filter logic (see the same
     // note above _defaultValues below — keep both lists in sync).
+    // hasActiveFilters needs no update: it derives from the button's excluded.
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
-    readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"], ["showScriptState", "tilingShowScriptState"]]
+    readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"], ["showScriptState", "tilingShowScriptState"], ["showSingleWindow", "tilingShowSingleWindow"], ["showReflowsOnFocus", "tilingShowReflowsOnFocus"]]
     // Default values for all resettable filter properties (not group/sort).
     // Adding a filter requires updating: property declaration, _defaultValues,
-    // the relevant state map, persistedState, hasActiveFilters, menu item, and JS logic.
+    // the relevant state map, persistedState, the filter button's group entry,
+    // and the JS logic.
     readonly property var _defaultValues: {
         "showHidden": true,
         "showAspectAny": true,
@@ -105,7 +117,9 @@ RowLayout {
         "showPersistent": true,
         "showCustomParams": true,
         "showReflowsOnResize": true,
-        "showScriptState": true
+        "showScriptState": true,
+        "showSingleWindow": true,
+        "showReflowsOnFocus": true
     }
 
     signal filterSettingsChanged
@@ -127,9 +141,37 @@ RowLayout {
     // page's filter button (the button moved to the search row).
     function popupFilterMenu() {
         if (viewMode === 0)
-            snappingFilterMenu.popup();
+            snappingFilterButton.popup();
         else
-            tilingFilterMenu.popup();
+            tilingFilterButton.popup();
+    }
+
+    // Keys the given filter button should show as unchecked: every bool
+    // filter property (the group entries' keys ARE the property names) that
+    // is currently false. Evaluated as a `Binding on excluded` value, so the
+    // per-property reads make it re-evaluate whenever any filter bool
+    // changes (reset, loadState, or a toggle echoing back).
+    function _excludedKeys(groups) {
+        var ex = [];
+        for (var g = 0; g < groups.length; ++g) {
+            for (var i = 0; i < groups[g].length; ++i) {
+                var key = groups[g][i].key;
+                if (!root[key])
+                    ex.push(key);
+            }
+        }
+        return ex;
+    }
+
+    // A checkbox in one of the filter menus was toggled: write it onto the
+    // named bool property (which flows to persistedState via
+    // filterSettingsChanged → saveState, exactly as before).
+    function _applyFilterToggle(key, included) {
+        if (_resetting)
+            return;
+
+        root[key] = included;
+        filterSettingsChanged();
     }
 
     // Resets filter and search state to defaults.
@@ -176,8 +218,10 @@ RowLayout {
                 val = Math.max(0, Math.min(val, maxSort));
             root[prop] = val;
         }
-        groupByCombo.currentIndex = groupByIndex;
-        sortByCombo.currentIndex = sortByIndex;
+        groupSort.groupByIndex = groupByIndex;
+        groupSort.sortByIndex = sortByIndex;
+        groupSort.sortAscending = sortAscending;
+        groupSort.syncFromState();
         _resetting = false;
         filterSettingsChanged();
     }
@@ -196,73 +240,58 @@ RowLayout {
         saveState(_previousViewMode);
         _previousViewMode = viewMode;
         loadState(viewMode);
+        // The new mode has its own priority order — refresh the Priority sort
+        // option's availability for the mode we just switched to.
+        _refreshHasPriorityOrder();
     }
     Component.onCompleted: {
         _previousViewMode = viewMode;
         loadState(viewMode);
+        _refreshHasPriorityOrder();
     }
 
-    // ── Group By ────────────────────────────────────────────────────────────
-    Label {
-        text: i18n("Group:")
-        font: Kirigami.Theme.smallFont
-        color: Kirigami.Theme.disabledTextColor
-    }
-
-    ComboBox {
-        id: groupByCombo
-
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-        model: root.viewMode === 0 ? root.snappingGroupModel : root.tilingGroupModel
-        // Binding is initial-only — user interaction breaks it; loadState()
-        // re-syncs imperatively via groupByCombo.currentIndex = ...
-        currentIndex: root.groupByIndex
-        Accessible.name: i18n("Group by")
-        onActivated: index => {
-            if (index < 0 || index >= model.length)
-                return;
-
-            root.groupByIndex = index;
+    // Priority order can be staged on the Configuration → Priority page while
+    // this bar is alive — refresh the cached availability so the Priority sort
+    // option ungreys without a mode switch. The order itself is read
+    // imperatively by the host's rebuildModel (effectiveSnappingOrder /
+    // effectiveTilingOrder), which only reruns on filterSettingsChanged, so
+    // emit that too or a staged reorder leaves the cards in the stale order
+    // while Priority sort is active. Not folded into _refreshHasPriorityOrder:
+    // its other two callers (Component.onCompleted, onViewModeChanged) already
+    // sit next to a loadState() that emits, and would rebuild twice.
+    Connections {
+        function onStagedSnappingOrderChanged() {
+            root._refreshHasPriorityOrder();
             root.filterSettingsChanged();
         }
-    }
 
-    // ── Sort By ─────────────────────────────────────────────────────────────
-    Label {
-        text: i18n("Sort:")
-        font: Kirigami.Theme.smallFont
-        color: Kirigami.Theme.disabledTextColor
-    }
-
-    ComboBox {
-        id: sortByCombo
-
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-        model: root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel
-        // Binding is initial-only — user interaction breaks it; loadState()
-        // re-syncs imperatively via sortByCombo.currentIndex = ...
-        currentIndex: root.sortByIndex
-        Accessible.name: i18n("Sort by")
-        onActivated: index => {
-            if (index < 0 || index >= model.length)
-                return;
-
-            root.sortByIndex = index;
+        function onStagedTilingOrderChanged() {
+            root._refreshHasPriorityOrder();
             root.filterSettingsChanged();
         }
+
+        target: settingsController
     }
 
-    ToolButton {
-        icon.name: root.sortAscending ? "view-sort-ascending" : "view-sort-descending"
-        icon.width: Kirigami.Units.iconSizes.smallMedium
-        icon.height: Kirigami.Units.iconSizes.smallMedium
-        onClicked: {
-            root.sortAscending = !root.sortAscending;
+    // ── Group / Sort / direction ─────────────────────────────────────────────
+    // The shared GroupSortBar owns the combos + direction toggle; this bar keeps
+    // ownership of the persisted state (per view mode) and pushes it in via
+    // syncFromState() on load / mode switch, pulling user edits back out in
+    // onChanged. "Priority" (the last sort option) is unavailable until an order
+    // is set on the Configuration → Priority page; _hasPriorityOrder tracks that.
+    GroupSortBar {
+        id: groupSort
+
+        groupModel: root.viewMode === 0 ? root.snappingGroupModel : root.tilingGroupModel
+        sortModel: root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel
+        sortItemAvailable: [true, true, root._hasPriorityOrder]
+        disabledSortTooltip: i18n("Set a layout order on the Priority page first")
+        onChanged: {
+            root.groupByIndex = groupByIndex;
+            root.sortByIndex = sortByIndex;
+            root.sortAscending = sortAscending;
             root.filterSettingsChanged();
         }
-        Accessible.name: root.sortAscending ? i18n("Sort ascending") : i18n("Sort descending")
-        ToolTip.visible: hovered
-        ToolTip.text: root.sortAscending ? i18n("Ascending") : i18n("Descending")
     }
 
     Timer {
@@ -277,155 +306,142 @@ RowLayout {
         }
     }
 
-    Menu {
-        id: snappingFilterMenu
+    // ── Filter menus ────────────────────────────────────────────────────────
+    // Both checkbox filter menus are FilterMenuButton instances hosted
+    // invisibly: this bar keeps ownership of the bool filter properties and
+    // their QtCore.Settings persistence, and the page's own toolbar button
+    // opens the menu via popupFilterMenu(), so the ToolButton chrome is
+    // unused. Group entries use the bool property names as keys; `excluded`
+    // is derived from those properties through a `Binding on` value source
+    // (the button reassigns `excluded` internally on toggle, a JS write that
+    // would sever a plain binding), and user edits come back via
+    // filterToggled / resetTriggered.
+    FilterMenuButton {
+        id: snappingFilterButton
 
-        title: i18n("Filter Layouts")
+        visible: false
+        menuTitle: i18n("Filter Layouts")
+        externalFilterActive: root.filterText.length > 0
+        groups: [[
+                {
+                    "key": "showBuiltInLayouts",
+                    "label": i18n("Built-in")
+                },
+                {
+                    "key": "showUserLayouts",
+                    "label": i18n("User Layouts")
+                }
+            ], [
+                {
+                    "key": "showAspectAny",
+                    "label": i18n("All Monitors")
+                },
+                {
+                    "key": "showAspectStandard",
+                    "label": i18n("Standard (16:9)")
+                },
+                {
+                    "key": "showAspectUltrawide",
+                    "label": i18n("Ultrawide (21:9)")
+                },
+                {
+                    "key": "showAspectSuperUltrawide",
+                    "label": i18n("Super-Ultrawide (32:9)")
+                },
+                {
+                    "key": "showAspectPortrait",
+                    "label": i18n("Portrait (9:16)")
+                }
+            ], [
+                {
+                    "key": "showAutoLayouts",
+                    "label": i18n("Auto")
+                },
+                {
+                    "key": "showManualLayouts",
+                    "label": i18n("Manual")
+                }
+            ], [
+                {
+                    "key": "showHidden",
+                    "label": i18n("Show Hidden Layouts")
+                }
+            ]]
+        onFilterToggled: (key, included) => root._applyFilterToggle(key, included)
+        onResetTriggered: root.resetFilters()
 
-        FilterMenuItem {
-            text: i18n("Built-in")
-            filterProperty: "showBuiltInLayouts"
-            checked: root.showBuiltInLayouts
+        Binding on excluded {
+            value: root._excludedKeys(snappingFilterButton.groups)
+            restoreMode: Binding.RestoreNone
         }
-
-        FilterMenuItem {
-            text: i18n("User Layouts")
-            filterProperty: "showUserLayouts"
-            checked: root.showUserLayouts
-        }
-
-        MenuSeparator {}
-
-        FilterMenuItem {
-            text: i18n("All Monitors")
-            filterProperty: "showAspectAny"
-            checked: root.showAspectAny
-        }
-
-        FilterMenuItem {
-            text: i18n("Standard (16:9)")
-            filterProperty: "showAspectStandard"
-            checked: root.showAspectStandard
-        }
-
-        FilterMenuItem {
-            text: i18n("Ultrawide (21:9)")
-            filterProperty: "showAspectUltrawide"
-            checked: root.showAspectUltrawide
-        }
-
-        FilterMenuItem {
-            text: i18n("Super-Ultrawide (32:9)")
-            filterProperty: "showAspectSuperUltrawide"
-            checked: root.showAspectSuperUltrawide
-        }
-
-        FilterMenuItem {
-            text: i18n("Portrait (9:16)")
-            filterProperty: "showAspectPortrait"
-            checked: root.showAspectPortrait
-        }
-
-        MenuSeparator {}
-
-        FilterMenuItem {
-            text: i18n("Auto")
-            filterProperty: "showAutoLayouts"
-            checked: root.showAutoLayouts
-        }
-
-        FilterMenuItem {
-            text: i18n("Manual")
-            filterProperty: "showManualLayouts"
-            checked: root.showManualLayouts
-        }
-
-        MenuSeparator {}
-
-        FilterMenuItem {
-            text: i18n("Show Hidden Layouts")
-            filterProperty: "showHidden"
-            checked: root.showHidden
-        }
-
-        MenuSeparator {}
-
-        ResetMenuItem {}
     }
 
     // ── Tiling Filter Menu ──────────────────────────────────────────────────
-    Menu {
-        id: tilingFilterMenu
+    FilterMenuButton {
+        id: tilingFilterButton
 
-        title: i18n("Filter Algorithms")
+        visible: false
+        menuTitle: i18n("Filter Algorithms")
+        externalFilterActive: root.filterText.length > 0
+        groups: [[
+                {
+                    "key": "showBuiltInAlgorithms",
+                    "label": i18n("Built-in")
+                },
+                {
+                    "key": "showUserAlgorithms",
+                    "label": i18n("User Scripts")
+                }
+            ], [
+                {
+                    "key": "showMasterCount",
+                    "label": i18n("Master Count")
+                },
+                {
+                    "key": "showSplitRatio",
+                    "label": i18n("Split Ratio")
+                },
+                {
+                    "key": "showOverlapping",
+                    "label": i18n("Overlapping Zones")
+                },
+                {
+                    "key": "showPersistent",
+                    "label": i18n("Persistent (Memory)")
+                },
+                {
+                    "key": "showCustomParams",
+                    "label": i18n("Custom Parameters")
+                },
+                {
+                    "key": "showReflowsOnResize",
+                    "label": i18n("Reflows")
+                },
+                {
+                    "key": "showScriptState",
+                    "label": i18n("Script State")
+                },
+                {
+                    "key": "showSingleWindow",
+                    "label": i18n("Single Window")
+                },
+                {
+                    "key": "showReflowsOnFocus",
+                    "label": i18n("Follows Focus")
+                }
+            ], [
+                {
+                    "key": "showHidden",
+                    "label": i18n("Show Hidden Algorithms")
+                }
+            ]]
+        onFilterToggled: (key, included) => root._applyFilterToggle(key, included)
+        onResetTriggered: root.resetFilters()
 
-        FilterMenuItem {
-            text: i18n("Built-in")
-            filterProperty: "showBuiltInAlgorithms"
-            checked: root.showBuiltInAlgorithms
+        Binding on excluded {
+            value: root._excludedKeys(tilingFilterButton.groups)
+            restoreMode: Binding.RestoreNone
         }
-
-        FilterMenuItem {
-            text: i18n("User Scripts")
-            filterProperty: "showUserAlgorithms"
-            checked: root.showUserAlgorithms
-        }
-
-        MenuSeparator {}
-
-        FilterMenuItem {
-            text: i18n("Master Count")
-            filterProperty: "showMasterCount"
-            checked: root.showMasterCount
-        }
-
-        FilterMenuItem {
-            text: i18n("Split Ratio")
-            filterProperty: "showSplitRatio"
-            checked: root.showSplitRatio
-        }
-
-        FilterMenuItem {
-            text: i18n("Overlapping Zones")
-            filterProperty: "showOverlapping"
-            checked: root.showOverlapping
-        }
-
-        FilterMenuItem {
-            text: i18n("Persistent (Memory)")
-            filterProperty: "showPersistent"
-            checked: root.showPersistent
-        }
-
-        FilterMenuItem {
-            text: i18n("Custom Parameters")
-            filterProperty: "showCustomParams"
-            checked: root.showCustomParams
-        }
-
-        FilterMenuItem {
-            text: i18n("Reflows")
-            filterProperty: "showReflowsOnResize"
-            checked: root.showReflowsOnResize
-        }
-
-        FilterMenuItem {
-            text: i18n("Script State")
-            filterProperty: "showScriptState"
-            checked: root.showScriptState
-        }
-
-        MenuSeparator {}
-
-        FilterMenuItem {
-            text: i18n("Show Hidden Algorithms")
-            filterProperty: "showHidden"
-            checked: root.showHidden
-        }
-
-        MenuSeparator {}
-
-        ResetMenuItem {}
     }
 
     // ── Persisted UI state (per view mode) ───────────────────────────────
@@ -460,35 +476,9 @@ RowLayout {
         property bool tilingShowCustomParams: true
         property bool tilingShowReflowsOnResize: true
         property bool tilingShowScriptState: true
+        property bool tilingShowSingleWindow: true
+        property bool tilingShowReflowsOnFocus: true
 
         category: "LayoutsPageFilterBar"
-    }
-
-    // Checkable menu item that writes back to a named root filter property.
-    // Uses an explicit Binding so the checked state survives imperative
-    // toggles (checkable breaks declarative bindings on user click).
-    component FilterMenuItem: MenuItem {
-        required property string filterProperty
-
-        checkable: true
-        onToggled: {
-            if (root._resetting)
-                return;
-
-            root[filterProperty] = checked;
-            root.filterSettingsChanged();
-        }
-
-        Binding on checked {
-            value: root[filterProperty]
-        }
-    }
-
-    // Shared "Reset Filters" action used by both filter menus
-    component ResetMenuItem: MenuItem {
-        text: i18n("Reset Filters")
-        icon.name: "edit-reset"
-        enabled: root.hasActiveFilters
-        onTriggered: root.resetFilters()
     }
 }

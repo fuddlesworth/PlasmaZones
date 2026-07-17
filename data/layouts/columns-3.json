@@ -3,7 +3,6 @@
     "name": "Columns (3)",
     "description": "Three equal vertical columns",
     "type": 1,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "standard",
     "zones": [

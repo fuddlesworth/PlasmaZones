@@ -1,0 +1,67 @@
+{
+    "id": "border-rgb",
+    "name": "RGB Cycle",
+    "description": "Rounded corners and a window border painted as a full colour wheel wrapped around the frame, slowly rotating. The classic gaming-rig ring. Set the speed to zero for a still rainbow. Width, corner radius, cycle speed, rainbow count, saturation and brightness are this pack's own parameters.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Borders",
+    "providesBorder": true,
+    "animated": true,
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "borderWidth",
+            "name": "Border width",
+            "type": "int",
+            "default": 3,
+            "min": 1,
+            "max": 12,
+            "description": "Thickness of the colour ring (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "description": "Roundness of the corners (px, 0 for square)"
+        },
+        {
+            "id": "cycleSpeed",
+            "name": "Cycle speed",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How many full colour rotations play per second, where 0 freezes the rainbow"
+        },
+        {
+            "id": "hueTurns",
+            "name": "Rainbow count",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.5,
+            "max": 4.0,
+            "description": "How many full rainbows wrap around the frame at once"
+        },
+        {
+            "id": "saturation",
+            "name": "Saturation",
+            "type": "float",
+            "default": 0.85,
+            "min": 0.2,
+            "max": 1.0,
+            "description": "Colour intensity of the ring"
+        },
+        {
+            "id": "brightness",
+            "name": "Brightness",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.3,
+            "max": 1.0,
+            "description": "Peak brightness of the ring"
+        }
+    ]
+}

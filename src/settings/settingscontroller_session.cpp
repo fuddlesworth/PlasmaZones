@@ -3,22 +3,24 @@
 
 // Session-state methods for SettingsController:
 //   * Font enumeration helpers (Q_INVOKABLE getters consumed by QML).
-//   * Stage-assignment + quick-layout-slot setters.
+//   * The QUrl → local-path helper QML hands file-dialog results through.
+//   * Stage-assignment setters and quick-layout-slot accessors, plus the
+//     screen-state / staged-assignment queries the assignments page reads back.
 //   * Virtual-desktop + activity tracking (D-Bus signals from KWin /
 //     ActivityManager and the daemon's screen-layout broadcast).
-//   * Running-windows query (used by the assignments page).
+//   * Running-windows and physical-screen queries (used by the assignments
+//     page).
 //   * Config import / export (whole-file JSON dump and restore).
-//   * Per-screen overrides for autotile / snapping / zone-selector.
 //   * Window-geometry persistence (QSettings entry under the
 //     organization config file, NOT the main JSON).
 //   * KZones import helpers.
-//   * Ordering helpers (effective / resolved / staged snapping +
-//     tiling order).
 //
-// Split out of settingscontroller.cpp to keep that file under the
-// 800-line cap (see CLAUDE.md). All methods here are members of
-// PlasmaZones::SettingsController and use its private state — same
-// class, separate translation unit, no API change.
+// Per-screen overrides live in settingscontroller_perscreen.cpp and the
+// ordering helpers in settingscontroller_ordering.cpp.
+//
+// All methods here are members of PlasmaZones::SettingsController and use its
+// private state. Same class as settingscontroller.cpp, separate translation
+// unit, no API change.
 
 #include "settingscontroller.h"
 
@@ -26,6 +28,8 @@
 #include "../config/configmigration.h"
 #include "../core/logging.h"
 #include "../core/settings_interfaces.h"
+#include "../core/utils.h"
+#include "../phosphor_i18n.h"
 #include "dbusutils.h"
 #include "kzonesimporter.h"
 #include "virtualscreenutils.h"
@@ -36,7 +40,9 @@
 
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -74,6 +80,27 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int vir
                                               const QString& tilingAlgorithmId)
 {
     m_staging.stageAssignmentEntry(screenName, virtualDesktop, activityId, mode, snappingLayoutId, tilingAlgorithmId);
+    setNeedsSave(true);
+}
+
+void SettingsController::stageAssignmentClear(const QString& screenName, int virtualDesktop, const QString& activityId)
+{
+    m_staging.stageFullClear(screenName, virtualDesktop, activityId);
+    setNeedsSave(true);
+}
+
+void SettingsController::removeStagedAssignment(const QString& screenName, int virtualDesktop,
+                                                const QString& activityId)
+{
+    m_staging.removeStagedAssignment(screenName, virtualDesktop, activityId);
+    // Same bookkeeping as stageAssignmentClear. Removing a staged entry can
+    // leave the staging map empty, but dirtiness here is page-level, not a
+    // count of staged entries: the user interacted with the page, and Apply
+    // simply flushes whatever remains (possibly nothing) — the flush of an
+    // empty map is a no-op. There is no unstage path in this controller
+    // that flips needsSave back to false short of save()/load(), so
+    // setNeedsSave(true) is the coherent mirror of the other staging
+    // mutators.
     setNeedsSave(true);
 }
 
@@ -263,7 +290,7 @@ void SettingsController::onVirtualDesktopsChanged()
     // the user clicking on the active page — target the "overview" page
     // (where MonitorStatePage.qml owns the per-mode disabled lists) so
     // dirty state attaches to the right tab regardless of where the user
-    // is currently looking. Pattern mirrors the window-rules handler in
+    // is currently looking. Pattern mirrors the rules handler in
     // settingscontroller.cpp.
     //
     // Wrap the SETTER calls (not just the trailing setNeedsSave) so the
@@ -353,8 +380,19 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
 
 namespace {
 
+// Drop a leading UTF-8 BOM from @p bytes. Qt's JSON parser treats a BOM as a
+// syntax error rather than skipping it, so any bytes handed to
+// QJsonDocument::fromJson have to come through here first. Shared by the import
+// probe's head sniff and its whole-file parse so the two agree on where the
+// content starts.
+QByteArray withoutUtf8Bom(const QByteArray& bytes)
+{
+    static const QByteArray kUtf8Bom("\xEF\xBB\xBF", 3);
+    return bytes.startsWith(kUtf8Bom) ? bytes.mid(kUtf8Bom.size()) : bytes;
+}
+
 // Parses the daemon's running-windows JSON payload into a QVariantList of
-// {windowClass, appName, caption} maps ready for QML consumption. The
+// {windowClass, appName, caption, desktopFile} maps ready for QML consumption. The
 // synchronous getRunningWindows() predecessor was removed in Phase 6 of
 // refactor/dbus-performance; only onRunningWindowsAvailable calls this now.
 // Anonymous namespace keeps this TU-local — same convention as the
@@ -443,52 +481,109 @@ void SettingsController::onRunningWindowsAvailable(const QString& json)
 
 bool SettingsController::exportAllSettings(const QString& filePath)
 {
+    // Reachable from QML: urlToLocalFile yields an empty string for a URL that
+    // is not a local file, so a remote destination lands here rather than being
+    // a programmer error.
     if (filePath.isEmpty()) {
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Settings can only be exported to a local file."));
         return false;
     }
     // Defence-in-depth: same sanitiser the per-layout import/export uses.
     // A QML or D-Bus caller passing a path with `..` traversal segments,
     // an embedded NUL, or a leading `~` is treated as a programmer error.
-    const QString safeFilePath = sanitizeIOPath(filePath);
+    const QString safeFilePath = Utils::sanitizeIOPath(filePath);
     if (safeFilePath.isEmpty()) {
         qCWarning(lcCore) << "exportAllSettings: refusing unsafe path" << filePath;
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That export path is not allowed."));
         return false;
     }
-    // Flush current in-memory settings to disk so the exported file reflects
-    // the actual current state, not the last-saved snapshot. Settings::save
-    // is void-returning so we can't surface a failure as a return-false
-    // here; the diagnostic log lets a maintainer correlate a stale export
-    // with the underlying flush failure in the journal.
-    qCInfo(PlasmaZones::lcCore) << "exportAllSettings: flushing in-memory config to disk before copy";
-    m_settings.save();
     const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
-    if (!QFile::exists(configPath)) {
-        qCWarning(PlasmaZones::lcCore) << "Config file not found:" << configPath;
+    // Exporting onto the live config is refused: the write below would put the
+    // current settings into the file the app is using, which is an implicit
+    // Save of whatever the user has pending, and it would leave that file
+    // disagreeing with the baseline per-page Discard reverts to. The file
+    // picker can reach the config directory. Canonical paths, so a symlink or a
+    // `.` segment pointing at the same file is caught too. canonicalFilePath()
+    // is empty for a file that does not exist yet, which on a fresh profile is
+    // exactly the live config path; in that case canonicalize the PARENT
+    // directory and rejoin the filename, so `<symlink-to-config-dir>/config.json`
+    // is still caught, and fall back to cleaned lexical paths only when the
+    // parent does not exist either (nothing on disk to resolve).
+    const QFileInfo destInfo(safeFilePath);
+    bool destIsLiveConfig = false;
+    if (destInfo.exists()) {
+        destIsLiveConfig = destInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath();
+    } else {
+        const auto resolveThroughParent = [](const QFileInfo& info) -> QString {
+            const QString parentCanonical = info.dir().canonicalPath();
+            if (parentCanonical.isEmpty())
+                return QDir::cleanPath(info.filePath());
+            return parentCanonical + QLatin1Char('/') + info.fileName();
+        };
+        destIsLiveConfig = resolveThroughParent(destInfo) == resolveThroughParent(QFileInfo(configPath));
+    }
+    if (destIsLiveConfig) {
+        qCWarning(PlasmaZones::lcCore) << "exportAllSettings: destination is the live config file, refusing"
+                                       << safeFilePath;
+        Q_EMIT settingsTransferFailed(
+            PhosphorI18n::tr("That is the settings file this app is using. Export to a different file."));
         return false;
     }
-    // Remove destination if it exists (QFile::copy won't overwrite)
-    if (QFile::exists(safeFilePath)) {
-        QFile::remove(safeFilePath);
-    }
-    bool ok = QFile::copy(configPath, safeFilePath);
-    if (!ok) {
+    // Serialize the current settings straight to the destination rather than
+    // copying the live config. The old form flushed with Settings::save()
+    // first, so that the export carried what the user could see rather than the
+    // last-saved snapshot — but save() commits to ~/.config and re-baselines,
+    // so pressing Export persisted edits the user had never chosen to save and
+    // left a later per-page Discard with nothing to revert to. exportTo writes
+    // the same values (the setters already keep the backend's in-memory root
+    // current) without touching the live file or the baseline, and it writes
+    // atomically, so a failed export leaves whatever was at the destination
+    // alone instead of unlinking it up front to make room.
+    if (!m_settings.exportTo(safeFilePath)) {
         qCWarning(PlasmaZones::lcCore) << "Failed to export settings to:" << safeFilePath;
+        Q_EMIT settingsTransferFailed(
+            PhosphorI18n::tr("Could not write the export. Check that the folder is writable."));
+        return false;
     }
-    return ok;
+    return true;
 }
 
 bool SettingsController::importAllSettings(const QString& filePath)
 {
+    // Same as the export side: an empty path here is a URL that is not a local
+    // file, which a user can pick.
     if (filePath.isEmpty()) {
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Settings can only be imported from a local file."));
         return false;
     }
-    const QString safeFilePath = sanitizeIOPath(filePath);
-    if (safeFilePath.isEmpty() || !QFile::exists(safeFilePath)) {
-        qCWarning(lcCore) << "importAllSettings: refusing unsafe or missing path" << filePath;
+    // Split rather than combined: a refused path and a file that is not there
+    // are the same `false` to a caller but different words to a user, and the
+    // log wants them apart too.
+    const QString safeFilePath = Utils::sanitizeIOPath(filePath);
+    if (safeFilePath.isEmpty()) {
+        qCWarning(lcCore) << "importAllSettings: refusing unsafe path" << filePath;
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That file path is not allowed."));
+        return false;
+    }
+    if (!QFile::exists(safeFilePath)) {
+        qCWarning(lcCore) << "importAllSettings: file not found" << filePath;
+        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That settings file is no longer there."));
         return false;
     }
 
     const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
+
+    // Importing the live config onto itself is a no-op, but the copy below
+    // removes the destination first and would then find its source gone. The
+    // backup restores it, so nothing is lost, yet the user is told the import
+    // failed when there was simply nothing to do. Refuse it up front instead.
+    const QFileInfo importInfo(safeFilePath);
+    if (importInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath()) {
+        qCWarning(PlasmaZones::lcCore) << "importAllSettings: source is the live config file, refusing" << safeFilePath;
+        Q_EMIT settingsTransferFailed(
+            PhosphorI18n::tr("Those are the settings this app is already using. Pick a different file to import."));
+        return false;
+    }
 
     // Detect if the imported file is legacy INI format (not JSON).
     // If so, run the migration converter to produce a JSON file.
@@ -509,20 +604,43 @@ bool SettingsController::importAllSettings(const QString& filePath)
             };
             if (head.size() >= 4 && byte(0) == 0x00 && byte(1) == 0x00 && byte(2) == 0xFE && byte(3) == 0xFF) {
                 qCWarning(PlasmaZones::lcCore) << "Import file has UTF-32 BE BOM, refusing:" << filePath;
+                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
                 return false;
             }
             if (head.size() >= 4 && byte(0) == 0xFF && byte(1) == 0xFE && byte(2) == 0x00 && byte(3) == 0x00) {
                 qCWarning(PlasmaZones::lcCore) << "Import file has UTF-32 LE BOM, refusing:" << filePath;
+                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
                 return false;
             }
             if (head.size() >= 2 && ((byte(0) == 0xFE && byte(1) == 0xFF) || (byte(0) == 0xFF && byte(1) == 0xFE))) {
                 qCWarning(PlasmaZones::lcCore) << "Import file has UTF-16 BOM, refusing:" << filePath;
+                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
                 return false;
             }
-            head = head.trimmed();
             // Skip UTF-8 BOM (EF BB BF) if present — trimmed() only strips ASCII whitespace.
-            if (head.size() >= 3 && byte(0) == 0xEF && byte(1) == 0xBB && byte(2) == 0xBF) {
-                head = head.mid(3).trimmed();
+            head = withoutUtf8Bom(head.trimmed()).trimmed();
+            // A leading '[' is ambiguous: a legacy INI file starts with its
+            // first "[Group]" header, but so does a JSON array. The array is
+            // valid JSON yet never a settings file (the config root is always
+            // an object), and feeding it to the INI migrator would produce a
+            // misleading "older settings file" error. Disambiguate by parsing
+            // the whole file: valid JSON here means it is not INI, so refuse
+            // it with the accurate message; a parse failure means a real INI
+            // section header and the migration path proceeds as before.
+            if (!head.isEmpty() && head.at(0) == '[') {
+                // Parse the body under the SAME normalization `head` got. peek()
+                // left the read position at 0, so readAll() re-reads the BOM that
+                // was stripped from `head` above, and Qt's JSON parser rejects a
+                // leading BOM outright — a BOM'd JSON array would look like a
+                // parse failure, fall through to isLegacyIni, and earn exactly the
+                // misleading "older settings file" error this branch exists to
+                // prevent.
+                if (!QJsonDocument::fromJson(withoutUtf8Bom(f.readAll().trimmed())).isNull()) {
+                    qCWarning(PlasmaZones::lcCore)
+                        << "Import file is a JSON array, not a settings object, refusing:" << filePath;
+                    Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
+                    return false;
+                }
             }
             isLegacyIni = !head.isEmpty() && head.at(0) != '{';
         }
@@ -535,6 +653,8 @@ bool SettingsController::importAllSettings(const QString& filePath)
     }
     if (QFile::exists(configPath) && !QFile::copy(configPath, backupPath)) {
         qCWarning(PlasmaZones::lcCore) << "Failed to backup config to:" << backupPath;
+        Q_EMIT settingsTransferFailed(
+            PhosphorI18n::tr("Could not back up your current settings, so nothing was imported."));
         return false;
     }
 
@@ -547,12 +667,14 @@ bool SettingsController::importAllSettings(const QString& filePath)
         ok = PlasmaZones::ConfigMigration::migrateIniToJson(safeFilePath, configPath);
         if (!ok) {
             qCWarning(PlasmaZones::lcCore) << "Failed to convert legacy INI file:" << safeFilePath;
+            Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not read that older settings file."));
         }
     } else {
         // Validate JSON before overwriting current config
         QFile importFile(safeFilePath);
         if (!importFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
             qCWarning(PlasmaZones::lcCore) << "Failed to open import file:" << safeFilePath;
+            Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not read that settings file."));
             ok = false;
         } else {
             QJsonParseError parseErr;
@@ -560,6 +682,7 @@ bool SettingsController::importAllSettings(const QString& filePath)
             if (parseErr.error != QJsonParseError::NoError || !importDoc.isObject()) {
                 qCWarning(PlasmaZones::lcCore)
                     << "Invalid JSON in import file:" << safeFilePath << parseErr.errorString();
+                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
                 ok = false;
             } else {
                 // Valid JSON — copy to config path
@@ -569,6 +692,9 @@ bool SettingsController::importAllSettings(const QString& filePath)
                 ok = QFile::copy(safeFilePath, configPath);
                 if (!ok) {
                     qCWarning(PlasmaZones::lcCore) << "Failed to import settings from:" << safeFilePath;
+                    // Says what failed, not what the restore below will do:
+                    // that runs after this and can fail too.
+                    Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not replace your settings with that file."));
                 }
             }
         }
@@ -587,12 +713,21 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // rename where configPath doesn't exist; that's preferable to the
         // silent-failure semantics of the previous form.
         if (QFile::exists(backupPath)) {
+            // Both arms leave the user without their settings, which the
+            // failure reported above does not cover: it says the import
+            // failed, not that the restore behind it failed too and the only
+            // copy is now the backup. Name the file, since recovering it by
+            // hand is the one action left.
             if (QFile::exists(configPath) && !QFile::remove(configPath)) {
                 qCWarning(PlasmaZones::lcCore)
                     << "Failed to remove configPath before restore. Backup remains at:" << backupPath;
+                Q_EMIT settingsTransferFailed(
+                    PhosphorI18n::tr("Your settings could not be put back. A copy is saved at %1.").arg(backupPath));
             } else if (!QFile::rename(backupPath, configPath)) {
                 qCWarning(PlasmaZones::lcCore)
                     << "Failed to restore config from backup after failed import. Backup remains at:" << backupPath;
+                Q_EMIT settingsTransferFailed(
+                    PhosphorI18n::tr("Your settings could not be put back. A copy is saved at %1.").arg(backupPath));
             }
         }
     } else {
@@ -606,24 +741,50 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // re-fire dirtyChanged before the trailing setNeedsSave(false)
         // runs. Both connect-side handlers (the
         // m_animationsPage::pendingChangesChanged and
-        // m_windowRulesPage::dirtyChanged connect lambdas in
+        // m_rulesPage::dirtyChanged connect lambdas in
         // settingscontroller.cpp) early-return when m_loading is true.
         m_loading = true;
         m_settings.load();
         // Page controllers with their own on-disk staging surfaces
-        // (animations / window-rules) must reload too — m_settings.load()
+        // (animations / rules) must reload too — m_settings.load()
         // only refreshes settings.json-backed state. Without these the
         // imported config disagrees with what the page controllers still
         // hold in their in-memory snapshots.
-        if (m_animationsPage) {
-            m_animationsPage->revertPending();
+        // Refused means an async discard still owns the snapshot map, so the
+        // page is still holding pre-edit content for files the import just
+        // rewrote. Do not force the session clean in that case: the import did
+        // not fully land, so leave whatever dirty state the session already
+        // carried rather than declaring it settled. (This only withholds the
+        // clear; setNeedsSave(false) never marks anything dirty, and a later
+        // Discard on the animation pages is gated by hasPendingChanges(), not
+        // by m_dirtyPages membership.)
+        const bool animationsReverted = !m_animationsPage || m_animationsPage->revertPending();
+        if (!animationsReverted) {
+            qCWarning(lcConfig) << "importConfig: animation snapshots are still staged after the revert (a discard is "
+                                   "in flight, or a restore failed)";
+            // The settings on disk are the imported ones, but the animation
+            // page still holds pre-import snapshots. That is a partial result
+            // the user has to know about: without this the import reports plain
+            // success while the page shows something else.
+            Q_EMIT settingsTransferFailed(
+                PhosphorI18n::tr("Your settings were imported, but the animation pages still show the old ones. "
+                                 "Reopen the settings window to see the imported values."));
+            // Report not-fully-landed. The bool's only job is gating the General
+            // page's success toast (see the settingsTransferFailed doc), and the
+            // toast surface replaces whatever is in flight. Returning true here
+            // would let the caller overwrite the reason just emitted, inside the
+            // same JS statement, so the user would only ever read "Settings
+            // imported" on the one path that exists to say otherwise.
+            ok = false;
         }
-        if (m_windowRulesPage) {
-            m_windowRulesPage->revert();
+        if (m_rulesPage) {
+            m_rulesPage->revert();
         }
         m_loading = false;
         DaemonDBus::notifyReload();
-        setNeedsSave(false);
+        if (animationsReverted) {
+            setNeedsSave(false);
+        }
     }
     return ok;
 }
@@ -663,6 +824,14 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
     if (!s)
         return {};
     QVariantMap map;
+    // A staged full clear carries no mode/layout fields (stageFullClear
+    // resets them), so surface it explicitly — otherwise QML restore code
+    // would see an empty map and fall back to the daemon's still-resolved
+    // explicit values, hiding the pending clear.
+    if (s->fullCleared) {
+        map[QStringLiteral("fullCleared")] = true;
+        return map;
+    }
     if (s->snappingLayoutId.has_value())
         map[QStringLiteral("layoutId")] = *s->snappingLayoutId;
     if (s->tilingAlgorithmId.has_value()) {
@@ -685,8 +854,7 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Per-screen autotile / snapping / zone-selector overrides live in
-// settingscontroller_perscreen.cpp — split out to keep this TU under the
-// 800-line cap.
+// settingscontroller_perscreen.cpp.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QVariantMap SettingsController::loadWindowGeometry() const
@@ -753,7 +921,15 @@ int SettingsController::importFromKZones()
 
 int SettingsController::importFromKZonesFile(const QString& filePath)
 {
-    const auto result = KZonesImporter::importFromFile(filePath);
+    // Defence-in-depth: same sanitiser, and same QFileDialog entry point, as
+    // the layout and algorithm imports.
+    const QString safe = Utils::sanitizeIOPath(filePath);
+    if (safe.isEmpty()) {
+        qCWarning(lcCore) << "importFromKZonesFile: refusing unsafe path" << filePath;
+        Q_EMIT kzonesImportFinished(0, PhosphorI18n::tr("That file path is not allowed."));
+        return 0;
+    }
+    const auto result = KZonesImporter::importFromFile(safe);
     if (result.imported > 0) {
         m_pendingSelectLayoutId = result.pendingSelectLayoutId;
         scheduleLayoutLoad();

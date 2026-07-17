@@ -8,12 +8,13 @@
  *
  * A v3 config.json + assignments.json fixture is run through
  * ConfigMigration::ensureJsonConfig; the test asserts:
- *   - windowrules.json is produced at `_version == 4`,
- *   - each migrated zone Assignment becomes a context rule at the exact
- *     cascade priority dictated by the formula,
+ *   - rules.json is produced at `_version == 4`,
+ *   - each migrated zone Assignment becomes a context rule seeded in the
+ *     Context priority band (~301..306) by its pinned dimensions,
  *   - assignment rules carry SetEngineMode + (when non-empty)
  *     SetSnappingLayout / SetTilingAlgorithm,
- *   - a provider-default catch-all rule exists at priority 0,
+ *   - the global default comes from a gated resolver, so no provider-default
+ *     catch-all rule is emitted,
  *   - per-mode disable-list entries become DisableEngine context rules,
  *   - the v3 window-class/application exclusion lists fold into
  *     `AppId AppIdMatches` Exclude rules,
@@ -22,11 +23,12 @@
  *   - the zone-overlay appearance groups are renamed from
  *     `Snapping.Appearance.*` to `Snapping.Zones.*` (key-for-key move,
  *     absent-source no-op, idempotent, coexisting with the folds above),
- *   - config.json is stamped `_version == 4`,
+ *   - config.json is stamped at the current schema version (the chain runs
+ *     past the v3→v4 step to ConfigSchemaVersion),
  *   - the conversion is idempotent (running twice is a no-op).
  *
- * windowrules.json SUPERSEDES the v3 inputs: the migration renames
- * assignments.json to assignments.json.migrated after windowrules.json is
+ * rules.json SUPERSEDES the v3 inputs: the migration renames
+ * assignments.json to assignments.json.migrated after rules.json is
  * durably written (a non-destructive retire that leaves the original data
  * recoverable from disk), removes the config.json Display.*Disabled* keys,
  * and relocates the QuickLayouts slots to the quicklayouts.json sidecar.
@@ -51,14 +53,14 @@
 #include "../../../src/config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
-#include <PhosphorWindowRules/ContextRuleBridge.h>
-#include <PhosphorWindowRules/ExclusionRules.h>
-#include <PhosphorWindowRules/WindowRule.h>
-#include <PhosphorWindowRules/WindowRuleSet.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/ExclusionRules.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleSet.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-namespace CRB = PhosphorWindowRules::ContextRuleBridge;
+namespace CRB = PhosphorRules::ContextRuleBridge;
 
 class TestMigrationV3ToV4 : public QObject
 {
@@ -70,7 +72,8 @@ private:
         QDir().mkpath(QFileInfo(path).absolutePath());
         QFile f(path);
         QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(QJsonDocument(obj).toJson());
+        const QByteArray bytes = QJsonDocument(obj).toJson();
+        QCOMPARE(f.write(bytes), static_cast<qint64>(bytes.size()));
     }
 
     QJsonObject readJson(const QString& path)
@@ -83,11 +86,11 @@ private:
     }
 
     /// The legacy assignments.json path. ConfigDefaults no longer exposes it
-    /// (windowrules.json supersedes it in v4) — it sits beside windowrules.json
+    /// (rules.json supersedes it in v4) — it sits beside rules.json
     /// in the same plasmazones config directory.
     static QString assignmentsPath()
     {
-        return QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
+        return QFileInfo(ConfigDefaults::rulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
     }
 
     /// A v3 config.json carrying per-mode disable lists + a global default
@@ -104,7 +107,8 @@ private:
         display.insert(QStringLiteral("AutotileDisabledActivities"), QStringLiteral("DP-1/act-uuid-7"));
         root.insert(QStringLiteral("Display"), display);
 
-        // Global default snapping layout — drives the provider-default rule.
+        // Global default snapping layout — feeds the gated default resolver
+        // (no provider-default rule is emitted).
         QJsonObject windowHandling;
         windowHandling.insert(QStringLiteral("DefaultLayoutId"),
                               QStringLiteral("{aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee}"));
@@ -158,9 +162,9 @@ private:
         return root;
     }
 
-    QJsonArray rulesFromWindowRules()
+    QJsonArray rulesFromRules()
     {
-        const QJsonObject root = readJson(ConfigDefaults::windowRulesFilePath());
+        const QJsonObject root = readJson(ConfigDefaults::rulesFilePath());
         return root.value(QStringLiteral("rules")).toArray();
     }
 
@@ -177,10 +181,10 @@ private:
     }
 
     // An assignment rule sets an engine mode and does NOT disable an engine.
-    // Disable rules share the assignment cascade priorities (e.g. a
-    // screen+activity disable and a screen+activity assignment both land at
-    // 510), so any priority-keyed lookup that must target the assignment rule
-    // has to filter on this predicate rather than taking the first match.
+    // Disable rules are all seeded at the Context band base (300) while
+    // assignment rules sit just above it (301..306), so they never share a
+    // priority; this predicate still lets a priority-keyed lookup target the
+    // assignment rule unambiguously.
     bool isAssignmentRule(const QJsonObject& rule)
     {
         const QStringList types = actionTypes(rule);
@@ -197,10 +201,10 @@ private:
         return false;
     }
 
-    // Returns the assignment rule at @p priority, skipping any same-priority
-    // disable rule. A bare first-match-by-priority lookup would return
-    // whichever rule the migration happened to emit first — an order
-    // dependency the assertion should not rely on.
+    // Returns the assignment rule at @p priority, skipping any disable rule.
+    // A bare first-match-by-priority lookup would return whichever rule the
+    // migration happened to emit first — an order dependency the assertion
+    // should not rely on.
     QJsonObject findAssignmentRuleByPriority(const QJsonArray& rules, int priority)
     {
         for (const QJsonObject& r : allRulesByPriority(rules, priority)) {
@@ -290,7 +294,7 @@ private Q_SLOTS:
 
     // ─── Full conversion ──────────────────────────────────────────────────
 
-    void testFullConversion_producesWindowRules()
+    void testFullConversion_producesRules()
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
@@ -298,14 +302,15 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        // windowrules.json exists at _version 4.
-        QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
-        const QJsonObject wr = readJson(ConfigDefaults::windowRulesFilePath());
+        // rules.json exists at _version 4.
+        QVERIFY(QFile::exists(ConfigDefaults::rulesFilePath()));
+        const QJsonObject wr = readJson(ConfigDefaults::rulesFilePath());
         QCOMPARE(wr.value(QStringLiteral("_version")).toInt(), 4);
 
-        // config.json stamped v4.
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 4);
+        // The migration chain now runs v3 → v4 → v5, so config.json lands at
+        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
+        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
         // All four temporary stash keys are stripped from config.json.
         // The fixture's `makeV3Config()` doesn't populate the two
@@ -341,7 +346,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QJsonArray rules = rulesFromWindowRules();
+        const QJsonArray rules = rulesFromRules();
 
         // The 1-based zone ordinals carried by a rule's SnapToZone action.
         const auto snapZones = [](const QJsonObject& rule) -> QList<int> {
@@ -429,7 +434,7 @@ private Q_SLOTS:
 
         // Exactly one rule whose AppId leaf is the NORMALIZED single token.
         QJsonObject chromiumRule;
-        for (const QJsonValue& v : rulesFromWindowRules()) {
+        for (const QJsonValue& v : rulesFromRules()) {
             const QJsonObject r = v.toObject();
             if (matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches"))
                 == QLatin1String("chromium")) {
@@ -480,7 +485,7 @@ private Q_SLOTS:
 
         int mpvRuleCount = 0;
         QList<int> winningZones;
-        for (const QJsonValue& v : rulesFromWindowRules()) {
+        for (const QJsonValue& v : rulesFromRules()) {
             const QJsonObject r = v.toObject();
             if (matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches"))
                 != QLatin1String("mpv")) {
@@ -524,7 +529,7 @@ private Q_SLOTS:
         // Finds the id of the SnapToZone rule whose AppId-appIdMatches leaf is the
         // given pattern.
         const auto snapRuleIdFor = [this](const QString& pattern) -> QString {
-            for (const QJsonValue& v : rulesFromWindowRules()) {
+            for (const QJsonValue& v : rulesFromRules()) {
                 const QJsonObject r = v.toObject();
                 if (actionTypes(r).contains(QLatin1String("snapToZone"))
                     && matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches")) == pattern) {
@@ -551,7 +556,7 @@ private Q_SLOTS:
         QCOMPARE(firstId, QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString());
 
         // Force the rebuild path again and re-stage the same v3 inputs.
-        QFile::remove(ConfigDefaults::windowRulesFilePath());
+        QFile::remove(ConfigDefaults::rulesFilePath());
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
         writeJson(layoutsDir + QStringLiteral("/layout1.json"),
                   QJsonObject{{QStringLiteral("appRules"),
@@ -572,25 +577,26 @@ private Q_SLOTS:
         writeJson(assignmentsPath(), makeAssignments());
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QJsonArray rules = rulesFromWindowRules();
+        const QJsonArray rules = rulesFromRules();
 
-        // Each fixture Assignment migrated to a rule at the cascade priority
-        // its pinned dimensions dictate. The four pinned levels must all be
-        // present in the migrated rule set.
+        // Each fixture Assignment migrated to a rule seeded in the Context
+        // priority band by its pinned dimensions
+        // (300 + activity?3 + desktop?2 + screen?1). The four pinned levels
+        // must all be present in the migrated rule set.
         //
-        // Priorities 410/510 can also carry same-priority disable rules, so we
-        // assert against the assignment cascade explicitly via the shared
-        // assignment-filtered helper (a rule that sets an engine mode and does
-        // NOT disable an engine).
+        // Disable rules all sit at the band base (300), so they never share a
+        // priority with these assignment rules; the assignment-filtered helper
+        // (a rule that sets an engine mode and does NOT disable an engine) keeps
+        // the lookup unambiguous regardless.
 
-        // Exact (screen+desktop+activity) → 610.
-        QVERIFY(hasAssignmentAtPriority(rules, 610));
-        // Screen + activity → 510 (activity weight beats desktop).
-        QVERIFY(hasAssignmentAtPriority(rules, 510));
-        // Screen + desktop → 410.
-        QVERIFY(hasAssignmentAtPriority(rules, 410));
-        // Screen only → 310.
-        QVERIFY(hasAssignmentAtPriority(rules, 310));
+        // Exact (screen+desktop+activity) → 306.
+        QVERIFY(hasAssignmentAtPriority(rules, 306));
+        // Screen + activity → 304 (activity nudge beats desktop).
+        QVERIFY(hasAssignmentAtPriority(rules, 304));
+        // Screen + desktop → 303.
+        QVERIFY(hasAssignmentAtPriority(rules, 303));
+        // Screen only → 301.
+        QVERIFY(hasAssignmentAtPriority(rules, 301));
     }
 
     // ─── Lossless three-action assignment rules ──────────────────────────
@@ -602,67 +608,31 @@ private Q_SLOTS:
         writeJson(assignmentsPath(), makeAssignments());
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QJsonArray rules = rulesFromWindowRules();
+        const QJsonArray rules = rulesFromRules();
 
-        // The exact rule (610) had Mode=Autotile + snappingLayout + tilingAlgo
-        // — all three actions present. (610 is unique to the exact assignment;
-        // no disable rule collides there, but use the assignment-filtered
-        // lookup uniformly so the three sites stay consistent.)
-        const QJsonObject exact = findAssignmentRuleByPriority(rules, 610);
+        // The exact rule (306) had Mode=Autotile + snappingLayout + tilingAlgo
+        // — all three actions present. Disable rules all sit at the band base
+        // (300), so none collides with an assignment rule; the
+        // assignment-filtered lookup is used uniformly so the three sites stay
+        // consistent.
+        const QJsonObject exact = findAssignmentRuleByPriority(rules, 306);
         QVERIFY(!exact.isEmpty());
         QCOMPARE(actionTypes(exact),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout"),
                               QStringLiteral("setTilingAlgorithm")}));
 
-        // The screen+activity rule (510) had snapping mode + a layout, no
-        // tiling algorithm → SetEngineMode + SetSnappingLayout only. A
-        // screen+activity disable rule (AutotileDisabledActivities) also lands
-        // at 510, so filter to the assignment rule explicitly.
-        const QJsonObject scrAct = findAssignmentRuleByPriority(rules, 510);
+        // The screen+activity rule (304) had snapping mode + a layout, no
+        // tiling algorithm → SetEngineMode + SetSnappingLayout only.
+        const QJsonObject scrAct = findAssignmentRuleByPriority(rules, 304);
         QVERIFY(!scrAct.isEmpty());
         QCOMPARE(actionTypes(scrAct),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout")}));
 
-        // The screen-only rule (310) was mode-only autotile (both layout
-        // fields empty) → just SetEngineMode. Screen-only monitor disable
-        // rules also land at 310, so filter to the assignment rule explicitly.
-        const QJsonObject scrOnly = findAssignmentRuleByPriority(rules, 310);
+        // The screen-only rule (301) was mode-only autotile (both layout
+        // fields empty) → just SetEngineMode.
+        const QJsonObject scrOnly = findAssignmentRuleByPriority(rules, 301);
         QVERIFY(!scrOnly.isEmpty());
         QCOMPARE(actionTypes(scrOnly), (QStringList{QStringLiteral("setEngineMode")}));
-    }
-
-    // ─── Provider-default catch-all ───────────────────────────────────────
-
-    void testProviderDefaultRule_atPriorityZero()
-    {
-        IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(assignmentsPath(), makeAssignments());
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const QJsonArray rules = rulesFromWindowRules();
-        // Priority 0 is the shared exclusion/catch-all band: the migrated AppId
-        // Exclude rules AND the premade Steam exclusion rule also live at 0, so
-        // the catch-all is no longer the sole priority-0 rule. Identify it by
-        // its defining empty-All{} match instead of by priority alone.
-        QList<QJsonObject> catchAlls;
-        for (const QJsonObject& r : allRulesByPriority(rules, 0)) {
-            const QJsonObject m = r.value(QStringLiteral("match")).toObject();
-            if (m.contains(QStringLiteral("all")) && m.value(QStringLiteral("all")).toArray().isEmpty()) {
-                catchAlls.append(r);
-            }
-        }
-        QCOMPARE(catchAlls.size(), 1);
-
-        const QJsonObject def = catchAlls.first();
-        // The catch-all match is an empty All{} — serialized as { "all": [] }.
-        const QJsonObject match = def.value(QStringLiteral("match")).toObject();
-        QVERIFY(match.contains(QStringLiteral("all")));
-        QVERIFY(match.value(QStringLiteral("all")).toArray().isEmpty());
-
-        // The v3 config carried a DefaultLayoutId → provider default is a
-        // snapping rule carrying that layout.
-        QCOMPARE(actionTypes(def), (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout")}));
     }
 
     // ─── Disable-list rules ───────────────────────────────────────────────
@@ -674,7 +644,7 @@ private Q_SLOTS:
         writeJson(assignmentsPath(), makeAssignments());
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> disabled = disableRules(rulesFromWindowRules());
+        const QList<QJsonObject> disabled = disableRules(rulesFromRules());
 
         // Count DisableEngine rules. Fixture: snapping monitor (DP-3) = 1,
         // autotile monitors (DP-3, HDMI-2) = 2, snapping desktop (DP-1/4) = 1,
@@ -734,63 +704,61 @@ private Q_SLOTS:
         QCOMPARE(std::count_if(disabled.cbegin(), disabled.cend(), isAutotileActivity), 1);
     }
 
-    // ─── Multi-dimension disable-rule priority ────────────────────────────
-    // The disable rules share the cascade priority formula with assignment
-    // rules: a screen+desktop disable outranks a screen-only disable, and a
-    // screen+activity disable outranks both. This exercises the formula above
-    // the single-dimension (screen-only, 310) band — a monitor-only fixture
-    // entry alone never reaches the multi-pin priorities.
+    // ─── Disable-rule priority: seeded in the Context band ────────────────
+    // Disable rules no longer follow a multi-dimension cascade: every migrated
+    // DisableEngine rule is seeded at the Context band base
+    // (kContextBandBase = 300) regardless of how many dimensions it pins. This
+    // asserts the screen+desktop, screen+activity, and screen-only disables all
+    // land at the same band value, and that makeDisableRule agrees.
 
-    void testDisableRulePriority_multiDimension()
+    void testDisableRulePriority_seededInContextBand()
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
         writeJson(assignmentsPath(), makeAssignments());
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> disabled = disableRules(rulesFromWindowRules());
+        const QList<QJsonObject> disabled = disableRules(rulesFromRules());
 
-        // The "DP-1/4" SnappingDisabledDesktops entry pins screen + desktop →
-        // priority 410 (kBasePriority + screen + desktop weights).
+        // The "DP-1/4" SnappingDisabledDesktops entry pins screen + desktop —
+        // seeded at the Context band base (300), no per-dimension nudge.
         const auto snapDesktop = std::find_if(disabled.cbegin(), disabled.cend(), [&](const QJsonObject& r) {
             return disableActionMode(r) == QLatin1String("snapping")
                 && matchLeafValue(r, QStringLiteral("virtualDesktop")) == QLatin1String("4");
         });
         QVERIFY(snapDesktop != disabled.cend());
         QCOMPARE(snapDesktop->value(QStringLiteral("priority")).toInt(),
-                 CRB::contextPriority(/*screenPinned=*/true, /*desktopPinned=*/true, /*activityPinned=*/false));
-        QCOMPARE(snapDesktop->value(QStringLiteral("priority")).toInt(), 410);
+                 PhosphorRules::ContextRuleBridge::kContextBandBase);
 
         // The "DP-1/act-uuid-7" AutotileDisabledActivities entry pins screen +
-        // activity → priority 510 (activity weight beats desktop).
+        // activity — also seeded at the band base (300).
         const auto autotileActivity = std::find_if(disabled.cbegin(), disabled.cend(), [&](const QJsonObject& r) {
             return disableActionMode(r) == QLatin1String("autotile")
                 && matchLeafValue(r, QStringLiteral("activity")) == QLatin1String("act-uuid-7");
         });
         QVERIFY(autotileActivity != disabled.cend());
         QCOMPARE(autotileActivity->value(QStringLiteral("priority")).toInt(),
-                 CRB::contextPriority(/*screenPinned=*/true, /*desktopPinned=*/false, /*activityPinned=*/true));
-        QCOMPARE(autotileActivity->value(QStringLiteral("priority")).toInt(), 510);
+                 PhosphorRules::ContextRuleBridge::kContextBandBase);
 
-        // A screen-only monitor disable sits at the single-dimension band (310).
+        // A screen-only monitor disable sits at the band base (300) too.
         const auto snapMonitor = std::find_if(disabled.cbegin(), disabled.cend(), [&](const QJsonObject& r) {
             return disableActionMode(r) == QLatin1String("snapping")
                 && matchLeafValue(r, QStringLiteral("screenId")) == QLatin1String("DP-3");
         });
         QVERIFY(snapMonitor != disabled.cend());
         QCOMPARE(snapMonitor->value(QStringLiteral("priority")).toInt(),
-                 CRB::contextPriority(/*screenPinned=*/true, /*desktopPinned=*/false, /*activityPinned=*/false));
+                 PhosphorRules::ContextRuleBridge::kContextBandBase);
 
-        // makeDisableRule's priority must agree with the migration output for
-        // a multi-dimension entry — a screen+desktop disable rule pins 410.
-        const PhosphorWindowRules::WindowRule directDesktop = CRB::makeDisableRule(
-            QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(), QStringLiteral("snapping"));
-        QCOMPARE(directDesktop.priority, 410);
-        // A screen+activity disable rule pins 510 — activity outranks desktop.
-        const PhosphorWindowRules::WindowRule directActivity = CRB::makeDisableRule(
-            QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"), QStringLiteral("autotile"));
-        QCOMPARE(directActivity.priority, 510);
-        QVERIFY(directActivity.priority > directDesktop.priority);
+        // makeDisableRule must agree with the migration output: every disable
+        // rule is seeded at the band base regardless of the pinned dimensions.
+        const PhosphorRules::Rule directDesktop =
+            CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(),
+                                 QStringLiteral("snapping"), PhosphorRules::ContextRuleBridge::kContextBandBase);
+        QCOMPARE(directDesktop.priority, PhosphorRules::ContextRuleBridge::kContextBandBase);
+        const PhosphorRules::Rule directActivity =
+            CRB::makeDisableRule(QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"),
+                                 QStringLiteral("autotile"), PhosphorRules::ContextRuleBridge::kContextBandBase);
+        QCOMPARE(directActivity.priority, PhosphorRules::ContextRuleBridge::kContextBandBase);
     }
 
     // ─── Idempotency ──────────────────────────────────────────────────────
@@ -803,12 +771,10 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
         const QByteArray firstRun = [&] {
-            QFile f(ConfigDefaults::windowRulesFilePath());
+            QFile f(ConfigDefaults::rulesFilePath());
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
         QVERIFY(!firstRun.isEmpty());
-        const int firstCount =
-            QJsonDocument::fromJson(firstRun).object().value(QStringLiteral("rules")).toArray().size();
 
         // The process-level migration guard would normally short-circuit;
         // reset it so the second call re-runs the full logic against the
@@ -817,23 +783,20 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QByteArray secondRun = [&] {
-            QFile f(ConfigDefaults::windowRulesFilePath());
+            QFile f(ConfigDefaults::rulesFilePath());
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
-        // The `windowRulesAlreadyConverted` probe loads windowrules.json as a
-        // v4 WindowRuleSet; on the second run it succeeds, so finalize takes
+        // The `rulesAlreadyConverted` probe loads rules.json as a
+        // v4 RuleSet; on the second run it succeeds, so finalize takes
         // the already-converted branch and only retries the idempotent
-        // cleanup steps instead of rebuilding — windowrules.json is
-        // byte-identical, the rule count is unchanged.
+        // cleanup steps instead of rebuilding — rules.json is
+        // byte-identical.
         QCOMPARE(secondRun, firstRun);
-        const int secondCount =
-            QJsonDocument::fromJson(secondRun).object().value(QStringLiteral("rules")).toArray().size();
-        QCOMPARE(secondCount, firstCount);
     }
 
     // ─── No-assignments fixture ───────────────────────────────────────────
 
-    void testNoAssignments_stillWritesProviderDefault()
+    void testNoAssignments_writesNoProviderDefault()
     {
         IsolatedConfigGuard guard;
         // A v3 config with no assignments.json at all.
@@ -843,32 +806,24 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
-        const QJsonArray rules = rulesFromWindowRules();
-        // Two rules: the provider-default catch-all + the premade Steam
-        // exclusion rule (seeded unconditionally on every fresh/migrated v4
-        // config). Identify the catch-all by its empty-All{} match.
-        QCOMPARE(rules.size(), 2);
-        QJsonObject def;
+        QVERIFY(QFile::exists(ConfigDefaults::rulesFilePath()));
+        const QJsonArray rules = rulesFromRules();
+        // Exactly one rule: the premade Steam exclusion rule (seeded
+        // unconditionally on every fresh/migrated v4 config). No provider-default
+        // catch-all rule is emitted — the global default now comes from the gated
+        // resolver, not a rule.
+        QCOMPARE(rules.size(), 1);
+
+        // No empty-All{} catch-all assignment rule (one carrying a setEngineMode
+        // action) may be present.
         for (const QJsonValue& v : rules) {
             const QJsonObject r = v.toObject();
             const QJsonObject m = r.value(QStringLiteral("match")).toObject();
-            if (m.contains(QStringLiteral("all")) && m.value(QStringLiteral("all")).toArray().isEmpty()) {
-                def = r;
-            }
+            const bool emptyAll =
+                m.contains(QStringLiteral("all")) && m.value(QStringLiteral("all")).toArray().isEmpty();
+            QVERIFY2(!(emptyAll && actionTypes(r).contains(QLatin1String("setEngineMode"))),
+                     "no empty-All{} provider-default rule may be emitted");
         }
-        QVERIFY2(!def.isEmpty(), "provider-default catch-all must be present");
-        QCOMPARE(def.value(QStringLiteral("priority")).toInt(), 0);
-
-        // With no DefaultLayoutId and no Tiling default algorithm, the
-        // provider default is the bare snapping placeholder: a single
-        // SetEngineMode action (mode = "snapping"), no layout action — there
-        // is no layout to carry, so SetSnappingLayout / SetTilingAlgorithm are
-        // both absent.
-        QCOMPARE(actionTypes(def), (QStringList{QStringLiteral("setEngineMode")}));
-        const QJsonArray actions = def.value(QStringLiteral("actions")).toArray();
-        QCOMPARE(actions.size(), 1);
-        QCOMPARE(actions.first().toObject().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
     }
 
     // ─── Premade Steam rule ───────────────────────────────────────────────
@@ -886,7 +841,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QJsonArray rules = rulesFromWindowRules();
+        const QJsonArray rules = rulesFromRules();
         QJsonObject steam;
         for (const QJsonValue& v : rules) {
             const QJsonObject r = v.toObject();
@@ -896,6 +851,12 @@ private Q_SLOTS:
         }
         QVERIFY2(!steam.isEmpty(), "premade Steam rule must be seeded on a fresh/migrated v4 config");
         QVERIFY(steam.value(QStringLiteral("enabled")).toBool());
+
+        // Composite match (the None{} guard below makes it non-simple), so
+        // assignBandPrioritiesToZeroRules seeds it in the Advanced band [500,600)
+        // rather than the Application band the simple AppId excludes get.
+        const int steamPriority = steam.value(QStringLiteral("priority")).toInt();
+        QVERIFY(steamPriority >= 500 && steamPriority < 600);
 
         // A single terminal Exclude action — the window is left unmanaged by
         // snap/tile.
@@ -932,14 +893,14 @@ private Q_SLOTS:
 
         // The rule is sliced into the Exclude rule set the daemon/effect
         // consume — i.e. it actually participates in the exclusion gate.
-        const auto set = PhosphorWindowRules::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
+        const auto set = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
         QVERIFY(set.has_value());
-        QCOMPARE(PhosphorWindowRules::ExclusionRules::excludeRulesFrom(*set).count(), 1);
+        QCOMPARE(PhosphorRules::ExclusionRules::excludeRulesFrom(*set).count(), 1);
     }
 
     // ─── Superseding: assignments.json retired to .migrated ───────────────
 
-    /// windowrules.json supersedes assignments.json — once the rule store is
+    /// rules.json supersedes assignments.json — once the rule store is
     /// durably written, the legacy file is renamed to assignments.json.migrated
     /// (the irreversible commit). Rename is preferred over deletion so a
     /// downgrade or manual recovery can restore the previous schema.
@@ -952,17 +913,16 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        // windowrules.json written; assignments.json retired from its original
+        // rules.json written; assignments.json retired from its original
         // location (renamed to .migrated, or in the fallback path removed).
-        QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
-        QVERIFY2(!QFile::exists(assignmentsPath()),
-                 "assignments.json must be retired once windowrules.json supersedes it");
+        QVERIFY(QFile::exists(ConfigDefaults::rulesFilePath()));
+        QVERIFY2(!QFile::exists(assignmentsPath()), "assignments.json must be retired once rules.json supersedes it");
     }
 
     // ─── Superseding: Display.*Disabled* keys removed ─────────────────────
 
     /// migrateV3ToV4 removes the six config.json Display.*Disabled* keys for
-    /// real — windowrules.json now carries them as DisableEngine rules, so a
+    /// real — rules.json now carries them as DisableEngine rules, so a
     /// stale duplicate in config.json would be a split source of truth.
     void testSupersede_displayDisabledKeysRemoved()
     {
@@ -985,7 +945,7 @@ private Q_SLOTS:
 
     // ─── Superseding: QuickLayouts relocated to sidecar ───────────────────
 
-    /// QuickLayouts slots are not window rules — the migration relocates them
+    /// QuickLayouts slots are not rules — the migration relocates them
     /// to the quicklayouts.json sidecar (the file LayoutRegistry reads). The v3
     /// slots are snapping bindings, written under the snapping key of the single
     /// mode-nested format (no flat variant).
@@ -1005,9 +965,9 @@ private Q_SLOTS:
         QVERIFY2(slots.contains(QStringLiteral("autotile")), "the nested format always carries both mode keys");
         QVERIFY2(!slots.contains(QStringLiteral("3")), "slots must be nested by mode, not written flat");
 
-        // The QuickLayouts data must not have leaked into windowrules.json as
+        // The QuickLayouts data must not have leaked into rules.json as
         // a rule — it is not a rule.
-        const QJsonArray rules = rulesFromWindowRules();
+        const QJsonArray rules = rulesFromRules();
         for (const QJsonValue& v : rules) {
             QVERIFY(!actionTypes(v.toObject()).contains(QStringLiteral("quickLayout")));
         }
@@ -1017,7 +977,7 @@ private Q_SLOTS:
 
     /// Running the migration a second time after assignments.json is already
     /// retired is a clean no-op: the idempotency guard short-circuits on the
-    /// existing v4 windowrules.json, nothing is re-created or re-retired.
+    /// existing v4 rules.json, nothing is re-created or re-retired.
     void testSupersede_idempotentAfterAssignmentsRetired()
     {
         IsolatedConfigGuard guard;
@@ -1027,7 +987,7 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
         QVERIFY(!QFile::exists(assignmentsPath()));
         const QByteArray firstRun = [&] {
-            QFile f(ConfigDefaults::windowRulesFilePath());
+            QFile f(ConfigDefaults::rulesFilePath());
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
         QVERIFY(!firstRun.isEmpty());
@@ -1036,10 +996,10 @@ private Q_SLOTS:
         ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        // assignments.json is not re-created; windowrules.json is byte-identical.
+        // assignments.json is not re-created; rules.json is byte-identical.
         QVERIFY(!QFile::exists(assignmentsPath()));
         const QByteArray secondRun = [&] {
-            QFile f(ConfigDefaults::windowRulesFilePath());
+            QFile f(ConfigDefaults::rulesFilePath());
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
         QCOMPARE(secondRun, firstRun);
@@ -1050,13 +1010,13 @@ private Q_SLOTS:
     // Simulates the scenario where the assignments.json retire step fails (a
     // read-only filesystem, a lock, a permissions error) so the legacy file is
     // still present on the next startup. The conversion is already complete —
-    // windowrules.json exists as a valid v4 WindowRuleSet, and the user has
+    // rules.json exists as a valid v4 RuleSet, and the user has
     // since authored an extra rule via the rule editor. Re-running
-    // finalizeV4Conversion MUST NOT rebuild-and-overwrite windowrules.json from
+    // finalizeV4Conversion MUST NOT rebuild-and-overwrite rules.json from
     // the dead assignments.json: the user's rule must survive.
     //
-    // The fix gates the rebuild on `!windowRulesAlreadyConverted` (probed by
-    // actually loading windowrules.json as a WindowRuleSet), NOT on
+    // The fix gates the rebuild on `!rulesAlreadyConverted` (probed by
+    // actually loading rules.json as a RuleSet), NOT on
     // assignments.json's absence — so a permanently-undeletable assignments.json
     // can no longer clobber the rule store on every launch.
     void testDeleteFailure_doesNotOverwriteUserRules()
@@ -1065,21 +1025,22 @@ private Q_SLOTS:
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
         writeJson(assignmentsPath(), makeAssignments());
 
-        // First run: full conversion produces windowrules.json.
+        // First run: full conversion produces rules.json.
         QVERIFY(ConfigMigration::ensureJsonConfig());
-        QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
+        QVERIFY(QFile::exists(ConfigDefaults::rulesFilePath()));
 
         // The user authors a new rule via the rule editor — load the store,
-        // append a rule, persist it. This rule exists ONLY in windowrules.json;
+        // append a rule, persist it. This rule exists ONLY in rules.json;
         // it has no counterpart in assignments.json.
-        auto setWithUserRule = PhosphorWindowRules::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
-        QVERIFY2(setWithUserRule.has_value(), "windowrules.json must parse as a v4 rule set");
-        const PhosphorWindowRules::WindowRule userRule =
+        auto setWithUserRule = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
+        QVERIFY2(setWithUserRule.has_value(), "rules.json must parse as a v4 rule set");
+        const PhosphorRules::Rule userRule =
             CRB::makeDisableRule(QStringLiteral("User-authored · DP-9"), QStringLiteral("DP-9"),
-                                 /*virtualDesktop=*/0, QString(), QStringLiteral("snapping"));
+                                 /*virtualDesktop=*/0, QString(), QStringLiteral("snapping"),
+                                 PhosphorRules::ContextRuleBridge::kContextBandBase);
         const QUuid userRuleId = userRule.id;
         QVERIFY(setWithUserRule->addRule(userRule));
-        QVERIFY(setWithUserRule->saveToFile(ConfigDefaults::windowRulesFilePath()));
+        QVERIFY(setWithUserRule->saveToFile(ConfigDefaults::rulesFilePath()));
         const int countWithUserRule = setWithUserRule->count();
         QVERIFY(countWithUserRule > 0);
 
@@ -1087,7 +1048,7 @@ private Q_SLOTS:
         // on disk (as if QFile::remove / rename had failed on the first run).
         // Without the fix, the old idempotency guard — gated on
         // assignments.json's absence — would NOT short-circuit, so the rebuild
-        // path would re-run and overwrite windowrules.json, destroying the
+        // path would re-run and overwrite rules.json, destroying the
         // user's rule.
         writeJson(assignmentsPath(), makeAssignments());
         QVERIFY(QFile::exists(assignmentsPath()));
@@ -1096,9 +1057,9 @@ private Q_SLOTS:
         ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        // The user's rule MUST survive — windowrules.json was not rebuilt.
-        auto afterRerun = PhosphorWindowRules::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
-        QVERIFY2(afterRerun.has_value(), "windowrules.json must still parse as a v4 rule set after the re-run");
+        // The user's rule MUST survive — rules.json was not rebuilt.
+        auto afterRerun = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
+        QVERIFY2(afterRerun.has_value(), "rules.json must still parse as a v4 rule set after the re-run");
         QVERIFY2(afterRerun->ruleById(userRuleId).has_value(),
                  "the user-authored rule must survive a re-run with assignments.json still present");
         QCOMPARE(afterRerun->count(), countWithUserRule);
@@ -1109,66 +1070,67 @@ private Q_SLOTS:
                  "the cleanup-only branch must retire the leftover assignments.json");
     }
 
-    // ─── Data-loss regression: malformed windowrules.json aborts ─────────
+    // ─── Data-loss regression: malformed rules.json aborts ─────────
     //
     // Sibling of testMalformedAssignmentsJsonAborts for the rebuild path's
-    // windowrules.json prevalidate. When windowrules.json exists but doesn't
+    // rules.json prevalidate. When rules.json exists but doesn't
     // parse, the "already converted" probe (loadFromFile().has_value()) drops
     // into the rebuild path, which would otherwise overwrite the corrupt-but-
-    // recoverable original with a stub provider-default rule set — destroying
-    // every user-authored rule. The new prevalidateWindowRulesFile fires
+    // recoverable original with a stub seed-only rule set — destroying
+    // every user-authored rule. The new prevalidateRulesFile fires
     // FIRST: quarantines to .corrupt.bak, refuses to commit, returns false.
-    void testMalformedWindowRulesJsonAborts()
+    void testMalformedRulesJsonAborts()
     {
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        // No legacy assignments file — this isolates the windowrules-only
-        // corruption path. A fresh install with a corrupt windowrules.json
+        // No legacy assignments file — this isolates the rules-only
+        // corruption path. A fresh install with a corrupt rules.json
         // is the cleanest reproduction.
-        const QString corruptPath = ConfigDefaults::windowRulesFilePath();
+        const QString corruptPath = ConfigDefaults::rulesFilePath();
         QDir().mkpath(QFileInfo(corruptPath).absolutePath());
         const QByteArray corruptBytes = QByteArrayLiteral("{ \"_version\": 4, \"rules\": [");
         {
             QFile f(corruptPath);
             QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(corruptBytes);
+            QCOMPARE(f.write(corruptBytes), static_cast<qint64>(corruptBytes.size()));
         }
 
-        QVERIFY2(!ConfigMigration::ensureJsonConfig(),
-                 "ensureJsonConfig must return false on a malformed windowrules.json");
+        QVERIFY2(!ConfigMigration::ensureJsonConfig(), "ensureJsonConfig must return false on a malformed rules.json");
 
         // The corrupt file was quarantined to .corrupt.bak with bytes preserved.
         const QString corruptBak = corruptPath + QStringLiteral(".corrupt.bak");
-        QVERIFY2(QFile::exists(corruptBak), "the malformed windowrules.json must be quarantined to .corrupt.bak");
+        QVERIFY2(QFile::exists(corruptBak), "the malformed rules.json must be quarantined to .corrupt.bak");
         {
             QFile f(corruptBak);
             QVERIFY(f.open(QIODevice::ReadOnly));
             QCOMPARE(f.readAll(), corruptBytes);
         }
 
-        // Original is gone (renamed). A new stub windowrules.json must NOT
+        // Original is gone (renamed). A new stub rules.json must NOT
         // have been written — that's the data-loss class the guard exists for.
         QVERIFY(!QFile::exists(corruptPath));
 
         // config.json's chain step (migrateV3ToV4) DID run before finalize —
         // it stamps `_version=4` and stashes any disable-list / animation-rule
         // data. The chain step's idempotency guard then short-circuits the
-        // next attempt; the rebuild branch at finalize takes over (windowrules.json
+        // next attempt; the rebuild branch at finalize takes over (rules.json
         // doesn't exist after quarantine, so the "already converted" probe
         // returns false and rebuild retries from the stash). Both paths
         // surface as a follow-up run after the user repairs the quarantine.
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 4);
+        // The migration chain now runs v3 → v4 → v5, so config.json lands at
+        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
+        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
     }
 
     // ─── Data-loss regression (B5): malformed assignments.json aborts ─────
     //
     // A corrupt assignments.json (truncation, power-loss, hand-edit error)
-    // must NOT silently produce a windowrules.json holding only the provider-
-    // default + disable rules — that would lose every pinned assignment AND
+    // must NOT silently produce a rules.json holding only the disable + seed
+    // rules — that would lose every pinned assignment AND
     // the quick-layout slots. The migration aborts loudly: the corrupt file
     // is quarantined to `.corrupt.bak` (NOT `.migrated`, which would imply a
-    // successful migration), windowrules.json is NOT written, and config.json
+    // successful migration), rules.json is NOT written, and config.json
     // keeps its v3 stamp so the next run can re-attempt after the user
     // repairs the sidecar.
     void testMalformedAssignmentsJsonAborts()
@@ -1186,17 +1148,17 @@ private Q_SLOTS:
         {
             QFile f(corruptPath);
             QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(corruptBytes);
+            QCOMPARE(f.write(corruptBytes), static_cast<qint64>(corruptBytes.size()));
         }
 
         // Migration MUST abort.
         QVERIFY2(!ConfigMigration::ensureJsonConfig(),
                  "ensureJsonConfig must return false on a malformed assignments.json");
 
-        // windowrules.json must NOT have been created — silently writing a
+        // rules.json must NOT have been created — silently writing a
         // disable-only rule set would mask the data-loss.
-        QVERIFY2(!QFile::exists(ConfigDefaults::windowRulesFilePath()),
-                 "windowrules.json must not be written when the legacy sidecar is corrupt");
+        QVERIFY2(!QFile::exists(ConfigDefaults::rulesFilePath()),
+                 "rules.json must not be written when the legacy sidecar is corrupt");
 
         // The corrupt file was quarantined to .corrupt.bak with its original
         // bytes preserved — the user can inspect and repair it.
@@ -1230,8 +1192,8 @@ private Q_SLOTS:
     // Stalled-chain gate: when config.json is stamped at a pre-v4 version
     // (chain stalled — e.g. migrateV1ToV2's side-effect writes failed and
     // MigrationRunner::runOnFile returned true for a no-op chain),
-    // finalizeV4Conversion must refuse to commit a stub windowrules.json.
-    // Otherwise the next successful run would hit `windowRulesAlreadyConverted
+    // finalizeV4Conversion must refuse to commit a stub rules.json.
+    // Otherwise the next successful run would hit `rulesAlreadyConverted
     // = true` in the cleanup branch and strip `_v4DisableStash` /
     // `_v4AnimationRulesStash` without porting them into rules — silently
     // losing the user's disable lists and animation app rules forever.
@@ -1274,8 +1236,8 @@ private Q_SLOTS:
         // already-converted path.
         const bool ok = ConfigMigration::finalizeV4Conversion(ConfigDefaults::configFilePath());
         QVERIFY2(!ok, "finalizeV4Conversion must return false when _version < ConfigSchemaVersion");
-        QVERIFY2(!QFile::exists(ConfigDefaults::windowRulesFilePath()),
-                 "windowrules.json must NOT be committed when config.json is still below v4");
+        QVERIFY2(!QFile::exists(ConfigDefaults::rulesFilePath()),
+                 "rules.json must NOT be committed when config.json is still below v4");
         const QJsonObject onDisk = readJson(ConfigDefaults::configFilePath());
         QVERIFY2(onDisk.value(ConfigKeys::versionKey()).toInt(0) == 3,
                  "the v3 stamp must survive — finalize is not allowed to advance the version");
@@ -1288,10 +1250,10 @@ private Q_SLOTS:
     // ─── Data-loss regression (B4): QuickLayouts write failure is recoverable ─
     //
     // The v3→v4 conversion writes two files: quicklayouts.json (sidecar) and
-    // windowrules.json (the irreversible commit marker). Writing the sidecar
-    // FIRST means a sidecar failure aborts BEFORE committing windowrules.json
+    // rules.json (the irreversible commit marker). Writing the sidecar
+    // FIRST means a sidecar failure aborts BEFORE committing rules.json
     // — the user's slots stay recoverable from assignments.json on the next
-    // attempt. Writing windowrules.json first would gate the rebuild path off
+    // attempt. Writing rules.json first would gate the rebuild path off
     // forever on the next run (the cleanup-only branch never re-attempts the
     // QuickLayouts relocation), losing the slots to the .migrated quarantine.
     //
@@ -1318,16 +1280,16 @@ private Q_SLOTS:
         {
             QFile pin(quickLayoutsPath + QStringLiteral("/.pin"));
             QVERIFY(pin.open(QIODevice::WriteOnly));
-            pin.write("x");
+            QCOMPARE(pin.write("x"), static_cast<qint64>(1));
         }
 
         // First attempt: the sidecar write fails, migration aborts BEFORE
-        // committing windowrules.json. The legacy sidecar must still be on
+        // committing rules.json. The legacy sidecar must still be on
         // disk (we never reach the retire step), so the data is recoverable.
         QVERIFY2(!ConfigMigration::ensureJsonConfig(),
                  "ensureJsonConfig must return false when the QuickLayouts sidecar write fails");
-        QVERIFY2(!QFile::exists(ConfigDefaults::windowRulesFilePath()),
-                 "windowrules.json must NOT be written when the sidecar write fails");
+        QVERIFY2(!QFile::exists(ConfigDefaults::rulesFilePath()),
+                 "rules.json must NOT be written when the sidecar write fails");
         QVERIFY2(QFile::exists(assignmentsPath()),
                  "assignments.json must remain on disk so the user can re-attempt the migration");
 
@@ -1338,12 +1300,12 @@ private Q_SLOTS:
         QVERIFY(QDir().rmdir(quickLayoutsPath));
         QVERIFY(!QFileInfo::exists(quickLayoutsPath));
 
-        // Second attempt: full migration succeeds. windowrules.json is
+        // Second attempt: full migration succeeds. rules.json is
         // written, the sidecar is populated, and the legacy file is retired.
         ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY2(ConfigMigration::ensureJsonConfig(),
                  "the migration must succeed once the QuickLayouts sidecar write can complete");
-        QVERIFY(QFile::exists(ConfigDefaults::windowRulesFilePath()));
+        QVERIFY(QFile::exists(ConfigDefaults::rulesFilePath()));
         QVERIFY2(QFile::exists(quickLayoutsPath), "the QuickLayouts sidecar must be populated on the second attempt");
         const QJsonObject slots = readJson(quickLayoutsPath);
         QCOMPARE(slots.value(QStringLiteral("snapping")).toObject().value(QStringLiteral("3")).toString(),
@@ -1352,9 +1314,9 @@ private Q_SLOTS:
                  "assignments.json must be retired once the full conversion completes");
     }
 
-    // ─── Animation App Rules → WindowRules ────────────────────────────────
+    // ─── Animation App Rules → Rules ────────────────────────────────
     //
-    // The v3 `Animations.AnimationAppRules` array folds into windowrules.json
+    // The v3 `Animations.AnimationAppRules` array folds into rules.json
     // as `OverrideAnimation{Shader,Timing}` actions on a
     // `WindowClass Contains <pattern>` matcher. Below covers the conversion
     // shape, the drop-on-malformed contract, the engaged-blocking / inherit
@@ -1363,7 +1325,7 @@ private Q_SLOTS:
 private:
     /// Build a v3 config carrying ONLY animation app rules (no Display.* keys,
     /// no Snapping defaults). Keeps animation-specific tests narrow — they
-    /// don't have to filter the provider-default + disable-rule noise out.
+    /// don't have to filter the disable-rule + seed-rule noise out.
     ///
     /// The v4 group / key names are pinned as inline `QStringLiteral`
     /// literals — the test's role is to be an INDEPENDENT WITNESS of the
@@ -1419,10 +1381,10 @@ private:
     /// All rules carrying an OverrideAnimation* action (either shader or
     /// timing). The animation rule set is otherwise independent of the
     /// assignment / disable cascade, so most tests want this filtered view.
-    QList<QJsonObject> animationRulesFromWindowRules()
+    QList<QJsonObject> animationRulesFromRules()
     {
         QList<QJsonObject> out;
-        for (const QJsonValue& v : rulesFromWindowRules()) {
+        for (const QJsonValue& v : rulesFromRules()) {
             const QJsonObject rule = v.toObject();
             for (const QJsonValue& a : rule.value(QStringLiteral("actions")).toArray()) {
                 const QString type = a.toObject().value(QStringLiteral("type")).toString();
@@ -1451,7 +1413,7 @@ private:
 
 private Q_SLOTS:
 
-    void testAnimationAppRules_shaderAndTimingKindsBecomeWindowRules()
+    void testAnimationAppRules_shaderAndTimingKindsBecomeRules()
     {
         IsolatedConfigGuard guard;
         QJsonObject shaderParams;
@@ -1465,7 +1427,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> animRules = animationRulesFromWindowRules();
+        const QList<QJsonObject> animRules = animationRulesFromRules();
         QCOMPARE(animRules.size(), 2);
 
         // Locate by action type — list ordering is asserted in a separate test.
@@ -1494,7 +1456,7 @@ private Q_SLOTS:
                  QStringLiteral("firefox"));
         QCOMPARE(shaderRule.value(QStringLiteral("enabled")).toBool(), true);
         QVERIFY2(shaderRule.value(QStringLiteral("priority")).toInt() > 0,
-                 "animation rules must sit strictly above the provider-default catch-all band (priority 0)");
+                 "animation app rules get a positive descending-by-list-order priority");
         const QJsonObject shaderAction = animationAction(shaderRule);
         QCOMPARE(shaderAction.value(QStringLiteral("event")).toString(), QStringLiteral("window.open"));
         QCOMPARE(shaderAction.value(QStringLiteral("effectId")).toString(), QStringLiteral("dissolve"));
@@ -1517,8 +1479,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         QJsonArray src;
         // Three valid entries — first should get the highest priority,
-        // last should get priority 1 (above the provider-default catch-all
-        // band at 0).
+        // last should get priority 1 (descending by list order, lowest is 1).
         src.append(makeShaderRule(QStringLiteral("first"), QStringLiteral("window.open"), QStringLiteral("popup")));
         src.append(makeShaderRule(QStringLiteral("second"), QStringLiteral("window.open"), QStringLiteral("fade")));
         src.append(makeShaderRule(QStringLiteral("third"), QStringLiteral("window.open"), QStringLiteral("blur")));
@@ -1527,7 +1488,7 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QMap<QString, int> priorityByPattern;
-        for (const QJsonObject& rule : animationRulesFromWindowRules()) {
+        for (const QJsonObject& rule : animationRulesFromRules()) {
             const QString pattern = matchLeafValueByOp(rule, QStringLiteral("windowClass"), QStringLiteral("contains"));
             priorityByPattern[pattern] = rule.value(QStringLiteral("priority")).toInt();
         }
@@ -1550,7 +1511,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> animRules = animationRulesFromWindowRules();
+        const QList<QJsonObject> animRules = animationRulesFromRules();
         QCOMPARE(animRules.size(), 1);
         // Inlined action params — `effectId` lives directly on the action
         // object alongside `type` and `event`, not nested under `params`.
@@ -1601,7 +1562,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> animRules = animationRulesFromWindowRules();
+        const QList<QJsonObject> animRules = animationRulesFromRules();
         QCOMPARE(animRules.size(), 3);
         for (const QJsonObject& rule : animRules) {
             const QJsonObject action = animationAction(rule);
@@ -1654,7 +1615,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> animRules = animationRulesFromWindowRules();
+        const QList<QJsonObject> animRules = animationRulesFromRules();
         QCOMPARE(animRules.size(), 1);
         QCOMPARE(matchLeafValueByOp(animRules.first(), QStringLiteral("windowClass"), QStringLiteral("contains")),
                  QStringLiteral("survivor"));
@@ -1668,7 +1629,7 @@ private Q_SLOTS:
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
-        QCOMPARE(animationRulesFromWindowRules().size(), 0);
+        QCOMPARE(animationRulesFromRules().size(), 0);
         // And no stash key persists.
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
         QVERIFY(!cfg.contains(QStringLiteral("_v4AnimationRulesStash")));
@@ -1678,7 +1639,7 @@ private Q_SLOTS:
     {
         // The animation rules and the assignment/disable rules target
         // disjoint slot namespaces, so a fixture combining both must produce
-        // BOTH families in windowrules.json — and neither family clobbers
+        // BOTH families in rules.json — and neither family clobbers
         // the other. This test is the load-bearing assertion for the
         // strip-after-rebuild path: the fixture populates
         // `_v4AnimationRulesStash`, so the post-conversion stash-absence
@@ -1705,44 +1666,32 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         // Animation family — exactly one rule emitted.
-        const QList<QJsonObject> animRulesOut = animationRulesFromWindowRules();
+        const QList<QJsonObject> animRulesOut = animationRulesFromRules();
         QCOMPARE(animRulesOut.size(), 1);
         const QJsonObject animRule = animRulesOut.first();
-        // Animation rule sits at priority 1 (count == 1 → priority 1) —
-        // strictly above the catch-all band.
+        // Animation rule sits at priority 1 (count == 1 → priority 1).
         QCOMPARE(animRule.value(QStringLiteral("priority")).toInt(), 1);
 
-        // Assignment cascade — every fixture-pinned level (610/510/410/310)
+        // Assignment cascade — every fixture-pinned level (306/304/303/301)
         // must still produce an assignment rule (setEngineMode + NOT
         // disableEngine), matching testCascadePriorities_exactValues. A
         // regression where an animation rule collided with an assignment
         // rule's id would drop the assignment from the rebuilt set; counting
-        // every cascade level guards that.
-        const QJsonArray allRules = rulesFromWindowRules();
-        QVERIFY(hasAssignmentAtPriority(allRules, 610));
-        QVERIFY(hasAssignmentAtPriority(allRules, 510));
-        QVERIFY(hasAssignmentAtPriority(allRules, 410));
-        QVERIFY(hasAssignmentAtPriority(allRules, 310));
+        // every pinned level guards that.
+        const QJsonArray allRules = rulesFromRules();
+        QVERIFY(hasAssignmentAtPriority(allRules, 306));
+        QVERIFY(hasAssignmentAtPriority(allRules, 304));
+        QVERIFY(hasAssignmentAtPriority(allRules, 303));
+        QVERIFY(hasAssignmentAtPriority(allRules, 301));
 
         // Disable family — count must match testDisableListRules exactly
         // (fixture: 1 + 2 + 1 + 1 = 5). Drift here means an animation rule
         // clobbered a disable rule.
         QCOMPARE(disableRules(allRules).size(), 5);
 
-        // Provider-default catch-all at 0.
-        const auto hasPriority = [&](int p) {
-            for (const QJsonValue& v : allRules) {
-                if (v.toObject().value(QStringLiteral("priority")).toInt() == p) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        QVERIFY(hasPriority(0));
-
         // Animation rule id is distinct from every other rule's id — disjoint
         // slot namespaces are nothing without disjoint identities (a clash on
-        // (id) would overwrite a sibling rule inside WindowRuleSet::addRule).
+        // (id) would overwrite a sibling rule inside RuleSet::addRule).
         const QString animRuleId = animRule.value(QStringLiteral("id")).toString();
         QVERIFY(!animRuleId.isEmpty());
         int collisions = 0;
@@ -1758,7 +1707,7 @@ private Q_SLOTS:
         // the rebuild branch consumed it. This fixture populates the stash
         // (animRules.size() > 0), so a regression that stopped stripping
         // would fail here — distinguishing this from the matching assertion
-        // in testFullConversion_producesWindowRules where the fixture never
+        // in testFullConversion_producesRules where the fixture never
         // populates the stash to begin with.
         const QJsonObject cfgAfter = readJson(ConfigDefaults::configFilePath());
         QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4AnimationRulesStash")),
@@ -1770,7 +1719,7 @@ private Q_SLOTS:
         // Re-running the migration against a v3 fixture must yield
         // byte-identical animation rules — the rule id is derived from
         // (classPattern, eventPath, kind) via a fixed v5-UUID namespace, so
-        // a repeat run produces the same UUID and the WindowRuleSet round-trip
+        // a repeat run produces the same UUID and the RuleSet round-trip
         // stays stable. This is the conversion's idempotency at the rule
         // level (the file-level idempotency is asserted by
         // testIdempotency_runTwiceIsNoOp above; this test scopes the assertion
@@ -1782,7 +1731,7 @@ private Q_SLOTS:
         writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithAnimationRules(src));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
-        const QString firstId = animationRulesFromWindowRules().first().value(QStringLiteral("id")).toString();
+        const QString firstId = animationRulesFromRules().first().value(QStringLiteral("id")).toString();
         QVERIFY(!firstId.isEmpty());
 
         // Golden assertion: re-derive the expected id inline against the
@@ -1807,34 +1756,34 @@ private Q_SLOTS:
         const QString expectedId = QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString();
         QCOMPARE(firstId, expectedId);
 
-        // Wipe windowrules.json (force the rebuild path on next call) and
+        // Wipe rules.json (force the rebuild path on next call) and
         // re-stage the same v3 inputs.
-        QFile::remove(ConfigDefaults::windowRulesFilePath());
+        QFile::remove(ConfigDefaults::rulesFilePath());
         writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithAnimationRules(src));
         ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QString secondId = animationRulesFromWindowRules().first().value(QStringLiteral("id")).toString();
+        const QString secondId = animationRulesFromRules().first().value(QStringLiteral("id")).toString();
         QCOMPARE(secondId, firstId);
     }
 
     void testAnimationAppRules_cleanupOnlyBranchStripsStashes()
     {
         // The cleanup-only branch of finalizeV4Conversion runs when
-        // windowrules.json already exists as a valid v4 rule set but the
+        // rules.json already exists as a valid v4 rule set but the
         // previous run failed before stripping config.json's scratch keys.
         // A regression that stops stripping the stash on the cleanup retry
         // would leave inert _v4*Stash keys on disk forever — the rebuild
-        // path is gated off (windowrules.json exists), so the main path
+        // path is gated off (rules.json exists), so the main path
         // tested by other cases never re-runs to clean up.
         //
         // Fixture: a v4-stamped config.json that carries both stash keys,
-        // plus an existing v4 windowrules.json (so windowRulesAlreadyConverted
+        // plus an existing v4 rules.json (so rulesAlreadyConverted
         // returns true). ensureJsonConfigImpl's "Already at OR above current
         // version" branch still calls finalizeV4Conversion on every startup,
         // which takes the cleanup-only
         // sub-branch when the rule store already parses as v4 — strip both
-        // stashes, leave windowrules.json byte-identical, never recreate
+        // stashes, leave rules.json byte-identical, never recreate
         // assignments.json or its .migrated quarantine artifact.
         IsolatedConfigGuard guard;
 
@@ -1866,19 +1815,19 @@ private Q_SLOTS:
         cfg.insert(QStringLiteral("_v4AnimationExclusionStash"), animationExclusionStash);
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
-        // Pre-existing windowrules.json: produced via the production save
+        // Pre-existing rules.json: produced via the production save
         // path so the file shape always matches what `loadFromFile` expects
         // (hand-written JSON would silently drift if the library tightens
-        // its load contract, flipping windowRulesAlreadyConverted to false
+        // its load contract, flipping rulesAlreadyConverted to false
         // and silently rebuilding instead of taking the cleanup branch).
-        PhosphorWindowRules::WindowRuleSet emptySet;
-        QDir().mkpath(QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath());
-        QVERIFY(emptySet.saveToFile(ConfigDefaults::windowRulesFilePath()));
-        const QByteArray windowRulesBefore = [&] {
-            QFile f(ConfigDefaults::windowRulesFilePath());
+        PhosphorRules::RuleSet emptySet;
+        QDir().mkpath(QFileInfo(ConfigDefaults::rulesFilePath()).absolutePath());
+        QVERIFY(emptySet.saveToFile(ConfigDefaults::rulesFilePath()));
+        const QByteArray rulesBefore = [&] {
+            QFile f(ConfigDefaults::rulesFilePath());
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
-        QVERIFY(!windowRulesBefore.isEmpty());
+        QVERIFY(!rulesBefore.isEmpty());
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -1893,13 +1842,13 @@ private Q_SLOTS:
         QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4AnimationExclusionStash")),
                  "cleanup-only branch must strip _v4AnimationExclusionStash");
 
-        // windowrules.json is byte-identical — the cleanup branch must NOT
+        // rules.json is byte-identical — the cleanup branch must NOT
         // rebuild and overwrite user-edited rules.
-        const QByteArray windowRulesAfter = [&] {
-            QFile f(ConfigDefaults::windowRulesFilePath());
+        const QByteArray rulesAfter = [&] {
+            QFile f(ConfigDefaults::rulesFilePath());
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
-        QCOMPARE(windowRulesAfter, windowRulesBefore);
+        QCOMPARE(rulesAfter, rulesBefore);
 
         // Probe that the CLEANUP-ONLY branch was actually taken (not just
         // that the post-conditions happen to hold). The rebuild path writes
@@ -1945,8 +1894,8 @@ private:
     /// Surface every rule that's an Application-subject Exclude rule (the
     /// only shape the exclusion fold produces). A v3 fixture with no
     /// assignments / disable lists / animation rules yields a rule set
-    /// containing exactly the migrated exclusions + the provider-default
-    /// catch-all; the catch-all has no `appId` leaf, so this filter
+    /// containing exactly the migrated exclusions + the premade Steam rule;
+    /// the Steam rule matches on `windowClass`, not `appId`, so this filter
     /// targets the exclusion-fold output cleanly.
     QList<QJsonObject> exclusionRules(const QJsonArray& rules)
     {
@@ -1974,7 +1923,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> excl = exclusionRules(rulesFromWindowRules());
+        const QList<QJsonObject> excl = exclusionRules(rulesFromRules());
         QCOMPARE(excl.size(), 2);
         QStringList patterns;
         for (const QJsonObject& r : excl) {
@@ -1985,10 +1934,14 @@ private Q_SLOTS:
 
         // Schema invariants spelled out so a regression in the builder
         // (e.g. wrong field, wrong op, multi-action rule) fails here rather
-        // than at runtime in the cascade evaluator.
+        // than at runtime in the rule evaluator.
         for (const QJsonObject& r : excl) {
             QVERIFY(r.value(QStringLiteral("enabled")).toBool());
-            QCOMPARE(r.value(QStringLiteral("priority")).toInt(), 0);
+            // assignBandPrioritiesToZeroRules seeds the simple AppId-match Exclude
+            // rules in the Application band (200-299) so they display sensibly
+            // instead of all reading "Priority 0".
+            const int priority = r.value(QStringLiteral("priority")).toInt();
+            QVERIFY(priority >= 200 && priority < 300);
         }
     }
 
@@ -2006,7 +1959,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> excl = exclusionRules(rulesFromWindowRules());
+        const QList<QJsonObject> excl = exclusionRules(rulesFromRules());
         QCOMPARE(excl.size(), 2);
         QStringList patterns;
         for (const QJsonObject& r : excl) {
@@ -2028,7 +1981,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> excl = exclusionRules(rulesFromWindowRules());
+        const QList<QJsonObject> excl = exclusionRules(rulesFromRules());
         // Only "firefox" and "konsole" survive — the empty / whitespace
         // entries from BOTH lists are dropped.
         QCOMPARE(excl.size(), 2);
@@ -2047,7 +2000,7 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithExclusions(QStringLiteral("firefox"), QString()));
         QVERIFY(ConfigMigration::ensureJsonConfig());
-        const QString firstId = exclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+        const QString firstId = exclusionRules(rulesFromRules()).first().value(QStringLiteral("id")).toString();
         QVERIFY(!firstId.isEmpty());
 
         // Golden assertion: re-derive the expected id inline against the
@@ -2068,12 +2021,12 @@ private Q_SLOTS:
         const QString expectedId = QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString();
         QCOMPARE(firstId, expectedId);
 
-        // Round-trip: wipe windowrules.json + re-stage same v3 input.
-        QFile::remove(ConfigDefaults::windowRulesFilePath());
+        // Round-trip: wipe rules.json + re-stage same v3 input.
+        QFile::remove(ConfigDefaults::rulesFilePath());
         writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithExclusions(QStringLiteral("firefox"), QString()));
         ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY(ConfigMigration::ensureJsonConfig());
-        const QString secondId = exclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+        const QString secondId = exclusionRules(rulesFromRules()).first().value(QStringLiteral("id")).toString();
         QCOMPARE(secondId, firstId);
     }
 
@@ -2103,8 +2056,8 @@ private Q_SLOTS:
     {
         // A clean v3 config with no Exclusions group must not produce any
         // exclusion stash entry and not contribute any exclusion rule to
-        // the output. The provider-default catch-all rule still appears —
-        // the assertion targets the exclusion-shaped subset exactly.
+        // the output. The premade Steam rule still appears — the assertion
+        // targets the exclusion-shaped subset exactly.
         IsolatedConfigGuard guard;
         // makeV3ConfigWithExclusions with both nulls produces a v3 config
         // with NO Exclusions group at all.
@@ -2112,7 +2065,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        QCOMPARE(exclusionRules(rulesFromWindowRules()).size(), 0);
+        QCOMPARE(exclusionRules(rulesFromRules()).size(), 0);
     }
 
     // ─── Animation exclusions fold ────────────────────────────────────────
@@ -2144,9 +2097,11 @@ private:
         return root;
     }
 
-    /// Animation-exclude rules are the only ExcludeAnimations-action
-    /// shape the migration produces, so a simple "rules whose actions
-    /// contain excludeAnimations" filter cleanly isolates them.
+    /// Animation-exclude rules are the only ExcludeAnimations-action shape the
+    /// migration produces, with exactly one action, so filtering for the exact
+    /// single-action list {excludeAnimations} cleanly isolates them. (Exact
+    /// match, not "contains": if the migration ever emits a second action
+    /// alongside it, this filter must be revisited rather than silently passing.)
     QList<QJsonObject> animationExclusionRules(const QJsonArray& rules)
     {
         QList<QJsonObject> out;
@@ -2170,7 +2125,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> rules = animationExclusionRules(rulesFromWindowRules());
+        const QList<QJsonObject> rules = animationExclusionRules(rulesFromRules());
         QCOMPARE(rules.size(), 2);
         QStringList patterns;
         for (const QJsonObject& r : rules) {
@@ -2194,7 +2149,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QList<QJsonObject> rules = animationExclusionRules(rulesFromWindowRules());
+        const QList<QJsonObject> rules = animationExclusionRules(rulesFromRules());
         QCOMPARE(rules.size(), 2);
         QStringList patterns;
         for (const QJsonObject& r : rules) {
@@ -2213,7 +2168,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        QCOMPARE(animationExclusionRules(rulesFromWindowRules()).size(), 2);
+        QCOMPARE(animationExclusionRules(rulesFromRules()).size(), 2);
     }
 
     void testAnimationExclusions_idempotentRuleIds()
@@ -2234,7 +2189,7 @@ private Q_SLOTS:
                   makeV3ConfigWithAnimationExclusions(QString(), QStringLiteral("firefox")));
         QVERIFY(ConfigMigration::ensureJsonConfig());
         const QString firstId =
-            animationExclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+            animationExclusionRules(rulesFromRules()).first().value(QStringLiteral("id")).toString();
         QVERIFY(!firstId.isEmpty());
 
         // The namespace UUID is shared with the snapping-side fold — same
@@ -2252,17 +2207,17 @@ private Q_SLOTS:
         const QString expectedId = QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString();
         QCOMPARE(firstId, expectedId);
 
-        // Round-trip: wipe windowrules.json + re-stage same v3 input.
+        // Round-trip: wipe rules.json + re-stage same v3 input.
         // Re-running the migration on identical input must produce the
-        // same id so `WindowRuleStore::addRule`'s id-collision check
+        // same id so `RuleStore::addRule`'s id-collision check
         // collapses the second run to a no-op instead of duplicating.
-        QFile::remove(ConfigDefaults::windowRulesFilePath());
+        QFile::remove(ConfigDefaults::rulesFilePath());
         writeJson(ConfigDefaults::configFilePath(),
                   makeV3ConfigWithAnimationExclusions(QString(), QStringLiteral("firefox")));
         ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY(ConfigMigration::ensureJsonConfig());
         const QString secondId =
-            animationExclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+            animationExclusionRules(rulesFromRules()).first().value(QStringLiteral("id")).toString();
         QCOMPARE(secondId, firstId);
     }
 
@@ -2302,7 +2257,7 @@ private Q_SLOTS:
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        QCOMPARE(animationExclusionRules(rulesFromWindowRules()).size(), 0);
+        QCOMPARE(animationExclusionRules(rulesFromRules()).size(), 0);
     }
 
     // ─── Zone-overlay group rename: Snapping.Appearance.* → Snapping.Zones.* ─
@@ -2360,7 +2315,9 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 4);
+        // The migration chain now runs v3 → v4 → v5, so config.json lands at
+        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
+        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
         const QJsonObject snapping = cfg.value(QStringLiteral("Snapping")).toObject();
 
@@ -2384,13 +2341,12 @@ private Q_SLOTS:
             snapping.value(QStringLiteral("Behavior")).toObject().value(QStringLiteral("ToggleActivation")).toBool(),
             true);
 
-        // End-state collision check: the NEW snap-window appearance settings reuse the
-        // freed Snapping.Appearance.Colors namespace. The v3 zone-overlay value
-        // (UseSystem=false) was relocated to Snapping.Zones above, so a Settings loaded
-        // from the migrated config must read snappingUseSystemBorderColors() as the
-        // SHIPPED DEFAULT — proving no stale v3 zone value bleeds into the new key.
+        // End-state load check: a Settings loaded from the migrated config must
+        // read the zone-overlay UseSystem flag from its new Snapping.Zones.Colors
+        // home (the migration relocated the v3 UseSystem=false there), proving the
+        // renamed group is wired to the live getter.
         Settings settings;
-        QCOMPARE(settings.snappingUseSystemBorderColors(), ConfigDefaults::snappingUseSystemBorderColors());
+        QCOMPARE(settings.useSystemColors(), false);
     }
 
     void testZoneRename_absentSourceIsNoOp()
@@ -2468,7 +2424,7 @@ private Q_SLOTS:
 
         // The existing disable-list fold still produces its 5 DisableEngine
         // rules (same assertion as testDisableListRules).
-        const QList<QJsonObject> disabled = disableRules(rulesFromWindowRules());
+        const QList<QJsonObject> disabled = disableRules(rulesFromRules());
         QCOMPARE(disabled.size(), 5);
 
         // The Display group is still drained empty.

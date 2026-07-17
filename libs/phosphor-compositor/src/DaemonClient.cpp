@@ -467,23 +467,6 @@ void DaemonClient::handleSnapAssistReady(const QString& windowId, const QString&
     Q_EMIT snapAssistReady(windowId, screenId, zones);
 }
 
-void DaemonClient::querySetting(const QString& key)
-{
-    auto* watcher = new QDBusPendingCallWatcher(
-        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Settings,
-                                                   QStringLiteral("getSetting"), {key}),
-        this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, key](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        if (w->isError())
-            return;
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            Q_EMIT settingReceived(key, reply.value());
-        }
-    });
-}
-
 void DaemonClient::probeDaemonAvailable(int timeoutMs)
 {
     QDBusMessage msg = QDBusMessage::createMethodCall(

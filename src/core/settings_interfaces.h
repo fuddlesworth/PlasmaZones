@@ -97,13 +97,13 @@ inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
 
 namespace PerScreenSnappingKey {
 
+using PhosphorEngine::PerScreenSnappingKey::InnerGap;
 using PhosphorEngine::PerScreenSnappingKey::OuterGap;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapBottom;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapLeft;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapRight;
 using PhosphorEngine::PerScreenSnappingKey::OuterGapTop;
 using PhosphorEngine::PerScreenSnappingKey::UsePerSideOuterGap;
-using PhosphorEngine::PerScreenSnappingKey::ZonePadding;
 
 // Only the gap keys above are per-screen. Snap-assist and the zone-selector
 // enable switch are global-only (ISettings::setSnapAssistEnabled /
@@ -142,7 +142,7 @@ public:
 };
 
 /**
- * @brief Settings related to zone visualization (colors, opacity, blur)
+ * @brief Settings related to zone visualization (colors, opacity)
  *
  * Used by: KWin Effect, KCM, Overlay Service
  */
@@ -156,8 +156,8 @@ public:
     virtual void setShowZonesOnAllMonitors(bool show) = 0;
     // Per-mode disable lists. The `mode` argument selects which list to read
     // or write — disabling a monitor for snap leaves the autotile gate untouched
-    // and vice versa. Storage is `Display.{Snapping,Autotile}Disabled*`
-    // in the v3 schema.
+    // and vice versa. Since the v4 schema these are stored as DisableEngine
+    // context rules in rules.json (not Display.* config keys).
     virtual QStringList disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode) const = 0;
     virtual void setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, const QStringList& screenIdOrNames) = 0;
     virtual bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const = 0;
@@ -210,8 +210,6 @@ public:
     virtual void setBorderWidth(int width) = 0;
     virtual int borderRadius() const = 0;
     virtual void setBorderRadius(int radius) = 0;
-    virtual bool enableBlur() const = 0;
-    virtual void setEnableBlur(bool enable) = 0;
 
     // Label font settings
     virtual QString labelFontFamily() const = 0;
@@ -228,14 +226,40 @@ public:
     virtual void setLabelFontStrikeout(bool strikeout) = 0;
 
     // Shader effects
-    virtual bool enableShaderEffects() const = 0;
-    virtual void setEnableShaderEffects(bool enable) = 0;
     virtual int shaderFrameRate() const = 0;
     virtual void setShaderFrameRate(int fps) = 0;
     virtual bool enableAudioVisualizer() const = 0;
     virtual void setEnableAudioVisualizer(bool enable) = 0;
     virtual int audioSpectrumBarCount() const = 0;
     virtual void setAudioSpectrumBarCount(int count) = 0;
+
+    // Audio spectrum analysis (Shaders.Audio) — the CAVA parameter set the
+    // spectrum providers run with. String values use the canonical config
+    // forms (ConfigDefaults::audioChannelModeOptions / audioInputMethodOptions).
+    virtual bool audioAutosens() const = 0;
+    virtual void setAudioAutosens(bool enable) = 0;
+    virtual int audioSensitivity() const = 0;
+    virtual void setAudioSensitivity(int percent) = 0;
+    virtual int audioNoiseReduction() const = 0;
+    virtual void setAudioNoiseReduction(int value) = 0;
+    virtual int audioLowerCutoffHz() const = 0;
+    virtual void setAudioLowerCutoffHz(int hz) = 0;
+    virtual int audioHigherCutoffHz() const = 0;
+    virtual void setAudioHigherCutoffHz(int hz) = 0;
+    virtual bool audioMonstercat() const = 0;
+    virtual void setAudioMonstercat(bool enable) = 0;
+    virtual bool audioWaves() const = 0;
+    virtual void setAudioWaves(bool enable) = 0;
+    virtual QString audioChannelMode() const = 0;
+    virtual void setAudioChannelMode(const QString& mode) = 0;
+    virtual bool audioReverse() const = 0;
+    virtual void setAudioReverse(bool enable) = 0;
+    virtual int audioExtraSmoothing() const = 0;
+    virtual void setAudioExtraSmoothing(int percent) = 0;
+    virtual QString audioInputMethod() const = 0;
+    virtual void setAudioInputMethod(const QString& method) = 0;
+    virtual QString audioInputSource() const = 0;
+    virtual void setAudioInputSource(const QString& source) = 0;
 };
 
 /**
@@ -252,9 +276,12 @@ class PLASMAZONES_EXPORT IZoneGeometrySettings : public PhosphorEngine::IGeometr
 public:
     ~IZoneGeometrySettings() override = default;
 
-    virtual void setZonePadding(int padding) = 0;
+    // Shared inner/outer gap model. The getters are inherited from
+    // PhosphorEngine::IGeometrySettings; the setters live here (PZ-owned) because
+    // the global default is config-backed (the Gaps group in config.json).
+    virtual void setInnerGap(int gap) = 0;
     virtual void setOuterGap(int gap) = 0;
-    virtual void setUsePerSideOuterGap(bool enabled) = 0;
+    virtual void setUsePerSideOuterGap(bool usePerSide) = 0;
     virtual void setOuterGapTop(int gap) = 0;
     virtual void setOuterGapBottom(int gap) = 0;
     virtual void setOuterGapLeft(int gap) = 0;
@@ -270,9 +297,13 @@ public:
 };
 
 /**
- * @brief Settings related to window exclusion rules
+ * @brief Global window-filtering knobs for the KWin effect
  *
- * Used by: KWin Effect only (not exposed in KCM visualization)
+ * Two independent filter sets, same shape: the snapping/tiling exclusion
+ * globals (excludeTransientWindows + min-size) and the decoration/border
+ * filter (decoration* + min-size). Both are consumed by the KWin effect; the
+ * decoration knobs are also surfaced in the standalone Window Appearance
+ * settings page. Not exposed in the KCM.
  */
 class PLASMAZONES_EXPORT IWindowExclusionSettings
 {
@@ -281,9 +312,9 @@ public:
 
     // The per-application / per-class exclusion lists (excludedApplications,
     // excludedWindowClasses) retired in v4 — the legacy QStringList settings
-    // folded into Application-subject Exclude WindowRules, and all consumers
+    // folded into Application-subject Exclude Rules, and all consumers
     // (snap-engine, KWin effect, WTA pending-restore prune) now route through
-    // PhosphorWindowRules::ExclusionRules over the unified rule store.
+    // PhosphorRules::ExclusionRules over the unified rule store.
 
     virtual bool excludeTransientWindows() const = 0;
     virtual void setExcludeTransientWindows(bool exclude) = 0;
@@ -291,6 +322,20 @@ public:
     virtual void setMinimumWindowWidth(int width) = 0;
     virtual int minimumWindowHeight() const = 0;
     virtual void setMinimumWindowHeight(int height) = 0;
+
+    // Decoration window filtering — gates the KWin effect's border /
+    // decoration pass, independent of the snapping filter above so a user can
+    // tune which windows get a border separately from which windows snap.
+    // Unlike the snapping filter, exclude-transient is a real toggle here: with
+    // it off the effect draws borders onto dialogs / popups. Defaults preserve
+    // the prior behavior (transients were already never decorated; no size
+    // threshold was ever applied).
+    virtual bool decorationExcludeTransientWindows() const = 0;
+    virtual void setDecorationExcludeTransientWindows(bool exclude) = 0;
+    virtual int decorationMinimumWindowWidth() const = 0;
+    virtual void setDecorationMinimumWindowWidth(int width) = 0;
+    virtual int decorationMinimumWindowHeight() const = 0;
+    virtual void setDecorationMinimumWindowHeight(int height) = 0;
 };
 
 /**
@@ -366,7 +411,7 @@ public:
     /// autotile-floated (untiled) windows are gated independently. The managed
     /// restore (snapped-to-zone / tiled) is governed separately by
     /// @ref restoreWindowsToZonesOnLogin. Per-window overrides via the
-    /// engine-neutral RestorePosition window rule.
+    /// engine-neutral RestorePosition rule.
     virtual bool snappingRestoreFloatedWindowsOnLogin() const = 0;
     virtual void setSnappingRestoreFloatedWindowsOnLogin(bool restore) = 0;
     virtual bool autotileRestoreFloatedWindowsOnLogin() const = 0;
@@ -422,7 +467,7 @@ public:
     /// When true, no context is assigned an active snapping or autotiling layout
     /// by default — the synthesized level-1 default is suppressed and a mode only
     /// activates for a context the user has explicitly assigned (or a
-    /// DefaultLayoutAssignment window rule has re-enabled). Mode-neutral: governs
+    /// DefaultLayoutAssignment rule has re-enabled). Mode-neutral: governs
     /// both engines, since the level-1 default is a single mode-carrying entry.
     /// Off by default (every context gets the default, today's behavior).
     virtual bool suppressDefaultLayoutAssignment() const = 0;

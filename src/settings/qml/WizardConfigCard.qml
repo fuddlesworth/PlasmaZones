@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
 import org.kde.kirigami as Kirigami
@@ -16,13 +15,13 @@ Rectangle {
     id: root
 
     default property alias content: innerColumn.data
-    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
+    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.alternateBackgroundColor, Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast), Kirigami.Theme.highlightColor, Kirigami.Theme.hoverColor)
 
     Layout.fillWidth: true
     implicitHeight: innerColumn.implicitHeight + Kirigami.Units.largeSpacing * 2
     radius: Kirigami.Units.smallSpacing * 2
     color: _colors.subtleBg
-    border.width: Math.round(Screen.devicePixelRatio)
+    border.width: 1
     border.color: _colors.subtleBorder
 
     ColumnLayout {

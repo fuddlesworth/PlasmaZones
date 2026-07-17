@@ -41,7 +41,7 @@ extern PLASMAZONES_EXPORT const QLatin1StringView kShellAnimationFamilySeedsOwne
 /// Returned alongside the loader pair from
 /// `constructAnimationLoaders` so callers that wire additional signals
 /// before the initial scan can pass the same lists into
-/// `runInitialAnimationLoad`.
+/// `runInitialCurveLoad` / `runInitialProfileLoad`.
 struct AnimationLoaderDirs
 {
     QStringList curveDirs;
@@ -68,8 +68,9 @@ struct AnimationLoaderHandles
 ///
 /// Does NOT call `loadLibraryBuiltins` / `loadFromDirectories` — callers
 /// run those AFTER they have wired any consumer-side signals so the
-/// initial scan's emits are observed by every listener. Use
-/// `runInitialAnimationLoad` for the standard load sequence.
+/// initial scan's emits are observed by every listener. Drive them with
+/// `runInitialCurveLoad`, then `seedShellAnimationFamilies`, then
+/// `runInitialProfileLoad`.
 ///
 /// The returned `unique_ptr`s are caller-owned. `ownerTag` partitions
 /// the registry so a `clearOwner(tag)` teardown / rescan only touches
@@ -80,22 +81,16 @@ PLASMAZONES_EXPORT AnimationLoaderHandles constructAnimationLoaders(
     PhosphorAnimation::CurveRegistry& curveRegistry, PhosphorAnimation::PhosphorProfileRegistry& profileRegistry,
     QLatin1StringView ownerTag, QObject* parent = nullptr);
 
-/// Run the standard initial-load sequence on previously-constructed
-/// loaders: library builtins for curves, then the curve disk dirs with
-/// LiveReload::On, then library builtins for profiles, then the
-/// profile disk dirs with LiveReload::On. Curves load first so any
-/// profile JSON referencing a user-authored curve resolves on first
-/// parse rather than waiting for the curveLoader→profileLoader rescan
-/// wire to fire on the second pass.
-PLASMAZONES_EXPORT void runInitialAnimationLoad(PhosphorAnimation::CurveLoader& curveLoader,
-                                                PhosphorAnimation::ProfileLoader& profileLoader,
-                                                const AnimationLoaderDirs& dirs);
-
-/// Curve half of the initial load — exposed so callers that want to
-/// interleave logic between curves and profiles (e.g.
-/// `seedShellAnimationFamilies` between them) can drive the two
-/// phases explicitly. Internally calls `loadLibraryBuiltins` then
-/// `loadFromDirectories` with LiveReload::On.
+/// Curve half of the initial load. Always run this BEFORE
+/// `runInitialProfileLoad` so a profile JSON referencing a user-authored
+/// curve resolves on first parse rather than waiting for the
+/// curveLoader→profileLoader rescan wire to fire on the second pass.
+/// Split from the profile half because every composition root has to
+/// interleave `seedShellAnimationFamilies` between the two — the seeds
+/// resolve named curves, and the profile loader's `reloadFromOwner` has
+/// to be able to overwrite a seed the user authored a JSON for.
+/// Internally calls `loadLibraryBuiltins` then `loadFromDirectories`
+/// with LiveReload::On.
 PLASMAZONES_EXPORT void runInitialCurveLoad(PhosphorAnimation::CurveLoader& curveLoader,
                                             const AnimationLoaderDirs& dirs);
 
@@ -109,8 +104,8 @@ PLASMAZONES_EXPORT void runInitialProfileLoad(PhosphorAnimation::ProfileLoader& 
 /// unconfigured leaf inherits a sensible curve/duration shape rather
 /// than the library default of 150 ms OutCubic. Reproduces the
 /// per-family character of the prior bundled per-leaf JSONs (popups
-/// feel different from windows feel different from workspace
-/// transitions) without reintroducing the per-leaf shadowing problem
+/// feel different from windows feel different from OSDs) without
+/// reintroducing the per-leaf shadowing problem
 /// that motivated their deletion: every entry is registered under the
 /// `kShellAnimationFamilySeedsOwnerTag` partition, so a Settings-UI
 /// edit (direct-owner) or a user-authored JSON (loader-tagged owner)

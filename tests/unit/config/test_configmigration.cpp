@@ -239,7 +239,7 @@ private Q_SLOTS:
 
         // ensureJsonConfig runs the full v1→v4 chain. The v1→v2 step extracts
         // Assignment groups to assignments.json; the v4 conversion folds them
-        // into windowrules.json and retires assignments.json (renames it to
+        // into rules.json and retires assignments.json (renames it to
         // assignments.json.migrated so a downgrade can recover). Assert the
         // v4 end-state.
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -250,22 +250,23 @@ private Q_SLOTS:
         const QString groupName = QStringLiteral("Assignment:eDP-1:Desktop:1:Activity:abc-123");
         QVERIFY2(!configRoot.contains(groupName), "Assignment group should not remain in config.json");
 
-        // assignments.json was superseded by windowrules.json and retired from
+        // assignments.json was superseded by rules.json and retired from
         // its original location (renamed to .migrated, or removed in the
         // fallback path).
         const QString assignmentsPath =
-            QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
+            QFileInfo(ConfigDefaults::rulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
         QVERIFY2(!QFile::exists(assignmentsPath), "assignments.json must be retired by the v4 conversion");
 
-        // The assignment lives in windowrules.json as a context rule. The
-        // exact (screen+desktop+activity) cascade level → priority 610, with
-        // SetEngineMode (snapping) + SetSnappingLayout + SetTilingAlgorithm.
-        const QJsonObject wr = readJsonConfig(ConfigDefaults::windowRulesFilePath());
+        // The assignment lives in rules.json as a context rule. Priority is
+        // seeded in the Context band by pinned-dimension count: the exact
+        // (screen+desktop+activity) shape → 306, with SetEngineMode (snapping) +
+        // SetSnappingLayout + SetTilingAlgorithm.
+        const QJsonObject wr = readJsonConfig(ConfigDefaults::rulesFilePath());
         QCOMPARE(wr.value(QStringLiteral("_version")).toInt(), 4);
         bool foundExact = false;
         for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
             const QJsonObject r = v.toObject();
-            if (r.value(QStringLiteral("priority")).toInt() != 610) {
+            if (r.value(QStringLiteral("priority")).toInt() != 306) {
                 continue;
             }
             QStringList types;
@@ -278,10 +279,10 @@ private Q_SLOTS:
                                   QStringLiteral("setTilingAlgorithm")}));
             foundExact = true;
         }
-        QVERIFY2(foundExact, "exact-cascade assignment rule (priority 610) missing from windowrules.json");
+        QVERIFY2(foundExact, "exact-context assignment rule (priority 306) missing from rules.json");
     }
 
-    void testMigrateAssignmentGroups_readableAsWindowRule()
+    void testMigrateAssignmentGroups_readableAsRule()
     {
         IsolatedConfigGuard guard;
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
@@ -292,12 +293,12 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         // The v3→v4 conversion turned the assignment into a screen+desktop
-        // context rule (priority 410, autotile mode + the dwindle algorithm).
-        const QJsonObject wr = readJsonConfig(ConfigDefaults::windowRulesFilePath());
+        // context rule (priority 303, autotile mode + the dwindle algorithm).
+        const QJsonObject wr = readJsonConfig(ConfigDefaults::rulesFilePath());
         bool foundDesktopRule = false;
         for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
             const QJsonObject r = v.toObject();
-            if (r.value(QStringLiteral("priority")).toInt() != 410) {
+            if (r.value(QStringLiteral("priority")).toInt() != 303) {
                 continue;
             }
             QString mode;
@@ -316,7 +317,7 @@ private Q_SLOTS:
             QCOMPARE(algorithm, QStringLiteral("dwindle"));
             foundDesktopRule = true;
         }
-        QVERIFY2(foundDesktopRule, "screen+desktop assignment rule (priority 410) missing from windowrules.json");
+        QVERIFY2(foundDesktopRule, "screen+desktop assignment rule (priority 303) missing from rules.json");
     }
 
     void testMigrateNumericValues()
@@ -334,9 +335,11 @@ private Q_SLOTS:
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
-        QJsonObject gaps = snapping.value(QStringLiteral("Gaps")).toObject();
-        QCOMPARE(gaps.value(QStringLiteral("Inner")).toInt(), 8);
-        QCOMPARE(gaps.value(QStringLiteral("Outer")).toInt(), 4);
+        // The shared inner/outer gaps are no longer migrated to a stored group —
+        // the global default is rule-backed (the managed baseline appearance
+        // Rule), so the v1 Padding/OuterGap values are silently dropped and
+        // no top-level "Gaps" group is produced.
+        QVERIFY(!root.contains(QStringLiteral("Gaps")));
 
         // Zone-overlay groups land under Snapping.Zones.* after the v3→v4 rename.
         QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
@@ -784,6 +787,11 @@ private Q_SLOTS:
                                     "DefaultLayoutId=\n"
                                     "\n"
                                     "[Appearance]\n"
+                                    // Retired blur toggle, in its actual v1 home ([Appearance]). The
+                                    // migration never copies it, and the drop is structural — every v1
+                                    // group is removed wholesale — so the schema-coverage assertion
+                                    // pins that it never surfaces as an undeclared v2 destination key.
+                                    "EnableBlur=true\n"
                                     "UseSystemColors=true\n"
                                     "HighlightColor=1,2,3,255\n"
                                     "InactiveColor=4,5,6,255\n"
@@ -799,7 +807,6 @@ private Q_SLOTS:
                                     "LabelFontItalic=false\n"
                                     "LabelFontUnderline=false\n"
                                     "LabelFontStrikeout=false\n"
-                                    "EnableBlur=false\n"
                                     "\n"
                                     "[Zones]\n"
                                     "Padding=4\n"
@@ -1032,9 +1039,16 @@ private Q_SLOTS:
         QVERIFY(animations.contains(QStringLiteral("Enabled")));
         QCOMPARE(animations.value(QStringLiteral("Enabled")).toBool(), true);
 
-        // Profile blob is stored as a STRING containing a compact JSON
-        // object — that's how settings.cpp reads/writes it via
-        // PhosphorConfig::Store::read<QString>.
+        // The migration writes the Profile blob as a STRING containing a
+        // compact JSON object, even though the live schema stores the
+        // profile as a nested object (settings.cpp reads it via
+        // readProfileObject as a QVariantMap). The stringified form is a
+        // deliberate migration artifact — it keeps Animations/Profile a
+        // single scalar leaf for the schema/migration cross-check (see the
+        // rationale comment at the profile write in migrateV1ToV2,
+        // configmigration.cpp) — and the Store's legacy-string fallback
+        // parses it on first load, normalising to a nested object on the
+        // next save.
         const QString profileString = animations.value(QStringLiteral("Profile")).toString();
         QVERIFY2(!profileString.isEmpty(), "Migration did not produce Animations/Profile blob from v1 per-field keys");
         const QJsonDocument profileDoc = QJsonDocument::fromJson(profileString.toUtf8());
@@ -1515,7 +1529,7 @@ private Q_SLOTS:
     /// file with disabled-monitor data. The v2→v3 step duplicates the single
     /// legacy list into BOTH the snap and autotile lists; the v3→v4 step then
     /// converts every entry into a DisableEngine context rule in
-    /// windowrules.json and REMOVES the config.json Display.*Disabled* keys.
+    /// rules.json and REMOVES the config.json Display.*Disabled* keys.
     void testMigrateV1ToV4_chainConvertsDisableListsToRules()
     {
         IsolatedConfigGuard guard;
@@ -1532,14 +1546,14 @@ private Q_SLOTS:
         const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QCOMPARE(root.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
-        // The Display.*Disabled* keys are gone from config.json — windowrules
+        // The Display.*Disabled* keys are gone from config.json — rules
         // .json supersedes them.
         const QJsonObject display = root.value(QStringLiteral("Display")).toObject();
         QVERIFY(!display.contains(QStringLiteral("SnappingDisabledMonitors")));
         QVERIFY(!display.contains(QStringLiteral("AutotileDisabledMonitors")));
 
         // Two monitors × two modes = four DisableEngine monitor rules.
-        const QJsonObject wr = readJsonConfig(ConfigDefaults::windowRulesFilePath());
+        const QJsonObject wr = readJsonConfig(ConfigDefaults::rulesFilePath());
         int disableMonitorRules = 0;
         for (const QJsonValue& v : wr.value(QStringLiteral("rules")).toArray()) {
             const QJsonObject r = v.toObject();

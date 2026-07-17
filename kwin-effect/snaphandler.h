@@ -6,7 +6,6 @@
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
-#include <QColor>
 #include <QHash>
 #include <QObject>
 #include <QPointF>
@@ -48,19 +47,19 @@ struct CachedSnapRestore
 /**
  * @brief Handles snapping integration for PlasmaZones.
  *
- * The snap-mode counterpart to AutotileHandler. Owns the snap-side border
- * APPEARANCE state and tiled tracking (m_border, parallel to
- * AutotileHandler::m_border) for snap-committed windows. Title-bar
- * (borderless) state is owned by the effect's DecorationManager — this
- * handler only acquires/releases its per-screen Snap ownership there.
- * Delegates window lookups and border rendering back to the effect through
- * the m_effect back-pointer.
+ * The snap-mode counterpart to AutotileHandler. Owns the snap-side tiled
+ * tracking (m_border, parallel to AutotileHandler::m_border) for
+ * snap-committed windows. The tracking set feeds the IsSnapped rule field;
+ * per-window border appearance and title-bar (borderless) state are resolved
+ * from rules and applied via the effect's DecorationManager — this handler
+ * does not touch decorations or resolve appearance itself.
+ * Delegates window lookups back to the effect through the m_effect back-pointer.
  *
  * Built on the shared PhosphorCompositor BorderState + AutotileStateHelpers so
- * snap and autotile share one standardized border mechanism. The effect's
- * mode-aware border resolver (resolveBorderStateFor) reads borderState() here
- * alongside AutotileHandler's so each window draws with the settings of the
- * mode that manages it.
+ * snap and autotile share one standardized tracking mechanism. The effect's
+ * membership resolver (resolveSurfacePathFor) reads isTiledWindow() here
+ * alongside AutotileHandler's so each window resolves to the decoration surface
+ * path of the mode that manages it.
  */
 class SnapHandler : public QObject
 {
@@ -71,25 +70,21 @@ public:
 
     // ── Snap border-state lifecycle (mirrors AutotileHandler's set) ──
 
-    /// Record @p windowId as snap-committed on @p screenId (idempotent), apply
-    /// title-bar hiding if enabled, and (re)draw its border.
+    /// Record @p windowId as snap-committed on @p screenId (idempotent) and
+    /// (re)draw its border. Title-bar hiding is driven by rules.
     void markWindowSnapped(const QString& windowId, const QString& screenId);
-    /// Drop @p windowId from the snap set on every screen, restore its title
-    /// bar if we hid it, and remove its border.
+    /// Drop @p windowId from the snap set on every screen, remove its border,
+    /// and clear its zone-cache entry (the IsSnapped / Zone rule-fact source)
+    /// so placement-scoped rules re-resolve immediately. Title-bar restores
+    /// flow through the rule path.
     void clearWindowSnapped(const QString& windowId);
-    /// Apply/restore title-bar hiding across all currently snap-committed
-    /// windows when the snappingHideTitleBars setting toggles.
-    /// Returns true if the value actually changed; the caller runs
-    /// updateAllBorders() on true (and skips it on a no-op reload) — full
-    /// mirror of AutotileHandler::updateHideTitleBarsSetting.
-    bool updateSnapHideTitleBars(bool hide);
     /// Drop all snap tiled-tracking bookkeeping. Physical title-bar restores
     /// are the DecorationManager's job — teardown callers pair this with
     /// DecorationManager::restoreAll() (symmetric with
     /// AutotileHandler::clearTiledTracking).
     void clearSnapTracking();
     /// Drop snap border/title-bar tracking for a window being destroyed. Pure
-    /// bookkeeping — no setNoBorder/removeWindowBorder, the window is going away.
+    /// bookkeeping — no setNoBorder/removeWindowDecoration, the window is going away.
     void onWindowClosed(const QString& windowId);
 
     // ── Snapping focus-follows-mouse (mirrors AutotileHandler) ──
@@ -157,10 +152,19 @@ public:
     // ── Snap minimize-float (mirrors AutotileHandler's minimize→float machine) ──
     /// Drive the snap-mode minimize→float state machine: on a snapping-mode
     /// screen, float a window when it minimizes and unfloat it when it
-    /// unminimizes (autotile screens run AutotileHandler's own machine). Called
-    /// from PlasmaZonesEffect::slotWindowMinimizedChanged after the shared
-    /// minimize shader event.
-    void handleMinimizeChanged(const QString& windowId, const QString& screenId, bool minimized);
+    /// unminimizes (autotile screens run AutotileHandler's own machine). When
+    /// unminimizing a window this session minimize-floated, it also retries
+    /// snap restore if the daemon tracks the window as neither snapped nor
+    /// floating — every restore pass (daemon-ready, pendingRestoresAvailable)
+    /// skips minimized windows, so a window minimized across a daemon restart
+    /// would otherwise stay stranded at whatever geometry KWin unminimizes it
+    /// to. In a normal minimize cycle the daemon still holds the window in its
+    /// floating set (minimize-float unsnaps), so the neither-set check keeps
+    /// the net inert and the plain unfloat re-snaps as before. Called from
+    /// PlasmaZonesEffect::slotWindowMinimizedChanged after the shared minimize
+    /// shader event.
+    void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
+                               bool minimized);
     /// Drop @p windowId from the minimize-float set (window closed). Returns
     /// true if it was present.
     bool removeMinimizeFloated(const QString& windowId)
@@ -168,65 +172,12 @@ public:
         return m_minimizeFloatedWindows.remove(windowId);
     }
 
-    // ── Border rendering accessors — delegate to shared AutotileStateHelpers ──
+    // ── Tiled-membership accessor — delegates to shared AutotileStateHelpers ──
+    // The snapped-window set feeds the IsSnapped rule field; per-window border
+    // appearance and title-bar hiding are resolved from rules, not this state.
     bool isTiledWindow(const QString& windowId) const
     {
         return AutotileStateHelpers::isTiledWindow(m_border, windowId);
-    }
-    bool shouldShowBorderForWindow(const QString& windowId) const
-    {
-        return AutotileStateHelpers::shouldShowBorderForWindow(m_border, windowId);
-    }
-    /// Read-only view of the snap border state. The effect's mode-aware border
-    /// resolution reads this alongside the parallel autotile BorderState so each
-    /// window draws with the settings of the mode that manages it.
-    const BorderState& borderState() const
-    {
-        return m_border;
-    }
-    bool hideTitleBars() const
-    {
-        return m_border.hideTitleBars;
-    }
-    bool showBorder() const
-    {
-        return m_border.showBorder;
-    }
-    void setShowBorder(bool show)
-    {
-        m_border.showBorder = show;
-    }
-    int borderWidth() const
-    {
-        return m_border.width;
-    }
-    void setBorderWidth(int w)
-    {
-        m_border.width = w;
-    }
-    int borderRadius() const
-    {
-        return m_border.radius;
-    }
-    void setBorderRadius(int r)
-    {
-        m_border.radius = r;
-    }
-    QColor borderColor() const
-    {
-        return m_border.color;
-    }
-    void setBorderColor(const QColor& c)
-    {
-        m_border.color = c;
-    }
-    QColor inactiveBorderColor() const
-    {
-        return m_border.inactiveColor;
-    }
-    void setInactiveBorderColor(const QColor& c)
-    {
-        m_border.inactiveColor = c;
     }
 
 public Q_SLOTS:

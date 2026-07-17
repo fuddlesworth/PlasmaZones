@@ -61,8 +61,12 @@ class PLASMAZONES_EXPORT AutotileAdaptor : public QDBusAbstractAdaptor
     Q_PROPERTY(QString algorithm READ algorithm WRITE setAlgorithm NOTIFY algorithmChanged)
     Q_PROPERTY(double masterRatio READ masterRatio WRITE setMasterRatio NOTIFY configChanged)
     Q_PROPERTY(int masterCount READ masterCount WRITE setMasterCount NOTIFY configChanged)
-    Q_PROPERTY(int innerGap READ innerGap WRITE setInnerGap NOTIFY configChanged)
-    Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY configChanged)
+    // Gaps are rule-backed (the managed baseline gap rule, edited over
+    // org.plasmazones.Rules) and synced into the engine on every settings
+    // change, so they are READ-ONLY here: a direct write would be reverted on
+    // the next sync. Mirrors the read-only gap getters on the Settings adaptor.
+    Q_PROPERTY(int innerGap READ innerGap NOTIFY configChanged)
+    Q_PROPERTY(int outerGap READ outerGap NOTIFY configChanged)
     Q_PROPERTY(bool smartGaps READ smartGaps WRITE setSmartGaps NOTIFY configChanged)
     Q_PROPERTY(bool focusNewWindows READ focusNewWindows WRITE setFocusNewWindows NOTIFY configChanged)
 
@@ -87,7 +91,7 @@ public:
 
     /// Wire the WindowTrackingAdaptor (post-construction, to break the
     /// construction-order cycle) so the autotile open path can resolve
-    /// RouteToScreen / RouteToDesktop window rules. Pass nullptr on shutdown.
+    /// RouteToScreen / RouteToDesktop rules. Pass nullptr on shutdown.
     void setWindowTrackingAdaptor(WindowTrackingAdaptor* wta)
     {
         m_windowTrackingAdaptor = wta;
@@ -118,11 +122,9 @@ public:
     int masterCount() const;
     void setMasterCount(int count);
 
+    // Read-only: gaps are rule-backed (see the Q_PROPERTY note above).
     int innerGap() const;
-    void setInnerGap(int gap);
-
     int outerGap() const;
-    void setOuterGap(int gap);
 
     bool smartGaps() const;
     void setSmartGaps(bool enabled);
@@ -433,7 +435,7 @@ private:
     PhosphorTileEngine::AutotileEngine* m_engine = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     /// Borrowed; outlives adaptor. Wired post-construction by the daemon so the
-    /// autotile open path can resolve RouteToScreen / RouteToDesktop window rules
+    /// autotile open path can resolve RouteToScreen / RouteToDesktop rules
     /// (the rule store + evaluator live on the WTA). Null in tests / when unset —
     /// routing is then skipped and windows open on their spawn screen.
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr;

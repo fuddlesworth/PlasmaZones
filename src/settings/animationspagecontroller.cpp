@@ -8,10 +8,12 @@
 #include "../core/isettings.h"
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
+#include "animationfileutils.h"
 #include "animationpresetlibrary.h"
 #include "animations_controller_detail.h"
 #include "dbusutils.h"
-#include "motionsetstore.h"
+#include "motionsetdomain.h"
+#include "shadersetstore.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -41,6 +43,16 @@
 #include <algorithm>
 
 namespace PlasmaZones {
+
+namespace {
+
+/// Ceiling on a single snapshotted profile file. The snapshot map holds these
+/// in memory for the session, and the file is a filesystem boundary a user can
+/// hand-place anything at. Derived from the shared cap so it cannot drift
+/// from ShaderSetStore's set-file cap or the other profile readers.
+constexpr qint64 kMaxSnapshotBytes = animfileutil::kMaxJsonFileBytes;
+
+} // namespace
 
 namespace animations_controller_detail {
 
@@ -86,9 +98,20 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     // honest — downstream listeners only re-evaluate on real changes.
     // Forward the snapshot helper as a callable so the sub-services can
     // capture pre-edit content without coupling to the controller's
-    // m_pendingFileSnapshots layout.
-    auto snapshotFn = [this](const QString& filePath) {
-        snapshotFileIfFirst(filePath);
+    // m_pendingFileSnapshots layout. The bool return matters: a false means
+    // the pre-edit content could NOT be captured, and a caller that writes
+    // anyway loses it permanently. Both consumers honour it and refuse the
+    // write (ShaderSetStore::snapshotFile, AnimationPresetLibrary's mutators).
+    auto snapshotFn = [this](const QString& filePath) -> bool {
+        return snapshotFileIfFirst(filePath);
+    };
+    // The companion to snapshotFn. A sub-service that snapshots a file and then
+    // fails to write it has staged a file it never touched, so the page would
+    // report unsaved changes with nothing to discard. This drops that entry
+    // again — but only when the file on disk still matches what was staged, so
+    // a snapshot covering an EARLIER edit that did land is never thrown away.
+    auto snapshotRollbackFn = [this](const QString& filePath) -> bool {
+        return dropFileSnapshotIfUnchanged(filePath);
     };
     auto profilesDirFn = [this]() {
         return userProfilesDir();
@@ -99,13 +122,25 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     auto writeOverrideFn = [this](const QString& path, const QVariantMap& profile) {
         return setOverride(path, profile);
     };
+    // The store is reachable straight from QML (`animationsPage.setsBridge`),
+    // so the in-flight-discard gate the old controller-level forwarders
+    // enforced has to travel WITH it — otherwise a set write could land
+    // mid-revert and be clobbered by the worker's restore walk.
+    auto mutationGuardFn = [this]() -> QString {
+        if (m_asyncRevertInFlight)
+            return PhosphorI18n::tr("Cannot modify sets while a discard is in progress.");
+        return QString();
+    };
 
-    // Sub-service construction lands BEFORE the dirty-forwarder wiring
-    // below so any pendingChangesChanged synchronously fired from a
-    // ctor (e.g. AnimationPresetLibrary loading pre-existing
-    // overrides on first construct) isn't missed by the forwarder.
-    m_presets = new AnimationPresetLibrary(profilesDirFn, snapshotFn, this);
-    m_motionSets = new MotionSetStore(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn, this);
+    // Sub-services are constructed before the dirty-forwarder wiring below.
+    // Nothing is missed by that ordering: the forwarder seeds
+    // m_lastHadPendingChanges from the real post-construction state (just
+    // below), so it does not need to have observed any signal fired during
+    // construction.
+    m_presets = new AnimationPresetLibrary(profilesDirFn, snapshotFn, snapshotRollbackFn, this);
+    m_motionSets = new ShaderSetStore(motionset::makeConfig(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn,
+                                                            snapshotRollbackFn, mutationGuardFn),
+                                      this);
 
     m_lastHadPendingChanges = hasPendingChanges();
     connect(this, &AnimationsPageController::pendingChangesChanged, this, [this]() {
@@ -118,16 +153,22 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
 
     connect(m_presets, &AnimationPresetLibrary::userPresetsChanged, this,
             &AnimationsPageController::userPresetsChanged);
+    // CLAUDE.md: only emit a signal when the value actually changed. The
+    // sub-services and the mutators raise pendingChangesChanged unconditionally
+    // (a no-op revert, a refused write), so gate the outward dirtyChanged on an
+    // observed state flip rather than forwarding every raise.
+    connect(m_presets, &AnimationPresetLibrary::toastRequested, this, &AnimationsPageController::toastRequested);
     connect(m_presets, &AnimationPresetLibrary::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
-    connect(m_motionSets, &MotionSetStore::motionSetsChanged, this, &AnimationsPageController::motionSetsChanged);
-    connect(m_motionSets, &MotionSetStore::pendingChangesChanged, this,
+    connect(m_motionSets, &ShaderSetStore::pendingChangesChanged, this,
             &AnimationsPageController::pendingChangesChanged);
-    // applyMotionSet's per-path overrideChanged emissions ride through
-    // the m_writeOverride callback (which the controller wires to its
-    // own setOverride). MotionSetStore therefore exposes no
-    // overrideChanged signal — the controller is the single source of
-    // truth for that signal.
+    // A set's `active` flag is derived from the live override files, so it
+    // goes stale whenever an event's profile is edited anywhere else.
+    connect(this, &AnimationsPageController::overrideChanged, m_motionSets, &ShaderSetStore::notifyLiveStateChanged);
+    // A set apply's per-path overrideChanged emissions ride through the
+    // writeOverride callback (which the controller wires to its own
+    // setOverride). ShaderSetStore therefore exposes no overrideChanged
+    // signal — the controller is the single source of truth for it.
 
     if (m_shaderRegistry) {
         connect(m_shaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
@@ -144,19 +185,14 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // semantics, and the lambda silently clears m_shaderTreeDirty
         // on the user's own write — a silent revert of staged edits.
         //
-        // m_asyncRevertGeneration defends against a different race:
+        // m_asyncRevertInFlight guards a second race:
         // SettingsController::discard() pairs our discard() with a
         // follow-up Settings::load(), which fires shaderProfileTreeChanged
         // while the asyncRevert worker is still running. The lambda must
         // NOT clear m_shaderTreeDirty in that window — the worker's
         // finished handler owns the terminal clear-and-emit sequence as
-        // part of discardResult. Every dispatch bumps
-        // m_asyncRevertGeneration, so any in-flight worker makes the
-        // generation differ from the value seen here and short-circuits
-        // the clear path. The bool m_asyncRevertInFlight check is the
-        // primary in-flight signal; the generation comparison is
-        // belt-and-braces against a future change that reorders the
-        // flag clear.
+        // part of discardResult — so it short-circuits while the flag is
+        // set.
         connect(
             m_settings, &ISettings::shaderProfileTreeChanged, this,
             [this]() {
@@ -224,6 +260,16 @@ bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
         m_pendingFileSnapshots.insert(filePath, std::nullopt);
         return true;
     }
+    // A hand-placed profile file is a filesystem boundary like any other. Cap it
+    // rather than slurping an arbitrarily large blob into the snapshot map for
+    // the rest of the session, and refuse (so callers bail) rather than write
+    // over content we cannot restore.
+    const QFileInfo info(filePath);
+    if (!info.isFile() || info.size() > kMaxSnapshotBytes) {
+        qCWarning(lcConfig) << "snapshotFileIfFirst: refusing to snapshot" << filePath
+                            << "— not a regular file, or over the" << kMaxSnapshotBytes << "byte cap";
+        return false;
+    }
     if (!f.open(QIODevice::ReadOnly)) {
         // Mid-session permission drift on an existing file would
         // silently lose pre-edit content if a write proceeded without
@@ -234,6 +280,41 @@ bool AnimationsPageController::snapshotFileIfFirst(const QString& filePath)
         return false;
     }
     m_pendingFileSnapshots.insert(filePath, f.readAll());
+    return true;
+}
+
+bool AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePath)
+{
+    const auto it = m_pendingFileSnapshots.constFind(filePath);
+    if (it == m_pendingFileSnapshots.cend())
+        return false;
+
+    // The snapshot is the ONLY copy of the file's pre-edit content, so it may be
+    // dropped only when the file still holds exactly that content: the write it
+    // was taken for never landed. A mismatch means some earlier write did land,
+    // and the entry is still Discard's way back.
+    QFile f(filePath);
+    if (it.value().has_value()) {
+        // Compare sizes first: it settles the common mismatch without a read, and
+        // it keeps this off the unbounded-readAll path that snapshotFileIfFirst
+        // already refuses to take.
+        if (QFileInfo(filePath).size() != it.value()->size())
+            return false;
+
+        if (!f.exists() || !f.open(QIODevice::ReadOnly) || f.readAll() != *it.value())
+            return false;
+    } else if (f.exists()) {
+        // Staged as "did not exist", but something created it since.
+        return false;
+    }
+
+    const bool wasPending = hasPendingChanges();
+    m_pendingFileSnapshots.remove(filePath);
+    // Sole owner of the signal for this transition: the sub-services used to
+    // emit alongside their rollback call, which fired twice for one flip and
+    // once even when the rollback declined to drop.
+    if (wasPending != hasPendingChanges())
+        Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -255,8 +336,8 @@ void AnimationsPageController::apply()
     // and m_shaderTreeDirty — letting the worker's still-running
     // file restores silently UNDO writes the user wanted to keep,
     // then emit discardResult(true) on a now-clean page. Symmetric
-    // to the per-mutator guards added in pass 36 (setOverride etc.)
-    // and to WindowRuleController::m_asyncCommitInFlight.
+    // to the per-mutator guards (setOverride etc.) and to
+    // RuleController::m_asyncCommitInFlight.
     if (m_asyncRevertInFlight) {
         Q_EMIT applyResult(false, PhosphorI18n::tr("Cannot save while a discard is in progress."));
         return;
@@ -287,7 +368,7 @@ void AnimationsPageController::commitPending()
         Q_EMIT pendingChangesChanged();
 }
 
-void AnimationsPageController::revertPending()
+bool AnimationsPageController::revertPending()
 {
     // discard() / revertPending() is the StagingDomain contract for "undo
     // everything since the last apply". This method:
@@ -306,8 +387,16 @@ void AnimationsPageController::revertPending()
     // edits.
     using namespace PhosphorAnimation;
 
+    // The async worker is mid-way through rewriting these same files, and it
+    // merges its results back into m_pendingFileSnapshots when it lands. A
+    // synchronous restore running underneath it would race that walk on disk
+    // and then have its map edits overwritten by the worker's reply.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "revertPending: blocked while an async discard is in flight";
+        return false;
+    }
     if (!hasPendingChanges())
-        return;
+        return true;
 
     const QString profilesDir = userProfilesDir();
     const QString setsDir = userMotionSetsDir();
@@ -378,9 +467,19 @@ void AnimationsPageController::revertPending()
         Q_EMIT overrideChanged(path);
     if (anyPreset)
         Q_EMIT userPresetsChanged();
-    if (anyMotionSet)
-        Q_EMIT motionSetsChanged();
+    if (anyMotionSet && m_motionSets)
+        m_motionSets->notifyLiveStateChanged();
     Q_EMIT pendingChangesChanged();
+    // True means the state really is clean now. A retained entry is a file whose
+    // restore FAILED, and a caller that goes on to declare the session clean (an
+    // import, a defaults reset) must not do so while one is still staged: the
+    // next Discard would write it back over the new state.
+    return m_pendingFileSnapshots.isEmpty();
+}
+
+bool AnimationsPageController::asyncRevertInFlight() const
+{
+    return m_asyncRevertInFlight;
 }
 
 void AnimationsPageController::asyncRevertPending()
@@ -424,9 +523,12 @@ void AnimationsPageController::asyncRevertPending()
     // Track the keys the worker is going to process so the finished
     // handler can MERGE results back into m_pendingFileSnapshots.
     // Today the m_asyncRevertInFlight guard rejects concurrent
-    // setOverride / setShaderOverride / clearShaderOverride* /
-    // applyMotionSet / addUserPreset / removeUserPreset /
-    // saveCurrentAsMotionSet / removeMotionSet calls during the worker
+    // setOverride / clearOverride / clearAllOverrides /
+    // setShaderOverride / clearShaderOverride* / addUserPreset /
+    // removeUserPreset calls, and — through the
+    // mutationGuard closure handed to ShaderSetStore — every set
+    // mutator (applySet / saveCurrentAsSet / removeSet / updateSet /
+    // importSet) during the worker
     // run, so a fresh post-discard mutator would be the only way new
     // entries could appear — kept the merge as belt-and-braces against
     // a future change that opens the mutator gate (or a post-discard
@@ -434,13 +536,6 @@ void AnimationsPageController::asyncRevertPending()
     const QSet<QString> dispatchedKeys(snapshots.keyBegin(), snapshots.keyEnd());
 
     m_asyncRevertInFlight = true;
-    // Bump the generation BEFORE wiring the watcher so the
-    // shaderProfileTreeChanged DirectConnection lambda (which compares
-    // the live counter against its own captured snapshot at signal-fire
-    // time) sees a fresh value for the duration of this dispatch. The
-    // lambda is the one external-reload short-circuit we rely on for the
-    // discard()+load() pair.
-    ++m_asyncRevertGeneration;
     auto* watcher = new QFutureWatcher<WorkerResult>(this);
     connect(
         watcher, &QFutureWatcher<WorkerResult>::finished, this,
@@ -466,8 +561,8 @@ void AnimationsPageController::asyncRevertPending()
                 Q_EMIT overrideChanged(path);
             if (result.anyPreset)
                 Q_EMIT userPresetsChanged();
-            if (result.anyMotionSet)
-                Q_EMIT motionSetsChanged();
+            if (result.anyMotionSet && m_motionSets)
+                m_motionSets->notifyLiveStateChanged();
             Q_EMIT pendingChangesChanged();
             // Emit discardResult LAST and clear the in-flight flag AFTER
             // the emit so any DirectConnection slot wired to
@@ -477,8 +572,8 @@ void AnimationsPageController::asyncRevertPending()
             // re-opens together with the flag clear.
             const QString errorMsg = result.retained.isEmpty()
                 ? QString()
-                : PhosphorI18n::tr("Failed to restore %1 profile file(s). They remain pending.")
-                      .arg(result.retained.size());
+                : PhosphorI18n::tr("Could not restore %n profile file(s). They remain pending.", nullptr,
+                                   static_cast<int>(result.retained.size()));
             Q_EMIT discardResult(result.retained.isEmpty(), errorMsg);
             m_asyncRevertInFlight = false;
         },
@@ -532,9 +627,8 @@ void AnimationsPageController::asyncRevertPending()
 }
 
 // ─── Path discovery ────────────────────────────────────────────────────
-// `sectionForPath`, `eventLabel`, `parentPath`, `parentChain` live in
-// `animationspagecontroller_paths.cpp` so this TU stays under the
-// project's 800-line cap. Same class, separate TU, no API change.
+// `sectionForPath`, `eventLabel`, `parentChain` live in
+// `animationspagecontroller_paths.cpp`. Same class, separate TU, no API change.
 
 QVariantList AnimationsPageController::eventSections() const
 {
@@ -628,42 +722,10 @@ bool AnimationsPageController::removeUserPreset(const QString& name)
     return m_presets && m_presets->removeUserPreset(name);
 }
 
-// ─── Motion sets — delegated ───────────────────────────────────────────
-
-QVariantList AnimationsPageController::availableMotionSets() const
-{
-    return m_motionSets ? m_motionSets->availableMotionSets() : QVariantList{};
-}
-
-bool AnimationsPageController::applyMotionSet(const QString& name)
-{
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "applyMotionSet: blocked during discard";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
-        return false;
-    }
-    return m_motionSets && m_motionSets->applyMotionSet(name);
-}
-
-bool AnimationsPageController::saveCurrentAsMotionSet(const QString& name, const QString& description)
-{
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "saveCurrentAsMotionSet: blocked during discard";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
-        return false;
-    }
-    return m_motionSets && m_motionSets->saveCurrentAsMotionSet(name, description);
-}
-
-bool AnimationsPageController::removeMotionSet(const QString& name)
-{
-    if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "removeMotionSet: blocked during discard";
-        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
-        return false;
-    }
-    return m_motionSets && m_motionSets->removeMotionSet(name);
-}
+// Motion sets live entirely in the shared ShaderSetStore reached through
+// `setsBridge()` — QML talks to it directly. The in-flight-discard gate the
+// old forwarders enforced now travels with the store as its mutationGuard
+// (wired in the constructor).
 
 // ─── Shader effects ────────────────────────────────────────────────────
 // The effectToMap / parameterInfoToMap / shaderProfileToMap helpers used

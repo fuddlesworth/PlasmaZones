@@ -18,10 +18,13 @@
 #include <QDBusError>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QPluginLoader>
 #include <QRegularExpression>
 #include <QSet>
 #include <QThread>
+
+#include <PhosphorServiceIdle/IdleService.h>
 
 #include <PhosphorAnimation/CurveLoader.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -33,14 +36,15 @@
 #include <PhosphorAnimation/QtQuickClockManager.h>
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorSurface/SurfaceShaderRegistry.h>
 
 #include <array>
 
 #include "overlayservice.h"
 #include "unifiedlayoutcontroller.h"
 #include "modetracker.h"
-#include "unifiedlayoutcontroller.h"
 #include "shortcutmanager.h"
+#include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneentryscaffold.h"
 #include "rendering/zoneshadernoderhi.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -57,6 +61,7 @@
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
+#include "../core/baselinecleanup.h"
 #include "../core/constants.h"
 #include "../core/crosssurfaceresolver.h"
 #include "../core/geometryutils.h"
@@ -87,9 +92,12 @@
 #include "../dbus/shaderadaptor.h"
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
-#include "../dbus/windowruleadaptor.h"
-#include <PhosphorWindowRules/ExclusionRules.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include "../dbus/ruleadaptor.h"
+#include <PhosphorRules/ExclusionRules.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleStore.h>
+
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
@@ -102,19 +110,18 @@
 
 namespace PlasmaZones {
 
-// Snapping and autotile gaps are the SAME two quantities under different names:
-// snapping's per-zone "zonePadding" is the full inter-region gap (each zone's
-// interior edge insets by zonePadding/2, so two neighbours leave a zonePadding
-// gap — see GeometryUtils::applyGapsToZoneGeometry), exactly like autotile's
-// "innerGap" (the single gap between two tiles). Snapping "outerGap" and
-// autotile "outerGap" both inset the content area from the screen edge per side.
+// Snapping and autotile share one unified gap model: a single innerGap (the
+// gap between two adjacent regions — each zone's interior edge insets by
+// innerGap/2 so two neighbours leave an innerGap gap, see
+// GeometryUtils::applyGapsToZoneGeometry) and a single outerGap (insets the
+// content area from the screen edge per side), with one default for each.
 // A context gap-override rule must therefore clamp to the same range in both
 // modes; these assertions fail the build if the two ranges ever drift apart.
-// (The defaults may legitimately differ per mode, so only the range is tied.)
 static_assert(Defaults::MaxGap == PhosphorTiles::AutotileDefaults::MaxGap,
               "Snapping and autotile gap clamp ceilings must match — they are the same gap quantity");
 
 namespace {
+
 // Debounce interval (ms): coalesce rapid geometry changes (multi-screen, panel editor) into one update.
 // Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a
 // follow-up panel geometry requery after the debounced update completes).
@@ -162,12 +169,12 @@ Daemon::Daemon(QObject* parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
-    // Unified WindowRule store — loads windowrules.json (written by the v3→v4
-    // migration). Daemon is the sole writer; the WindowRuleAdaptor exposes it.
+    // Unified Rule store — loads rules.json (written by the v3→v4
+    // migration). Daemon is the sole writer; the RuleAdaptor exposes it.
     // Declared/constructed before m_layoutManager so the registry can borrow it.
-    , m_windowRuleStore(std::make_unique<PhosphorWindowRules::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
-    , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_windowRuleStore.get(),
-                                                                      QStringLiteral("plasmazones/layouts")))
+    , m_ruleStore(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath()))
+    , m_layoutManager(
+          std::make_unique<PhosphorZones::LayoutRegistry>(m_ruleStore.get(), QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<PhosphorZones::LayoutComputeService>(nullptr))
     // m_curveRegistry / m_profileRegistry are default-constructed (no
     // init-list entries) — daemon.h declares them between m_layoutComputeService
@@ -182,16 +189,16 @@ Daemon::Daemon(QObject* parent)
     // m_curveRegistry to be declared BEFORE m_settings in daemon.h —
     // see the DECLARATION ORDER INVARIANT comment there.
     //
-    // Pass m_windowRuleStore.get() so Settings shares the daemon's single
+    // Pass m_ruleStore.get() so Settings shares the daemon's single
     // canonical store rather than constructing a second one over the same
-    // file. Two stores pointed at windowrules.json race on disk: each
+    // file. Two stores pointed at rules.json race on disk: each
     // mutator rebuilds its `kept` list from its own stale in-memory
     // snapshot, so the second writer silently drops rules the first writer
     // added. Mirrors the existing LayoutRegistry-via-borrowed-pointer
     // pattern above. Standalone settings / editor processes that have no
     // daemon-owned store pass nullptr and Settings falls back to owning
     // its own.
-    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_windowRuleStore.get(), nullptr))
+    , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_ruleStore.get(), nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
     , m_windowRegistry(std::make_unique<PhosphorEngine::WindowRegistry>(nullptr))
     , m_panelSource(std::make_unique<PhosphorScreens::PlasmaPanelSource>())
@@ -223,6 +230,24 @@ Daemon::Daemon(QObject* parent)
     // `QObject((ensureScreenIdResolver(), parent))` comma-operator trick
     // because that idiom reads as an accidental typo.
     ensureScreenIdResolver();
+
+    // The daemon no longer seeds the managed baseline appearance rules (borders,
+    // title bars, gaps): those defaults now live in the config store. Strip any
+    // stale copies a previous branch build wrote to rules.json so a carried-over
+    // file does not keep three orphaned managed rules alive. Match only the fixed
+    // baseline ids AND managed==true — a user's own rule is never touched. Rebuild
+    // the list once via setAllRules (a single persist + rulesChanged) instead of
+    // per-rule removeRule, and gate it on removedAny so a clean store (second
+    // startup, or a fresh install) neither persists nor emits. The store loaded in
+    // its constructor. Settings IS already a rulesChanged consumer (it subscribes
+    // in its own ctor, constructed above), so a strip here reaches
+    // Settings::onRuleStoreChanged; that only recomputes its gap fingerprint and
+    // its downstream settingsChanged / perScreen* signals have no connected
+    // listeners yet (the adaptors and geometry wiring land later in setup), so the
+    // second-order effect is inert.
+    if (m_ruleStore && !stripStaleManagedAppearanceBaselines(*m_ruleStore)) {
+        qCWarning(lcDaemon) << "Failed to persist rules.json after stripping stale baseline appearance rules";
+    }
 
     // Configure geometry update debounce timer
     // This prevents cascading recalculations when multiple geometry changes occur rapidly.
@@ -293,6 +318,7 @@ Daemon::Daemon(QObject* parent)
     // an empty registry for the brief window before loaders run.
     setupAnimationProfiles();
     setupAnimationShaderEffects();
+    setupSurfaceShaderEffects();
 }
 
 // Paths that follow the user's `Settings.animationProfile` slider
@@ -372,8 +398,8 @@ void Daemon::setupAnimationProfiles()
     // the daemon's pre-scan signal wiring below — a loader's
     // initial-scan emit otherwise fires before the
     // publishActiveAnimationProfile listener is installed and is
-    // silently dropped. Triggered explicitly via
-    // `runInitialAnimationLoad` further down.
+    // silently dropped. Triggered explicitly by the three-phase load
+    // further down.
     auto loaderHandles =
         constructAnimationLoaders(m_curveRegistry, m_profileRegistry, kPlasmaZonesUserProfilesOwnerTag, nullptr);
     m_curveLoader = std::move(loaderHandles.curveLoader);
@@ -548,6 +574,43 @@ void Daemon::setupAnimationShaderEffects()
 
     if (m_overlayService) {
         m_overlayService->setAnimationShaderRegistry(m_animationShaderRegistry.get());
+    }
+}
+
+void Daemon::setupSurfaceShaderEffects()
+{
+    m_surfaceShaderRegistry = std::make_unique<PhosphorSurfaceShaders::SurfaceShaderRegistry>(nullptr);
+
+    // System dirs from XDG_DATA_DIRS in descending priority. Reverse so the
+    // first registered is the lowest-priority system dir — the loader applies
+    // first-registration-wins, yielding `user > sys-highest > ... > sys-lowest`
+    // after the user dir is appended last. Surface packs install to
+    // `plasmazones/surface` (singular), the third category beside
+    // `plasmazones/overlays` and `plasmazones/animations`.
+    QStringList surfaceDirs = QStandardPaths::locateAll(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/surface"), QStandardPaths::LocateDirectory);
+    std::reverse(surfaceDirs.begin(), surfaceDirs.end());
+
+    const QString userSurfaceDir =
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/surface");
+    if (!surfaceDirs.contains(userSurfaceDir))
+        surfaceDirs.append(userSurfaceDir);
+
+    // Materialise the user dir BEFORE registering so the watcher attaches a
+    // direct watch instead of a parent-watch proxy (mirrors the animation /
+    // curve / profile setup). Failures are non-fatal — the on-demand scan still
+    // runs without a watch.
+    QDir().mkpath(userSurfaceDir);
+
+    m_surfaceShaderRegistry->setUserPath(userSurfaceDir);
+    m_surfaceShaderRegistry->addSearchPaths(surfaceDirs);
+
+    // Stage d: hand the registry to the overlay service so the OSD show path can
+    // resolve its decoration pack's fragment shader + translated params. Borrow
+    // is nulled in stop() before the registry is reset, mirroring the animation
+    // registry's teardown.
+    if (m_overlayService) {
+        m_overlayService->setSurfaceShaderRegistry(m_surfaceShaderRegistry.get());
     }
 }
 
@@ -732,6 +795,115 @@ bool Daemon::init()
         }
     }
 
+    // Warm-bake SURFACE shaders (window border / rounded corners / glow) the
+    // same way zone + animation shaders are warmed above, so the first surface
+    // paint never blocks the render thread on a cold glslang compile. Shares the
+    // single-threaded m_shaderBakePool, so all three categories serialise.
+    //
+    // Like the zone/animation warm-bakes, the surface bake installs the same
+    // fragment entry-point scaffold the live loader uses (the
+    // surfaceEntryPrologue()/surfaceEntryCandidates() passed below), so a
+    // pSurface()-only pack compiles and the warm key matches SurfaceShaderItem's
+    // scaffolded live load. The one thing that differs is vertex-shader
+    // resolution: surface packs ship NO vertex shader, so the vert is resolved
+    // from a shared `surface.vert` in the include paths (same resolution as
+    // SurfaceShaderItem). A pack with no resolvable vert is skipped — the live
+    // path would error on it too, so there is nothing to warm.
+    if (m_surfaceShaderRegistry) {
+        auto scheduleWarmForSurfaceEffect = [this,
+                                             registryPtr = QPointer<PhosphorSurfaceShaders::SurfaceShaderRegistry>(
+                                                 m_surfaceShaderRegistry.get())](
+                                                const PhosphorSurfaceShaders::SurfaceShaderEffect& info) {
+            if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
+                return;
+            }
+            // Pure liveness gate: the include paths come from the static
+            // helper below (not the registry), so the QPointer is checked
+            // only to skip bakes scheduled across registry teardown.
+            if (!registryPtr) {
+                return;
+            }
+            // Include paths come from the SAME function the live loader's
+            // constructor uses (SurfaceShaderItem::surfaceIncludePaths — XDG
+            // dirs user-first, each contributing its `shared` subdir then
+            // itself), so the bake-cache key the warm compile writes is
+            // structurally guaranteed to be the one the first live paint
+            // looks up; the two can no longer silently diverge. The vert
+            // resolves as the live loader does: the pack's metadata vert
+            // first, else `surface.vert` beside the frag, else the first
+            // `surface.vert` in the include dirs (the `shared` subdir
+            // carries the shipped one — packs themselves ship no vert, so
+            // both sides land on the shared vert today). The overlay host
+            // satisfies the matching side of this contract: applyDecoration
+            // writes each chain stage's vertexSource from the pack's declared
+            // vertexShaderPath (and the registry preamble), so a pack that
+            // ships its own vert keys the same vert on both the warm bake
+            // and the live load.
+            const QStringList includePaths = SurfaceShaderItem::surfaceIncludePaths();
+            QString vertPath = info.vertexShaderPath;
+            if (vertPath.isEmpty()) {
+                const QString besideFrag =
+                    QFileInfo(info.fragmentShaderPath).absolutePath() + QStringLiteral("/surface.vert");
+                if (QFile::exists(besideFrag)) {
+                    vertPath = besideFrag;
+                }
+            }
+            if (vertPath.isEmpty()) {
+                for (const QString& incDir : std::as_const(includePaths)) {
+                    const QString candidate = incDir + QStringLiteral("/surface.vert");
+                    if (QFile::exists(candidate)) {
+                        vertPath = candidate;
+                        break;
+                    }
+                }
+            }
+            if (vertPath.isEmpty() || !QFile::exists(vertPath)) {
+                return;
+            }
+            const QString effectId = info.id;
+            const QString paramPreamble = PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(info);
+            // Bake WITH the same fragment entry-point scaffold the live loader
+            // installs (surfaceshaderitem.cpp setEntryScaffold), or a
+            // `pSurface()`-only pack bakes its raw main()-less source and fails
+            // to compile, and even a traditional main() pack would key the
+            // cache differently from the scaffolded live load and miss it.
+            // Mirrors the zone and animation warm-bakes above.
+            const QString entryPrologue = PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryPrologue();
+            const QList<PhosphorShaders::EntryCandidate> entryCandidates =
+                PhosphorSurfaceShaders::SurfaceShaderRegistry::surfaceEntryCandidates();
+            auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
+            connect(watcher, &QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>::finished, this,
+                    [watcher, effectId]() {
+                        const PhosphorRendering::WarmShaderBakeResult r = watcher->result();
+                        if (!r.success) {
+                            qCWarning(lcDaemon) << "Surface shader bake: failed for" << effectId << r.errorMessage;
+                        }
+                        watcher->deleteLater();
+                    });
+            watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
+                                                 [vertPath, fragPath = info.fragmentShaderPath, includePaths,
+                                                  paramPreamble, entryPrologue, entryCandidates]() {
+                                                     return warmShaderBakeCacheForPaths(vertPath, fragPath,
+                                                                                        includePaths, paramPreamble,
+                                                                                        entryPrologue, entryCandidates);
+                                                 }));
+        };
+        connect(m_surfaceShaderRegistry.get(), &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                [this, scheduleWarmForSurfaceEffect]() {
+                    if (!m_surfaceShaderRegistry) {
+                        return;
+                    }
+                    const QList<PhosphorSurfaceShaders::SurfaceShaderEffect> effects =
+                        m_surfaceShaderRegistry->availableEffects();
+                    for (const PhosphorSurfaceShaders::SurfaceShaderEffect& info : effects) {
+                        scheduleWarmForSurfaceEffect(info);
+                    }
+                });
+        for (const PhosphorSurfaceShaders::SurfaceShaderEffect& info : m_surfaceShaderRegistry->availableEffects()) {
+            scheduleWarmForSurfaceEffect(info);
+        }
+    }
+
     // Wire the level-1 (global) cascade tier as two pass-through
     // providers — snap default layout id and autotile default algorithm
     // id — symmetric in shape and each gated on its own enabled flag.
@@ -766,6 +938,44 @@ bool Daemon::init()
         }
         return m_settings->defaultAutotileAlgorithm();
     });
+    // Tiled-window-count provider — lets a SetTilingAlgorithm rule match on
+    // Field::TiledWindowCount (e.g. switch algorithm once a second window
+    // opens). Reads the engine's live per-screen state (non-creating); nullopt
+    // when the screen is not actively tiling so a count predicate stays inert
+    // there. The screen's current-context state aligns with the (desktop,
+    // activity) the algorithm is resolved for, so the desktop/activity args are
+    // not needed to disambiguate.
+    m_layoutManager->setTiledWindowCountProvider(
+        [this](const QString& screenId, int, const QString&) -> std::optional<int> {
+            if (!m_autotileEngine) {
+                return std::nullopt;
+            }
+            // const overload: a non-creating lookup that returns nullptr when the
+            // screen has no tiling state. The non-const overload would lazily
+            // CREATE an empty state, both polluting m_screenStates during a pure
+            // resolution query and reporting 0 (not nullopt) for a non-tiling
+            // screen, which would make a TiledWindowCount predicate match there
+            // instead of staying inert.
+            const PhosphorEngine::IPlacementState* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
+            if (!state) {
+                return std::nullopt;
+            }
+            return state->tiledWindowCount();
+        });
+    // Orientation provider — derives "portrait" / "landscape" from the screen's
+    // geometry so a Field::ScreenOrientation rule can drive any context slot on a
+    // rotated monitor. Returns nullopt for an unknown / invalid geometry (the
+    // predicate then stays inert). A square screen is treated as landscape.
+    m_layoutManager->setScreenOrientationProvider([this](const QString& screenId) -> std::optional<QString> {
+        if (!m_screenManager) {
+            return std::nullopt;
+        }
+        const QRect geom = m_screenManager->screenGeometry(screenId);
+        if (!geom.isValid()) {
+            return std::nullopt;
+        }
+        return geom.height() > geom.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+    });
     // Snapping-preferred provider — separate from defaultLayoutIdProvider
     // because the user can have snapping enabled WITHOUT a global default
     // snap layout id (per-screen assignments cover everything). Without
@@ -780,7 +990,7 @@ bool Daemon::init()
     // default synthesis above is short-circuited so an unassigned context gets
     // no active layout (no engine activates) until the user assigns one — the
     // same effective state as having no default providers configured. The
-    // per-context DefaultLayoutAssignment window rule overrides this either way.
+    // per-context DefaultLayoutAssignment rule overrides this either way.
     m_layoutManager->setDefaultAssignmentSuppressedProvider([this]() {
         return m_settings && m_settings->suppressDefaultLayoutAssignment();
     });
@@ -940,7 +1150,7 @@ bool Daemon::init()
         if (autotileToggled && !autotileNow && m_windowTrackingAdaptor && m_snapAdaptor && m_snapEngine) {
             // Pre-arm OSD suppression for the resnap signal(s) about to fire (the
             // feedback returns asynchronously, so arm before emitting).
-            m_suppressResnapOsd = 1; // resnapCurrentAssignments()
+            armResnapOsdSuppression(1); // resnapCurrentAssignments()
             m_snapAdaptor->resnapCurrentAssignments();
             // Batched float-restore: one resnap signal per autotile-disabled
             // toggle instead of per-window D-Bus chatter. Downcast mirrors
@@ -964,7 +1174,7 @@ bool Daemon::init()
                 entries.append(m_pendingSnapFloatRestores);
                 m_pendingSnapFloatRestores.clear();
                 if (!entries.isEmpty()) {
-                    ++m_suppressResnapOsd; // the batched emit drives a second resnap feedback
+                    armResnapOsdSuppression(1); // the batched emit drives a second resnap feedback
                     concreteSnap->emitBatchedResnap(entries);
                 }
             }
@@ -984,19 +1194,28 @@ bool Daemon::init()
     // shortcuts). Autotile windows are already retiled by the settingsChanged
     // handler above; this covers manually-snapped windows. Debounced so a batch
     // of per-side gap edits in one save collapses into a single resnap pass.
+    // Watchdog that floors the resnap-OSD suppression counter if some primed
+    // feedback never arrives (a resnap that produced zero moves emits none).
+    // Re-armed by armResnapOsdSuppression on every arm.
+    m_suppressResnapOsdWatchdog.setSingleShot(true);
+    m_suppressResnapOsdWatchdog.setInterval(2000);
+    connect(&m_suppressResnapOsdWatchdog, &QTimer::timeout, this, [this]() {
+        m_suppressResnapOsd = 0;
+    });
+
     m_gapResnapTimer.setSingleShot(true);
     m_gapResnapTimer.setInterval(100);
     connect(&m_gapResnapTimer, &QTimer::timeout, this, [this]() {
         if (!m_snapAdaptor) {
             return;
         }
-        m_suppressResnapOsd = 1; // settings-driven reflow, not user navigation
+        armResnapOsdSuppression(1); // settings-driven reflow, not user navigation
         m_snapAdaptor->resnapCurrentAssignments();
     });
     const auto scheduleGapResnap = [this]() {
         m_gapResnapTimer.start();
     };
-    connect(m_settings.get(), &Settings::zonePaddingChanged, this, scheduleGapResnap);
+    connect(m_settings.get(), &Settings::innerGapChanged, this, scheduleGapResnap);
     connect(m_settings.get(), &Settings::outerGapChanged, this, scheduleGapResnap);
     connect(m_settings.get(), &Settings::usePerSideOuterGapChanged, this, scheduleGapResnap);
     connect(m_settings.get(), &Settings::outerGapTopChanged, this, scheduleGapResnap);
@@ -1029,15 +1248,31 @@ bool Daemon::init()
     // that owns m_shaderRegistry runs its destructor.
     m_shaderAdaptor = new ShaderAdaptor(m_shaderRegistry.get(), this);
 
-    // Window rule adaptor - the unified org.plasmazones.WindowRules surface.
+    // Rule adaptor - the unified org.plasmazones.Rules surface.
     // Held as a member so stop() can detach() it before the unique_ptr that
-    // owns m_windowRuleStore runs its destructor.
-    m_windowRuleAdaptor = new WindowRuleAdaptor(m_windowRuleStore.get(), this);
+    // owns m_ruleStore runs its destructor.
+    m_ruleAdaptor = new RuleAdaptor(m_ruleStore.get(), this);
 
     // Compositor bridge adaptor - compositor-agnostic window control protocol.
     // Held as a member so the support report and the registration watchdog
     // can query its state. Ownership stays with `this` via QObject parent.
     m_compositorBridge = new CompositorBridgeAdaptor(this);
+
+    // Session-idle detection for Decorations.Performance.PauseWhenIdle. The KWin
+    // effect cannot do this itself: idleness arrives over ext-idle-notify-v1, a
+    // Wayland CLIENT protocol that the compositor the effect lives in SERVES rather
+    // than consumes. The daemon is already a client, so it watches and pushes the
+    // resolved boolean over D-Bus.
+    //
+    // Worth the plumbing because it is the only thing that recovers idle GPU power:
+    // an animated decoration pack repaints every window carrying it on every vsync,
+    // and it is the existence of per-frame work — not how cheap that work is — that
+    // keeps the card pinned in its top performance state.
+    //
+    // Constructed AFTER m_settingsAdaptor (it emits through it) and AFTER
+    // m_compositorBridge (it subscribes to bridgeRegistered to push the current idle
+    // state to a freshly (re)started effect, since the signal is edge-triggered).
+    setupIdleService();
 
     // Overlay adaptor - overlay visibility and highlighting
     m_overlayAdaptor = new OverlayAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
@@ -1055,7 +1290,7 @@ bool Daemon::init()
     m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
     // Full rule set for per-window RestorePosition evaluation (overrides the
     // per-engine *RestoreFloatedWindowsOnLogin settings for matched windows).
-    m_windowTrackingAdaptor->setWindowRuleStore(m_windowRuleStore.get());
+    m_windowTrackingAdaptor->setRuleStore(m_ruleStore.get());
 
     // Drop closed windows from m_lastAutotileOrders so a manual→autotile toggle
     // doesn't replay a ghost id into the TilingState (recalculateLayout would
@@ -1160,43 +1395,21 @@ bool Daemon::init()
     // ownership but not the pointee, so it still points at the live engine.
     if (autotileEngine) {
         autotileEngine->setContextGapProvider([this](const QString& screenId) -> QVariantMap {
-            if (!m_layoutManager) {
+            if (!m_layoutManager || screenId.isEmpty()) {
                 return {};
             }
-            const PhosphorZones::ContextGapOverride gaps =
-                m_layoutManager->resolveContextGaps(screenId, currentDesktopForScreen(screenId), currentActivity());
-            if (gaps.isEmpty()) {
-                return {};
-            }
-            namespace PSK = PhosphorEngine::PerScreenKeys;
-            QVariantMap map;
-            // zonePadding is snapping's inner spacing — the autotile inner gap.
-            if (gaps.zonePadding) {
-                map.insert(QString(PSK::InnerGap), *gaps.zonePadding);
-            }
-            if (gaps.outerGap) {
-                map.insert(QString(PSK::OuterGap), *gaps.outerGap);
-            }
-            // The per-side toggle gates whether the resolver honours the per-side
-            // values below — without it, stale per-side entries (left from when
-            // the rule had per-side enabled) would apply on autotile but not on
-            // snapping, which checks this flag (resolveOuterGapsFromMap).
-            if (gaps.usePerSideOuterGap) {
-                map.insert(QString(PSK::UsePerSideOuterGap), *gaps.usePerSideOuterGap);
-            }
-            if (gaps.outerGapTop) {
-                map.insert(QString(PSK::OuterGapTop), *gaps.outerGapTop);
-            }
-            if (gaps.outerGapBottom) {
-                map.insert(QString(PSK::OuterGapBottom), *gaps.outerGapBottom);
-            }
-            if (gaps.outerGapLeft) {
-                map.insert(QString(PSK::OuterGapLeft), *gaps.outerGapLeft);
-            }
-            if (gaps.outerGapRight) {
-                map.insert(QString(PSK::OuterGapRight), *gaps.outerGapRight);
-            }
-            return map;
+            // This is the autotile gap path, so resolve against the "tiling"
+            // placement mode — a per-mode `Mode Equals "tiling"` gap rule then
+            // applies here and a "snapping" one stays inert. The same
+            // GeometryUtils::contextGapOverrideMap shaping the snap provider uses
+            // below keeps the two paths byte-identical (PerScreenKeys form, with
+            // the per-side toggle gating the per-side entries). The config per-
+            // monitor gap is merged UNDER the rule override so a user gap rule
+            // still wins per slot.
+            return GeometryUtils::mergeConfigPerScreenGaps(
+                GeometryUtils::contextGapOverrideMap(m_layoutManager->resolveContextGaps(
+                    screenId, currentDesktopForScreen(screenId), currentActivity(), QStringLiteral("tiling"))),
+                m_settings.get(), screenId);
         });
     }
 
@@ -1241,23 +1454,49 @@ bool Daemon::init()
     // Uses the base-class pointer — WDA only needs isActiveOnScreen().
     m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
 
-    // SnapEngine creates its own SnapState internally (symmetric with
-    // AutotileEngine/TilingState). WTS references it for zone queries.
-    m_windowTrackingAdaptor->service()->setSnapState(snapEngine->snapState());
+    // SnapEngine owns its per-(screen,desktop,activity) snap stores (symmetric with
+    // AutotileEngine/TilingState). Wire the WTS facade through the engine's resolver
+    // seam so each windowId-keyed query reaches the store that owns the window and
+    // each screen-carrying write reaches — and registers — the store for that screen.
+    {
+        PhosphorPlacement::WindowTrackingService::SnapStateResolver snapResolver;
+        snapResolver.forWindow = [e = QPointer(snapEngine)](const QString& id) -> PhosphorSnapEngine::SnapState* {
+            return e ? e->stateForWindow(id) : nullptr;
+        };
+        snapResolver.forWindowOnScreen =
+            [e = QPointer(snapEngine)](const QString& id, const QString& screenId) -> PhosphorSnapEngine::SnapState* {
+            return e ? e->stateForWindowOnScreen(id, screenId) : nullptr;
+        };
+        snapResolver.forScreen = [e = QPointer(snapEngine)](const QString& screenId) -> PhosphorSnapEngine::SnapState* {
+            return e ? static_cast<PhosphorSnapEngine::SnapState*>(e->stateForScreen(screenId)) : nullptr;
+        };
+        snapResolver.globals = [e = QPointer(snapEngine)]() -> PhosphorSnapEngine::SnapState* {
+            return e ? e->globalState() : nullptr;
+        };
+        snapResolver.allStates = [e = QPointer(snapEngine)]() -> QList<PhosphorSnapEngine::SnapState*> {
+            return e ? e->allSnapStates() : QList<PhosphorSnapEngine::SnapState*>{};
+        };
+        snapResolver.forgetWindow = [e = QPointer(snapEngine)](const QString& id) {
+            if (e) {
+                e->forgetWindow(id);
+            }
+        };
+        m_windowTrackingAdaptor->service()->setSnapStateResolver(std::move(snapResolver));
+    }
     m_windowTrackingAdaptor->service()->setSnapEngine(snapEngine);
-    // Inject the shared window registry so SnapState canonicalizes its
+    // Inject the shared window registry so each SnapState canonicalizes its
     // windowId-keyed stores to the stable first-seen composite (instanceId →
     // first observed appId|instanceId). This makes snap float/zone/screen state
     // immune to the effect-restart-after-WM_CLASS-mutation re-identification
     // skew, mirroring how AutotileEngine canonicalizes tiling state (issue #628).
-    snapEngine->snapState()->setWindowRegistry(m_windowRegistry.get());
+    snapEngine->setWindowRegistry(m_windowRegistry.get());
 
     // Filter the unified rule store down to its Exclude-shaped slice and
     // hand the address to SnapEngine for its isAppIdExcluded probe. The
     // filtered slice is held as a stable Daemon member (m_excludeRuleSet)
     // and refreshed in-place via setRules so the bound RuleEvaluator's
     // per-revision sort index and resolve cache actually invalidate on
-    // each rules-changed edit (a copy-assigned fresh WindowRuleSet would
+    // each rules-changed edit (a copy-assigned fresh RuleSet would
     // re-import revision=1 every cycle, freezing the cache on the next
     // resolveCached-bearing migration of the call sites). Rebuilt
     // whenever the unified store emits rulesChanged, so a settings-app
@@ -1272,10 +1511,9 @@ bool Daemon::init()
     //     pair seeds the filter and drains any restore queue entries
     //     populated by WTA::loadState above.
     snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
-    m_excludeRuleSet.setRules(
-        PhosphorWindowRules::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules());
+    m_excludeRuleSet.setRules(PhosphorRules::ExclusionRules::excludeRulesFrom(m_ruleStore->ruleSet()).rules());
     m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-        PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+        PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
 
     auto refilterExcludeRules = [this, snapEnginePtr = QPointer(snapEngine)] {
         // QPointer null-checks defend the rulesChanged subscription
@@ -1288,12 +1526,12 @@ bool Daemon::init()
         if (!snapEnginePtr) {
             return;
         }
-        // Symmetric guard for the rule store. `m_windowRuleStore` is a
+        // Symmetric guard for the rule store. `m_ruleStore` is a
         // unique_ptr owned by Daemon, so it currently shares Daemon's
         // lifetime; the guard exists so a future refactor that drops
         // and re-creates the store on the fly (or moves ownership
         // out) can't UAF this lambda.
-        if (!m_windowRuleStore) {
+        if (!m_ruleStore) {
             return;
         }
         // Equality-guard against no-op edits: every rulesChanged emission
@@ -1301,11 +1539,11 @@ bool Daemon::init()
         // this lambda, but only changes that affect the Exclude slice
         // should bump the evaluator's revision and walk the (potentially
         // long) pending-restore queues. The guard below compares the two
-        // `QList<WindowRule>` slices element-wise (the same semantics as
-        // `WindowRuleSet::operator==`, which delegates to this list compare) —
+        // `QList<Rule>` slices element-wise (the same semantics as
+        // `RuleSet::operator==`, which delegates to this list compare) —
         // exactly the rules-list-only comparison we want.
-        const QList<PhosphorWindowRules::WindowRule> newSlice =
-            PhosphorWindowRules::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules();
+        const QList<PhosphorRules::Rule> newSlice =
+            PhosphorRules::ExclusionRules::excludeRulesFrom(m_ruleStore->ruleSet()).rules();
         if (newSlice == m_excludeRuleSet.rules()) {
             return;
         }
@@ -1324,10 +1562,10 @@ bool Daemon::init()
         if (m_windowTrackingAdaptor) {
             // Shutdown-window guard, mirrors snapEnginePtr null-check above.
             m_windowTrackingAdaptor->pruneExcludedPendingRestores(
-                PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+                PhosphorRules::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
         }
     };
-    connect(m_windowRuleStore.get(), &PhosphorWindowRules::WindowRuleStore::rulesChanged, this,
+    connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this,
             [refilterExcludeRules](bool /*persisted*/) {
                 refilterExcludeRules();
             });
@@ -1338,7 +1576,17 @@ bool Daemon::init()
     // open zone selectors / the layout picker in sync would miss it. Re-push
     // the lock state to any open overlay on every rule change. QPointer guards
     // the shutdown window (overlay reset before ~Daemon disconnects).
-    connect(m_windowRuleStore.get(), &PhosphorWindowRules::WindowRuleStore::rulesChanged, this,
+    //
+    // Deliberately UNCONDITIONAL — no slice-equality guard like the exclude path
+    // above. That guard exists because its work is expensive (walking long
+    // pending-restore queues + bumping an evaluator revision); these two
+    // refreshes are cheap and self-bounding: refreshContextLockState only acts
+    // on live selector/picker slots, and refreshOverlayPropertiesIfShown
+    // early-returns unless the overlay is currently shown. rulesChanged also
+    // only fires on a real store change (setAllRules no-ops when equal), so a
+    // whole-set guard would never trip; a lock/overlay-only slice extractor
+    // would be the only guard that could, and it isn't worth the machinery here.
+    connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this,
             [overlay = QPointer(m_overlayService.get())](bool /*persisted*/) {
                 if (overlay) {
                     overlay->refreshContextLockState();
@@ -1348,6 +1596,21 @@ bool Daemon::init()
                     overlay->refreshOverlayPropertiesIfShown();
                 }
             });
+
+    // A rule edit that changes the ACTIVE context's resolved assignment (engine
+    // mode / snapping layout / tiling algorithm) must move live windows — resnap
+    // snapping screens, retile autotile screens. The legacy assignment-apply path
+    // (assignmentChangesApplied) only fires for setAssignmentEntry-driven edits,
+    // so rule-driven changes were silently not applied. reconcileActiveAssignments
+    // diffs the per-screen active assignment and drives the same apply path for
+    // the screens that actually changed (a no-op for appearance/exclude/lock
+    // edits, which don't alter the active assignment).
+    connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
+        reconcileActiveAssignments();
+    });
+    // Prime the snapshot from the initial rule set so the first real rule edit
+    // diffs against the live assignments rather than an empty baseline.
+    diffActiveAssignments();
 
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
@@ -1375,7 +1638,7 @@ bool Daemon::init()
     // window's CURRENT screen mode. This replaces the old single shared
     // m_floatingWindows + m_snapState bit that both engines read/wrote.
     //
-    // Mode resolution: the window's tracked screen (WTS screenAssignments, with
+    // Mode resolution: the window's tracked screen (WTS screenForWindow, with
     // the autotile engine's own tracked screen as the fallback for windows snap
     // never saw) → LayoutRegistry::modeForScreen → the owning engine.
     {
@@ -1403,7 +1666,7 @@ bool Daemon::init()
                 if (screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile) {
                     return autotilePtr && autotilePtr->isWindowFloatingInAutotile(windowId);
                 }
-                return snapEnginePtr && snapEnginePtr->snapState() && snapEnginePtr->snapState()->isFloating(windowId);
+                return snapEnginePtr && snapEnginePtr->isFloating(windowId);
             });
 
         m_windowTrackingAdaptor->service()->setEngineFloatWriter(
@@ -1423,16 +1686,16 @@ bool Daemon::init()
                 if (screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile) {
                     return;
                 }
-                if (snapEnginePtr && snapEnginePtr->snapState()) {
-                    snapEnginePtr->snapState()->setFloating(windowId, floating);
+                if (snapEnginePtr) {
+                    snapEnginePtr->setFloating(windowId, floating);
                 }
             });
 
         m_windowTrackingAdaptor->service()->setEngineFloatLister(
             [snapEnginePtr = QPointer(snapEngine), autotilePtr = QPointer(autotileEngine)]() -> QStringList {
                 QStringList all;
-                if (snapEnginePtr && snapEnginePtr->snapState()) {
-                    all += snapEnginePtr->snapState()->floatingWindows();
+                if (snapEnginePtr) {
+                    all += snapEnginePtr->floatingWindows();
                 }
                 if (autotilePtr) {
                     all += autotilePtr->allFloatingWindows();
@@ -1528,13 +1791,42 @@ bool Daemon::init()
         }
     });
 
+    // Re-resolve the per-screen tiling algorithm when a screen's tiled-window
+    // count changes, so a Field::TiledWindowCount rule (e.g. a centered
+    // single-window layout that gives way once a second window opens) takes
+    // effect as windows open and close. Gated on an ACTUAL count change so the
+    // per-retile placementChanged stream (drags, resizes) does not re-walk the
+    // cascade. A re-resolve that lands on the same count returns the same answer
+    // and updateAutotileScreens() diffs each screen's overrides before
+    // re-applying, so a plain count-keyed switch settles in one step. (A
+    // pathological rule whose chosen algorithm caps MaxWindows below the live
+    // count would float the excess, drop the count, and could oscillate — that
+    // is a self-contradictory config, not a normal one.)
+    connect(
+        autotileEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, [this](const QString& screenId) {
+            if (!m_autotileEngine) {
+                return;
+            }
+            // const overload: non-creating, returns nullptr (→ count 0) when
+            // the screen has no tiling state, so this gate never allocates a
+            // phantom state while observing the count.
+            const PhosphorEngine::IPlacementState* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
+            const int count = state ? state->tiledWindowCount() : 0;
+            const auto it = m_lastTiledCountByScreen.constFind(screenId);
+            if (it != m_lastTiledCountByScreen.constEnd() && it.value() == count) {
+                return; // count unchanged — nothing a count rule could key on moved
+            }
+            m_lastTiledCountByScreen.insert(screenId, count);
+            updateAutotileScreens();
+        });
+
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
     // Wire the WTA so the autotile open path can resolve RouteToScreen /
-    // RouteToDesktop window rules (the rule store + evaluator live on the WTA).
+    // RouteToDesktop rules (the rule store + evaluator live on the WTA).
     m_autotileAdaptor->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
 
     // Control adaptor - high-level convenience API for third-party integrations.
@@ -1587,8 +1879,15 @@ bool Daemon::init()
             // Resnap only the snapping-mode screens whose assignments actually changed.
             // changedScreenIds scopes the resnap to avoid spurious geometry-set on
             // screens whose layout didn't change (prevents flicker on unrelated VS).
-            m_suppressResnapOsd = osdEntries.size();
-            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
+            // Restrict the resnap to each screen's CURRENT virtual desktop (the
+            // filter compares every window against its own screen's desktop, so
+            // multi-screen KCM applies stay correct). Without it, a per-desktop
+            // assignment change resnaps windows parked on OTHER desktops into the
+            // just-assigned layout's zones — the user sees one desktop's layout
+            // leak onto every desktop. Mirrors resnapIfManualMode (navigation.cpp).
+            armResnapOsdSuppression(osdEntries.size());
+            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds,
+                                                                                  currentDesktop());
             m_snapAdaptor->resnapToNewLayout();
             // Restore snap-float positions for windows this KCM apply released
             // from autotile — the buffer-based resnap above cannot cover
@@ -1636,6 +1935,12 @@ bool Daemon::init()
                         showLayoutOsd(layout, osd.screenId);
                 }
             }
+
+            // Refresh the active-assignment snapshot to what was just applied,
+            // so a later rule edit diffs against reality (this path also runs
+            // for legacy setAssignmentEntry-driven applies, which bypass
+            // reconcileActiveAssignments and would otherwise leave it stale).
+            diffActiveAssignments();
         });
 
     // Register D-Bus service and object with error handling and retry logic
@@ -1739,6 +2044,21 @@ void Daemon::start()
     // already contemplates this cycle to avoid stacking the aboutToQuit
     // handler; this is the matching reset on the value side.
     m_shuttingDown = false;
+
+    // Re-arm the idle service. stop() tears it down (its Wayland notification object and
+    // every connection around it), and setupIdleService is otherwise only reached from
+    // init(), which start() does not re-run — so an in-process restart came back up with
+    // the idle state permanently stale. Guarded on !m_idleService so the ordinary
+    // init()-then-start() path does not build it twice.
+    //
+    // Note what this does NOT fix: stop() also unregisters the D-Bus object and the service
+    // name, and re-registering them lives in init(), not here. A restarted daemon therefore
+    // has no bus presence, so nothing it publishes reaches the effect regardless. The
+    // re-arm exists so the daemon's own state is consistent after the cycle (which the
+    // repairs below also do), not because the cycle fully restores service.
+    if (!m_idleService) {
+        setupIdleService();
+    }
 
     // Re-publish the QML static defaults. stop() nulls all three
     // (`PhosphorCurve::setDefaultRegistry(nullptr)` etc.) to prevent
@@ -1954,6 +2274,8 @@ void Daemon::stop()
     if (m_layoutManager) {
         m_layoutManager->setDefaultLayoutIdProvider({});
         m_layoutManager->setDefaultAutotileAlgorithmProvider({});
+        m_layoutManager->setTiledWindowCountProvider({});
+        m_layoutManager->setScreenOrientationProvider({});
         m_layoutManager->setSnappingPreferredProvider({});
         m_layoutManager->setDefaultAssignmentSuppressedProvider({});
     }
@@ -1970,6 +2292,54 @@ void Daemon::stop()
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
     PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
     PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
+
+    // Idle wiring, ALSO before the m_running gate, for the same reason as the two
+    // blocks above: setupIdleService() runs from init(), which precedes start(), so
+    // an init-without-start teardown (test fixtures, early-fail init, double-stop)
+    // reaches the member destructors with the idle service still live. ~Daemon calls
+    // stop(), so resetting the service HERE (unconditionally, above the gate) means the
+    // member destructor never has to. Every call below is null-safe and idempotent, so
+    // running it on the already-stopped path costs nothing.
+    //
+    // The debounce timer goes with it: a pending fire would land in refreshIdleStages
+    // after teardown. It early-returns on a null m_idleService, so this is belt and
+    // braces — but every other piece of this wiring is severed explicitly rather than
+    // left to an invariant, and this is the last piece.
+    m_idleStagesRefreshTimer.stop();
+    // Sever the idled/resumed lambdas BEFORE the reset. They are the two connections
+    // idle.cpp makes with m_idleService as SENDER (not in m_idleConnections, which holds
+    // only the settings/bridge/timer connections keyed on other senders), so
+    // teardownIdleConnections below does not touch them — and it runs after this reset
+    // anyway. Destroying the service walks ~IdleStateMachine, which can emit resumed()
+    // while IdleService's own QObject connections are still live (QObject severs them only
+    // in ~QObject, after member destruction), firing the daemon lambda mid-teardown. That
+    // publishes sessionIdleNow() — a spurious sessionIdleChanged(false) D-Bus broadcast on
+    // shutdown when the seat was idle. Disconnecting first makes the teardown emit nothing.
+    if (m_idleService) {
+        m_idleService->disconnect(this);
+    }
+    m_idleService.reset();
+    // The next run starts from a fresh effect that assumes an active session. Leaving this
+    // true would make the re-armed service's first publish look redundant and swallow it.
+    m_publishedSessionIdle = false;
+    // And the arm-retry budget, for the same reason its two neighbours here are reset: the
+    // race it covers is a STARTUP race, so a restarted daemon needs its full budget. Spent
+    // in run 1, it would otherwise send run 2 straight to the give-up branch on the very
+    // first attempt.
+    m_idleArmRetriesLeft = kIdleArmRetries;
+    // The idle service's own signals die with it, but the connections idle.cpp made whose
+    // sender OUTLIVES it are still live: the two settings signals, the debounce timer (a
+    // value member), and the bridgeRegistered push when a compositor bridge exists (that
+    // one is conditional, so it is three or four). A settings write between stop() and
+    // ~Daemon would still run their lambdas. Sever exactly those.
+    //
+    // NOT a blanket disconnect(m_settings.get(), nullptr, this, nullptr). That severs
+    // every m_settings→this connection — the gap-resnap sweep, the adjacent-threshold
+    // handler, the snapping/autotile enable-delta, the animation-profile republish, all
+    // eleven of them — and most are made in the constructor or init(), which start() does
+    // NOT re-run. A stop()→start() cycle (which this daemon supports deliberately, and
+    // says so in three places) would come back up with them silently gone.
+    teardownIdleConnections();
 
     if (!m_running) {
         return;
@@ -2027,6 +2397,15 @@ void Daemon::stop()
         m_overlayService->setAnimationShaderRegistry(nullptr);
     }
     m_animationShaderRegistry.reset();
+    // Reset the surface registry here too so its QFileSystemWatcher and the
+    // effectsChanged → warm-bake connection (captured by value into the init()
+    // lambda, targeting `this`) are torn down before the event loop can spin
+    // during shutdown. Null the overlay service's borrow FIRST (Stage d wired
+    // the OSD decoration consumer), mirroring the animation registry above.
+    if (m_overlayService) {
+        m_overlayService->setSurfaceShaderRegistry(nullptr);
+    }
+    m_surfaceShaderRegistry.reset();
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();
@@ -2099,6 +2478,10 @@ void Daemon::stop()
         wts->setEngineFloatLister({});
         wts->setAutotileModePredicate({});
         wts->setAutotileTiledPredicate({});
+        // Deliberately NOT cleared here: the snap-state resolver (setSnapStateResolver)
+        // and setSnapEngine both capture/store only QPointer(snapEngine), so they
+        // self-null when the engine is destroyed — there is no `this`/raw-pointer
+        // capture to invalidate, unlike the float callbacks above.
     }
 
     // Tear down the context-resolver triple before destroying the
@@ -2158,16 +2541,16 @@ void Daemon::stop()
     // teardown contract grep-discoverable and survives that refactor.
     // `m_snapEngine` is base-typed `PlacementEngineBase*`; the setter
     // lives on the concrete `SnapEngine`. qobject_cast mirrors the
-    // narrowing in the autotile-toggle branch above (~ line 893).
+    // concreteAutotile narrowing a few lines below.
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         concreteSnap->setExcludeRuleSet(nullptr);
     }
 
-    // Likewise sever WindowTrackingAdaptor's borrow of m_windowRuleStore (used by
+    // Likewise sever WindowTrackingAdaptor's borrow of m_ruleStore (used by
     // its restore-position evaluator) before the store is destroyed. Same
     // grep-discoverable teardown contract as the SnapEngine exclude borrow above.
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setWindowRuleStore(nullptr);
+        m_windowTrackingAdaptor->setRuleStore(nullptr);
     }
 
     // Clear the autotile context-gap provider, which captures `this` (Daemon, via
@@ -2208,12 +2591,12 @@ void Daemon::stop()
     // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
     // non-trivial signal wiring + cached state that benefits from
     // explicit teardown for the same "queued D-Bus call lands during
-    // destruction window" defense-in-depth. WindowRuleAdaptor borrows
-    // m_windowRuleStore (a unique_ptr) and m_settings; without detach
+    // destruction window" defense-in-depth. RuleAdaptor borrows
+    // m_ruleStore (a unique_ptr) and m_settings; without detach
     // its slot bodies could deref freed memory during the window after
     // ~Daemon's body returns — that is when the unique_ptr members
-    // (including m_windowRuleStore) run their destructors, and the
-    // raw-Qt-parented WindowRuleAdaptor only runs its own destructor
+    // (including m_ruleStore) run their destructors, and the
+    // raw-Qt-parented RuleAdaptor only runs its own destructor
     // *after* that, as part of QObject child cleanup.
     //
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
@@ -2248,8 +2631,8 @@ void Daemon::stop()
     if (m_controlAdaptor) {
         m_controlAdaptor->detach();
     }
-    if (m_windowRuleAdaptor) {
-        m_windowRuleAdaptor->detach();
+    if (m_ruleAdaptor) {
+        m_ruleAdaptor->detach();
     }
 
     // Provider lambdas already cleared at the top of stop() (before the

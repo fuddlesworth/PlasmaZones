@@ -906,7 +906,7 @@ local function threeColumnLayout(area, count, gap, splitRatio, masterCount, minS
 
     local minCenterWidth = extractRegionMaxMin(minSizes, 0, masterCount, "w")
     local sideMinW
-    if #minSizes > 0 then
+    if minSizes and #minSizes > 0 then
         sideMinW = interleaveMinWidths(minSizes, stackIsLeft, stackCount, masterCount)
     else
         sideMinW = { minLeftWidth = 0, minRightWidth = 0 }
@@ -917,7 +917,7 @@ local function threeColumnLayout(area, count, gap, splitRatio, masterCount, minS
 
     local masterMinH = extractMinHeights(minSizes, masterCount)
     local sideMinH
-    if #minSizes > 0 then
+    if minSizes and #minSizes > 0 then
         sideMinH = interleaveMinHeights(minSizes, stackIsLeft, stackCount, leftCount, rightCount, masterCount)
     else
         sideMinH = { leftMinH = {}, rightMinH = {} }
@@ -990,6 +990,145 @@ local function applyTreeGeometry(node, rect, gap, depth)
     return zones
 end
 
+-- ── Shared algorithm helpers ───────────────────────────────────────────────
+-- Extracted from the bundled algorithms so many scripts share one copy. Each is
+-- behaviour-preserving: identical output to the inline code it replaces.
+
+-- Standard tile() preamble: no windows → empty; a work area below the minimum
+-- tile size → the host's fill fallback. Returns the early-out zone list, or nil
+-- when the caller should proceed. Call as:
+--   local early = pluau.guardArea(ctx.area, count); if early then return early end
+local function guardArea(area, count)
+    if count <= 0 then return {} end
+    if area.width < MIN_ZONE_SIZE or area.height < MIN_ZONE_SIZE then
+        return fillArea(area, count)
+    end
+    return nil
+end
+
+-- NaN-safe clamp. Returns nil when v is not a real number (callers pair it with
+-- `or default`), otherwise v bounded to [lo, hi].
+local function clamp(v, lo, hi)
+    if type(v) ~= "number" or v ~= v then
+        return nil
+    end
+    if v < lo then return lo end
+    if v > hi then return hi end
+    return v
+end
+
+-- Centred start for a `size`-long span inside a `total`-long region beginning at
+-- `start` (integer floor, matching the inline `start + floor((total - size) / 2)`).
+local function center(start, total, size)
+    return start + math.floor((total - size) / 2)
+end
+
+-- Square-ish grid shape for `count` cells: cols = ceil(sqrt), rows = ceil(count/cols).
+local function gridShape(count)
+    local cols = math.ceil(math.sqrt(count))
+    local rows = math.ceil(count / cols)
+    return cols, rows
+end
+
+-- Running start offsets for a run of `sizes` beginning at `start`, each separated
+-- by `gap`. offsets[1] = start; offsets[i + 1] = offsets[i] + sizes[i] + gap.
+-- Length equals #sizes for non-empty input; an empty `sizes` still yields
+-- { start } (both consumers pass at least one size after guardArea).
+local function cumulativeOffsets(start, sizes, gap)
+    local offsets = { start }
+    for i = 1, #sizes - 1 do
+        offsets[i + 1] = offsets[i] + sizes[i] + gap
+    end
+    return offsets
+end
+
+-- Per-window minimum (w, h) at 0-based index i; 0 for either when absent or
+-- non-positive. Mirrors the inline single-index reads in grid/spread/spiral.
+local function minSizeAt(minSizes, i)
+    local entry = minSizes and minSizes[i + 1]
+    local hasEntry = minSizes and i < #minSizes and entry
+    local w = (hasEntry and entry.w and entry.w > 0) and entry.w or 0
+    local h = (hasEntry and entry.h and entry.h > 0) and entry.h or 0
+    return w, h
+end
+
+-- Ratio reconstruction for the onWindowResized closed forms. A window whose size
+-- IS the ratio (grow edge): newRatio = new * oldRatio / old. A window that is the
+-- COMPLEMENT of the ratio (shrink edge): newRatio = 1 - new * (1 - oldRatio) / old.
+local function resizeRatioGrow(newSize, oldSize, oldRatio)
+    return newSize * oldRatio / oldSize
+end
+
+local function resizeRatioShrink(newSize, oldSize, oldRatio)
+    return 1 - newSize * (1 - oldRatio) / oldSize
+end
+
+-- Shared onWindowResized glue for master/stack layouts. The master/stack seam
+-- maps to the split ratio: dragging a master window's trailing edge grows the
+-- ratio, a stack window's leading edge shrinks it. `horizontal` selects the axis
+-- and the seam edges — false is the vertical seam (width axis; right grows, left
+-- shrinks, as in master-stack), true is the horizontal seam (height axis; bottom
+-- grows, top shrinks, as in wide). Returns a { splitRatio = ... } control table
+-- for the engine to apply locally, or nil when there is no seam or the drag is
+-- not on the boundary edge. The gap cancels in the fraction, so the new ratio is
+-- reconstructed self-referentially from the old size.
+local function masterStackResize(state, resize, horizontal)
+    local count = state.windowCount
+    local masterCount = state.masterCount
+    if count <= masterCount then return nil end -- no stack → no seam
+    local oldRatio = state.splitRatio
+    local old, new, edges, idx = resize.oldRect, resize.newRect, resize.edges, resize.index
+    local oldDim, newDim, growEdge, shrinkEdge
+    if horizontal then
+        oldDim, newDim = old.height, new.height
+        growEdge, shrinkEdge = edges.bottom, edges.top
+    else
+        oldDim, newDim = old.width, new.width
+        growEdge, shrinkEdge = edges.right, edges.left
+    end
+    if oldDim <= 0 or oldRatio <= 0 or oldRatio >= 1 then return nil end
+    if idx < masterCount then
+        if growEdge then
+            return { splitRatio = resizeRatioGrow(newDim, oldDim, oldRatio) }
+        end
+    else
+        if shrinkEdge then
+            return { splitRatio = resizeRatioShrink(newDim, oldDim, oldRatio) }
+        end
+    end
+    return nil
+end
+
+-- General horizontal/vertical strip of `count` cells filling a panel, appended to
+-- `zones`. When the gaps alone exceed the strip length it degrades to equal,
+-- overlapping fills; otherwise cells are distributed evenly (gap-aware).
+local function stripLayout(zones, startX, startY, panelW, panelH, count, gap, horizontal)
+    if count <= 0 then return end
+    local totalSize = horizontal and panelW or panelH
+
+    -- Degenerate gap: equal-split without gaps
+    if (count - 1) * gap >= totalSize then
+        local equalSize = math.max(1, math.floor(totalSize / count))
+        local fill
+        if horizontal then
+            fill = fillRegion(startX, startY, equalSize, panelH, count)
+        else
+            fill = fillRegion(startX, startY, panelW, equalSize, count)
+        end
+        for i = 1, #fill do zones[#zones + 1] = fill[i] end
+        return
+    end
+
+    local slots = distributeEvenly(horizontal and startX or startY, totalSize, count, gap)
+    for i = 1, #slots do
+        if horizontal then
+            zones[#zones + 1] = { x = slots[i].pos, y = startY, width = slots[i].size, height = panelH }
+        else
+            zones[#zones + 1] = { x = startX, y = slots[i].pos, width = panelW, height = slots[i].size }
+        end
+    end
+end
+
 -- ── Module wrapper ─────────────────────────────────────────────────────────
 local function algorithm(def)
     local userTile = def.tile
@@ -1036,4 +1175,15 @@ pluau = {
     solveThreeColumn = solveThreeColumn,
     threeColumnLayout = threeColumnLayout,
     applyTreeGeometry = applyTreeGeometry,
+    -- shared algorithm helpers
+    guardArea = guardArea,
+    clamp = clamp,
+    center = center,
+    gridShape = gridShape,
+    cumulativeOffsets = cumulativeOffsets,
+    minSizeAt = minSizeAt,
+    resizeRatioGrow = resizeRatioGrow,
+    resizeRatioShrink = resizeRatioShrink,
+    masterStackResize = masterStackResize,
+    stripLayout = stripLayout,
 }

@@ -206,11 +206,19 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     writeQmlProperty(slot, QStringLiteral("screenWidth"), screenGeom.width());
     writeQmlProperty(slot, QStringLiteral("screenHeight"), screenGeom.height());
 
-    writeColorSettings(slot, m_settings);
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
+    writeColorSettings(slot, m_settings, &overlayOverride);
     if (m_settings) {
-        writeQmlProperty(slot, QStringLiteral("borderWidth"), m_settings->borderWidth());
-        writeQmlProperty(slot, QStringLiteral("borderRadius"), m_settings->borderRadius());
+        writeQmlProperty(slot, QStringLiteral("borderWidth"),
+                         overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
+        writeQmlProperty(slot, QStringLiteral("borderRadius"),
+                         overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
     }
+
+    // Stage d: resolve + push the snap-assist surface-shader decoration (same
+    // SurfaceDecoration host the OSD uses, retargeted to the "popup.snapAssist"
+    // surface path). Empty source = no decoration (card draws natively).
+    applyDecoration(slot, QStringLiteral("popup.snapAssist"));
 
     // Resize the shell window to the target screen geometry (matches
     // OSD path's sizeOsdToScreen). The shell is shared with OSD,
@@ -249,8 +257,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
     // ensureCancelOverlayShortcutRegistered() - the shell's wl_surface is
     // kbd-None so the per-content QML Shortcut path used by the legacy
     // SnapAssistOverlay can't fire here. KGlobalAccel grab of Escape +
-    // cancelSnap()'s existing isSnapAssistVisible() branch (see
-    // windowdragadaptor.cpp:265) routes Escape to hideSnapAssist().
+    // cancelSnap()'s existing isSnapAssistVisible() branch routes Escape to
+    // hideSnapAssist().
     Q_EMIT snapAssistShown(screenId, emptyZones, candidates);
 }
 
@@ -424,7 +432,9 @@ void OverlayService::hideSnapAssist()
     // settle): in both cases "dismissed" arrives first.
     //
     // snapAssistDismissed → WindowDragAdaptor::onSnapAssistDismissed →
-    // unregisterCancelOverlayShortcut() (windowdragadaptor.cpp:82).
+    // releaseCancelOverlayShortcutIfIdle(), which drops the shared Escape
+    // grab only when no other overlay (e.g. the layout picker) still
+    // holds it - the conditionality is load-bearing for bail-path safety.
     Q_EMIT snapAssistDismissed();
 
     auto stateIt = m_screenStates.find(screenId);
@@ -509,10 +519,6 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
 
 void OverlayService::showLayoutPicker(const QString& screenId)
 {
-    if (m_layoutPickerVisible) {
-        return;
-    }
-
     QScreen* screen = resolveTargetScreen(m_screenManager, screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showLayoutPicker: no screen available";
@@ -520,6 +526,15 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     const QString resolvedId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
+
+    // Same-screen re-request while visible is a no-op; a request for a
+    // DIFFERENT screen migrates the picker there (dismiss + reshow below),
+    // mirroring showSnapAssist's cross-screen singleton handling instead of
+    // silently dropping the request.
+    if (m_layoutPickerVisible && m_layoutPickerScreenId == resolvedId) {
+        return;
+    }
+
     QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
     if (!screenGeom.isValid()) {
         screenGeom = screen->geometry();
@@ -530,9 +545,6 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         qCWarning(lcOverlay) << "showLayoutPicker: no passive shell for screen=" << resolvedId;
         return;
     }
-
-    // Hide the zone selector on this VS to avoid overlap.
-    hideZoneSelectorSlotOnScreen(resolvedId);
 
     QSize autotileCanvas;
     if (m_screenManager) {
@@ -547,13 +559,30 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    QString activeId;
-    if (m_layoutManager) {
-        PhosphorZones::Layout* activeLayout = resolveScreenLayout(resolvedId);
-        if (activeLayout) {
-            activeId = activeLayout->id().toString();
+    // Hide the zone selector on this VS to avoid overlap. Runs only after
+    // every bail above (shell + layouts validated), so a failed request can
+    // never leave the drag-time zone selector stuck hidden — same
+    // bails-first ordering contract as showSnapAssist.
+    hideZoneSelectorSlotOnScreen(resolvedId);
+
+    // The picker is a singleton across screens: with the new target fully
+    // validated (shell + layouts), dismiss it on the previous screen before
+    // showing here. Animator-driven hideSlot keys only the picker track, so
+    // sibling slots on the previous shell keep animating cleanly. Validation
+    // failures above return BEFORE this point, leaving the picker untouched
+    // on its current screen — same ordering contract as showSnapAssist.
+    if (m_layoutPickerVisible && !m_layoutPickerScreenId.isEmpty() && m_layoutPickerScreenId != resolvedId) {
+        const QString prevScreenId = m_layoutPickerScreenId;
+        auto prevIt = m_screenStates.find(prevScreenId);
+        if (prevIt != m_screenStates.end() && prevIt->shell && prevIt->shell->shellSurface()
+            && prevIt->layoutPickerSlot()) {
+            m_shellHost->hideSlot(prevScreenId, PhosphorSlotKeys::LayoutPicker(), [this, prevScreenId]() {
+                onLayoutPickerSlotHideCompleted(prevScreenId);
+            });
         }
     }
+
+    const QString activeId = activeLayoutIdForScreen(resolvedId);
 
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
@@ -567,7 +596,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     writeQmlProperty(slot, QStringLiteral("activeLayoutId"), activeId);
     writeQmlProperty(slot, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(slot, QStringLiteral("globalAutoAssign"), m_settings && m_settings->autoAssignAllLayouts());
-    writeFontProperties(slot, m_settings);
+    writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     bool locked = false;
     if (m_settings && m_layoutManager) {
@@ -576,7 +605,13 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         locked = isAnyModeLocked(m_settings, m_layoutManager, resolvedId, curDesktop, curActivity);
     }
     writeQmlProperty(slot, QStringLiteral("locked"), locked);
-    writeColorSettings(slot, m_settings);
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, resolvedId);
+    writeColorSettings(slot, m_settings, &overlayOverride);
+
+    // Stage d: resolve + push the layout-picker surface-shader decoration (same
+    // SurfaceDecoration host the OSD uses, retargeted to the "popup.layoutPicker"
+    // surface path). Empty source = no decoration (card draws natively).
+    applyDecoration(slot, QStringLiteral("popup.layoutPicker"));
 
     if (shellWindow) {
         assertWindowOnScreen(shellWindow, screen, screenGeom);

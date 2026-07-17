@@ -3,6 +3,8 @@
 
 #include "../plasmazoneseffect.h"
 
+#include "shader_internal.h"
+
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -26,9 +28,6 @@
 #include <QScopeGuard>
 #include <QSet>
 #include <QStringList>
-#include <QTimer>
-
-#include <utility>
 
 #include "../autotilehandler.h"
 #include "../navigationhandler.h"
@@ -54,6 +53,13 @@ void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& acti
 
 void PlasmaZonesEffect::slotActivateWindowRequested(const QString& windowId)
 {
+    // Showing-desktop guard: this activation is daemon-relayed (snap engine
+    // navigation/commit) and Workspace::activateWindow on a hidden window
+    // synchronously cancels a peek — see isShowingDesktop's doc for the policy.
+    if (PlasmaZonesEffect::isShowingDesktop()) {
+        qCDebug(lcEffect) << "slotActivateWindowRequested: dropped during show desktop" << windowId;
+        return;
+    }
     KWin::EffectWindow* w = findWindowById(windowId);
     if (w) {
         KWin::effects->activateWindow(w);
@@ -153,6 +159,14 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         qCWarning(lcEffect) << "slotApplyGeometryRequested: invalid geometry" << geometry;
         return;
     }
+    // Consume the drag-to-float marker FIRST, before the minimized early-return can bypass
+    // it. The marker is a one-shot: this float-restore event is exactly the one it was
+    // waiting for, so it must be cleared whether or not we go on to apply the geometry.
+    // Consuming it only on the non-minimized path left it armed when a drag-floated window
+    // was minimized, and the next legitimate float-restore for that window was then wrongly
+    // skipped by the stale marker.
+    const bool wasDragFloated = zoneId.isEmpty() && m_dragFloatedWindowIds.remove(liveWindowId);
+
     // Skip float-restore geometry on minimized windows: when a snapped window is minimized
     // we float it (to free the zone slot), but applying the pre-tile geometry while minimized
     // would poison what KWin restores to on unminimize, causing a visible flash of the
@@ -165,7 +179,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // Skip float-restore geometry for drag-to-float: when the user drags a window
     // off the autotile layout, the daemon restores pre-autotile geometry. But the
     // user expects the window to stay where they dropped it, not snap back.
-    if (zoneId.isEmpty() && m_dragFloatedWindowIds.remove(liveWindowId)) {
+    if (wasDragFloated) {
         qCInfo(lcEffect) << "slotApplyGeometryRequested: skipping float-restore for drag-floated window:"
                          << liveWindowId;
         return;
@@ -399,11 +413,11 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             // newer batch has superseded every screen this one targeted. The
             // superseding cascade captured and re-asserts the current stacking
             // order itself; replaying this batch's stale savedStack would
-            // shuffle windows into a pre-supersession order. drainPendingRestores
-            // and snap-assist below stay unconditional: for the non-resnap
-            // batches (rotate, vs_reconfigure, snap_all) both are no-ops, and a
-            // superseded resnap is still safe because the superseding resnap
-            // re-drains its own queued restores and re-evaluates snap assist.
+            // shuffle windows into a pre-supersession order. Snap-assist below
+            // stays unconditional: for the non-resnap batches (rotate,
+            // vs_reconfigure, snap_all) it is a no-op, and a superseded resnap
+            // is still safe because the superseding resnap re-evaluates snap
+            // assist itself.
             bool fullySuperseded = !genByScreen.isEmpty();
             for (auto it = genByScreen.constBegin(); it != genByScreen.constEnd(); ++it) {
                 if (m_daemonBatchGenByScreen.value(it.key()) == it.value()) {
@@ -422,19 +436,6 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                     }
                 }
             }
-            // Drain any title-bar restores deferred from autotile→snap mode
-            // toggle. slotScreensChanged queues deferred releases in the
-            // DecorationManager instead of running the slow Wayland
-            // decoration round-trips synchronously; by the time onComplete
-            // fires here, animations for all resnapped windows are already
-            // in flight via the animation framework, so borders return
-            // mid-animation rather than after a 250+ ms stall before motion
-            // begins. Windows snap re-acquired during the resnap keep their
-            // title bars hidden (the manager cancels their queued restores).
-            // Unconditional — for non-mode-toggle batches (rotate,
-            // vs_reconfigure, snap_all) the pending set is empty and the
-            // call is a no-op.
-            m_decorationManager->drainPendingRestores();
             // Show snap assist after resnap if applicable.
             //
             // A resnap is a bulk operation (autotile→snap toggle, rotate,
@@ -494,6 +495,9 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // empty zoneId (e.g. a float toggle when no pre-tile geometry is
         // stored, so applyGeometryForFloat sends nothing). Idempotent — a
         // no-op if the window wasn't snap-tracked.
+        // clearWindowSnapped also drops the ZoneCache entry (the IsSnapped /
+        // Zone rule-fact source), covering float paths that don't emit
+        // windowStateChanged with an empty zone.
         m_snapHandler->clearWindowSnapped(windowId);
 
         // Invalidate any stale instant-restore entry for this app. The snap
@@ -509,8 +513,19 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // appId to survive the window's identity change across close/reopen.
         m_snapHandler->invalidateRestore(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
-    // isFloating is now a rule MATCH field — re-resolve appearance / animation
-    // rules for this window so a `WHEN isFloating` border / opacity re-applies.
+    // The change-gated write above (setWindowFloating, plus the zone-cache
+    // clear that now runs inside clearWindowSnapped on the floating branch)
+    // re-resolves this window's rules only when a match field actually flips.
+    // That is not enough on the cross-monitor drag-out path: the cross-screen
+    // handoff pre-sets the floating / zone caches while the window is still
+    // moving, so by the time this
+    // authoritative windowFloatingChanged arrives both writes are no-ops and the
+    // hide-title-bar / border reconcile never runs — the floated window keeps its
+    // snap chrome (hidden title bar), ignoring the show-title-bar-when-floating rule.
+    // This signal IS the authoritative placement-state change, so reconcile
+    // unconditionally; invalidateRuleCacheForStateChange coalesces to a single flush
+    // per event-loop turn, so the redundant call when a write did flip the cache is
+    // cheap. Mirrors the drag-end paths, which invalidate directly and unconditionally.
     invalidateRuleCacheForStateChange(windowId);
 }
 
@@ -523,118 +538,131 @@ void PlasmaZonesEffect::slotWindowStateChanged(const QString& windowId, const Ph
         qCWarning(lcEffect) << "slotWindowStateChanged: rejecting invalid entry —" << err;
         return;
     }
+    // Re-key to the window's LIVE id before writing, not the daemon-supplied one.
+    //
+    // ZoneCache keys on the instance UUID (extractInstanceId), and so does the IsSnapped /
+    // Zone rule-match READ — but through a cross-session restore the daemon can still hold
+    // the pre-restore UUID, so a write keyed on it files the entry under an instance id the
+    // rule matcher will never read, and a restored snapped window's IsSnapped / Zone(...)
+    // rules silently stop matching. Every other commit path already keys by the live id
+    // (slotApplyGeometryRequested spells out why). A window that cannot be resolved falls
+    // back to the daemon id — best-effort, and correct for the ordinary same-session case
+    // where the two ids are identical.
+    QString liveWindowId = windowId;
+    if (KWin::EffectWindow* const w = findWindowById(windowId)) {
+        liveWindowId = getWindowId(w);
+    }
     // Keep the effect-side zone cache current so the IsSnapped / Zone rule-match
     // fields resolve against the live placement. An empty zoneId (unsnapped /
-    // floated / screen-changed) removes the entry. The isFloating cache WRITE lives
-    // on the separate windowFloatingChanged path, so it is not duplicated here; the
-    // rule-cache invalidation below coalesces with the floating path's (a float
-    // toggle emits both signals — see flushPendingRuleInvalidations).
-    m_navigationHandler->setWindowZone(windowId, state.zoneId);
-    invalidateRuleCacheForStateChange(windowId);
-}
-
-void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowId)
-{
-    if (m_shaderManager.animationRuleSet().isEmpty()) {
-        return;
-    }
-    // Coalesce: a single float toggle emits BOTH windowFloatingChanged and
-    // windowStateChanged, so this runs twice per logical change. Accumulate the
-    // affected windowIds and flush once at the end of the event-loop turn — the
-    // match-cache clear is global (running it per call is wasteful) and the
-    // per-window border rebuild is otherwise repeated. The flush before the next
-    // paint keeps the re-resolved border / opacity visually immediate.
-    //
-    // Only the CACHED verdicts (border / opacity) need invalidation. shouldHandleWindow's
-    // exclusion query is evaluated on-demand every time it is consulted (drag start,
-    // lifecycle filtering), so a snap/float/zone change is picked up at the next natural
-    // call without eager re-filtering.
-    const bool wasEmpty = m_pendingRuleInvalidations.isEmpty();
-    m_pendingRuleInvalidations.insert(windowId);
-    if (wasEmpty) {
-        // `this` as the context object cancels the callback if the effect is torn
-        // down before the turn ends.
-        QTimer::singleShot(0, this, [this] {
-            flushPendingRuleInvalidations();
-        });
-    }
-}
-
-void PlasmaZonesEffect::flushPendingRuleInvalidations()
-{
-    const QSet<QString> windowIds = std::exchange(m_pendingRuleInvalidations, {});
-    if (windowIds.isEmpty() || m_shaderManager.animationRuleSet().isEmpty()) {
-        return;
-    }
-    // The match cache is keyed on (windowId, ruleSet revision); neither moves on a
-    // placement-state change, so drop it once so border / opacity rules re-resolve
-    // against the new snapped / floating / zone state.
-    m_shaderManager.animationRuleEvaluator().clearCache();
-    const bool hasOpacity = m_shaderManager.hasOpacityRules();
-    for (const QString& windowId : windowIds) {
-        KWin::EffectWindow* w = findWindowById(windowId);
-        if (!w) {
-            continue;
-        }
-        // Recreate this window's border so a state-scoped border colour re-applies.
-        updateWindowBorder(windowId, w);
-        // An opacity-only (borderless) window needs an explicit repaint for its
-        // re-resolved opacity to reach the screen (mirrors slotWindowActivated).
-        if (hasOpacity) {
-            w->addRepaintFull();
-        }
-    }
-}
-
-void PlasmaZonesEffect::invalidateAllRuleCaches()
-{
-    if (m_shaderManager.animationRuleSet().isEmpty()) {
-        return;
-    }
-    // A bulk placement change (daemon loss clears the zone/floating caches; the
-    // daemon-ready re-seed repopulates them) moves neither the windowId nor the
-    // ruleSet revision the match cache is keyed on, so every placement-scoped
-    // verdict would survive stale. Drop the whole cache; the full repaint makes
-    // every opacity-only window re-resolve against the current placement on the
-    // next frame (border windows recover through their own restore/rebuild path).
-    m_shaderManager.animationRuleEvaluator().clearCache();
-    if (KWin::effects && m_shaderManager.hasOpacityRules()) {
-        KWin::effects->addRepaintFull();
-    }
+    // floated / screen-changed) removes the entry. setWindowZone re-resolves this
+    // window's rules when the zone actually changes (coalescing with the floating
+    // path's invalidation when a float toggle emits both signals — see
+    // flushPendingRuleInvalidations), so no separate invalidate call is needed.
+    m_navigationHandler->setWindowZone(liveWindowId, state.zoneId);
 }
 
 void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 {
-    if (!w || !shouldHandleWindow(w) || !isTileableWindow(w)) {
+    if (!w) {
         return;
     }
-    const QString windowId = getWindowId(w);
-    const QString screenId = getWindowScreenId(w);
     const bool minimized = w->isMinimized();
 
-    // window.minimize shader transition fires for BOTH snap and autotile
-    // screens — the shader event is screen-mode-independent and the
-    // autotile handler's own minimised-change slot does not fire it
-    // (which would otherwise be asymmetric per-screen UX for the same
-    // user-configured "WindowMinimize" event).
+    // window.minimize shader transition fires for EVERY window the
+    // animation filter admits — like the open / close / focus events, it
+    // gates only on `shouldAnimateWindow` (enforced inside
+    // tryBeginShaderForEvent), NOT on the tiling filters below. A window
+    // excluded from tiling (min-size, exclusion rule) still animates its
+    // other lifecycle events, so it must animate minimize too. It also
+    // fires for BOTH snap and autotile screens — the shader event is
+    // screen-mode-independent and the autotile handler's own
+    // minimised-change slot does not fire it (which would otherwise be
+    // asymmetric per-screen UX for the same user-configured
+    // "WindowMinimize" event).
     //
-    // We only fire on UN-minimize (forward 0→1, "appear"). The
-    // going-to-minimized direction is intentionally not a shader event
-    // on the kwin-effect path: KWin pulls the surface (collapses frame
-    // geometry to 0×0 / sets isMinimized=true) BEFORE this signal fires,
-    // and beginShaderTransition's collapsed-surface guard rejects the
-    // install — the FBO allocation aborts on a 0×0 redirect target.
-    // A genuine "going away" minimise animation would need an
-    // unredirect-time hook that captures the last live frame before
-    // KWin tears the surface down; that's out of scope for this layer.
-    if (!minimized) {
+    // Un-minimize plays forward (0→1, "appear"); going-to-minimized plays
+    // the same shader in reverse (1→0, "going away"), matching the
+    // close / unmaximize reverse-leg convention.
+    //
+    // The going-to-minimized direction was historically skipped on the
+    // claim that KWin pulls the surface (collapses the frame to 0×0)
+    // before this signal fires. That was a misdiagnosis: minimizing keeps
+    // the frame geometry and the last committed buffer intact and only
+    // disables painting via PAINT_DISABLED_BY_MINIMIZE, which
+    // beginShaderTransition lifts with an EffectWindowVisibleRef for the
+    // transition's lifetime (the mechanism KWin's own Magic Lamp / Squash
+    // minimize effects use).
+    // animateMinimized opts the going-to-minimized leg past the
+    // begin-side minimized-window reject; the un-minimize leg runs on a
+    // visible window where the flag is moot.
+    //
+    // Spurious-pair suppression: plasmashell notification stacking makes
+    // KWin emit minimizedChanged(true) on tiled windows with the matching
+    // unminimize ~1-2 ms later (the same quirk kMinimizeFloatDebounceMs
+    // in autotilehandler/signals.cpp debounces on the float side). The
+    // reverse leg installs immediately — a genuine minimize must not
+    // start late, and a spurious pair paints at most one barely-started
+    // frame — but an unminimize landing inside the window means the pair
+    // was noise: silently drop the reverse leg instead of superseding it
+    // with a full un-minimize replay, which with an icon pack made every
+    // tiled window pour out of its taskbar icon on every notification.
+    if (minimized) {
+        // Stamp only a leg that is provably OURS, identified by generation.
+        // tryBeginShaderForEvent can install nothing (no pack assigned,
+        // null-shader sentinel, animation filter), and stamping blindly
+        // would let a spurious pair kill an unrelated leg mid-animation —
+        // a future reverse leg, or a superseding one. A fresh install is
+        // detected by the generation changing; a repeated minimize event
+        // whose prior minimize leg is still live (same-effect
+        // short-circuit) refreshes the stamp's timestamp while keeping
+        // the same generation.
+        const auto* pre = m_shaderManager.findTransition(w);
+        const quint64 preGeneration = pre ? pre->generation : 0;
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
-                               /*reverse=*/false);
+                               /*reverse=*/true, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
+                               /*animateMinimized=*/true);
+        if (const auto* post = m_shaderManager.findTransition(w); post && post->reverse) {
+            const auto stampIt = m_minimizeShaderStamp.constFind(w);
+            const bool freshInstall = post->generation != preGeneration;
+            const bool ourLiveLeg =
+                stampIt != m_minimizeShaderStamp.constEnd() && stampIt->generation == post->generation;
+            if (freshInstall || ourLiveLeg) {
+                // Stamp with a FRESH clock sample, not one taken at slot
+                // entry: a cold-cache install compiles the pack on this
+                // thread (tens of ms for a heavy shader), and the paired
+                // spurious unminimize measures its gap from ITS slot
+                // entry — an entry-time stamp would inflate the measured
+                // gap by the compile cost and let the session's first
+                // notification-induced pair escape suppression.
+                m_minimizeShaderStamp.insert(w, {ShaderInternal::shaderClockNowMs(), post->generation});
+            }
+        }
+    } else {
+        const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+        const MinimizeShaderStamp stamp = m_minimizeShaderStamp.take(w);
+        const bool spuriousPair = stamp.timeMs > 0 && nowMs - stamp.timeMs < kSpuriousMinimizePairMs;
+        if (spuriousPair) {
+            // Only the exact leg we stamped is ours to drop — the
+            // generation check keeps a superseding leg (or anything else
+            // live on the window) on its own teardown.
+            if (const auto* st = m_shaderManager.findTransition(w);
+                st && st->reverse && st->generation == stamp.generation) {
+                endShaderTransition(w);
+            }
+        } else {
+            tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
+                                   /*reverse=*/false);
+        }
     }
 
-    // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler (mirrors
-    // AutotileHandler running its own minimize→float machine for autotile screens).
-    m_snapHandler->handleMinimizeChanged(windowId, screenId, minimized);
+    // Snap-mode-only minimize→float bookkeeping is owned by SnapHandler
+    // (mirrors AutotileHandler running its own minimize→float machine for
+    // autotile screens). Unlike the shader event above, this state
+    // machine only concerns windows the tiling system manages.
+    if (!shouldHandleWindow(w) || !isTileableWindow(w)) {
+        return;
+    }
+    m_snapHandler->handleMinimizeChanged(w, getWindowId(w), getWindowScreenId(w), minimized);
 }
 
 void PlasmaZonesEffect::slotRunningWindowsRequested()

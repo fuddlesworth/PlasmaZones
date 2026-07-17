@@ -13,7 +13,6 @@
 
 #include <PhosphorConfig/IBackend.h>
 #include <PhosphorConfig/JsonBackend.h>
-#include <PhosphorConfig/QSettingsBackend.h>
 
 #include <memory>
 
@@ -25,9 +24,5 @@ PLASMAZONES_EXPORT std::unique_ptr<PhosphorConfig::IBackend> createDefaultConfig
 /// Ephemeral window-tracking session state (~/.config/plasmazones/session.json).
 /// Separate file from config.json to avoid write contention.
 PLASMAZONES_EXPORT std::unique_ptr<PhosphorConfig::IBackend> createSessionBackend();
-
-/// Legacy plasmazonesrc INI backend. Used only by migration and tests —
-/// runtime code uses the JSON factories above.
-PLASMAZONES_EXPORT std::unique_ptr<PhosphorConfig::QSettingsBackend> createLegacyQSettingsBackend();
 
 } // namespace PlasmaZones

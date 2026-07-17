@@ -14,6 +14,15 @@
 
 namespace PlasmaZones {
 
+bool windowIsTransient(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return false;
+    }
+    return w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
+        || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor() != nullptr;
+}
+
 PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
 {
     using PhosphorProtocol::WindowType;
@@ -56,10 +65,10 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     return WindowType::Unknown;
 }
 
-PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating,
-                                                    bool isSnapped, const QString& zoneId)
+PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
+                                        bool isTiled, const QString& zoneId)
 {
-    PhosphorWindowRules::WindowQuery query;
+    PhosphorRules::WindowQuery query;
     if (!w) {
         return query;
     }
@@ -69,8 +78,19 @@ PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const
     // (the engaged-empty foot-gun the string fields below also avoid).
     query.isFloating = isFloating;
     query.isSnapped = isSnapped;
+    query.isTiled = isTiled;
     if (!zoneId.isEmpty()) {
         query.zone = zoneId;
+    }
+    // Engine mode (context field) — derived from the snapped / tiled state above
+    // so a per-mode rule (`Mode Equals "tiling"`) resolves this window's border /
+    // title / colour the same way the daemon resolves its per-mode gaps. Snapping
+    // and tiling are the only engine modes; a floating (unmanaged) window has no
+    // mode, so query.mode is left empty and no Mode leaf matches it.
+    if (isTiled) {
+        query.mode = QStringLiteral("tiling");
+    } else if (isSnapped) {
+        query.mode = QStringLiteral("snapping");
     }
     // Context fields — let a window-domain rule pin screen / desktop / activity
     // (e.g. "red border on monitor 2"). screenId is resolved by the caller (the
@@ -78,6 +98,16 @@ PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const
     // virtualDesktop / activity are derived here, mirroring the daemon-side
     // setWindowMetadata derivation in window_identity.cpp (0 / "" = all/unknown).
     query.screenId = screenId;
+    // Orientation of the window's screen ("portrait" when taller than wide), so a
+    // window rule can match ScreenOrientation the same way a context rule does.
+    // Left empty (inert) when the output or its geometry is unavailable; a square
+    // screen counts as landscape, matching the daemon-side orientation provider.
+    if (const auto* output = w->screen()) {
+        const QRect g = output->geometry();
+        if (g.isValid()) {
+            query.screenOrientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+        }
+    }
     // `WindowQuery` fields are `std::optional` — leaving a field disengaged
     // makes a predicate over it inert (returns false). Engaging it with an
     // empty string instead would silently match `Equals ""` and `Regex "^$"`,
@@ -150,6 +180,8 @@ PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const
         query.skipTaskbar = kw->skipTaskbar();
         query.skipPager = kw->skipPager();
         query.isResizable = kw->isResizable();
+        query.isMovable = kw->isMovable();
+        query.isMaximizable = kw->isMaximizable();
         // captionNormal is the raw WM_NAME without the WM-added " — App" suffix
         // that caption() (used for Title above) includes. Gate non-empty like
         // the other string fields so a disengaged optional stays a non-match.
@@ -159,7 +191,7 @@ PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const
         }
     }
     // isFocused mirrors the live active-window state so a rule like
-    // "isFocused=false ⇒ SetBorderColor(gray)" resolves correctly. The
+    // "isFocused=false ⇒ SetBorderColorActive(gray)" resolves correctly. The
     // evaluator's per-window match cache is keyed on (windowId, ruleSet
     // revision) — neither moves on focus change — so callers MUST invalidate
     // it on KWin's windowActivated signal (see slotWindowActivated), exactly
@@ -176,8 +208,7 @@ PhosphorWindowRules::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const
     //   width/height → frame extent; a `Width LessThan N` leaf reproduces the
     //                  `frame.width() < N` strict-less-than gate (integer
     //                  truncation is safe at integer thresholds).
-    query.isTransient = w->isDialog() || w->isUtility() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
-        || w->isTooltip() || w->isMenu() || w->isSplash() || w->transientFor() != nullptr;
+    query.isTransient = windowIsTransient(w);
     query.isNotification = w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay();
     // Stacking / accessory flags read straight off EffectWindow. Always engaged
     // when the window exists, like the other bool flags above.

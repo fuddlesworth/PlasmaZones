@@ -13,12 +13,12 @@
 namespace PhosphorZones {
 
 namespace {
-// Screen-id resolver state. The resolver is installed by the daemon / editor /
-// settings at startup and read by Layout::fromJson, which can run on any
-// thread — the QFileSystemWatcher worker in particular services layout-file
-// change notifications off the main thread. A plain static std::function is
-// subject to torn reads when set() races with an ongoing get(); guard it with
-// a mutex and return copies so readers never outlive the stored callable.
+// Screen-id resolver state. This is process-wide static state with no thread
+// affinity of its own: it is installed by the daemon / editor / settings at
+// startup and read by Layout::fromJson, which is a plain static any caller on
+// any thread may reach. A bare static std::function is subject to torn reads
+// when set() races an in-flight get(), so guard it with a mutex and return
+// copies, which also keeps a reader from outliving the stored callable.
 std::mutex& resolverMutex()
 {
     static std::mutex m;
@@ -316,6 +316,15 @@ QRectF Layout::fixedZoneBoundingBox() const
         maxY = std::max(maxY, fg.y() + fg.height());
         hasAny = true;
     }
+    // Anchored at the screen origin, tracking extents only: a fixed zone's
+    // pixels are offsets from the screen origin, and normalizedGeometry divides
+    // by the reference SIZE without subtracting its origin (that contract is
+    // load-bearing — windowtrackingadaptor/persistence.cpp hands it a screen
+    // rect that carries a non-zero origin on a secondary monitor and adds the
+    // origin back itself). So the reference has to be an extent from that same
+    // origin, which is what this returns. A negative fixed offset therefore
+    // falls OUTSIDE this box; keeping the emitted relativeGeometry inside 0–1
+    // is Zone::toJson's clamp, not this box's job.
     return hasAny ? QRectF(0, 0, maxX, maxY) : QRectF();
 }
 
@@ -324,10 +333,18 @@ QRectF Layout::fixedZoneReferenceGeometry() const
     const QRectF bbox = fixedZoneBoundingBox();
     if (bbox.isEmpty())
         return QRectF();
-    if (m_lastRecalcGeometry.height() > 0 && bbox.width() <= m_lastRecalcGeometry.width()
-        && bbox.height() <= m_lastRecalcGeometry.height()) {
+    // The recalc rect is the screen the layout was last laid out against, and
+    // that is the frame the relative coords are defined over, so prefer it
+    // whenever it can hold the fixed zones. Both extents are checked: a
+    // width-only overflow stretches the editor canvas exactly as a height-only
+    // one does.
+    if (m_lastRecalcGeometry.width() > 0 && m_lastRecalcGeometry.height() > 0
+        && bbox.width() <= m_lastRecalcGeometry.width() && bbox.height() <= m_lastRecalcGeometry.height()) {
         return m_lastRecalcGeometry;
     }
+    // Either the zones genuinely overflow the screen (a 3840x2160 layout on a
+    // 3840x2126 panel-reduced screen — pinning to the bbox keeps the editor
+    // canvas from squashing them, discussion #593) or no screen is known yet.
     return bbox;
 }
 
@@ -468,7 +485,7 @@ void Layout::addZone(Zone* zone)
         if (zone->zoneNumber() <= 0) {
             zone->setZoneNumber(m_zones.size());
         }
-        m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
+        m_zoneGeometryDirty = true; // Absolute geometries owe a recompute
         Q_EMIT zoneAdded(zone);
         Q_EMIT zonesChanged();
         emitModifiedIfNotBatched();
@@ -478,7 +495,7 @@ void Layout::addZone(Zone* zone)
 void Layout::removeZone(Zone* zone)
 {
     if (zone && m_zones.removeOne(zone)) {
-        m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
+        m_zoneGeometryDirty = true; // Absolute geometries owe a recompute
         // Renumber BEFORE emitting zoneRemoved so observers see a coherent
         // post-state: the removed zone is detached and the remaining zones
         // already carry their final 1..N numbers.
@@ -494,7 +511,7 @@ void Layout::removeZoneAt(int index)
 {
     if (index >= 0 && index < m_zones.size()) {
         auto zone = m_zones.takeAt(index);
-        m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
+        m_zoneGeometryDirty = true; // Absolute geometries owe a recompute
         renumberZones();
         Q_EMIT zoneRemoved(zone);
         zone->deleteLater();
@@ -511,7 +528,7 @@ void Layout::clearZones()
             zone->deleteLater();
         }
         m_zones.clear();
-        m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
+        m_zoneGeometryDirty = true; // Absolute geometries owe a recompute
         Q_EMIT zonesChanged();
         emitModifiedIfNotBatched();
     }
@@ -615,11 +632,16 @@ QVector<Zone*> Layout::adjacentZones(const QPointF& point, qreal threshold) cons
 
 void Layout::recalculateZoneGeometries(const QRectF& screenGeometry)
 {
-    // Skip if geometry hasn't changed (prevents redundant recalculations)
-    if (screenGeometry == m_lastRecalcGeometry) {
+    // Skip if neither input changed (prevents redundant recalculations). The
+    // zone-set check is what the cleared cache used to stand in for: a layout
+    // whose zones were swapped since the last pass still carries the same
+    // screen rect, so comparing the rect alone would early-out and leave the
+    // new zones with no absolute geometry at all.
+    if (screenGeometry == m_lastRecalcGeometry && !m_zoneGeometryDirty) {
         return;
     }
     m_lastRecalcGeometry = screenGeometry;
+    m_zoneGeometryDirty = false;
 
     qCDebug(PhosphorZones::lcLayoutLib) << "recalculateZoneGeometries layout=" << m_name
                                         << "screenGeometry=" << screenGeometry;

@@ -21,9 +21,9 @@
 // metadata.json declaration order → customParams[0] sub-slots:
 // p_gridDensity (customParams[0].x), p_cellSmoothness (customParams[0].y).
 
-float rs_rand(vec2 co) {
-    return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
-}
+// classicHash (the (12.9898, 78.233) sin-dot value hash) hosted in
+// shared/noise.glsl; the per-shader rs_rand copy collapsed to it.
+#include <noise.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
@@ -37,7 +37,7 @@ vec4 pTransition(vec2 uv, float t) {
     // against the pre-first-frame (0,0) state of either uniform.
     vec2 sz = vec2(p_gridDensity) * max(iAnchorSize, vec2(1.0))
                                 / max(iSurfaceScreenPos.zw, vec2(1.0));
-    float r = rs_rand(floor(sz * uv));
+    float r = classicHash(floor(sz * uv));
     float reveal = smoothstep(0.0, -p_cellSmoothness, r - (p * (1.0 + p_cellSmoothness)));
 
     return win * reveal;

@@ -1,0 +1,75 @@
+{
+    "id": "phosphor-condense",
+    "name": "Phosphor Condense",
+    "description": "The window condenses out of rising ember dust in the Phosphor style. Sparks drift upward and thicken along a noisy frontier that climbs the surface, each region locking into the image as the light reaches it, with the brand gradient from cyan to rose riding the embers. Closing disperses the window back into embers that burn out as they rise.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Particle",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "grain",
+            "name": "Frontier Grain",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.2,
+            "max": 3.0
+        },
+        {
+            "id": "softness",
+            "name": "Frontier Softness",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.05,
+            "max": 0.4
+        },
+        {
+            "id": "density",
+            "name": "Ember Density",
+            "type": "float",
+            "default": 26.0,
+            "min": 8.0,
+            "max": 60.0
+        },
+        {
+            "id": "embers",
+            "name": "Ember Intensity",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "glow",
+            "name": "Frontier Glow",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient Cyan",
+            "type": "color",
+            "default": "#22D3EE"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient Blue",
+            "type": "color",
+            "default": "#3B82F6"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient Purple",
+            "type": "color",
+            "default": "#A855F7"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient Rose",
+            "type": "color",
+            "default": "#F43F5E"
+        }
+    ]
+}

@@ -179,7 +179,7 @@ QVector<SearchEntry> SearchController::buildIndex() const
     // Static + provider entries: auto-fill the breadcrumb from the page
     // hierarchy when the producer didn't set one, so section/setting/entity
     // results read consistently with page results. A producer-supplied subtitle
-    // (e.g. a window rule's match summary) is respected.
+    // (e.g. a rule's match summary) is respected.
     for (SearchEntry e : m_staticEntries) {
         if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page) {
             e.subtitle = breadcrumbFor(e.pageId, true);

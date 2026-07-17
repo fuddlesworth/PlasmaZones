@@ -4,7 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
-import org.phosphor.animation
+import org.plasmazones.common as QFZCommon
 
 /**
  * Snap Assist content body — Aero-Snap-style window picker rendered as
@@ -16,7 +16,7 @@ import org.phosphor.animation
  * (`KeyboardInteractivity::None`); Escape is routed via the daemon's
  * KGlobalAccel `cancel_overlay_during_drag` shortcut, which calls
  * `WindowDragAdaptor::cancelSnap()` — that already dismisses snap-assist
- * when visible (windowdragadaptor.cpp:265), so no per-content kbd grab
+ * when visible, so no per-content kbd grab
  * is needed.
  *
  * Carries `property bool shaderAnchor: true` so the SurfaceAnimator's
@@ -36,9 +36,11 @@ Item {
     property int screenWidth: 1920
     property int screenHeight: 1080
     // Zone appearance defaults — C++ side overwrites from settings.
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    // highlightColor is unused in-file but declared for the
+    // writeColorSettings push contract symmetry (all slots receive the trio).
+    property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
+    property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
+    property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
     property int borderWidth: Kirigami.Units.smallSpacing
@@ -80,6 +82,8 @@ Item {
         Item {
             id: zoneContainer
 
+            required property var modelData
+
             property var zone: modelData
 
             x: zone ? zone.x : 0
@@ -91,7 +95,10 @@ Item {
             Rectangle {
                 id: zoneBg
 
-                readonly property bool useCustom: zone && (zone.useCustomColors === true || zone.useCustomColors === 1)
+                // Shared contract with ZoneOverlayContent.hasCustomColors() and
+                // RenderNodeOverlayContent's useCustom: only true, 1, or "true"
+                // enable per-zone colors (raw truthiness would accept "false").
+                readonly property bool useCustom: zone !== null && zone !== undefined && (zone.useCustomColors === true || zone.useCustomColors === 1 || (typeof zone.useCustomColors === "string" && zone.useCustomColors.toLowerCase() === "true"))
                 readonly property color fillColor: useCustom && zone.inactiveColor ? zone.inactiveColor : root.inactiveColor
                 readonly property real fillOpacity: useCustom && zone.inactiveOpacity !== undefined ? zone.inactiveOpacity : root.inactiveOpacity
                 readonly property color strokeColor: useCustom && zone.borderColor ? zone.borderColor : root.borderColor
@@ -161,6 +168,8 @@ Item {
                     Item {
                         id: candidateCard
 
+                        required property var modelData
+
                         property var candidate: modelData
                         property bool hovered: cardMouse.containsMouse
 
@@ -180,7 +189,7 @@ Item {
                             anchors.fill: parent
                             radius: Math.max(2, candidateFlow.zoneSize * 0.01)
                             color: candidateCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.35) : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.75)
-                            border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
+                            border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                             border.width: candidateCard.hovered ? Kirigami.Units.smallSpacing : Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
                         }
 
@@ -230,6 +239,7 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: root.visible
                             cursorShape: Qt.PointingHandCursor
+                            Accessible.role: Accessible.Button
                             Accessible.name: candidate && candidate.caption ? i18n("Snap %1 to this zone", candidate.caption) : i18n("Snap window to this zone")
                             onClicked: {
                                 const wId = candidate ? candidate.windowId : "";

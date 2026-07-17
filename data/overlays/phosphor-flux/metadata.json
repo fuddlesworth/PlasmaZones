@@ -1,0 +1,206 @@
+{
+    "id": "phosphor-flux",
+    "name": "Phosphor Flux",
+    "category": "Branded",
+    "description": "The official Phosphor look. Zones rest on the deep navy brand surface while two depths of luminous gradient ribbons drift through them, ember dust rises with the gradient, bright signal pulses travel a sparse node graph, nested containment strokes breathe inside each zone, and all the borders sample one shared gradient frame with a gleam orbiting each zone. With audio, every ember column rides its own spectrum band, the ribbons warp where the music is loud, bass blooms the graph nodes into small plasma vortices and breathes the shells, and the frame gleams run hotter with the energy.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "speed",
+            "name": "Animation Speed",
+            "group": "Animation",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.1,
+            "max": 4.0
+        },
+        {
+            "id": "fluxIntensity",
+            "name": "Flux Intensity",
+            "group": "Flux Field",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.0,
+            "max": 1.5
+        },
+        {
+            "id": "fluxScale",
+            "name": "Flux Scale",
+            "group": "Flux Field",
+            "type": "float",
+            "default": 1.6,
+            "min": 0.4,
+            "max": 5.0
+        },
+        {
+            "id": "emberIntensity",
+            "name": "Ember Intensity",
+            "group": "Embers",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.0,
+            "max": 1.5
+        },
+        {
+            "id": "emberDensity",
+            "name": "Ember Columns",
+            "group": "Embers",
+            "type": "float",
+            "default": 28.0,
+            "min": 8.0,
+            "max": 64.0
+        },
+        {
+            "id": "gleamStrength",
+            "name": "Frame Gleam",
+            "group": "Appearance",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "graphScale",
+            "name": "Graph Density",
+            "group": "Signal Graph",
+            "type": "float",
+            "default": 5.0,
+            "min": 2.0,
+            "max": 12.0
+        },
+        {
+            "id": "graphOpacity",
+            "name": "Graph Opacity",
+            "group": "Signal Graph",
+            "type": "float",
+            "default": 0.4,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "pulseSpeed",
+            "name": "Pulse Speed",
+            "group": "Signal Graph",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "shellCount",
+            "name": "Shell Count",
+            "group": "Shells",
+            "type": "int",
+            "default": 3,
+            "min": 0,
+            "max": 4
+        },
+        {
+            "id": "shellSpacing",
+            "name": "Shell Spacing",
+            "group": "Shells",
+            "type": "float",
+            "default": 14.0,
+            "min": 6.0,
+            "max": 40.0
+        },
+        {
+            "id": "shellOpacity",
+            "name": "Shell Opacity",
+            "group": "Shells",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "shellPulseSpeed",
+            "name": "Shell Pulse Speed",
+            "group": "Shells",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.0,
+            "max": 4.0
+        },
+        {
+            "id": "fillOpacity",
+            "name": "Fill Opacity",
+            "group": "Appearance",
+            "type": "float",
+            "default": 0.92,
+            "min": 0.4,
+            "max": 1.0
+        },
+        {
+            "id": "glowStrength",
+            "name": "Glow Strength",
+            "group": "Appearance",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "audioSensitivity",
+            "name": "Audio Sensitivity",
+            "group": "Audio",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "labelBrightness",
+            "name": "Label Brightness",
+            "group": "Labels",
+            "type": "float",
+            "default": 1.8,
+            "min": 1.0,
+            "max": 4.0
+        },
+        {
+            "id": "showLabels",
+            "name": "Show Labels",
+            "group": "Labels",
+            "type": "bool",
+            "default": true
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient Cyan",
+            "group": "Colors",
+            "type": "color",
+            "default": "#22D3EE"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient Blue",
+            "group": "Colors",
+            "type": "color",
+            "default": "#3B82F6"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient Purple",
+            "group": "Colors",
+            "type": "color",
+            "default": "#A855F7"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient Rose",
+            "group": "Colors",
+            "type": "color",
+            "default": "#F43F5E"
+        },
+        {
+            "id": "backgroundColor",
+            "name": "Background Color",
+            "group": "Colors",
+            "type": "color",
+            "default": "#0B1730"
+        }
+    ]
+}

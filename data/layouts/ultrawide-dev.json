@@ -3,7 +3,6 @@
     "name": "Ultrawide Dev",
     "description": "Code + Preview + Terminal layout for developers on 21:9 monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "ultrawide",
     "zones": [

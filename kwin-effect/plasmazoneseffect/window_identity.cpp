@@ -130,7 +130,7 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
 
     const int windowType = static_cast<int>(windowTypeFor(w));
 
-    // Extended window-property snapshot. Built via the SAME windowRuleQueryFor the
+    // Extended window-property snapshot. Built via the SAME ruleQueryFor the
     // effect's live rule path uses, so the daemon resolves byte-identical values —
     // no second, drift-prone accessor copy here. Placement state (isFloating /
     // isSnapped / zone) is intentionally NOT carried: those are resolved at
@@ -145,7 +145,12 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
     // avoiding a per-frame query build + a{sv} marshal for chatty-title windows.
     QVariantMap extended;
     if (includeExtended) {
-        const PhosphorWindowRules::WindowQuery props = windowRuleQueryFor(w, QString(), false, false, QString());
+        PhosphorRules::WindowQuery props = ruleQueryFor(w, QString(), false, false, false, QString());
+        // Report the window's OWN (pre-rule) keepAbove/keepBelow — the daemon
+        // matches its KeepAbove/KeepBelow predicates against this metadata,
+        // and rule output must not feed rule input on that side of the
+        // boundary either. Shared invariant; see applyOwnLayerFlags.
+        applyOwnLayerFlags(props, getWindowId(w));
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
         if (props.isMinimized) {
             extended.insert(Key::IsMinimized, *props.isMinimized);
@@ -191,6 +196,12 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         }
         if (props.isResizable) {
             extended.insert(Key::IsResizable, *props.isResizable);
+        }
+        if (props.isMovable) {
+            extended.insert(Key::IsMovable, *props.isMovable);
+        }
+        if (props.isMaximizable) {
+            extended.insert(Key::IsMaximizable, *props.isMaximizable);
         }
         if (props.width) {
             extended.insert(Key::Width, *props.width);

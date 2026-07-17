@@ -15,10 +15,10 @@ import org.kde.kirigami as Kirigami
  * `~/.local/share/plasmazones/profiles/`; the daemon's existing
  * `ProfileLoader` watches that dir and live-reloads the registry.
  *
- * Phase 3 scope: timing-mode (Easing/Spring), curve thumbnail with
- * "Customize…" dialog, duration slider, inheritance breadcrumb. The
- * Animation-style combo + shader-param editor + scale-start slider
- * land in Phase 6 alongside the shader-picker controller.
+ * Controls: timing-mode (Easing/Spring), curve thumbnail with
+ * "Customize…" dialog, duration slider, inheritance breadcrumb, and — on
+ * shader-supported paths — the shader picker and its per-shader parameter
+ * editor (both wired through the shared AnimationProfileEditor).
  *
  * Required properties:
  *   - eventPath:  full path string from `ProfilePaths::` (e.g. "editor.snapIn")
@@ -43,6 +43,10 @@ Item {
     property bool isParentNode: false
     property bool alwaysEnabled: false
     property bool collapsible: false
+    /// The card's hosting SettingsCard. The virtualized card list re-registers
+    /// its search anchor against this once the card builds, so a deep-link
+    /// reveal can expand the card when it's collapsed.
+    readonly property Item settingsCard: card
     // ── Internal state — one source of truth per UX axis ────────────
     // The on-disk schema is `Profile::toJson()` — a single `curve`
     // string that's either an easing wire format ("x1,y1,x2,y2",
@@ -139,28 +143,6 @@ Item {
             return "";
 
         return chain.slice(1).join(" ← ");
-    }
-
-    function summaryDescription() {
-        if (root.currentTimingMode === CurvePresets.timingModeSpring) {
-            var si = CurvePresets.springPresetIndex(root.currentSpringOmega, root.currentSpringZeta);
-            if (si >= 0)
-                return i18n("Spring · %1", CurvePresets.springPresets[si].label);
-
-            return i18n("Spring · Custom");
-        }
-        var idx = CurvePresets.findIndices(root.currentEasingCurve);
-        if (idx.styleIndex >= 0)
-            return CurvePresets.easingStyles[idx.styleIndex].label + " · " + CurvePresets.easingDirections[idx.dirIndex].label;
-
-        return i18n("Easing · Custom");
-    }
-
-    function summarySecondary() {
-        if (root.currentTimingMode === CurvePresets.timingModeSpring)
-            return i18n("ω=%1 · ζ=%2", root.currentSpringOmega.toFixed(1), root.currentSpringZeta.toFixed(2));
-
-        return i18n("%1 ms", root.currentDuration);
     }
 
     // `effectId` is explicit so callers can snapshot it at user-action
@@ -513,14 +495,21 @@ Item {
                 // Picker model fed via the registry-tick dependency
                 // so the binding re-evaluates on
                 // `shaderEffectsChanged`.
-                // Path-aware list: each effect carries `dimmed`/`dimReason`
-                // for this event, so the category picker greys out shaders
-                // that can't drive this row (e.g. the geometry-only
-                // window-morph on a show/hide event) with a warning tooltip —
-                // the same affordance the window-rule action picker uses.
+                // Path-aware list: pre-filtered to the shaders that can drive
+                // this event, so the category picker only offers compatible
+                // shaders (e.g. the geometry-only window-morph is omitted on a
+                // show/hide event). `dimmed`/`dimReason` remain on each row as
+                // always-false QML-compat fields.
                 availableShaders: {
                     void (root._shaderRegistryRev);
                     return settingsController.animationsPage.availableShaderEffectsForPath(root.eventPath);
+                }
+                // Parameter schema for the picked shader, fed in the same
+                // registry-tick-bound way so the editor doesn't reach the
+                // settingsController context itself.
+                shaderParamSchema: {
+                    void (root._shaderRegistryRev);
+                    return editor.shaderEffectId.length > 0 ? settingsController.animationsPage.shaderParameters(editor.shaderEffectId) : [];
                 }
                 onShaderEffectActivated: function (id) {
                     var sid = id || "";
@@ -564,6 +553,11 @@ Item {
                     // through the batch writer (single setShaderOverride
                     // call carrying every roll).
                     root._writeAllShaderParams(root.currentShaderEffectId, rolled);
+                }
+                onResetRequested: function (defaults) {
+                    // Same batch path as randomize — one setShaderOverride
+                    // carrying every param at its default.
+                    root._writeAllShaderParams(root.currentShaderEffectId, defaults);
                 }
             }
         }

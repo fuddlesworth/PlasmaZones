@@ -66,6 +66,22 @@ private Q_SLOTS:
         QCOMPARE(*resolved.effectId, QStringLiteral("morph"));
     }
 
+    void testResolveDesktopCategoryOverrideInherited()
+    {
+        // The "All Desktop Events" row writes an override at the `desktop`
+        // family root and relies on it cascading to both leaves. That is the
+        // row's entire contract — it is a real cascade parent, not a bulk
+        // write to each leaf — so pin the walk-up here rather than only for
+        // the window family.
+        ShaderProfileTree tree;
+        ShaderProfile category;
+        category.effectId = QStringLiteral("desktop-fade");
+        tree.setOverride(PP::Desktop, category);
+
+        QCOMPARE(*tree.resolve(PP::DesktopPeek).effectId, QStringLiteral("desktop-fade"));
+        QCOMPARE(*tree.resolve(PP::DesktopSwitch).effectId, QStringLiteral("desktop-fade"));
+    }
+
     void testResolveLeafFillsFromCategoryThenBaseline()
     {
         ShaderProfileTree tree;
@@ -226,17 +242,24 @@ private Q_SLOTS:
 
     // ─── resolveShaderWithDefault: built-in per-event default ───
 
-    void testDefaultShaderForPathMoveEvents()
+    void testDefaultShaderForPathSnapEvents()
     {
-        // Move/resize events default to window-morph; others to none.
+        // Snap events default to window-morph; others to none.
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapIn), QStringLiteral("window-morph"));
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapOut), QStringLiteral("window-morph"));
-        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapResize), QStringLiteral("window-morph"));
-        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowMove), QStringLiteral("window-morph"));
-        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowResize), QStringLiteral("window-morph"));
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowLayoutSwitch), QStringLiteral("window-morph"));
+        // The interactive-drag leaf carries NO default: a crossfade pack
+        // cannot drive the held drag transition, and the move-class packs
+        // (wobble) are opt-in.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowMove).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowOpen).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowClose).isEmpty());
+        // The desktop transitions are OPT-IN by contract: both are intrusive
+        // full-screen blends that contend with KWin's own effects, so a
+        // regression adding a default here would silently auto-enable them on
+        // fresh configs.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopSwitch).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopPeek).isEmpty());
     }
 
     void testDefaultShaderForPathOverlayEvents()
@@ -271,15 +294,15 @@ private Q_SLOTS:
         QVERIFY(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::OsdShow).effectiveEffectId().isEmpty());
     }
 
-    void testResolveWithDefaultUnsetMoveEventGetsMorph()
+    void testResolveWithDefaultUnsetSnapEventGetsMorph()
     {
-        // Truly-unset move event resolves to the built-in default.
+        // Truly-unset snap event resolves to the built-in window-morph default.
         ShaderProfileTree tree;
         const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
         QCOMPARE(r.effectiveEffectId(), QStringLiteral("window-morph"));
     }
 
-    void testResolveWithDefaultUnsetNonMoveEventStaysEmpty()
+    void testResolveWithDefaultUnsetNonSnapEventStaysEmpty()
     {
         ShaderProfileTree tree;
         const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowOpen);
@@ -329,10 +352,11 @@ private Q_SLOTS:
         ShaderProfile catNone;
         catNone.effectId = QString(); // engaged-empty "None" at the category
         tree.setOverride(PP::Window, catNone);
-        // A move event without its own override still gets the default.
+        // A snap event without its own override still gets the default.
         QCOMPARE(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn).effectiveEffectId(),
                  QStringLiteral("window-morph"));
-        // A non-move window event correctly stays None under the category None.
+        // A non-snap window event (no built-in default) correctly stays None
+        // under the category None.
         QVERIFY(
             PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMinimize).effectiveEffectId().isEmpty());
         // A per-event None under the category still wins (no default).
@@ -352,11 +376,80 @@ private Q_SLOTS:
         ShaderProfileTree tree;
         ShaderProfile paramsOnly;
         paramsOnly.parameters = QVariantMap({{QStringLiteral("speed"), 0.5}});
-        tree.setOverride(PP::WindowMove, paramsOnly);
-        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMove);
+        tree.setOverride(PP::WindowSnapIn, paramsOnly);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
         QCOMPARE(r.effectiveEffectId(), QStringLiteral("window-morph"));
         QVERIFY(r.parameters.has_value());
         QCOMPARE(r.parameters->value(QStringLiteral("speed")).toDouble(), 0.5);
+    }
+
+    void testResolveMoveLeafTakesNoInheritedShader()
+    {
+        // The interactive-drag leaf (window.movement.move) takes NO inherited
+        // shader: an ancestor pick is by construction a crossfade pack that
+        // cannot drive the held drag, so resolve() reads only the direct leaf
+        // override. Sibling legs inherit normally.
+        ShaderProfileTree tree;
+        ShaderProfile parent;
+        parent.effectId = QStringLiteral("ripple-snap");
+        tree.setOverride(PP::WindowMovement, parent);
+        QVERIFY(tree.resolve(PP::WindowMove).effectiveEffectId().isEmpty());
+        QCOMPARE(tree.resolve(PP::WindowSnapIn).effectiveEffectId(), QStringLiteral("ripple-snap"));
+        // resolveShaderWithDefault injects no default either (move has none).
+        QVERIFY(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMove).effectiveEffectId().isEmpty());
+        // A direct leaf override applies untouched.
+        ShaderProfile leaf;
+        leaf.effectId = QStringLiteral("wobble");
+        tree.setOverride(PP::WindowMove, leaf);
+        QCOMPARE(tree.resolve(PP::WindowMove).effectiveEffectId(), QStringLiteral("wobble"));
+        // Isolation cuts both ways in outcome: the leaf override does not
+        // bleed into sibling or ancestor resolution either.
+        QCOMPARE(tree.resolve(PP::WindowSnapIn).effectiveEffectId(), QStringLiteral("ripple-snap"));
+        QCOMPARE(tree.resolve(PP::WindowMovement).effectiveEffectId(), QStringLiteral("ripple-snap"));
+        // The baseline is skipped too, exactly like named ancestors.
+        tree.clearOverride(PP::WindowMove);
+        ShaderProfile base;
+        base.effectId = QStringLiteral("fade");
+        tree.setBaseline(base);
+        QVERIFY(tree.resolve(PP::WindowMove).effectiveEffectId().isEmpty());
+    }
+
+    void testResolveMoveLeafParamsOnlyStaysEmpty()
+    {
+        // A params-only override on the MOVE leaf (parameters set, effectId
+        // unset) resolves to an EMPTY effect id even through
+        // resolveShaderWithDefault: the leaf takes no inherited shader AND
+        // carries no built-in default, so unlike the snap-event case
+        // (testResolveWithDefaultParamsOnlyLeafStillGetsDefault) there is
+        // nothing for the params to overlay onto. The params themselves
+        // still survive on the resolved profile.
+        ShaderProfileTree tree;
+        ShaderProfile paramsOnly;
+        paramsOnly.parameters = QVariantMap({{QStringLiteral("strength"), 2.0}});
+        tree.setOverride(PP::WindowMove, paramsOnly);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMove);
+        QVERIFY(r.effectiveEffectId().isEmpty());
+        QVERIFY(r.parameters.has_value());
+        QCOMPARE(r.parameters->value(QStringLiteral("strength")).toDouble(), 2.0);
+    }
+
+    void testShaderPathResolvesInIsolation()
+    {
+        // The isolation predicate is the SSOT shared by resolve() and the
+        // settings shadowing-children walk: exactly the interactive-drag
+        // leaf, never its parent, siblings, or unrelated paths.
+        QVERIFY(PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowMove));
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowMovement));
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowSnapIn));
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowOpen));
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(QString()));
+        // Both desktop leaves must stay NON-isolated. The predicate is a single
+        // hardcoded equality, so extending it to a desktop leaf would compile
+        // and pass everything else while silently killing the "All Desktop
+        // Events" cascade row, whose whole premise is that neither leaf
+        // resolves in isolation (AnimationsDesktopsPage.qml). Pin it here.
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::DesktopPeek));
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::DesktopSwitch));
     }
 };
 

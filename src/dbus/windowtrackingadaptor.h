@@ -54,8 +54,8 @@ class VirtualDesktopManager;
 class ActivityManager;
 }
 
-namespace PhosphorWindowRules {
-class WindowRuleStore;
+namespace PhosphorRules {
+class RuleStore;
 class RuleEvaluator;
 class ResolvedActions;
 }
@@ -160,7 +160,7 @@ public:
      * rule set; it self-invalidates on in-place rule edits via the set's
      * revision counter, so no rulesChanged subscription is required.
      */
-    void setWindowRuleStore(PhosphorWindowRules::WindowRuleStore* store);
+    void setRuleStore(PhosphorRules::RuleStore* store);
 
     /**
      * @brief Set engine references for routing operations per-screen
@@ -669,13 +669,27 @@ public:
     /// on open. Consulted by the restore-position predicate the daemon injects into
     /// BOTH engines (in-process, not via D-Bus); @p mode selects which per-engine
     /// global default applies (snap-floated vs autotile-floated). A matched
-    /// RestorePosition window rule wins (engine-neutral); otherwise the
+    /// RestorePosition rule wins (engine-neutral); otherwise the
     /// per-engine `*RestoreFloatedWindowsOnLogin` setting decides. Builds a
     /// WindowQuery from the window registry metadata.
     bool shouldRestoreFloatedPosition(const QString& windowId, PhosphorZones::AssignmentEntry::Mode mode);
 
+    /// Resolve whether a SNAPPED window should be restored to its zone on login.
+    /// The snapped-to-zone analogue of shouldRestoreFloatedPosition: a matched
+    /// SetRestoreToZoneOnLogin rule wins, otherwise the global
+    /// `restoreWindowsToZonesOnLogin` setting decides. Consulted by the
+    /// managed-restore predicate the daemon injects into the SnapEngine.
+    bool shouldRestoreToZoneOnLogin(const QString& windowId);
+
+    /// Resolve whether a window's ORIGINAL (pre-snap) size should be restored when
+    /// it is unsnapped. A matched SetRestoreSizeOnUnsnap rule wins, otherwise the
+    /// global `restoreOriginalSizeOnUnsnap` setting decides. Consulted on the
+    /// drag-out / drop / cursor-left-zones unsnap paths (the latter two live in
+    /// WindowDragAdaptor and call through here), so this is public.
+    bool shouldRestoreSizeOnUnsnap(const QString& windowId);
+
     /// Resolve whether an opening window should start FLOATING because a "Float
-    /// this app" window rule matched it. Consulted by the float predicate the
+    /// this app" rule matched it. Consulted by the float predicate the
     /// daemon injects into BOTH engines (in-process, not via D-Bus). Unlike
     /// RestorePosition there is no global default — Float is purely rule-driven,
     /// so the answer is false unless a Float rule matches. The Float action's
@@ -693,7 +707,7 @@ public:
     /// `RouteScreen` slots — mirrors shouldFloatByRule.
     PhosphorSnapEngine::PlacementDirective placementZonesByRule(const QString& windowId, const QString& screenId);
 
-    /// Engine-neutral RouteToDesktop: if a matched window rule pins @p windowId to
+    /// Engine-neutral RouteToDesktop: if a matched rule pins @p windowId to
     /// a virtual desktop, emit windowDesktopMoveRequested so the compositor moves
     /// it there on open. Independent of snapping/tiling — composes with the
     /// window's placement. Called from the snap open-path facade. Pins @p screenId
@@ -728,7 +742,7 @@ public:
 
     /// Shared by the two open-routing entry points: if @p resolved carries a
     /// RouteToDesktop action, emit windowDesktopMoveRequested for @p windowId.
-    void emitRouteToDesktopIfMatched(const PhosphorWindowRules::ResolvedActions& resolved, const QString& windowId);
+    void emitRouteToDesktopIfMatched(const PhosphorRules::ResolvedActions& resolved, const QString& windowId);
     /**
      * @brief Drop unified WindowPlacement records for excluded appIds.
      *
@@ -748,12 +762,12 @@ public:
      *      before the `rulesChanged` subscription connects, pruning what loadState
      *      just deserialized into the store.
      *   2. Daemon::init's `refilterExcludeRules` lambda, fired on every
-     *      `WindowRuleStore::rulesChanged` whose post-filter Exclude slice differs
+     *      `RuleStore::rulesChanged` whose post-filter Exclude slice differs
      *      from the cached one (equality-guarded). Drives live rule edits into the prune.
      *   3. Daemon::finalizeStartup, after AutotileEngine::loadState has restored its
      *      placement records, so any autotile records loaded then are pruned too.
-     * The daemon derives @p patterns from the unified WindowRule store via
-     * `PhosphorWindowRules::ExclusionRules::applicationExcludePatternsFrom`.
+     * The daemon derives @p patterns from the unified Rule store via
+     * `PhosphorRules::ExclusionRules::applicationExcludePatternsFrom`.
      *
      * Safe to call at any time. An empty @p patterns short-circuits.
      */
@@ -1160,10 +1174,10 @@ private:
     // and shouldFloatByRule (resolveCached returns every matched slot, so one
     // evaluator serves both per-window resolvers). The evaluator self-invalidates
     // on in-place rule edits via the set revision, so it is built once on first
-    // use. Reset in setWindowRuleStore only when the store pointer actually
+    // use. Reset in setRuleStore only when the store pointer actually
     // changes (a same-store rebind keeps the evaluator).
-    PhosphorWindowRules::WindowRuleStore* m_windowRuleStore = nullptr;
-    std::unique_ptr<PhosphorWindowRules::RuleEvaluator> m_windowRuleEvaluator;
+    PhosphorRules::RuleStore* m_ruleStore = nullptr;
+    std::unique_ptr<PhosphorRules::RuleEvaluator> m_ruleEvaluator;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: session.json save/load)

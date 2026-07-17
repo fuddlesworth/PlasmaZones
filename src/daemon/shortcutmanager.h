@@ -60,10 +60,11 @@ public:
 
     /**
      * Register an ad-hoc shortcut that lives outside the main settings-driven
-     * table. Used by subsystems that need a transient grab bound to a code
-     * path (e.g. WindowDragAdaptor's Escape cancel during a drag). Batches
-     * with an immediate flush to the backend. Idempotent — re-registering the
-     * same id updates the callback and description in place.
+     * table. Used by subsystems that need a transient grab bound to a UI state
+     * (e.g. the cancel-overlay Escape grab bound while the layout picker or
+     * snap assist is showing). Batches with an immediate flush to the backend.
+     * Idempotent — re-registering the same id updates the callback and
+     * description in place.
      */
     void registerAdhocShortcut(const QString& id, const QKeySequence& sequence, const QString& description,
                                std::function<void()> callback) override;
@@ -123,9 +124,10 @@ private:
     // Adhoc registration deferred because the initial settings-driven
     // registration batch was in flight when the caller arrived. Drained from
     // the Registry ready() callback so subsystems that bind shortcuts in
-    // response to user actions (e.g. WindowDragAdaptor's Escape cancel on
-    // drag start) don't silently lose their grab when the drag fires in the
-    // first few hundred ms after daemon startup on a Portal compositor.
+    // response to user actions (e.g. the cancel-overlay Escape grab bound when
+    // the layout picker or snap assist first shows) don't silently lose their
+    // grab when that overlay appears in the first few hundred ms after daemon
+    // startup on a Portal compositor.
     struct PendingAdhocOp
     {
         enum Kind {

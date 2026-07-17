@@ -36,11 +36,19 @@ private Q_SLOTS:
 };
 
 namespace {
+/// Built with the EXPORTED StageKey constants, exactly as a caller would.
+///
+/// Deliberately not with local literals. The field names are a contract across the
+/// library boundary, and a caller building its maps from StageKey while these tests
+/// spelled the names out by hand would leave the constants themselves unguarded: get
+/// one wrong and every caller silently produces a stage with a zero timeout, which the
+/// parser drops as meaningless, so the ladder comes out empty and idle never fires. The
+/// tests must exercise the same symbols the callers do.
 QVariantMap stage(const QString& name, int timeoutMs)
 {
     QVariantMap map;
-    map.insert(QLatin1String("name"), name);
-    map.insert(QLatin1String("timeoutMs"), timeoutMs);
+    map.insert(StageKey::Name, name);
+    map.insert(StageKey::TimeoutMs, timeoutMs);
     return map;
 }
 } // namespace
@@ -66,10 +74,10 @@ void IdleFacadeTest::stagesRoundTripSortedByTimeout()
 
     const QVariantList out = service.stages();
     QCOMPARE(out.size(), 3);
-    QCOMPARE(out.at(0).toMap().value(QLatin1String("name")).toString(), QStringLiteral("dim"));
-    QCOMPARE(out.at(0).toMap().value(QLatin1String("timeoutMs")).toInt(), 300000);
-    QCOMPARE(out.at(1).toMap().value(QLatin1String("name")).toString(), QStringLiteral("lock"));
-    QCOMPARE(out.at(2).toMap().value(QLatin1String("name")).toString(), QStringLiteral("off"));
+    QCOMPARE(out.at(0).toMap().value(StageKey::Name).toString(), QStringLiteral("dim"));
+    QCOMPARE(out.at(0).toMap().value(StageKey::TimeoutMs).toInt(), 300000);
+    QCOMPARE(out.at(1).toMap().value(StageKey::Name).toString(), QStringLiteral("lock"));
+    QCOMPARE(out.at(2).toMap().value(StageKey::Name).toString(), QStringLiteral("off"));
 
     // Re-applying the same ladder is a no-op: the forwarded stagesChanged is
     // edge-only, so it must not fire again.
@@ -85,7 +93,7 @@ void IdleFacadeTest::nonPositiveTimeoutsDropped()
         {stage(QStringLiteral("dim"), 300000), stage(QStringLiteral("bad"), 0), stage(QStringLiteral("worse"), -5)});
     const QVariantList out = service.stages();
     QCOMPARE(out.size(), 1);
-    QCOMPARE(out.at(0).toMap().value(QLatin1String("name")).toString(), QStringLiteral("dim"));
+    QCOMPARE(out.at(0).toMap().value(StageKey::Name).toString(), QStringLiteral("dim"));
 }
 
 void IdleFacadeTest::emptyStagesClears()

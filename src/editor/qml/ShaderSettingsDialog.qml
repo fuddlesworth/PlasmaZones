@@ -17,7 +17,7 @@ import org.plasmazones.common as PZCommon
  *
  * The picker, parameter rows, accordion sections and lock/randomize
  * toolbar live in `org.plasmazones.common` (PZCommon.CategoryMenuButton /
- * ShaderParameterEditor) so the animation-settings page can reuse them.
+ * ParameterEditor) so the animation-settings page can reuse them.
  * This dialog owns the editor-specific bits: the live preview pane, the
  * shader-preset load/save flow, color/image platform dialogs, and the
  * pending-state buffering until "Apply" is clicked.
@@ -33,6 +33,8 @@ Kirigami.Dialog {
     id: root
 
     required property var editorController
+    // EditorWindow reference, needed for the shared urlToLocalPath helper
+    required property var editorWindow
     // ═══════════════════════════════════════════════════════════════════════
     // PENDING STATE (buffered until Apply is clicked)
     // ═══════════════════════════════════════════════════════════════════════
@@ -79,6 +81,24 @@ Kirigami.Dialog {
     property real previewLastTime: 0
     property real previewTimeDelta: 0.016
     property int previewFrame: 0
+
+    // Build a small-theme font carrying only the size dimension the theme font
+    // actually holds (the other reads -1, which Qt.font warns on). Reads
+    // Kirigami.Theme.smallFont inside the caller's binding, so the binding
+    // stays reactive to theme font changes. Local twin of the settings app's
+    // FontUtils.js (a different QML module, so the library is not importable
+    // here).
+    function smallFontWith(extra) {
+        const base = Kirigami.Theme.smallFont;
+        const props = Object.assign({
+            family: base.family
+        }, extra);
+        if (base.pixelSize > 0)
+            props.pixelSize = base.pixelSize;
+        else
+            props.pointSize = base.pointSize;
+        return Qt.font(props);
+    }
 
     function hideShaderPreview() {
         previewAnimationTimer.stop();
@@ -292,20 +312,21 @@ Kirigami.Dialog {
     }
 
     function filePathFromUrl(url) {
-        if (!url)
-            return "";
-
-        // `decodeURIComponent` is required for paths containing spaces or
-        // any other %-encoded character — `selectedFile` from FileDialog
-        // returns e.g. `file:///home/u/My%20Documents/preset.json`.
-        return decodeURIComponent(url.toString().replace(/^file:\/\/+/, "/"));
+        // Single URL→path implementation shared with EditorWindow's
+        // import/export dialogs (handles %-encoded characters and both
+        // file:// and file:/// forms).
+        return root.editorWindow.urlToLocalPath(url);
     }
 
     function preparePresetDialog(dialog) {
         if (editorController) {
             var dir = editorController.shaderPresetDirectory();
+            // `encodeURI` percent-encodes spaces and unicode while preserving
+            // path separators; the residual replaces cover `#` and `?`, which
+            // encodeURI leaves alone but the file:// URL would parse as
+            // fragment/query delimiters (same pattern as ShaderBrowserCard).
             if (dir && dir.length > 0)
-                dialog.currentFolder = Qt.resolvedUrl("file://" + dir);
+                dialog.currentFolder = Qt.resolvedUrl("file://" + encodeURI(dir).replace(/#/g, "%23").replace(/\?/g, "%3F"));
         }
     }
 
@@ -320,6 +341,10 @@ Kirigami.Dialog {
         previewAllowed = true;
         presetErrorMessage = "";
         initializePendingState();
+        // Re-sync imperatively: the checkbox's `checked` binding is severed
+        // by the first user toggle (QQC2 interactive-property behavior), so
+        // reopening the dialog must push the actual state back in.
+        enableEffectCheck.checked = root.hasShaderEffect;
     }
     onAppActiveChanged: {
         if (!root.visible || !root.hasShaderEffect)
@@ -350,6 +375,11 @@ Kirigami.Dialog {
 
         lockedParams = {};
         debouncePreviewUpdate.restart();
+        // Re-sync imperatively: the checkbox's `checked` binding is severed
+        // by the first user toggle (QQC2 interactive-property behavior), so
+        // programmatic shader changes (e.g. loading a preset that crosses the
+        // none/effect boundary) must push the actual state back in.
+        enableEffectCheck.checked = root.hasShaderEffect;
     }
     onPendingParamsChanged: debouncePreviewUpdate.restart()
     standardButtons: Kirigami.Dialog.NoButton
@@ -424,6 +454,8 @@ Kirigami.Dialog {
                         } else {
                             root.pendingShaderId = root.noneShaderId;
                         }
+                        // Re-derive from the model: with no effect shaders registered the assignments above are a no-op and the box must not latch checked.
+                        checked = root.hasShaderEffect;
                     }
                 }
 
@@ -478,8 +510,13 @@ Kirigami.Dialog {
                     elide: Text.ElideRight
                     maximumLineCount: 3
                     opacity: (root.currentShaderInfo && root.currentShaderInfo.description) ? 0.8 : 0.5
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    font.italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
+                    // One binding: a font.<sub> sibling next to a whole-group
+                    // `font:` is an illegal duplicate binding that fails the
+                    // whole document. smallFontWith passes only the size
+                    // dimension the theme font actually carries.
+                    font: root.smallFontWith({
+                        italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
+                    })
                     verticalAlignment: Text.AlignTop
                 }
 
@@ -505,8 +542,10 @@ Kirigami.Dialog {
                     }
                     elide: Text.ElideRight
                     opacity: 0.5
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    font.italic: true
+                    // One binding, one valid size (see the description label above).
+                    font: root.smallFontWith({
+                        italic: true
+                    })
                 }
             }
 
@@ -516,7 +555,7 @@ Kirigami.Dialog {
             }
 
             // ── Parameters editor (toolbar + flat/grouped rows) ───────
-            PZCommon.ShaderParameterEditor {
+            PZCommon.ParameterEditor {
                 id: paramEditor
 
                 Layout.fillWidth: true
@@ -526,6 +565,10 @@ Kirigami.Dialog {
                 lockedParams: root.lockedParams
                 enableLocking: true
                 enableRandomize: true
+                // This dialog has its own "Defaults" button in the footer
+                // button row, so suppress the editor's header reset to avoid a
+                // duplicate (same pattern as ShaderBrowserDetailDialog).
+                enableReset: false
                 enableGroups: true
                 enableImage: true
                 onValueChanged: function (id, value) {
@@ -763,6 +806,9 @@ Kirigami.Dialog {
                     return -1;
                 }
 
+                // Preview well resolves against the View color set
+                Kirigami.Theme.colorSet: Kirigami.Theme.View
+                Kirigami.Theme.inherit: false
                 anchors.fill: parent
                 anchors.margins: Kirigami.Units.largeSpacing
                 color: Kirigami.Theme.backgroundColor

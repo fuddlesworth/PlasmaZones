@@ -42,6 +42,16 @@ RowLayout {
      */
     signal opacityEdited(real value)
 
+    /**
+     * @brief Imperatively re-sync the slider position from a 0-1 opacity value
+     *
+     * A user drag severs the internal slider's value binding, so selection
+     * changes and undo/redo must call this to keep the handle on the model.
+     */
+    function syncOpacity(value) {
+        slider.value = (value !== undefined ? value : defaultOpacity) * 100;
+    }
+
     spacing: Kirigami.Units.smallSpacing
 
     Slider {
@@ -57,17 +67,16 @@ RowLayout {
         ToolTip.text: opacitySliderRow.toolTipText
         ToolTip.visible: hovered && opacitySliderRow.toolTipText !== ""
         onMoved: {
-            Qt.callLater(function() {
+            Qt.callLater(function () {
                 opacitySliderRow.opacityEdited(slider.value / 100);
             });
         }
     }
 
     Label {
-        text: Math.round(slider.value) + "%"
-        Layout.preferredWidth: 40
+        text: i18nc("@label opacity percentage", "%1%", Math.round(slider.value))
+        Layout.preferredWidth: Kirigami.Units.gridUnit * 2
         horizontalAlignment: Text.AlignRight
         font: Kirigami.Theme.fixedWidthFont
     }
-
 }

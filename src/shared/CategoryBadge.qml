@@ -24,18 +24,17 @@ Rectangle {
     readonly property bool isDynamic: category === 1
     readonly property real heightScale: 0.9
     readonly property real backgroundOpacity: 0.15
-    readonly property real textOpacity: 0.6
+    // 0.7 matches the sibling badge recipe (AspectRatioBadge) and keeps the
+    // "Manual" label above the 4.5:1 contrast threshold; 0.6 fell to ~3.7:1.
+    readonly property real textOpacity: 0.7
     readonly property real fontScale: 0.75
 
     implicitWidth: categoryLabel.implicitWidth + Kirigami.Units.smallSpacing * 1.5
     implicitHeight: Kirigami.Units.gridUnit * heightScale
     radius: Kirigami.Units.smallSpacing / 2
     color: {
-        if (root.isDynamic)
-            return Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, backgroundOpacity);
-
-        if (root.effectiveAutoAssign)
-            return Qt.rgba(Kirigami.Theme.activeTextColor.r, Kirigami.Theme.activeTextColor.g, Kirigami.Theme.activeTextColor.b, backgroundOpacity);
+        if (root.isDynamic || root.effectiveAutoAssign)
+            return Qt.alpha(Kirigami.Theme.highlightColor, backgroundOpacity);
 
         return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, backgroundOpacity);
     }
@@ -52,16 +51,8 @@ Rectangle {
         }
         font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
         font.weight: Font.Medium
-        color: {
-            if (root.isDynamic)
-                return Kirigami.Theme.neutralTextColor;
-
-            if (root.effectiveAutoAssign)
-                return Kirigami.Theme.activeTextColor;
-
-            return Kirigami.Theme.textColor;
-        }
+        // Per-category label hues were deliberately retired — all states use the plain text color.
+        color: Kirigami.Theme.textColor
         opacity: (root.isDynamic || root.effectiveAutoAssign) ? 0.8 : root.textOpacity
     }
-
 }

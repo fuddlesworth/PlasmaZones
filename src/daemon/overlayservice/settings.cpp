@@ -7,6 +7,7 @@
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorRendering/ShaderCompiler.h>
+#include "../../core/cavaoptions.h"
 #include "../../core/logging.h"
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -66,15 +67,24 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::overlayDisplayModeChanged, this,
                     &OverlayService::recreateOverlayWindowsOnTypeMismatch);
 
-            connect(m_settings, &ISettings::enableShaderEffectsChanged, this, [this]() {
-                if (m_visible) {
-                    recreateOverlayWindowsOnTypeMismatch();
-                }
-            });
-
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
             connect(m_settings, &ISettings::shaderFrameRateChanged, this, &OverlayService::syncCavaState);
+            // The full CAVA analysis parameter set (Shaders.Audio). Every knob
+            // routes through the same reconcile: setOptions no-ops on an
+            // unchanged set and restarts capture at most once per change.
+            connect(m_settings, &ISettings::audioAutosensChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioSensitivityChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioNoiseReductionChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioLowerCutoffHzChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioHigherCutoffHzChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioMonstercatChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioWavesChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioChannelModeChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioReverseChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioExtraSmoothingChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioInputMethodChanged, this, &OverlayService::syncCavaState);
+            connect(m_settings, &ISettings::audioInputSourceChanged, this, &OverlayService::syncCavaState);
 
             // Shader profile tree drives the per-overlay shader effect (osd.show,
             // popup.zoneSelector, etc.). Push it into the SurfaceAnimator
@@ -87,6 +97,27 @@ void OverlayService::setSettings(ISettings* settings)
             connect(m_settings, &ISettings::shaderProfileTreeChanged, this, [this]() {
                 if (m_settings) {
                     applyShaderProfilesToAnimator(m_settings->shaderProfileTree());
+                }
+            });
+
+            // Per-surface decoration tree drives each overlay's decoration
+            // (border/titlebar + shader-pack chain), resolved + pushed at show
+            // time. Re-apply it to any currently-visible transient overlay on a
+            // live edit so the decoration preview updates without waiting for the
+            // next show. Connected to the specific signal (not the settingsChanged
+            // catch-all) so unrelated edits don't re-bake decoration; each
+            // applyDecoration is null-safe per slot, so screens without a wired
+            // slot are skipped. OSDs are intentionally omitted — they auto-dismiss
+            // sub-second, so a live re-decorate has no observable effect.
+            connect(m_settings, &ISettings::decorationProfileTreeChanged, this, [this]() {
+                for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                    const auto& state = it.value();
+                    if (m_zoneSelectorVisible)
+                        applyDecoration(state.zoneSelectorSlot(), QStringLiteral("popup.zoneSelector"));
+                    if (m_snapAssistVisible)
+                        applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
+                    if (m_layoutPickerVisible)
+                        applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
                 }
             });
 
@@ -116,9 +147,6 @@ void OverlayService::setSettings(ISettings* settings)
             // won't propagate until the next daemon restart.
             if (m_shaderRegistry) {
                 m_shadersChangedConnection = connect(m_shaderRegistry, &ShaderRegistry::shadersChanged, this, [this]() {
-                    if (!m_settings || !m_settings->enableShaderEffects()) {
-                        return;
-                    }
                     qCInfo(lcOverlay) << "Shader files changed on disk, triggering hot-reload";
                     PhosphorRendering::ShaderCompiler::clearCache();
                     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
@@ -264,7 +292,7 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
             // shader is skipped and the overlay keeps drawing rectangles until
             // a hide/show (or daemon restart) rebuilds the slot. Run the
             // type-mismatch recreate first — a no-op when no flip is needed —
-            // mirroring the enableShaderEffects setting path so live edits take
+            // mirroring the overlayDisplayMode setting path so live edits take
             // effect immediately. Only meaningful while visible; a hidden
             // overlay rebuilds with the correct type on its next show.
             if (m_visible) {
@@ -328,15 +356,18 @@ void OverlayService::syncCavaState()
     // CAVA is a continuous audio-capture + FFT child process feeding a per-frame
     // spectrum; running it while nothing is displayed burns CPU on capture AND
     // on per-frame overlay repaints. Run it only while audio-viz is enabled AND
-    // the overlay (un-idled) or the editor's shader preview is actually shown.
-    const bool wantRun = m_settings->enableAudioVisualizer() && isOverlayDisplaying();
+    // something that reacts to audio is on screen: the overlay (un-idled), the
+    // editor's shader preview, or a decoration surface (OSD / popup) carrying an
+    // audio-reactive pack. A plain decoration never starts audio (it declares no
+    // `audio` flag, so visibleAudioDecorationSlots() ignores it).
+    const bool wantRun =
+        m_settings->enableAudioVisualizer() && (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty());
 
     if (wantRun) {
         if (m_idleQuiesceTimer) {
             m_idleQuiesceTimer->stop(); // cancel any pending grace-period quiesce
         }
-        m_audioProvider->setBarCount(m_settings->audioSpectrumBarCount());
-        m_audioProvider->setFramerate(m_settings->shaderFrameRate());
+        m_audioProvider->setOptions(cavaOptionsFromSettings(m_settings));
         if (!m_audioProvider->isRunning()) {
             m_audioProvider->start();
         }
@@ -353,12 +384,21 @@ void OverlayService::syncCavaState()
         if (m_audioProvider->isRunning()) {
             m_audioProvider->stop();
             for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-                if (!it_.value().overlayPhysScreen) {
-                    continue;
+                const auto& st = it_.value();
+                if (st.overlayPhysScreen) {
+                    if (auto* slot = st.mainOverlaySlot()) {
+                        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                    }
                 }
-                auto* slot = it_.value().mainOverlaySlot();
-                if (slot) {
-                    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                // Decoration slots (OSD / popups) carry their own audioSpectrum,
+                // so an audio-reactive border must settle to silence too rather
+                // than freeze on the last pushed frame. Independent of the zone
+                // overlay, so cleared regardless of overlayPhysScreen.
+                for (QQuickItem* deco :
+                     {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot()}) {
+                    if (deco) {
+                        writeQmlProperty(deco, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
+                    }
                 }
             }
             if (m_shaderPreviewWindow) {
@@ -388,8 +428,10 @@ void OverlayService::scheduleIdleQuiesce()
             // window both cancels this timer and resumes, but guard anyway. The
             // overlay's QQuickWindows are intentionally left alive (NVIDIA
             // teardown-deadlock avoidance); we only pause the 60 Hz shader
-            // render loop and the CAVA capture.
-            if (isOverlayDisplaying()) {
+            // render loop and the CAVA capture. Mirror syncCavaState's wantRun
+            // predicate: a visible audio decoration also keeps CAVA alive, so it
+            // must veto the quiesce too.
+            if (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty()) {
                 return;
             }
             stopShaderAnimation();

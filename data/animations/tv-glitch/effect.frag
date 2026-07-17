@@ -121,5 +121,5 @@ vec4 pTransition(vec2 uv, float t) {
 
   oColor.a *= mask;
 
-  return vec4(oColor.rgb * oColor.a, oColor.a);
+  return premultiply(oColor);
 }

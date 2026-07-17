@@ -1,0 +1,135 @@
+{
+    "id": "frosted-glass",
+    "name": "Frosted Glass",
+    "description": "The phosphor-shell frosted panel look over a real blur. The scene behind the surface is blurred and tinted by a slowly turning two-colour gradient. A drifting crystalline grain and a soft vignette sit on top. Where no scene exists behind the surface (OSDs and popups) it falls back to the original translucent gradient slab. Lowering the Content opacity parameter fades the window content over the pane.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Blur",
+    "fragmentShader": "effect.frag",
+    "needsBackdrop": true,
+    "animated": true,
+    "multipass": true,
+    "bufferScale": 0.25,
+    "bufferShaders": [
+        "builtin:gaussian-h",
+        "builtin:gaussian-v"
+    ],
+    "parameters": [
+        {
+            "id": "blurRadius",
+            "name": "Blur radius",
+            "type": "int",
+            "default": 24,
+            "min": 2,
+            "max": 64,
+            "group": "Blur",
+            "description": "How strongly the scene behind the surface is blurred (px)"
+        },
+        {
+            "id": "cornerRadius",
+            "name": "Corner radius",
+            "type": "int",
+            "default": 8,
+            "min": 0,
+            "max": 32,
+            "group": "Shape",
+            "description": "Corner rounding of the pane (px)"
+        },
+        {
+            "id": "contentOpacity",
+            "name": "Content opacity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 1.0,
+            "group": "Content",
+            "description": "How visible the window content stays over the frosted pane, where 1.0 is fully opaque and 0.0 shows only the blurred backdrop"
+        },
+        {
+            "id": "grainAmount",
+            "name": "Grain amount",
+            "type": "float",
+            "default": 0.03,
+            "min": 0.0,
+            "max": 0.3,
+            "group": "Frost",
+            "description": "Strength of the crystalline frost grain"
+        },
+        {
+            "id": "grainScale",
+            "name": "Grain scale",
+            "type": "float",
+            "default": 40.0,
+            "min": 5.0,
+            "max": 120.0,
+            "group": "Frost",
+            "description": "Density of the frost crystals"
+        },
+        {
+            "id": "grainSpeed",
+            "name": "Grain drift",
+            "type": "float",
+            "default": 0.3,
+            "min": 0.0,
+            "max": 2.0,
+            "group": "Frost",
+            "description": "How quickly the fine frost detail drifts, where 0 freezes it"
+        },
+        {
+            "id": "gradientStrength",
+            "name": "Gradient strength",
+            "type": "float",
+            "default": 0.45,
+            "min": 0.0,
+            "max": 1.0,
+            "group": "Gradient",
+            "description": "How much of the gradient colours is mixed over the blurred scene"
+        },
+        {
+            "id": "gradientSpeed",
+            "name": "Gradient speed",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 3.0,
+            "group": "Gradient",
+            "description": "How quickly the gradient turns and drifts, where 0 freezes it"
+        },
+        {
+            "id": "gradientAngle",
+            "name": "Gradient angle",
+            "type": "float",
+            "default": 0.0,
+            "min": 0.0,
+            "max": 360.0,
+            "group": "Gradient",
+            "description": "Base direction of the gradient (degrees)"
+        },
+        {
+            "id": "vignetteStrength",
+            "name": "Vignette",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.5,
+            "group": "Shape",
+            "description": "How much the pane darkens toward its edges"
+        },
+        {
+            "id": "colorA",
+            "name": "First colour",
+            "type": "color",
+            "default": "#ffcba6f7",
+            "group": "Gradient",
+            "description": "Gradient start colour"
+        },
+        {
+            "id": "colorB",
+            "name": "Second colour",
+            "type": "color",
+            "default": "#ff89dceb",
+            "group": "Gradient",
+            "description": "Gradient end colour"
+        }
+    ]
+}

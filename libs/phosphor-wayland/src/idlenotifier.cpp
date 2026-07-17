@@ -51,22 +51,30 @@ public:
         if (timeout.count() <= 0)
             return;
         auto* integration = LayerShellIntegration::instance();
-        if (!integration)
+        if (!integration) {
+            qCWarning(lcIdleNotifier) << "Idle notification not armed: no Wayland integration";
             return;
+        }
         auto* notifier = integration->idleNotifier();
-        if (!notifier)
+        if (!notifier) {
+            qCWarning(lcIdleNotifier) << "Idle notification not armed: compositor advertises no ext-idle-notifier";
             return;
+        }
         auto* display = integration->display();
-        if (!display)
+        if (!display) {
+            qCWarning(lcIdleNotifier) << "Idle notification not armed: no Wayland display";
             return;
+        }
         auto seats = display->inputDevices();
         if (seats.isEmpty()) {
             qCWarning(lcIdleNotifier) << "No input seat available for idle notification";
             return;
         }
         struct wl_seat* seat = seats.first()->wl_seat();
-        if (!seat)
+        if (!seat) {
+            qCWarning(lcIdleNotifier) << "Idle notification not armed: the seat has no wl_seat";
             return;
+        }
         static const struct ext_idle_notification_v1_listener listener = {
             .idled = handleIdled,
             .resumed = handleResumed,
@@ -76,6 +84,12 @@ public:
         notification = ext_idle_notifier_v1_get_idle_notification(notifier, ms, seat);
         if (notification) {
             ext_idle_notification_v1_add_listener(notification, &listener, this);
+        } else {
+            // Every precondition passed and arming STILL produced nothing. This is exactly
+            // the state isArmed() reports false for and the daemon burns its retry budget on,
+            // so name it — the four early-returns above are logged, and the one case where
+            // the compositor simply hands back no object was the one left silent.
+            qCWarning(lcIdleNotifier) << "Idle notification not armed: the compositor returned no notification object";
         }
     }
 
@@ -85,12 +99,17 @@ public:
             ext_idle_notification_v1_destroy(notification);
             notification = nullptr;
         }
-        if (idle && owner) {
+        // Clear the flag once, and announce the implicit resume the teardown causes. The
+        // store used to be spelled twice (inside the guard and again unconditionally),
+        // which read as if the guarded one could be skipped while the flag still had to
+        // land — it cannot: this is the only writer here.
+        if (idle) {
             idle = false;
-            Q_EMIT owner->idleChanged();
-            Q_EMIT owner->resumed();
+            if (owner) {
+                Q_EMIT owner->idleChanged();
+                Q_EMIT owner->resumed();
+            }
         }
-        idle = false;
     }
 };
 
@@ -120,6 +139,11 @@ void IdleNotifier::setTimeout(std::chrono::milliseconds timeout)
 std::chrono::milliseconds IdleNotifier::timeout() const
 {
     return d->timeout;
+}
+
+bool IdleNotifier::isArmed() const
+{
+    return d->notification != nullptr;
 }
 
 bool IdleNotifier::isIdle() const

@@ -6,6 +6,7 @@
 #include <QEvent>
 #include <QKeyEvent>
 #include <QLoggingCategory>
+#include <QTimer>
 
 #include <effect/effect.h>
 
@@ -31,9 +32,16 @@ Q_LOGGING_CATEGORY(lcEffectDiag, "plasmazones.effect.diag", QtWarningMsg)
 
 bool PlasmaZonesEffect::supported()
 {
-    // This effect is a compositor plugin that works in KWin on Wayland
-    // Note: PlasmaZones daemon requires Wayland with layer-shell support
-    return true;
+    // OpenGL compositing is a hard requirement, not a preference: every render
+    // path in this effect is GL (GLShader / GLFramebuffer / GLTexture, the
+    // decoration composite fold, the transition shaders, the desktop blend).
+    // Under QPainter compositing KWin hands effects an image-backed RenderTarget
+    // whose framebuffer() is null, so the first thing that reaches for it —
+    // RenderTarget::texture(), which dereferences it — would crash. Mirrors the
+    // guard KWin's own GL-only effects (blur, screen transform) carry.
+    //
+    // The daemon additionally requires Wayland with layer-shell support.
+    return KWin::effects && KWin::effects->isOpenGLCompositing();
 }
 
 bool PlasmaZonesEffect::enabledByDefault()
@@ -46,6 +54,32 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
     Q_UNUSED(flags)
     // Called when KWin wants effects to reload or when daemon notifies of settings change
     qCDebug(lcEffect) << "reconfigure() called";
+    // A KWin effects reconfigure (any Desktop Effects KCM apply) reconciles
+    // the loaded-effects list against kwinrc, which RE-LOADS windowaperture /
+    // eyeonscreen — the suppression never writes kwinrc, so this is the one
+    // path that undoes the unload without any of the other sync triggers
+    // (tree load, registry commit, animations toggle) firing. Re-assert on the
+    // NEXT event-loop turn only, never synchronously: this reconfigure runs
+    // from inside EffectsHandler's dispatch over its loaded-effects container,
+    // and a synchronous unloadEffect/loadEffect here would mutate that
+    // container mid-iteration. The sync is idempotent, so a reconfigure storm
+    // just coalesces to cheap no-ops. `this` as context cancels the callback if
+    // we unload first.
+    //
+    // Whether the deferred pass lands after the KCM's own re-load of
+    // windowaperture/eyeonscreen is NOT guaranteed here — it depends on
+    // EffectsHandler's internal ordering between queueing those loads and
+    // driving our reconfigure(). Lose the race and the sync sees them still
+    // unloaded, no-ops, and they come back live alongside an assigned peek
+    // pack. That is self-correcting rather than sticky: any later trigger (a
+    // pack change, the animations toggle, the next reconfigure) re-asserts,
+    // and the cost until then is that a peek capture can bake in their
+    // transform. Re-asserting from the showingDesktopChanged handler would
+    // close it, but that handler runs inside KWin's own emission over its
+    // effects list, which is the one place an unload must not happen.
+    QTimer::singleShot(0, this, [this]() {
+        syncShowDesktopEffectSuppression();
+    });
 }
 
 bool PlasmaZonesEffect::isActive() const
@@ -58,30 +92,50 @@ bool PlasmaZonesEffect::isActive() const
     //
     // Without this clause, the only paths that wake the chain are
     // (a) interactive drag (`m_dragTracker->isDragging()`) and
-    // (b) zone-snap reflow animations (`m_windowAnimator`).
+    // (b) zone-snap reflow animations (`m_windowAnimator`), plus
+    // (c) the full-screen desktop legs below.
     // window.move works through (a) because the drag holds isActive()
     // true; every other lifecycle event (focus/open/close/minimize/
     // maximize/resize) installs a shader transition only — without this
     // clause those events would resolve cleanly, redirect the window,
     // and then sit unrendered until the timer-driven teardown fired.
     //
-    // `m_shaderManager.hasOpacityRules()` is included for the same
-    // chain-exclusion reason, but the failure mode is the opposite of a
-    // one-shot transition: a SetOpacity rule is a PERSISTENT per-window
-    // appearance change that prePaintWindow/paintWindow must apply on
-    // every frame the matched window is painted. The transient triggers
-    // above only hold isActive() true while a drag/animation/transition
-    // is in flight; the instant they settle KWin drops the effect from
-    // the chain and `data.setOpacity()` stops running, so the window
-    // snaps back to full opacity until the next interaction spins a
-    // transition back up. Gating on hasOpacityRules() keeps the effect
-    // in the chain for as long as any enabled opacity rule exists, so
-    // the dim survives idle. This does not force continuous repaints —
-    // KWin still only composites on damage; isActive() merely keeps the
-    // effect consulted (and the window composited rather than
-    // direct-scanned-out) when a frame is produced.
+    // `hasOpacityRules()` is deliberately NOT an activation clause.
+    // SetOpacity is layer-backed: a persistent per-window dim exists only
+    // as the opacity-tint layer's folded pack param, and any window
+    // carrying that layer sits in m_windowDecorations — the clause below
+    // already holds the effect active for it. The only per-frame rule
+    // consumer left is prePaintWindow's frame-opacity cache, which feeds
+    // the shader-transition draw's bare-uTexture0 fallback; a transition
+    // in flight holds isActive() true via `!m_shaderManager.empty()`. A
+    // SetOpacity rule with no layered window and no transition has no
+    // paint-path consumer at all (the rule is inert by design), so it
+    // must not keep the effect in the chain.
+    //
+    // `!m_windowDecorations.isEmpty()` is the SAME persistent case as opacity
+    // rules: a per-window border is rendered passively in drawWindow by
+    // re-blitting the redirected window through the border shader on every
+    // composite (the KDE-Rounded-Corners / LightlyShaders model). Those
+    // effects keep isActive() true whenever they manage a window; without
+    // this clause an idle bordered window (no drag/animation/transition)
+    // drops the effect from the chain, drawWindow is never called, and the
+    // border only appears while some OTHER trigger (an animation) holds the
+    // effect active. Gating on a non-empty border set keeps the effect
+    // consulted for as long as any window has a border, so the border
+    // survives idle. O(1) — a QHash emptiness check, safe in this per-frame
+    // hot path.
+    //
+    // `m_desktopTransition.isRunning()` is the same shape as the shader-manager
+    // clause, for the screen-level legs. A desktop switch or a show-desktop
+    // peek installs from a signal handler (desktopChanged /
+    // showingDesktopChanged): no drag is held, the window animator has no entry
+    // for it, and the blend is not a redirected window — so no other clause
+    // here can be true for one. Drop this and paintScreen is never called,
+    // DesktopTransitionManager::paintOutput never gets a frame, and the blend
+    // sits unrendered until its own wall-clock reap. Also O(1) (an
+    // unordered_map emptiness check).
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
-        || m_shaderManager.hasOpacityRules();
+        || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

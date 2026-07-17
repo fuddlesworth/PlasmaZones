@@ -3,7 +3,6 @@
     "name": "Portrait Top Focus",
     "description": "Large top area with two side-by-side panels below for vertical monitors",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "portrait",
     "zones": [

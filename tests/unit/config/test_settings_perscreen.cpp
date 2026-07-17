@@ -14,19 +14,60 @@
  * 6. Fresh config defaults
  */
 
-#include <QTest>
+#include <QJsonValue>
 #include <QSignalSpy>
+#include <QTest>
+#include <QUuid>
 #include <QVariantMap>
+#include <memory>
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/core/constants.h"
 #include "../../../src/core/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleStore.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
+
+namespace {
+
+// Build a context gap Rule scoped to one screen: a `ScreenId Equals <connector>`
+// match carrying the inner/outer gap actions. Per-monitor gaps are config-backed
+// now, so this stands in for any gap-action-bearing rule the gap-resync
+// fingerprint must react to (testGapResyncOnlyOnGapRuleChange).
+PhosphorRules::Rule makePerScreenGapRule(const QString& connector, int innerGap, int outerGap)
+{
+    using namespace PhosphorRules;
+    const auto action = [](QLatin1StringView type, const QJsonValue& value) {
+        RuleAction a;
+        a.type = QString(type);
+        a.params.insert(QString(ActionParam::Value), value);
+        return a;
+    };
+
+    Rule rule;
+    rule.id = QUuid::createUuidV5(ConfigDefaults::baselineGapRuleId(), connector.toUtf8());
+    rule.name = QStringLiteral("Gaps (%1)").arg(connector);
+    rule.enabled = true;
+    rule.priority = 100;
+    rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, connector);
+    rule.actions = {
+        action(ActionType::SetInnerGap, innerGap),        action(ActionType::SetOuterGap, outerGap),
+        action(ActionType::SetUsePerSideOuterGap, false), action(ActionType::SetOuterGapTop, outerGap),
+        action(ActionType::SetOuterGapBottom, outerGap),  action(ActionType::SetOuterGapLeft, outerGap),
+        action(ActionType::SetOuterGapRight, outerGap),
+    };
+    return rule;
+}
+
+} // namespace
 
 class TestSettingsPerScreen : public QObject
 {
@@ -257,17 +298,13 @@ private Q_SLOTS:
             const char* key;
             QVariant value;
         };
+        // Every declared per-screen autotile key, INCLUDING the inner/outer gap
+        // dimensions (config-backed and unified snap+tile now — see
+        // testPerScreenAutotile_gapKeysAreAccepted for the validation contract).
         const QList<KeyProbe> probes{
             {PerScreenAutotileKey::Algorithm, QStringLiteral("bsp")},
             {PerScreenAutotileKey::SplitRatio, 0.5},
             {PerScreenAutotileKey::MasterCount, 2},
-            {PerScreenAutotileKey::InnerGap, 5},
-            {PerScreenAutotileKey::OuterGap, 5},
-            {PerScreenAutotileKey::UsePerSideOuterGap, true},
-            {PerScreenAutotileKey::OuterGapTop, 5},
-            {PerScreenAutotileKey::OuterGapBottom, 5},
-            {PerScreenAutotileKey::OuterGapLeft, 5},
-            {PerScreenAutotileKey::OuterGapRight, 5},
             {PerScreenAutotileKey::FocusNewWindows, true},
             {PerScreenAutotileKey::SmartGaps, true},
             {PerScreenAutotileKey::MaxWindows, 3},
@@ -278,6 +315,13 @@ private Q_SLOTS:
             {PerScreenAutotileKey::AnimationsEnabled, true},
             {PerScreenAutotileKey::AnimationDuration, 200},
             {PerScreenAutotileKey::AnimationEasingCurve, QStringLiteral("linear")},
+            {PerScreenAutotileKey::InnerGap, 10},
+            {PerScreenAutotileKey::OuterGap, 12},
+            {PerScreenAutotileKey::UsePerSideOuterGap, true},
+            {PerScreenAutotileKey::OuterGapTop, 6},
+            {PerScreenAutotileKey::OuterGapBottom, 7},
+            {PerScreenAutotileKey::OuterGapLeft, 8},
+            {PerScreenAutotileKey::OuterGapRight, 9},
         };
 
         // Derive the short form the same way the implementation does
@@ -312,11 +356,13 @@ private Q_SLOTS:
     }
 
     /**
-     * Per-screen autotile gaps and algorithm sub-domains are independent: the
-     * Gaps card and the Algorithm card share one per-screen map but must report
-     * and clear only their own keys, so resetting one never wipes the other.
+     * The per-screen autotile map hosts three disjoint sub-domains — the
+     * inner/outer gap DIMENSIONS (Windows gaps card, config-backed), SmartGaps
+     * (which rides the map but has no per-screen card of its own now), and
+     * everything else (the Algorithm card). Clearing one card's keys never wipes
+     * another's.
      */
-    void testPerScreenAutotile_gapsAndAlgorithmSubdomainsAreIndependent()
+    void testPerScreenAutotile_subdomainsAreIndependent()
     {
         IsolatedConfigGuard guard;
 
@@ -324,73 +370,241 @@ private Q_SLOTS:
 
         const QString screen = QStringLiteral("test-screen-1");
 
-        // A gaps override (InnerGap) and an algorithm override (MasterCount)
-        // coexist in the one shared per-screen autotile map.
-        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 12);
+        // One override from each sub-domain coexists in the shared per-screen map.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileSmartGaps"), true);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 15);
         settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
 
-        QVERIFY(settings.hasPerScreenAutotileGapsSettings(screen));
+        QVERIFY(settings.hasPerScreenGapOverride(screen));
         QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
+        QVERIFY(settings.getPerScreenAutotileSettings(screen).contains(QStringLiteral("SmartGaps")));
 
-        // Spy from here so the two setter emits above don't count.
+        // Spy from here so the three setter emits above don't count.
         QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
 
-        // Clearing the gaps sub-domain emits once and leaves the algorithm
-        // override intact.
-        settings.clearPerScreenAutotileGapsSettings(screen);
+        // Clearing the gap DIMENSIONS leaves SmartGaps and the algorithm intact.
+        settings.clearPerScreenGapOverride(screen);
         QCOMPARE(spy.count(), 1);
-        QVERIFY(!settings.hasPerScreenAutotileGapsSettings(screen));
+        QVERIFY(!settings.hasPerScreenGapOverride(screen));
         QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
-        QVariantMap afterGapsClear = settings.getPerScreenAutotileSettings(screen);
-        QVERIFY2(!afterGapsClear.contains(QStringLiteral("InnerGap")), "gaps key must be cleared");
-        QCOMPARE(afterGapsClear.value(QStringLiteral("MasterCount")).toInt(), 2);
+        QVariantMap afterGapDimClear = settings.getPerScreenAutotileSettings(screen);
+        QVERIFY2(!afterGapDimClear.contains(QStringLiteral("InnerGap")), "gap dimension must be cleared");
+        QCOMPARE(afterGapDimClear.value(QStringLiteral("SmartGaps")).toBool(), true);
+        QCOMPARE(afterGapDimClear.value(QStringLiteral("MasterCount")).toInt(), 2);
 
-        // A no-op gaps clear (no gaps remain) changes nothing and does not emit.
-        settings.clearPerScreenAutotileGapsSettings(screen);
+        // A no-op gap-dimension clear (none remain) changes nothing and does not emit.
+        settings.clearPerScreenGapOverride(screen);
         QCOMPARE(spy.count(), 1);
-        QVERIFY(settings.hasPerScreenAutotileAlgorithmSettings(screen));
 
-        // Clearing the algorithm sub-domain removes the last remaining key, so
-        // the whole per-screen entry is dropped.
+        // Clearing the algorithm sub-domain leaves the SmartGaps override intact.
         settings.clearPerScreenAutotileAlgorithmSettings(screen);
         QCOMPARE(spy.count(), 2);
         QVERIFY(!settings.hasPerScreenAutotileAlgorithmSettings(screen));
-        QVERIFY(!settings.hasPerScreenAutotileSettings(screen));
+        QVERIFY2(settings.getPerScreenAutotileSettings(screen).contains(QStringLiteral("SmartGaps")),
+                 "SmartGaps must survive the algorithm-domain clear");
     }
 
     /**
-     * The per-screen snapping map holds only gap keys (snap-assist is global;
-     * the zone-selector keys live in their own map), so clearing it removes the
-     * whole entry. Verifies the clear reports the overrides, emits exactly once,
-     * and removes the entry — and that a redundant clear is a silent no-op.
+     * Per-screen inner/outer gap keys are config-backed now (unified — one value
+     * per monitor drives both snap and tile): the validator ACCEPTS and clamps
+     * them, they round-trip into the per-screen map, and the gap accessors surface
+     * them. Out-of-range writes clamp; non-numeric writes are rejected.
      */
-    void testPerScreenSnapping_clearDropsEntry()
+    void testPerScreenAutotile_gapKeysAreAccepted()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QString screen = QStringLiteral("test-screen-1");
+
+        QSignalSpy spy(&settings, &Settings::perScreenAutotileSettingsChanged);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 11);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileOuterGap"), 13);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileUsePerSideOuterGap"), true);
+        QCOMPARE(spy.count(), 3);
+
+        const QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
+        QCOMPARE(overrides.value(QStringLiteral("InnerGap")).toInt(), 11);
+        QCOMPARE(overrides.value(QStringLiteral("OuterGap")).toInt(), 13);
+        QCOMPARE(overrides.value(QStringLiteral("UsePerSideOuterGap")).toBool(), true);
+
+        // Out-of-range inner gap clamps to the shared gap range (not rejected).
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 100000);
+        const int stored = settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("InnerGap")).toInt();
+        QVERIFY2(stored >= ConfigDefaults::innerGapMin() && stored <= ConfigDefaults::innerGapMax(),
+                 "per-screen inner gap must clamp to the shared range");
+
+        // Non-numeric payloads are rejected (no emit, value unchanged).
+        const int before = spy.count();
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileOuterGap"), QStringLiteral("garbage"));
+        QCOMPARE(spy.count(), before);
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("OuterGap")).toInt(), 13);
+
+        // A negative inner gap clamps UP to the shared minimum (not rejected).
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), -5);
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("InnerGap")).toInt(),
+                 ConfigDefaults::innerGapMin());
+
+        // Zero is a valid in-range gap (the minimum is 0): it stores as 0 rather
+        // than being clamped away or rejected.
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileOuterGap"), 0);
+        QCOMPARE(settings.getPerScreenAutotileSettings(screen).value(QStringLiteral("OuterGap")).toInt(), 0);
+    }
+
+    // =========================================================================
+    // Config-backed per-screen gaps (unified snap + tile)
+    // =========================================================================
+
+    /**
+     * perScreenGapOverrides / getPerScreenSnappingSettings / getPerScreenAutotile-
+     * Settings surface the config-backed per-monitor gap dimensions for a screen
+     * that has them, and no gap keys for a screen that doesn't (consumer falls
+     * back to global). Non-gap autotile keys coexist with the gap keys.
+     */
+    void testPerScreenGaps_configBacked()
+    {
+        IsolatedConfigGuard guard;
+        namespace PSK = PhosphorEngine::PerScreenKeys;
+
+        Settings settings;
+        const QString screen = QStringLiteral("DP-cfg-1");
+        const QString other = QStringLiteral("DP-cfg-2");
+
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 13);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileOuterGap"), 21);
+        settings.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
+
+        const QVariantMap gapOverrides = settings.perScreenGapOverrides(screen);
+        QCOMPARE(gapOverrides.value(QString(PSK::InnerGap)).toInt(), 13);
+        QCOMPARE(gapOverrides.value(QString(PSK::OuterGap)).toInt(), 21);
+        // perScreenGapOverrides is the gap subset ONLY — no algorithm keys.
+        QVERIFY(!gapOverrides.contains(QStringLiteral("MasterCount")));
+
+        const QVariantMap snapping = settings.getPerScreenSnappingSettings(screen);
+        QCOMPARE(snapping.value(QString(PSK::InnerGap)).toInt(), 13);
+        QCOMPARE(snapping.value(QString(PSK::OuterGap)).toInt(), 21);
+
+        // The full autotile map carries both the gaps and the non-gap override.
+        const QVariantMap autotile = settings.getPerScreenAutotileSettings(screen);
+        QCOMPARE(autotile.value(QString(PSK::InnerGap)).toInt(), 13);
+        QCOMPARE(autotile.value(QStringLiteral("MasterCount")).toInt(), 2);
+
+        // A screen with no gap override gets no gap keys (falls through to global).
+        QVERIFY(settings.perScreenGapOverrides(other).isEmpty());
+        QVERIFY(settings.getPerScreenSnappingSettings(other).isEmpty());
+    }
+
+    /**
+     * A config-backed per-monitor gap stored on the physical monitor must also
+     * apply when queried with one of its virtual sub-screen ids ("<physical>/vs:N"),
+     * via the virtual→physical fallback in perScreenGapOverrides.
+     */
+    void testPerScreenGaps_configBackedVirtualFallback()
+    {
+        IsolatedConfigGuard guard;
+        namespace PSK = PhosphorEngine::PerScreenKeys;
+
+        Settings settings;
+        const QString physical = QStringLiteral("DP-virtfb");
+        const QString virtualId = PhosphorIdentity::VirtualScreenId::make(physical, 0);
+
+        settings.setPerScreenAutotileSetting(physical, QStringLiteral("AutotileInnerGap"), 7);
+        settings.setPerScreenAutotileSetting(physical, QStringLiteral("AutotileOuterGap"), 9);
+
+        const QVariantMap snapping = settings.getPerScreenSnappingSettings(virtualId);
+        QCOMPARE(snapping.value(QString(PSK::InnerGap)).toInt(), 7);
+        QCOMPARE(snapping.value(QString(PSK::OuterGap)).toInt(), 9);
+    }
+
+    /**
+     * Regression: the rule-store gap re-sync (perScreenAutotile/Snapping +
+     * settingsChanged) must fire ONLY when a gap action actually changes — never
+     * on a non-gap rule write. Emitting it on every rulesChanged made a mode /
+     * assignment toggle (also a rule write) fire settingsChanged, which drove the
+     * daemon to re-resolve the default assignment and instantly revert the
+     * toggle, breaking the snapping<->autotile switch.
+     */
+    void testGapResyncOnlyOnGapRuleChange()
+    {
+        using namespace PhosphorRules;
+        IsolatedConfigGuard guard;
+
+        auto store = std::make_unique<RuleStore>(ConfigDefaults::rulesFilePath());
+        Settings settings(store.get(), nullptr);
+
+        QSignalSpy settingsSpy(&settings, &Settings::settingsChanged);
+        QSignalSpy autotileSpy(&settings, &Settings::perScreenAutotileSettingsChanged);
+        QSignalSpy snappingSpy(&settings, &Settings::perScreenSnappingSettingsChanged);
+
+        // A non-gap rule write (a border rule, standing in for a mode/assignment
+        // toggle) must NOT trigger the gap re-sync.
+        Rule borderRule;
+        borderRule.id = QUuid::createUuidV5(ConfigDefaults::baselineBorderRuleId(), QByteArrayLiteral("nongap"));
+        borderRule.name = QStringLiteral("Border");
+        borderRule.enabled = true;
+        borderRule.priority = 50;
+        RuleAction widthAction;
+        widthAction.type = QString(ActionType::SetBorderWidth);
+        widthAction.params.insert(QString(ActionParam::Value), 4);
+        borderRule.actions = {widthAction};
+        QVERIFY(store->addRule(borderRule));
+        QCOMPARE(settingsSpy.count(), 0);
+        QCOMPARE(autotileSpy.count(), 0);
+        QCOMPARE(snappingSpy.count(), 0);
+
+        // A gap rule write DOES trigger the re-sync.
+        QVERIFY(store->addRule(makePerScreenGapRule(QStringLiteral("DP-resync"), /*inner=*/11, /*outer=*/12)));
+        QVERIFY(settingsSpy.count() >= 1);
+        QVERIFY(autotileSpy.count() >= 1);
+        QVERIFY(snappingSpy.count() >= 1);
+    }
+
+    /**
+     * Regression: Settings::load() must fire perScreenSnappingSettingsChanged
+     * (the daemon's gap-resnap trigger) ONLY when the gap-dimension subset of
+     * the per-screen autotile store changed on a reload — never on an
+     * algorithm/split-only per-screen change. A per-monitor gap edit lands in
+     * a different Settings (the settings app), so the daemon only sees it via a
+     * reload; if that reload didn't resnap, per-monitor gaps never took effect
+     * (discussion #661). Emitting on every per-screen reload would instead make
+     * an unrelated algorithm edit resnap spuriously.
+     */
+    void testLoad_gapResnapSignalOnlyOnGapDimensionChange()
     {
         IsolatedConfigGuard guard;
 
-        Settings settings;
+        const QString screen = QStringLiteral("DP-resnap-1");
 
-        const QString screen = QStringLiteral("test-screen-1");
+        // Seed a per-screen gap dimension plus a non-gap key on disk.
+        {
+            Settings seed;
+            seed.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 8);
+            seed.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 2);
+            seed.save();
+        }
 
-        settings.setPerScreenSnappingSetting(screen, QStringLiteral("ZonePadding"), 8);
-        settings.setPerScreenSnappingSetting(screen, QStringLiteral("OuterGap"), 12);
+        // The spied Settings loads that seeded state on construction.
+        Settings spied;
+        QSignalSpy gapSpy(&spied, &Settings::perScreenSnappingSettingsChanged);
 
-        QVERIFY(settings.hasPerScreenSnappingSettings(screen));
-        // Pin the accept path: both gap keys round-trip through the validator.
-        const QVariantMap stored = settings.getPerScreenSnappingSettings(screen);
-        QCOMPARE(stored.value(QStringLiteral("ZonePadding")).toInt(), 8);
-        QCOMPARE(stored.value(QStringLiteral("OuterGap")).toInt(), 12);
+        // Change the gap DIMENSION on disk (via a second Settings), then reload
+        // the spied instance — the gap-resnap signal must fire exactly once.
+        {
+            Settings writer;
+            writer.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileInnerGap"), 16);
+            writer.save();
+        }
+        spied.load();
+        QCOMPARE(gapSpy.count(), 1);
 
-        QSignalSpy spy(&settings, &Settings::perScreenSnappingSettingsChanged);
-
-        settings.clearPerScreenSnappingSettings(screen);
-        QCOMPARE(spy.count(), 1);
-        QVERIFY(!settings.hasPerScreenSnappingSettings(screen));
-        QVERIFY(settings.getPerScreenSnappingSettings(screen).isEmpty());
-
-        // A no-op clear (nothing left) changes nothing and does not emit.
-        settings.clearPerScreenSnappingSettings(screen);
-        QCOMPARE(spy.count(), 1);
+        // Change ONLY a non-gap per-screen key on disk (the gap dimension is
+        // untouched), then reload again — the gap-resnap signal must NOT fire.
+        {
+            Settings writer;
+            writer.setPerScreenAutotileSetting(screen, QStringLiteral("AutotileMasterCount"), 4);
+            writer.save();
+        }
+        spied.load();
+        QCOMPARE(gapSpy.count(), 1);
     }
 
     // =========================================================================
@@ -419,12 +633,11 @@ private Q_SLOTS:
         // Appearance defaults
         QCOMPARE(settings.borderWidth(), ConfigDefaults::borderWidth());
         QCOMPARE(settings.borderRadius(), ConfigDefaults::borderRadius());
-        QCOMPARE(settings.enableBlur(), ConfigDefaults::enableBlur());
         QCOMPARE(settings.labelFontWeight(), ConfigDefaults::labelFontWeight());
         QVERIFY(qFuzzyCompare(settings.labelFontSizeScale(), ConfigDefaults::labelFontSizeScale()));
 
         // PhosphorZones::Zone geometry defaults
-        QCOMPARE(settings.zonePadding(), ConfigDefaults::zonePadding());
+        QCOMPARE(settings.innerGap(), ConfigDefaults::innerGap());
         QCOMPARE(settings.outerGap(), ConfigDefaults::outerGap());
         QCOMPARE(settings.adjacentThreshold(), ConfigDefaults::adjacentThreshold());
         QCOMPARE(settings.pollIntervalMs(), ConfigDefaults::pollIntervalMs());
@@ -451,15 +664,14 @@ private Q_SLOTS:
         QCOMPARE(settings.animationDuration(), ConfigDefaults::animationDuration());
 
         // Shader defaults
-        QCOMPARE(settings.enableShaderEffects(), ConfigDefaults::enableShaderEffects());
         QCOMPARE(settings.shaderFrameRate(), ConfigDefaults::shaderFrameRate());
     }
 
     // The earlier "empty excluded lists survive round-trip" test was
     // retired alongside excludedApplications / excludedWindowClasses
     // themselves: the v4 fold removed those QStringList settings from
-    // Settings entirely. The Window Rules round-trip is covered by
-    // test_windowrule_store; the empty-rule-set case is exercised there.
+    // Settings entirely. The Rules round-trip is covered by
+    // test_rule_store; the empty-rule-set case is exercised there.
 };
 
 // NOT guiless: Settings::load → applySystemColorScheme reads

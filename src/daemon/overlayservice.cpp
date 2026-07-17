@@ -102,13 +102,9 @@ QQuickItem* OverlayService::PerScreenOverlayState::mainOverlaySlot() const
 }
 
 // Per-role SurfaceAnimator config builders + setupSurfaceAnimator +
-// applyShaderProfilesToAnimator are extracted to
-// overlayservice/animation_config.cpp to keep this translation unit
-// under the project's <800-line guideline.
+// applyShaderProfilesToAnimator live in overlayservice/animation_config.cpp.
 
-// primeSurfaceRenderPipeline + cancelSurfacePrime are extracted to
-// overlayservice/priming.cpp to keep this translation unit under the
-// project's <800-line guideline.
+// primeSurfaceRenderPipeline + cancelSurfacePrime live in overlayservice/priming.cpp.
 
 OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                                PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent)
@@ -603,6 +599,24 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screen
     return screenLayout;
 }
 
+QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
+{
+    // Autotile contexts have no backing Layout object — their active id is the
+    // resolved "autotile:<algorithm>" assignment id, which matches the autotile
+    // cards in the picker / selector. Manual contexts keep the existing
+    // Layout-based resolution (its fallback chain to default/global is what makes
+    // snapping highlight correctly).
+    if (m_layoutManager && !screenId.isEmpty()) {
+        const QString assignmentId = m_layoutManager->assignmentIdForScreen(
+            screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            return assignmentId;
+        }
+    }
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
+    return screenLayout ? screenLayout->id().toString() : QString();
+}
+
 void OverlayService::hideDisabledAndRefresh()
 {
     // Hide overlay + zone-selector slots on screens where the current
@@ -672,8 +686,7 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 
 // Screen-management methods (setupForScreen / removeScreen /
 // assertWindowOnScreen / handleScreenAdded / destroyAllWindowsForPhysicalScreen
-// / handleScreenRemoved) are extracted to overlayservice/screens.cpp to keep
-// this translation unit under the project's <800-line guideline.
+// / handleScreenRemoved) live in overlayservice/screens.cpp.
 
 OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude(const QString& screenId) const
 {

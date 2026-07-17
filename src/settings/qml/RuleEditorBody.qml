@@ -24,7 +24,7 @@ import org.kde.kirigami as Kirigami
 ColumnLayout {
     id: root
 
-    /// The WindowRuleController — threaded into the recursive editors.
+    /// The RuleController — threaded into the recursive editors.
     required property var controller
     /// The SettingsController bridge — threaded into the leaf and action
     /// editors so the picker-kind params (screen / activity / layout) can
@@ -98,7 +98,23 @@ ColumnLayout {
     /// True iff the working rule is structurally complete (≥1 action,
     /// every leaf filled) AND semantically clean (no action/match domain
     /// mismatches). The consumer's Save button binds its `enabled` to this.
-    readonly property bool canSave: root.workingRule.actions !== undefined && root.workingRule.actions.length > 0 && root._matchHasFilledLeaves(root.workingRule.match) && root.validationIssues.length === 0
+    readonly property bool canSave: root.workingRule.actions !== undefined && root.workingRule.actions.length > 0 && root._actionsAllHaveType(root.workingRule.actions) && root._matchHasFilledLeaves(root.workingRule.match) && root.validationIssues.length === 0
+
+    /// True iff every action carries a non-empty type. A freshly-added action
+    /// is a type-less placeholder ("Choose…" in the picker) until the user
+    /// picks one — block saving that incomplete action. The rule library's
+    /// validator deliberately treats an empty-type slot as a benign
+    /// placeholder (see validationIssuesForJson), so the completeness gate has
+    /// to live here rather than surfacing as a validation issue.
+    function _actionsAllHaveType(actions) {
+        if (actions === undefined || actions === null)
+            return false;
+        for (var i = 0; i < actions.length; ++i) {
+            if (!actions[i] || actions[i].type === undefined || String(actions[i].type).length === 0)
+                return false;
+        }
+        return true;
+    }
 
     function _patch(key, value) {
         // Shallow clone via Object.assign — we replace `key`'s value
@@ -122,9 +138,10 @@ ColumnLayout {
     /// generous for any human-authored rule.
     readonly property int _maxMatchDepth: 64
 
-    /// True if every leaf predicate in @p node carries a non-empty value.
-    /// A leaf with an empty string / missing value would match an empty-string
-    /// id (e.g. the guided `ScreenId == ""` seed) — block saving that.
+    /// True if every leaf predicate in @p node is complete: a non-empty field,
+    /// a non-empty operator, and a non-empty value. A freshly-added leaf seeds
+    /// all three empty, and an empty-string value would match an empty-string
+    /// id (e.g. the guided `ScreenId == ""` seed) — block saving either.
     function _matchHasFilledLeaves(node, depth) {
         if (depth === undefined)
             depth = 0;
@@ -134,6 +151,14 @@ ColumnLayout {
             return true;
 
         if (node.field !== undefined) {
+            // A freshly-added condition seeds an empty field / operator; block
+            // save until the user picks a field (which auto-seeds a valid
+            // operator) and fills the value.
+            if (String(node.field).length === 0)
+                return false;
+            if (node.op === undefined || String(node.op).length === 0)
+                return false;
+
             var v = node.value;
             if (v === undefined || v === null)
                 return false;
@@ -193,10 +218,9 @@ ColumnLayout {
             }
         }
 
-        // Priority + band-name hint. Bare integers like "610" are
-        // meaningless without the band scheme; the inline label maps the
-        // current value back to its semantic band. Bands defined in
-        // windowrulecontroller.cpp.
+        // Priority. The value is a position in one flat, global precedence list
+        // (higher wins). Reordering rules on the Rules page renumbers them by list
+        // order, so an explicit value set here holds only until the next reorder.
         RowLayout {
             id: priorityRow
 
@@ -207,20 +231,13 @@ ColumnLayout {
 
             SpinBox {
                 Accessible.name: i18n("Rule priority. Higher rules are evaluated first.")
-                ToolTip.delay: 500
-                ToolTip.text: i18n("Priority bands. 100: Animation, 200: Application, 300: Context, 500: Advanced. Higher numbers win within a band.")
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+                ToolTip.text: i18n("Higher priority is evaluated first. Reordering rules on the Rules page renumbers them by list order.")
                 ToolTip.visible: hovered
                 from: 0
                 to: 100000
                 value: priorityRow._priority
                 onValueModified: root._patch("priority", value)
-            }
-
-            Label {
-                Layout.alignment: Qt.AlignVCenter
-                font.italic: true
-                opacity: 0.65
-                text: priorityRow._priority >= 500 ? i18n("Advanced") : priorityRow._priority >= 300 ? i18n("Context") : priorityRow._priority >= 200 ? i18n("Application") : priorityRow._priority >= 100 ? i18n("Animation") : i18n("Custom")
             }
         }
     }

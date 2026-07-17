@@ -30,7 +30,8 @@
 
 const float FADE_WIDTH = 1.0;
 
-float easeOutQuad(float x) { return -1.0 * x * (x - 2.0); }
+// easeOutQuad hosted in shared/easing.glsl; the local copy collapsed to it.
+#include <easing.glsl>
 
 // hash22 + simplex2D + simplex2DFractal hosted in shared/noise.glsl.
 // 4-octave fractal simplex gives the chunky "burn pattern" for the
@@ -60,7 +61,7 @@ vec4 pTransition(vec2 uv, float t)
     float pixelSize = max(ceil(p_maxPixelSize * dissolve + 1.0), 1.0);
     // Floor iResolution so an early-frame zero-sized surface doesn't
     // divide-by-zero into an infinite pixelGrid.
-    vec2 pixelGrid  = vec2(pixelSize) / max(iResolution, vec2(1.0));
+    vec2 pixelGrid  = vec2(pixelSize) / resolutionSafe();
     vec2 cellUV     = uv - mod(uv, pixelGrid) + pixelGrid * 0.5;
     // boundaryMask (see noise.glsl) crops the right/bottom-edge cell
     // whose centre can exceed 1.0 by up to half a cell. Without it,

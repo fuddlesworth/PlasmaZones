@@ -8,8 +8,8 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutSettingsStore.h>
 
-#include <PhosphorWindowRules/RuleEvaluator.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleEvaluator.h>
+#include <PhosphorRules/RuleStore.h>
 
 #include <QHash>
 #include <QPair>
@@ -66,8 +66,8 @@ inline size_t qHash(const CombinedAssignmentKey& key, size_t seed = 0) noexcept
  *     (screenId, virtualDesktop, activity), with cascading fallback
  *     (narrower keys beat wider keys; base screen is the widest). The
  *     assignment authority is the injected
- *     @ref PhosphorWindowRules::WindowRuleStore — each per-context
- *     assignment is a context-only @c WindowRule and the cascade is the
+ *     @ref PhosphorRules::RuleStore — each per-context
+ *     assignment is a context-only @c Rule and the cascade is the
  *     evaluator's descending-priority walk.
  *   - Numbered quick-layout shortcut slots (1..9), persisted to a
  *     @c quicklayouts.json sidecar beside the rule store's file.
@@ -85,14 +85,14 @@ class PHOSPHORZONES_EXPORT LayoutRegistry : public IZoneLayoutRegistry
 
 public:
     /**
-     * @param ruleStore Borrowed unified WindowRule store. Required - asserted
-     *                non-null. The store's @ref PhosphorWindowRules::WindowRuleSet
+     * @param ruleStore Borrowed unified Rule store. Required - asserted
+     *                non-null. The store's @ref PhosphorRules::RuleSet
      *                is the single source of truth for every per-context
      *                assignment; the registry resolves @ref layoutForScreen /
      *                @ref assignmentEntryForScreen and the per-mode/snapping/
      *                tiling derivatives by building a windowless
-     *                @ref PhosphorWindowRules::WindowQuery and evaluating it
-     *                through @ref PhosphorWindowRules::RuleEvaluator. Mutators
+     *                @ref PhosphorRules::WindowQuery and evaluating it
+     *                through @ref PhosphorRules::RuleEvaluator. Mutators
      *                (@ref assignLayout etc.) translate to context-rule upserts
      *                via @c ContextRuleBridge and persist through the store.
      *                The caller owns the store and must outlive the registry.
@@ -123,8 +123,7 @@ public:
      *       roots, which drive quick slots over D-Bus rather than locally,
      *       deliberately skip it.
      */
-    LayoutRegistry(PhosphorWindowRules::WindowRuleStore* ruleStore, QString layoutSubdirectory,
-                   QObject* parent = nullptr);
+    LayoutRegistry(PhosphorRules::RuleStore* ruleStore, QString layoutSubdirectory, QObject* parent = nullptr);
     ~LayoutRegistry() override;
 
     // ─── IZoneLayoutRegistry ──────────────────────────────────────────────
@@ -146,6 +145,15 @@ public:
     Q_INVOKABLE void removeLayoutById(const QUuid& id) override;
     Q_INVOKABLE Layout* duplicateLayout(Layout* source) override;
 
+    /// The literal suffix @ref duplicateLayout appends to the source layout's
+    /// name. Public so callers that post-process a duplicate's name (e.g. a
+    /// boundary clamp that must trim the base while keeping the suffix
+    /// intact) reference the same string instead of duplicating the literal.
+    static QString duplicateNameSuffix()
+    {
+        return QStringLiteral(" (Copy)");
+    }
+
     Layout* activeLayout() const override
     {
         return m_activeLayout;
@@ -165,8 +173,39 @@ public:
     Q_INVOKABLE void saveLayouts();
     void saveLayout(Layout* layout);
 
-    Q_INVOKABLE void importLayout(const QString& filePath);
-    Q_INVOKABLE void exportLayout(Layout* layout, const QString& filePath);
+    /// Load a layout from @p filePath and add it to the registry.
+    ///
+    /// Returns the imported layout, so callers can name what was imported
+    /// without guessing at registry order. Returns nullptr when the file is
+    /// missing, unreadable, empty, not JSON, fails schema validation, or does
+    /// not parse into a layout. The reason is logged. Failures report through
+    /// the return value rather than a signal because the D-Bus caller answers
+    /// a user who is waiting on the result of a file picker, and every one of
+    /// these branches used to be a silent early return.
+    Q_INVOKABLE Layout* importLayout(const QString& filePath);
+
+    /// Validate @p json against the bundled layout schema — the single gate
+    /// every untrusted layout document passes before it reaches
+    /// @c Layout::fromJson. Returns false when the document is not a
+    /// well-formed layout, logging @p context (a file path, or a name for the
+    /// ingress) followed by a per-error diagnostic.
+    ///
+    /// Static, and public so ingresses outside this library — the D-Bus layout
+    /// surface — apply the identical gate the file ingresses do. Without it an
+    /// out-of-range value (a zero-width zone, say) is accepted and persisted,
+    /// then refused by this same schema on the next startup, and the layout
+    /// disappears with no user-visible cause. The schema is compiled once
+    /// process-wide and validation reads only it, so this holds no registry
+    /// state and is safe to call from anywhere.
+    static bool isLayoutJsonValid(const QJsonObject& json, const QString& context);
+
+    /// Write @p layout to @p filePath as a standalone layout document.
+    ///
+    /// Returns false when the destination cannot be opened, written or
+    /// committed. Failures report through the return value for the same
+    /// file-picker reason as importLayout(). The write is atomic, so a failure
+    /// leaves whatever was already at the destination untouched.
+    Q_INVOKABLE bool exportLayout(Layout* layout, const QString& filePath);
 
     // ─── Assignment persistence (via config backend) ──────────────────────
 
@@ -237,6 +276,49 @@ public:
     void setDefaultAutotileAlgorithmProvider(std::function<QString()> provider);
 
     /**
+     * @brief Inject a callback that returns the tiled-window count for a screen,
+     * or std::nullopt when the screen is not actively tiling (so a count
+     * predicate stays inert there).
+     *
+     * The count is fed into the windowless WindowQuery built during
+     * @ref resolveAssignmentEntry, letting a SetTilingAlgorithm rule match on
+     * @c Field::TiledWindowCount, for example to switch algorithm once a second
+     * window opens. The value also participates in that resolver's cache key, so
+     * a count change yields a distinct entry rather than a stale hit; the caller
+     * (the daemon) re-resolves and re-applies the per-screen algorithm when the
+     * count changes (on the engine's placementChanged).
+     *
+     * The (virtualDesktop, activity) parameters identify the resolution context,
+     * but a provider may return the screen's CURRENT-context count when its
+     * backing engine only tracks the visible desktop. That is sound because the
+     * tiling-algorithm slot is only ever resolved for the screen's current
+     * context; a count predicate on a non-current (desktop, activity) is not a
+     * supported configuration. Returning nullopt for an unknown context is also
+     * valid (the predicate then stays inert).
+     *
+     * Same threading contract as @ref setDefaultAutotileAlgorithmProvider.
+     */
+    void setTiledWindowCountProvider(
+        std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)>
+            provider);
+
+    /**
+     * @brief Inject a callback that returns a screen's orientation token
+     * ("portrait" / "landscape"), or std::nullopt when the geometry is unknown
+     * (so an orientation predicate stays inert there).
+     *
+     * The token is stamped onto every windowless context WindowQuery this
+     * registry builds (assignment, gap, lock, overlay, default-assignment,
+     * tiling-params), so an orientation rule can drive any context slot — for example a different
+     * tiling algorithm on a rotated (portrait) monitor. Orientation derives from
+     * screen geometry alone, independent of the resolved layout, so it carries no
+     * recursion risk (unlike an active-layout query). The daemon wires this to
+     * @c ScreenManager::screenGeometry. Same threading contract as
+     * @ref setTiledWindowCountProvider.
+     */
+    void setScreenOrientationProvider(std::function<std::optional<QString>(const QString& screenId)> provider);
+
+    /**
      * @brief Inject a callback that returns true when Snapping is the
      * user's preferred default mode (regardless of whether a default
      * snapping layout id is configured).
@@ -287,8 +369,8 @@ public:
     void setDefaultAssignmentSuppressedProvider(std::function<bool()> provider);
 
     /// True when the snapping-preferred provider is wired AND reports true — i.e.
-    /// snapping is globally enabled (the daemon wires the provider to
-    /// `ISettings::snappingEnabled`). Mirrors the internal default-assignment
+    /// snapping is globally enabled (the consumer wires the provider to its
+    /// global snapping-enabled setting). Mirrors the internal default-assignment
     /// branch's `m_snappingPreferredProvider && m_snappingPreferredProvider()`
     /// test, exposed so other engines can gate cross-engine coordination on the
     /// global snap toggle. When unset, returns false (no provider ⇒ not preferred).
@@ -339,8 +421,8 @@ public:
     /// engine-mode gate. Returns an all-unset @ref ContextGapOverride when no
     /// matching rule fills a gap slot. Same owner-thread affinity as the rest
     /// of the registry.
-    ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop,
-                                          const QString& activity) const override;
+    ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
+                                          const QString& mode = QString()) const override;
 
     /// Resolve whether a context rule locks the active layout for the
     /// (screen, desktop, activity) context by evaluating a windowless
@@ -372,6 +454,58 @@ public:
     ContextOverlayOverride resolveContextOverlay(const QString& screenId, int virtualDesktop,
                                                  const QString& activity) const override;
 
+    /// Resolve the per-context autotile parameter overrides (max windows / split
+    /// ratio / master count) for (screen, desktop, activity) — a per-slot read
+    /// like @ref resolveContextGaps. The daemon layers the returned values onto
+    /// the per-screen autotile override map (config stays the base; the rule wins
+    /// where present). NOT cached: called on screen / layout changes, not the hot
+    /// per-cursor path — which also lets it stamp the active layout onto the query
+    /// without a cache-key fold (there is no cache entry to go stale). Concrete
+    /// (not on the interface): the daemon holds a concrete LayoutRegistry.
+    ContextTilingParams resolveContextTilingParams(const QString& screenId, int virtualDesktop,
+                                                   const QString& activity) const;
+
+    /// The screen-orientation token from @ref m_screenOrientationProvider ("portrait"
+    /// / "landscape"), or an empty string when the provider is unset or returns
+    /// nullopt. Shared by @ref stampScreenOrientation (the query value) and the
+    /// cache-key fold (see @ref contextCacheKeyToken) so both read the same source.
+    QString screenOrientationToken(const QString& screenId) const
+    {
+        if (m_screenOrientationProvider) {
+            if (const auto token = m_screenOrientationProvider(screenId)) {
+                return *token;
+            }
+        }
+        return QString();
+    }
+
+    /// Stamp the screen-orientation token onto @p query from
+    /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
+    /// returns nullopt). Called at every windowless-context query build site so a
+    /// @c Field::ScreenOrientation predicate can match regardless of which
+    /// context slot (assignment / gap / lock / overlay) is being resolved.
+    /// Orientation is geometry-derived and layout-independent, so this is safe to
+    /// call from the assignment cascade (no recursion, unlike an active-layout read).
+    void stampScreenOrientation(PhosphorRules::WindowQuery& query, const QString& screenId) const
+    {
+        query.screenOrientation = screenOrientationToken(screenId);
+    }
+
+    /// Compose the extra cache-key token a daemon-facing context resolver (gap /
+    /// lock / overlay / default-assignment) passes to @ref resolveCachedContext,
+    /// folding in the placement @p modeToken (empty for the non-gap resolvers), the
+    /// @p activeLayoutId, and the @p orientationToken. Both the active layout AND
+    /// the screen orientation are NON-rule-set inputs — each can change without a
+    /// rule-set revision bump (the layout via the external global-default provider,
+    /// the orientation via a live monitor rotation) — so, exactly like the
+    /// tiledWindowCount "twc:" token, they must ride the cache KEY rather than the
+    /// value, or the change would return a stale hit. See resolveCachedContext.
+    static QString contextCacheKeyToken(const QString& modeToken, const QString& activeLayoutId,
+                                        const QString& orientationToken)
+    {
+        return modeToken + QLatin1String("|al:") + activeLayoutId + QLatin1String("|or:") + orientationToken;
+    }
+
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
     /// True iff a context-assignment rule whose match is exactly this
@@ -380,7 +514,7 @@ public:
     /// assignment is still an explicit assignment: this reports stored
     /// intent, not the effective cascade result. It therefore intentionally
     /// diverges from @ref assignmentEntryForScreen / the resolvers, which
-    /// skip disabled rules and would synthesize the provider default for a
+    /// skip disabled rules and fall through to the gated default for a
     /// context whose only rule is disabled.
     Q_INVOKABLE bool hasExplicitAssignment(const QString& screenId, int virtualDesktop = 0,
                                            const QString& activity = QString()) const;
@@ -499,8 +633,8 @@ public:
 
     /// quicklayouts.json top-level keys: one nested slot object per tiling
     /// mode. This is the ONLY on-disk shape — there is no flat legacy variant.
-    /// Shared with the v3→v4 schema migration (configmigration.cpp), which
-    /// writes the same nested format, so reader and migration cannot drift.
+    /// Shared with a consumer's v3→v4 schema migration, which writes the same
+    /// nested format, so reader and migration cannot drift.
     static constexpr QLatin1String QuickSlotsSnappingKey{"snapping"};
     static constexpr QLatin1String QuickSlotsAutotileKey{"autotile"};
 
@@ -579,9 +713,9 @@ public:
     /// Used by tests to verify the cache populates and invalidates against
     /// rule-set revision bumps. Not for production callers — the value
     /// drifts as cursor-move resolves come in. Return type is `int` because
-    /// the cache is bounded at 256 entries (`kMaxEntries` in
-    /// layoutregistry_assignments.cpp), well within `int` range — keeps
-    /// test assertions free of the `qsizetype` `int` widening dance.
+    /// the cache is bounded at 256 entries (`kMaxEntries` in the shared
+    /// @ref resolveCachedContext template below), well within `int` range —
+    /// keeps test assertions free of the `qsizetype` `int` widening dance.
     [[nodiscard]] int contextResolveCacheSize() const
     {
         return static_cast<int>(m_contextResolveCache.size());
@@ -639,32 +773,36 @@ private:
     /// One-time idempotent fold of the retired autotile-overrides.json into the
     /// unified layout-settings.json sidecar; deletes the legacy file when done.
     void migrateLegacyAutotileOverrides();
-    Layout* resolveConfiguredDefault() const;
 
     // ─── Rule-backed assignment resolution ────────────────────────────────
-    // The unified WindowRuleStore is the single source of truth for every
+    // The unified RuleStore is the single source of truth for every
     // per-context assignment. These helpers translate the legacy
     // AssignmentEntry API onto the rule store + evaluator.
 
     /// Resolve the AssignmentEntry for a context by evaluating a windowless
     /// WindowQuery through the RuleEvaluator and reading the engine-mode /
-    /// layout / tiling action slots of the resolved action set. Returns
-    /// nullopt when no pinned context rule fills the engine-mode slot
-    /// (the catch-all/provider-default rule is excluded so cascade-miss is
-    /// distinguishable). @p screenId is taken verbatim — connector / VS
-    /// fallback is the caller's (layoutForScreen) retry loop.
+    /// layout / tiling action slots of the resolved action set. The winner of
+    /// each slot is the highest-priority matching rule (priority wins, ties by
+    /// list order). Returns nullopt when no rule of any shape fills any of the
+    /// three slots, so a genuine miss stays distinguishable and routes to the
+    /// gated default. @p screenId is taken verbatim — connector / VS fallback is
+    /// the caller's (layoutForScreen) retry loop.
     ///
     /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
-    /// by (screenId, virtualDesktop, activity). The cache is invalidated
+    /// by (screenId, virtualDesktop, activity) plus a "twc:N|or:<token>"
+    /// composite of the tiled-window-count and screen-orientation tokens (each
+    /// empty when unknown), so a count or rotation change yields a fresh entry
+    /// rather than a stale hit while steady callers keep hitting the
+    /// cache. The cache is invalidated
     /// lazily by comparing the bound rule set's monotonic
-    /// @c WindowRuleSet::revision() against the snapshot taken on the last
+    /// @c RuleSet::revision() against the snapshot taken on the last
     /// insert — a mismatch clears the whole map before falling through to the
     /// linear walk. No explicit signal-time clear is required: a real edit
-    /// bumps the revision (see @c WindowRuleSet::setRules), so the next
-    /// resolve sees the bump and re-populates. A soft cap (256 entries — see
-    /// the per-cache @c kMaxEntries constant in
-    /// @c layoutregistry_assignments.cpp; each context cache declares its own)
-    /// guards against pathological growth from clients probing unique
+    /// bumps the revision (see @c RuleSet::setRules), so the next
+    /// resolve sees the bump and re-populates. A soft cap (256 entries — the
+    /// @c kMaxEntries constant in the shared @ref resolveCachedContext template,
+    /// applied uniformly to every context cache) guards against pathological
+    /// growth from clients probing unique
     /// non-existent tuples; on overflow the cache is cleared entirely (the
     /// next walk re-seeds it cleanly). 256 sits comfortably above any
     /// realistic live (screens × desktops × activities) footprint and far
@@ -694,8 +832,8 @@ private:
     /// disabled rule in place rather than appending a duplicate) but rejects
     /// any match carrying a window-property leaf — only a pure context-only
     /// match is an exact context rule.
-    const PhosphorWindowRules::WindowRule* findExactContextRule(const QString& screenId, int virtualDesktop,
-                                                                const QString& activity) const;
+    const PhosphorRules::Rule* findExactContextRule(const QString& screenId, int virtualDesktop,
+                                                    const QString& activity) const;
 
     /// Find the id of the exact-shape context rule for a (screen, desktop,
     /// activity) tuple, or a null QUuid if none exists.
@@ -766,10 +904,10 @@ private:
     AssignmentEntry resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
                                                             const QString& activity) const;
 
-    /// True iff an enabled, PINNED (non-catch-all) engine-mode assignment rule
-    /// matches the (screen, desktop, activity) context — i.e. the user authored
-    /// an explicit per-context assignment, even one that sets only the mode with
-    /// no layout. Such a window rule overrides the global suppress setting (the
+    /// True iff an enabled engine-mode assignment rule matches the (screen,
+    /// desktop, activity) context — i.e. the user authored an explicit
+    /// per-context assignment, even one that sets only the mode with
+    /// no layout. Such a rule overrides the global suppress setting (the
     /// context is managed, never suppressed). Mirrors the connector /
     /// virtual-screen fallback chain of @ref assignmentIdForScreen so a rule
     /// keyed by the physical/connector id still matches a virtual-screen query.
@@ -785,9 +923,25 @@ private:
         QString screenId;
         int virtualDesktop = 0;
         QString activity;
+        // A free-form fourth key dimension, used by the context resolvers that
+        // share the ContextResolveKey type but never the same cache container. It
+        // folds in every non-rule-set input the resolved value depends on, so a
+        // change in one yields a fresh entry rather than a stale hit:
+        //   - gap cascade: contextCacheKeyToken(mode, activeLayout, orientation) —
+        //     the SAME (screen, desktop, activity) resolves DIFFERENT gaps per
+        //     placement mode, active layout, and screen orientation.
+        //   - lock / default-assignment / overlay: contextCacheKeyToken with an
+        //     empty mode (they are mode-agnostic) plus activeLayout (except
+        //     default-assignment, which omits it to avoid recursion) and orientation.
+        //   - assignment resolver: "twc:N|or:<token>" — the tiled-window-count and
+        //     the screen orientation (it does not read the active layout).
+        // Each resolver owns its own cache hash, so the token vocabularies never
+        // collide.
+        QString mode;
         bool operator==(const ContextResolveKey& other) const noexcept
         {
-            return virtualDesktop == other.virtualDesktop && screenId == other.screenId && activity == other.activity;
+            return virtualDesktop == other.virtualDesktop && screenId == other.screenId && activity == other.activity
+                && mode == other.mode;
         }
     };
     friend size_t qHash(const LayoutRegistry::ContextResolveKey& key, size_t seed) noexcept
@@ -800,6 +954,7 @@ private:
         h = ::qHash(key.screenId, h);
         h = ::qHash(key.virtualDesktop, h);
         h = ::qHash(key.activity, h);
+        h = ::qHash(key.mode, h);
         return h;
     }
 
@@ -816,14 +971,14 @@ private:
     /// that must short-circuit on a null evaluator do so BEFORE calling this.
     template<typename V, typename ComputeFn>
     V resolveCachedContext(QHash<ContextResolveKey, V>& cache, quint64& cacheRevision, const QString& screenId,
-                           int virtualDesktop, const QString& activity, ComputeFn&& compute) const
+                           int virtualDesktop, const QString& activity, const QString& mode, ComputeFn&& compute) const
     {
         const quint64 revision = m_ruleStore->ruleSet().revision();
         if (revision != cacheRevision) {
             cache.clear();
             cacheRevision = revision;
         }
-        const ContextResolveKey key{screenId, virtualDesktop, activity};
+        const ContextResolveKey key{screenId, virtualDesktop, activity, mode};
         const auto cached = cache.constFind(key);
         if (cached != cache.constEnd()) {
             return cached.value();
@@ -839,8 +994,12 @@ private:
 
     /// The rule-derived slot resolution cached by @ref resolveAssignmentEntry.
     /// Holds ONLY what the rule set produced for each of the three independent
-    /// slots, so the cache stays a pure function of the rule set (the cache's
-    /// revision-invalidation contract). The global default — an external
+    /// slots. Given a fixed cache key the value is a pure function of the rule
+    /// set (the cache's revision-invalidation contract). The live tiled-window
+    /// count and the screen orientation are the non-rule-set inputs that affect
+    /// the result; rather than break that contract they participate in the cache
+    /// KEY (the "twc:N" and "|or:<token>" components), so each combination resolves
+    /// its own entry. The global default — an external
     /// provider, not part of the rule set and not revision-tracked — is folded
     /// in AFTER the cache returns, so a default-setting change is reflected
     /// immediately without a rule-set revision bump (a settings edit produces
@@ -909,6 +1068,17 @@ private:
     /// Symmetric to @c m_defaultLayoutIdProvider; together they form
     /// the level-1 cascade tier.
     std::function<QString()> m_defaultAutotileAlgorithmProvider;
+    /// Empty = provider unset. Returns the tiled-window count for a context
+    /// (or nullopt when it is not actively tiling), fed into the windowless
+    /// query during @ref resolveAssignmentEntry so a SetTilingAlgorithm rule
+    /// can match @c Field::TiledWindowCount. See @ref setTiledWindowCountProvider.
+    std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)>
+        m_tiledWindowCountProvider;
+    /// Empty = provider unset. Returns a screen's orientation token
+    /// ("portrait" / "landscape"), or nullopt when geometry is unknown. Stamped
+    /// onto every windowless context query so a Field::ScreenOrientation predicate
+    /// can match. See @ref setScreenOrientationProvider.
+    std::function<std::optional<QString>(const QString& screenId)> m_screenOrientationProvider;
     /// Empty = provider unset (legacy behaviour). Returns true when
     /// the user has snapping mode enabled in settings, regardless of
     /// whether a global default snap layout id is configured. See
@@ -922,9 +1092,9 @@ private:
     /// Borrowed unified rule store — the single assignment authority. The
     /// caller owns the store and must outlive the registry; always non-null
     /// (the ctor asserts it).
-    PhosphorWindowRules::WindowRuleStore* m_ruleStore = nullptr;
+    PhosphorRules::RuleStore* m_ruleStore = nullptr;
     /// Evaluator bound to m_ruleStore->ruleSet(); the one resolution model.
-    std::unique_ptr<PhosphorWindowRules::RuleEvaluator> m_evaluator;
+    std::unique_ptr<PhosphorRules::RuleEvaluator> m_evaluator;
     QString m_layoutSubdirectory; ///< XDG-relative (e.g. "plasmazones/layouts") - drives locateAll discovery
     QString m_layoutDirectory; ///< Absolute user-writable path derived from m_layoutSubdirectory
     QVector<Layout*> m_layouts;

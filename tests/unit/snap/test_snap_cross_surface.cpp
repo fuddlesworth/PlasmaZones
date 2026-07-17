@@ -68,14 +68,6 @@ public:
     {
         return nullptr;
     }
-    const QHash<QString, QString>& screenAssignments() const override
-    {
-        return screenOfWindow;
-    }
-    const QHash<QString, QStringList>& zoneAssignments() const override
-    {
-        return m_zoneAssign;
-    }
     const QHash<QString, QList<PhosphorEngine::PendingRestore>>& pendingRestoreQueues() const override
     {
         return m_pending;
@@ -144,6 +136,9 @@ public:
     {
         return {};
     }
+    void clearPreFloatZone(const QString&) override
+    {
+    }
     bool clearAutoSnapped(const QString&) override
     {
         return false;
@@ -191,7 +186,6 @@ public:
     }
 
 private:
-    QHash<QString, QStringList> m_zoneAssign;
     QHash<QString, QList<PhosphorEngine::PendingRestore>> m_pending;
     PhosphorEngine::WindowPlacementStore m_store;
 };

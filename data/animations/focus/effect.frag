@@ -124,5 +124,5 @@ vec4 pTransition(vec2 uv, float t) {
     texColor.a *= alpha;
 
     // Output the final color with the applied blur and alpha transition.
-    return vec4(texColor.rgb * texColor.a, texColor.a);
+    return premultiply(texColor);
 }

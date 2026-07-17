@@ -26,6 +26,8 @@
 #include <QSet>
 #include <QStringList>
 
+#include <memory>
+
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
@@ -50,14 +52,12 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     if (!w || m_effect->getWindowId(w) != windowId) {
         // Window gone (closed mid-snap — the close often races the async
         // snap reply, so slotWindowClosed's bookkeeping may have ALREADY
-        // run). Recording tiled tracking or acquiring decoration ownership
-        // now would re-create state nothing will ever clean up; drop any
-        // remnants instead. The exact-id check matters: findWindowById's
-        // appId fuzzy fallback can resolve a same-app SIBLING for a dead id,
-        // and hiding the sibling's title bar under the dead key would be
-        // unreleasable.
+        // run). Recording tiled tracking now would re-create state nothing
+        // will ever clean up; drop any remnants instead. The exact-id check
+        // matters: findWindowById's appId fuzzy fallback can resolve a
+        // same-app SIBLING for a dead id, and tracking the sibling under the
+        // dead key would strand it.
         AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
         return;
     }
     // A window can only be snap-managed by one screen at a time. Strip stale
@@ -66,31 +66,16 @@ void SnapHandler::markWindowSnapped(const QString& windowId, const QString& scre
     AutotileStateHelpers::removeFromOtherScreens(m_border, windowId, screenId);
     AutotileStateHelpers::addTiledOnScreen(m_border, screenId, windowId);
 
-    // Decoration ownership. The manager owns the capability gate
-    // (userCanSetNoBorder — survives the already-borderless autotile→snap
-    // handoff, skips CSD windows), the prior-state capture, and the
-    // AlreadyPlaced sequence (capture moveResizeGeometry → setNoBorder →
-    // re-assert) that keeps the window filling its zone across the
-    // decoration change.
-    if (m_border.hideTitleBars) {
-        // Move any stale snap claim from another screen (no physical flap),
-        // then acquire on this one.
-        m_effect->decorationManager()->releaseOthersOfKind(windowId, DecorationManager::OwnerKind::Snap, screenId);
-        m_effect->decorationManager()->acquire(windowId, DecorationManager::snap(screenId),
-                                               DecorationManager::Placement::AlreadyPlaced);
-    } else {
-        // Hide-title-bars off: no acquire follows, so a bare cross-screen
-        // owner strip could orphan a hidden entry — release the whole kind
-        // instead (restores if a stale claim somehow exists, no-op otherwise).
-        m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
-    }
+    // Title-bar (borderless) state is driven entirely by rules through
+    // the effect's reconcileRuleHiddenTitleBar → DecorationManager path; this
+    // handler only records snap tiled-tracking for border RENDERING.
 
     // Border overlays are visual-only, so skip the off-desktop case (consistent
-    // with updateAllBorders): an OutlinedBorderItem for an invisible window is
-    // wasted work. When the user switches to that window's desktop, the
-    // desktopChanged → updateAllBorders connection rebuilds its border.
+    // with updateAllDecorations): redirecting an invisible window through the border
+    // shader is wasted work. When the user switches to that window's desktop, the
+    // desktopChanged → updateAllDecorations connection rebuilds its border.
     if (w->isOnCurrentDesktop()) {
-        m_effect->updateWindowBorder(windowId, w);
+        m_effect->updateWindowDecoration(windowId, w);
     }
 }
 
@@ -100,46 +85,27 @@ void SnapHandler::clearWindowSnapped(const QString& windowId)
         return;
     }
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
-    // Release snap's decoration ownership. The manager restores the title bar
-    // only when no other owner remains — a window mid-transition between
-    // modes keeps autotile's claim, which replaces the old cross-mode guard.
-    m_effect->decorationManager()->releaseKind(windowId, DecorationManager::OwnerKind::Snap);
-    m_effect->removeWindowBorder(windowId);
-}
-
-bool SnapHandler::updateSnapHideTitleBars(bool hide)
-{
-    // Only act on change (mirrors AutotileHandler::updateHideTitleBarsSetting):
-    // a no-op call would otherwise walk an acquire-all / release-all pass and
-    // a full updateAllBorders for nothing.
-    if (m_border.hideTitleBars == hide) {
-        return false;
-    }
-    m_border.hideTitleBars = hide;
-    if (hide) {
-        // Hide on every currently snap-committed window. The windows are
-        // already placed in their zones, so the AlreadyPlaced sequence
-        // re-asserts the zone rect across the decoration change.
-        const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
-        for (const auto& p : pairs) {
-            m_effect->decorationManager()->acquire(p.first, DecorationManager::snap(p.second),
-                                                   DecorationManager::Placement::AlreadyPlaced);
-        }
-    } else {
-        // Release every snap ownership; the manager restores each title bar
-        // that no other owner (autotile mid-transition, rule hide) still
-        // claims. Deferred + an immediate drain: each restore is a 30-120 ms
-        // synchronous Wayland round-trip, so the drain runs them one per
-        // event-loop tick instead of stalling the compositor for the batch.
-        m_effect->decorationManager()->releaseAllOfKind(DecorationManager::OwnerKind::Snap,
-                                                        DecorationManager::Restore::Deferred);
-        m_effect->decorationManager()->drainPendingRestores();
-    }
-    // The border refresh is the CALLER's job on a true return — full
-    // symmetry with AutotileHandler::updateHideTitleBarsSetting, so a
-    // caller following either pattern never double-walks the stacking
-    // order.
-    return true;
+    // A window that is no longer snap-managed occupies no zone. The zone cache
+    // is the source of the IsSnapped / Zone rule-match fields, and several
+    // unsnap paths (drag-out unsnap in particular) get their answer in the
+    // endDrag reply with NO windowStateChanged broadcast to follow — leaving
+    // the entry stale means the coalesced rule re-resolve still sees
+    // "snapped", so a placement-scoped decoration never rebuilds and a
+    // hide-title-bar-when-snapped rule keeps the title bar hidden until some
+    // unrelated re-resolve (e.g. a focus swap). Clearing here, in the one
+    // place every unsnap funnels through, keeps the fact and the tracking in
+    // lockstep; clearWindowZone re-resolves the rules only when an entry was
+    // actually dropped, so this is free for callers whose broadcast already
+    // landed. Cleared BEFORE the re-decorate below so the re-resolve sees the
+    // window as unsnapped and picks the floating-state chain, not the snapped
+    // one it is leaving.
+    m_effect->clearWindowZone(windowId);
+    // Re-resolve the decoration SYNCHRONOUSLY instead of dropping it: this
+    // funnel runs at drag start (the daemon floats the grabbed window), and a
+    // bare removeWindowDecoration here blanked EVERY pack — interior blur
+    // included — until some later push happened to rebuild the entry
+    // mid-drag. The shared funnel swaps update-or-remove in the same turn.
+    m_effect->reconcileDecorationOnPlacementFlip(windowId);
 }
 
 void SnapHandler::clearSnapTracking()
@@ -147,15 +113,15 @@ void SnapHandler::clearSnapTracking()
     // Bookkeeping only. Physical title-bar restores are the
     // DecorationManager's job — teardown callers pair this with
     // DecorationManager::restoreAll(). Callers also pair it with
-    // clearAllBorders() to tear down the OutlinedBorderItem scene items.
+    // clearAllDecorations() to release the per-window border shader redirect.
     m_border.tiledWindowsByScreen.clear();
 }
 
 void SnapHandler::onWindowClosed(const QString& windowId)
 {
     // Pure bookkeeping — the window is being destroyed, so no setNoBorder /
-    // removeWindowBorder is needed (the border item is removed by the effect's
-    // close path and the title bar dies with the window).
+    // removeWindowDecoration is needed (the effect's close path drops the border
+    // entry / shader redirect and the title bar dies with the window).
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
 }
 
@@ -235,8 +201,13 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
         return;
     }
 
-    // Use pre-captured geometry if provided, otherwise read from window.
+    // Use pre-captured geometry if provided, otherwise read from window. Correct for
+    // maximize/fullscreen: the callers' pre-captured frame is the live frameGeometry(),
+    // which is the full-monitor rect while maximized — capturing that as the float-back
+    // size floats the window back full-screen. freeGeometryForCapture substitutes the
+    // pre-maximize restore rect (shared with the autotile capture path).
     QRectF geom = preCapturedGeometry.isValid() ? preCapturedGeometry : QRectF(w->frameGeometry());
+    geom = PlasmaZonesEffect::freeGeometryForCapture(w, geom);
     if (geom.width() <= 0 || geom.height() <= 0) {
         return;
     }
@@ -266,6 +237,14 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
 void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
 {
     if (!m_focusFollowsMouse) {
+        return;
+    }
+
+    // Pause FFM entirely during show-desktop/peek. Peeked windows are hidden
+    // from the scene but keep their frameGeometry, so the scan below would
+    // find one under the cursor and activateWindow() would synchronously
+    // cancel the peek (mirrors the autotile FFM guard).
+    if (PlasmaZonesEffect::isShowingDesktop()) {
         return;
     }
 
@@ -299,7 +278,10 @@ void SnapHandler::handleCursorMoved(const QPointF& pos, const QString& screenId)
         KWin::EffectWindow* w = windows[i];
         // isDeleted: a close-grabbed dying window under the cursor must not
         // pause FFM via the occlusion bail (or pollute id caches below).
-        if (!w || w->isDeleted() || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        // isHiddenByShowDesktop: belt-and-braces behind the showing-desktop
+        // bail above, for the frame where peek engages mid-scan.
+        if (!w || w->isDeleted() || w->isMinimized() || w->isHiddenByShowDesktop() || !w->isOnCurrentDesktop()
+            || !w->isOnCurrentActivity()) {
             continue;
         }
         // Cheap geometry test before the windowClass()/windowId allocations below.
@@ -336,7 +318,8 @@ void SnapHandler::callCancelSnap()
                                                 QStringLiteral("cancelSnap"));
 }
 
-void SnapHandler::handleMinimizeChanged(const QString& windowId, const QString& screenId, bool minimized)
+void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
+                                        bool minimized)
 {
     // Snap-mode-only: the autotile handler runs its own snap-state / float-state
     // machine for autotile screens.
@@ -355,12 +338,92 @@ void SnapHandler::handleMinimizeChanged(const QString& windowId, const QString& 
             qCDebug(lcEffect) << "Snap: unminimized window was not minimize-floated, skipping unfloat:" << windowId;
             return;
         }
+        // Restore net for a snap-tracked window minimized across a daemon
+        // restart: every restore pass (slotDaemonReady's untracked sweep,
+        // slotPendingRestoresAvailable) deliberately skips minimized windows,
+        // and the unfloat sent below only flips a floating flag the daemon
+        // applies to windows it already tracks — the new daemon session tracks
+        // this window as neither snapped nor floating, so the unfloat no-ops
+        // and the window never rejoins its zone.
+        //
+        // Discriminating "orphaned by a restart" from a NORMAL minimize cycle
+        // needs both daemon states: minimize-float UNSNAPS the window
+        // (SnapEngine::setWindowFloat(true) → unsnapForFloat), so in a normal
+        // cycle it is absent from getSnappedWindows too — but it IS in the
+        // daemon's floating set, and the unfloat below re-snaps it. Only a
+        // window in NEITHER set is orphaned. Both queries are dispatched HERE,
+        // before the unfloat fireAndForget below enters the same D-Bus send
+        // queue, so the daemon answers them against the pre-unfloat state.
+        //
+        // The restore-on-orphan is deliberately scoped to windows this effect
+        // session minimize-floated (the remove() above succeeded): an
+        // unconditional net would fire resolveWindowRestore on every
+        // unminimize of any never-tracked window, re-running its open-time
+        // placement routing (RouteToDesktop) and churning the placement
+        // store's per-app FIFO on a path that is not an open.
+        //
+        // Tracked-ness MUST be checked, not resolved blindly:
+        // resolveWindowRestore consumes the single-shot FIFO pending-restore
+        // entry for the window's appId, and burning it on a window the daemon
+        // still owns robs a sibling window's restore. A failed query counts
+        // as tracked for the same reason.
+        if (window && m_effect->isDaemonReady("unminimize restore check")) {
+            struct QueryJoin
+            {
+                int pending = 2;
+                bool trackedOrFailed = false;
+            };
+            auto join = std::make_shared<QueryJoin>();
+            QPointer<KWin::EffectWindow> safeWindow = window;
+            const auto onReplyDone = [this, join, safeWindow, windowId]() {
+                if (--join->pending > 0 || join->trackedOrFailed) {
+                    return;
+                }
+                // Same eligibility guards as slotPendingRestoresAvailable's
+                // sweep, re-checked post-await: the window may have closed,
+                // re-minimized, or left the current desktop/activity while
+                // the queries were in flight (restoring an off-desktop window
+                // would snap it through the wrong desktop's snap state).
+                if (!safeWindow || safeWindow->isDeleted() || safeWindow->isMinimized()
+                    || !safeWindow->isOnCurrentDesktop() || !safeWindow->isOnCurrentActivity()) {
+                    return;
+                }
+                qCInfo(lcEffect) << "Snap: unminimized window is untracked by daemon — retrying restore:" << windowId;
+                callResolveWindowRestore(safeWindow.data());
+            };
+            auto* snappedWatcher = new QDBusPendingCallWatcher(
+                PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                           QStringLiteral("getSnappedWindows")),
+                this);
+            connect(snappedWatcher, &QDBusPendingCallWatcher::finished, this,
+                    [join, windowId, onReplyDone](QDBusPendingCallWatcher* w) {
+                        w->deleteLater();
+                        QDBusPendingReply<QStringList> reply = *w;
+                        if (!reply.isValid() || reply.value().contains(windowId)) {
+                            join->trackedOrFailed = true;
+                        }
+                        onReplyDone();
+                    });
+            auto* floatingWatcher = new QDBusPendingCallWatcher(
+                PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
+                                                           QStringLiteral("queryWindowFloating"), {windowId}),
+                this);
+            connect(floatingWatcher, &QDBusPendingCallWatcher::finished, this,
+                    [join, onReplyDone](QDBusPendingCallWatcher* w) {
+                        w->deleteLater();
+                        QDBusPendingReply<bool> reply = *w;
+                        if (!reply.isValid() || reply.value()) {
+                            join->trackedOrFailed = true;
+                        }
+                        onReplyDone();
+                    });
+        }
     }
 
     qCInfo(lcEffect) << "Snap: window" << (minimized ? "minimized, floating:" : "unminimized, unfloating:") << windowId
                      << "on" << screenId;
 
-    if (m_effect->m_daemonServiceRegistered) {
+    if (m_effect->isDaemonReady("snap minimize float")) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("setWindowFloatingForScreen"),
                                                        {windowId, screenId, minimized},
@@ -465,7 +528,11 @@ void SnapHandler::slotMoveSpecificWindowToZoneRequested(const QString& windowId,
         // so recording it here would double-track the window — same
         // discriminator as slotApplyGeometryRequested / the async snap path.
         if (!screenId.isEmpty() && !isAutotile) {
-            markWindowSnapped(m_effect->getWindowId(targetWindow), screenId);
+            const QString wid = m_effect->getWindowId(targetWindow);
+            markWindowSnapped(wid, screenId);
+            // Snapped — re-resolve Mode / IsSnapped rules now instead of waiting
+            // for the daemon broadcast, consistent with the drag-commit paths.
+            m_effect->invalidateRuleCacheForStateChange(wid);
         }
 
         // Snap Assist continuation: only for manual-mode screens.

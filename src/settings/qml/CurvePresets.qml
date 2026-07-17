@@ -23,7 +23,7 @@ import QtQuick
  *   - AnimationsPresetsPage (preset library)
  *
  * Easing presets include bezier curves in "x1,y1,x2,y2" format and named
- * curves like "elastic-out:1.00,0.30". Spring presets use the (omega, zeta)
+ * curves like "elastic-out:1.40,0.30". Spring presets use the (omega, zeta)
  * shape from `PhosphorAnimation::Spring` — values mirror the C++
  * `Spring::snappy()`, `::smooth()`, `::bouncy()` factories.
  *
@@ -153,9 +153,9 @@ QtObject {
                 "in-out": "0.68,-0.55,0.27,1.55"
             },
             "elastic": {
-                "in": "elastic-in:1.00,0.30",
-                "out": "elastic-out:1.00,0.30",
-                "in-out": "elastic-in-out:1.00,0.30"
+                "in": "elastic-in:1.40,0.30",
+                "out": "elastic-out:1.40,0.30",
+                "in-out": "elastic-in-out:1.40,0.30"
             },
             "bounce": {
                 "in": "bounce-in:1.00,3",
@@ -197,7 +197,7 @@ QtObject {
         },
         {
             "label": i18n("Elastic"),
-            "curve": "elastic-out:1.00,0.30"
+            "curve": "elastic-out:1.40,0.30"
         },
         {
             "label": i18n("Bounce"),
@@ -301,7 +301,7 @@ QtObject {
     /// Friendly label for ANY stored curve wire value, including the
     /// `spring:omega,zeta` form. Single source of truth for the name shown
     /// both in the rule editor's curve button (ActionRow) and the rule-list
-    /// action summary (resolved in C++ via WindowRuleController). Easing
+    /// action summary (resolved in C++ via RuleController). Easing
     /// values defer to curveDisplayName; springs format as "Spring (ω, ζ)".
     function curveLabel(curve) {
         if (curve && curve.indexOf("spring:") === 0) {

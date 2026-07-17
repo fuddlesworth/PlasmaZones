@@ -56,22 +56,21 @@ public:
                                      int virtualDesktop) = 0;
     virtual void unassignWindow(const QString& windowId) = 0;
 
-    virtual const QHash<QString, QStringList>& zoneAssignments() const = 0;
-
     /// A window's recorded snap zone(s), preferring the LIVE assignment but falling
     /// back to the DURABLE placement-record snap slot when the live cache is cold.
-    /// The live `zoneAssignments()` map is runtime-only — a daemon restart (and
-    /// `handoffRelease` on autotile entry) clears it — so consumers that must
+    /// The live per-store zone maps are runtime-only — a daemon restart (and
+    /// `handoffRelease` on autotile entry) clears them — so consumers that must
     /// survive a restart (the autotile→snap resnap) read this instead. Returns an
     /// empty list for a window that was never snapped in either source.
     virtual QStringList recordedSnapZones(const QString& windowId) const = 0;
 
-    virtual const QHash<QString, QString>& screenAssignments() const = 0;
     virtual QString zoneForWindow(const QString& windowId) const = 0;
     virtual QStringList zonesForWindow(const QString& windowId) const = 0;
     /// The screen a window is assigned to (empty when none), canonicalizing the
-    /// id — the point accessor callers use instead of screenAssignments().value()
-    /// so a window resolves across the effect-restart re-identification skew (#628).
+    /// id so a window resolves across the effect-restart re-identification skew
+    /// (#628). There is deliberately no flat whole-map accessor on this interface:
+    /// window placement is stored per (screen, desktop, activity) context, and a
+    /// cross-store union erases the context that per-desktop consumers need.
     virtual QString screenForWindow(const QString& windowId) const = 0;
     /// Same, returning @p defaultScreen when the window has no assignment.
     virtual QString screenForWindow(const QString& windowId, const QString& defaultScreen) const = 0;
@@ -106,6 +105,11 @@ public:
 
     virtual QStringList preFloatZones(const QString& windowId) const = 0;
     virtual QString preFloatScreen(const QString& windowId) const = 0;
+    /// Clear the saved pre-float zone/screen for @p windowId (both the windowId
+    /// key and its appId alias). Used to drop stale pre-float state when a
+    /// floating window crosses monitors, so a later unfloat does not restore it
+    /// to a zone on the monitor it left.
+    virtual void clearPreFloatZone(const QString& windowId) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Auto-snap / pending restore

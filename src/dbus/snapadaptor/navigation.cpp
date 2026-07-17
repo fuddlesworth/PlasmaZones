@@ -6,10 +6,7 @@
 #include "../../core/logging.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
-
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
+#include <PhosphorEngine/GeometryUtils.h>
 
 namespace PlasmaZones {
 
@@ -184,34 +181,15 @@ void SnapAdaptor::handleBatchedResnap(const QString& resnapData)
 {
     qCDebug(lcDbusWindow) << "handleBatchedResnap: processing batched resnap from SnapEngine";
 
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(resnapData.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        qCWarning(lcDbusWindow) << "handleBatchedResnap: invalid JSON:" << parseError.errorString();
+    // Deserialize through the lib-side pair of serializeZoneAssignments — one
+    // serializer, one deserializer, shared JsonKeys, so the two sides cannot
+    // drift and the parse is unit-testable next to the serializer.
+    QString parseError;
+    const QVector<ZoneAssignmentEntry> entries =
+        PhosphorEngine::GeometryUtils::deserializeZoneAssignments(resnapData, &parseError);
+    if (!parseError.isEmpty()) {
+        qCWarning(lcDbusWindow) << "handleBatchedResnap: invalid JSON:" << parseError;
         return;
-    }
-
-    // Deserialize ZoneAssignmentEntry array
-    QVector<ZoneAssignmentEntry> entries;
-    const QJsonArray arr = doc.array();
-    for (const QJsonValue& val : arr) {
-        QJsonObject obj = val.toObject();
-        ZoneAssignmentEntry entry;
-        entry.windowId = obj.value(QLatin1String("windowId")).toString();
-        entry.targetZoneId = obj.value(QLatin1String("targetZoneId")).toString();
-        entry.sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
-        // Deserialize multi-zone IDs (for zone-spanning windows)
-        const QJsonArray zoneIdsArr = obj.value(QLatin1String("targetZoneIds")).toArray();
-        if (!zoneIdsArr.isEmpty()) {
-            for (const QJsonValue& v : zoneIdsArr)
-                entry.targetZoneIds.append(v.toString());
-        }
-        entry.targetGeometry =
-            QRect(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
-                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
-        if (!entry.windowId.isEmpty() && !entry.targetZoneId.isEmpty()) {
-            entries.append(entry);
-        }
     }
 
     processBatchEntries(m_adaptor, m_engine, entries, QStringLiteral("resnap"));

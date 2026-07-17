@@ -1,0 +1,20 @@
+{
+    "id": "desktop-crosszoom",
+    "name": "Desktop Cross Zoom",
+    "description": "Zooms and blurs the outgoing desktop into the incoming one for a cinematic switch.",
+    "author": "PlasmaZones (ported from GL-Transitions CrossZoom by rectalogic, MIT)",
+    "version": "1.0",
+    "category": "Zoom",
+    "appliesTo": ["desktop"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "strength",
+            "name": "Zoom Strength",
+            "type": "float",
+            "default": 0.4,
+            "min": 0.0,
+            "max": 1.0
+        }
+    ]
+}

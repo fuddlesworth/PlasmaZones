@@ -4,6 +4,8 @@
 #include "animationpresetlibrary.h"
 #include "animationfileutils.h"
 
+#include "../phosphor_i18n.h"
+
 #include "../core/logging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -23,18 +25,35 @@ namespace presetlib_detail {
 
 static constexpr QLatin1String JsonNameKey{"name"};
 
+/// Ceiling on a preset file read on the GUI thread. The profiles dir is a
+/// filesystem boundary a user can hand-place anything in. Derived from the
+/// shared cap so it cannot drift from the other readers of these dirs.
+constexpr qint64 kMaxPresetFileBytes = animfileutil::kMaxJsonFileBytes;
+
 } // namespace presetlib_detail
 
-AnimationPresetLibrary::AnimationPresetLibrary(ProfilesDirFn profilesDirFn, SnapshotFn snapshot, QObject* parent)
+using presetlib_detail::kMaxPresetFileBytes;
+
+AnimationPresetLibrary::AnimationPresetLibrary(ProfilesDirFn profilesDirFn, SnapshotFn snapshot,
+                                               SnapshotRollbackFn rollback, QObject* parent)
     : QObject(parent)
     , m_profilesDir(std::move(profilesDirFn))
     , m_snapshot(std::move(snapshot))
+    , m_rollback(std::move(rollback))
 {
 }
 
 QString AnimationPresetLibrary::presetFilePath(const QString& presetName) const
 {
-    return animfileutil::jsonFilePath(m_profilesDir(), animfileutil::slugify(presetName));
+    // m_profilesDir is injected, so treat an unset callable as an unconfigured
+    // library rather than dereferencing it. Every other reader goes through
+    // here or profilesDir() for the same reason.
+    return animfileutil::jsonFilePath(profilesDir(), animfileutil::slugify(presetName));
+}
+
+QString AnimationPresetLibrary::profilesDir() const
+{
+    return m_profilesDir ? m_profilesDir() : QString();
 }
 
 QVariantList AnimationPresetLibrary::userPresets() const
@@ -42,7 +61,11 @@ QVariantList AnimationPresetLibrary::userPresets() const
     using namespace PhosphorAnimation;
 
     QVariantList result;
-    QDir dir(m_profilesDir());
+    const QString dirPath = profilesDir();
+    if (dirPath.isEmpty())
+        return result;
+
+    QDir dir(dirPath);
     if (!dir.exists())
         return result;
 
@@ -51,6 +74,13 @@ QVariantList AnimationPresetLibrary::userPresets() const
 
     const auto entries = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files, QDir::Name);
     for (const QFileInfo& info : entries) {
+        // The profiles dir is hand-editable, and this walk runs on the GUI thread
+        // on every rebind. Cap it, the same way the snapshot side does.
+        if (!info.isFile() || info.size() > kMaxPresetFileBytes) {
+            qCWarning(lcConfig) << "AnimationPresetLibrary: skipping" << info.absoluteFilePath()
+                                << "— not a regular file, or over the size cap";
+            continue;
+        }
         QFile f(info.absoluteFilePath());
         if (!f.open(QIODevice::ReadOnly)) {
             qCWarning(lcConfig) << "AnimationPresetLibrary: cannot open" << info.absoluteFilePath();
@@ -86,7 +116,7 @@ QVariantList AnimationPresetLibrary::userPresets() const
             continue;
 
         QVariantMap entry = obj.toVariantMap();
-        entry.insert(QStringLiteral("name"), name);
+        entry.insert(presetlib_detail::JsonNameKey, name);
         result.append(entry);
     }
     return result;
@@ -96,42 +126,68 @@ bool AnimationPresetLibrary::addUserPreset(const QString& name, const QVariantMa
 {
     using namespace PhosphorAnimation;
 
-    if (name.isEmpty())
+    if (name.isEmpty()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("A preset needs a name."));
         return false;
+    }
 
     // Reject names that match a built-in event path — the file would
     // collide with an override slot. Check both the original name and
     // the slug because slugify lowercases.
     const QString slug = animfileutil::slugify(name);
-    if (slug.isEmpty())
-        return false;
     const QStringList builtInPaths = ProfilePaths::allBuiltInPaths();
-    if (builtInPaths.contains(name) || builtInPaths.contains(slug))
+    if (slug.isEmpty() || builtInPaths.contains(name) || builtInPaths.contains(slug)) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("That name cannot be used for a preset."));
         return false;
+    }
 
-    const QString dir = m_profilesDir();
-    if (!QDir().mkpath(dir))
-        return false;
-
+    const QString dir = profilesDir();
     const QString filePath = animfileutil::jsonFilePath(dir, slug);
-    if (filePath.isEmpty())
+    // mkpath AFTER the name checks above, so a refused write leaves no empty
+    // profiles directory behind.
+    if (dir.isEmpty() || filePath.isEmpty() || !QDir().mkpath(dir)) {
+        qCWarning(lcConfig) << "AnimationPresetLibrary: no writable profiles directory for" << name;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
         return false;
+    }
 
-    if (m_snapshot)
-        m_snapshot(filePath);
+    // A false return means the pre-edit content could not be captured. Writing
+    // anyway would lose it for good, with Discard unable to restore.
+    if (m_snapshot && !m_snapshot(filePath)) {
+        qCWarning(lcConfig) << "AnimationPresetLibrary: refusing to write" << filePath
+                            << "— could not capture its pre-edit content";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
+        return false;
+    }
 
     QJsonObject obj = QJsonObject::fromVariantMap(profileJson);
     obj.insert(presetlib_detail::JsonNameKey, name);
 
+    const QByteArray payload = QJsonDocument(obj).toJson(QJsonDocument::Indented);
     QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    const bool written =
+        file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(payload) == payload.size() && file.commit();
+    if (!written) {
+        qCWarning(lcConfig) << "AnimationPresetLibrary: could not write" << filePath << ":" << file.errorString();
+        // The snapshot above staged a file the write never touched. Un-stage it,
+        // or the page reports an unsaved change with nothing to discard. The
+        // rollback owns the dirty-state signal and raises it only when it really
+        // dropped something, so this must not emit as well.
+        if (m_rollback)
+            m_rollback(filePath);
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not save the preset \"%1\".").arg(name));
         return false;
-    file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
-    if (!file.commit())
-        return false;
+    }
+
+    // Re-saving a preset with byte-identical content puts the file back exactly
+    // as it was, so the snapshot it staged is a phantom. The rollback declines
+    // unless disk really still matches, so this is safe for a real edit. It owns
+    // the pendingChangesChanged for a drop, so only emit here when it declined.
+    const bool dropped = m_rollback && m_rollback(filePath);
 
     Q_EMIT userPresetsChanged();
-    Q_EMIT pendingChangesChanged();
+    if (!dropped)
+        Q_EMIT pendingChangesChanged();
     return true;
 }
 
@@ -139,8 +195,10 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
 {
     using namespace PhosphorAnimation;
 
-    if (name.isEmpty())
+    if (name.isEmpty()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("A preset needs a name."));
         return false;
+    }
 
     // Override files (those whose stem is a built-in path) are off-limits
     // to the preset CRUD surface. Skip them in the directory scan so the
@@ -165,7 +223,7 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
     }
 
     if (filePath.isEmpty()) {
-        QDir dir(m_profilesDir());
+        QDir dir(profilesDir());
         const auto entries = dir.entryInfoList(QStringList{QStringLiteral("*.json")}, QDir::Files);
         for (const QFileInfo& info : entries) {
             // Skip override files outright — their stem is the path,
@@ -173,6 +231,9 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
             // preset name we're searching for>"` would otherwise be
             // deleted here (the original bug).
             if (knownPathSet.contains(info.completeBaseName()))
+                continue;
+            // Same boundary as userPresets(): hand-editable dir, GUI thread.
+            if (!info.isFile() || info.size() > kMaxPresetFileBytes)
                 continue;
             QFile raw(info.absoluteFilePath());
             if (!raw.open(QIODevice::ReadOnly))
@@ -187,19 +248,40 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
         }
     }
 
-    if (filePath.isEmpty())
-        return false;
-
     QFile file(filePath);
-    if (!file.exists())
+    if (filePath.isEmpty() || !file.exists()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not find the preset \"%1\".").arg(name));
         return false;
-    if (m_snapshot)
-        m_snapshot(filePath);
-    if (!file.remove())
+    }
+    // A false return means the pre-edit content could not be captured. Writing
+    // anyway would lose it for good, with Discard unable to restore.
+    if (m_snapshot && !m_snapshot(filePath)) {
+        qCWarning(lcConfig) << "AnimationPresetLibrary: refusing to write" << filePath
+                            << "— could not capture its pre-edit content";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset \"%1\".").arg(name));
         return false;
+    }
+    if (!file.remove()) {
+        qCWarning(lcConfig) << "AnimationPresetLibrary: could not remove" << filePath;
+        // The snapshot above staged a file the delete never touched. Un-stage
+        // it, or the page reports an unsaved change with nothing to discard. The
+        // rollback owns the dirty-state signal (see addUserPreset).
+        if (m_rollback)
+            m_rollback(filePath);
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the preset \"%1\".").arg(name));
+        return false;
+    }
+
+    // Deleting a preset created earlier in this session puts disk back exactly as
+    // it started, so the staged snapshot is a phantom. The rollback declines
+    // unless disk really still matches the stage, so deleting a PRE-EXISTING
+    // preset keeps its snapshot as Discard's way back. It owns the signal for a
+    // drop, so only emit here when it declined.
+    const bool dropped = m_rollback && m_rollback(filePath);
 
     Q_EMIT userPresetsChanged();
-    Q_EMIT pendingChangesChanged();
+    if (!dropped)
+        Q_EMIT pendingChangesChanged();
     return true;
 }
 

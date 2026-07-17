@@ -1,0 +1,89 @@
+{
+    "id": "phosphor-scan",
+    "name": "Phosphor Scan",
+    "description": "The window powers on like a phosphor screen. A bright beam scans down the surface leaving a glowing persistence trail that settles into the image, faint scanlines fade as the picture stabilises, and the beam carries the brand gradient from cyan to rose. Closing powers the screen back down through the same scan.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Reveal",
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "beamWidth",
+            "name": "Beam Width",
+            "type": "float",
+            "default": 0.12,
+            "min": 0.03,
+            "max": 0.3
+        },
+        {
+            "id": "persistence",
+            "name": "Persistence",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "scanlines",
+            "name": "Scanlines",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "jitter",
+            "name": "Beam Jitter",
+            "type": "float",
+            "default": 0.4,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "unlitDim",
+            "name": "Silhouette Strength",
+            "type": "float",
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.8
+        },
+        {
+            "id": "glow",
+            "name": "Beam Glow",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient Cyan",
+            "type": "color",
+            "default": "#22D3EE"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient Blue",
+            "type": "color",
+            "default": "#3B82F6"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient Purple",
+            "type": "color",
+            "default": "#A855F7"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient Rose",
+            "type": "color",
+            "default": "#F43F5E"
+        },
+        {
+            "id": "colorTint",
+            "name": "Silhouette Tint",
+            "type": "color",
+            "default": "#0B1730"
+        }
+    ]
+}

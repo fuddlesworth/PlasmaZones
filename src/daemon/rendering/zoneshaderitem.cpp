@@ -92,7 +92,7 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     // Use locateAll() because locate() stops at the first match (~/.local/share/
     // which has user shaders but NOT common.glsl). We need the system dir too.
     const QStringList allShaderDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/overlays"), QStandardPaths::LocateDirectory);
     QStringList includePaths;
     for (const QString& dir : allShaderDirs) {
         const QString sharedDir = dir + QStringLiteral("/shared");
@@ -112,9 +112,12 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
 
 ZoneShaderItem::~ZoneShaderItem()
 {
-    // Nothing to do: the scene graph owns the render node and the zero-size
-    // branch in updatePaintNode severs its back-pointer (invalidateItem) before
-    // deleting it. ZoneShaderItem holds no owning node pointer of its own.
+    // Nothing to do HERE: updatePaintNode registers its node with the base
+    // (registerRenderNode), so the base ~ShaderEffect severs the node's
+    // back-pointer (invalidateItem) and the sceneGraphAboutToStop handler
+    // releases its GPU resources — same coverage as SurfaceShaderItem. The
+    // scene graph owns and deletes the node itself; the zero-size branch in
+    // updatePaintNode handles the live resize-to-zero case.
 }
 
 // ============================================================================
@@ -320,6 +323,9 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             if (auto* rhiNode = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(oldNode)) {
                 rhiNode->invalidateItem();
             }
+            // Deregister from the base so its destructor doesn't invalidate
+            // a dangling pointer.
+            registerRenderNode(nullptr);
             delete oldNode;
         }
         return nullptr;
@@ -335,8 +341,14 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         // both ShaderEffect subclasses (this and tools/shader-render's
         // RenderEffect) follow the same factory pattern — and a future
         // refactor to delegate updatePaintNode to the parent picks up the
-        // right node type for free.
+        // right node type for free. REGISTER the node with the base (this
+        // override replaces the base updatePaintNode that normally does the
+        // tracking) so the base destructor / sceneGraphAboutToStop teardown
+        // severs the node's item back-pointer — the same participation
+        // SurfaceShaderItem has.
+        registerRenderNode(nullptr);
         node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(createShaderNode());
+        registerRenderNode(node);
         freshNode = true;
         qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
     }

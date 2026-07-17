@@ -26,6 +26,10 @@ RowLayout {
     property int sliderWidth: Kirigami.Units.gridUnit * 16
     property int labelWidth: Kirigami.Units.gridUnit * 3
     property var formatValue: null
+    //* @brief Screen-reader name for the INNER Slider (the focusable control).
+    //* Setting Accessible.name on this RowLayout wrapper never reaches the
+    //* Slider, so callers use this instead (mirrors SettingsSwitch).
+    property string accessibleName: ""
     //* @brief Provides direct access to the internal Slider for Binding targets.
     readonly property alias slider: slider
 
@@ -43,19 +47,23 @@ RowLayout {
     Slider {
         id: slider
 
+        Accessible.name: root.accessibleName
         Layout.preferredWidth: root.sliderWidth
         from: root.from
         to: root.to
         stepSize: root.stepSize
-        onMoved: {
-            root.value = value;
-            root.moved(value);
-        }
+        // Emit `moved` only — do NOT write `root.value` here. Callers bind
+        // `value:` to their source and update it from `onMoved`; the new value
+        // flows back through that binding and the Binding above re-syncs the
+        // handle on release. Writing `root.value` imperatively would sever the
+        // caller's `value:` binding, so a later EXTERNAL update to the source
+        // (e.g. picking a spring preset that sets ω/ζ) would no longer move the
+        // handle.
+        onMoved: root.moved(value)
     }
 
     Label {
         text: root.formatValue ? root.formatValue(slider.value) : Math.round(slider.value) + root.valueSuffix
         Layout.preferredWidth: root.labelWidth
     }
-
 }

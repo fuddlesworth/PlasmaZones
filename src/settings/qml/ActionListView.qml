@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.plasmazones.settings
+
+import "FontUtils.js" as FontUtils
 
 /**
  * @brief Read-only display of a rule's actions list — the "THEN" half of
@@ -46,10 +47,10 @@ ColumnLayout {
     /// MatchExpressionView's equivalents so the WHEN and THEN trees
     /// look like one consistent tree visualisation.
     readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
-    readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
-    // 1 physical pixel — matches MatchExpressionView's revised guide
+    readonly property color _guideColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+    // 1 device-independent px — matches MatchExpressionView's guide
     // thickness. See the rationale comment there.
-    readonly property int _guideThickness: Math.max(1, Math.round(Screen.devicePixelRatio))
+    readonly property int _guideThickness: 1
 
     /// Look up the `{ value, label, params }` entry for a wire type
     /// string, or null when the type isn't in the registry.
@@ -152,6 +153,28 @@ ColumnLayout {
             }
             return rawStr;
         }
+        if (kind === "decorationChain") {
+            // Surface-pack ids resolve through the decoration pack catalog
+            // (mirrors ActionRow's _decorationChainEditor source); unknown ids
+            // render verbatim. An empty chain is the "no decoration" sentinel.
+            var chainIds = raw || [];
+            if (!chainIds.length)
+                return i18n("Block decoration");
+            var decoCtl = root.appSettings ? root.appSettings.decorationPage : null;
+            var packs = decoCtl ? (decoCtl.availableShaderEffects() || []) : [];
+            var names = [];
+            for (var ci = 0; ci < chainIds.length; ++ci) {
+                var packName = chainIds[ci];
+                for (var pj = 0; pj < packs.length; ++pj) {
+                    if (packs[pj].id === chainIds[ci]) {
+                        packName = packs[pj].name;
+                        break;
+                    }
+                }
+                names.push(packName);
+            }
+            return names.join(", ");
+        }
         if (kind === "overlayShader") {
             // Overlay shaders come from the snapping-shaders registry, not the
             // animation one (mirrors ActionRow's _overlayShaderEditor source).
@@ -206,6 +229,20 @@ ColumnLayout {
             if (num >= 1 && names.length >= num && names[num - 1])
                 return num + ": " + names[num - 1];
             return num > 0 ? String(num) : rawStr;
+        }
+        if (kind === "color") {
+            // "accent" is the follow-the-system-accent sentinel; otherwise a
+            // #AARRGGBB hex string. Show a readable word / upper-cased hex (the
+            // actual swatch is rendered alongside this pill).
+            return rawStr === "accent" ? i18n("Accent") : rawStr.toUpperCase();
+        }
+        if (kind === "bool") {
+            // Render the JSON bool as On / Off for the value pill — without this
+            // branch it fell through to the raw lowercase "true" / "false". The
+            // collapsed rule list and the action editor's toggle caption use the
+            // action's polarity phrase ("Hide border") instead; this terser On /
+            // Off is the tabular pill form, matching the WHEN-side value pills.
+            return (raw === true || raw === "true") ? i18n("On") : i18n("Off");
         }
         return rawStr;
     }
@@ -274,6 +311,18 @@ ColumnLayout {
 
                     target: actionDelegate
                 }
+
+                // onPaint samples the theme-derived guide colour. Every
+                // PlatformTheme colour shares the one `colorsChanged` notify
+                // signal, so this one handler repaints on any palette change
+                // (same pattern as CurveThumbnail).
+                Connections {
+                    function onColorsChanged() {
+                        treeCanvas.requestPaint();
+                    }
+
+                    target: Kirigami.Theme
+                }
             }
 
             RowLayout {
@@ -341,26 +390,55 @@ ColumnLayout {
                             // the pill kicked in.
                             Layout.minimumWidth: paramRow.index === 0 ? Kirigami.Units.gridUnit * 8 : 0
                             text: paramRow.modelData.label
-                            font.capitalization: Font.AllUppercase
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            // One binding: a font.<sub> sibling next to a whole-group `font:` is an
+                            // illegal duplicate binding that fails the whole document. FontUtils
+                            // passes only the size dimension the theme font actually carries.
+                            font: FontUtils.withProps(Kirigami.Theme.smallFont, {
+                                capitalization: Font.AllUppercase
+                            })
                             opacity: 0.55
                         }
 
                         Rectangle {
                             Layout.alignment: Qt.AlignVCenter
-                            implicitWidth: valueLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
-                            implicitHeight: valueLabel.implicitHeight + Kirigami.Units.smallSpacing
+                            implicitWidth: pillContent.implicitWidth + Kirigami.Units.largeSpacing * 2
+                            implicitHeight: pillContent.implicitHeight + Kirigami.Units.smallSpacing
                             radius: Kirigami.Units.smallSpacing
+                            Kirigami.Theme.colorSet: Kirigami.Theme.View
+                            Kirigami.Theme.inherit: false
                             color: Kirigami.Theme.alternateBackgroundColor
-                            border.width: Math.round(Screen.devicePixelRatio)
-                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            border.width: 1
+                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
-                            Label {
-                                id: valueLabel
+                            RowLayout {
+                                id: pillContent
 
                                 anchors.centerIn: parent
-                                text: root._resolveParamValue(paramRow.modelData, actionDelegate._action)
-                                font.family: Kirigami.Theme.smallFont.family
+                                spacing: Kirigami.Units.smallSpacing
+
+                                // Colour swatch for `color`-kind params — the raw
+                                // value is a #AARRGGBB hex or the "accent" sentinel
+                                // (resolved to the live accent colour for display).
+                                Rectangle {
+                                    readonly property string _rawColor: String(actionDelegate._action[paramRow.modelData.key] || "")
+
+                                    visible: paramRow.modelData.kind === "color"
+                                    Layout.alignment: Qt.AlignVCenter
+                                    implicitWidth: valueLabel.implicitHeight
+                                    implicitHeight: valueLabel.implicitHeight
+                                    radius: Math.round(Kirigami.Units.smallSpacing / 2)
+                                    color: paramRow.modelData.kind !== "color" ? "transparent" : (_rawColor === "accent" ? Kirigami.Theme.highlightColor : (_rawColor === "" ? Kirigami.Theme.backgroundColor : _rawColor))
+                                    border.width: 1
+                                    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                                }
+
+                                Label {
+                                    id: valueLabel
+
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: root._resolveParamValue(paramRow.modelData, actionDelegate._action)
+                                    font.family: Kirigami.Theme.smallFont.family
+                                }
                             }
                         }
                     }

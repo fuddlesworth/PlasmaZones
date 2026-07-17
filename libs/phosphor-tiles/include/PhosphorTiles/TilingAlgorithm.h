@@ -43,9 +43,12 @@ class TilingState;
  * - Master count adjustment
  * - Split ratio adjustment
  *
- * @note Thread Safety: All algorithms are stateless — their const public
- *       methods can be called concurrently on the same instance. The
- *       TilingState parameter must not be modified during the call.
+ * @note Thread Safety: Built-in geometry algorithms are stateless — their
+ *       const public methods can be called concurrently on the same instance.
+ *       Scripted algorithms are main-thread-only: LuauTileAlgorithm runs on a
+ *       non-thread-safe lua_State and must not be called concurrently (see its
+ *       class documentation). In all cases the TilingState parameter must not be
+ *       modified during the call.
  */
 class PHOSPHORTILES_EXPORT TilingAlgorithm : public QObject
 {
@@ -150,8 +153,15 @@ public:
     /**
      * @brief Get the index of the "master" zone (if applicable)
      *
-     * For algorithms with a master/stack concept, this returns the index
-     * of the primary window zone. Used for "focus master" and "swap with master".
+     * For algorithms with a master/stack concept, this returns the index of the
+     * primary window zone.
+     *
+     * This describes the algorithm for a caller that asks, and nothing in this
+     * tree reads it outside of tests. In particular the engine's focusMaster()
+     * focuses the first tiled window directly rather than consulting this, so
+     * overriding it does not change any built-in behaviour. It stays on the
+     * exported API because a third-party algorithm can declare it and a
+     * third-party consumer can read it, which is what this library is LGPL for.
      *
      * @return Master zone index (0-based), or -1 if no master concept
      */
@@ -245,6 +255,31 @@ public:
     virtual bool centerLayout() const;
 
     /**
+     * @brief Whether this algorithm lays out the single-window case itself
+     *
+     * By default an algorithm does not own the single-window case: a scripted
+     * algorithm's calculateZones() fills the work area for a lone window without
+     * invoking its tile(). An algorithm that opts in (e.g. a layout that centers
+     * a lone window) receives the single-window case in its tile() and owns the
+     * resulting geometry.
+     *
+     * @return true if the algorithm owns the single-window layout (default: false)
+     */
+    virtual bool supportsSingleWindow() const noexcept;
+
+    /**
+     * @brief Whether the layout must be recomputed when focus moves
+     *
+     * Most layouts place a window by its tiled index, so a focus change alone
+     * does not move anything and the engine skips retiling. Focus-driven layouts
+     * (e.g. Theater, where the focused window occupies the centered spotlight)
+     * opt in so the engine reflows when focus moves between tiled windows.
+     *
+     * @return true if a focus change should trigger a retile (default: false)
+     */
+    virtual bool retilesOnFocusChange() const noexcept;
+
+    /**
      * @brief Whether this algorithm is a user-provided scripted algorithm
      *
      * Scripted algorithms are loaded from Luau (.luau) files at runtime.
@@ -258,8 +293,18 @@ public:
      * @brief Whether this algorithm supports per-window minimum size constraints
      *
      * Most algorithms respect the minSizes parameter. Algorithms that ignore
-     * it (e.g., Floating Center, Tatami) return false so the settings UI can
-     * disable min-size controls for them.
+     * it (e.g., Floating Center, Tatami) return false to say so.
+     *
+     * Returning false opts the algorithm out of the engine's min-size pass:
+     * AutotileEngine skips enforceMinSizes (and the removeRectOverlaps implied
+     * by it) for the algorithm's zones, alongside the separate
+     * producesOverlappingZones() opt-out. An algorithm that declares this is
+     * saying min sizes are not a concept it works in, so having the engine
+     * post-process its output into honouring them would contradict the
+     * declaration.
+     *
+     * There is no settings control keyed on it: it describes the algorithm
+     * rather than exposing a user choice.
      *
      * @return true if the algorithm honors minSizes (default: true)
      */

@@ -11,7 +11,7 @@
 namespace PhosphorEngine {
 
 namespace PerScreenSnappingKey {
-inline constexpr QLatin1String ZonePadding{"ZonePadding"};
+inline constexpr QLatin1String InnerGap{"InnerGap"};
 inline constexpr QLatin1String OuterGap{"OuterGap"};
 inline constexpr QLatin1String UsePerSideOuterGap{"UsePerSideOuterGap"};
 inline constexpr QLatin1String OuterGapTop{"OuterGapTop"};
@@ -21,7 +21,7 @@ inline constexpr QLatin1String OuterGapRight{"OuterGapRight"};
 } // namespace PerScreenSnappingKey
 
 namespace GeometryDefaults {
-inline constexpr int ZonePadding = 8;
+inline constexpr int InnerGap = 8;
 inline constexpr int OuterGap = 8;
 } // namespace GeometryDefaults
 
@@ -30,7 +30,7 @@ class PHOSPHORENGINE_EXPORT IGeometrySettings
 public:
     virtual ~IGeometrySettings() = default;
 
-    virtual int zonePadding() const = 0;
+    virtual int innerGap() const = 0;
     virtual int outerGap() const = 0;
     virtual bool usePerSideOuterGap() const = 0;
     virtual int outerGapTop() const = 0;

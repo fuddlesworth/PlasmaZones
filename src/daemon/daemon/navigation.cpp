@@ -425,7 +425,7 @@ void Daemon::resnapIfManualMode()
     // m_snapAdaptor doesn't leave the counter armed for the next
     // unrelated navigationFeedback. Mirrors the daemon.cpp:1249 site.
     if (m_snapAdaptor) {
-        m_suppressResnapOsd = 1;
+        armResnapOsdSuppression(1);
         m_snapAdaptor->resnapToNewLayout();
     }
     // Restore snap-float positions for windows the picker/cycle just released
@@ -454,7 +454,7 @@ void Daemon::emitPendingSnapFloatRestoresForResnapBuffer()
         return;
     }
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-        ++m_suppressResnapOsd; // the batched emit drives an additional resnap feedback
+        armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
         concreteSnap->emitBatchedResnap(floatEntries);
     }
 }

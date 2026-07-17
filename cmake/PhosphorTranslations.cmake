@@ -12,8 +12,7 @@
 #
 # Included from the top-level CMakeLists.txt via include(), so it runs in
 # that scope (every variable set here stays visible to the caller, exactly
-# as if the block were still inline). Extracted to keep CMakeLists.txt under
-# the project's 800-line cap, the same reason PhosphorCPack.cmake exists.
+# as if the block were still inline).
 find_package(Qt6LinguistTools QUIET)
 
 # Source files for lupdate string extraction (daemon + autotile + editor)
@@ -54,11 +53,20 @@ file(GLOB_RECURSE KCM_PLASMAZONES_QML "${CMAKE_SOURCE_DIR}/kcm/*.qml")
 list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml)
 list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml)
 
-# All sources for lupdate (daemon + editor + KCM - same translation context)
+# Standalone settings app — all of its C++ (PhosphorI18n::tr) and QML (i18n)
+# strings. Globbed recursively so a newly-added controller or page is picked up
+# without touching this list. The settings app already installs the plasmazones
+# catalog at runtime via PlasmaZones::loadTranslations(), so these strings are
+# the same translation context as the daemon / editor / KCM.
+file(GLOB_RECURSE PLASMAZONES_SETTINGS_I18N_SOURCES "${CMAKE_SOURCE_DIR}/src/settings/*.cpp")
+file(GLOB_RECURSE PLASMAZONES_SETTINGS_QML "${CMAKE_SOURCE_DIR}/src/settings/*.qml")
+
+# All sources for lupdate (daemon + editor + KCM + settings - same translation context)
 set(_all_i18n_sources
     ${PLASMAZONESD_I18N_SOURCES} ${PLASMAZONESD_QML}
     ${PLASMAZONES_EDITOR_I18N_SOURCES} ${PLASMAZONES_EDITOR_QML}
     ${KCM_PLASMAZONES_QML}
+    ${PLASMAZONES_SETTINGS_I18N_SOURCES} ${PLASMAZONES_SETTINGS_QML}
 )
 
 # Collect per-language .ts files (plasmazones_de.ts, plasmazones_fr.ts, etc.)

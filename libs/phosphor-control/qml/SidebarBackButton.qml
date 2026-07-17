@@ -6,7 +6,6 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
-import "ThemeHelpers.js" as ThemeHelpers
 
 /**
  * Drill-out header row shown at the top of the sidebar list when the user has
@@ -18,8 +17,7 @@ import "ThemeHelpers.js" as ThemeHelpers
  * section-header text below, whereas an icon box centres the glyph and pushes it
  * off the grid. It also mirrors under RTL (‹ → ›) for free. The bottom rule is
  * NOT drawn here — the hosting Sidebar places a Kirigami.Separator below this
- * row so it shares the section dividers' inset. Extracted from Sidebar.qml to
- * keep that file under the 800-line cap (CLAUDE.md).
+ * row so it shares the section dividers' inset.
  */
 QQC2.ItemDelegate {
     id: backButton
@@ -66,7 +64,7 @@ QQC2.ItemDelegate {
         property bool _behaviorReady: false
 
         Component.onCompleted: _behaviorReady = true
-        color: backButton.hovered ? ThemeHelpers.hoverTint(Kirigami.Theme.textColor) : Qt.rgba(0, 0, 0, 0)
+        color: backButton.hovered ? Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.hoverColor, 0.15) : Qt.rgba(0, 0, 0, 0)
         radius: Kirigami.Units.smallSpacing
 
         Behavior on color {

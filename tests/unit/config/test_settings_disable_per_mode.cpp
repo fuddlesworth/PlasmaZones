@@ -24,11 +24,41 @@
 #include "../../../src/core/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/ContextRuleBridge.h>
+#include <PhosphorRules/RuleStore.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using Mode = PhosphorZones::AssignmentEntry::Mode;
+
+// Stable-id-shaped screen names, required by every test that asserts on a
+// screen name the code stored or returned, or on a rule's deterministic UUID.
+//
+// `resolveScreenId` only rewrites CONNECTOR names, which ScreenIdentity defines
+// as "contains no ':'", so a "Manuf:Model:Serial" string canonicalizes to itself
+// on every machine. A connector name like "DP-2" would resolve against whatever
+// is actually plugged into the box running the suite: the write path
+// (setDisabledMonitors → writeDisableEntries → canonicalDisableEntries) and the
+// read path (disabledMonitors, which resolves on every read) would both rewrite
+// it to that monitor's EDID id, so a `QCOMPARE(disabledMonitors(...), {"DP-2"})`
+// fails on a host with a real DP-2 and the rebuilt rule's derived UUID changes.
+// Under QT_QPA_PLATFORM=offscreen no connector matches and the name falls
+// through untouched, which is why such a test can pass ctest and fail a bare run.
+//
+// Tests that only round-trip a name through isMonitorDisabled() are immune, and
+// several below still write a plain "DP-1" for that reason. isMonitorDisabled
+// resolves BOTH sides through ScreenIdentity::variantsFor, so whatever the write
+// path canonicalised the name to, the read path canonicalises the query the same
+// way and the two meet — the assertion never names the stored form. Adding one of
+// these constants to such a test would buy nothing.
+//
+// The rule for a new test: use a constant here the moment the test asserts on a
+// screen name the code STORED or RETURNED (a QCOMPARE against a disable-list
+// entry) or on a rule's derived UUID. A bare isMonitorDisabled() round-trip can
+// keep using a connector name.
+static const QString kScreenA = QStringLiteral("TestVendor:PanelA:0001");
+static const QString kScreenB = QStringLiteral("TestVendor:PanelB:0002");
+static const QString kScreenC = QStringLiteral("TestVendor:PanelC:0003");
 
 class TestSettingsDisablePerMode : public QObject
 {
@@ -71,6 +101,76 @@ private Q_SLOTS:
                  "autotile-side disable was wiped when snap was cleared");
     }
 
+    /// A disable rule the user toggled OFF in the rule editor must not gate the
+    /// engine, and must not be deleted by an unrelated write to its own (axis,
+    /// mode) family.
+    ///
+    /// The two halves are one fix. `disableEntriesFor` skipping `!enabled` is
+    /// what stops the gate, but that same getter is what `writeDisableEntries`
+    /// round-trips to decide which rules its rebuild owns: once a disabled rule
+    /// is invisible to the getter it is in neither `before` nor `after`, so the
+    /// kept-walk has to recognise and preserve it or the next write to any other
+    /// monitor silently deletes the user's rule.
+    void testMonitorDisable_disabledRuleNeitherGatesNorIsDeleted()
+    {
+        IsolatedConfigGuard guard;
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath(), nullptr);
+        Settings settings(&store, nullptr);
+
+        PhosphorRules::Rule off = PhosphorRules::ContextRuleBridge::makeDisableRule(
+            QStringLiteral("Snapping off · ") + kScreenB, kScreenB, 0, QString(),
+            PhosphorZones::modeToWireString(Mode::Snapping), PhosphorRules::ContextRuleBridge::kContextBandBase);
+        off.enabled = false;
+        QVERIFY(store.addRule(off));
+
+        // The gate reads these lists directly (isMonitorDisabled →
+        // contextDisabledReason), so reporting a switched-off rule here would
+        // keep snapping dead on that screen with no rule in the editor claiming
+        // to do it.
+        QVERIFY2(!settings.isMonitorDisabled(Mode::Snapping, kScreenB), "a disabled rule still gated the engine off");
+        QVERIFY(settings.disabledMonitors(Mode::Snapping).isEmpty());
+
+        // An unrelated write to the same family. The getter no longer reports the
+        // screen-B rule, so the kept-walk is the only thing between it and
+        // deletion.
+        settings.setDisabledMonitors(Mode::Snapping, {kScreenA});
+        QCOMPARE(settings.disabledMonitors(Mode::Snapping), QStringList{kScreenA});
+
+        PhosphorRules::RuleStore reloaded(ConfigDefaults::rulesFilePath(), nullptr);
+        reloaded.load();
+        const auto survivor = reloaded.ruleSet().ruleById(off.id);
+        QVERIFY2(survivor.has_value(), "an unrelated write to the family deleted the user's disabled rule");
+        QVERIFY2(!survivor->enabled, "the preserved rule came back enabled");
+    }
+
+    /// Re-asserting a disabled rule's own entry through the list re-enables it
+    /// rather than colliding with it. `makeDisableRule` derives a deterministic
+    /// id from (screen, desktop, activity, mode), so a kept-walk that preserved
+    /// the disabled rule unconditionally would leave two rules sharing one id the
+    /// moment the user ticked that monitor back on.
+    void testMonitorDisable_reAssertingADisabledRuleReEnablesIt()
+    {
+        IsolatedConfigGuard guard;
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath(), nullptr);
+        Settings settings(&store, nullptr);
+
+        PhosphorRules::Rule off = PhosphorRules::ContextRuleBridge::makeDisableRule(
+            QStringLiteral("Snapping off · ") + kScreenB, kScreenB, 0, QString(),
+            PhosphorZones::modeToWireString(Mode::Snapping), PhosphorRules::ContextRuleBridge::kContextBandBase);
+        off.enabled = false;
+        QVERIFY(store.addRule(off));
+
+        settings.setDisabledMonitors(Mode::Snapping, {kScreenB});
+        QVERIFY(settings.isMonitorDisabled(Mode::Snapping, kScreenB));
+
+        PhosphorRules::RuleStore reloaded(ConfigDefaults::rulesFilePath(), nullptr);
+        reloaded.load();
+        QCOMPARE(reloaded.count(), 1);
+        const auto revived = reloaded.ruleSet().ruleById(off.id);
+        QVERIFY(revived.has_value());
+        QVERIFY2(revived->enabled, "ticking the monitor back on left the rule disabled");
+    }
+
     /// Each per-mode list survives a save → reload round-trip with its
     /// contents intact, AND keeps its content separate from the other mode's
     /// list. Catches regressions where a save accidentally writes both modes
@@ -78,8 +178,8 @@ private Q_SLOTS:
     void testMonitorDisable_perModeRoundTrip()
     {
         IsolatedConfigGuard guard;
-        const QStringList snapList{QStringLiteral("DP-1"), QStringLiteral("HDMI-A-1")};
-        const QStringList autotileList{QStringLiteral("DP-2")};
+        const QStringList snapList{kScreenA, kScreenC};
+        const QStringList autotileList{kScreenB};
 
         {
             Settings settings;
@@ -105,11 +205,11 @@ private Q_SLOTS:
         QSignalSpy monitorSpy(&settings, &Settings::disabledMonitorsChanged);
         QVERIFY(monitorSpy.isValid());
 
-        settings.setDisabledMonitors(Mode::Snapping, {QStringLiteral("DP-1")});
+        settings.setDisabledMonitors(Mode::Snapping, {kScreenA});
         QCOMPARE(monitorSpy.count(), 1);
         QCOMPARE(monitorSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Snapping));
 
-        settings.setDisabledMonitors(Mode::Autotile, {QStringLiteral("DP-2")});
+        settings.setDisabledMonitors(Mode::Autotile, {kScreenB});
         QCOMPARE(monitorSpy.count(), 1);
         QCOMPARE(monitorSpy.takeFirst().at(0).toInt(), static_cast<int>(Mode::Autotile));
     }
@@ -236,7 +336,7 @@ private Q_SLOTS:
         QVERIFY(activitySpy.isValid());
 
         // Writer flips snap-side monitor list and persists.
-        writerSettings.setDisabledMonitors(Mode::Snapping, {QStringLiteral("DP-1")});
+        writerSettings.setDisabledMonitors(Mode::Snapping, {kScreenA});
         writerSettings.save();
 
         // Observer's load() picks up the on-disk delta. Only the snap-side
@@ -250,7 +350,7 @@ private Q_SLOTS:
         QCOMPARE(activitySpy.count(), 0);
 
         // Observer now sees the new value via its own getter.
-        QCOMPARE(observerSettings.disabledMonitors(Mode::Snapping), QStringList{QStringLiteral("DP-1")});
+        QCOMPARE(observerSettings.disabledMonitors(Mode::Snapping), QStringList{kScreenA});
         QVERIFY(observerSettings.disabledMonitors(Mode::Autotile).isEmpty());
     }
 
@@ -337,12 +437,12 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Borrowed WindowRuleStore ctor — Settings shares the caller's store
+    // Borrowed RuleStore ctor — Settings shares the caller's store
     //
-    // The settings app constructs Settings with a WindowRuleStore it owns
+    // The settings app constructs Settings with a RuleStore it owns
     // elsewhere (SettingsController::m_localRuleStore) so the disable-list
     // writes and the in-process LayoutRegistry read the SAME store instead of
-    // two independent copies over windowrules.json. These tests pin that the
+    // two independent copies over rules.json. These tests pin that the
     // borrow ctor genuinely shares the caller's store (mutations land in it)
     // and that a null argument degrades to owning one.
     // =========================================================================
@@ -353,7 +453,7 @@ private Q_SLOTS:
     void testBorrowedStore_writesLandInCallerStore()
     {
         IsolatedConfigGuard guard;
-        PhosphorWindowRules::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath());
         QCOMPARE(store.count(), 0);
 
         Settings settings(&store, nullptr);
@@ -369,6 +469,96 @@ private Q_SLOTS:
         QCOMPARE(store.count(), 0);
     }
 
+    // =========================================================================
+    // Non-bare-screen DisableEngine rules
+    //
+    // The disable lists key entries by (screen), (screen/desktop) or
+    // (screen/activity) and nothing else. A DisableEngine rule whose match pins
+    // a FOURTH thing — a non-dimension context field such as ScreenOrientation —
+    // is authorable in the rule editor with no hand-editing (the match is
+    // context-only, so the editor's context-action compatibility check passes),
+    // and it is not a shape the lists can represent. Both halves of the disable
+    // path must therefore refuse it: the getter must not report it (or the gate
+    // would fire in every orientation), and the write path's kept-walk must not
+    // rewrite it (or the orientation leaf is destroyed on the next unrelated
+    // write to the same family).
+    // =========================================================================
+
+    /// Build `All{ScreenId == screen, ScreenOrientation == "portrait"}` with a
+    /// single DisableEngine action for @p modeToken — the shape the rule editor
+    /// produces for "turn snapping off on this screen, but only in portrait".
+    static PhosphorRules::Rule makeOrientationDisableRule(const QString& screen, const QString& modeToken)
+    {
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("Snapping off · portrait only");
+        rule.enabled = true;
+        rule.priority = ContextRuleBridge::kContextBandBase;
+        rule.match = MatchExpression::makeAll(
+            {MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, screen),
+             MatchExpression::makeLeaf(Field::ScreenOrientation, Operator::Equals, QStringLiteral("portrait"))});
+        RuleAction action;
+        action.type = QString(ActionType::DisableEngine);
+        action.params.insert(ActionParam::Mode, modeToken);
+        rule.actions.append(action);
+        return rule;
+    }
+
+    /// A DisableEngine rule that ALSO pins ScreenOrientation gates the engine
+    /// only while that orientation holds, so it is not a monitor-axis disable
+    /// entry. Reporting it as one would switch the engine off on that screen in
+    /// EVERY orientation — the exact opposite of what the rule says.
+    void testOrientationQualifiedDisable_isNotAMonitorEntry()
+    {
+        IsolatedConfigGuard guard;
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath());
+        Settings settings(&store, nullptr);
+
+        QVERIFY(store.setAllRules({makeOrientationDisableRule(kScreenA, QStringLiteral("snapping"))}));
+        QCOMPARE(store.count(), 1);
+
+        // The rule pins more than the screen, so it cannot be keyed by the
+        // monitor disable list and must not appear in it.
+        QVERIFY2(!settings.disabledMonitors(Mode::Snapping).contains(kScreenA),
+                 "an orientation-qualified DisableEngine rule is not a bare monitor disable entry");
+        QVERIFY2(!settings.isMonitorDisabled(Mode::Snapping, kScreenA),
+                 "the monitor gate must not fire for a rule that only disables the engine in portrait");
+    }
+
+    /// An unrelated write to the same (Monitor, Snapping) family must leave an
+    /// orientation-qualified disable rule byte-for-byte intact. The write path
+    /// rebuilds the family from the entry strings, and the entry strings carry
+    /// only the screen — so a rule wrongly admitted into the family comes back
+    /// as a bare screen pin with a different UUID, i.e. the user's rule is gone.
+    void testOrientationQualifiedDisable_survivesUnrelatedFamilyWrite()
+    {
+        IsolatedConfigGuard guard;
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath());
+        Settings settings(&store, nullptr);
+
+        const PhosphorRules::Rule orientationRule = makeOrientationDisableRule(kScreenA, QStringLiteral("snapping"));
+        QVERIFY(store.setAllRules({orientationRule}));
+
+        // Disable snapping on a DIFFERENT screen — a write to the same
+        // (Monitor, Snapping) family that has nothing to do with the rule above.
+        settings.setDisabledMonitors(Mode::Snapping, {kScreenB});
+
+        // The new bare disable landed.
+        QCOMPARE(settings.disabledMonitors(Mode::Snapping), QStringList{kScreenB});
+
+        // And the orientation rule is still there, unchanged — same id, same
+        // match. Locating it by id is the point: a rebuilt bare-screen rule
+        // would carry disableRuleIdFor's derived UUID instead.
+        const std::optional<PhosphorRules::Rule> survivor = store.ruleSet().ruleById(orientationRule.id);
+        QVERIFY2(survivor.has_value(), "the unrelated write destroyed the orientation-qualified disable rule");
+        QVERIFY2(
+            survivor->match.referencesAnyField(QSet<PhosphorRules::Field>{PhosphorRules::Field::ScreenOrientation}),
+            "the orientation leaf was stripped — the rule was rebuilt from a bare screen entry");
+        QCOMPARE(survivor->name, orientationRule.name);
+        QVERIFY(survivor->enabled);
+    }
+
     /// A null store argument degrades to owning one (defensive parity with the
     /// backend-injecting ctor) so a misuse still yields a working object.
     void testBorrowedStore_nullDegradesToOwned()
@@ -377,8 +567,8 @@ private Q_SLOTS:
         Settings settings(nullptr, nullptr);
 
         // No crash, and disable-lists work against the internally-owned store.
-        settings.setDisabledMonitors(Mode::Autotile, {QStringLiteral("DP-2")});
-        QVERIFY(settings.isMonitorDisabled(Mode::Autotile, QStringLiteral("DP-2")));
+        settings.setDisabledMonitors(Mode::Autotile, {kScreenB});
+        QVERIFY(settings.isMonitorDisabled(Mode::Autotile, kScreenB));
     }
 
     /// A BORROWED store is NOT reloaded by Settings::load() — that is the owner's
@@ -388,16 +578,16 @@ private Q_SLOTS:
     void testBorrowedStore_settingsLoadDoesNotReloadIt()
     {
         IsolatedConfigGuard guard;
-        PhosphorWindowRules::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
+        PhosphorRules::RuleStore store(ConfigDefaults::rulesFilePath());
         Settings settings(&store, nullptr);
 
         // Establish a known baseline on disk (the Settings ctor's config
-        // migration may have seeded windowrules.json, so don't assume empty).
+        // migration may have seeded rules.json, so don't assume empty).
         QVERIFY(store.setAllRules({}));
         QCOMPARE(store.count(), 0);
 
         // A peer (a separate owned Settings over the same file) writes a disable
-        // rule to windowrules.json.
+        // rule to rules.json.
         {
             Settings peer;
             peer.setDisabledMonitors(Mode::Snapping, {QStringLiteral("DP-1")});

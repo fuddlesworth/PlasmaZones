@@ -25,45 +25,67 @@ Kirigami.Dialog {
     property bool supportsSplitRatio: false
     property bool producesOverlappingZones: false
     property bool supportsMemory: false
+    property bool supportsScriptState: false
+    property bool supportsSingleWindow: false
+    property bool retileOnFocus: false
     property bool openInEditor: true
     property string _previousAutoName: ""
-    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
-    readonly property color _subtleBg: _colors.subtleBg
-    readonly property color _subtleBorder: _colors.subtleBorder
-    readonly property color _accentBorder: _colors.accentBorder
-    readonly property color _badgeBg: _colors.badgeBg
-    readonly property color _badgeBorder: _colors.badgeBorder
-    // Re-evaluated on open so it picks up the correct screen.
+    // Set for the duration of a create, so the button and the Return key
+    // cannot both land a second createNewAlgorithm call.
+    property bool _creating: false
     // Clamped to [1.0, 3.6] to keep the preview usable on extreme aspect ratios (e.g. 32:9).
-    property real screenAspectRatio: 16 / 9
+    // Read through the content Item rather than this root. `Screen` on a Popup
+    // resolves against no window of its own, so it answers for the primary
+    // monitor: the preview took the primary display's ratio even when the
+    // dialog was open on another one. Through the Item it follows the window,
+    // and as a binding it keeps following it across screens rather than
+    // sampling once on open.
+    readonly property real screenAspectRatio: WizardUtils.clampedScreenAspectRatio(dialogContent.Screen.width, dialogContent.Screen.height)
     readonly property var baseTemplates: [
         {
             "name": i18n("Blank"),
             "id": "blank",
-            "desc": i18n("Minimal skeleton to implement yourself"),
-            "hasMaster": false,
-            "hasSplit": false
+            "desc": i18n("Minimal skeleton to implement yourself")
         },
         {
             "name": i18n("Master + Stack"),
             "id": "master-stack",
-            "desc": i18n("Large master area with stacked windows"),
-            "hasMaster": true,
-            "hasSplit": true
+            "desc": i18n("Large master area with stacked windows")
         },
         {
             "name": i18n("Grid"),
             "id": "grid",
-            "desc": i18n("Equal-sized NxM grid layout"),
-            "hasMaster": false,
-            "hasSplit": false
+            "desc": i18n("Equal-sized NxM grid layout")
         },
         {
             "name": i18n("Binary Split"),
             "id": "bsp",
-            "desc": i18n("Balanced recursive BSP splitting"),
-            "hasMaster": false,
-            "hasSplit": true
+            "desc": i18n("Balanced recursive BSP splitting")
+        },
+        {
+            "name": i18n("Aligned Grid"),
+            "id": "aligned-grid",
+            "desc": i18n("Resize-aware grid that moves whole rows and columns")
+        },
+        {
+            "name": i18n("Dwindle (Memory)"),
+            "id": "dwindle-memory",
+            "desc": i18n("Remembers split positions when you resize a split")
+        },
+        {
+            "name": i18n("Cluster"),
+            "id": "cluster",
+            "desc": i18n("Groups windows by application, with custom parameters")
+        },
+        {
+            "name": i18n("Theater"),
+            "id": "theater",
+            "desc": i18n("Spotlight that follows focus, with windows on side rails")
+        },
+        {
+            "name": i18n("Deck"),
+            "id": "deck",
+            "desc": i18n("Focused window on the left with the rest peeking from the right edge")
         }
     ]
     // Resolve selected template data for step 2
@@ -77,10 +99,6 @@ Kirigami.Dialog {
 
     function selectTemplate(templateData) {
         root.baseTemplate = templateData.id;
-        root.supportsMasterCount = templateData.hasMaster;
-        root.supportsSplitRatio = templateData.hasSplit;
-        root.producesOverlappingZones = false;
-        root.supportsMemory = false;
         if (nameField.text === "" || nameField.text === root._previousAutoName) {
             let autoName = i18n("My %1", templateData.name);
             nameField.text = autoName;
@@ -101,12 +119,17 @@ Kirigami.Dialog {
         root.supportsSplitRatio = false;
         root.producesOverlappingZones = false;
         root.supportsMemory = false;
+        root.supportsScriptState = false;
+        root.supportsSingleWindow = false;
+        root.retileOnFocus = false;
         root.openInEditor = true;
-        root.screenAspectRatio = WizardUtils.clampedScreenAspectRatio(Screen.width, Screen.height);
+        root._creating = false;
         wizardFooter.errorText = "";
     }
 
     ColumnLayout {
+        id: dialogContent
+
         spacing: Kirigami.Units.largeSpacing
 
         // ── Step indicator ─────────────────────────────────────────────
@@ -135,10 +158,10 @@ Kirigami.Dialog {
                     opacity: 0.7
                 }
 
-                // 2x2 grid — matches layout wizard's visual pattern
+                // 3-column grid — Blank plus a curated subset of the bundled algorithms
                 GridLayout {
                     Layout.fillWidth: true
-                    columns: 2
+                    columns: 3
                     columnSpacing: Kirigami.Units.mediumSpacing
                     rowSpacing: Kirigami.Units.mediumSpacing
 
@@ -149,21 +172,29 @@ Kirigami.Dialog {
                             id: templateDelegate
 
                             required property var modelData
-                            required property int index
 
-                            templateName: modelData.name
-                            templateDesc: modelData.desc
-                            selected: root.baseTemplate === modelData.id
-                            onClicked: root.selectTemplate(modelData)
+                            templateName: templateDelegate.modelData.name
+                            templateDesc: templateDelegate.modelData.desc
+                            selected: root.baseTemplate === templateDelegate.modelData.id
+                            onClicked: root.selectTemplate(templateDelegate.modelData)
                             onDoubleClicked: {
-                                root.selectTemplate(modelData);
+                                root.selectTemplate(templateDelegate.modelData);
                                 root.currentStep = 1;
                             }
 
                             AlgorithmPreview {
                                 anchors.fill: parent
                                 visible: templateDelegate.modelData.id !== "blank"
-                                algorithmId: templateDelegate.modelData.id
+                                // The empty id is AlgorithmPreview's "nothing to
+                                // render" contract: no lookup, no empty-result
+                                // retry. Two things want it here. There is no
+                                // blank.luau to preview. And this dialog is
+                                // built with the Layouts page rather than on
+                                // demand, so without the `opened` gate all eight
+                                // template previews would run their Luau tile
+                                // pass on every page load, for a wizard the user
+                                // may never open.
+                                algorithmId: (root.opened && templateDelegate.modelData.id !== "blank") ? templateDelegate.modelData.id : ""
                                 windowCount: 4
                                 showLabel: false
                                 appSettings: root.controller
@@ -180,7 +211,7 @@ Kirigami.Dialog {
                                 Behavior on color {
                                     PhosphorMotionAnimation {
                                         profile: "widget.tint"
-                                        durationOverride: 200
+                                        durationOverride: Kirigami.Units.longDuration
                                     }
                                 }
                             }
@@ -201,22 +232,22 @@ Kirigami.Dialog {
                 spacing: Kirigami.Units.largeSpacing
 
                 // Landscape preview matching monitor aspect ratio
-                Rectangle {
-                    Layout.preferredWidth: Math.min(Kirigami.Units.gridUnit * 26, parent ? parent.width : Kirigami.Units.gridUnit * 26)
-                    Layout.preferredHeight: Layout.preferredWidth / root.screenAspectRatio
-                    Layout.maximumHeight: Kirigami.Units.gridUnit * 12
-                    Layout.alignment: Qt.AlignHCenter
-                    radius: Kirigami.Units.smallSpacing * 2
-                    color: root._subtleBg
-                    border.width: Math.round(Screen.devicePixelRatio)
-                    border.color: root._accentBorder
+                WizardPreviewFrame {
+                    aspectRatio: root.screenAspectRatio
 
                     AlgorithmPreview {
                         anchors.fill: parent
                         anchors.margins: Kirigami.Units.largeSpacing
-                        anchors.bottomMargin: Kirigami.Units.largeSpacing * 2
+                        // Space for the bottom name bar (LayoutThumbnail's
+                        // wrapper reserves 3 gridUnits of `_verticalChrome`
+                        // instead; this frame only needs to clear the badge).
+                        anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5 + Kirigami.Units.smallSpacing
                         visible: root.baseTemplate !== "blank"
-                        algorithmId: root.baseTemplate
+                        // The same `opened` gate as the step-1 previews above:
+                        // without it a closed dialog keeps a live algorithmId
+                        // and re-runs its Luau tile pass on every
+                        // availableAlgorithmsChanged.
+                        algorithmId: (root.opened && root.baseTemplate !== "blank") ? root.baseTemplate : ""
                         appSettings: root.controller
                         windowCount: 6
                         showLabel: false
@@ -224,6 +255,10 @@ Kirigami.Dialog {
 
                     ColumnLayout {
                         anchors.centerIn: parent
+                        // Center within the content region above the name bar,
+                        // not the full frame, so the hint clears the bar even
+                        // at the 3.6 aspect clamp where the frame is shortest.
+                        anchors.verticalCenterOffset: -(Kirigami.Units.gridUnit * 1.5 + Kirigami.Units.smallSpacing) / 2
                         visible: root.baseTemplate === "blank"
                         spacing: Kirigami.Units.smallSpacing
 
@@ -267,8 +302,17 @@ Kirigami.Dialog {
                             Layout.fillWidth: true
                             placeholderText: i18n("My Algorithm")
                             Accessible.name: i18n("Algorithm name")
-                            Keys.onReturnPressed: {
-                                if (wizardFooter.createEnabled)
+                            // A failed create releases the `_creating` guard so the
+                            // user can retry, which leaves a held Return free to
+                            // re-fire the D-Bus + .luau write on every repeat. Ignore
+                            // auto-repeat so one press is one attempt. Same contract
+                            // as NewLayoutDialog.
+                            Keys.onReturnPressed: event => {
+                                if (!event.isAutoRepeat && wizardFooter.createEnabled)
+                                    wizardFooter.createClicked();
+                            }
+                            Keys.onEnterPressed: event => {
+                                if (!event.isAutoRepeat && wizardFooter.createEnabled)
                                     wizardFooter.createClicked();
                             }
                         }
@@ -287,7 +331,9 @@ Kirigami.Dialog {
                         Layout.fillWidth: true
                     }
 
-                    // Capabilities
+                    // Capabilities — editable for the blank scaffold only. A
+                    // template's capabilities are part of its metadata and
+                    // travel with the copied script.
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
@@ -308,16 +354,40 @@ Kirigami.Dialog {
                             }
                         }
 
+                        Label {
+                            visible: root.baseTemplate !== "blank"
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: i18n("Capabilities are inherited from the template so its layout code keeps working.")
+                            font: Kirigami.Theme.smallFont
+                            opacity: 0.6
+                        }
+
                         GridLayout {
+                            visible: root.baseTemplate === "blank"
                             columns: 2
                             columnSpacing: Kirigami.Units.largeSpacing * 2
                             rowSpacing: Kirigami.Units.smallSpacing
 
+                            // Each box drives its flag through `onToggled` and
+                            // reads it back through a plain `checked:` binding,
+                            // so the onOpened resets land on the control. There
+                            // is no write-back loop: a CheckBox flips `checked`
+                            // through toggle(), a C++ setter, which neither
+                            // severs the binding nor re-emits toggled().
+                            //
+                            // A `Binding on checked` would work here too, and
+                            // is what the StayOpenMenuItems in FilterMenuButton
+                            // genuinely need, because those assign `checked`
+                            // from JS and a plain binding does not survive that.
+                            // Nothing assigns `checked` here, so the plain form
+                            // is the one to use, matching the same checkbox in
+                            // NewLayoutDialog.
                             CheckBox {
                                 text: i18n("Master count")
                                 checked: root.supportsMasterCount
                                 onToggled: root.supportsMasterCount = checked
-                                Accessible.name: i18n("Supports master count")
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Configurable master/center windows")
@@ -327,7 +397,7 @@ Kirigami.Dialog {
                                 text: i18n("Split ratio")
                                 checked: root.supportsSplitRatio
                                 onToggled: root.supportsSplitRatio = checked
-                                Accessible.name: i18n("Supports split ratio")
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Adjustable master/stack ratio")
@@ -337,7 +407,7 @@ Kirigami.Dialog {
                                 text: i18n("Overlapping zones")
                                 checked: root.producesOverlappingZones
                                 onToggled: root.producesOverlappingZones = checked
-                                Accessible.name: i18n("Produces overlapping zones")
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Zones can overlap each other")
@@ -347,10 +417,40 @@ Kirigami.Dialog {
                                 text: i18n("Persistent memory")
                                 checked: root.supportsMemory
                                 onToggled: root.supportsMemory = checked
-                                Accessible.name: i18n("Remembers split positions")
+                                Accessible.description: ToolTip.text
                                 ToolTip.visible: hovered
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Remembers positions across changes")
+                            }
+
+                            CheckBox {
+                                text: i18n("Script state")
+                                checked: root.supportsScriptState
+                                onToggled: root.supportsScriptState = checked
+                                Accessible.description: ToolTip.text
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                ToolTip.text: i18n("Keeps a persistent state table across retiles")
+                            }
+
+                            CheckBox {
+                                text: i18n("Single window")
+                                checked: root.supportsSingleWindow
+                                onToggled: root.supportsSingleWindow = checked
+                                Accessible.description: ToolTip.text
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                ToolTip.text: i18n("Lays out a lone window itself instead of filling the screen")
+                            }
+
+                            CheckBox {
+                                text: i18n("Follows focus")
+                                checked: root.retileOnFocus
+                                onToggled: root.retileOnFocus = checked
+                                Accessible.description: ToolTip.text
+                                ToolTip.visible: hovered
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+                                ToolTip.text: i18n("Reflows when focus moves between tiled windows")
                             }
                         }
                     }
@@ -361,10 +461,12 @@ Kirigami.Dialog {
 
                     // Options
                     CheckBox {
+                        // No Accessible.name: CheckBox already exposes `text`.
+                        // No tooltip here either, so there is nothing to add as
+                        // a description.
                         text: i18n("Open in text editor after creation")
                         checked: root.openInEditor
                         onToggled: root.openInEditor = checked
-                        Accessible.name: text
                     }
                 }
             }
@@ -387,17 +489,36 @@ Kirigami.Dialog {
 
         currentStep: root.currentStep
         createText: i18n("Create Algorithm")
-        createEnabled: nameField.text.trim().length > 0
+        createEnabled: nameField.text.trim().length > 0 && !root._creating
         onBackClicked: root.currentStep = 0
         onNextClicked: root.currentStep = 1
         onCreateClicked: {
+            // close() runs an exit transition during which the footer stays
+            // live, so without this a second click would create a second
+            // algorithm under the rolled-over "<name>-1" filename.
+            if (root._creating)
+                return;
+
+            root._creating = true;
             wizardFooter.errorText = "";
-            let result = root.controller.createNewAlgorithm(nameField.text.trim(), root.baseTemplate, root.supportsMasterCount, root.supportsSplitRatio, root.producesOverlappingZones, root.supportsMemory);
+            let result = root.controller.createNewAlgorithm(nameField.text.trim(), root.baseTemplate, {
+                "supportsMasterCount": root.supportsMasterCount,
+                "supportsSplitRatio": root.supportsSplitRatio,
+                "producesOverlappingZones": root.producesOverlappingZones,
+                "supportsMemory": root.supportsMemory,
+                "supportsScriptState": root.supportsScriptState,
+                "supportsSingleWindow": root.supportsSingleWindow,
+                "retileOnFocus": root.retileOnFocus
+            });
             if (result && result.length > 0) {
                 if (root.openInEditor)
                     root.controller.openAlgorithm(result);
 
                 root.close();
+            } else {
+                // Creation failed and the dialog stays open showing why, so
+                // release the guard for the retry.
+                root._creating = false;
             }
         }
         onCancelClicked: root.close()

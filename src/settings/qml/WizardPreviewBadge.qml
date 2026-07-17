@@ -2,37 +2,29 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
-import "WizardUtils.js" as WizardUtils
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Pill-shaped badge anchored to bottom-center of parent, showing a template name.
+ * @brief Bottom name bar for the wizard step-2 preview containers.
  *
- * Used in wizard step 2 preview containers.
+ * Mirrors the layout card's name label (owned by the shared LayoutCard
+ * component) so every preview in the app names its content the same way:
+ * a full-width, centered label over a translucent strip at the bottom of
+ * the frame.
  */
-Rectangle {
-    id: root
-
-    required property string text
-    readonly property var _colors: WizardUtils.wizardColors(Kirigami.Theme.textColor, Kirigami.Theme.highlightColor)
-
+Label {
     anchors.bottom: parent.bottom
-    anchors.horizontalCenter: parent.horizontalCenter
-    anchors.bottomMargin: Kirigami.Units.smallSpacing
-    width: badgeLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
-    height: badgeLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
-    radius: height / 2
-    color: _colors.badgeBg
-    border.width: Math.round(Screen.devicePixelRatio)
-    border.color: _colors.badgeBorder
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.margins: Kirigami.Units.smallSpacing
+    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+    font.weight: Font.DemiBold
+    elide: Text.ElideRight
+    horizontalAlignment: Text.AlignHCenter
 
-    Label {
-        id: badgeLabel
-
-        anchors.centerIn: parent
-        text: root.text
-        font.weight: Font.DemiBold
+    background: Rectangle {
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
+        radius: Kirigami.Units.smallSpacing * 0.5
     }
 }

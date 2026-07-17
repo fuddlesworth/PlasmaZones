@@ -2,14 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
 /**
- * @brief One monitor tile in the WindowRulesPage MONITORS strip.
+ * @brief One monitor tile in the RulesPage MONITORS strip.
  *
  * Visual style mirrors `DisplayMap`'s per-screen tile — monitor
  * icon (rotated for portrait), display label, "Primary" badge — so the
@@ -26,7 +25,7 @@ Rectangle {
     /// connectorName, isPrimary, width/height, etc.).
     required property var screenData
     /// Rule-related data: `{ screenId, layoutName, tilingEnabled, ruleCount,
-    /// assigned, locked }` from `WindowRuleController.monitorOverview(screens)`,
+    /// assigned, locked }` from `RuleController.monitorOverview(screens)`,
     /// which emits a tile for every screen. A screen with no pinned rules carries
     /// `assigned: false` and renders a "Not assigned" caption; `locked` is true
     /// when a LockContext rule pins the monitor's layout; the property only
@@ -49,17 +48,12 @@ Rectangle {
     implicitWidth: content.implicitWidth + Kirigami.Units.largeSpacing * 2
     implicitHeight: content.implicitHeight + Kirigami.Units.largeSpacing
     radius: Kirigami.Units.smallSpacing
-    color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
-    border.width: Math.round(Screen.devicePixelRatio)
-    border.color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-    // CheckBox role rather than RadioButton — radio buttons imply that
-    // exactly one option is selected and that clicking the active item is
-    // a no-op, but this tile supports click-to-clear (deselection) so a
-    // checkable-button affordance is the correct semantics for screen
-    // readers ("checked" / "unchecked" toggles per tile).
-    Accessible.role: Accessible.CheckBox
-    Accessible.name: i18n("Filter rules to monitor %1", monitorLabel.text)
-    Accessible.checked: tile.selected
+    color: tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : tileMouse.containsMouse ? Qt.alpha(Kirigami.Theme.hoverColor, 0.1) : "transparent"
+    // Focus wins over selection: a keyboard user lands on the
+    // selected tile most of the time, so testing `selected` first
+    // would leave that tile with no focus indication at all.
+    border.width: tileMouse.activeFocus ? 2 : 1
+    border.color: tileMouse.activeFocus ? Kirigami.Theme.focusColor : tile.selected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
     ColumnLayout {
         id: content
@@ -101,7 +95,7 @@ Rectangle {
             width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing
             height: primaryLabel.implicitHeight + Kirigami.Units.smallSpacing / 2
             radius: height / 2
-            color: tile._isPrimary ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15) : "transparent"
+            color: tile._isPrimary ? Qt.alpha(Kirigami.Theme.highlightColor, 0.15) : "transparent"
 
             Label {
                 id: primaryLabel
@@ -109,8 +103,11 @@ Rectangle {
                 anchors.centerIn: parent
                 text: i18n("Primary")
                 font: Kirigami.Theme.smallFont
-                color: Kirigami.Theme.positiveTextColor
+                color: Kirigami.Theme.highlightColor
                 opacity: tile._isPrimary ? 1 : 0
+                // Opacity 0 keeps the badge in the accessibility tree, so
+                // non-primary tiles would still announce "Primary".
+                Accessible.ignored: !tile._isPrimary
             }
         }
 
@@ -151,17 +148,17 @@ Rectangle {
                     var n = tile._ruleCount;
                     var countLabel = i18np("%n rule", "%n rules", n);
                     if (!tile._assigned)
-                        return i18n("Not assigned") + " · " + countLabel;
+                        return i18nc("@label monitor caption", "%1 · %2", i18n("Not assigned"), countLabel);
 
                     // `tilingEnabled` means "the screen's window-management
                     // engine is NOT disabled" for whatever engine it runs
                     // (snapping / autotile / scrolling), so the label stays
                     // engine-agnostic rather than saying "Tiling off".
                     if (!tile.tileData.tilingEnabled)
-                        return i18n("Engine off") + " · " + countLabel;
+                        return i18nc("@label monitor caption", "%1 · %2", i18n("Engine off"), countLabel);
 
                     if (tile.tileData.layoutName && tile.tileData.layoutName.length > 0)
-                        return tile.tileData.layoutName + " · " + countLabel;
+                        return i18nc("@label monitor caption", "%1 · %2", tile.tileData.layoutName, countLabel);
 
                     return countLabel;
                 }
@@ -176,8 +173,21 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         hoverEnabled: true
         activeFocusOnTab: true
+        // a11y role lives on the focusable item (this MouseArea), so assistive
+        // tech sees the role and the focus together. CheckBox role rather than
+        // RadioButton — radio buttons imply that exactly one option is selected
+        // and that clicking the active item is a no-op, but this tile supports
+        // click-to-clear (deselection) so a checkable-button affordance is the
+        // correct semantics for screen readers ("checked" / "unchecked" toggles
+        // per tile).
+        Accessible.role: Accessible.CheckBox
+        Accessible.name: i18n("Filter rules to monitor %1", monitorLabel.text)
+        Accessible.checked: tile.selected
+        Accessible.focusable: true
         Keys.onSpacePressed: tile.clicked()
         Keys.onReturnPressed: tile.clicked()
+        // Numpad Enter alias, matching the sibling card components.
+        Keys.onEnterPressed: tile.clicked()
         onClicked: tile.clicked()
     }
 
@@ -189,6 +199,17 @@ Rectangle {
     }
 
     Behavior on border.color {
+        PhosphorMotionAnimation {
+            profile: "widget.hover"
+            durationOverride: Kirigami.Units.shortDuration
+        }
+    }
+
+    // Focus toggles the width between 1 and 2 (see the binding above);
+    // animating it alongside colour keeps the focus ring from popping while
+    // the colour is still mid-fade. Same motion profile as the sibling
+    // SegmentedViewSwitch's border behaviors.
+    Behavior on border.width {
         PhosphorMotionAnimation {
             profile: "widget.hover"
             durationOverride: Kirigami.Units.shortDuration

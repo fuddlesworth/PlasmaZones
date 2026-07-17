@@ -17,22 +17,26 @@ SettingsFlickable {
     // Q_PROPERTY and a same-named Q_INVOKABLE, so the `()` form errors with
     // "is not a function"). Refreshed via the Connections below on its NOTIFY.
     property var _cachedAlgos: settingsController.availableAlgorithms || []
-    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettings.defaultAutotileAlgorithm)
-    // Derive algorithm ID from the combo's current selection (tracks UI immediately,
-    // not delayed by D-Bus round-trip to daemon)
-    readonly property string selectedAlgorithm: {
-        if (!algorithmCombo)
-            return root.effectiveAlgorithm;
+    // The ISettings object (the `appSettings` context property), captured at page
+    // scope. LayoutComboBox declares its own `appSettings: settingsController`,
+    // which SHADOWS the context property inside the combo's onActivated — writing
+    // `appSettings.defaultAutotileAlgorithm` there hit a nonexistent property on
+    // the controller and silently dropped every algorithm change. Read/write the
+    // algorithm through this reference so it always targets ISettings.
+    readonly property var appSettingsObj: appSettings
+    readonly property string effectiveAlgorithm: settingValue("Algorithm", appSettingsObj.defaultAutotileAlgorithm)
+    // Working algorithm for the whole page (preview, custom-param controls,
+    // capability lookups). Driven imperatively rather than bound to
+    // algorithmCombo.currentValue: that value transiently resets to the first
+    // list entry (BSP) whenever the combo rebuilds its model — e.g. the layout
+    // reload that follows a Save — which used to drag the entire page onto BSP.
+    // It is set the instant the user picks an algorithm (the combo's
+    // onActivated, below) so switching is immediate, and re-synced to the
+    // persisted setting on load / external edits / per-screen scope changes via
+    // onEffectiveAlgorithmChanged.
+    property string selectedAlgorithm: root.effectiveAlgorithm
 
-        let val = algorithmCombo.currentValue;
-        if (!val || val === "")
-            return root.effectiveAlgorithm;
-
-        if (val.startsWith("autotile:"))
-            return val.substring(9);
-
-        return val;
-    }
+    onEffectiveAlgorithmChanged: root.selectedAlgorithm = root.effectiveAlgorithm
     // Data-driven algorithm capabilities (lookup from cached availableAlgorithms by ID)
     readonly property var algoCapabilities: {
         const algos = root._cachedAlgos;
@@ -57,6 +61,64 @@ SettingsFlickable {
 
         return root.settingsBridge.customParamsForAlgorithm(root.selectedAlgorithm);
     }
+    // Live custom-param values (name → value) for the selected algorithm. This
+    // is the single source of truth the param controls read and write, and the
+    // value the live preview consumes — exactly the role appSettings holds for
+    // split ratio / master count. customParamDefs (the Repeater model) is
+    // intentionally not refreshed on edit, so the current values live here
+    // instead. Re-seeded from the saved/default values whenever the algorithm
+    // changes (i.e. customParamDefs re-evaluates).
+    property var liveCustomParams: ({})
+
+    function _seedLiveCustomParams() {
+        const defs = root.customParamDefs;
+        let m = {};
+        for (let i = 0; i < defs.length; ++i) {
+            const d = defs[i];
+            m[d.name] = (d.value !== undefined ? d.value : d.defaultValue);
+        }
+        root.liveCustomParams = m;
+    }
+
+    function setLiveCustomParam(name, value) {
+        // Reassign a fresh object so the `var` property emits changed —
+        // mutating in place would not re-trigger the preview binding or the
+        // delegates' paramValue.
+        let m = Object.assign({}, root.liveCustomParams);
+        m[name] = value;
+        root.liveCustomParams = m;
+    }
+
+    onCustomParamDefsChanged: _seedLiveCustomParams()
+
+    // Live per-algorithm built-in tuning (split ratio, master count, max
+    // windows) for the selected algorithm. Like liveCustomParams, this is the
+    // reactive source the sliders read in global scope so they don't snap back
+    // to the non-reactive algorithmSettingsFor() value, and it re-seeds on
+    // algorithm change so each algorithm shows its own saved tuning. Per-screen
+    // overrides bypass this (they flow through settingValue/writeSetting's
+    // per-screen path, which is reactive on its own).
+    property var liveAlgoSettings: ({})
+
+    function _seedLiveAlgoSettings() {
+        root.liveAlgoSettings = root.settingsBridge.algorithmSettingsFor(root.selectedAlgorithm);
+    }
+
+    function setLiveAlgoSetting(key, value) {
+        if (psHelper.isPerScreen)
+            return;
+        let m = Object.assign({}, root.liveAlgoSettings);
+        m[key] = value;
+        root.liveAlgoSettings = m;
+    }
+
+    onSelectedAlgorithmChanged: _seedLiveAlgoSettings()
+
+    Component.onCompleted: {
+        _seedLiveCustomParams();
+        _seedLiveAlgoSettings();
+    }
+
     // Whether the algorithm uses a center layout (ratio/count labels say "Center" instead of "Master").
     // Check capabilities map first (for future extensibility via scripted algorithm metadata),
     // falling back to hardcoded IDs for built-in algorithms. See PR #256 / M13.
@@ -68,18 +130,6 @@ SettingsFlickable {
 
     function writeSetting(key, value, globalSetter) {
         psHelper.writeSetting(key, value, globalSetter);
-    }
-
-    // Default max-windows for an algorithm id, looked up from the cached
-    // capabilities list. Returns -1 when the id is unknown so the caller can
-    // preserve the current value rather than guess.
-    function _defaultMaxWindowsFor(algoId) {
-        var algos = root._cachedAlgos;
-        for (var i = 0; i < algos.length; i++) {
-            if (algos[i].id === algoId)
-                return algos[i].defaultMaxWindows;
-        }
-        return -1;
     }
 
     contentHeight: content.implicitHeight
@@ -143,7 +193,7 @@ SettingsFlickable {
                         Rectangle {
                             anchors.fill: parent
                             color: Kirigami.Theme.backgroundColor
-                            border.color: Kirigami.Theme.disabledTextColor
+                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                             border.width: 1
                             radius: Kirigami.Units.smallSpacing
 
@@ -154,11 +204,15 @@ SettingsFlickable {
                                 showLabel: false
                                 algorithmId: root.selectedAlgorithm
                                 algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
-                                // Track the live Max-windows slider so the diagram and the
-                                // "Max N windows" caption below always show the same count.
+                                // Every layout input the user can edit feeds the preview
+                                // from the live slider handle, so the diagram updates as the
+                                // user drags any of them (master ratio and master count
+                                // included, not just max windows). The "Max N windows"
+                                // caption below also tracks the windows slider.
                                 windowCount: previewWindowSlider.slider.value
-                                splitRatio: root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6
-                                masterCount: (root.algoCapabilities && root.algoCapabilities.supportsMasterCount) ? 1 : 0
+                                splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : (root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
+                                masterCount: root.algoSupportsMasterCount ? masterCountSlider.slider.value : 0
+                                customParams: root.liveCustomParams
                                 zoneNumberDisplay: root.algoCapabilities ? (root.algoCapabilities.zoneNumberDisplay || "all") : "all"
                             }
                         }
@@ -212,41 +266,18 @@ SettingsFlickable {
                             // Extract algorithm ID from autotile: prefixed value
                             let selectedId = algorithmCombo.currentValue;
                             if (selectedId === "")
-                                selectedId = appSettings.defaultAutotileAlgorithm;
+                                selectedId = root.appSettingsObj.defaultAutotileAlgorithm;
                             else if (selectedId.startsWith("autotile:"))
                                 selectedId = selectedId.substring(9);
-                            // Decide BEFORE the switch whether max-windows should
-                            // follow the new algorithm's default. Mirror the
-                            // daemon (AutotileEngine::resetMaxWindowsForAlgorithmSwitch):
-                            // only reset when the user never customized it, i.e. the
-                            // current value still equals the OLD algorithm's default.
-                            // effectiveAlgorithm/settingValue still read the old
-                            // state here (the write below hasn't landed yet).
-                            // Without this guard, switching algorithm would clobber a
-                            // customized value and — when scoped to a monitor — force a
-                            // per-screen MaxWindows override the user never set.
-                            var oldDefaultMax = root._defaultMaxWindowsFor(root.effectiveAlgorithm);
-                            var currentMax = root.settingValue("MaxWindows", appSettings.autotileMaxWindows);
-                            var resetMax = oldDefaultMax >= 0 && currentMax === oldDefaultMax;
+                            // Drive the page off the user's pick immediately, then
+                            // persist. Both go through root.appSettingsObj — NOT the
+                            // bare `appSettings`, which the combo shadows with the
+                            // controller in this scope (see appSettingsObj above).
+                            // Resetting global max-windows / split-ratio / master-count
+                            // here would clobber a sibling algorithm's per-algorithm slot.
+                            root.selectedAlgorithm = selectedId;
                             root.writeSetting("Algorithm", selectedId, function (v) {
-                                appSettings.defaultAutotileAlgorithm = v;
-                            });
-                            if (!resetMax)
-                                return;
-                            // Reset maxWindows to the new algorithm's default.
-                            // Use Qt.callLater so algoCapabilities binding has
-                            // re-evaluated with the newly selected algorithm.
-                            Qt.callLater(function () {
-                                if (!root.algoCapabilities)
-                                    return;
-                                var newDefault = root.algoCapabilities.defaultMaxWindows || 6;
-                                // Writing the setting moves the slider via its
-                                // value binding (settingValue → SettingsSlider);
-                                // an imperative slider write here would just be
-                                // reasserted by that binding, so don't.
-                                root.writeSetting("MaxWindows", newDefault, function (v) {
-                                    appSettings.autotileMaxWindows = v;
-                                });
+                                root.appSettingsObj.defaultAutotileAlgorithm = v;
                             });
                         }
                     }
@@ -263,17 +294,18 @@ SettingsFlickable {
                     SettingsSlider {
                         id: previewWindowSlider
 
-                        Accessible.name: i18n("Maximum windows")
+                        accessibleName: i18n("Maximum windows")
                         from: root.settingsBridge.autotileMaxWindowsMin
                         to: root.settingsBridge.autotileMaxWindowsMax
                         stepSize: 1
-                        value: root.settingValue("MaxWindows", appSettings.autotileMaxWindows)
+                        value: root.settingValue("MaxWindows", root.liveAlgoSettings.maxWindows !== undefined ? root.liveAlgoSettings.maxWindows : appSettings.autotileMaxWindows)
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }
                         onMoved: value => {
-                            return root.writeSetting("MaxWindows", Math.round(value), function (v) {
-                                appSettings.autotileMaxWindows = v;
+                            root.setLiveAlgoSetting("maxWindows", Math.round(value));
+                            root.writeSetting("MaxWindows", Math.round(value), function (v) {
+                                root.settingsBridge.setAlgorithmMaxWindows(root.selectedAlgorithm, v);
                             });
                         }
                     }
@@ -291,17 +323,20 @@ SettingsFlickable {
                     description: root.algoCenterLayout ? i18n("Width proportion allocated to the center column") : i18n("Width proportion allocated to the master area")
 
                     SettingsSlider {
-                        Accessible.name: root.algoCenterLayout ? i18n("Center ratio") : i18n("Master ratio")
+                        id: masterRatioSlider
+
+                        accessibleName: root.algoCenterLayout ? i18n("Center ratio") : i18n("Master ratio")
                         from: root.settingsBridge.autotileSplitRatioMin
                         to: root.settingsBridge.autotileSplitRatioMax
                         stepSize: 0.05
-                        value: root.settingValue("SplitRatio", appSettings.autotileSplitRatio)
+                        value: root.settingValue("SplitRatio", root.liveAlgoSettings.splitRatio !== undefined ? root.liveAlgoSettings.splitRatio : appSettings.autotileSplitRatio)
                         formatValue: function (v) {
                             return Math.round(v * 100) + "%";
                         }
                         onMoved: value => {
+                            root.setLiveAlgoSetting("splitRatio", value);
                             root.writeSetting("SplitRatio", value, function (v) {
-                                appSettings.autotileSplitRatio = v;
+                                root.settingsBridge.setAlgorithmSplitRatio(root.selectedAlgorithm, v);
                             });
                         }
                     }
@@ -314,7 +349,7 @@ SettingsFlickable {
                     description: i18n("Amount the ratio changes per keyboard shortcut press")
 
                     SettingsSlider {
-                        Accessible.name: i18n("Ratio step size")
+                        accessibleName: i18n("Ratio step size")
                         from: root.settingsBridge.autotileSplitRatioStepMin
                         to: root.settingsBridge.autotileSplitRatioStepMax
                         stepSize: 0.01
@@ -341,17 +376,20 @@ SettingsFlickable {
                     description: root.algoCenterLayout ? i18n("Number of windows in the center column") : i18n("Number of windows in the master area")
 
                     SettingsSlider {
-                        Accessible.name: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
+                        id: masterCountSlider
+
+                        accessibleName: root.algoCenterLayout ? i18n("Center count") : i18n("Master count")
                         from: root.settingsBridge.autotileMasterCountMin
                         to: root.settingsBridge.autotileMasterCountMax
                         stepSize: 1
-                        value: root.settingValue("MasterCount", appSettings.autotileMasterCount)
+                        value: root.settingValue("MasterCount", root.liveAlgoSettings.masterCount !== undefined ? root.liveAlgoSettings.masterCount : appSettings.autotileMasterCount)
                         formatValue: function (v) {
                             return Math.round(v).toString();
                         }
                         onMoved: value => {
+                            root.setLiveAlgoSetting("masterCount", Math.round(value));
                             root.writeSetting("MasterCount", Math.round(value), function (v) {
-                                appSettings.autotileMasterCount = v;
+                                root.settingsBridge.setAlgorithmMasterCount(root.selectedAlgorithm, v);
                             });
                         }
                     }
@@ -360,16 +398,34 @@ SettingsFlickable {
                 // =============================================================
                 // Custom Algorithm Parameters
                 // =============================================================
+                // Unlike the built-in sliders above, custom params are stored
+                // per-algorithm only — there is no per-screen override for them,
+                // so the controls write the global per-algorithm value via
+                // setCustomParam() regardless of the active monitor scope.
                 Repeater {
                     model: root.customParamDefs
 
                     delegate: ColumnLayout {
+                        id: paramDelegate
+
                         required property var modelData
                         required property int index
                         readonly property string paramLabel: modelData.description || modelData.name
                         // Show the raw param name as subtitle when description was used as title
                         readonly property string paramDescription: modelData.description ? modelData.name : ""
-                        readonly property var paramValue: modelData.value !== undefined ? modelData.value : modelData.defaultValue
+                        // Current value, read from the page's live map (the single
+                        // source of truth). Falls back to the model's saved/default
+                        // value before the map is seeded. Because this tracks
+                        // liveCustomParams, the slider's on-release re-sync
+                        // (Binding when: !pressed) and the switch / combo all settle
+                        // on the value the user just set instead of snapping back to
+                        // the never-refreshed model value.
+                        readonly property var paramValue: {
+                            const v = root.liveCustomParams[modelData.name];
+                            if (v !== undefined)
+                                return v;
+                            return modelData.value !== undefined ? modelData.value : modelData.defaultValue;
+                        }
                         readonly property real paramMin: modelData.minValue !== undefined ? modelData.minValue : 0
                         readonly property real paramMax: {
                             let mx = modelData.maxValue !== undefined ? modelData.maxValue : 1;
@@ -391,7 +447,7 @@ SettingsFlickable {
                             // Number parameter: rendered as a SettingsSlider
                             SettingsSlider {
                                 visible: modelData.type === "number"
-                                Accessible.name: paramLabel
+                                accessibleName: paramLabel
                                 from: paramMin
                                 to: paramMax
                                 stepSize: {
@@ -414,6 +470,7 @@ SettingsFlickable {
                                     return Math.round(v).toString();
                                 }
                                 onMoved: value => {
+                                    root.setLiveCustomParam(modelData.name, value);
                                     root.settingsBridge.setCustomParam(root.selectedAlgorithm, modelData.name, value);
                                 }
                             }
@@ -424,6 +481,7 @@ SettingsFlickable {
                                 Accessible.name: paramLabel
                                 checked: paramValue === true
                                 onToggled: {
+                                    root.setLiveCustomParam(modelData.name, checked);
                                     root.settingsBridge.setCustomParam(root.selectedAlgorithm, modelData.name, checked);
                                 }
                             }
@@ -441,10 +499,7 @@ SettingsFlickable {
                                     return idx >= 0 ? idx : 0;
                                 }
                                 onActivated: {
-                                    // Imperative assignment breaks the declarative currentIndex
-                                    // binding above, preventing it from snapping back to the
-                                    // old value after the user makes a selection.
-                                    currentIndex = enumCombo.currentIndex;
+                                    root.setLiveCustomParam(modelData.name, currentText);
                                     root.settingsBridge.setCustomParam(root.selectedAlgorithm, modelData.name, currentText);
                                 }
                             }

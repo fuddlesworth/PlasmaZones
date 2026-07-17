@@ -19,7 +19,7 @@ RowLayout {
 
     /// The leaf JSON object — `{ field: "appId", op: "equals", value: ... }`.
     required property var node
-    /// The WindowRuleController (for operatorsForField).
+    /// The RuleController (for operatorsForField).
     required property var controller
     /// The SettingsController — populates the screen / activity pickers.
     required property var appSettings
@@ -31,6 +31,13 @@ RowLayout {
     // The current field's descriptor (by wire string), or undefined if the
     // stored field is unknown / legacy.
     readonly property var _fieldEntry: leaf._entryForWire(leaf.fieldOptions, leaf.node.field)
+    // True once a field is chosen. A freshly-added condition seeds an empty
+    // field so the picker shows its placeholder and the user must select one;
+    // the operator / value editors stay hidden until then (mirroring how an
+    // action row shows no param editors until its type is picked). Keyed on
+    // the field STRING being non-empty — not on `_fieldEntry` — so a legacy /
+    // unknown field (non-empty but unrecognised) still shows its editors.
+    readonly property bool _hasField: leaf.node.field !== undefined && String(leaf.node.field).length > 0
     // Operator options depend on the current field's enum value.
     readonly property var _operatorOptions: leaf._fieldEntry !== undefined ? controller.operatorsForField(leaf._fieldEntry.value) : []
     readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
@@ -257,6 +264,9 @@ RowLayout {
     WideComboBox {
         id: opCombo
 
+        // Hidden until a field is chosen — a field-less placeholder has no
+        // operator vocabulary to offer yet.
+        visible: leaf._hasField
         Layout.alignment: Qt.AlignTop
         // Fixed to the widest operator label across ALL fields' operator sets
         // (plus chrome for the dropdown indicator + padding) instead of the
@@ -278,7 +288,16 @@ RowLayout {
 
     Loader {
         Layout.fillWidth: true
-        Layout.alignment: Qt.AlignTop
+        // Hidden until a field is chosen — there is no value to type against a
+        // field-less placeholder (mirrors the operator combo above).
+        visible: leaf._hasField
+        active: leaf._hasField
+        // Most value editors top-align so a string editor's wrapped operator hint
+        // can grow downward without dragging the combos with it. The bool toggle
+        // is a short fixed-height control with no hint line, so it vertically
+        // centers against the taller field / operator combos instead of clinging
+        // to their top edge (which read as "not centered").
+        Layout.alignment: leaf._valueKind === "bool" ? Qt.AlignVCenter : Qt.AlignTop
         sourceComponent: {
             if (leaf._valueKind === "bool")
                 return boolValueEditor;
@@ -298,8 +317,33 @@ RowLayout {
             if (leaf._valueKind === "windowType")
                 return windowTypeValueEditor;
 
+            if (leaf._valueKind === "mode")
+                return modeValueEditor;
+
+            if (leaf._valueKind === "orientation")
+                return orientationValueEditor;
+
+            if (leaf._valueKind === "layout")
+                return layoutValueEditor;
+
             return stringValueEditor;
         }
+    }
+
+    // Slack absorber for the field-less state. Before a field is chosen the
+    // operator combo and value editor are both hidden, so the row's only
+    // fillWidth item (the value Loader above) is invisible and absorbs no
+    // stretch. QtQuick.Layouts then hands the leftover width to the remaining
+    // cells that carry a Layout.alignment (the info icon, field picker and
+    // trash), inflating each cell and left-aligning its item inside — which
+    // pushes the field picker rightward (the "Choose…" inset) and un-pins the
+    // trash. This empty fillWidth item soaks up that slack instead, so the
+    // picker stays at its natural left position and the trash stays hard right.
+    // Once a field is chosen the value Loader becomes the fillWidth item, so
+    // this collapses out of the layout.
+    Item {
+        Layout.fillWidth: true
+        visible: !leaf._hasField
     }
 
     ToolButton {
@@ -344,7 +388,7 @@ RowLayout {
                 ToolButton {
                     Accessible.name: leaf._pickTooltip(leaf.node.field)
                     Layout.alignment: Qt.AlignVCenter
-                    ToolTip.delay: 500
+                    ToolTip.delay: Kirigami.Units.toolTipDelay
                     ToolTip.text: leaf._pickTooltip(leaf.node.field)
                     ToolTip.visible: hovered
                     icon.name: "window-duplicate"
@@ -389,11 +433,32 @@ RowLayout {
     Component {
         id: boolValueEditor
 
-        CheckBox {
-            checked: leaf.node.value === true
-            text: checked ? i18n("True") : i18n("False")
-            Accessible.name: i18n("Match value")
-            onToggled: leaf._emit(leaf.node.field, leaf.node.op, checked)
+        // SettingsSwitch is a fixed-size custom Item whose track fills its
+        // bounds, but the hosting Loader is Layout.fillWidth (for the text /
+        // combo editors), which would stretch the toggle into a full-width pill.
+        // Host it in a fill wrapper and keep the toggle at its implicit size,
+        // left- and vertically-centered — the same control and wrapper the
+        // action editor's bool param uses (ActionRow's _boolParamEditor), so
+        // a WHEN bool value and a THEN bool value share one widget.
+        Item {
+            implicitHeight: boolToggle.implicitHeight
+
+            SettingsSwitch {
+                id: boolToggle
+
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                checked: leaf.node.value === true
+                accessibleName: i18n("Match value")
+                // Echo the toggle's state as On / Off so the predicate value is
+                // legible at a glance (the field and operator to the left say
+                // what is being matched, this says to what). Same On / Off
+                // vocabulary as the read-only match summary.
+                label: checked ? i18n("On") : i18n("Off")
+                onToggled: function (newValue) {
+                    leaf._emit(leaf.node.field, leaf.node.op, newValue);
+                }
+            }
         }
     }
 
@@ -560,6 +625,117 @@ RowLayout {
                 return String(v);
             }
             Accessible.name: i18n("Window type")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
+
+    Component {
+        id: modeValueEditor
+
+        WideComboBox {
+            // The field entry's `options` carry {value: token, wire: token,
+            // label: localised} triples. Mode is a string field, so the value
+            // persisted in the rule store IS the wire token ("snapping" /
+            // "tiling"; Floating was dropped from the Mode condition).
+            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+
+            model: _options
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < _options.length; ++i) {
+                    if (_options[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            // Show the raw stored token when no option matches (a hand-edited
+            // rule or a newer schema), mirroring the windowType / screen pickers.
+            // The empty-string sentinel is the "no value yet" state the field
+            // picker seeds when switching in from another field.
+            displayText: {
+                if (currentIndex >= 0)
+                    return currentText;
+                var v = leaf.node.value;
+                if (v === undefined || v === null || v === "")
+                    return i18n("Choose a mode…");
+                return String(v);
+            }
+            Accessible.name: i18n("Placement mode")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
+
+    Component {
+        id: orientationValueEditor
+
+        WideComboBox {
+            // Screen orientation is a string field whose value IS the wire token
+            // ("portrait" / "landscape"); the options carry {value, wire, label}
+            // triples, same shape as the mode editor above.
+            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+
+            model: _options
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < _options.length; ++i) {
+                    if (_options[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            displayText: {
+                if (currentIndex >= 0)
+                    return currentText;
+                var v = leaf.node.value;
+                if (v === undefined || v === null || v === "")
+                    return i18n("Choose an orientation…");
+                return String(v);
+            }
+            Accessible.name: i18n("Screen orientation")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
+
+    Component {
+        id: layoutValueEditor
+
+        WideComboBox {
+            id: layoutCombo
+
+            // Picker over `appSettings.layouts` (snapping layouts and autotile
+            // entries); the wire value stays the layout id (snap UUID or
+            // "autotile:<algo>") so it matches the id the daemon resolves for the
+            // screen. Mirrors the activity picker.
+            readonly property var _layouts: leaf.appSettings ? leaf.appSettings.layouts : []
+
+            model: _layouts
+            textRole: "displayName"
+            valueRole: "id"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < layoutCombo._layouts.length; ++i) {
+                    if (layoutCombo._layouts[i].id === target)
+                        return i;
+                }
+                return -1;
+            }
+            // Fall back to the raw id (e.g. a deleted layout) so the rule's pin
+            // stays visible even when no current layout matches.
+            displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose a layout…"))
+            Accessible.name: i18n("Active layout")
             onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);

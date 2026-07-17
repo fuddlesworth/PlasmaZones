@@ -4,7 +4,6 @@
     "description": "Two equal vertical columns",
     "type": 1,
     "defaultOrder": 1,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "standard",
     "zones": [

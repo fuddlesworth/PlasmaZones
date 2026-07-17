@@ -68,11 +68,21 @@ public:
     P_CONFIG_GROUP(performanceGroup, "Performance")
     P_CONFIG_GROUP(renderingGroup, "Rendering")
     P_CONFIG_GROUP(shadersGroup, "Shaders")
+    P_CONFIG_GROUP(shadersAudioGroup, "Shaders.Audio")
     P_CONFIG_GROUP(animationsGroup, "Animations")
     P_CONFIG_GROUP(shortcutsGlobalGroup, "Shortcuts.Global")
     P_CONFIG_GROUP(shortcutsTilingGroup, "Shortcuts.Tiling")
     P_CONFIG_GROUP(orderingGroup, "Ordering")
     P_CONFIG_GROUP(updatesGroup, "Updates")
+
+    // Window decoration appearance (tiled/snapped window border + title bar).
+    // Mode-neutral top-level group — the values apply to both the snapping and
+    // tiling engines, so it sits outside Snapping.* / Tiling.*.
+    P_CONFIG_GROUP(windowsAppearanceGroup, "Windows")
+
+    // Shared inner/outer gap model used by BOTH snapping and tiling. Mode-neutral
+    // top-level group; the gap values are read by both engines.
+    P_CONFIG_GROUP(gapsGroup, "Gaps")
 
     // Snapping sub-groups
     P_CONFIG_GROUP(snappingZonesGroup, "Snapping.Zones")
@@ -85,15 +95,11 @@ public:
     P_CONFIG_GROUP(snappingZonesOpacityGroup, "Snapping.Zones.Opacity")
     P_CONFIG_GROUP(snappingZonesBorderGroup, "Snapping.Zones.Border")
     P_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
-    // Snapping window appearance — the post-snap window's border / title-bar
-    // decoration (parallel to Tiling.Appearance.*, distinct from the
-    // Snapping.Zones.* drag-time zone overlay above).
-    P_CONFIG_GROUP(snappingAppearanceGroup, "Snapping.Appearance")
-    P_CONFIG_GROUP(snappingAppearanceColorsGroup, "Snapping.Appearance.Colors")
-    P_CONFIG_GROUP(snappingAppearanceDecorationsGroup, "Snapping.Appearance.Decorations")
-    P_CONFIG_GROUP(snappingAppearanceBordersGroup, "Snapping.Appearance.Borders")
     P_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     P_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
+    // Snapping.Gaps holds only the snapping-specific adjacency threshold. The
+    // shared inner/outer gap values live in the top-level Gaps group (gapsGroup)
+    // and are read through Settings' gap getters.
     P_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
 
     // Display (mode-neutral) — per-mode disable lists. Lives outside Snapping.*
@@ -104,15 +110,35 @@ public:
     // Animations sub-groups
     P_CONFIG_GROUP(animationsWindowFilteringGroup, "Animations.WindowFiltering")
 
+    // Decorations sub-groups — window filtering for the KWin effect's border /
+    // decoration pass. Independent of the Animations and Exclusions groups so a
+    // user can tune which windows get a border separately from which windows
+    // snap or animate. Reuses the shared leaf keys (transientWindowsKey,
+    // minimumWindowWidthKey, minimumWindowHeightKey); only the group differs.
+    P_CONFIG_GROUP(decorationsWindowFilteringGroup, "Decorations.WindowFiltering")
+
     // Tiling sub-groups
-    P_CONFIG_GROUP(tilingAppearanceGroup, "Tiling.Appearance")
     P_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
     P_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")
     P_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
-    P_CONFIG_GROUP(tilingAppearanceColorsGroup, "Tiling.Appearance.Colors")
-    P_CONFIG_GROUP(tilingAppearanceDecorationsGroup, "Tiling.Appearance.Decorations")
-    P_CONFIG_GROUP(tilingAppearanceBordersGroup, "Tiling.Appearance.Borders")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
+
+    // Decorations — per-surface decoration tree (DecorationProfileTree:
+    // shader-pack chain + per-pack parameters, keyed on a dot-path surface
+    // namespace; any border appearance rides as the border pack's parameters).
+    // The DecorationProfileTree blob is a leaf key directly under this group,
+    // mirroring how the animation ShaderProfileTree sits under Animations; the
+    // Decorations.WindowFiltering sub-group is the border-pass window filter.
+    P_CONFIG_GROUP(decorationsGroup, "Decorations")
+
+    // Decorations.Performance — what the decoration chain is allowed to keep
+    // redrawing. An animated pack (a drifting mote layer, an orbiting gleam)
+    // repaints every window carrying it on every vsync, which never lets the GPU
+    // leave its top performance state: measured at ~110 W and +12 C over an idle
+    // desktop with the effect unloaded, on hardware that is only ~45% busy. The
+    // cost is not the work per frame, it is that there IS work every frame — so
+    // the knobs here bound WHEN the chain animates rather than how much it does.
+    P_CONFIG_GROUP(decorationsPerformanceGroup, "Decorations.Performance")
 
     // Parent groups (for purge enumeration — covers all sub-groups)
     P_CONFIG_GROUP(shortcutsGroup, "Shortcuts")
@@ -277,7 +303,6 @@ public:
     // Config Keys — Snapping.Effects
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_KEY(blurKey, "Blur")
     P_CONFIG_KEY(showNumbersKey, "ShowNumbers")
     P_CONFIG_KEY(flashOnSwitchKey, "FlashOnSwitch")
     P_CONFIG_KEY(osdOnLayoutSwitchKey, "OsdOnLayoutSwitch")
@@ -305,14 +330,42 @@ public:
     // Config Keys — Snapping.Gaps
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_KEY(innerKey, "Inner")
-    P_CONFIG_KEY(outerKey, "Outer")
-    P_CONFIG_KEY(usePerSideKey, "UsePerSide")
-    P_CONFIG_KEY(topKey, "Top")
-    P_CONFIG_KEY(bottomKey, "Bottom")
-    P_CONFIG_KEY(leftKey, "Left")
-    P_CONFIG_KEY(rightKey, "Right")
     P_CONFIG_KEY(adjacentThresholdKey, "AdjacentThreshold")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Windows (window decoration appearance)
+    //
+    // Border width / radius REUSE the generic widthKey() / radiusKey() accessors
+    // above (the windowsAppearanceGroup context disambiguates them from the
+    // Snapping.Zones.Border keys of the same spelling).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(showBorderKey, "ShowBorder")
+    P_CONFIG_KEY(borderScopeKey, "BorderScope")
+    P_CONFIG_KEY(hideTitleBarsKey, "HideTitleBars")
+    P_CONFIG_KEY(titleBarScopeKey, "TitleBarScope")
+    P_CONFIG_KEY(borderColorActiveKey, "BorderColorActive")
+    P_CONFIG_KEY(borderColorInactiveKey, "BorderColorInactive")
+    P_CONFIG_KEY(focusFadeDurationKey, "FocusFadeDuration")
+    // Plain opacity+tint layer (rendered by the built-in "opacity-tint"
+    // surface pack), the opacity analogue of ShowBorder/BorderScope above.
+    P_CONFIG_KEY(showOpacityTintKey, "ShowOpacityTint")
+    P_CONFIG_KEY(opacityTintScopeKey, "OpacityTintScope")
+    P_CONFIG_KEY(opacityKey, "Opacity")
+    P_CONFIG_KEY(tintStrengthKey, "TintStrength")
+    P_CONFIG_KEY(tintColorKey, "TintColor")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Gaps (shared inner/outer gap model)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(innerGapKey, "Inner")
+    P_CONFIG_KEY(outerGapKey, "Outer")
+    P_CONFIG_KEY(usePerSideOuterGapKey, "UsePerSide")
+    P_CONFIG_KEY(outerGapTopKey, "Top")
+    P_CONFIG_KEY(outerGapBottomKey, "Bottom")
+    P_CONFIG_KEY(outerGapLeftKey, "Left")
+    P_CONFIG_KEY(outerGapRightKey, "Right")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling (top-level)
@@ -345,29 +398,28 @@ public:
     P_CONFIG_KEY(lockedScreensKey, "LockedScreens")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Colors + Snapping.Appearance.Colors
+    // Config Keys — Decorations
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // (uses useSystemKey, activeKey, inactiveKey)
+    // DecorationProfileTree JSON blob — the user-applied per-surface decoration
+    // (shader-pack chain). Mirrors the animation ShaderProfileTree blob under
+    // Animations, persisted as a nested JSON object under the Decorations group —
+    // with one materialization difference: the decoration schema default is the
+    // serialized empty tree ({"baseline":…,"overrides":[]}, non-empty as a
+    // map), whereas the animation default is a bare {}.
+    P_CONFIG_KEY(decorationProfileTreeKey, "DecorationProfileTree")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Decorations + Snapping.Appearance.Decorations
+    // Config Keys — Decorations.Performance
     // ═══════════════════════════════════════════════════════════════════════════
-
-    P_CONFIG_KEY(hideTitleBarsKey, "HideTitleBars")
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Borders + Snapping.Appearance.Borders
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    P_CONFIG_KEY(showBorderKey, "ShowBorder")
-    // (also uses widthKey, radiusKey)
+    P_CONFIG_KEY(animateFocusedOnlyKey, "AnimateFocusedOnly")
+    P_CONFIG_KEY(pauseWhenIdleKey, "PauseWhenIdle")
+    P_CONFIG_KEY(idleTimeoutSecKey, "IdleTimeoutSec")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // (uses innerKey, outerKey, usePerSideKey, topKey, bottomKey, leftKey, rightKey)
     P_CONFIG_KEY(smartGapsKey, "SmartGaps")
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -382,7 +434,7 @@ public:
     // group), so it is declared with the rest of the animation keys below
     // rather than here. Note: the per-list `Applications` / `WindowClasses`
     // leaf-key accessors were retired with the v4 fold of exclusion lists
-    // into Application-subject WindowRules — the migration reads from
+    // into Application-subject Rules — the migration reads from
     // `v3ExcludedApplicationsKey` / `v3ExcludedWindowClassesKey` below,
     // and no live config path remains.
 
@@ -398,10 +450,24 @@ public:
     // Config Keys — Shaders
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // (uses enabledKey)
     P_CONFIG_KEY(frameRateKey, "FrameRate")
-    P_CONFIG_KEY(audioVisualizerKey, "AudioVisualizer")
-    P_CONFIG_KEY(audioSpectrumBarCountKey, "AudioSpectrumBarCount")
+
+    // Audio spectrum (Shaders.Audio group; the on/off toggle uses enabledKey).
+    // The flat Shaders.AudioVisualizer / Shaders.AudioSpectrumBarCount keys
+    // moved here in the v5 migration (migrateV4ToV5).
+    P_CONFIG_KEY(barsKey, "Bars")
+    P_CONFIG_KEY(autosensKey, "Autosens")
+    P_CONFIG_KEY(sensitivityKey, "Sensitivity")
+    P_CONFIG_KEY(noiseReductionKey, "NoiseReduction")
+    P_CONFIG_KEY(lowerCutoffHzKey, "LowerCutoffHz")
+    P_CONFIG_KEY(higherCutoffHzKey, "HigherCutoffHz")
+    P_CONFIG_KEY(monstercatKey, "Monstercat")
+    P_CONFIG_KEY(wavesKey, "Waves")
+    P_CONFIG_KEY(channelModeKey, "ChannelMode")
+    P_CONFIG_KEY(reverseKey, "Reverse")
+    P_CONFIG_KEY(extraSmoothingKey, "ExtraSmoothing")
+    P_CONFIG_KEY(inputMethodKey, "InputMethod")
+    P_CONFIG_KEY(inputSourceKey, "InputSource")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Animations
@@ -533,7 +599,6 @@ public:
 
     P_CONFIG_KEY(gridEnabledKey, "GridEnabled")
     P_CONFIG_KEY(edgeEnabledKey, "EdgeEnabled")
-    P_CONFIG_KEY(intervalKey, "Interval")
     P_CONFIG_KEY(intervalXKey, "IntervalX")
     P_CONFIG_KEY(intervalYKey, "IntervalY")
     P_CONFIG_KEY(overrideModifierKey, "OverrideModifier")
@@ -574,7 +639,6 @@ public:
 
     P_CONFIG_GROUP(zoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_ZONE_SELECTOR ":")
     P_CONFIG_GROUP(autotileScreenGroupPrefix, P_PER_SCREEN_PREFIX_AUTOTILE ":")
-    P_CONFIG_GROUP(snappingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SNAPPING ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1/v2/v3/v4 accessors — used ONLY by migration code.
@@ -662,6 +726,15 @@ public:
         P_CONFIG_GROUP(v2ShortcutsGroup, "Shortcuts")
         P_CONFIG_GROUP(v2EditorGroup, "Editor")
         P_CONFIG_GROUP(v2OrderingGroup, "Ordering")
+        // v2 Animations destination — group plus the two leaf keys migrateV1ToV2
+        // writes ("Enabled" bool and the stringified "Profile" blob). Frozen at
+        // their v2 literals for the same reason as the sibling groups above: a
+        // future rename of the live `animationsGroup()` / `enabledKey()` /
+        // `animationProfileKey()` accessors must not silently retarget the
+        // v1→v2 step to a path no v2 config ever had on disk.
+        P_CONFIG_GROUP(v2AnimationsGroup, "Animations")
+        P_CONFIG_KEY(v2AnimationsEnabledKey, "Enabled")
+        P_CONFIG_KEY(v2AnimationProfileKey, "Profile")
         // Parameterised v2 destinations: v1→v2 renames v1's
         // `QuickLayout%1Shortcut` to v2's `QuickLayout%1` and preserves
         // v1's `SnapToZone%1` verbatim. Frozen accessors pin the v2
@@ -696,7 +769,7 @@ public:
         //
         // Per-mode disable keys (`v3*DisabledMonitorsKey` etc.) lived in the v3
         // Display group; migrateV2ToV3 wrote them there and migrateV3ToV4 reads
-        // and removes them as the values move into windowrules.json. They no
+        // and removes them as the values move into rules.json. They no
         // longer exist on disk at runtime (v4+) — Settings::disableEntriesFor /
         // writeDisableEntries route through the rule store instead.
         //
@@ -736,7 +809,7 @@ public:
         //
         // The `Animations.AnimationAppRules` array carried per-window animation
         // overrides up through v4. migrateV3ToV4 stashes that array for
-        // finalizeV4Conversion to convert into WindowRules, then removes the key
+        // finalizeV4Conversion to convert into Rules, then removes the key
         // permanently. The group name `Animations` is unchanged at runtime (it
         // still hosts ShaderProfileTree), but the key accessor is migration-only:
         // it lives here so the migration is the sole remaining reader of the v4
@@ -774,29 +847,23 @@ public:
         // the legacy `Exclusions.{Applications,WindowClasses}` lists and
         // consumed by `finalizeV4Conversion`, which converts each surviving
         // pattern into an Application-subject `AppId AppIdMatches <pattern>
-        // Exclude` WindowRule. Same purge-protection semantics as the two
+        // Exclude` Rule. Same purge-protection semantics as the two
         // sibling stash keys above.
         P_CONFIG_KEY(v4ExclusionStashKey, "_v4ExclusionStash")
         // Fourth v4 scratch-root key — set on the root by `migrateV3ToV4`
         // from the legacy `Animations.WindowFiltering.{Applications,WindowClasses}`
         // lists and consumed by `finalizeV4Conversion`, which converts each
         // surviving pattern into a `DesktopFile`/`WindowClass Contains
-        // <pattern> → ExcludeAnimations` WindowRule (preserving the
+        // <pattern> → ExcludeAnimations` Rule (preserving the
         // legacy effect-bridge match-field split). Same purge-protection
         // semantics as the three sibling stash keys above.
         P_CONFIG_KEY(v4AnimationExclusionStashKey, "_v4AnimationExclusionStash")
 
-        // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
-        // finalizeV4Conversion. These mirror the live `displayGroup`,
-        // `defaultLayoutIdKey`, `snappingBehaviorWindowHandlingGroup`,
-        // `tilingAlgorithmGroup`, and `defaultKey` accessors but are frozen
-        // at their v3 literal so a future runtime rename cannot silently
-        // retarget the migration to a path no v3 config ever had on disk.
+        // v3 frozen group accessor — used ONLY by migrateV3ToV4. Mirrors the
+        // live `displayGroup` accessor but is frozen at its v3 literal so a
+        // future runtime rename cannot silently retarget the migration to a
+        // path no v3 config ever had on disk.
         P_CONFIG_GROUP(v3DisplayGroup, "Display")
-        P_CONFIG_KEY(v3DefaultLayoutIdKey, "DefaultLayoutId")
-        P_CONFIG_GROUP(v3SnappingBehaviorWindowHandlingGroup, "Snapping.Behavior.WindowHandling")
-        P_CONFIG_GROUP(v3TilingAlgorithmGroup, "Tiling.Algorithm")
-        P_CONFIG_KEY(v3DefaultKey, "Default")
 
         // v3 Exclusions group + comma-joined pattern keys — frozen at their
         // v3 literal for the same reason the disable-list group/keys above
@@ -865,13 +932,13 @@ private:
 // ─── Disable-rule label helpers ─────────────────────────────────────────────
 // Shared between the live Settings disable-list writer
 // (Settings::writeDisableEntries) and the v3→v4 migration's disable-rule
-// builders. Both call sites must produce the same `WindowRule::name` string for
+// builders. Both call sites must produce the same `Rule::name` string for
 // a given (mode, screen, desktop, activity) tuple so that resaving an existing
 // disable list (e.g. after a UI edit) doesn't fork into two slightly different
 // labels for what is otherwise the same rule.
 //
-// These are NOT translated. `WindowRule::name` is the persisted identity
-// surface in windowrules.json; running the app under different locales must
+// These are NOT translated. `Rule::name` is the persisted identity
+// surface in rules.json; running the app under different locales must
 // not change its on-disk text. The rule editor surfaces the name verbatim,
 // matching the historic behaviour.
 inline QString autotileDisableRulePrefix()
@@ -889,11 +956,11 @@ inline QString scrollingDisableRulePrefix()
     return QStringLiteral("Scrolling off · ");
 }
 
-/// Persistent label-prefix for the WindowRule::name field of a per-mode
+/// Persistent label-prefix for the Rule::name field of a per-mode
 /// disable rule. Exhaustive switch — a future `Mode` enum value added in
 /// `AssignmentEntry.h` without an entry here fires a `Q_UNREACHABLE`
 /// diagnostic rather than silently producing an empty prefix that lands
-/// in the persisted `WindowRule::name` as bare ` · DP-1` (parseable but
+/// in the persisted `Rule::name` as bare ` · DP-1` (parseable but
 /// anonymous, and identical across modes — losing the screen→mode
 /// affinity that makes the rule editor scannable).
 inline QString disableRulePrefixFor(PhosphorZones::AssignmentEntry::Mode mode)

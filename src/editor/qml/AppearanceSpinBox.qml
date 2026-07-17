@@ -16,7 +16,7 @@ SpinBox {
     /**
      * @brief Current value
      */
-    property int spinValue: 0
+    property var spinValue: 0
     /**
      * @brief Default value used when spinValue is undefined
      */
@@ -39,6 +39,16 @@ SpinBox {
      * @param newValue The new value
      */
     signal spinValueModified(int newValue)
+
+    /**
+     * @brief Imperatively re-sync the spinbox from a model value
+     *
+     * A user edit severs the declarative value binding, so selection changes
+     * and undo/redo must call this to keep the spinbox on the model.
+     */
+    function syncValue(newValue) {
+        value = (newValue !== undefined) ? newValue : defaultValue;
+    }
 
     value: (spinValue !== undefined) ? spinValue : defaultValue
     enabled: spinEnabled

@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -40,7 +39,7 @@ ColumnLayout {
     // parent — per-monitor settings groups always scope by physical output.
     property bool physicalOnly: true
     // Q_INVOKABLE name (on appSettings) returning bool "this screen has
-    // overrides" for the page's domain, e.g. "hasPerScreenAutotileGapsSettings".
+    // overrides" for the page's domain, e.g. "hasPerScreenGapOverride".
     // Empty disables the override dots.
     property string hasOverridesMethod: ""
 
@@ -215,6 +214,9 @@ ColumnLayout {
     }
     Component.onCompleted: _refreshOverrides()
     onHasOverridesMethodChanged: _refreshOverrides()
+    // physicalOnly gates the whole dot computation above, so a mode flip must
+    // re-poll (or clear) the map rather than leaving the previous mode's dots.
+    onPhysicalOnlyChanged: _refreshOverrides()
 
     Connections {
         target: root.appSettings
@@ -252,9 +254,11 @@ ColumnLayout {
                 Layout.fillHeight: true
                 Layout.preferredHeight: root._mapHeight + Kirigami.Units.largeSpacing
                 radius: Kirigami.Units.smallSpacing
-                color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : allMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
-                border.width: Math.round(Screen.devicePixelRatio)
-                border.color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : allMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                Kirigami.Theme.colorSet: Kirigami.Theme.View
+                Kirigami.Theme.inherit: false
+                color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : allMouse.containsMouse ? Kirigami.Theme.alternateBackgroundColor : "transparent"
+                border.width: allMouse.activeFocus ? 2 : 1
+                border.color: allMouse.activeFocus ? Kirigami.Theme.focusColor : !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
                 ColumnLayout {
                     id: allContent
 
@@ -289,8 +293,11 @@ ColumnLayout {
                     Accessible.role: Accessible.RadioButton
                     Accessible.name: i18n("All Monitors")
                     Accessible.checked: !root.isPerScreen
+                    Accessible.focusable: true
                     Keys.onSpacePressed: root.screenPicked("")
                     Keys.onReturnPressed: root.screenPicked("")
+                    // Numpad Enter alias, matching the sibling card components.
+                    Keys.onEnterPressed: root.screenPicked("")
                     onClicked: root.screenPicked("")
                 }
 
@@ -337,9 +344,11 @@ ColumnLayout {
                         width: rect.w
                         height: rect.h
                         radius: Kirigami.Units.smallSpacing
-                        color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
-                        border.width: isSelected ? Math.round(Screen.devicePixelRatio) * 2 : Math.round(Screen.devicePixelRatio)
-                        border.color: isSelected ? Kirigami.Theme.highlightColor : tileMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                        Kirigami.Theme.colorSet: Kirigami.Theme.View
+                        Kirigami.Theme.inherit: false
+                        color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18) : tileMouse.containsMouse ? Kirigami.Theme.alternateBackgroundColor : Kirigami.Theme.backgroundColor
+                        border.width: (isSelected || tileMouse.activeFocus) ? 2 : 1
+                        border.color: tileMouse.activeFocus ? Kirigami.Theme.focusColor : isSelected ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                         // Connector-first label (DP-2); vendor + resolution in tooltip.
                         Label {
@@ -366,7 +375,7 @@ ColumnLayout {
                             width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing
                             height: primaryLabel.implicitHeight + Kirigami.Units.smallSpacing / 2
                             radius: height / 2
-                            color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.18)
+                            color: Qt.alpha(Kirigami.Theme.highlightColor, 0.18)
 
                             Label {
                                 id: primaryLabel
@@ -374,7 +383,7 @@ ColumnLayout {
                                 anchors.centerIn: parent
                                 text: i18nc("@label primary monitor badge", "Primary")
                                 font: Kirigami.Theme.smallFont
-                                color: Kirigami.Theme.positiveTextColor
+                                color: Kirigami.Theme.textColor
                             }
                         }
 
@@ -388,7 +397,7 @@ ColumnLayout {
                             height: width
                             radius: width / 2
                             color: Kirigami.Theme.highlightColor
-                            border.width: Math.round(Screen.devicePixelRatio)
+                            border.width: 1
                             border.color: Kirigami.Theme.backgroundColor
                         }
 
@@ -405,12 +414,16 @@ ColumnLayout {
                             // name for an output with no connector/label/name.
                             Accessible.name: connectorLabel.text || i18n("Unknown monitor")
                             Accessible.checked: tile.isSelected
+                            Accessible.focusable: true
                             Keys.onSpacePressed: root.screenPicked(tile.screenName)
                             Keys.onReturnPressed: root.screenPicked(tile.screenName)
+                            // Numpad Enter alias, matching the sibling card components.
+                            Keys.onEnterPressed: root.screenPicked(tile.screenName)
                             onClicked: root.screenPicked(tile.screenName)
                         }
 
                         ToolTip.visible: tileMouse.containsMouse && ToolTip.text !== ""
+                        ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: {
                             var parts = [];
                             if (tile.modelData.displayLabel)

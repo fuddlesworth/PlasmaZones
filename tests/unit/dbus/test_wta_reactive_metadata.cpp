@@ -33,12 +33,12 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
-#include <PhosphorWindowRules/MatchExpression.h>
-#include <PhosphorWindowRules/MatchTypes.h>
-#include <PhosphorWindowRules/RuleAction.h>
-#include <PhosphorWindowRules/WindowRule.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorWindowRules/WindowRuleStore.h>
+#include <PhosphorRules/RuleStore.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorZones/Zone.h>
@@ -165,7 +165,10 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        // Detach the borrowed engine from the service before deleting it so the
+        // service never holds a dangling SnapEngine*.
         m_wta->service()->setSnapState(nullptr);
+        m_wta->service()->setSnapEngine(nullptr);
         delete m_snapEngine;
         m_snapEngine = nullptr;
 
@@ -296,28 +299,27 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
 
-        PhosphorWindowRules::WindowRule rule;
+        PhosphorRules::Rule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("no-restore-dolphin");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::AppId,
-                                                                    PhosphorWindowRules::Operator::Equals,
-                                                                    QStringLiteral("org.kde.dolphin"));
-        PhosphorWindowRules::RuleAction action;
-        action.type = QString(PhosphorWindowRules::ActionType::RestorePosition);
-        action.params.insert(QString(PhosphorWindowRules::ActionParam::Value), false);
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::RestorePosition);
+        action.params.insert(QString(PhosphorRules::ActionParam::Value), false);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
         // Sever the borrow on ANY exit path (incl. an early QVERIFY2 return)
         // before the stack-local store above is destroyed — a dangling borrow
         // would be deref'd during teardown.
         const auto detach = qScopeGuard([this] {
-            m_wta->setWindowRuleStore(nullptr);
+            m_wta->setRuleStore(nullptr);
         });
         m_settings->setSnappingRestoreFloatedWindowsOnLogin(true); // global default ON
 
@@ -351,6 +353,86 @@ private Q_SLOTS:
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // SetRestoreToZoneOnLogin / SetRestoreSizeOnUnsnap rules override their
+    // respective global settings per window, mirroring RestorePosition. An
+    // unmatched window falls back to the global setting.
+    // ────────────────────────────────────────────────────────────────────
+    void restoreToZoneAndUnsnapSizeRules_overrideGlobalSettings()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
+
+        const auto boolAction = [](QLatin1StringView type, bool value) {
+            PhosphorRules::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PhosphorRules::ActionParam::Value), value);
+            return a;
+        };
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("no-restore-dolphin");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        rule.actions.append(boolAction(PhosphorRules::ActionType::SetRestoreToZoneOnLogin, false));
+        rule.actions.append(boolAction(PhosphorRules::ActionType::SetRestoreSizeOnUnsnap, false));
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+        });
+        m_settings->setRestoreWindowsToZonesOnLogin(true); // global default ON
+        m_settings->setRestoreOriginalSizeOnUnsnap(true); // global default ON
+
+        const QString dolphinInstance = QStringLiteral("dolphin-uuid-1");
+        m_registry->upsert(dolphinInstance, {QStringLiteral("org.kde.dolphin"), QString(), QString()});
+        const QString dolphinId =
+            PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.dolphin"), dolphinInstance);
+
+        QVERIFY2(!m_wta->shouldRestoreToZoneOnLogin(dolphinId),
+                 "a matched SetRestoreToZoneOnLogin(false) rule must override the global ON setting");
+        QVERIFY2(!m_wta->shouldRestoreSizeOnUnsnap(dolphinId),
+                 "a matched SetRestoreSizeOnUnsnap(false) rule must override the global ON setting");
+
+        // An unmatched window falls back to the global settings (ON).
+        const QString konsoleInstance = QStringLiteral("konsole-uuid-1");
+        m_registry->upsert(konsoleInstance, {QStringLiteral("org.kde.konsole"), QString(), QString()});
+        const QString konsoleId =
+            PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.konsole"), konsoleInstance);
+        QVERIFY2(m_wta->shouldRestoreToZoneOnLogin(konsoleId),
+                 "an unmatched window falls back to the global restoreWindowsToZonesOnLogin = true");
+        QVERIFY2(m_wta->shouldRestoreSizeOnUnsnap(konsoleId),
+                 "an unmatched window falls back to the global restoreOriginalSizeOnUnsnap = true");
+
+        // Slot independence: a rule setting ONLY SetRestoreToZoneOnLogin(false) must
+        // leave shouldRestoreSizeOnUnsnap on its own global (true). Both globals are
+        // ON and the dolphin rule above set both actions to the same value, so a
+        // cross-wired resolver (one reading the other's slot) would pass every
+        // assertion so far; this single-action rule is what catches a slot swap.
+        PhosphorRules::Rule zoneOnlyRule;
+        zoneOnlyRule.id = QUuid::createUuid();
+        zoneOnlyRule.name = QStringLiteral("no-zone-restore-gwenview");
+        zoneOnlyRule.enabled = true;
+        zoneOnlyRule.priority = 100;
+        zoneOnlyRule.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals, QStringLiteral("org.kde.gwenview"));
+        zoneOnlyRule.actions.append(boolAction(PhosphorRules::ActionType::SetRestoreToZoneOnLogin, false));
+        QVERIFY(store.addRule(zoneOnlyRule));
+
+        const QString gwenInstance = QStringLiteral("gwenview-uuid-1");
+        m_registry->upsert(gwenInstance, {QStringLiteral("org.kde.gwenview"), QString(), QString()});
+        const QString gwenId =
+            PhosphorIdentity::WindowId::buildCompositeId(QStringLiteral("org.kde.gwenview"), gwenInstance);
+        QVERIFY2(!m_wta->shouldRestoreToZoneOnLogin(gwenId), "the zone-only rule overrides restore-to-zone to false");
+        QVERIFY2(m_wta->shouldRestoreSizeOnUnsnap(gwenId),
+                 "restore-size-on-unsnap must fall back to its own global (true) with no SizeOnUnsnap "
+                 "action present — proving the two resolvers read distinct slots");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // Float rule resolves through the composite windowId. shouldFloatByRule is
     // purely rule-driven (no global default): the verdict is the presence of a
     // matched Float slot, resolved through the same bare-instance-id extraction
@@ -360,24 +442,23 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
 
-        PhosphorWindowRules::WindowRule rule;
+        PhosphorRules::Rule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("float-dolphin");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::AppId,
-                                                                    PhosphorWindowRules::Operator::Equals,
-                                                                    QStringLiteral("org.kde.dolphin"));
-        PhosphorWindowRules::RuleAction action;
-        action.type = QString(PhosphorWindowRules::ActionType::Float);
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::AppId, PhosphorRules::Operator::Equals, QStringLiteral("org.kde.dolphin"));
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Float);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
         const auto detach = qScopeGuard([this] {
-            m_wta->setWindowRuleStore(nullptr);
+            m_wta->setRuleStore(nullptr);
         });
 
         const QString dolphinInstance = QStringLiteral("dolphin-float-1");
@@ -397,7 +478,7 @@ private Q_SLOTS:
 
     void floatRule_falsesWithoutStore()
     {
-        m_wta->setWindowRuleStore(nullptr);
+        m_wta->setRuleStore(nullptr);
         QVERIFY2(!m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(
                      QStringLiteral("org.kde.dolphin"), QStringLiteral("any-uuid"))),
                  "with no rule store, no window is rule-floated");
@@ -421,28 +502,28 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
 
         // "Float any modal dialog narrower than 500px" — a bool field AND an int
         // field, both carried only via the extended a{sv}, combined under All.
-        PhosphorWindowRules::WindowRule rule;
+        PhosphorRules::Rule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("float-narrow-modal");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRules::MatchExpression::makeAll(
-            {PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::IsModal,
-                                                            PhosphorWindowRules::Operator::Equals, true),
-             PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::Width,
-                                                            PhosphorWindowRules::Operator::LessThan, 500)});
-        PhosphorWindowRules::RuleAction action;
-        action.type = QString(PhosphorWindowRules::ActionType::Float);
+        rule.match = PhosphorRules::MatchExpression::makeAll(
+            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::IsModal, PhosphorRules::Operator::Equals,
+                                                      true),
+             PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::Width, PhosphorRules::Operator::LessThan,
+                                                      500)});
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Float);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
         const auto detach = qScopeGuard([this] {
-            m_wta->setWindowRuleStore(nullptr);
+            m_wta->setRuleStore(nullptr);
         });
 
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
@@ -483,6 +564,84 @@ private Q_SLOTS:
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // End-to-end plumb for the IsMovable / IsMaximizable capability match fields:
+    // effect a{sv} → setWindowMetadata unpack → WindowRegistry snapshot →
+    // buildRuleQueryForWindow → evaluation. A dropped key mapping or missing parse
+    // anywhere in that chain would leave the field silently always-disengaged, so
+    // this exercises the same full path as the IsModal/Width test above.
+    // ────────────────────────────────────────────────────────────────────
+    void floatRule_matchesExtendedProperty_isMovableAndMaximizable()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
+
+        // "Float any movable, non-maximizable window" — both new capability fields,
+        // carried only via the extended a{sv}, combined under All.
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("float-movable-nonmaximizable");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorRules::MatchExpression::makeAll(
+            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::IsMovable, PhosphorRules::Operator::Equals,
+                                                      true),
+             PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::IsMaximizable,
+                                                      PhosphorRules::Operator::Equals, false)});
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Float);
+        rule.actions.append(action);
+        QVERIFY(store.addRule(rule));
+
+        m_wta->setRuleStore(&store);
+        const auto detach = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+        });
+
+        namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
+        const QString appId = QStringLiteral("org.kde.someapp");
+        const int normalType = static_cast<int>(PhosphorProtocol::WindowType::Normal);
+        const auto floatVerdict = [&](const QString& instance, const QVariantMap& extended) {
+            m_wta->setWindowMetadata(instance, appId, QString(), QString(), QString(), 0, 0, QString(), normalType,
+                                     extended);
+            return m_wta->shouldFloatByRule(PhosphorIdentity::WindowId::buildCompositeId(appId, instance));
+        };
+
+        // Movable + not maximizable → both leaves match → float.
+        QVariantMap movableNonMax;
+        movableNonMax.insert(Key::IsMovable, true);
+        movableNonMax.insert(Key::IsMaximizable, false);
+        QVERIFY2(floatVerdict(QStringLiteral("movable-nonmax-1"), movableNonMax),
+                 "a movable, non-maximizable window must float (both capability props matched end-to-end)");
+
+        // Movable + maximizable → IsMaximizable leaf fails → no float.
+        QVariantMap movableMax;
+        movableMax.insert(Key::IsMovable, true);
+        movableMax.insert(Key::IsMaximizable, true);
+        QVERIFY2(!floatVerdict(QStringLiteral("movable-max-1"), movableMax),
+                 "a maximizable window must not float (IsMaximizable == false fails the All)");
+
+        // Not movable + not maximizable → IsMovable leaf fails → no float.
+        QVariantMap nonMovableNonMax;
+        nonMovableNonMax.insert(Key::IsMovable, false);
+        nonMovableNonMax.insert(Key::IsMaximizable, false);
+        QVERIFY2(!floatVerdict(QStringLiteral("nonmovable-nonmax-1"), nonMovableNonMax),
+                 "a non-movable window must not float (IsMovable == true fails)");
+
+        // Not movable + maximizable → both leaves fail → no float (fourth corner).
+        QVariantMap nonMovableMax;
+        nonMovableMax.insert(Key::IsMovable, false);
+        nonMovableMax.insert(Key::IsMaximizable, true);
+        QVERIFY2(!floatVerdict(QStringLiteral("nonmovable-max-1"), nonMovableMax),
+                 "a non-movable maximizable window must not float (both leaves fail)");
+
+        // Absent keys → both capability fields disengaged → predicate inert → no float.
+        QVERIFY2(
+            !floatVerdict(QStringLiteral("no-caps-1"), QVariantMap()),
+            "with the capability props absent, an IsMovable/IsMaximizable rule stays inert (engage-only-when-known)");
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // A caption-only metadata refresh (chatty title tick) sends an EMPTY extended
     // a{sv}; the daemon must PRESERVE the window's prior extended snapshot rather
     // than wipe it. Without the merge, the next title tick would clear IsModal /
@@ -492,23 +651,23 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
 
-        PhosphorWindowRules::WindowRule rule;
+        PhosphorRules::Rule rule;
         rule.id = QUuid::createUuid();
         rule.name = QStringLiteral("float-modal");
         rule.enabled = true;
         rule.priority = 100;
-        rule.match = PhosphorWindowRules::MatchExpression::makeLeaf(PhosphorWindowRules::Field::IsModal,
-                                                                    PhosphorWindowRules::Operator::Equals, true);
-        PhosphorWindowRules::RuleAction action;
-        action.type = QString(PhosphorWindowRules::ActionType::Float);
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::IsModal,
+                                                              PhosphorRules::Operator::Equals, true);
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::Float);
         rule.actions.append(action);
         QVERIFY(store.addRule(rule));
 
-        m_wta->setWindowRuleStore(&store);
+        m_wta->setRuleStore(&store);
         const auto detach = qScopeGuard([this] {
-            m_wta->setWindowRuleStore(nullptr);
+            m_wta->setRuleStore(nullptr);
         });
 
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
@@ -555,7 +714,7 @@ private Q_SLOTS:
         // No store wired → per-engine global setting decides, both polarities. The
         // two engine defaults are independent: Mode::Snapping reads the snapping
         // setting, Mode::Autotile reads the autotile setting.
-        m_wta->setWindowRuleStore(nullptr);
+        m_wta->setRuleStore(nullptr);
         m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
         m_settings->setAutotileRestoreFloatedWindowsOnLogin(false);
         QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping),
@@ -573,10 +732,10 @@ private Q_SLOTS:
         // still the global setting (no rule can match a window with no query).
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        PhosphorWindowRules::WindowRuleStore store(dir.filePath(QStringLiteral("windowrules.json")));
-        m_wta->setWindowRuleStore(&store);
+        PhosphorRules::RuleStore store(dir.filePath(QStringLiteral("rules.json")));
+        m_wta->setRuleStore(&store);
         const auto detach = qScopeGuard([this] {
-            m_wta->setWindowRuleStore(nullptr);
+            m_wta->setRuleStore(nullptr);
         });
         m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
         QVERIFY2(m_wta->shouldRestoreFloatedPosition(unseen, PhosphorZones::AssignmentEntry::Mode::Snapping),

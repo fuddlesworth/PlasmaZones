@@ -8,9 +8,8 @@
 // visibility into the booleans ShellHost::syncSurfaceState expects.
 //
 // Extracted from osd.cpp where these methods accumulated during the
-// Phase 2-4 ShellHost lift. They are not OSD-specific - they belong
-// with the shell-host wiring conceptually - and keep osd.cpp under
-// the <800-line cap.
+// Phase 2-4 ShellHost lift. They are not OSD-specific, they belong
+// with the shell-host wiring conceptually.
 
 #include "internal.h"
 #include "../overlayservice.h"
@@ -190,8 +189,9 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
     QObject::connect(window, SIGNAL(layoutPickerDismissRequested()), this, SLOT(onLayoutPickerDismissRequested()));
     // No zoneSelectorZoneSelected wiring: the zone-selector slot is input-
     // transparent by design and hit-testing runs in C++ via
-    // updateSelectorPosition. See ZoneSelectorContent's `interactive: false`
-    // for the matching QML-side enforcement.
+    // updateSelectorPosition. ZoneSelectorContent's zone previews declare no
+    // pointer handlers, so input-transparency holds by construction on the
+    // QML side too.
 
     // Prime the wl_surface map + Vulkan swapchain init + first-frame
     // render so the very first user-triggered slot show doesn't race
@@ -295,7 +295,13 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     //     inside the OSD content is the accepted casualty - the
     //     alternative is the daemon eating every click on the screen
     //     for the OSD's full lifetime, which the user reported as worse
-    //     than losing click-dismiss.
+    //     than losing click-dismiss. The OSD-card-over-modal variant of
+    //     that casualty (an OSD firing while a modal is up would occlude
+    //     modal content AND, since the modal grabs input, the card's
+    //     MouseArea would eat clicks on its rect) no longer exists: the
+    //     osdSlot's z binding in PassiveOverlayShell.qml drops the OSD
+    //     below the modal slots (3 -> 1.5) whenever one is visible, so
+    //     the modal both paints over and hit-tests before the card.
     //   - Main overlay during drag is driven by KWin's drag stream
     //     (cursor pushes via OverlayService::updateMousePosition);
     //     it never needs Qt-level input on its own.

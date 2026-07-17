@@ -14,27 +14,16 @@
 // native aspect — no non-uniform stretch.
 
 #ifdef PLASMAZONES_KWIN
-// Old-content snapshot bound by the kwin-effect paint pipeline. iFromRect
-// / iToRect are consumed in the vertex stage; the fragment needs only the
-// snapshot and the per-vertex flow varying.
-uniform sampler2D uOldWindow;
 // .xy = card uv within the destination rect, .z = arrival ease (0 = old
 // rect, 1 = settled). Interpolated from effect.vert across the grid.
+// iFromRect / iToRect are consumed in the vertex stage.
 layout(location = 1) in vec3 vFlow;
 #endif
 
 #include <anchor_remap.glsl>
 
-#ifdef PLASMAZONES_KWIN
-// Sample the captured OLD content at card-space uv, mirroring
-// surfaceColor's iAnchorRectInTexture fold + KWin Y-up flip +
-// iWindowOpacity multiply so old and new align and a SetOpacity rule dims
-// both equally through the flow.
-vec4 oldColor(vec2 uv) {
-    vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
-    return texture(uOldWindow, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
-}
-#endif
+// uOldWindow + oldColor(): the shared captured-old-frame sampler.
+#include <old_content.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
@@ -42,9 +31,14 @@ vec4 pTransition(vec2 uv, float t) {
     float e = clamp(vFlow.z, 0.0, 1.0);
 
     // Feathered window mask in card space — the grid spans the whole
-    // output, so only cells inside [0, 1] carry window content.
+    // output, so only cells inside the card carry window content. The card
+    // runs past [0, 1] by the decoration chain's outer margin: that band is
+    // the halo the compositor composited into the padded canvas, which
+    // surfaceColor() resolves through its layer remap, so the mask includes
+    // it and the halo flows with the window. Zero pad reduces to [0, 1].
+    vec2 pad = surfacePadRel();
     vec2 fw = max(fwidth(cuv), vec2(1.0e-4));
-    vec2 edge = min(smoothstep(vec2(0.0), fw, cuv), smoothstep(vec2(0.0), fw, 1.0 - cuv));
+    vec2 edge = min(smoothstep(vec2(0.0), fw, cuv + pad), smoothstep(vec2(0.0), fw, 1.0 + pad - cuv));
     float mask = edge.x * edge.y;
     if (mask <= 0.0) {
         return vec4(0.0);

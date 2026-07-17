@@ -6,6 +6,8 @@
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include "shaderutils.h"
 
+#include <PhosphorFsLoader/SchemaValidator.h>
+
 #include <QColor>
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -289,11 +291,29 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     return info;
 }
 
+/// Process-wide shader-metadata schema validator, compiled once from the
+/// RCC-embedded schema (see qt6_add_resources in CMakeLists).
+const PhosphorFsLoader::SchemaValidator& shaderMetadataValidator()
+{
+    static const PhosphorFsLoader::SchemaValidator validator = PhosphorFsLoader::SchemaValidator::fromResource(
+        QStringLiteral(":/phosphorshaders/schemas/shader-metadata.schema.json"), lcShaderRegistry());
+    return validator;
+}
+
 /// Strategy parser callback: parse + validate. Returns std::nullopt to
 /// skip the shader (missing frag, broken multipass, etc.); the strategy
 /// logs the per-file context.
 std::optional<ShaderRegistry::ShaderInfo> parseShader(const QString& shaderDir, const QJsonObject& root, bool isUserDir)
 {
+    // Structural schema gate on metadata.json (identity + parameter contract)
+    // before parsing, so a malformed pack is skipped with a clear diagnostic
+    // rather than registering a shader with unbindable parameters.
+    if (const auto errors = shaderMetadataValidator().validate(root)) {
+        qCWarning(lcShaderRegistry) << "Skipping shader pack failing schema validation:" << shaderDir;
+        PhosphorFsLoader::logSchemaErrors(lcShaderRegistry(), *errors);
+        return std::nullopt;
+    }
+
     ShaderRegistry::ShaderInfo info = parseShaderMetadata(shaderDir, root);
     info.isUserShader = isUserDir;
 

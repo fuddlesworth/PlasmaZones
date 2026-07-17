@@ -40,8 +40,9 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
     setWindowFloating(windowId, true);
 
     // Restore pre-snap size (not position — window stays where the user dropped it).
-    // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped.
-    if (m_settings && m_settings->restoreOriginalSizeOnUnsnap()) {
+    // This mirrors the activated-drag path in WindowDragAdaptor::dragStopped. A
+    // matched SetRestoreSizeOnUnsnap rule overrides the global setting per window.
+    if (shouldRestoreSizeOnUnsnap(windowId)) {
         auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
         if (geo) {
             Q_EMIT applyGeometryRequested(windowId, 0, 0, geo->width(), geo->height(), QString(), screenId, true);
@@ -204,7 +205,12 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     }
 
     if (dest) {
-        dest->setWindowFloat(windowId, floating);
+        // Thread the effect's authoritative live screen so the engine resolves
+        // this float/unfloat against the window's REAL current monitor, not its
+        // (possibly stale) tracked association. Without this, unfloating a window
+        // that drifted to another monitor while floating non-deterministically
+        // teleports it back to its source-monitor zone (Discussion #724).
+        dest->setWindowFloat(windowId, floating, screenId);
     }
 }
 

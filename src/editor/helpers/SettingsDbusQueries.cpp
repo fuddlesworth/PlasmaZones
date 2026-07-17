@@ -29,40 +29,6 @@ QVariant unwrapGetSetting(const QDBusMessage& reply)
     return reply.arguments().constFirst().value<QDBusVariant>().variant();
 }
 
-// WARNING: Only safe for settings whose values are never legitimately the
-// empty string. getSetting() in settingsadaptor.cpp returns an empty-
-// string QDBusVariant as the "key not found" sentinel (see the default
-// return at the bottom of SettingsAdaptor::getSetting), and this helper
-// treats that as "missing" so callers fall back to their defaults. A
-// string-typed setting that the user has cleared would therefore be
-// indistinguishable from an unknown key and get silently dropped. Only
-// used as a fallback by querySettingsBatch() for the gap/overlay keys
-// (all int/bool), which makes this safe today — do not generalize
-// without first replacing the sentinel with a structured "not found"
-// signal on the daemon side.
-QVariantMap querySettingsPerKey_NonStringOnly(const QStringList& keys)
-{
-    QVariantMap result;
-    for (const QString& key : keys) {
-        if (key.isEmpty()) {
-            continue;
-        }
-        const QVariant value = unwrapGetSetting(PhosphorProtocol::ClientHelpers::syncCall(
-            PhosphorProtocol::Service::Interface::Settings, QStringLiteral("getSetting"), {key}));
-        if (!value.isValid()) {
-            continue;
-        }
-        // Empty-string sentinel for unknown keys — see the warning on this
-        // function's comment above. Safe for the int/bool gap/overlay keys
-        // this helper is restricted to.
-        if (value.typeId() == QMetaType::QString && value.toString().isEmpty()) {
-            continue;
-        }
-        result.insert(key, value);
-    }
-    return result;
-}
-
 } // namespace
 
 QVariantMap querySettingsBatch(const QStringList& keys)
@@ -86,37 +52,19 @@ QVariantMap querySettingsBatch(const QStringList& keys)
         return converted.toMap();
     }
 
-    // Stale daemon: this build knows about getSettings() but the daemon
-    // doesn't. Fall back to individual getSetting() calls so the editor
-    // still sees the user's real configured values instead of defaults.
-    // Other error types (timeout, service unreachable) would also fail
-    // per-key, so there's no point retrying those — return empty and let
-    // callers fall back to hardcoded defaults.
+    // No per-key fallback for a daemon too old to have getSettings(). There used to be
+    // one, and it was a trap: the only daemon that can reach it is one that predates this
+    // build, which is exactly the daemon that still answers an unknown key with a valid
+    // EMPTY STRING instead of an error — so the fallback silently wrote ""/0/false into
+    // the result map where the caller's own default belonged. It was written to work
+    // around that sentinel and then outlived the reasoning. The editor and the daemon
+    // ship together, and CLAUDE.md is explicit that ad-hoc backwards compatibility is
+    // write-once and maintain-forever. Callers fall back to their defaults.
     if (reply.type() == QDBusMessage::ErrorMessage) {
         const QDBusError err(reply);
-        if (err.type() == QDBusError::UnknownMethod) {
-            qCWarning(lcDbus) << "getSettings() unavailable on daemon — falling back to per-key getSetting()."
-                              << "Restart plasmazones-daemon to pick up the batched path.";
-            return querySettingsPerKey_NonStringOnly(keys);
-        }
         qCWarning(lcDbus) << "getSettings() failed:" << err.message() << "(type" << err.type() << ")";
     }
     return QVariantMap();
-}
-
-int queryIntSetting(const QString& settingKey, int defaultValue)
-{
-    const QVariant value = unwrapGetSetting(PhosphorProtocol::ClientHelpers::syncCall(
-        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("getSetting"), {settingKey}));
-    if (!value.isValid()) {
-        return defaultValue;
-    }
-    bool ok = false;
-    const int result = value.toInt(&ok);
-    if (!ok || result < 0) {
-        return defaultValue;
-    }
-    return result;
 }
 
 bool queryBoolSetting(const QString& settingKey, bool defaultValue)

@@ -42,6 +42,28 @@ void IdleStateMachine::setStages(const QList<IdleStage>& stages)
     Q_EMIT stagesChanged();
 }
 
+bool IdleStateMachine::isArmed() const
+{
+    // INHIBITED is not FAILED. An inhibition tears the sources down on purpose (rebuild()
+    // creates none while monitoring is off), so an all-of over an empty source list would
+    // report exactly what a compositor that refused to arm reports — and the one caller that
+    // reads this answer responds to false by REBUILDING the ladder and, when its retries run
+    // out, disabling idle detection for the whole session. It would have done that to a
+    // perfectly healthy ladder that something had merely paused.
+    //
+    // "Is anything wrong" and "is anything watching" are two different questions. This
+    // answers the first.
+    if (!m_monitoringEnabled) {
+        return true;
+    }
+    if (m_sources.empty()) {
+        return false;
+    }
+    return std::all_of(m_sources.cbegin(), m_sources.cend(), [](const IIdleSource::Ptr& source) {
+        return source && source->isArmed();
+    });
+}
+
 QList<IdleStage> IdleStateMachine::stages() const
 {
     return m_stages;

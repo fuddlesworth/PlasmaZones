@@ -1,0 +1,71 @@
+{
+    "id": "wobble",
+    "name": "Wobbly Move",
+    "description": "Drag transition that turns the window into a sheet of fabric held at the point you grab, so the rest drapes and trails behind, driven by a neighbour-coupled spring simulation. Every physics knob is exposed so the feel can be dialled from taut cloth to loose jelly.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Physics",
+    "appliesTo": [
+        "move"
+    ],
+    "fragmentShader": "effect.frag",
+    "vertexShader": "effect.vert",
+    "fboExtent": "surface",
+    "geometryGrid": 40,
+    "parameters": [
+        {
+            "id": "strength",
+            "name": "Strength",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.2,
+            "max": 3.0,
+            "description": "Overall amount of deflection, where higher values exaggerate the drape"
+        },
+        {
+            "id": "sheetStiffness",
+            "name": "Sheet stiffness",
+            "type": "float",
+            "default": 0.018,
+            "min": 0.005,
+            "max": 0.08,
+            "description": "How rigidly the body holds its shape, where lower values drape more like loose cloth"
+        },
+        {
+            "id": "gripStiffness",
+            "name": "Grip strength",
+            "type": "float",
+            "default": 0.16,
+            "min": 0.03,
+            "max": 0.5,
+            "description": "How tightly the grabbed point tracks the cursor, where higher values keep it pinned under the pointer"
+        },
+        {
+            "id": "springiness",
+            "name": "Springiness",
+            "type": "float",
+            "default": 0.82,
+            "min": 0.6,
+            "max": 0.97,
+            "description": "How much the sheet oscillates before settling, where lower values drift to rest and higher values bounce like jelly"
+        },
+        {
+            "id": "moveFactor",
+            "name": "Responsiveness",
+            "type": "float",
+            "default": 0.16,
+            "min": 0.05,
+            "max": 0.4,
+            "description": "How quickly the sheet reacts to the drag, where lower values feel heavier"
+        },
+        {
+            "id": "maxBend",
+            "name": "Maximum bend",
+            "type": "int",
+            "default": 400,
+            "min": 32,
+            "max": 800,
+            "description": "Cap on how far any part of the window may deflect (px)"
+        }
+    ]
+}

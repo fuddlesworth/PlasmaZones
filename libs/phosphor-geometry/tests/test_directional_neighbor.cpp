@@ -25,6 +25,7 @@ private Q_SLOTS:
     void binarySplit_rightFromTopLeft_picksTopRightNotBelow();
     void overlapPreference_beatsNearerDiagonal();
     void overlappingTier_nearestGapWins();
+    void overlappingStack_stepsOneZoneBothDirections();
     void tie_isDeterministicByOrder();
     void requireOverlap_diagonalOnly_returnsMinusOne();
     void requireOverlap_nearestGapAmongOverlapping_wins();
@@ -114,6 +115,39 @@ void TestDirectionalNeighbor::overlappingTier_nearestGapWins()
     const QRectF far(400, 0, 100, 100); // gap 300
     const QList<QRectF> candidates{far, near};
     QCOMPARE(directionalNeighbor(focus, candidates, Direction::Right), 1); // near
+}
+
+void TestDirectionalNeighbor::overlappingStack_stepsOneZoneBothDirections()
+{
+    // Discussion #771: a cascade of mutually overlapping zones. Every
+    // in-direction candidate's edge gap clamps to zero, so before the
+    // travel-axis tie-break the winner fell to list order — correct by
+    // accident moving right (zones stored left-to-right), but "left" jumped
+    // straight to the leftmost zone. Both directions must step exactly one
+    // zone at a time, independent of candidate order.
+    const QList<QRectF> cascade{
+        QRectF(0.0, 0.0, 0.6, 1.0), // 0 leftmost
+        QRectF(0.2, 0.0, 0.6, 1.0), // 1 middle
+        QRectF(0.4, 0.0, 0.6, 1.0) // 2 rightmost
+    };
+    QCOMPARE(directionalNeighbor(cascade[0], cascade, Direction::Right), 1);
+    QCOMPARE(directionalNeighbor(cascade[1], cascade, Direction::Right), 2);
+    QCOMPARE(directionalNeighbor(cascade[2], cascade, Direction::Left), 1);
+    QCOMPARE(directionalNeighbor(cascade[1], cascade, Direction::Left), 0);
+
+    // Reversed candidate order: same geometric answers (indices remap).
+    const QList<QRectF> reversed{cascade[2], cascade[1], cascade[0]};
+    QCOMPARE(directionalNeighbor(reversed[2], reversed, Direction::Right), 1);
+    QCOMPARE(directionalNeighbor(reversed[0], reversed, Direction::Left), 1);
+
+    // Same cascade stacked vertically: up/down step one zone at a time too.
+    const QList<QRectF> vertical{
+        QRectF(0.0, 0.0, 1.0, 0.6), // 0 topmost
+        QRectF(0.0, 0.2, 1.0, 0.6), // 1 middle
+        QRectF(0.0, 0.4, 1.0, 0.6) // 2 bottommost
+    };
+    QCOMPARE(directionalNeighbor(vertical[0], vertical, Direction::Down), 1);
+    QCOMPARE(directionalNeighbor(vertical[2], vertical, Direction::Up), 1);
 }
 
 void TestDirectionalNeighbor::tie_isDeterministicByOrder()

@@ -18,6 +18,7 @@
 
 #include "phosphor_i18n.h"
 #include <memory>
+#include <utility>
 #include <QDBusMessage>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -119,48 +120,165 @@ QVariantList EditorController::screenModel() const
     return model;
 }
 
+// Carry out a screen switch: swap the target, then load whatever layout that
+// screen is assigned. Both entry points (setTargetScreen when nothing is
+// unsaved, confirmPendingTargetScreen once the user has answered the prompt)
+// land here so the switch itself is written once.
+void EditorController::applyTargetScreen(const QString& screenName)
+{
+    const QString previousLayout = m_layoutId;
+    m_targetScreen = screenName;
+
+    cacheVirtualScreenGeometry(screenName);
+    // Clear the per-layout override — the previous layout's bbox doesn't
+    // apply to the new screen. loadLayout / createNewLayout below set it
+    // again if the incoming layout uses fixed geometry.
+    m_layoutBoundsOverride = QSize();
+
+    Q_EMIT targetScreenChanged();
+    refreshUsableAreaInsets();
+
+    // Defer targetScreenSizeChanged + setReferenceScreenSize to
+    // loadLayout/createNewLayout, which know the final reference size
+    // (fixed-zone bounding box for fixed layouts; physical/VS size
+    // otherwise). Emitting here would make QML react with the old
+    // zones against the new size before the layout swap completes.
+    if (!screenName.isEmpty() && m_layoutService) {
+        QString layoutId = m_layoutService->getLayoutIdForScreen(screenName);
+        qCDebug(lcEditor) << "applyTargetScreen:" << screenName << "daemon returned layoutId:" << layoutId
+                          << "current layoutId:" << previousLayout;
+        if (!layoutId.isEmpty()) {
+            loadLayout(layoutId);
+        } else {
+            qCInfo(lcEditor) << "No layout assigned to screen" << screenName << "- creating new layout";
+            createNewLayout();
+        }
+    } else {
+        // No layout will be loaded — publish the new size now.
+        Q_EMIT targetScreenSizeChanged();
+        m_zoneManager->setReferenceScreenSize(targetScreenSize());
+    }
+}
+
 void EditorController::setTargetScreen(const QString& screenName)
 {
-    if (m_targetScreen != screenName) {
-        // Check for unsaved changes before switching screens
-        if (m_hasUnsavedChanges) {
-            // For now, just warn - in future could prompt user
-            qCWarning(lcEditor) << "Switching screens with unsaved changes";
-        }
-
-        QString previousLayout = m_layoutId;
-        m_targetScreen = screenName;
-
-        cacheVirtualScreenGeometry(screenName);
-        // Clear the per-layout override — the previous layout's bbox doesn't
-        // apply to the new screen. loadLayout / createNewLayout below set it
-        // again if the incoming layout uses fixed geometry.
-        m_layoutBoundsOverride = QSize();
-
-        Q_EMIT targetScreenChanged();
-        refreshUsableAreaInsets();
-
-        // Defer targetScreenSizeChanged + setReferenceScreenSize to
-        // loadLayout/createNewLayout, which know the final reference size
-        // (fixed-zone bounding box for fixed layouts; physical/VS size
-        // otherwise). Emitting here would make QML react with the old
-        // zones against the new size before the layout swap completes.
-        if (!screenName.isEmpty() && m_layoutService) {
-            QString layoutId = m_layoutService->getLayoutIdForScreen(screenName);
-            qCDebug(lcEditor) << "setTargetScreen:" << screenName << "daemon returned layoutId:" << layoutId
-                              << "current layoutId:" << previousLayout;
-            if (!layoutId.isEmpty()) {
-                loadLayout(layoutId);
-            } else {
-                qCInfo(lcEditor) << "No layout assigned to screen" << screenName << "- creating new layout";
-                createNewLayout();
-            }
-        } else {
-            // No layout will be loaded — publish the new size now.
-            Q_EMIT targetScreenSizeChanged();
-            m_zoneManager->setReferenceScreenSize(targetScreenSize());
-        }
+    if (m_targetScreen == screenName) {
+        return;
     }
+
+    // The switch loads the new screen's layout over the current one, so any
+    // unsaved edits go with it. Park the request and let the UI ask the user
+    // rather than deciding for them. targetScreen() keeps reporting the old
+    // screen until the answer arrives, which is what holds the screen-selector
+    // binding on the current screen while the prompt is up.
+    if (m_hasUnsavedChanges) {
+        m_pendingTargetScreen = screenName;
+        Q_EMIT targetScreenChangeRequiresConfirmation(screenName);
+        return;
+    }
+
+    applyTargetScreen(screenName);
+}
+
+void EditorController::confirmPendingTargetScreen()
+{
+    if (!m_pendingTargetScreen) {
+        return;
+    }
+
+    // Clear before applying: applyTargetScreen loads a layout, which re-enters
+    // enough of the controller that leaving the pending screen set would let a
+    // second confirm apply it twice.
+    const QString screenName = *std::exchange(m_pendingTargetScreen, std::nullopt);
+    if (screenName == m_targetScreen) {
+        return;
+    }
+    applyTargetScreen(screenName);
+}
+
+void EditorController::cancelPendingTargetScreen()
+{
+    m_pendingTargetScreen.reset();
+}
+
+void EditorController::applyLaunch(const PendingLaunch& launch)
+{
+    // The screen is applied with setTargetScreenDirect on the two paths that
+    // name a layout themselves: setTargetScreen would load the SCREEN's
+    // assigned layout, and the caller is about to load its own over the top.
+    // Preview mode is set unconditionally so state from a previous forwarded
+    // launch cannot leak into a later non-preview launch on the same instance.
+    auto switchScreen = [this](const QString& id, bool loadAssignedLayout) {
+        if (id.isEmpty() || m_targetScreen == id) {
+            return;
+        }
+        if (loadAssignedLayout) {
+            setTargetScreen(id);
+        } else {
+            setTargetScreenDirect(id);
+        }
+    };
+
+    if (launch.createNew) {
+        setPreviewMode(false);
+        switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
+        createNewLayout();
+    } else if (!launch.layoutId.isEmpty()) {
+        // Switch screen first (direct, no auto-load) so loadLayout resolves
+        // per-screen geometry and virtual-screen context against the target
+        // screen rather than whatever was current before the forward.
+        switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
+        setPreviewMode(launch.preview || PhosphorLayout::LayoutId::isAutotile(launch.layoutId));
+        loadLayout(launch.layoutId);
+    } else {
+        setPreviewMode(false);
+        // No layout named, so follow the screen's assigned layout. This is the
+        // one path that routes through setTargetScreen, and setTargetScreen
+        // runs its own unsaved-changes confirmation — which is why requestLaunch
+        // deliberately does NOT park this shape as well. See the note there.
+        switchScreen(launch.screenId, /*loadAssignedLayout*/ true);
+    }
+}
+
+void EditorController::requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
+{
+    const PendingLaunch launch{screenId, layoutId, createNew, preview};
+
+    // createNewLayout() and loadLayout() replace what is loaded outright, with
+    // no confirmation of their own, so with edits in flight they silently
+    // destroy the user's work. Those two shapes get parked and the UI asks.
+    //
+    // The remaining shape (a screen with no layout named) is deliberately NOT
+    // parked here. It defers to setTargetScreen, which already parks on its own
+    // for the same reason, and double-gating it would prompt twice: the answer
+    // to this prompt reaches applyLaunch with the edits still unsaved — Discard
+    // here means "go anyway", not "revert the layout" — so setTargetScreen
+    // would see a dirty controller and park a second time.
+    const bool replacesLayoutOutright = createNew || !layoutId.isEmpty();
+    if (m_hasUnsavedChanges && replacesLayoutOutright) {
+        m_pendingLaunch = launch;
+        Q_EMIT launchRequestRequiresConfirmation();
+        return;
+    }
+
+    applyLaunch(launch);
+}
+
+void EditorController::confirmPendingLaunch()
+{
+    if (!m_pendingLaunch) {
+        return;
+    }
+
+    // Clear before applying, for the same re-entrancy reason as
+    // confirmPendingTargetScreen: applyLaunch loads a layout.
+    const PendingLaunch launch = *std::exchange(m_pendingLaunch, std::nullopt);
+    applyLaunch(launch);
+}
+
+void EditorController::cancelPendingLaunch()
+{
+    m_pendingLaunch.reset();
 }
 
 namespace {
@@ -627,18 +745,11 @@ void EditorController::loadLayout(const QString& layoutId)
         : -1;
     m_useFullScreenGeometry =
         layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry)].toBool(false);
-    if (layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey))) {
-        QJsonValue arVal = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)];
-        if (arVal.isString()) {
-            // Canonical format from PhosphorZones::Layout::toJson() — string like "ultrawide"
-            m_aspectRatioClass = static_cast<int>(PhosphorLayout::ScreenClassification::fromString(arVal.toString()));
-        } else {
-            // Int format (from editor save round-trip before daemon persists)
-            m_aspectRatioClass = arVal.toInt(0);
-        }
-    } else {
-        m_aspectRatioClass = 0;
-    }
+    int oldAspectRatioClass = m_aspectRatioClass;
+    // fromJsonValue accepts the canonical string from Layout::toJson and the int
+    // from an editor save round-trip, and maps a missing key to Any.
+    m_aspectRatioClass = static_cast<int>(PhosphorLayout::ScreenClassification::fromJsonValue(
+        layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)]));
     int oldOverlayDisplayMode = m_overlayDisplayMode;
     m_overlayDisplayMode = layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode))
         ? layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)].toInt(-1)
@@ -696,7 +807,9 @@ void EditorController::loadLayout(const QString& layoutId)
     if (m_useFullScreenGeometry != oldUseFullScreen) {
         Q_EMIT useFullScreenGeometryChanged();
     }
-    Q_EMIT aspectRatioClassChanged();
+    if (m_aspectRatioClass != oldAspectRatioClass) {
+        Q_EMIT aspectRatioClassChanged();
+    }
     if (m_overlayDisplayMode != oldOverlayDisplayMode) {
         Q_EMIT overlayDisplayModeChanged();
     }
@@ -718,19 +831,23 @@ void EditorController::loadLayout(const QString& layoutId)
  * Serializes the layout to JSON and sends it to the daemon via D-Bus.
  * Creates a new layout if isNewLayout is true, otherwise updates existing layout.
  * Emits layoutSaveFailed signal on error, layoutSaved on success.
+ *
+ * Returns whether the save landed. Every false return has already emitted
+ * layoutSaveFailed and left m_hasUnsavedChanges set, so a caller that chains a
+ * layout-replacing action onto a save can gate it on this and leave the user's
+ * work in place when the daemon refuses the payload.
  */
-void EditorController::saveLayout()
+bool EditorController::saveLayout()
 {
     if (!m_layoutService || !m_zoneManager) {
         Q_EMIT layoutSaveFailed(PhosphorI18n::tr("Services not initialized"));
-        return;
+        return false;
     }
 
     // Build JSON from current state
     QJsonObject layoutObj;
     layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = m_layoutId;
     layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = m_layoutName;
-    layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
 
     QJsonArray zonesArray;
     QVariantList zones = m_zoneManager->zones();
@@ -869,15 +986,18 @@ void EditorController::saveLayout()
         QString newLayoutId = m_layoutService->createLayout(jsonStr);
         if (newLayoutId.isEmpty()) {
             // Error signal already emitted by service
-            return;
+            return false;
         }
-        m_layoutId = newLayoutId;
+        if (m_layoutId != newLayoutId) {
+            m_layoutId = newLayoutId;
+            Q_EMIT layoutIdChanged();
+        }
         m_isNewLayout = false;
     } else {
         bool success = m_layoutService->updateLayout(jsonStr);
         if (!success) {
             // Error signal already emitted by service
-            return;
+            return false;
         }
     }
 
@@ -894,6 +1014,7 @@ void EditorController::saveLayout()
 
     Q_EMIT hasUnsavedChangesChanged();
     Q_EMIT layoutSaved();
+    return true;
 }
 
 /**
@@ -930,10 +1051,13 @@ void EditorController::importLayout(const QString& filePath)
         return;
     }
 
+    // An empty id is how the daemon reports a rejection: a file that is not
+    // there, not readable, not JSON, or not a layout. Nothing was imported, so
+    // say that rather than describing the empty reply.
     const QString newLayoutId = reply.arguments().value(0).toString();
     if (newLayoutId.isEmpty()) {
-        QString error = PhosphorI18n::tr("Imported layout but received empty ID");
-        qCWarning(lcEditor) << error;
+        const QString error = PhosphorI18n::tr("That file is not a layout this app can read.");
+        qCWarning(lcEditor) << "importLayout: daemon rejected" << filePath;
         Q_EMIT layoutLoadFailed(error);
         return;
     }
@@ -947,7 +1071,7 @@ void EditorController::importLayout(const QString& filePath)
  * @param filePath Path where the JSON file should be saved
  *
  * Calls the D-Bus exportLayout method to save the current layout to a file.
- * Emits layoutSaveFailed if the export fails.
+ * Emits layoutExported on success and layoutSaveFailed if the export fails.
  */
 void EditorController::exportLayout(const QString& filePath)
 {
@@ -970,8 +1094,18 @@ void EditorController::exportLayout(const QString& filePath)
         return;
     }
 
-    // Export successful - emit layoutSaved signal for success notification
-    Q_EMIT layoutSaved();
+    // A reply arrived, which only says the daemon was reachable. It answers
+    // false for a destination it could not open, write or commit, and that is a
+    // ReplyMessage like any other, so reporting saved on the strength of the
+    // message type alone would call a failed export a success.
+    if (reply.arguments().isEmpty() || !reply.arguments().first().toBool()) {
+        const QString error = PhosphorI18n::tr("Could not write the export. Check that the folder is writable.");
+        qCWarning(lcEditor) << "exportLayout: daemon could not write" << filePath;
+        Q_EMIT layoutSaveFailed(error);
+        return;
+    }
+
+    Q_EMIT layoutExported();
 }
 
 } // namespace PlasmaZones

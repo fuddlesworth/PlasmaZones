@@ -11,21 +11,14 @@
 // crease shade to sell the fold, and masks the window's [0, 1] card rect.
 
 #ifdef PLASMAZONES_KWIN
-uniform sampler2D uOldWindow;
 // .xy = sampling card uv, .z = crease shade, .w = old->new cross-fade.
 layout(location = 1) in vec4 vFold;
 #endif
 
 #include <anchor_remap.glsl>
 
-#ifdef PLASMAZONES_KWIN
-// Sample the captured OLD content at card-space uv, mirroring
-// surfaceColor's anchor fold + KWin Y-up flip + window-rule opacity.
-vec4 oldColor(vec2 uv) {
-    vec2 t = iAnchorRectInTexture.xy + uv * iAnchorRectInTexture.zw;
-    return texture(uOldWindow, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
-}
-#endif
+// uOldWindow + oldColor(): the shared captured-old-frame sampler.
+#include <old_content.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
@@ -33,9 +26,13 @@ vec4 pTransition(vec2 uv, float t) {
     float shade = clamp(vFold.z, 0.0, 1.0);
     float fade = clamp(vFold.w, 0.0, 1.0);
 
-    // Feathered window mask in card space.
+    // Feathered window mask in card space, widened past [0, 1] by the
+    // decoration chain's outer margin so the halo the compositor composited
+    // into the padded canvas folds with the window instead of being cropped
+    // at the frame edge. Zero pad reduces to the bare card edge.
+    vec2 pad = surfacePadRel();
     vec2 fw = max(fwidth(cuv), vec2(1.0e-4));
-    vec2 edge = min(smoothstep(vec2(0.0), fw, cuv), smoothstep(vec2(0.0), fw, 1.0 - cuv));
+    vec2 edge = min(smoothstep(vec2(0.0), fw, cuv + pad), smoothstep(vec2(0.0), fw, 1.0 + pad - cuv));
     float mask = edge.x * edge.y;
     if (mask <= 0.0) {
         return vec4(0.0);

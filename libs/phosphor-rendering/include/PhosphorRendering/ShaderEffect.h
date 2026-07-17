@@ -717,6 +717,23 @@ protected:
      */
     virtual ShaderNodeRhi* createShaderNode();
 
+    /**
+     * @brief Register the live render node for base-class teardown coverage.
+     *
+     * The base tracks the node it returned from updatePaintNode so the
+     * destructor and the sceneGraphAboutToStop handler can sever the node's
+     * back-pointer (invalidateItem) / release its GPU resources. That tracking
+     * member is private and is only set by the BASE updatePaintNode — a
+     * subclass that fully reimplements updatePaintNode (SurfaceShaderItem)
+     * MUST register its node here (and register nullptr when it deletes the
+     * node) or the base teardown silently no-ops and a render-thread access
+     * between item destruction and node deletion walks a freed item.
+     */
+    void registerRenderNode(ShaderNodeRhi* node)
+    {
+        m_renderNode = node;
+    }
+
     void setError(const QString& error);
     void setStatus(Status newStatus);
 

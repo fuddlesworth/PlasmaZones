@@ -42,6 +42,13 @@ inline constexpr QLatin1String Idled{"_idled"};
 /// shader bindings forward to the `iAudioSpectrum` UBO field.
 inline constexpr QLatin1String AudioSpectrum{"audioSpectrum"};
 
+/// Daemon-internal marker (leading underscore): true when a decoration
+/// slot's current chain carries an audio-reactive surface pack. Set by
+/// applyDecoration via setProperty and read by visibleAudioDecorationSlots
+/// + syncCavaState to gate CAVA and the audio-spectrum push. Not a QML
+/// binding — purely a C++-side flag on the slot QObject.
+inline constexpr QLatin1String WantsAudioDecoration{"_wantsAudioDecoration"};
+
 /// Per-overlay zone-rectangle list as QVariantList of QVariantMap
 /// snapshots (see ZoneSnapshotKeys in zoneshaderitem.cpp for the
 /// per-zone payload format).

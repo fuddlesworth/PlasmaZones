@@ -131,7 +131,7 @@ public Q_SLOTS:
 
     // Import/Export
     QString importLayout(const QString& filePath);
-    void exportLayout(const QString& layoutId, const QString& filePath);
+    bool exportLayout(const QString& layoutId, const QString& filePath);
 
     // Visibility filtering
     void setLayoutHidden(const QString& layoutId, bool hidden);
@@ -288,9 +288,14 @@ Q_SIGNALS:
     /**
      * @brief Full-layout change notification.
      *
-     * Emitted by structural mutations — editor save, createLayoutFromJson,
-     * updateLayout — where the client genuinely needs the whole serialized
-     * layout. Carries the complete JSON payload (5–20 KB in prod).
+     * Emitted by @c updateLayout (the editor's save path) and by active-layout
+     * switches, where the client genuinely needs the whole serialized layout.
+     * Carries the complete JSON payload (5–20 KB in prod).
+     *
+     * @c createLayoutFromJson does NOT emit this — a new layout announces
+     * itself with @c layoutCreated(id) instead. An active-layout switch is not
+     * a structural mutation but does emit this, alongside the cheaper
+     * @c activeLayoutChanged(id) documented below.
      *
      * Compact property-level mutations (setLayoutHidden / setLayoutAutoAssign /
      * setLayoutAspectRatioClass) do NOT emit this signal any more — they
@@ -399,6 +404,12 @@ private Q_SLOTS:
 
 public:
     void invalidateCache();
+
+    // Mark screens as changed for the next applyAssignmentChanges(), without
+    // going through setAssignmentEntry. Internal (NOT bus-exposed): the daemon
+    // calls this to drive the same resnap/retile path when a RULE edit (not a
+    // legacy assignment edit) changes the active assignment for some screens.
+    void markScreensChanged(const QSet<QString>& screenIds);
 
     /**
      * @brief Notify consumers that the layout list data has changed

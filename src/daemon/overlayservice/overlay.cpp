@@ -249,9 +249,12 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             qCDebug(lcOverlay) << "initializeOverlay: screenId=" << screenId << "geom=" << geom << "windowScreen="
                                << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
             updateOverlayWindow(screenId, physScreen);
-            // Post-shell-migration: shell window stays mapped permanently;
-            // animation drives the per-content slot's opacity. Surface::show()
-            // only fires on the very first transition Hidden→Shown.
+            // Post-shell-migration: the shell window is kept mapped across
+            // hides while shaders or animations are enabled (effects-gated
+            // keepMappedOnHide, see createWarmedOsdSurface); animation drives
+            // the per-content slot's opacity. Surface::show() only fires on
+            // a Hidden→Shown transition (once per daemon lifetime with
+            // effects on; per re-show after an unmap with effects off).
             auto* shellSurface = shellState->shellSurface();
             auto* slot = m_screenStates[screenId].mainOverlaySlot();
             if (shellSurface && slot) {
@@ -737,14 +740,23 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
 
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
 
+    // Per-context overlay overrides (shader / style + appearance) resolved once
+    // for this screen's live context; layered over config below and reused by
+    // the shader block further down.
+    const PhosphorZones::ContextOverlayOverride overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
+
     if (m_settings) {
-        writeColorSettings(slot, m_settings);
-        writeQmlProperty(slot, QStringLiteral("borderWidth"), m_settings->borderWidth());
-        writeQmlProperty(slot, QStringLiteral("borderRadius"), m_settings->borderRadius());
-        writeQmlProperty(slot, QStringLiteral("enableBlur"), m_settings->enableBlur());
-        bool showNumbers = m_settings->showZoneNumbers() && (!screenLayout || screenLayout->showZoneNumbers());
+        writeColorSettings(slot, m_settings, &overlayOverride);
+        writeQmlProperty(slot, QStringLiteral("borderWidth"),
+                         overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
+        writeQmlProperty(slot, QStringLiteral("borderRadius"),
+                         overlayOverride.borderRadius.value_or(m_settings->borderRadius()));
+        // The rule overrides the global show-numbers setting; the per-layout
+        // gate still wins (a layout that hides numbers keeps them hidden).
+        bool showNumbers = overlayOverride.showZoneNumbers.value_or(m_settings->showZoneNumbers())
+            && (!screenLayout || screenLayout->showZoneNumbers());
         writeQmlProperty(slot, QStringLiteral("showNumbers"), showNumbers);
-        writeFontProperties(slot, m_settings);
+        writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/true);
     }
 
     const bool windowIsShader = slot->property("useShader").toBool();
@@ -752,8 +764,6 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     if (windowIsShader && screenUsesShader && screenLayout) {
         auto* registry = m_shaderRegistry;
         if (registry) {
-            const PhosphorZones::ContextOverlayOverride overlayOverride =
-                overlayOverrideForScreen(m_layoutManager, screenId);
             const QString shaderId = overlayOverride.shaderId.value_or(screenLayout->shaderId());
             const QVariantMap rawParams =
                 overlayOverride.shaderId ? overlayOverride.shaderParams : screenLayout->shaderParams();
@@ -802,7 +812,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
         writeQmlProperty(slot, QStringLiteral("highlightedCount"), highlightedCount);
         updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout);
         // Note: zoneDataVersion is bumped and broadcast to all windows in
-        // updateGeometries() after all per-screen updates complete. Do not
+        // updateZonesForAllWindows() after all per-screen updates complete. Do not
         // write it here - updateOverlayWindow() is called per-screen, and
         // writing the version mid-loop would cause inconsistent state across
         // windows (some see the new version, others the old one).

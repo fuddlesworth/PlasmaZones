@@ -17,7 +17,7 @@ import org.kde.kirigami as Kirigami
 ColumnLayout {
     id: root
 
-    /// The WindowRuleController — supplies `ruleTemplates()` and the
+    /// The RuleController — supplies `ruleTemplates()` and the
     /// `newEmptyRule(subject)` / `newRuleFromTemplate(id)` constructors.
     required property var controller
     // Cache once — `ruleTemplates()` allocates a fresh QVariantList on every

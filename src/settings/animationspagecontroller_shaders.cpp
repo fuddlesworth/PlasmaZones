@@ -3,20 +3,18 @@
 
 // Shader-leg methods for AnimationsPageController:
 //   * Available-shader enumeration (availableShaderEffects,
-//     availableShaderEffectsForPath, shaderEffectInfo, shaderParameters,
+//     availableShaderEffectsForPath, shaderParameters,
 //     supportsShaderLeg).
 //   * User shader directory + shader-pack install
-//     (userShaderDirectoryPath, ensureUserShaderDirectory,
-//     openUserShaderDirectory, installShaderPack).
+//     (userShaderDirectoryPath, openUserShaderDirectory, installShaderPack).
 //   * Per-event shader read + override (rawShaderProfile,
 //     resolvedShaderProfile, setShaderOverride, clearShaderOverride,
 //     shaderOverrideDescendantCount, clearShaderOverrideDescendants,
 //     shaderEffectUsages).
 //
-// Split out of animationspagecontroller.cpp to keep that file under
-// the 800-line cap (see CLAUDE.md). All methods are members of
-// PlasmaZones::AnimationsPageController and use its private state —
-// same class, separate translation unit, no API change.
+// All methods are members of PlasmaZones::AnimationsPageController and use its
+// private state — same class as animationspagecontroller.cpp, separate
+// translation unit, no API change.
 
 #include "animationspagecontroller.h"
 
@@ -85,23 +83,6 @@ struct MutatingShaderTreeScope
     MutatingShaderTreeScope& operator=(const MutatingShaderTreeScope&) = delete;
 };
 
-/// Human-readable tooltip for an effect that can't drive an event row of
-/// class @p pathClass. Only called when a mismatch is proven, so @p
-/// pathClass is always a concrete class and the effect supports the OTHER
-/// one. The two messages name the events the effect DOES apply to so the
-/// user knows where to use it instead.
-QString shaderPathMismatchReason(const PhosphorAnimationShaders::AnimationShaderEffect& effect,
-                                 const QString& pathClass)
-{
-    namespace PP = PhosphorAnimation::ProfilePaths;
-    if (pathClass == PP::EventClassAppearance) {
-        // Effect is geometry-only (e.g. window-morph) on an appearance row.
-        return PhosphorI18n::tr("“%1” only applies to move, resize, snap, and tile events.").arg(effect.name);
-    }
-    // pathClass == geometry: effect is appearance-only on a geometry row.
-    return PhosphorI18n::tr("“%1” only applies to show and hide events, not move, resize, snap, or tile.")
-        .arg(effect.name);
-}
 } // namespace
 
 bool AnimationsPageController::supportsShaderLeg(const QString& path) const
@@ -127,28 +108,25 @@ QVariantList AnimationsPageController::availableShaderEffectsForPath(const QStri
     if (!m_shaderRegistry)
         return result;
 
-    // Class of this event row — drives the dim reason. Computed once; empty
-    // for an ambiguous row, in which case nothing dims (the predicate
-    // returns true for every effect).
-    const QString pathClass = PhosphorAnimation::ProfilePaths::eventClassForPath(path);
-
     const auto effects = m_shaderRegistry->availableEffects();
     result.reserve(effects.size());
     for (const auto& effect : effects) {
+        // Only offer shaders whose contract matches this event's class — a
+        // geometry-morph on an appearance leg, or a window shader on a desktop
+        // switch, would silently no-op. Filtering (rather than dimming) keeps
+        // each picker to one coherent set: appearance shaders on the Appearance
+        // page, the morph shaders on Movement, the drag-physics packs on the
+        // "Dragged" leaf, the two-texture packs on Virtual Desktops. `dimmed`
+        // is retained (always false) for QML compatibility.
+        if (!PhosphorAnimationShaders::shaderEffectAppliesToEventPath(effect, path)) {
+            continue;
+        }
         QVariantMap m = effectToMap(effect);
-        const bool compatible = PhosphorAnimationShaders::shaderEffectAppliesToEventPath(effect, path);
-        m.insert(QLatin1String("dimmed"), !compatible);
-        m.insert(QLatin1String("dimReason"), compatible ? QString() : shaderPathMismatchReason(effect, pathClass));
+        m.insert(QLatin1String("dimmed"), false);
+        m.insert(QLatin1String("dimReason"), QString());
         result.append(m);
     }
     return result;
-}
-
-QVariantMap AnimationsPageController::shaderEffectInfo(const QString& effectId) const
-{
-    if (!m_shaderRegistry || effectId.isEmpty() || !m_shaderRegistry->hasEffect(effectId))
-        return {};
-    return effectToMap(m_shaderRegistry->effect(effectId));
 }
 
 QVariantList AnimationsPageController::shaderParameters(const QString& effectId) const
@@ -172,11 +150,6 @@ QString AnimationsPageController::userShaderDirectoryPath() const
     // confusing "directory not found" downstream.
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return QDir::cleanPath(base + ConfigDefaults::userAnimationsSubdir());
-}
-
-bool AnimationsPageController::ensureUserShaderDirectory()
-{
-    return QDir().mkpath(userShaderDirectoryPath());
 }
 
 void AnimationsPageController::openUserShaderDirectory()
@@ -238,10 +211,27 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
         return {};
     const ShaderProfileTree tree = m_settings->shaderProfileTree();
     // resolveShaderWithDefault (not bare resolve) so the built-in per-event
-    // default — window-morph for window-move events — shows as the current
+    // default — window-morph for window snap events — shows as the current
     // value for an unset event. A user override (incl. an explicit "None")
     // still wins; the default is computed, never persisted.
-    return shaderProfileToMap(resolveShaderWithDefault(tree, path));
+    ShaderProfile resolved = resolveShaderWithDefault(tree, path);
+    // Runtime-truth mirror of the compositor's applicability gate
+    // (PlasmaZonesEffect::resolvedShaderAppliesToEvent), routed through the
+    // same canonical predicate. A persisted effect that provably cannot
+    // drive this event (a stale pre-split geometry pack on the drag leaf, a
+    // hand-edited class mismatch) is refused at runtime, so displaying it
+    // as "current" would advertise an animation that never plays — and the
+    // class-filtered picker could not even show it as a selectable entry.
+    // Blank only the VIEW: the persisted override is untouched and the
+    // user's next pick overwrites it. An id the registry doesn't know
+    // passes through, so a user pack that is still scanning doesn't flash
+    // to "None" mid-warmup.
+    const QString effectId = resolved.effectiveEffectId();
+    if (!effectId.isEmpty() && m_shaderRegistry && m_shaderRegistry->hasEffect(effectId)
+        && !shaderEffectAppliesToEventPath(m_shaderRegistry->effect(effectId), path)) {
+        resolved.effectId.reset();
+    }
+    return shaderProfileToMap(resolved);
 }
 
 bool AnimationsPageController::setShaderOverride(const QString& path, const QString& effectId,
@@ -293,7 +283,7 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // `ShaderProfile::effectId = std::optional<QString>("")`. This is
     // the "explicit no effect" sentinel — `ShaderProfile::overlay`
     // treats it as a real value that wins over a parent's effectId,
-    // so inheritance from an ancestor (e.g. `panel` → "dissolve") is
+    // so inheritance from an ancestor (e.g. `popup` → "dissolve") is
     // BLOCKED at this path and every descendant resolves to no shader.
     // Parameters PASSED ALONGSIDE an empty effectId are preserved on
     // the disable sentinel — callers that need to clear them entirely
@@ -410,9 +400,12 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
     if (!m_settings)
         return 0;
     if (m_asyncRevertInFlight) {
+        // -1, not 0: a caller must be able to tell "refused, try again" from
+        // "there was nothing to clear" — the clearAllOverrides convention.
         qCWarning(lcConfig) << "clearShaderOverrideDescendants: refusing while async discard is in flight; path="
                             << path;
-        return 0;
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        return -1;
     }
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     const QStringList toClear = collectShaderOverrideDescendants(tree, path);

@@ -3,7 +3,6 @@
     "name": "Super-Ultrawide Dev",
     "description": "Dual-workspace dev layout for 32:9, with the left half for code and the right half for reference and tools",
     "type": 5,
-    "isBuiltIn": true,
     "showZoneNumbers": true,
     "aspectRatioClass": "super-ultrawide",
     "zones": [
