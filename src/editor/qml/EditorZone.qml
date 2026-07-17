@@ -463,7 +463,7 @@ Item {
         // Accessible.role is optional
         // Removing role to avoid enumeration issues in QML
         Accessible.name: root.zoneData && root.zoneData.name ? i18nc("@info:accessibility", "Zone %1: %2", root.zoneData.zoneNumber || 1, root.zoneData.name) : i18nc("@info:accessibility", "Zone %1", root.zoneData ? (root.zoneData.zoneNumber || 1) : 0)
-        Accessible.description: isSelected ? i18nc("@info:accessibility", "Selected zone. Position: %1% × %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.", zoneRect.a11yXPercent, zoneRect.a11yYPercent, zoneRect.a11yWidthPercent, zoneRect.a11yHeightPercent) : i18nc("@info:accessibility", "Zone. Position: %1% × %2%, Size: %3% × %4%. Click to select.", zoneRect.a11yXPercent, zoneRect.a11yYPercent, zoneRect.a11yWidthPercent, zoneRect.a11yHeightPercent)
+        Accessible.description: isSelected ? i18nc("@info:accessibility", "Selected zone. Position: %1%, %2%, Size: %3% × %4%. Click to deselect, drag to move, use handles to resize.", zoneRect.a11yXPercent, zoneRect.a11yYPercent, zoneRect.a11yWidthPercent, zoneRect.a11yHeightPercent) : i18nc("@info:accessibility", "Zone. Position: %1%, %2%, Size: %3% × %4%. Click to select.", zoneRect.a11yXPercent, zoneRect.a11yYPercent, zoneRect.a11yWidthPercent, zoneRect.a11yHeightPercent)
         Accessible.selectable: true
         Accessible.selected: root.isSelected
 
