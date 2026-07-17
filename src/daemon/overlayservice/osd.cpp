@@ -15,7 +15,6 @@
 #include <QSet>
 #include <QQmlEngine>
 #include <QGuiApplication>
-#include <QColor>
 #include <QPalette>
 
 #include <PhosphorLayer/ILayerShellTransport.h>
@@ -408,6 +407,8 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     QVariantList stages;
     double outerPadding = 0.0;
     bool chainWantsAudio = false;
+    // Theme colours for the pack flag resolver, read once for the whole chain.
+    const QPalette pal = QGuiApplication::palette();
     for (const QString& packId : chain) {
         if (!m_surfaceShaderRegistry->hasEffect(packId)) {
             qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
@@ -459,7 +460,6 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         // m_settings is guaranteed non-null here — applyDecoration early-returns
         // above when it (or the registry) is null.
         QVariantMap resolvedParams = friendlyParams;
-        const QPalette pal = QGuiApplication::palette();
         PhosphorSurfaceShaders::resolveThemeParamColors(effect, resolvedParams,
                                                         {m_settings->highlightColor(), m_settings->inactiveColor(),
                                                          pal.color(QPalette::Active, QPalette::Window),

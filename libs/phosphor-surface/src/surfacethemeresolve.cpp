@@ -32,8 +32,8 @@ void resolveThemeParamColors(const SurfaceShaderEffect& effect, QVariantMap& fri
     const auto effectiveFlag = [&](QLatin1String id) -> std::optional<bool> {
         for (const auto& param : effect.parameters) {
             if (param.id == id) {
-                return friendlyParams.contains(QString(id)) ? friendlyParams.value(QString(id)).toBool()
-                                                            : param.defaultValue.toBool();
+                const QString key(id);
+                return friendlyParams.contains(key) ? friendlyParams.value(key).toBool() : param.defaultValue.toBool();
             }
         }
         return std::nullopt;
@@ -43,15 +43,20 @@ void resolveThemeParamColors(const SurfaceShaderEffect& effect, QVariantMap& fri
     const auto effectiveReal = [&](QLatin1String id, double fallback) -> double {
         for (const auto& param : effect.parameters) {
             if (param.id == id) {
-                return friendlyParams.contains(QString(id)) ? friendlyParams.value(QString(id)).toDouble()
-                                                            : param.defaultValue.toDouble();
+                const QString key(id);
+                return friendlyParams.contains(key) ? friendlyParams.value(key).toDouble()
+                                                    : param.defaultValue.toDouble();
             }
         }
         return fallback;
     };
 
     // Border colours. A neutral frame-contrast line wins over the system accent
-    // when both are engaged.
+    // when both are engaged. activeColor / inactiveColor are set unconditionally
+    // (no packHasHalo-style declared-param guard): translateSurfaceParams only
+    // emits a lane for params the pack declares, so a key inserted for a pack
+    // that lacks it is dropped. The halo branch below guards because it has to
+    // READ the existing colour to preserve its alpha; this branch writes fresh.
     if (effectiveFlag(QLatin1String("useThemeNeutral")).value_or(false)) {
         const QColor neutral = lerpColor(theme.background, theme.foreground,
                                          qBound(0.0, effectiveReal(QLatin1String("frameContrast"), 0.2), 1.0));
@@ -72,13 +77,13 @@ void resolveThemeParamColors(const SurfaceShaderEffect& effect, QVariantMap& fri
     // smear. The pack's own colour alpha (its intensity knob) is preserved.
     if (effectiveFlag(QLatin1String("useThemeTint")).value_or(false)) {
         for (const QLatin1String haloId : {QLatin1String("shadowColor"), QLatin1String("glowColor")}) {
+            const QString key(haloId);
             bool packHasHalo = false;
             QVariant current;
             for (const auto& param : effect.parameters) {
                 if (param.id == haloId) {
                     packHasHalo = true;
-                    current = friendlyParams.contains(QString(haloId)) ? friendlyParams.value(QString(haloId))
-                                                                       : param.defaultValue;
+                    current = friendlyParams.contains(key) ? friendlyParams.value(key) : param.defaultValue;
                     break;
                 }
             }
@@ -89,7 +94,7 @@ void resolveThemeParamColors(const SurfaceShaderEffect& effect, QVariantMap& fri
                 }
                 QColor tint = theme.background;
                 tint.setAlphaF(cur.isValid() ? cur.alphaF() : 0.5);
-                friendlyParams.insert(QString(haloId), tint);
+                friendlyParams.insert(key, tint);
             }
         }
     }

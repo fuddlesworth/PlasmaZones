@@ -1,7 +1,7 @@
 {
     "id": "shadow",
     "name": "Drop Shadow",
-    "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's rounded corners and leaves the window content untouched, and it softens when the window loses focus. Size, offset, colour and strength are this pack's own parameters.",
+    "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's rounded corners and leaves the window content untouched. It softens when the window loses focus. Size, offset, colour and strength are this pack's own parameters.",
     "author": "PlasmaZones",
     "version": "1.1",
     "category": "Ambience",
