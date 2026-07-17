@@ -13,6 +13,11 @@
                 "The rule editor's action and condition pickers are alphabetized and grouped so they are easier to scan (#699)",
                 "A new Theater tiling layout keeps one window centered at a width you set per monitor, and with more windows the focused one moves to a centered spotlight while the rest line up on rails down both sides. It starts hidden, so turn it on from the Algorithms list to try it (#704)",
                 "Peeking at the desktop can now play a full-screen animation. Pick a pack for the new Peeked at Desktop event on the Animations → Transitions → Desktop page. Three new packs ship with it, Peek Recede, Peek Blinds, and Phosphor Peek, and every desktop transition pack works there too (#777)",
+                "New window decoration effects: a Decoration category adds glass, blur, glow, shadow, and animated border packs that draw behind and around your windows. Pick them from a browser and save your own sets (#624)",
+                "Switching virtual desktops can play a full-screen transition. Turn it on for the new desktop switch event on the Animations page and pick from eleven packs such as Fade, Slide, Wipe, and Cube (#747)",
+                "Audio-reactive window borders that move with your music, with the full CAVA audio settings to tune them (#624, #763)",
+                "New rule actions to keep a window above or below others and to tune a screen or desktop's tiling on its own, plus a Centered single-window layout (#733, #759, #703)",
+                "The settings app now remembers the pages you visit, so you can step back and forward through them (#749)",
                 "Fixed: dragging a window could briefly stutter at the start and end of a drag on some systems, because a shortcut config file was rewritten on every drag. That write is gone, so dragging stays smooth (#714)"
             ]
         },
