@@ -56,6 +56,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Maximize and restore animations never played**: maximizing a window with an animation assigned made it vanish for the length of the animation and pop in at full size, and restoring played the wrong motion with every pack except Window morph. The maximize event never told the animation which rectangles it was moving between, and the restore leg ran the timeline backwards for the grid-deformation packs. Both directions now morph between the old and new frame with any geometry pack. Restore also waits for the window's real size change before starting, so an app that is slow to shrink no longer snaps first and animates late, and dragging a maximized window free by its title bar no longer fires a stray maximize animation over the drag ([#755](https://github.com/fuddlesworth/PlasmaZones/pull/755)).
 - **"Move Window Left" skipped through overlapping zones**: in a layout where zones overlap each other, moving a window left jumped straight to the leftmost zone in one keypress, while moving right stepped one zone at a time. The zone picker broke ties between overlapping zones by their storage order, which only happened to match the expected zone when moving right. Ties now break by distance, so moving, focusing, and swapping a window all step to the nearest zone in every direction. Thanks @Nathorr for the report ([#773](https://github.com/fuddlesworth/PlasmaZones/pull/773), [discussion #771](https://github.com/fuddlesworth/PlasmaZones/discussions/771)).
 
+## [3.1.3] - 2026-07-01
+
+### Changed
+
+- **Rebuilt for KWin 6.1.2**: the PlasmaZones KWin effect is compiled against a specific KWin version and will not load under a different one, so this release rebuilds the effect for KWin 6.1.2. Update to it once your system moves to that KWin, otherwise window dragging, shortcuts, and snapping stop working.
+- **Shorter KWin version-mismatch warning**: when the installed effect was built for a different KWin than the one running, the notification now gives just the diagnosis and the rebuild-and-reinstall fix, without the NixOS-specific install note.
+
 ## [3.1.2] - 2026-06-25
 
 ### Fixed
@@ -1603,7 +1610,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.2...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.3...HEAD
+[3.1.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.2...v3.1.3
 [3.1.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.1...v3.1.2
 [3.1.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.17...v3.1.0

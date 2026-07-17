@@ -17,6 +17,13 @@
             ]
         },
         {
+            "version": "3.1.3",
+            "date": "2026-07-01",
+            "highlights": [
+                "Rebuilt for KWin 6.1.2 so the window-manager integration keeps working after the latest Plasma update. Update PlasmaZones once your system moves to that KWin"
+            ]
+        },
+        {
             "version": "3.1.2",
             "date": "2026-06-25",
             "highlights": [
