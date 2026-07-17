@@ -18,16 +18,21 @@ import org.plasmazones.common as QFZCommon
  * PhosphorRoles::LayoutPicker with `osd.show` / `osd.pop` / `osd.hide`
  * profiles). PhosphorLayer::Surface handles `Qt.WindowTransparentForInput`
  * on the underlying QWindow during the hide cycle, and OverlayService::
- * showLayoutPicker / hideLayoutPicker drive `Surface::show()` /
- * `Surface::hide()` directly.
+ * showLayoutPicker / hideLayoutPicker drive the picker slot's animated
+ * show/hide (hideLayoutPicker → ShellHost::hideSlot); the shell
+ * wl_surface's map state is managed separately by
+ * syncPassiveShellSurfaceState.
  *
  * This Item only owns:
  *   - Data properties written by C++ (layouts, activeLayoutId, locked, …)
  *   - Keyboard navigation state (selectedIndex; moveSelection /
  *     confirmSelection are invoked from C++, see below)
  *   - The visible content tree (backdrop + popup frame + grid of cards)
- *   - The `_dismissed` latch + `dismissRequested` signal that C++ wires
- *     to Surface::hide() (via the host Window's signal forwarding)
+ *   - The `_dismissed` latch + `dismissRequested` signal, forwarded by
+ *     the shell host as `layoutPickerDismissRequested` and routed by C++
+ *     (wirePassiveShellSlots, shellhost_bridge.cpp) to OverlayService::
+ *     onLayoutPickerDismissRequested → hideLayoutPicker →
+ *     ShellHost::hideSlot
  */
 Item {
     // Keyboard handling. The shell surface is kbd-None, so QML Shortcuts
@@ -75,10 +80,12 @@ Item {
     property bool fontStrikeout: false
     property bool locked: false
     /// Idempotency latch for `dismissRequested`. Multiple rapid backdrop
-    /// clicks during the keepMappedOnHide=true fade-out window can fire
+    /// clicks during the hide-animation fade-out window (the shell stays
+    /// mapped and briefly input-accepting while shaders or animations
+    /// are enabled — effects-gated keepMappedOnHide) can fire
     /// `dismissRequested` more than once before `Qt.WindowTransparentForInput`
-    /// lands at the QWindow level. Without this, C++ runs Surface::hide()
-    /// on an already-Hidden surface and the library logs a qCWarning per
+    /// lands at the QWindow level. Without this, C++ re-runs the dismiss
+    /// path (hideLayoutPicker) for an already-dismissed picker per
     /// spurious click. No writer resets it: the host slot's Loader
     /// re-instantiates this component on every show, so the latch starts
     /// false each cycle.
@@ -112,9 +119,11 @@ Item {
     // Internal signals — host Window re-emits to its public signals.
     signal layoutSelected(string layoutId)
     /// User-initiated dismiss request (backdrop click, Escape, in-flight
-    /// race). C++ event filter and OverlayService::hideLayoutPicker
-    /// translate this into Surface::hide() — which then drives the library
-    /// animator. Same shape as LayoutOsd / NavigationOsd for consistency.
+    /// race). The shell host re-emits it as `layoutPickerDismissRequested`,
+    /// which wirePassiveShellSlots (shellhost_bridge.cpp) connects to
+    /// OverlayService::onLayoutPickerDismissRequested → hideLayoutPicker
+    /// → ShellHost::hideSlot (animator-driven slot-hide). Same shape as
+    /// LayoutOsd / NavigationOsd for consistency.
     signal dismissRequested
 
     /// Internal: emit dismissRequested at most once per show cycle.

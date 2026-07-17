@@ -1997,42 +1997,60 @@ public:
         Q_EMIT lockedScreensChanged();
         Q_EMIT settingsChanged();
     }
+    // Context locks — mirrors Settings::isContextLocked / setContextLocked
+    // (settings.cpp). Mirrored exactly: the ':'-separated composite key format
+    // (bare name → whole-screen lock; "name:<desktop>" → per-desktop;
+    // "name:<desktop>:<activity>" → per-(desktop,activity)); locks living in
+    // the same lockedScreens list the plain lockedScreens()/setLockedScreens()
+    // accessors expose (so lockedScreensChanged fires on lock writes, as in
+    // production); the hierarchical lookup fallback composite → name:desktop →
+    // bare name; and the setter's refusal of the (screen, 0, activity) shape,
+    // which has no representable key in the lockedScreens schema.
+    // Simplified: production expands the queried name through
+    // PhosphorScreens::ScreenIdentity::variantsFor (connector-name <-> EDID-id
+    // aliases) before the lookup; the stub has no ScreenIdentity and checks
+    // the given name verbatim. Tests must lock and query the same spelling.
     bool isScreenLocked(const QString& screenId) const override
     {
-        return m_lockedScreens.contains(screenId);
+        return isContextLocked(screenId, 0, QString());
     }
     void setScreenLocked(const QString& screenId, bool locked) override
     {
-        const bool had = m_lockedScreens.contains(screenId);
-        if (had == locked) {
-            return;
-        }
-        if (locked) {
-            m_lockedScreens.append(screenId);
-        } else {
-            m_lockedScreens.removeAll(screenId);
-        }
-        Q_EMIT lockedScreensChanged();
-        Q_EMIT settingsChanged();
+        setContextLocked(screenId, 0, QString(), locked);
     }
     bool isContextLocked(const QString& screenId, int desktop, const QString& activityId) const override
     {
-        return m_lockedContexts.contains(contextLockKey(screenId, desktop, activityId));
+        if (desktop > 0 && !activityId.isEmpty()
+            && m_lockedScreens.contains(screenId + QLatin1Char(':') + QString::number(desktop) + QLatin1Char(':')
+                                        + activityId)) {
+            return true;
+        }
+        if (desktop > 0 && m_lockedScreens.contains(screenId + QLatin1Char(':') + QString::number(desktop))) {
+            return true;
+        }
+        return m_lockedScreens.contains(screenId);
     }
     void setContextLocked(const QString& screenId, int desktop, const QString& activityId, bool locked) override
     {
-        const QString key = contextLockKey(screenId, desktop, activityId);
-        if (m_lockedContexts.contains(key) == locked) {
+        // Production refuses this shape: composing just the bare name would
+        // silently widen an activity-scoped lock to the whole screen.
+        if (desktop <= 0 && !activityId.isEmpty()) {
             return;
         }
-        if (locked) {
-            m_lockedContexts.insert(key);
-        } else {
-            m_lockedContexts.remove(key);
+        QString key = screenId;
+        if (desktop > 0) {
+            key += QLatin1Char(':') + QString::number(desktop);
+            if (!activityId.isEmpty()) {
+                key += QLatin1Char(':') + activityId;
+            }
         }
-        // ISettings declares no contextLockedChanged, so the aggregate signal is the only
-        // one to emit.
-        Q_EMIT settingsChanged();
+        QStringList current = m_lockedScreens;
+        if (locked && !current.contains(key)) {
+            current.append(key);
+            setLockedScreens(current);
+        } else if (!locked && current.removeAll(key) > 0) {
+            setLockedScreens(current);
+        }
     }
 
     // Rendering (ISettings)
@@ -2157,11 +2175,6 @@ private:
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
-    // Seeded from ConfigDefaults, every one of them. The nine below were already
-    // member-backed and so escaped the sweep that fixed the hardcoded getters — including
-    // BOTH snap-assist flags, which read false against a default of TRUE while the comment
-    // here claimed they had been fixed. A comment describing a fix that did not land is
-    // worse than no comment: it stops the next reader from looking.
     // Every remaining getter, member-backed and seeded from ConfigDefaults. They used to
     // return hardcoded literals with no-op setters: a value no test could move, against a
     // baseline production does not have. Fourteen disagreed with the real default outright,
@@ -2189,14 +2202,6 @@ private:
     QString m_audioInputMethod = ConfigDefaults::audioInputMethod();
     QString m_audioInputSource = ConfigDefaults::audioInputSource();
     QString m_labelFontFamily = ConfigDefaults::labelFontFamily();
-    /// The composite key production uses for a locked (screen, desktop, activity) context.
-    static QString contextLockKey(const QString& screenId, int desktop, const QString& activityId)
-    {
-        return screenId + QLatin1Char('/') + QString::number(desktop) + QLatin1Char('/') + activityId;
-    }
-
-    QSet<QString> m_lockedContexts;
-
     // Per-mode disable lists, keyed by the AssignmentEntry::Mode int. Real storage: the
     // setters used to drop the value entirely, so no test could ever disable anything.
     QHash<int, QStringList> m_disabledMonitors;

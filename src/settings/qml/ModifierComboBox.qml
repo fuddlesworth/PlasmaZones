@@ -57,13 +57,20 @@ RowLayout {
         model: modifierOptions.map(o => {
             return o.text;
         })
-        currentIndex: {
-            let val = root.modifierValue || 0;
-            for (let i = 0; i < modifierOptions.length; i++) {
-                if (modifierOptions[i].value === val)
-                    return i;
+        // Guarded binding: a plain `currentIndex:` binding is severed the
+        // first time the user activates an item, after which external
+        // modifierValue changes no longer update the combo.
+        Binding on currentIndex {
+            value: {
+                let val = root.modifierValue || 0;
+                for (let i = 0; i < combo.modifierOptions.length; i++) {
+                    if (combo.modifierOptions[i].value === val)
+                        return i;
+                }
+                return 0;
             }
-            return 0;
+            when: !combo.popup.visible
+            restoreMode: Binding.RestoreNone
         }
         onActivated: idx => {
             root.modifierSelected(modifierOptions[idx].value);

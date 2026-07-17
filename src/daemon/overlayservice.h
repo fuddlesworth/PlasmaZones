@@ -303,9 +303,12 @@ private:
      * This helper does a sacrificial show+hide on the surface so the
      * compositor maps the wl_surface, Vulkan initialises the swapchain,
      * the QSGLayer renders at least one frame, and the surface lands
-     * back in State::Hidden with the QQuickWindow still mapped (every
-     * surface that uses this helper has SurfaceConfig::keepMappedOnHide
-     * = true, so the wl_surface stays alive across the hide).
+     * back in State::Hidden. The post-hide mapped guarantee is
+     * conditional: SurfaceConfig::keepMappedOnHide is effects-gated
+     * (createWarmedOsdSurface), so the wl_surface stays alive across
+     * the prime's hide only while shaders or animations are enabled;
+     * with both off the prime still warms the pipelines but the
+     * wl_surface unmaps after the hide.
      *
      * Surfaces are tracked in m_primingSurfaces so a user-triggered show
      * landing during the prime window can cancel the queued hide via
@@ -405,8 +408,9 @@ private Q_SLOTS:
     /// QML signal. Resolves the emitting shell window via `sender()`,
     /// finds the matching m_screenStates entry, and runs an animated
     /// slot-hide via SurfaceAnimator::beginHide on (shellSurface,
-    /// osdSlotItem) - the shell wl_surface itself stays mapped, only
-    /// the OSD slot Item's opacity animates to 0.
+    /// osdSlotItem) - only the OSD slot Item's opacity animates to 0;
+    /// the shell wl_surface itself stays mapped across the hide while
+    /// shaders or animations are enabled (effects-gated keepMappedOnHide).
     void onOsdDismissRequested();
 
     /// Receiver for the shell's `snapAssistDismissRequested` QML signal
@@ -881,9 +885,11 @@ private:
     void restoreZoneSelectorAfterHide(const QString& effectiveId);
 
     /// Drive the per-screen shell wl_surface map state from slot
-    /// visibility. Shell uses keepMappedOnHide=true; Surface::show()
-    /// /hide() flip Qt::WindowTransparentForInput. The flip only
-    /// happens through Surface's state machine, not through slot-level
+    /// visibility. The shell's keepMappedOnHide is effects-gated
+    /// (createWarmedOsdSurface): the window is kept mapped on hide only
+    /// while shaders or animations are enabled. Surface::show()/hide()
+    /// flip Qt::WindowTransparentForInput. The flip only happens
+    /// through Surface's state machine, not through slot-level
     /// animator hides - without this helper the shell never re-enters
     /// Hidden after first show, and the input region eats every click
     /// for the daemon's lifetime.

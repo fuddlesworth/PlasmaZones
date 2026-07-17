@@ -436,26 +436,21 @@ ColumnLayout {
                     readonly property int presetMatchTolerance: 5
                     property int selectedSize: {
                         if (root.effectiveSizeMode === 0)
-                            return 0;
+                            return 0; // Auto
 
-                        // Auto
                         if (customModeActive)
-                            return 4;
+                            return 4; // Explicit Custom selection
 
-                        // Explicit Custom selection
                         var w = root.effectivePreviewWidth;
                         if (Math.abs(w - root.constants.zoneSelectorPreviewSmall) <= presetMatchTolerance)
-                            return 1;
+                            return 1; // Small
 
-                        // Small
                         if (Math.abs(w - root.constants.zoneSelectorPreviewMedium) <= presetMatchTolerance)
-                            return 2;
+                            return 2; // Medium
 
-                        // Medium
                         if (Math.abs(w - root.constants.zoneSelectorPreviewLarge) <= presetMatchTolerance)
-                            return 3;
+                            return 3; // Large
 
-                        // Large
                         return 4;
                     }
 

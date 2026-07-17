@@ -12,9 +12,6 @@ SettingsFlickable {
     // Page-scoped Q_PROPERTY surface for the Editor page lives on the
     // sub-controller; SettingsController exposes it as a child QObject.
     readonly property var settingsBridge: settingsController.editorPage
-    // Inline constants (from monolith Constants object)
-    readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
-    readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
 
     contentHeight: content.implicitHeight
     clip: true

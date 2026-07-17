@@ -249,9 +249,12 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             qCDebug(lcOverlay) << "initializeOverlay: screenId=" << screenId << "geom=" << geom << "windowScreen="
                                << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
             updateOverlayWindow(screenId, physScreen);
-            // Post-shell-migration: shell window stays mapped permanently;
-            // animation drives the per-content slot's opacity. Surface::show()
-            // only fires on the very first transition Hidden→Shown.
+            // Post-shell-migration: the shell window is kept mapped across
+            // hides while shaders or animations are enabled (effects-gated
+            // keepMappedOnHide, see createWarmedOsdSurface); animation drives
+            // the per-content slot's opacity. Surface::show() only fires on
+            // a Hidden→Shown transition (once per daemon lifetime with
+            // effects on; per re-show after an unmap with effects off).
             auto* shellSurface = shellState->shellSurface();
             auto* slot = m_screenStates[screenId].mainOverlaySlot();
             if (shellSurface && slot) {

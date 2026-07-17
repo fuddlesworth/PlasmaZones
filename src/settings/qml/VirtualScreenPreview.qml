@@ -76,7 +76,7 @@ Rectangle {
             border.width: 2
             radius: Kirigami.Units.smallSpacing / 2
             // Keep labels from painting outside the region in narrow (portrait /
-            // thin-split) zones \u2014 belt-and-braces alongside the width cap below.
+            // thin-split) zones, belt-and-braces alongside the width cap below.
             clip: true
 
             ColumnLayout {

@@ -126,7 +126,7 @@ Kirigami.Dialog {
                             Label {
                                 Layout.fillWidth: true
                                 // Read through the row's explicit id rather
-                                // than `parent.modelData` \u2014 if the RowLayout
+                                // than `parent.modelData` because if the RowLayout
                                 // ever grew an intermediate wrapper (Pane,
                                 // Item) the `parent` chain would shift and
                                 // this binding would silently resolve to

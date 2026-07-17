@@ -169,10 +169,11 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     // Disarm the render-pipeline prime first so its queued hide doesn't
     // race this real show - see primeSurfaceRenderPipeline.
     cancelSurfacePrime(surface);
-    // Shell wl_surface is permanently mapped - only the slot's opacity
-    // animates. Map the wl_surface on first show via Surface::show()
-    // (idempotent on subsequent shows; the keepMappedOnHide=true config
-    // means the wl_surface stays mapped between slot animations).
+    // Only the slot's opacity animates. Map the wl_surface via
+    // Surface::show() (idempotent on subsequent shows; keepMappedOnHide
+    // is effects-gated - see createWarmedOsdSurface - so the wl_surface
+    // stays mapped between slot animations while shaders or animations
+    // are enabled, and unmaps between shows otherwise).
     if (!surface->isLogicallyShown()) {
         surface->show();
     }
@@ -583,9 +584,9 @@ void OverlayService::onOsdDismissRequested()
     // QML osdDismissRequested fired - find which screen's shell window
     // emitted, then run an animator-driven slot-hide. Sender-based
     // resolution rather than carrying the screen id through the signal
-    // because layer-shell QML signals are parameter-less per the
-    // existing project convention (dismissRequested → Surface::hide()
-    // wiring lives in createWarmedOsdSurface).
+    // because the shell's QML dismiss signals are declared parameter-less
+    // by project convention (see PassiveOverlayShell.qml's
+    // osdDismissRequested and its wiring in wirePassiveShellSlots).
     QObject* senderObj = sender();
     auto* senderWindow = qobject_cast<QQuickWindow*>(senderObj);
     if (!senderWindow) {
@@ -702,7 +703,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     // Reuse the per-screen passive shell (create only if not in map).
-    // The shell stays mapped for the daemon's lifetime; per-show the
+    // The shell is kept mapped across hides while shaders or animations
+    // are enabled (effects-gated keepMappedOnHide); per-show the
     // SurfaceAnimator's beginShow on (shellSurface, osdSlot,
     // PhosphorRoles::Osd) replays the fade-in, and
     // restartDismissTimer extends the auto-hide. Cleanup happens only
@@ -788,7 +790,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // via the per-(Surface, target) keying. restartDismissTimer kicks
     // the QML auto-dismiss Timer that emits dismissRequested →
     // animator beginHide on the slot (see osdDismissRequested wiring
-    // in ensurePassiveShellFor).
+    // in wirePassiveShellSlots).
     cancelSurfacePrime(navSurface);
     if (!navSurface->isLogicallyShown()) {
         navSurface->show();

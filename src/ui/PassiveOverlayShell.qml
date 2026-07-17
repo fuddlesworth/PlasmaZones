@@ -20,11 +20,14 @@ import org.plasmazones.common as QFZCommon
  *     blocks the faster one's. With every passive overlay riding the
  *     shell's single window, all per-content animations share one
  *     polishAndSync — no inter-content contention.
- *   - The shell wl_surface is permanently mapped after first show, so
- *     the Vulkan swapchain + RHI pipelines warm once and stay hot for
- *     every subsequent per-content show. No per-show wl_surface
- *     map/unmap and the cold-pipeline first-paint cost is paid once at
- *     daemon start.
+ *   - The shell wl_surface is kept mapped across hides while shaders or
+ *     animations are enabled (keepMappedOnHide is effects-gated in
+ *     createWarmedOsdSurface), so the Vulkan swapchain + RHI pipelines
+ *     warm once and stay hot for every subsequent per-content show —
+ *     no per-show wl_surface map/unmap, and the cold-pipeline
+ *     first-paint cost is paid once at daemon start. With both effects
+ *     off, syncPassiveShellSurfaceState unmaps the wl_surface when all
+ *     slots are hidden.
  *
  * This shell is the kbd-None grouping. Modal kbd-Exclusive overlays
  * (snap-assist, layout picker) historically lived in their own per-show
@@ -79,8 +82,9 @@ Window {
     readonly property alias mainOverlaySlotItem: mainOverlaySlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
-    /// the slot-hide animation start (not Surface::hide() — the shell
-    /// stays mapped permanently, only the slot's opacity animates).
+    /// the slot-hide animation start (not Surface::hide() — only the
+    /// slot's opacity animates; the shell stays mapped across hides
+    /// while shaders or animations are enabled).
     signal osdDismissRequested
     /// Forwarded from snap-assist's `windowSelected` signal — host wires
     /// to onSnapAssistWindowSelected.
@@ -94,8 +98,10 @@ Window {
     signal layoutPickerDismissRequested
 
     // Qt::WindowTransparentForInput is driven imperatively by C++ from
-    // syncPassiveShellSurfaceState (via Surface::show()/hide() with
-    // keepMappedOnHide=true) — when no slot is visible, the shell's
+    // syncPassiveShellSurfaceState (via Surface::show()/hide();
+    // keepMappedOnHide is effects-gated, see createWarmedOsdSurface,
+    // so the surface is kept mapped on hide only while shaders or
+    // animations are enabled) — when no slot is visible, the shell's
     // wl_surface input region is set empty so clicks pass through.
     // Driving it from a QML flags binding here would race the C++
     // path: a slot visibility change triggers BOTH a binding
@@ -121,9 +127,10 @@ Window {
     // card above the screen top with the bottom partially cut off.
     // Leaving the size to C++ entirely closes the race.
     // Start hidden; first per-content show flips visible=true. The
-    // surface stays mapped (keepMappedOnHide=true) for the daemon's
-    // lifetime so swapchain + RHI pipelines stay warm across show
-    // cycles.
+    // surface stays mapped across hides while shaders or animations
+    // are enabled (effects-gated keepMappedOnHide) so swapchain + RHI
+    // pipelines stay warm across show cycles; with both effects off
+    // the wl_surface unmaps once all slots are hidden.
     visible: false
 
     Item {

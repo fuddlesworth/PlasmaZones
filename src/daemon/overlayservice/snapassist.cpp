@@ -432,7 +432,9 @@ void OverlayService::hideSnapAssist()
     // settle): in both cases "dismissed" arrives first.
     //
     // snapAssistDismissed → WindowDragAdaptor::onSnapAssistDismissed →
-    // unregisterCancelOverlayShortcut().
+    // releaseCancelOverlayShortcutIfIdle(), which drops the shared Escape
+    // grab only when no other overlay (e.g. the layout picker) still
+    // holds it - the conditionality is load-bearing for bail-path safety.
     Q_EMIT snapAssistDismissed();
 
     auto stateIt = m_screenStates.find(screenId);

@@ -106,7 +106,9 @@ Kirigami.Dialog {
         // tick — _shaderInfo is already set above, so the new item loads it.
         _rendererActive = false;
         Qt.callLater(function () {
-            root._rendererActive = root._livePreview;
+            // Guard on `opened` too: if the dialog was closed between the
+            // deferral and this call, don't re-arm the renderer.
+            root._rendererActive = root.opened && root._livePreview;
         });
     }
     function _recompute() {
