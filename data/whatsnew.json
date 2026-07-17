@@ -1,6 +1,15 @@
 {
     "releases": [
         {
+            "version": "3.2.1",
+            "date": "2026-07-17",
+            "highlights": [
+                "PlasmaZones is now fully translated into German, Georgian, Swedish, Dutch, Polish, and Russian (#785, #786, #787, #788, #789, #790)",
+                "Fixed: the on-screen display, layout picker, and zone selector cards could look see-through and let the desktop show through. They are now solid, with a border and drop shadow that follow your theme. If you customized these before and they still look off, reset them on the Decoration → OSDs and Decoration → Popups pages (#792)",
+                "Fixed: a custom decoration pack on a window now follows your theme colors for its frame line and its glow or shadow, the same as it already did on the overlay cards (#792)"
+            ]
+        },
+        {
             "version": "3.2.0",
             "date": "2026-07-17",
             "highlights": [

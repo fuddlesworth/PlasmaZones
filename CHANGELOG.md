@@ -5,6 +5,17 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1] - 2026-07-17
+
+### Added
+
+- **Six new translations**: PlasmaZones is now fully translated into German ([#785](https://github.com/fuddlesworth/PlasmaZones/pull/785)), Georgian ([#786](https://github.com/fuddlesworth/PlasmaZones/pull/786)), Swedish ([#787](https://github.com/fuddlesworth/PlasmaZones/pull/787)), Dutch ([#788](https://github.com/fuddlesworth/PlasmaZones/pull/788)), Polish ([#789](https://github.com/fuddlesworth/PlasmaZones/pull/789)), and Russian ([#790](https://github.com/fuddlesworth/PlasmaZones/pull/790)).
+
+### Fixed
+
+- **See-through overlay cards**: the on-screen display, the layout picker, and the zone selector were drawn with a translucent body, so the desktop could bleed through them. Each card is now drawn opaque with a border and drop shadow that follow your theme in both light and dark. If you had customized these surfaces and they still look wrong after upgrading, open the Decoration → OSDs and Decoration → Popups pages and reset each to its default ([#792](https://github.com/fuddlesworth/PlasmaZones/pull/792)).
+- **Decoration packs now follow theme colors on windows too**: a custom decoration pack on a window ignored the theme color options, so the neutral frame line and the theme-tinted glow or shadow only took effect on the overlay cards. All three now resolve on the window path as well ([#792](https://github.com/fuddlesworth/PlasmaZones/pull/792)).
+
 ## [3.2.0] - 2026-07-17
 
 ### Added
