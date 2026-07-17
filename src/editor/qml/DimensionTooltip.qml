@@ -80,7 +80,7 @@ Rectangle {
         }
 
         Label {
-            text: isFixedMode ? i18nc("@info Position in pixels", "%1px, %2px", fixedPosX, fixedPosY) : i18nc("@info Position as percentages", "%1% × %2%", xPercent, yPercent)
+            text: isFixedMode ? i18nc("@info Position in pixels", "%1px, %2px", fixedPosX, fixedPosY) : i18nc("@info Position as percentages", "%1%, %2%", xPercent, yPercent)
             font.family: Kirigami.Theme.fixedWidthFont.family
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
             color: Kirigami.Theme.textColor

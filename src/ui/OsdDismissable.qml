@@ -5,7 +5,7 @@ import QtQuick
 
 /**
  * Auto-dismiss timer + idempotency latch shared by every OSD content type
- * loaded into NotificationOverlay.qml's mode-driven Loader.
+ * loaded into PassiveOverlayShell.qml's osdSlot Loader.
  *
  * Why this is its own component: the timer-fire path and the click
  * MouseArea path can both attempt to dismiss within the same show cycle.

@@ -7,8 +7,8 @@ import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
 /**
- * Layout OSD content — Item-rooted body for use inside the unified
- * NotificationOverlay host that swaps OSD modes via Loader.
+ * Layout OSD content — Item-rooted body for use inside the
+ * PassiveOverlayShell host that swaps OSD modes via its osdSlot Loader.
  *
  * Phase 5: surface lifecycle + show/hide animations are driven entirely by
  * PhosphorAnimationLayer::SurfaceAnimator (registered for the notification
