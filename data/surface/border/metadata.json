@@ -3,7 +3,7 @@
     "name": "Border",
     "description": "Rounded corners and a window border. Clips the surface to a rounded rectangle and lays a configurable border band over the desktop, so a translucent border blends with what is behind the surface rather than its own content. Width, corner radius and colour are this pack's own parameters.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Borders",
     "providesBorder": true,
     "fragmentShader": "effect.frag",
@@ -27,11 +27,36 @@
             "description": "Roundness of the corners (px, 0 for square)"
         },
         {
+            "id": "edgeSoftness",
+            "name": "Edge softness",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.1,
+            "max": 2.0,
+            "description": "Anti-alias feather of the border edge (px). Lower is a crisper hairline. 0.7 is the soft default."
+        },
+        {
             "id": "useSystemAccent",
             "name": "Use system accent colour",
             "type": "bool",
             "default": true,
             "description": "Derive the border colours from the system colour scheme"
+        },
+        {
+            "id": "useThemeNeutral",
+            "name": "Use neutral theme colour",
+            "type": "bool",
+            "default": false,
+            "description": "Derive a neutral frame-contrast border colour from the theme instead of the accent. Wins over the accent option when both are on."
+        },
+        {
+            "id": "frameContrast",
+            "name": "Frame contrast",
+            "type": "float",
+            "default": 0.2,
+            "min": 0.0,
+            "max": 1.0,
+            "description": "How far the neutral border colour sits between the theme background (0) and foreground (1). Only applies when Use neutral theme colour is on"
         },
         {
             "id": "activeColor",

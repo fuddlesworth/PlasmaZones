@@ -32,7 +32,7 @@ vec4 pSurface(vec2 uv) {
 
     // Band geometry: the family's OUTER-radius rounded-rect SDF, content clip
     // and band edge from this pack's logical-px width and corner radius.
-    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius);
+    BorderBand bb = standardBorderBand(surfacePixel(uv), p_borderWidth, p_cornerRadius, p_edgeSoftness);
 
     // Focus-mixed border colour (the shader picks active vs inactive).
     vec4 outlineColor = mix(p_inactiveColor, p_activeColor, clamp(uSurfaceFocused, 0.0, 1.0));

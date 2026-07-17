@@ -41,6 +41,13 @@
             "type": "color",
             "default": "#ff3daee9",
             "description": "Colour of the halo"
+        },
+        {
+            "id": "useThemeTint",
+            "name": "Tint with theme background",
+            "type": "bool",
+            "default": false,
+            "description": "Tint the halo with the system background colour (keeping its alpha) so it tracks the theme instead of a fixed colour."
         }
     ]
 }

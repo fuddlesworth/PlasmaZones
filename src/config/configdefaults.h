@@ -1182,12 +1182,60 @@ public:
     ///
     /// The decoration tree is the user-applied surface-shader pack stack. Window
     /// border and title-bar appearance are owned by the window rules, not by this
-    /// tree, so the default auto-inserts NOTHING: it is an empty/neutral tree and
-    /// every surface (window / osd / popup) starts undecorated until the user
-    /// engages a pack (e.g. glow) from the Decoration pages.
+    /// tree, so windows and popups start undecorated until the user engages a
+    /// pack (e.g. glow) from the Decoration pages.
+    ///
+    /// The PopupFrame-based card surfaces are the exception: the OSD ("osd") and
+    /// the two PopupFrame popups ("popup.layoutPicker", "popup.zoneSelector")
+    /// ship a default chain that chromes their cards through the
+    /// surface-decoration pipeline rather than PopupFrame's built-in MultiEffect
+    /// — a crisp neutral frame-contrast border plus a real, theme-tinted drop
+    /// shadow. (Snap-assist is left undecorated: it carries its own anchor, not
+    /// PopupFrame, so it has no equivalent card chrome to replace.) These land
+    /// here (not as a daemon-only fallback) so they flow through the same tree
+    /// the Decoration pages edit and a user can retune or clear them. The border
+    /// colour resolves from the theme in OverlayService::applyDecoration
+    /// (useThemeNeutral, at frameContrast 0.2) so it tracks light and dark;
+    /// edgeSoftness 0.5 keeps the 1px border a crisp hairline. The shadow pack is
+    /// a proper drop shadow (offset, edge-feathered so it never cuts off in a
+    /// hard rectangle), tinted with the theme background (useThemeTint,
+    /// PopupFrame's original glow colour) so the halo tracks light and dark too.
     static ::PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree()
     {
-        return ::PhosphorSurfaceShaders::DecorationProfileTree{};
+        // One shared card decoration for every PopupFrame surface — the OSD and
+        // both popups read as the same surface family. PopupFrame squares its
+        // body off when decorated (radius 0), so the packs are the sole owners
+        // of the corner rounding. The corner radius is NOT set here: each popup
+        // slot publishes its own card radius (cardCornerRadius) and
+        // OverlayService::applyDecoration injects it into every pack that
+        // declares cornerRadius, so the corners follow the card and border and
+        // shadow coincide.
+        const auto cardDecoration = []() -> ::PhosphorSurfaceShaders::DecorationProfile {
+            ::PhosphorSurfaceShaders::DecorationProfile card;
+            card.chain = QStringList{QStringLiteral("border"), QStringLiteral("shadow")};
+            QVariantMap borderParams;
+            borderParams.insert(QStringLiteral("borderWidth"), 1);
+            borderParams.insert(QStringLiteral("useSystemAccent"), false);
+            borderParams.insert(QStringLiteral("useThemeNeutral"), true);
+            borderParams.insert(QStringLiteral("edgeSoftness"), 0.5);
+            QVariantMap shadowParams;
+            shadowParams.insert(QStringLiteral("shadowSize"), 28);
+            shadowParams.insert(QStringLiteral("shadowStrength"), 0.6);
+            shadowParams.insert(QStringLiteral("offsetY"), 6);
+            shadowParams.insert(QStringLiteral("useThemeTint"), true);
+            QVariantMap params;
+            params.insert(QStringLiteral("border"), borderParams);
+            params.insert(QStringLiteral("shadow"), shadowParams);
+            card.parameters = params;
+            return card;
+        };
+
+        ::PhosphorSurfaceShaders::DecorationProfileTree tree;
+        const ::PhosphorSurfaceShaders::DecorationProfile card = cardDecoration();
+        tree.setOverride(QStringLiteral("osd"), card);
+        tree.setOverride(QStringLiteral("popup.layoutPicker"), card);
+        tree.setOverride(QStringLiteral("popup.zoneSelector"), card);
+        return tree;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

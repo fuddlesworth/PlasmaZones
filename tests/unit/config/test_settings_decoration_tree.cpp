@@ -68,10 +68,15 @@ private Q_SLOTS:
 
     /// A fresh config has no Decorations/DecorationProfileTree entry, so
     /// Settings::decorationProfileTree() must fall back to the canonical
-    /// ConfigDefaults default — the EMPTY/neutral tree. Border and
-    /// titlebar visuals are owned by the window rules, so the tree starts
-    /// with no baseline chain and no overrides.
-    void testDecorationProfileTree_defaultIsEmptyNeutralTree()
+    /// ConfigDefaults default. The baseline stays neutral (no global chain —
+    /// window/popup border and titlebar visuals are owned by the window
+    /// rules), but the three PopupFrame card surfaces — "osd",
+    /// "popup.layoutPicker", "popup.zoneSelector" — each ship the same default
+    /// decoration chain (a crisp neutral frame-contrast border + a real,
+    /// theme-tinted drop shadow) that chromes their cards through the
+    /// surface-decoration pipeline. Snap-assist carries its own anchor, not
+    /// PopupFrame, so it is left undecorated.
+    void testDecorationProfileTree_defaultShipsCardChains()
     {
         IsolatedConfigGuard guard;
 
@@ -79,7 +84,28 @@ private Q_SLOTS:
         const auto tree = settings.decorationProfileTree();
         QCOMPARE(tree, ConfigDefaults::decorationProfileTree());
         QVERIFY2(!tree.baseline().chain.has_value(), "default baseline must carry no chain (fully neutral)");
-        QVERIFY2(tree.overriddenPaths().isEmpty(), "default tree must carry no per-surface overrides");
+        QCOMPARE(tree.overriddenPaths(),
+                 (QStringList{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
+                              QStringLiteral("popup.zoneSelector")}));
+
+        // Every card surface resolves to the same border + theme-tinted shadow.
+        const QStringList cardSurfaces{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
+                                       QStringLiteral("popup.zoneSelector")};
+        for (const QString& path : cardSurfaces) {
+            const auto card = tree.resolve(path);
+            QCOMPARE(card.enabledChain(), (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));
+            const auto borderParams = card.effectiveParameters().value(QStringLiteral("border")).toMap();
+            QVERIFY2(borderParams.value(QStringLiteral("useThemeNeutral")).toBool(),
+                     qPrintable(QStringLiteral("%1 border must derive a neutral theme colour").arg(path)));
+            QCOMPARE(borderParams.value(QStringLiteral("borderWidth")).toInt(), 1);
+            const auto shadowParams = card.effectiveParameters().value(QStringLiteral("shadow")).toMap();
+            QVERIFY2(shadowParams.value(QStringLiteral("useThemeTint")).toBool(),
+                     qPrintable(QStringLiteral("%1 shadow must tint with the theme background").arg(path)));
+        }
+
+        // Snap-assist stays undecorated (no PopupFrame chrome to replace).
+        QVERIFY2(tree.resolve(QStringLiteral("popup.snapAssist")).enabledChain().isEmpty(),
+                 "snap-assist must not ship a default decoration");
     }
 
     /// The tree — a baseline chain plus a leaf override — must survive

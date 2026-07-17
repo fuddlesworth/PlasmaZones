@@ -76,5 +76,11 @@ inline constexpr QLatin1String HighlightedZoneIds{"highlightedZoneIds"};
 /// done C++-side via PerScreenOverlayState::labelsTextureHash, not on the QML side.
 inline constexpr QLatin1String LabelsTexture{"labelsTexture"};
 
+/// Corner radius (logical px) the surface decoration should round the card to.
+/// Published per-slot by the popup shell (a Kirigami-derived design radius) and
+/// read by applyDecoration, which injects it into every decoration pack that
+/// declares a cornerRadius so border and shadow corners coincide.
+inline constexpr QLatin1String CardCornerRadius{"cardCornerRadius"};
+
 } // namespace OverlayQmlPropertyNames
 } // namespace PlasmaZones

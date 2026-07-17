@@ -15,6 +15,7 @@
 #include <QSet>
 #include <QQmlEngine>
 #include <QGuiApplication>
+#include <QPalette>
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
@@ -29,6 +30,7 @@
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
+#include <PhosphorSurface/SurfaceThemeResolve.h>
 
 #include "../../core/isettings.h"
 
@@ -405,6 +407,8 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     QVariantList stages;
     double outerPadding = 0.0;
     bool chainWantsAudio = false;
+    // Theme colours for the pack flag resolver, read once for the whole chain.
+    const QPalette pal = QGuiApplication::palette();
     for (const QString& packId : chain) {
         if (!m_surfaceShaderRegistry->hasEffect(packId)) {
             qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
@@ -445,6 +449,35 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
             outerPadding = qMax(outerPadding, request);
         }
 
+        // Theme colour resolution: packs that opt into theme-derived colours
+        // (border useThemeNeutral/useSystemAccent, glow/shadow useThemeTint) have
+        // them synthesised into their friendly params here, before translation —
+        // the flags are host-consumed and never reach the shader. Shared with the
+        // KWin window-decoration path via resolveThemeParamColors so both resolve
+        // identically. The daemon sources its theme colours from the live palette
+        // (background / foreground) plus its accent settings; resolved on every
+        // show, so a colour-scheme change is picked up on the next OSD.
+        // m_settings is guaranteed non-null here — applyDecoration early-returns
+        // above when it (or the registry) is null.
+        QVariantMap resolvedParams = friendlyParams;
+        PhosphorSurfaceShaders::resolveThemeParamColors(effect, resolvedParams,
+                                                        {m_settings->highlightColor(), m_settings->inactiveColor(),
+                                                         pal.color(QPalette::Active, QPalette::Window),
+                                                         pal.color(QPalette::Active, QPalette::WindowText)});
+
+        // Card corner radius: the popup slot publishes its card's design radius
+        // (cardCornerRadius, a Kirigami-derived logical-px value). The decoration
+        // rounds to the CARD, not a per-pack value, so every pack that declares a
+        // cornerRadius (border, shadow, glow) is injected the same radius here and
+        // their corners coincide. translateSurfaceParams only emits a lane for
+        // packs whose metadata declares cornerRadius, so this is a no-op for any
+        // pack without it. Slots that publish no cardCornerRadius (or a non-card
+        // surface) fall back to the pack's own default.
+        const QVariant cardRadius = slot->property(OverlayQmlPropertyNames::CardCornerRadius.data());
+        if (cardRadius.isValid() && cardRadius.toReal() > 0.0) {
+            resolvedParams.insert(QStringLiteral("cornerRadius"), cardRadius.toReal());
+        }
+
         QVariantMap stageMap;
         stageMap.insert(QStringLiteral("source"), QUrl::fromLocalFile(effect.fragmentShaderPath));
         stageMap.insert(QStringLiteral("vertexSource"),
@@ -452,7 +485,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
         stageMap.insert(QStringLiteral("preamble"),
                         PhosphorSurfaceShaders::SurfaceShaderRegistry::paramPreamble(effect));
         stageMap.insert(QStringLiteral("params"),
-                        m_surfaceShaderRegistry->translateSurfaceParams(packId, friendlyParams));
+                        m_surfaceShaderRegistry->translateSurfaceParams(packId, resolvedParams));
         // Animated packs declare it in metadata; the QML host gates that
         // stage's per-frame iTime tick (playing) on this so static packs pay
         // nothing.
