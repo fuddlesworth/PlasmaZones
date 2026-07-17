@@ -29,6 +29,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Centered, a single-window layout**: a bundled algorithm that holds the focused window centered at a width you set and keeps the rest behind it, built on new support for single-window layouts in scripts ([#703](https://github.com/fuddlesworth/PlasmaZones/pull/703)).
 - **Back and forward navigation in settings**: the settings app remembers the pages you visit, so you can step back to where you were and forward again from the breadcrumb row ([#749](https://github.com/fuddlesworth/PlasmaZones/pull/749)).
 - **Randomize and reset for algorithm and shader parameters**: the parameter editor gains a randomize control on each parameter and a button to randomize or reset a whole group at once, which makes it quick to explore how a shader or algorithm's settings look ([#737](https://github.com/fuddlesworth/PlasmaZones/pull/737)).
+- **Discord community link**: the Links card on the About page now has a Discord Community button that opens the project's invite.
 
 ### Changed
 
