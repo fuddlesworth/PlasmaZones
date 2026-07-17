@@ -58,7 +58,7 @@
         <location filename="../src/daemon/daemon/osd.cpp" line="295"/>
         <location filename="../src/settings/rulemodel.cpp" line="285"/>
         <source>Tiling: %1</source>
-        <translation>Tiling: %1</translation>
+        <translation>Kachelung: %1</translation>
     </message>
     <message>
         <location filename="../src/daemon/shortcutmanager.cpp" line="592"/>
@@ -560,7 +560,7 @@
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="890"/>
         <source>Sticky</source>
-        <translation>Klebrig</translation>
+        <translation>Angeheftet</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="892"/>
@@ -593,7 +593,7 @@
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="906"/>
         <source>Transient</source>
-        <translation>Vorübergehend</translation>
+        <translation>Transient</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="910"/>
@@ -775,7 +775,7 @@
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="85"/>
         <source>Taskbar &amp; switcher</source>
-        <translation>Taskleiste &amp; Umschalter</translation>
+        <translation>Fensterleiste &amp; Umschalter</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="91"/>
@@ -896,7 +896,7 @@
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="153"/>
         <source>Whether the window is hidden from the taskbar.</source>
-        <translation>Ob das Fenster in der Taskleiste ausgeblendet ist.</translation>
+        <translation>Ob das Fenster in der Fensterleiste ausgeblendet ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="155"/>
@@ -1191,7 +1191,7 @@
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="201"/>
         <source>The layout currently active on the monitor. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout. It cannot change which layout is assigned (that would be circular).</source>
-        <translation>Das derzeit auf dem Bildschirm aktive Layout. Ermöglicht es einer Regel, für den Bildschirm mit einem bestimmten Layout die Abstände, das Overlay oder den Sperrzustand zu ändern. Es kann nicht ändern, welches Layout zugewiesen ist (das wäre zirkulär).</translation>
+        <translation>Das derzeit auf dem Bildschirm aktive Layout. Ermöglicht es einer Regel, für den Bildschirm mit einem bestimmten Layout die Abstände, das Overlay oder den Sperrzustand zu ändern. Sie kann jedoch nicht ändern, welches Layout zugewiesen ist (das wäre zirkulär).</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="246"/>
@@ -1231,18 +1231,18 @@
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="351"/>
         <source>Show opacity and tint (off = hide)</source>
-        <translation>Deckkraft und Färbung anzeigen (aus = ausblenden)</translation>
+        <translation>Deckkraft und Tönung anzeigen (aus = ausblenden)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="354"/>
         <source>Tint strength (%)</source>
-        <translation>Färbungsstärke (%)</translation>
+        <translation>Tönungsstärke (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="357"/>
         <location filename="../src/settings/searchcatalog.cpp" line="353"/>
         <source>Tint color</source>
-        <translation>Färbungsfarbe</translation>
+        <translation>Tönungsfarbe</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="408"/>
@@ -1928,7 +1928,7 @@
         <location filename="../src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp" line="21"/>
         <source>Update Appearance for %1 Zones</source>
         <comment>@action</comment>
-        <translation>Aussehen von %1 Zonen aktualisieren</translation>
+        <translation>Darstellung von %1 Zonen aktualisieren</translation>
     </message>
     <message>
         <location filename="../src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp" line="73"/>
@@ -2061,7 +2061,7 @@
         <location filename="../src/editor/undo/commands/UpdateZoneAppearanceCommand.cpp" line="15"/>
         <source>Change Zone Appearance</source>
         <comment>@action</comment>
-        <translation>Zonen-Aussehen ändern</translation>
+        <translation>Zonendarstellung ändern</translation>
     </message>
     <message>
         <location filename="../src/editor/undo/commands/UpdateZoneGeometryCommand.cpp" line="14"/>
@@ -2818,7 +2818,7 @@
         <location filename="../src/settings/searchcatalog.cpp" line="109"/>
         <location filename="../src/settings/searchcatalog.cpp" line="138"/>
         <source>easing</source>
-        <translation>Beschleunigung</translation>
+        <translation>Easing</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="110"/>
@@ -3104,7 +3104,7 @@
         <location filename="../src/settings/searchcatalog.cpp" line="390"/>
         <location filename="../src/settings/searchcatalog.cpp" line="533"/>
         <source>Exclude transient windows</source>
-        <translation>Vorübergehende Fenster ausschließen</translation>
+        <translation>Transient-Fenster ausschließen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="240"/>
@@ -3672,12 +3672,12 @@
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="340"/>
         <source>Opacity and tint</source>
-        <translation>Deckkraft und Farbton</translation>
+        <translation>Deckkraft und Tönung</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="342"/>
         <source>Apply opacity and tint to</source>
-        <translation>Deckkraft und Farbton anwenden auf</translation>
+        <translation>Deckkraft und Tönung anwenden auf</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="346"/>
@@ -4124,7 +4124,7 @@
         <location filename="../src/settings/searchcatalog.cpp" line="467"/>
         <location filename="../src/settings/searchcatalog.cpp" line="508"/>
         <source>Sticky windows</source>
-        <translation>Klebrige Fenster</translation>
+        <translation>Angeheftete Fenster</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="467"/>
@@ -4136,7 +4136,7 @@
         <location filename="../src/settings/searchcatalog.cpp" line="467"/>
         <location filename="../src/settings/searchcatalog.cpp" line="508"/>
         <source>sticky</source>
-        <translation>Klebrig</translation>
+        <translation>Angeheftet</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="469"/>
@@ -4567,7 +4567,7 @@
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="597"/>
         <source>Easing Presets</source>
-        <translation>Beschleunigungsvorlagen</translation>
+        <translation>Easing-Vorlagen</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="599"/>
@@ -4641,17 +4641,17 @@
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="679"/>
         <source>Show (badge)</source>
-        <translation>Anzeigen (Kennzeichen)</translation>
+        <translation>Anzeigen (Markierung)</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="681"/>
         <source>Hide (badge)</source>
-        <translation>Ausblenden (Kennzeichen)</translation>
+        <translation>Ausblenden (Markierung)</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="683"/>
         <source>Pulse (badge)</source>
-        <translation>Pulsieren (Kennzeichen)</translation>
+        <translation>Pulsieren (Markierung)</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="684"/>
@@ -4706,7 +4706,7 @@
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="707"/>
         <source>Cursor Hover</source>
-        <translation>Zeiger überfährt</translation>
+        <translation>Zeiger darüber</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="709"/>
@@ -4767,7 +4767,7 @@
     <message>
         <location filename="../src/daemon/daemon.cpp" line="2225"/>
         <source>The PlasmaZones KWin effect has not registered with the daemon, so window dragging and shortcuts will not work. Make sure it is enabled in System Settings &gt; Desktop Effects, then restart the Plasma session.</source>
-        <translation>Der PlasmaZones-KWin-Effekt hat sich nicht beim Hintergrunddienst registriert, sodass das Ziehen von Fenstern und Kurzbefehle nicht funktionieren. Stellen Sie sicher, dass er in den Systemeinstellungen unter &gt; Arbeitsflächen-Effekte aktiviert ist, und starten Sie dann die Plasma-Sitzung neu.</translation>
+        <translation>Der PlasmaZones-KWin-Effekt hat sich nicht beim Hintergrunddienst registriert, sodass das Ziehen von Fenstern und Kurzbefehle nicht funktionieren. Stellen Sie sicher, dass er in den Systemeinstellungen unter Arbeitsflächen-Effekte aktiviert ist, und starten Sie dann die Plasma-Sitzung neu.</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon.cpp" line="2244"/>
