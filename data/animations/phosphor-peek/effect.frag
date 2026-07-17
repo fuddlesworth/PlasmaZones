@@ -67,11 +67,21 @@ vec4 pTransition(vec2 uv, float t) {
     float jitter = (fbm(uv * density * vec2(aspect, 1.0), 4, 2.0) - 0.5) * 0.18;
     float p = proj + jitter;
 
-    // The front sweeps from well before 0 to well past 1 so that t = 0 is
+    // The front sweeps just past the fragment extent on each side so t = 0 is
     // exactly the windows scene and t = 1 is exactly the desktop, whatever the
-    // softness and jitter do in between.
+    // softness and jitter do in between. proj is clamped to [0, 1] and jitter is
+    // bounded to [-0.09, +0.079] (fbm over the [0, 1) niriNoise), so p lands in
+    // [-0.09, 1.079]. Tying the endpoints to `soft` (rather than the old fixed
+    // [-0.6, 1.6] sized for the WORST-CASE soft = 0.4) makes the front reveal the
+    // first fragment at tt ≈ 0 and the last at tt ≈ 1 for ANY softness, so the
+    // drain uses the whole [0, 1] domain. The old fixed range finished the sweep
+    // at tt ≈ 0.85 (and started it at ≈ 0.15) at the default softness, leaving
+    // the rest of the timeline a static fully-drained frame — which an ease-out
+    // progress curve then stretched into a visible hang before the peek settled.
+    // The 0.02 margin past p ± soft plus the tt ≥ 0.96 backstop below keep both
+    // endpoints clean against the jitter bound.
     float soft = mix(0.05, 0.4, clamp(p_softness, 0.0, 1.0));
-    float front = mix(-0.6, 1.6, tt);
+    float front = mix(-0.11 - soft, 1.10 + soft, tt);
 
     // reveal: 0 = windows still here .. 1 = desktop drained through.
     float reveal = smoothstep(p - soft, p + soft, front);

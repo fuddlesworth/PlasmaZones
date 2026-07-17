@@ -31,9 +31,14 @@ vec4 pTransition(vec2 uv, float t) {
     float e = clamp(vFlow.z, 0.0, 1.0);
 
     // Feathered window mask in card space — the grid spans the whole
-    // output, so only cells inside [0, 1] carry window content.
+    // output, so only cells inside the card carry window content. The card
+    // runs past [0, 1] by the decoration chain's outer margin: that band is
+    // the halo the compositor composited into the padded canvas, which
+    // surfaceColor() resolves through its layer remap, so the mask includes
+    // it and the halo flows with the window. Zero pad reduces to [0, 1].
+    vec2 pad = surfacePadRel();
     vec2 fw = max(fwidth(cuv), vec2(1.0e-4));
-    vec2 edge = min(smoothstep(vec2(0.0), fw, cuv), smoothstep(vec2(0.0), fw, 1.0 - cuv));
+    vec2 edge = min(smoothstep(vec2(0.0), fw, cuv + pad), smoothstep(vec2(0.0), fw, 1.0 + pad - cuv));
     float mask = edge.x * edge.y;
     if (mask <= 0.0) {
         return vec4(0.0);

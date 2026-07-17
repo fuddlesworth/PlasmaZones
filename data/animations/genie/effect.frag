@@ -26,11 +26,15 @@ vec4 pTransition(vec2 uv, float t) {
     vec2 cuv = vGenie.xy;
     float p = clamp(vGenie.z, 0.0, 1.0);
 
-    // Feathered card-edge mask in card space — same construction as flow
-    // (the grid sits on the window's frame rect, or its padded decoration
-    // canvas, so this feathers the edges and crops any halo band).
+    // Feathered card-edge mask in card space — same construction as flow.
+    // Widened by the decoration chain's outer margin so the halo the
+    // compositor composited into the padded canvas travels with the card
+    // instead of being cropped at the frame edge; surfaceColor() resolves
+    // the out-of-range cuv into the band. Zero pad reduces to the bare
+    // [0, 1] card edge.
+    vec2 pad = surfacePadRel();
     vec2 fw = max(fwidth(cuv), vec2(1.0e-4));
-    vec2 edge = min(smoothstep(vec2(0.0), fw, cuv), smoothstep(vec2(0.0), fw, 1.0 - cuv));
+    vec2 edge = min(smoothstep(vec2(0.0), fw, cuv + pad), smoothstep(vec2(0.0), fw, 1.0 + pad - cuv));
     float mask = edge.x * edge.y;
     if (mask <= 0.0) {
         return vec4(0.0);

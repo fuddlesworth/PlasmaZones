@@ -66,13 +66,23 @@ vec4 pTransition(vec2 uv, float t)
     // endpoints (start / end of the leg) where `strength == 0` would
     // otherwise collapse the smoothstep to a step at the anchor edge
     // and lose sub-pixel AA on the silhouette.
+    // Both masks below run over the card range WIDENED by the decoration
+    // chain's outer margin. Within that band the sample is not the
+    // CLAMP_TO_EDGE smear concern (1) describes: it is the halo the
+    // compositor composited into the padded canvas, which surfaceColor()
+    // resolves through its layer remap. Cropping at the bare [0, 1] card
+    // edge threw that halo away. PAST the band the clamp reasoning stands
+    // unchanged, so the hard mask still lands there — just displaced
+    // outward. An unpadded window has zero pad and both masks reduce
+    // exactly to their previous form.
+    vec2 pad = surfacePadRel();
     vec2 sampleUv = anchorUv - warp;
-    vec2 sampleInside = step(vec2(0.0), sampleUv) * step(sampleUv, vec2(1.0));
+    vec2 sampleInside = step(-pad, sampleUv) * step(sampleUv, vec2(1.0) + pad);
     vec4 warpedSample = surfaceColor(sampleUv) * sampleInside.x * sampleInside.y;
 
     float feather = max(strength, 0.005);
-    vec2 lo = smoothstep(vec2(-feather), vec2(0.0), anchorUv);
-    vec2 hi = vec2(1.0) - smoothstep(vec2(1.0), vec2(1.0) + vec2(feather), anchorUv);
+    vec2 lo = smoothstep(-pad - vec2(feather), -pad, anchorUv);
+    vec2 hi = vec2(1.0) - smoothstep(vec2(1.0) + pad, vec2(1.0) + pad + vec2(feather), anchorUv);
     float mask = lo.x * lo.y * hi.x * hi.y;
     return warpedSample * mask;
 }
