@@ -72,8 +72,18 @@ vec4 pTransition(vec2 uv, float t) {
 
     // Outside the morphing rect: nothing to draw. Small feather to avoid a
     // hard edge as the rect sweeps.
+    //
+    // The rect is the window FRAME, and ruv is frame-relative, so the bare
+    // [0, 1] range cropped the decoration chain's halo at the frame edge for
+    // the whole morph. Widen by the chain's outer margin: oldColor() and
+    // surfaceColor() are both frame-anchored, so the same out-of-range ruv
+    // resolves into the padded canvas's margin band on either side of the
+    // cross-fade. The pad rides the rect lerp, so the halo scales with the
+    // window as it morphs rather than sitting at a fixed screen width. Zero
+    // pad reduces to the previous frame-edge mask.
+    vec2 pad = surfacePadRel();
     vec2 fw = max(fwidth(ruv), vec2(1.0e-4));
-    vec2 edge = min(smoothstep(vec2(0.0), fw, ruv), smoothstep(vec2(0.0), fw, 1.0 - ruv));
+    vec2 edge = min(smoothstep(vec2(0.0), fw, ruv + pad), smoothstep(vec2(0.0), fw, 1.0 + pad - ruv));
     float mask = edge.x * edge.y;
     if (mask <= 0.0) {
         return vec4(0.0);

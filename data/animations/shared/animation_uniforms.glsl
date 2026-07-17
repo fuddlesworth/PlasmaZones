@@ -428,6 +428,43 @@ vec4 surfaceColor(vec2 uv) {
 #endif
 }
 
+// The decoration chain's outer margin, expressed in the SAME card-space
+// units `surfaceColor()`'s `uv` takes — half-width per axis, so the halo
+// band spans `uv` in [-surfacePadRel(), 1 + surfacePadRel()].
+//
+// A card-space mask built on the bare [0, 1] range clips the halo at the
+// frame edge, discarding the margin the compositor composited into
+// `uSurfaceLayer`. Widening the mask by this value lets it through, and
+// `surfaceColor()`'s unclamped `iLayerRectInTexture` remap resolves the
+// out-of-range `uv` into the band.
+//
+// Derived from the two rect uniforms rather than pushed separately: both
+// describe the SAME inner rect, `iAnchorRectInTexture` within uTexture0's
+// expanded capture and `iLayerRectInTexture` within the layer canvas the
+// compositor padded by the margin. So `inner / rect.zw` recovers each
+// outer extent, and their difference is the two margins — the shadow inset
+// common to both cancels, leaving the padding alone. An unpadded window
+// carries canvas == expanded, hence equal rects and an exact zero, which
+// keeps its mask bit-identical to the un-widened form.
+vec2 surfacePadRel() {
+#ifdef PLASMAZONES_KWIN
+    // No layer means no composited canvas, so `iLayerRectInTexture` carries
+    // nothing to difference against.
+    if (iHasSurfaceLayer == 0) {
+        return vec2(0.0);
+    }
+    vec2 layerSpan = max(iLayerRectInTexture.zw, vec2(1.0e-6));
+    vec2 anchorSpan = max(iAnchorRectInTexture.zw, vec2(1.0e-6));
+    // max() against 0: a capture-scale clamp on a huge window can shrink the
+    // canvas below the expanded rect, and a negative pad would eat INTO the
+    // card rather than extend past it.
+    return max(0.5 * (1.0 / layerSpan - 1.0 / anchorSpan), vec2(0.0));
+#else
+    // Daemon path: the padded decoration chain is a compositor-side fold.
+    return vec2(0.0);
+#endif
+}
+
 // ─── Direction helpers (T1.5) ──────────────────────────────────────────
 // A transition plays forward (in: window.open / snapIn / show) or reverse
 // (out: window.close / snapOut / hide). The runtime exposes that as
