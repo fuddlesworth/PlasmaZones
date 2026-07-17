@@ -23,8 +23,11 @@
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/SurfaceThemeResolve.h>
 
 #include <QColor>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QtMath> // qCeil, resolving the chain's outer padding
 #include <QVariantMap>
 
@@ -392,6 +395,15 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
     int outerPadding = 0;
     bool needsBackdrop = false;
+    // Theme colours for the pack flag resolver (below). Accent / inactive come
+    // from the daemon-plumbed border colours (same source the plain-border layer
+    // uses); background / foreground come from the compositor's palette, which
+    // tracks the active colour scheme. Built once for the whole chain.
+    const QPalette pal = QGuiApplication::palette();
+    const PhosphorSurfaceShaders::SurfaceThemeColors themeColors{
+        m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9")),
+        m_borderInactiveColor.isValid() ? m_borderInactiveColor : QColor(QStringLiteral("#ff5c6370")),
+        pal.color(QPalette::Active, QPalette::Window), pal.color(QPalette::Active, QPalette::WindowText)};
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
         if (!eff.isValid()) {
@@ -400,7 +412,11 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // Any needsBackdrop pack in the chain switches the window onto the
         // composite path with a per-frame backdrop capture (see paintWindow).
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
-        const QVariantMap packOverrides = allPackParams.value(packId).toMap();
+        QVariantMap packOverrides = allPackParams.value(packId).toMap();
+        // Honour the pack's host-consumed theme flags (border useThemeNeutral /
+        // useSystemAccent, glow/shadow useThemeTint) via the shared resolver, so
+        // window decorations resolve them identically to the daemon overlay path.
+        PhosphorSurfaceShaders::resolveThemeParamColors(eff, packOverrides, themeColors);
         wb.packParamValues.insert(packId, ShaderInternal::resolveSurfaceParamValues(eff, packOverrides));
 
         // Outer-margin request (e.g. the glow pack's glowSize): the resolved

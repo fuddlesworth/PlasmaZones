@@ -1,7 +1,7 @@
 {
     "id": "shadow",
     "name": "Drop Shadow",
-    "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's rounded corners, softens on the unfocused window and leaves the window content untouched. Size, offset, colour and strength are this pack's own parameters.",
+    "description": "A soft dark shadow behind the window, cast slightly downward the way a real light would. It follows the frame's rounded corners and leaves the window content untouched, and it softens when the window loses focus. Size, offset, colour and strength are this pack's own parameters.",
     "author": "PlasmaZones",
     "version": "1.1",
     "category": "Ambience",
@@ -65,7 +65,7 @@
             "name": "Tint with theme background",
             "type": "bool",
             "default": false,
-            "description": "Tint the shadow with the system background colour (keeping its alpha) so it tracks the theme like a soft ambient glow. Honoured on overlay surfaces (OSD / popup)"
+            "description": "Tint the shadow with the system background colour (keeping its alpha) so it tracks the theme like a soft ambient glow."
         }
     ]
 }

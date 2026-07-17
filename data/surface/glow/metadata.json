@@ -47,7 +47,7 @@
             "name": "Tint with theme background",
             "type": "bool",
             "default": false,
-            "description": "Tint the halo with the system background colour (keeping its alpha) so it tracks the theme instead of a fixed colour. Honoured on overlay surfaces (OSD / popup)"
+            "description": "Tint the halo with the system background colour (keeping its alpha) so it tracks the theme instead of a fixed colour."
         }
     ]
 }

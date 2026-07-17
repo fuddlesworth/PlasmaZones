@@ -47,7 +47,7 @@
             "name": "Use neutral theme colour",
             "type": "bool",
             "default": false,
-            "description": "Derive a neutral frame-contrast border colour from the theme instead of the accent. Wins over the accent option when both are on. Honoured on overlay surfaces (OSD / popup)"
+            "description": "Derive a neutral frame-contrast border colour from the theme instead of the accent. Wins over the accent option when both are on."
         },
         {
             "id": "frameContrast",
