@@ -41,6 +41,12 @@ PhosphorUi.AboutPageShell {
                 }
 
                 LinkButton {
+                    linkText: i18n("Discord Community")
+                    linkIcon: "im-user"
+                    url: "https://discord.gg/9CQzAptdJ5"
+                }
+
+                LinkButton {
                     linkText: i18n("Documentation")
                     linkIcon: "documentation"
                     url: "https://phosphor-works.github.io/plasmazones/"
