@@ -10,6 +10,7 @@
 #include <QList>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QUuid>
 #include <QVariantList>
 
@@ -122,9 +123,10 @@ public:
     /// from it). Drives the "modified" marker in the page and switcher.
     Q_INVOKABLE bool activeProfileModified() const;
 
-    /// What @p id overrides relative to its parent, one row per key:
-    /// `{ group, key, before, after }`. `group`/`key` are humanized for
-    /// display; `before`/`after` are the raw values so QML formats them in the
+    /// What @p id overrides relative to its parent, one row per changed LEAF:
+    /// `{ segments, before, after }`. `segments` is the humanized path to the
+    /// leaf (group segments first, then the key path), which the view nests as a
+    /// tree. `before`/`after` are the raw values so QML formats them in the
     /// user's locale. Empty when the profile overrides nothing.
     Q_INVOKABLE QVariantList configChanges(const QString& id) const;
 
@@ -264,9 +266,22 @@ private:
     void depthFirstOrder(const QHash<QUuid, Record>& all, QList<QUuid>& orderOut, QHash<QUuid, int>& depthOut) const;
 
     /// "Snapping.Behavior.ZoneSpan" → "Snapping › Behavior › Zone span".
-    static QString humanizeGroup(const QString& group);
+    static QStringList humanizeGroupSegments(const QString& group);
     /// "borderWidth" → "Border width".
     static QString humanizeKey(const QString& key);
+
+    /// Walk a changed value into one row per differing LEAF, so a structured
+    /// setting (a shader profile tree) enumerates the same way every scalar
+    /// setting does instead of collapsing into an opaque blob. @p path
+    /// accumulates the humanized key path; @p depth guards runaway nesting.
+    /// A trigger object is kept whole — QML renders it as "Alt + Right".
+    /// @p identityKey names a field already spent on the row label (an array
+    /// element's `path`), which is therefore not repeated as a leaf of its own.
+    /// @p segments is the humanized path walked so far, carried as a LIST so the
+    /// view can nest shared prefixes instead of repeating a long breadcrumb on
+    /// every row.
+    static void appendLeafRows(const QStringList& segments, const QJsonValue& before, const QJsonValue& after,
+                               int depth, QVariantList& rows, const QString& identityKey = QString());
 
     /// Stable hex digest of @p id's fully-resolved config + user rules. Keyed on
     /// the whole cascade, so a child that overrides nothing hashes identically

@@ -3,6 +3,7 @@
 
 #include "profilestore.h"
 
+#include "../config/configkeys.h"
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
 
@@ -44,6 +45,34 @@ QList<QUuid> parseUuidArray(const QJsonArray& arr)
         }
     }
     return out;
+}
+
+/// A trigger ({modifier, mouseButton}) is a leaf, not a subtree: recursing into
+/// it would surface raw Qt bitmasks, where the pair together reads as "Alt +
+/// Right" once QML resolves it.
+bool isTriggerObject(const QJsonObject& object)
+{
+    return object.contains(ConfigKeys::triggerModifierField())
+        || object.contains(ConfigKeys::triggerMouseButtonField());
+}
+
+/// Label for one array element: prefer an identifying field the element already
+/// carries (a profile-tree override names its animation path) so the row reads
+/// as that entry rather than as a position, falling back to a 1-based index.
+QString arraySegmentLabel(const QJsonValue& element, int index, QString* identityKey)
+{
+    if (element.isObject()) {
+        const QJsonObject object = element.toObject();
+        for (const QLatin1String field : {QLatin1String("path"), QLatin1String("id"), QLatin1String("name")}) {
+            const QString value = object.value(field).toString();
+            if (!value.isEmpty()) {
+                *identityKey = field;
+                return value;
+            }
+        }
+    }
+    identityKey->clear();
+    return QString::number(index + 1);
 }
 
 QJsonArray uuidArray(const QList<QUuid>& ids)
@@ -591,17 +620,78 @@ QString ProfileStore::humanizeKey(const QString& key)
     return out;
 }
 
-QString ProfileStore::humanizeGroup(const QString& group)
+QStringList ProfileStore::humanizeGroupSegments(const QString& group)
 {
-    // Dot-path groups render as a breadcrumb, each segment humanized:
-    // "Snapping.Behavior.ZoneSpan" → "Snapping › Behavior › Zone span".
+    // A dot-path group becomes one segment per level, each humanized:
+    // "Snapping.Behavior.ZoneSpan" → ["Snapping", "Behavior", "Zone span"].
+    // Segments rather than a joined breadcrumb, so the view can nest rows that
+    // share a prefix under one parent instead of repeating (and eliding) the
+    // whole path on every row.
     const QStringList parts = group.split(QLatin1Char('.'), Qt::SkipEmptyParts);
     QStringList humanized;
     humanized.reserve(parts.size());
     for (const QString& part : parts) {
         humanized.append(humanizeKey(part));
     }
-    return humanized.join(QStringLiteral(" › "));
+    return humanized;
+}
+
+void ProfileStore::appendLeafRows(const QStringList& segments, const QJsonValue& before, const QJsonValue& after,
+                                  int depth, QVariantList& rows, const QString& identityKey)
+{
+    // An unchanged subtree contributes nothing, which is what keeps the row
+    // count proportional to the actual change rather than to the tree's size.
+    if (before == after) {
+        return;
+    }
+
+    // Depth cap: the schema bounds these shapes, but the files are hand-editable
+    // and a pathological nesting should degrade to one row, not recurse forever.
+    constexpr int maxDepth = 6;
+    const bool structured = before.isObject() || after.isObject();
+    const bool listed = before.isArray() || after.isArray();
+    const bool trigger = (before.isObject() && isTriggerObject(before.toObject()))
+        || (after.isObject() && isTriggerObject(after.toObject()));
+
+    if (depth < maxDepth && structured && !trigger) {
+        QStringList keys = before.toObject().keys();
+        for (const QString& key : after.toObject().keys()) {
+            if (!keys.contains(key)) {
+                keys.append(key);
+            }
+        }
+        keys.sort();
+        for (const QString& key : keys) {
+            // The identifying field already names this row; repeating it as a
+            // leaf would report "window.move › Path: window.move".
+            if (key == identityKey) {
+                continue;
+            }
+            appendLeafRows(segments + QStringList{humanizeKey(key)}, before.toObject().value(key),
+                           after.toObject().value(key), depth + 1, rows);
+        }
+        return;
+    }
+
+    if (depth < maxDepth && listed) {
+        const QJsonArray beforeItems = before.toArray();
+        const QJsonArray afterItems = after.toArray();
+        const int count = std::max(beforeItems.size(), afterItems.size());
+        for (int i = 0; i < count; ++i) {
+            const QJsonValue beforeItem = i < beforeItems.size() ? beforeItems.at(i) : QJsonValue();
+            const QJsonValue afterItem = i < afterItems.size() ? afterItems.at(i) : QJsonValue();
+            QString identity;
+            const QString segment = arraySegmentLabel(afterItem.isUndefined() ? beforeItem : afterItem, i, &identity);
+            appendLeafRows(segments + QStringList{segment}, beforeItem, afterItem, depth + 1, rows, identity);
+        }
+        return;
+    }
+
+    QVariantMap row;
+    row.insert(QStringLiteral("segments"), segments);
+    row.insert(QStringLiteral("before"), before.toVariant());
+    row.insert(QStringLiteral("after"), after.toVariant());
+    rows.append(row);
 }
 
 QVariantList ProfileStore::configChanges(const QString& id) const
@@ -624,12 +714,8 @@ QVariantList ProfileStore::configChanges(const QString& id) const
         const QJsonObject group = git.value().toObject();
         const QJsonObject baseGroup = parentResolved.value(git.key()).toObject();
         for (auto kit = group.constBegin(); kit != group.constEnd(); ++kit) {
-            QVariantMap row;
-            row.insert(QStringLiteral("group"), humanizeGroup(git.key()));
-            row.insert(QStringLiteral("key"), humanizeKey(kit.key()));
-            row.insert(QStringLiteral("before"), baseGroup.value(kit.key()).toVariant());
-            row.insert(QStringLiteral("after"), kit.value().toVariant());
-            rows.append(row);
+            appendLeafRows(humanizeGroupSegments(git.key()) + QStringList{humanizeKey(kit.key())},
+                           baseGroup.value(kit.key()), kit.value(), 0, rows);
         }
     }
     return rows;

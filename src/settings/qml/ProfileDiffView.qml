@@ -7,51 +7,60 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 import "FontUtils.js" as FontUtils
+import "ProfileDiffTree.js" as DiffTree
 
 /**
  * @brief Read-only display of one half of a profile's diff — the SETTINGS or
  *        RULES section of the profile preview.
  *
- * Mirrors `ActionListView` structurally (which in turn mirrors
- * `MatchExpressionView`) so the profile preview and the rule preview read as
- * one tree visualisation: each entry renders at depth-1 in a flat tree, with a
- * vertical guide and L-stub at column 0 plus an accent bullet at the row's
- * content edge. The row carries a bold subject label, then a sequence of
- * `LABEL value-pill` pairs — FROM / TO for a changed setting, CHANGE for a
- * rule — aligned in the same tabular columns the rule preview uses.
+ * Rows arrive as a PATH (`segments`) rather than a finished label, and this
+ * view nests them: everything sharing a prefix hangs off one parent node, so a
+ * setting reads as its own name under "Animations › Shader profile tree ›
+ * Overrides" instead of every row restating (and eliding) the whole breadcrumb.
  *
- * A value that parses as a colour gets a swatch inside its pill, the way
- * ActionListView renders `color`-kind action params.
+ * The connector geometry is ported from `MatchExpressionView`, which renders
+ * the rule preview's tree, so the two read as one visualisation: one Canvas per
+ * row strokes the ancestor verticals, and the immediate-parent column also
+ * strokes an L-stub into the row's content edge.
+ *
+ * A leaf carries a sequence of `LABEL value-pill` pairs — FROM / TO for a
+ * changed setting, CHANGE for a rule. A value that parses as a colour gets a
+ * swatch inside its pill, the way ActionListView renders `color`-kind params.
  */
 ColumnLayout {
     id: root
 
-    /// `[{ label, entries: [{ caption, value, emphasis, detail }] }, ...]`.
-    /// `emphasis` is an optional colour for the pill text (a rule's added /
-    /// removed state); `detail` is optional long-form text shown on the pill's
-    /// tooltip (the full payload behind a summarised structured value). Omit
-    /// both for ordinary values.
+    /// `[{ segments: [...], entries: [{ caption, value, emphasis, detail }] }]`.
+    /// `segments` is the path to the leaf; a row carrying a plain `label`
+    /// instead (the rules section, whose entries have no hierarchy) is treated
+    /// as a single-segment path. `emphasis` is an optional colour for the pill
+    /// text (a rule's added / removed state); `detail` is optional long-form
+    /// text shown on the pill's tooltip.
     required property var rows
 
     /// Fixed COLUMN widths — the pills inside them still hug their content, the
     /// way the rule preview's value pills do.
     ///
     /// That preview holds its columns with a minimum width, which works because
-    /// an action-type label is short. A settings breadcrumb ("Snapping › Zones ›
-    /// Labels › Font color") outruns any floor, so a minimum would let each row
-    /// set its own edges and the captions would stagger. Pinning the CELL rather
-    /// than the pill keeps every column square without padding "0" out into a
-    /// box the width of a JSON blob.
+    /// an action-type label is short. A settings leaf name can still outrun a
+    /// floor, so a minimum would let each row set its own edges and the
+    /// captions would stagger. Pinning the CELL rather than the pill keeps every
+    /// column square without padding "0" out into a box the width of a blob.
     readonly property real subjectColumnWidth: Kirigami.Units.gridUnit * 18
     readonly property real captionColumnWidth: Kirigami.Units.gridUnit * 4
     readonly property real valueColumnWidth: Kirigami.Units.gridUnit * 10
 
-    /// Tree visualisation constants — kept in lockstep with ActionListView's
-    /// and MatchExpressionView's equivalents so all three trees look like one.
+    /// Tree visualisation constants — kept in lockstep with MatchExpressionView's
+    /// and ActionListView's equivalents so all three trees look like one.
     readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
     readonly property color _guideColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-    // 1 device-independent px — matches ActionListView's guide thickness.
+    // 1 device-independent px — matches MatchExpressionView's guide thickness.
     readonly property int _guideThickness: 1
+
+    /// Flattened tree: one entry per rendered row, depth-first, each carrying
+    /// the last-child flags of every node on its path (`ancestors`) so the
+    /// Canvas knows which ancestor columns are still open below it.
+    readonly property var _nodes: DiffTree.buildRows(root.rows)
 
     /// True when @p value is a hex colour a swatch can render.
     function isColorValue(value) {
@@ -59,28 +68,36 @@ ColumnLayout {
     }
 
     // Spacing 0 — each delegate carries its own internal vertical padding, and
-    // zero spacing lets the col-0 tree verticals join across rows without gaps.
+    // zero spacing lets the tree verticals join across rows without gaps.
     spacing: 0
 
     Repeater {
-        model: root.rows || []
+        model: root._nodes
 
         delegate: Item {
             id: entryDelegate
 
             required property var modelData
-            required property int index
 
             readonly property var entries: entryDelegate.modelData.entries || []
-            // The bottom-most row's vertical stops at row-mid instead of running
-            // to the row bottom, matching the "last child" terminator.
-            readonly property bool isLastRow: entryDelegate.index === (root.rows ? root.rows.length - 1 : 0)
+            readonly property int depth: entryDelegate.modelData.depth
+            readonly property var ancestors: entryDelegate.modelData.ancestors
+            readonly property bool hasChildren: entryDelegate.modelData.hasChildren
+            /// Where this row's own content starts, in lockstep with
+            /// contentRow's leftMargin so the L-stub ends exactly at the bullet.
+            readonly property real contentLeft: entryDelegate.depth * root._indentStep + Kirigami.Units.smallSpacing
 
             Layout.fillWidth: true
             implicitHeight: contentRow.implicitHeight + Kirigami.Units.gridUnit
 
-            // Tree connector — always the depth-1 case: one column vertical at
-            // x = indentStep/2 with an L-stub to the bullet at content_left.
+            // For each ancestor column `a` (0 ≤ a < depth):
+            //   - a == depth-1 (immediate parent): draw the L-stub at the row
+            //     midpoint; the vertical runs full height when this row has
+            //     siblings below, and stops at the midpoint when it is the last
+            //     child.
+            //   - a < depth-1 (outer ancestor): no stub. The vertical runs full
+            //     height only while that ancestor's sub-tree is still open,
+            //     which `ancestors[a]` answers.
             Canvas {
                 id: treeCanvas
 
@@ -93,23 +110,51 @@ ColumnLayout {
                     ctx.strokeStyle = root._guideColor;
                     ctx.lineWidth = root._guideThickness;
                     ctx.lineCap = "butt";
-                    var x = Math.round(root._indentStep / 2) + 0.5;
+                    var indentStep = root._indentStep;
+                    var depth = entryDelegate.depth;
+                    var anc = entryDelegate.ancestors;
                     var rowMid = Math.round(height / 2) + 0.5;
-                    var contentLeft = root._indentStep + Kirigami.Units.smallSpacing;
-                    // Vertical.
-                    ctx.beginPath();
-                    ctx.moveTo(x, 0);
-                    ctx.lineTo(x, entryDelegate.isLastRow ? rowMid : height);
-                    ctx.stroke();
-                    // L-stub to the bullet.
-                    ctx.beginPath();
-                    ctx.moveTo(x, rowMid);
-                    ctx.lineTo(contentLeft, rowMid);
-                    ctx.stroke();
+                    for (var a = 0; a < depth; ++a) {
+                        var x = Math.round(a * indentStep + indentStep / 2) + 0.5;
+                        var isImmediateParent = (a === depth - 1);
+                        var currentIsLast = anc[a] === true;
+                        if (isImmediateParent || !currentIsLast) {
+                            ctx.beginPath();
+                            ctx.moveTo(x, 0);
+                            ctx.lineTo(x, (isImmediateParent && currentIsLast) ? rowMid : height);
+                            ctx.stroke();
+                        }
+                        if (isImmediateParent) {
+                            ctx.beginPath();
+                            ctx.moveTo(x, rowMid);
+                            ctx.lineTo(entryDelegate.contentLeft, rowMid);
+                            ctx.stroke();
+                        }
+                    }
+                    // Children connector: drop from just below this row's own
+                    // content down to the row bottom, at the CHILDREN's column.
+                    // Starting below the content rather than at row-mid keeps
+                    // the line from tracing through this row's own label.
+                    if (entryDelegate.hasChildren) {
+                        var childX = Math.round(depth * indentStep + indentStep / 2) + 0.5;
+                        var contentBottom = Math.round(rowMid + contentRow.height / 2) + 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(childX, contentBottom);
+                        ctx.lineTo(childX, height);
+                        ctx.stroke();
+                    }
                 }
 
                 Connections {
-                    function onIsLastRowChanged() {
+                    function onDepthChanged() {
+                        treeCanvas.requestPaint();
+                    }
+
+                    function onAncestorsChanged() {
+                        treeCanvas.requestPaint();
+                    }
+
+                    function onHasChildrenChanged() {
                         treeCanvas.requestPaint();
                     }
 
@@ -132,32 +177,33 @@ ColumnLayout {
                 id: contentRow
 
                 anchors.left: parent.left
-                anchors.leftMargin: root._indentStep + Kirigami.Units.smallSpacing
+                anchors.leftMargin: entryDelegate.contentLeft
                 anchors.right: parent.right
                 anchors.rightMargin: Kirigami.Units.largeSpacing
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Kirigami.Units.largeSpacing
 
-                // Bullet — accent, same as the rule preview's leaf bullets.
+                // Bullet — accent on a leaf, muted on a grouping node, so the
+                // rows carrying an actual value stand out from the scaffolding.
                 Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                     implicitWidth: Math.round(Kirigami.Units.gridUnit / 2.5)
                     implicitHeight: implicitWidth
                     radius: width / 2
-                    color: Kirigami.Theme.highlightColor
+                    color: entryDelegate.entries.length > 0 ? Kirigami.Theme.highlightColor : root._guideColor
                 }
 
-                // Subject label — a fixed column so every row's caption and
-                // pills start at the same x; a long breadcrumb elides rather
-                // than pushing this row's columns out of line with its
-                // neighbours'.
+                // Subject label. The column SHRINKS by this row's indent so the
+                // captions and pills of every row still line up in one column
+                // no matter how deep the row sits.
                 Label {
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: root.subjectColumnWidth
-                    Layout.maximumWidth: root.subjectColumnWidth
+                    Layout.preferredWidth: Math.max(Kirigami.Units.gridUnit * 6, root.subjectColumnWidth - entryDelegate.depth * root._indentStep)
+                    Layout.maximumWidth: Layout.preferredWidth
                     text: entryDelegate.modelData.label
                     elide: Text.ElideRight
                     font.bold: true
+                    opacity: entryDelegate.entries.length > 0 ? 1 : 0.7
                 }
 
                 Repeater {

@@ -219,32 +219,20 @@ ExpandableRowDelegate {
                 return String(value);
             }
 
-            /// Structured settings (a shader profile tree, a trigger list) have
-            /// no useful one-line form — dumping their JSON into the pill says
-            /// nothing a reader can act on. Summarise the SHAPE instead, which
-            /// is what a diff actually needs ("2 overrides" became "3
-            /// overrides"), and keep the payload on the tooltip for anyone who
-            /// wants it.
+            /// The store enumerates a structured setting into one row per changed
+            /// leaf, so almost everything arriving here is already a scalar. The
+            /// exception is a trigger, which the store keeps whole because its
+            /// two halves only mean something together: `{ modifier: 134217728,
+            /// mouseButton: 2 }` reads as "Alt + Right".
             function summarizeStructured(value) {
-                if (diffColumn.isListLike(value)) {
-                    return value.length === 0 ? i18nc("a list setting holding nothing", "none") : i18np("%1 item", "%1 items", value.length);
+                if (value.modifier !== undefined || value.mouseButton !== undefined) {
+                    return TriggerLabels.label(value.modifier || 0, value.mouseButton || 0, i18nc("a trigger with no modifier or button set", "none"));
                 }
-                // The shader / decoration profile trees carry their per-path
-                // entries under `overrides`; count those rather than the two
-                // top-level keys, which never vary.
-                if (diffColumn.isListLike(value.overrides)) {
-                    return value.overrides.length === 0 ? i18nc("a profile tree with nothing overridden", "none") : i18np("%1 override", "%1 overrides", value.overrides.length);
-                }
+                // A shape the store could not descend into (it caps nesting
+                // depth). Report the size so the row still says something, and
+                // leave the payload on the tooltip.
                 const keys = Object.keys(value);
-                return keys.length === 0 ? i18nc("a structured setting holding nothing", "none") : i18np("%1 entry", "%1 entries", keys.length);
-            }
-
-            /// A QVariantList arriving from C++ is NOT a JS Array — Array.isArray
-            /// answers false for it, which silently sent every list down the
-            /// generic object branch and reported a trigger list as "1 entries".
-            /// Test the shape instead: lists carry a numeric length, maps do not.
-            function isListLike(value) {
-                return value !== undefined && value !== null && typeof value === "object" && typeof value.length === "number";
+                return keys.length === 0 ? i18nc("a structured setting holding nothing", "none") : i18np("%n entry", "%n entries", keys.length);
             }
 
             /// Full payload for a structured value, shown on the pill's tooltip
@@ -266,7 +254,7 @@ ExpandableRowDelegate {
                 for (let i = 0; i < configRows.length; ++i) {
                     const change = configRows[i];
                     out.push({
-                        "label": change.group.length > 0 ? change.group + " › " + change.key : change.key,
+                        "segments": change.segments,
                         "entries": [
                             {
                                 "caption": i18nc("@label the value a setting had before this profile", "From"),

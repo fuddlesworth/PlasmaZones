@@ -52,64 +52,14 @@ Item {
     readonly property int maxTriggers: 4
     // -1 = adding a new trigger, >= 0 = editing trigger at that index
     property int editingTriggerIndex: -1
-    // Qt::KeyboardModifier bits — use bit shifts so qmlformat cannot mangle them
-    readonly property int shiftFlag: (1 << 25)
-    // 0x02000000 Qt::ShiftModifier
-    readonly property int ctrlFlag: (1 << 26)
-    // 0x04000000 Qt::ControlModifier
-    readonly property int altFlag: (1 << 27)
-    // 0x08000000 Qt::AltModifier
-    readonly property int metaFlag: (1 << 28)
-    // 0x10000000 Qt::MetaModifier
-    readonly property var modifierChips: [
-        {
-            "bit": shiftFlag,
-            "label": i18n("Shift")
-        },
-        {
-            "bit": ctrlFlag,
-            "label": i18n("Ctrl")
-        },
-        {
-            "bit": altFlag,
-            "label": i18n("Alt")
-        },
-        {
-            "bit": metaFlag,
-            "label": i18n("Meta")
-        }
-    ]
-    // Qt::MouseButton bits; UI labels "Extra 3/4/5" match common naming (kcfg uses Extra1/2/3 for 32/64/128)
-    readonly property var mouseButtonList: [
-        {
-            "bit": 2,
-            "label": i18n("Right")
-        },
-        {
-            "bit": 4,
-            "label": i18n("Middle")
-        },
-        {
-            "bit": 8,
-            "label": i18n("Back")
-        },
-        {
-            "bit": 16,
-            "label": i18n("Forward")
-        },
-        {
-            "bit": 32,
-            "label": i18n("Extra 3")
-        },
-        {
-            "bit": 64,
-            "label": i18n("Extra 4")
-        },
-        {
-            "bit": 128,
-            "label": i18n("Extra 5")
-        }
-    ]
+    // Bits and labels come from the TriggerLabels singleton so this editor and
+    // the profile diff name the same trigger the same way.
+    readonly property int shiftFlag: TriggerLabels.shiftFlag
+    readonly property int ctrlFlag: TriggerLabels.ctrlFlag
+    readonly property int altFlag: TriggerLabels.altFlag
+    readonly property int metaFlag: TriggerLabels.metaFlag
+    readonly property var modifierChips: TriggerLabels.modifiers
+    readonly property var mouseButtonList: TriggerLabels.mouseButtons
 
     signal valueModified(int modifierValue)
     signal mouseButtonsModified(int mouseButtonValue)

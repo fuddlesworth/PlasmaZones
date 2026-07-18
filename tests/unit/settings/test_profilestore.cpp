@@ -446,8 +446,8 @@ private Q_SLOTS:
         const QVariantList rootRows = m_store->configChanges(rootId);
         QCOMPARE(rootRows.size(), 1);
         const QVariantMap rootRow = rootRows.first().toMap();
-        QCOMPARE(rootRow.value(QStringLiteral("group")).toString(), QStringLiteral("Group a"));
-        QCOMPARE(rootRow.value(QStringLiteral("key")).toString(), QStringLiteral("K1"));
+        QCOMPARE(rootRow.value(QStringLiteral("segments")).toStringList(),
+                 (QStringList{QStringLiteral("Group a"), QStringLiteral("K1")}));
         QCOMPARE(rootRow.value(QStringLiteral("before")).toInt(), 1);
         QCOMPARE(rootRow.value(QStringLiteral("after")).toInt(), 2);
 
@@ -459,6 +459,58 @@ private Q_SLOTS:
         QCOMPARE(childRows.size(), 1);
         QCOMPARE(childRows.first().toMap().value(QStringLiteral("before")).toInt(), 2);
         QCOMPARE(childRows.first().toMap().value(QStringLiteral("after")).toInt(), 5);
+    }
+
+    /// A structured setting enumerates into one row per CHANGED leaf, the way a
+    /// scalar setting does, rather than collapsing into one opaque blob row.
+    /// The unchanged sibling leaf must contribute nothing, and an array element
+    /// must be named by the identifying field it carries.
+    void configDiffEnumeratesStructuredValues()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] = QJsonObject{
+            // Both scalars keep their defaults, so neither may produce a row.
+            {QStringLiteral("k1"), 1},
+            {QStringLiteral("k2"), QStringLiteral("x")},
+            {QStringLiteral("tree"),
+             QJsonObject{{QStringLiteral("overrides"),
+                          QJsonArray{QJsonObject{{QStringLiteral("path"), QStringLiteral("window.move")},
+                                                 {QStringLiteral("duration"), 250}}}}}},
+        };
+        const QString id = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        const QVariantList rows = m_store->configChanges(id);
+        QCOMPARE(rows.size(), 1);
+        const QVariantMap row = rows.first().toMap();
+        // Each level is its own segment (so the view can nest them), humanized,
+        // with the array element named by its `path` field, not its position.
+        QCOMPARE(row.value(QStringLiteral("segments")).toStringList(),
+                 (QStringList{QStringLiteral("Group a"), QStringLiteral("Tree"), QStringLiteral("Overrides"),
+                              QStringLiteral("window.move"), QStringLiteral("Duration")}));
+        QCOMPARE(row.value(QStringLiteral("after")).toInt(), 250);
+    }
+
+    /// A trigger stays whole: its modifier and mouse-button halves only mean
+    /// something together, so the row carries the object for QML to name.
+    void configDiffKeepsTriggersWhole()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] = QJsonObject{
+            {QStringLiteral("k1"), 1},
+            {QStringLiteral("k2"), QStringLiteral("x")},
+            {QStringLiteral("trigger"),
+             QJsonObject{{QStringLiteral("modifier"), 134217728}, {QStringLiteral("mouseButton"), 2}}},
+        };
+        const QString id = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        const QVariantList rows = m_store->configChanges(id);
+        QCOMPARE(rows.size(), 1);
+        const QVariantMap row = rows.first().toMap();
+        QCOMPARE(row.value(QStringLiteral("segments")).toStringList(),
+                 (QStringList{QStringLiteral("Group a"), QStringLiteral("Trigger")}));
+        const QVariantMap after = row.value(QStringLiteral("after")).toMap();
+        QCOMPARE(after.value(QStringLiteral("modifier")).toInt(), 134217728);
+        QCOMPARE(after.value(QStringLiteral("mouseButton")).toInt(), 2);
     }
 
     /// ruleChanges classifies each rule difference against the parent.

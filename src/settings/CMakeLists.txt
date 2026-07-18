@@ -241,6 +241,9 @@ target_include_directories(plasmazones-settings PRIVATE
 # MUST come before qt_add_qml_module — the function reads the property
 # at registration time, not at link time.
 set_source_files_properties(qml/CurvePresets.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+# TriggerLabels is a singleton for the same reason: the trigger bit tables are
+# shared between the trigger editor and the profile diff.
+set_source_files_properties(qml/TriggerLabels.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(plasmazones-settings
     URI org.plasmazones.settings
@@ -296,6 +299,7 @@ qt_add_qml_module(plasmazones-settings
         qml/ProfileComboBox.qml
         qml/SectionHeaderPill.qml
         qml/ProfileDiffView.qml
+        qml/ProfileDiffTree.js
         qml/ProfileSignature.qml
         qml/NewProfileDialog.qml
         qml/MonitorOverview.qml
@@ -413,6 +417,7 @@ qt_add_qml_module(plasmazones-settings
         qml/ShaderBrowserDetailDialog.qml
         qml/CurveEditorDialog.qml
         qml/CurvePresets.qml
+        qml/TriggerLabels.qml
         qml/CurveThumbnail.qml
         qml/SpringPreview.qml
         qml/EasingCurve.js
