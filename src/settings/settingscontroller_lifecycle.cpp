@@ -218,6 +218,13 @@ void SettingsController::save()
     // a spurious load() that reverts just-saved assignments. Posting the
     // reset through singleShot(0) drains those queued signals first, so
     // onExternalSettingsChanged() sees m_saving=true and returns early.
+    //
+    // A reload deferred while edits were pending is superseded by this save:
+    // the whole-schema flush above rewrote the file from this process's
+    // state, so re-reading disk afterwards would recover nothing of the
+    // external change. Clear the flag so the clean transition below doesn't
+    // fire a pointless reload.
+    m_pendingExternalReload = false;
     setNeedsSave(false);
     // Window-rule failure handling moved to RuleController itself
     // (see pushToDaemonAsync): a failed/partial-drop push keeps the page

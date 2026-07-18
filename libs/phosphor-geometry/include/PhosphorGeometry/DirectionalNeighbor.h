@@ -59,10 +59,12 @@ PHOSPHORGEOMETRY_EXPORT std::optional<Direction> directionFromString(QStringView
  *        navigation wants this: a diagonal tile is not a real left/right/up/down
  *        neighbour, so the move should hit the layout boundary (and cross to the
  *        next output) instead of swapping with a window that's offset away.
- *        Output-picking callers want it too: a side-by-side monitor whose
- *        centre sits below the source must not resolve as the "down" output.
- *        In-layout zone-adjacency callers leave it false (default) so an
- *        offset-but-present neighbour zone still resolves.
+ *        Cross-output move-picking wants it too: a side-by-side monitor
+ *        whose centre sits below the source must not resolve as the "down"
+ *        output. In-layout zone-adjacency and virtual-screen-swap callers
+ *        leave it false (default) so an offset-but-present neighbour still
+ *        resolves — a swap targets whatever region occupies that direction,
+ *        diagonal or not.
  *
  * @return index into @p candidates, or -1 when no candidate lies in
  *         @p direction. Candidates sharing @p focus's centre are skipped.

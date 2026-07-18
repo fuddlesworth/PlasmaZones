@@ -31,10 +31,15 @@ private Q_SLOTS:
 
     /// Guarantees no registry state leaks between test methods even
     /// when a test forgets to clean up after itself. See the matching
-    /// comment in test_profileloader.cpp.
+    /// comment in test_profileloader.cpp. The low-precedence tag is
+    /// reset here too: clear() deliberately preserves it (it's
+    /// configuration, not data), so a test that sets the tag and then
+    /// aborts on a failed assertion would otherwise leak it into every
+    /// subsequent test.
     void cleanup()
     {
         m_registry.clear();
+        m_registry.setLowPrecedenceOwnerTag(QString());
     }
 
     /// Verify that the published default-registry handle round-trips —
@@ -169,8 +174,6 @@ private Q_SLOTS:
 
         // Full snapshot still carries the seed for in-process consumers.
         QCOMPARE(m_registry.snapshot().size(), 3);
-
-        m_registry.setLowPrecedenceOwnerTag(QString());
     }
 
     /// `ownerReloaded(tag)` fires exactly once per partitioned-reload

@@ -1329,11 +1329,24 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 // The dirty flag makes this self-limiting on the slider hot path — the first
 // write of an edit burst marks the backend dirty, so later ticks skip the
 // reparse until the next save.
+// The call sits at the TOP of each setter (not inside patchProfileField)
+// because the per-field setters evaluate their currentValue argument at the
+// call site: a refresh inside the helper would run AFTER that read, and the
+// no-op guard would compare against the stale value — swallowing exactly the
+// healing write the refresh exists to enable.
 void Settings::refreshCleanBackendFromDisk()
 {
-    if (m_configBackend && !m_configBackend->isDirty()) {
-        m_configBackend->reparseConfiguration();
+    if (!m_configBackend || m_configBackend->isDirty()) {
+        return;
     }
+    m_configBackend->reparseConfiguration();
+    // A clean backend means no local uncommitted writes, so before the
+    // reparse the live store matched m_baseline. The reparse may adopt
+    // externally-committed changes to ANY key; without advancing the
+    // baseline those would be attributed to the local user as unsaved
+    // edits (phantom per-page dirty markers, and a per-page Discard would
+    // revert the external change to the stale session baseline).
+    captureBaseline();
 }
 
 template<typename T>
@@ -2567,6 +2580,11 @@ P_STORE_SET_BOOL(setZoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleAct
 void Settings::writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                                 TriggerListSignalFn specificSignal)
 {
+    // Trigger lists are whole-replace composites reachable over D-Bus from
+    // both processes, so the stale-guard refresh applies: a `before` read
+    // from a stale cache could equal the incoming value and swallow a write
+    // the disk actually needs.
+    refreshCleanBackendFromDisk();
     const QVariantList before = m_store->readVariant(group, key).toList();
     m_store->write(group, key, triggers.mid(0, MaxTriggersPerAction));
     const QVariantList after = m_store->readVariant(group, key).toList();
