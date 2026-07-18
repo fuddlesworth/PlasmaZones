@@ -377,6 +377,110 @@ private Q_SLOTS:
         d.setOverride(QStringLiteral("osd"), p);
         QVERIFY(a != d);
     }
+
+    // ── Seed defaults ────────────────────────────────────────────────────
+
+    /// An empty user tree takes the whole seed layer verbatim: every seed
+    /// override lands, in seed insertion order, field-for-field.
+    void withSeedDefaults_emptyTree_takesSeedsVerbatim()
+    {
+        DecorationProfileTree seeds;
+        seeds.setOverride(QStringLiteral("osd"),
+                          makeProfile(QStringList{QStringLiteral("border"), QStringLiteral("shadow")}, 1.0,
+                                      QStringLiteral("#112233")));
+        seeds.setOverride(QStringLiteral("popup.layoutPicker"),
+                          makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#445566")));
+
+        const DecorationProfileTree merged = DecorationProfileTree{}.withSeedDefaults(seeds);
+        QCOMPARE(merged, seeds);
+    }
+
+    /// A user override that engages `chain` at a seeded path wins outright —
+    /// including the engaged-but-EMPTY chain, which must keep the surface
+    /// explicitly undecorated rather than resurrect the seed. No seed field
+    /// (not even parameters) leaks under a user-built chain.
+    void withSeedDefaults_engagedChainBlocksInjection()
+    {
+        DecorationProfileTree seeds;
+        seeds.setOverride(QStringLiteral("osd"),
+                          makeProfile(QStringList{QStringLiteral("border"), QStringLiteral("shadow")}, 1.0,
+                                      QStringLiteral("#112233")));
+
+        // Engaged empty chain = explicitly undecorated.
+        DecorationProfileTree cleared;
+        DecorationProfile none;
+        none.chain = QStringList{};
+        cleared.setOverride(QStringLiteral("osd"), none);
+        const DecorationProfileTree mergedCleared = cleared.withSeedDefaults(seeds);
+        QVERIFY(mergedCleared.resolve(QStringLiteral("osd")).enabledChain().isEmpty());
+        QVERIFY2(!mergedCleared.directOverride(QStringLiteral("osd")).parameters.has_value(),
+                 "seed parameters must not leak under a user-engaged chain");
+
+        // Engaged non-empty chain: the user look stands untouched.
+        DecorationProfileTree custom;
+        DecorationProfile glow;
+        glow.chain = QStringList{QStringLiteral("glow")};
+        custom.setOverride(QStringLiteral("osd"), glow);
+        const DecorationProfileTree mergedCustom = custom.withSeedDefaults(seeds);
+        QCOMPARE(mergedCustom.resolve(QStringLiteral("osd")).enabledChain(), QStringList{QStringLiteral("glow")});
+        QVERIFY(!mergedCustom.directOverride(QStringLiteral("osd")).parameters.has_value());
+    }
+
+    /// A parameters-only override at a seeded path is a RETUNE: the seed
+    /// chain injects into the unengaged chain slot while the user's engaged
+    /// parameters map wins wholesale.
+    void withSeedDefaults_parametersOnlyOverride_keepsSeedChain()
+    {
+        DecorationProfileTree seeds;
+        seeds.setOverride(QStringLiteral("osd"),
+                          makeProfile(QStringList{QStringLiteral("border"), QStringLiteral("shadow")}, 1.0,
+                                      QStringLiteral("#112233")));
+
+        DecorationProfileTree user;
+        DecorationProfile retune;
+        QVariantMap shadowParams;
+        shadowParams.insert(QStringLiteral("shadowStrength"), 0.9);
+        QVariantMap params;
+        params.insert(QStringLiteral("shadow"), shadowParams);
+        retune.parameters = params;
+        user.setOverride(QStringLiteral("osd"), retune);
+
+        const DecorationProfile resolved = user.withSeedDefaults(seeds).resolve(QStringLiteral("osd"));
+        QCOMPARE(resolved.enabledChain(), (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));
+        QCOMPARE(resolved.effectiveParameters()
+                     .value(QStringLiteral("shadow"))
+                     .toMap()
+                     .value(QStringLiteral("shadowStrength"))
+                     .toDouble(),
+                 0.9);
+    }
+
+    /// A chain engaged at an ANCESTOR (category override or the baseline)
+    /// gates leaf injection too: injecting the seed at the leaf would shadow
+    /// the user's broader look in the walk-up.
+    void withSeedDefaults_ancestorChainBlocksLeafInjection()
+    {
+        DecorationProfileTree seeds;
+        seeds.setOverride(QStringLiteral("popup.layoutPicker"),
+                          makeProfile(QStringList{QStringLiteral("border"), QStringLiteral("shadow")}, 1.0,
+                                      QStringLiteral("#112233")));
+
+        // Category override engages a chain for every popup.
+        DecorationProfileTree viaCategory;
+        DecorationProfile glow;
+        glow.chain = QStringList{QStringLiteral("glow")};
+        viaCategory.setOverride(QStringLiteral("popup"), glow);
+        QCOMPARE(viaCategory.withSeedDefaults(seeds).resolve(QStringLiteral("popup.layoutPicker")).enabledChain(),
+                 QStringList{QStringLiteral("glow")});
+
+        // Baseline chain gates everything.
+        DecorationProfileTree viaBaseline;
+        viaBaseline.setBaseline(glow);
+        const DecorationProfileTree merged = viaBaseline.withSeedDefaults(seeds);
+        QVERIFY(!merged.hasOverride(QStringLiteral("popup.layoutPicker")));
+        QCOMPARE(merged.resolve(QStringLiteral("popup.layoutPicker")).enabledChain(),
+                 QStringList{QStringLiteral("glow")});
+    }
 };
 
 QTEST_MAIN(TestDecorationProfileTree)

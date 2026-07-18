@@ -693,11 +693,15 @@ void SettingsController::resetPage(const QString& page)
         return;
     }
 
-    // Decoration pages: reset to the schema default (the empty/neutral tree —
-    // borders are rule-owned, the tree carries only opt-in shader-pack
-    // decoration). A SURFACE page clears only its own root subtree's overrides,
-    // leaving the other two roots (and the global baseline) standing; a
-    // non-surface leaf (sets/shaders, empty root) resets the whole tree key.
+    // Decoration pages: reset to the built-in defaults. The stored blob holds
+    // only user edits; the built-in card chrome for the OSD and popups is a
+    // read-side seed layer (Settings::decorationProfileTree overlays
+    // ConfigDefaults::decorationProfileTree at lowest precedence). So a SURFACE
+    // page clears only its own root subtree's overrides — the seeds show
+    // through again, restoring the default chrome for seeded surfaces and "no
+    // decoration" everywhere else — leaving the other two roots (and the
+    // global baseline) standing; a non-surface leaf (sets/shaders, empty root)
+    // resets the whole tree key.
     // Staged like ordinary edits: Save commits, Discard restores the baseline.
     // Same NOTIFY-storm suppression as the manifest path.
     if (isDecorationPage(page)) {
@@ -710,8 +714,10 @@ void SettingsController::resetPage(const QString& page)
                 PhosphorSurfaceShaders::DecorationProfileTree tree = m_settings.decorationProfileTree();
                 bool changed = false;
                 // overriddenPaths() returns a copy, so clearing during the walk
-                // is safe. Only this root's overrides go; the default for a
-                // surface subtree is "no overrides".
+                // is safe. Only this root's overrides go; the stored default
+                // for a surface subtree is "no user overrides", and the write
+                // path strips whatever seed-injected entries the merged read
+                // view carried, so the seeds re-surface on the next read.
                 const QStringList paths = tree.overriddenPaths();
                 for (const QString& path : paths) {
                     if (decorationPathInRoot(path, root) && tree.clearOverride(path))

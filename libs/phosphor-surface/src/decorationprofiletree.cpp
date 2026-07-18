@@ -47,6 +47,61 @@ DecorationProfile DecorationProfileTree::resolve(const QString& surfacePath) con
     return effective.withDefaults();
 }
 
+DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationProfileTree& seeds) const
+{
+    // True when this tree engages `chain` at @p surfacePath or anywhere on its
+    // walk-up (baseline included) — the per-path gate for seed injection.
+    const auto chainEngagedOnWalk = [this](const QString& surfacePath) {
+        if (m_baseline.chain.has_value())
+            return true;
+        QString cursor = surfacePath;
+        while (!cursor.isEmpty()) {
+            const auto it = m_overrides.constFind(cursor);
+            if (it != m_overrides.constEnd() && it.value().chain.has_value())
+                return true;
+            cursor = decorationParentPath(cursor);
+        }
+        return false;
+    };
+
+    // Copy seed-engaged fields into unengaged slots of @p target; returns
+    // whether anything landed.
+    const auto injectUnengaged = [](DecorationProfile& target, const DecorationProfile& seed) {
+        bool changed = false;
+        if (!target.chain && seed.chain) {
+            target.chain = seed.chain;
+            changed = true;
+        }
+        if (!target.parameters && seed.parameters) {
+            target.parameters = seed.parameters;
+            changed = true;
+        }
+        if (!target.disabledPacks && seed.disabledPacks) {
+            target.disabledPacks = seed.disabledPacks;
+            changed = true;
+        }
+        return changed;
+    };
+
+    DecorationProfileTree merged = *this;
+
+    if (!m_baseline.chain.has_value()) {
+        DecorationProfile baseline = merged.m_baseline;
+        if (injectUnengaged(baseline, seeds.m_baseline))
+            merged.m_baseline = baseline;
+    }
+
+    for (const QString& path : seeds.m_insertionOrder) {
+        if (chainEngagedOnWalk(path))
+            continue;
+        DecorationProfile target = merged.m_overrides.value(path);
+        if (injectUnengaged(target, seeds.m_overrides.value(path)))
+            merged.setOverride(path, target);
+    }
+
+    return merged;
+}
+
 DecorationProfile DecorationProfileTree::directOverride(const QString& surfacePath) const
 {
     return m_overrides.value(surfacePath);
