@@ -980,20 +980,60 @@ PhosphorUi.SettingsAppWindow {
 
                     // Each entry carries its own identicon, so the dropdown
                     // reads as a gallery of profiles, not a plain name list.
+                    // Styling follows LayoutComboBox's popup delegate, the app's
+                    // dropdown convention: View colour set, a 0.15-alpha
+                    // highlight wash over an opaque row, and a leading checkmark
+                    // (with a spacer when absent) marking the current entry
+                    // rather than a second highlight band.
                     delegate: ItemDelegate {
                         id: profileEntry
 
                         required property var modelData
                         required property int index
 
+                        readonly property bool isCurrentSelection: profileCombo.currentIndex === profileEntry.index
+
+                        Kirigami.Theme.colorSet: Kirigami.Theme.View
+                        Kirigami.Theme.inherit: false
+
                         // Follow the popup's list, NOT the field: in the compact
                         // rail the field is only as wide as the rail, and sizing
                         // entries to it squeezes the names out of existence.
-                        width: profileEntry.ListView.view ? profileEntry.ListView.view.width : profileCombo.width
+                        // Reserve the scrollbar gutter so the row ends at its
+                        // edge rather than running under it.
+                        width: {
+                            const view = profileEntry.ListView.view;
+                            if (!view)
+                                return profileCombo.width;
+                            const bar = view.ScrollBar ? view.ScrollBar.vertical : null;
+                            return view.width - (bar && bar.visible ? bar.width : 0);
+                        }
+                        // Only the hovered / keyboard-navigated row highlights;
+                        // the current one is marked by the checkmark instead.
                         highlighted: profileCombo.highlightedIndex === profileEntry.index
+
+                        background: Rectangle {
+                            color: profileEntry.highlighted ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : Kirigami.Theme.backgroundColor
+                        }
 
                         contentItem: RowLayout {
                             spacing: Kirigami.Units.smallSpacing
+
+                            Kirigami.Icon {
+                                visible: profileEntry.isCurrentSelection
+                                source: "checkmark"
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                color: Kirigami.Theme.textColor
+                            }
+
+                            // Keeps the marks and names aligned on unchecked rows.
+                            Item {
+                                visible: !profileEntry.isCurrentSelection
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            }
 
                             ProfileSignature {
                                 signature: profileEntry.modelData.signature
@@ -1007,16 +1047,7 @@ PhosphorUi.SettingsAppWindow {
                                 Layout.alignment: Qt.AlignVCenter
                                 text: profileEntry.modelData.name
                                 elide: Text.ElideRight
-                                font.bold: profileEntry.modelData.active
-                            }
-
-                            Kirigami.Icon {
-                                visible: profileEntry.modelData.active
-                                source: "dialog-ok"
-                                Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                color: Kirigami.Theme.positiveTextColor
+                                color: Kirigami.Theme.textColor
                             }
                         }
                     }
