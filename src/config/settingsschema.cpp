@@ -9,6 +9,7 @@
 #include "../core/enums.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
 #include <QtGlobal>
 #include <PhosphorScreens/ScreenIdentity.h>
 

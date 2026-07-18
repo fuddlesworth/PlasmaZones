@@ -343,6 +343,12 @@ private:
     /// installed UBO profile's fill(). @p rhi supplies the NDC Y-orientation
     /// the profile folds into qt_Matrix.
     void syncBaseUniforms(QRhi* rhi);
+    /// True when this node's current render target is a texture render target
+    /// (a ShaderEffectSource layer capture) rather than the window. Null-safe;
+    /// the single predicate behind both the qt_Matrix flip decision
+    /// (syncBaseUniforms) and prepare()'s retarget detection, so the two can
+    /// never disagree within a frame.
+    bool renderingIntoTexture() const;
     void uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb);
     /**
      * Append the extension region to a resource update batch.

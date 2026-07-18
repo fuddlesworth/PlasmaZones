@@ -301,6 +301,12 @@ QRectF ShaderNodeRhi::rect() const
 // prepare() — resource initialization + shader baking + texture/uniform upload
 // ============================================================================
 
+bool ShaderNodeRhi::renderingIntoTexture() const
+{
+    QRhiRenderTarget* rt = renderTarget();
+    return rt && rt->resourceType() == QRhiResource::TextureRenderTarget;
+}
+
 void ShaderNodeRhi::prepare()
 {
     // Snapshot every m_item-derived value we need under the lock, then drop
@@ -350,7 +356,7 @@ void ShaderNodeRhi::prepare()
     // dirty. Force a full re-upload on the transition — qt_Matrix sits before
     // every granular dirty region, so only the full path re-covers it. Rare
     // (capture attach/detach), so the full upload costs nothing steady-state.
-    const bool intoTextureTarget = rt->resourceType() == QRhiResource::TextureRenderTarget;
+    const bool intoTextureTarget = renderingIntoTexture();
     if (m_lastTargetWasTexture.has_value() && *m_lastTargetWasTexture != intoTextureTarget) {
         m_uniformsDirty = true;
         m_didFullUploadOnce = false;

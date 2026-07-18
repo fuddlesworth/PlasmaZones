@@ -455,6 +455,84 @@ private Q_SLOTS:
                  0.9);
     }
 
+    /// A seed BASELINE fills unengaged user-baseline slots, and an engaged
+    /// user baseline chain blocks the whole baseline injection.
+    void withSeedDefaults_seedBaselineFillsUnengagedSlots()
+    {
+        DecorationProfileTree seeds;
+        seeds.setBaseline(makeProfile(QStringList{QStringLiteral("glow")}, 3.0, QStringLiteral("#112233")));
+
+        // Empty user tree: the seed baseline lands verbatim.
+        const DecorationProfileTree merged = DecorationProfileTree{}.withSeedDefaults(seeds);
+        QCOMPARE(merged.baseline().effectiveChain(), QStringList{QStringLiteral("glow")});
+        QVERIFY(merged.baseline().parameters.has_value());
+
+        // Engaged user baseline chain: nothing injects, not even parameters.
+        DecorationProfileTree custom;
+        DecorationProfile own;
+        own.chain = QStringList{QStringLiteral("border")};
+        custom.setBaseline(own);
+        const DecorationProfileTree mergedCustom = custom.withSeedDefaults(seeds);
+        QCOMPARE(mergedCustom.baseline().effectiveChain(), QStringList{QStringLiteral("border")});
+        QVERIFY2(!mergedCustom.baseline().parameters.has_value(),
+                 "seed baseline parameters must not leak under a user-engaged baseline chain");
+    }
+
+    /// disabledPacks injects like the other fields: it lands in an unengaged
+    /// slot and an engaged (even empty) user slot blocks it.
+    void withSeedDefaults_disabledPacksInjection()
+    {
+        DecorationProfileTree seeds;
+        DecorationProfile seed = makeProfile(QStringList{QStringLiteral("border"), QStringLiteral("shadow")}, 1.0,
+                                             QStringLiteral("#112233"));
+        seed.disabledPacks = QStringList{QStringLiteral("shadow")};
+        seeds.setOverride(QStringLiteral("osd"), seed);
+
+        // Unengaged slot: the seed's disable set lands (shadow filtered out).
+        const DecorationProfileTree merged = DecorationProfileTree{}.withSeedDefaults(seeds);
+        QCOMPARE(merged.resolve(QStringLiteral("osd")).enabledChain(), QStringList{QStringLiteral("border")});
+
+        // Engaged-but-empty user slot: explicitly nothing disabled, seed set
+        // blocked, both packs render.
+        DecorationProfileTree user;
+        DecorationProfile allOn;
+        allOn.disabledPacks = QStringList{};
+        user.setOverride(QStringLiteral("osd"), allOn);
+        const DecorationProfileTree mergedAllOn = user.withSeedDefaults(seeds);
+        QCOMPARE(mergedAllOn.resolve(QStringLiteral("osd")).enabledChain(),
+                 (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));
+    }
+
+    /// Parameters engaged at an ANCESTOR (with no chain anywhere) block the
+    /// seed's leaf parameters: resolve() overlays deepest-last, so an injected
+    /// leaf map would silently shadow the user's category-level tuning. The
+    /// seed chain still injects (its own walk is clear).
+    void withSeedDefaults_ancestorParamsBlockSeedLeafParams()
+    {
+        DecorationProfileTree seeds;
+        seeds.setOverride(QStringLiteral("popup.layoutPicker"),
+                          makeProfile(QStringList{QStringLiteral("border"), QStringLiteral("shadow")}, 1.0,
+                                      QStringLiteral("#112233")));
+
+        DecorationProfileTree user;
+        DecorationProfile tune;
+        QVariantMap borderParams;
+        borderParams.insert(QStringLiteral("width"), 7.0);
+        QVariantMap params;
+        params.insert(QStringLiteral("border"), borderParams);
+        tune.parameters = params;
+        user.setOverride(QStringLiteral("popup"), tune);
+
+        const DecorationProfile resolved = user.withSeedDefaults(seeds).resolve(QStringLiteral("popup.layoutPicker"));
+        QCOMPARE(resolved.enabledChain(), (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));
+        QCOMPARE(resolved.effectiveParameters()
+                     .value(QStringLiteral("border"))
+                     .toMap()
+                     .value(QStringLiteral("width"))
+                     .toDouble(),
+                 7.0);
+    }
+
     /// A chain engaged at an ANCESTOR (category override or the baseline)
     /// gates leaf injection too: injecting the seed at the leaf would shadow
     /// the user's broader look in the walk-up.

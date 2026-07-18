@@ -63,9 +63,12 @@ public:
     ///    parameters or disable set under a foreign chain is meaningless.
     ///    An engaged-but-empty chain therefore keeps a surface explicitly
     ///    undecorated.
-    ///  - Otherwise each seed-engaged field lands only in a slot this tree's
-    ///    direct override leaves unengaged, so a parameters-only retune keeps
-    ///    the seed chain while the retuned map wins.
+    ///  - Otherwise `parameters` and `disabledPacks` each inject only when
+    ///    this tree engages that SAME field nowhere on the walk-up either, so
+    ///    a parameters-only retune (at the path or at an ancestor) keeps the
+    ///    seed chain while the user's map wins — an injected leaf field would
+    ///    otherwise shadow an engaged ancestor map in resolve()'s
+    ///    deepest-last overlay.
     DecorationProfileTree withSeedDefaults(const DecorationProfileTree& seeds) const;
     /// Returns the override stored directly at @p surfacePath, or a
     /// default-constructed (all-unset) profile when none exists — which is

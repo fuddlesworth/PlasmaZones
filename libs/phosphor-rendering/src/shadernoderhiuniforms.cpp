@@ -68,9 +68,9 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     // every chain of two or more packs, and during show/hide transitions).
     // Mirrors the multipass buffer-pass identity pin in shadernoderhicore.cpp,
     // which corrects the same FBO round-trip for our OWN offscreen targets.
-    QRhiRenderTarget* rt = renderTarget();
-    const bool intoTextureTarget = rt && rt->resourceType() == QRhiResource::TextureRenderTarget;
-    state.yUpInNDC = rhi->isYUpInNDC() && !intoTextureTarget;
+    // renderingIntoTexture() is the same predicate prepare()'s retarget
+    // detection uses, so the flip and the forced re-upload cannot disagree.
+    state.yUpInNDC = rhi->isYUpInNDC() && !renderingIntoTexture();
 
     // Surface-only fields — read by a SurfaceUniformProfile, ignored by the
     // BaseUniformProfile (so the overlay/animation UBO bytes are unchanged).
@@ -610,6 +610,11 @@ void ShaderNodeRhi::releaseRhiResources()
     m_initialized = false;
     m_vboUploaded = false;
     m_didFullUploadOnce = false;
+    // Forget the last observed render-target kind alongside the full-upload
+    // reset: the post-reset target may differ, and the fresh full upload
+    // already re-covers qt_Matrix, so the retarget detector must not fire a
+    // stale comparison against pre-reset state.
+    m_lastTargetWasTexture.reset();
     m_shaderReady = false;
     m_shaderDirty = true;
     m_bufferShaderReady = false;

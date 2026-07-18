@@ -1628,23 +1628,54 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
     // disk. The read side (decorationProfileTree) passes through the same
     // filter, so the comparison below is pruned-vs-pruned.
     auto pruned = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(tree.toJson());
-    // Strip overrides the read-side seed overlay regenerates verbatim: callers
-    // read the MERGED tree (seed defaults injected), mutate, and write the
-    // whole tree back, so without this the injected card chrome would freeze
-    // into the stored blob on the first unrelated edit — and a later shipped
-    // default improvement would never reach this config. Per-path test against
-    // what withSeedDefaults would inject with the override absent, so an
-    // override that merely LOOKS like a seed but shadows an engaged ancestor
-    // chain is left alone.
+    // Strip the parts of an override the read-side seed overlay regenerates:
+    // callers read the MERGED tree (seed defaults injected), mutate, and write
+    // the whole tree back, so without this the injected card chrome would
+    // freeze into the stored blob on the first unrelated edit — and a later
+    // shipped default improvement would never reach this config. The strip is
+    // PER FIELD, not per override: a parameters-only retune of a seeded
+    // surface arrives as {chain: seed chain, parameters: user map}, and
+    // storing only the parameters keeps the chain seed-owned so shipped chain
+    // improvements still flow. Each strip is validated by regenerating the
+    // candidate through withSeedDefaults and requiring the ORIGINAL override
+    // back — that check inherently honours the overlay's injection gates, so
+    // a field that merely LOOKS like a seed but whose removal would change
+    // the resolved result (e.g. a chain-only override whose parameters would
+    // then inject, or a map shadowed by an engaged ancestor) is left alone.
     const auto seeds = ConfigDefaults::decorationProfileTree();
     for (const QString& path : seeds.overriddenPaths()) {
         if (!pruned.hasOverride(path))
             continue;
         PhosphorSurfaceShaders::DecorationProfileTree without = pruned;
         without.clearOverride(path);
-        const auto reinjected = without.withSeedDefaults(seeds);
-        if (reinjected.hasOverride(path) && reinjected.directOverride(path) == pruned.directOverride(path))
-            pruned = without;
+        const auto regenerated = without.withSeedDefaults(seeds);
+        if (!regenerated.hasOverride(path))
+            continue;
+        const auto seedView = regenerated.directOverride(path);
+        const auto original = pruned.directOverride(path);
+        auto candidate = original;
+        bool strippedAny = false;
+        const auto stripField = [&](auto member) {
+            auto& slot = candidate.*member;
+            const auto& regen = seedView.*member;
+            if (slot.has_value() && regen.has_value() && *slot == *regen) {
+                slot.reset();
+                strippedAny = true;
+            }
+        };
+        stripField(&PhosphorSurfaceShaders::DecorationProfile::chain);
+        stripField(&PhosphorSurfaceShaders::DecorationProfile::parameters);
+        stripField(&PhosphorSurfaceShaders::DecorationProfile::disabledPacks);
+        if (!strippedAny)
+            continue;
+        PhosphorSurfaceShaders::DecorationProfileTree candidateTree = pruned;
+        if (!candidate.chain && !candidate.parameters && !candidate.disabledPacks)
+            candidateTree.clearOverride(path);
+        else
+            candidateTree.setOverride(path, candidate);
+        const auto verify = candidateTree.withSeedDefaults(seeds);
+        if (verify.hasOverride(path) && verify.directOverride(path) == original)
+            pruned = candidateTree;
     }
     // Value-equality compare against the STORED (raw, pre-overlay) tree so a
     // same-tree write doesn't fire a spurious changed signal — writing the

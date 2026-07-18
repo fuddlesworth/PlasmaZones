@@ -49,53 +49,74 @@ DecorationProfile DecorationProfileTree::resolve(const QString& surfacePath) con
 
 DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationProfileTree& seeds) const
 {
-    // True when this tree engages `chain` at @p surfacePath or anywhere on its
-    // walk-up (baseline included) — the per-path gate for seed injection.
-    const auto chainEngagedOnWalk = [this](const QString& surfacePath) {
-        if (m_baseline.chain.has_value())
+    // True when this tree engages @p member at @p surfacePath or anywhere on
+    // its walk-up (baseline included). Chain engagement anywhere on the walk
+    // is the MASTER gate (the user built their own look there); parameters and
+    // disabledPacks additionally run the same walk for their OWN field, so a
+    // seed's leaf map can never shadow an engaged ancestor map — resolve()
+    // overlays deepest-last, and an injected leaf field would silently win
+    // over the user's category-level engagement.
+    const auto fieldEngagedOnWalk = [this](const QString& surfacePath, auto member) {
+        if ((m_baseline.*member).has_value())
             return true;
         QString cursor = surfacePath;
         while (!cursor.isEmpty()) {
             const auto it = m_overrides.constFind(cursor);
-            if (it != m_overrides.constEnd() && it.value().chain.has_value())
+            if (it != m_overrides.constEnd() && (it.value().*member).has_value())
                 return true;
             cursor = decorationParentPath(cursor);
         }
         return false;
     };
 
-    // Copy seed-engaged fields into unengaged slots of @p target; returns
-    // whether anything landed.
-    const auto injectUnengaged = [](DecorationProfile& target, const DecorationProfile& seed) {
-        bool changed = false;
-        if (!target.chain && seed.chain) {
-            target.chain = seed.chain;
-            changed = true;
-        }
-        if (!target.parameters && seed.parameters) {
-            target.parameters = seed.parameters;
-            changed = true;
-        }
-        if (!target.disabledPacks && seed.disabledPacks) {
-            target.disabledPacks = seed.disabledPacks;
-            changed = true;
-        }
-        return changed;
-    };
-
     DecorationProfileTree merged = *this;
 
+    // Baseline: the walk for the root IS the baseline, so the per-field gates
+    // collapse to the baseline's own slots (chain unengaged as the master
+    // gate, then each unengaged field takes the seed's).
     if (!m_baseline.chain.has_value()) {
         DecorationProfile baseline = merged.m_baseline;
-        if (injectUnengaged(baseline, seeds.m_baseline))
+        bool changed = false;
+        if (seeds.m_baseline.chain) {
+            baseline.chain = seeds.m_baseline.chain;
+            changed = true;
+        }
+        if (!baseline.parameters && seeds.m_baseline.parameters) {
+            baseline.parameters = seeds.m_baseline.parameters;
+            changed = true;
+        }
+        if (!baseline.disabledPacks && seeds.m_baseline.disabledPacks) {
+            baseline.disabledPacks = seeds.m_baseline.disabledPacks;
+            changed = true;
+        }
+        if (changed)
             merged.m_baseline = baseline;
     }
 
     for (const QString& path : seeds.m_insertionOrder) {
-        if (chainEngagedOnWalk(path))
+        // Master gate: an engaged chain at the path or any ancestor blocks the
+        // whole seed for this path. The walk reads *this, not `merged`, so an
+        // already-injected sibling seed never blocks another seed path.
+        if (fieldEngagedOnWalk(path, &DecorationProfile::chain))
             continue;
+        const DecorationProfile seed = seeds.m_overrides.value(path);
         DecorationProfile target = merged.m_overrides.value(path);
-        if (injectUnengaged(target, seeds.m_overrides.value(path)))
+        bool changed = false;
+        // The chain slot at `path` is unengaged (the master gate covers the
+        // path itself), so a seed chain always lands here.
+        if (seed.chain) {
+            target.chain = seed.chain;
+            changed = true;
+        }
+        if (seed.parameters && !fieldEngagedOnWalk(path, &DecorationProfile::parameters)) {
+            target.parameters = seed.parameters;
+            changed = true;
+        }
+        if (seed.disabledPacks && !fieldEngagedOnWalk(path, &DecorationProfile::disabledPacks)) {
+            target.disabledPacks = seed.disabledPacks;
+            changed = true;
+        }
+        if (changed)
             merged.setOverride(path, target);
     }
 
