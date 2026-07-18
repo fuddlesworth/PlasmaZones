@@ -30,10 +30,11 @@ public:
                               const QVariant& a2 = QVariant(), const QVariant& a3 = QVariant(),
                               const QVariant& a4 = QVariant(), const QVariant& a5 = QVariant()) const;
 
-    // i18np("1 item", "%1 items", count)
+    // i18np("%n item", "%n items", count) — only %n is substituted; %1..%5
+    // placeholders are NOT (compose an outer i18n() for extra values).
     Q_INVOKABLE QString i18np(const QString& singular, const QString& plural, int n) const;
 
-    // i18ncp("@ctx", "1 item", "%1 items", count)
+    // i18ncp("@ctx", "%n item", "%n items", count) — same %n-only rule.
     Q_INVOKABLE QString i18ncp(const QString& context, const QString& singular, const QString& plural, int n) const;
 
 private:

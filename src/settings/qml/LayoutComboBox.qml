@@ -592,9 +592,9 @@ ComboBox {
                             return i18n("No default configured");
                         } else if (isDefaultOption) {
                             let layoutName = (modelData.layout && modelData.layout.displayName) || "";
-                            return i18np("→ %2 (%1 zone)", "→ %2 (%1 zones)", (modelData.layout && modelData.layout.zoneCount) || 0, layoutName);
+                            return i18n("→ %1 (%2)", layoutName, i18np("%n zone", "%n zones", (modelData.layout && modelData.layout.zoneCount) || 0));
                         } else {
-                            return i18np("%1 zone", "%1 zones", (modelData.layout && modelData.layout.zoneCount) || 0);
+                            return i18np("%n zone", "%n zones", (modelData.layout && modelData.layout.zoneCount) || 0);
                         }
                     }
                     font: Kirigami.Theme.smallFont
