@@ -324,6 +324,17 @@ public:
     // settings) does NOT propagate here — fallback previews render with
     // built-in defaults. When the daemon is up, D-Bus carries the tuned
     // previews; the fallback is only a "daemon is down" safety net.
+    /// The selectable options for an enum-valued setting, as
+    /// `[{ text, value }, ...]` in declaration order, ready to hand straight to
+    /// a WideComboBox's model with textRole "text" / valueRole "value".
+    ///
+    /// The values come from the config schema and the words from the app-side
+    /// label table, so a picker cannot drift from what the key actually
+    /// accepts. Returns an empty list, and warns, when the key declares no
+    /// choices — an empty combo is a visible failure, unlike a silently wrong
+    /// label.
+    Q_INVOKABLE QVariantList valueOptions(const QString& group, const QString& key) const;
+
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
 
     // Screen accessors

@@ -18,6 +18,8 @@
  *     choice list that fell out of step with the enum it mirrors.
  */
 
+#include <QDir>
+#include <QRegularExpression>
 #include <QSet>
 #include <QTest>
 
@@ -257,6 +259,59 @@ private Q_SLOTS:
         QCOMPARE(SettingsValueLabels::kindName(
                      SettingsValueLabels::descriptorFor(CD::animationsGroup(), CD::shaderProfileTreeKey()).kind),
                  QStringLiteral("shaderPack"));
+    }
+
+    /// Every (group, key) pair a QML picker passes to valueOptions() must name
+    /// a key that declares choices.
+    ///
+    /// QML has no compile-time checking, so a mistyped pair here fails at
+    /// runtime as an empty combo box — on a page nobody may open for weeks.
+    /// Scanning the sources turns that into a test failure. This is the only
+    /// guard covering the QML side of the table, since nothing else can see
+    /// those string literals.
+    void everyQmlValueOptionsCallResolves()
+    {
+        const QDir qmlDir(QStringLiteral(P_SOURCE_DIR) + QStringLiteral("/src/settings/qml"));
+        QVERIFY2(qmlDir.exists(), qPrintable(QStringLiteral("no QML directory at %1").arg(qmlDir.path())));
+
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        // valueOptions("Group.Path", "Key") — tolerant of whitespace, and of
+        // either quote style QML allows.
+        // Escaped rather than a raw string literal: moc does not parse R"(...)"
+        // and would read the first embedded quote as the end of the string,
+        // swallowing the rest of the file and leaving this class without a
+        // vtable.
+        static const QRegularExpression call(
+            QStringLiteral("valueOptions\\s*\\(\\s*\"([^\"]+)\"\\s*,\\s*\"([^\"]+)\"\\s*\\)"));
+
+        QStringList problems;
+        int calls = 0;
+        const QFileInfoList files = qmlDir.entryInfoList({QStringLiteral("*.qml")}, QDir::Files);
+        for (const QFileInfo& info : files) {
+            QFile file(info.absoluteFilePath());
+            if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                continue;
+            }
+            const QString text = QString::fromUtf8(file.readAll());
+            auto it = call.globalMatch(text);
+            while (it.hasNext()) {
+                const QRegularExpressionMatch match = it.next();
+                const QString group = match.captured(1);
+                const QString key = match.captured(2);
+                ++calls;
+                const PhosphorConfig::KeyDef* def = schema.findKey(group, key);
+                if (!def) {
+                    problems.append(QStringLiteral("%1: %2/%3 is not in the schema").arg(info.fileName(), group, key));
+                } else if (def->choices.isEmpty()) {
+                    problems.append(QStringLiteral("%1: %2/%3 declares no choices, so the picker would be empty")
+                                        .arg(info.fileName(), group, key));
+                }
+            }
+        }
+
+        problems.sort();
+        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("\n  "))));
+        QVERIFY2(calls > 0, "no valueOptions() calls found in QML — the scan is broken, not clean");
     }
 
     /// The same token under two keys means two different things, which is the

@@ -343,6 +343,7 @@ p_add_test(test_configmigration config/test_configmigration.cpp)
 add_executable(test_settingsvaluelabels config/test_settingsvaluelabels.cpp)
 target_link_libraries(test_settingsvaluelabels
     PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+target_compile_definitions(test_settingsvaluelabels PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_settingsvaluelabels COMMAND test_settingsvaluelabels)
 
 # v3 → v4 window-rule consolidation migration.
