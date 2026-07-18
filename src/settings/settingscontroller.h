@@ -706,6 +706,12 @@ private Q_SLOTS:
 
 private:
     void setNeedsSave(bool needs);
+    /// Reload deferred by onExternalSettingsChanged() while edits were
+    /// pending — fire it once the app is fully clean again. Connected to
+    /// dirtyPagesChanged in the ctor: that is the one signal every
+    /// clean-transition path emits (footer save/discard, per-page kebab
+    /// Discard, the virtual-screens discard branch).
+    void maybeDrainPendingExternalReload();
     // Sync m_dirtyPages membership for @p page to its value-based dirty state
     // (isPageDirty) after a per-page Reset/Discard, emitting dirtyPagesChanged
     // when it flips so the footer's global needsSave stays consistent. Used for
@@ -817,6 +823,13 @@ private:
     QStack<QString> m_externalEditStack;
     bool m_saving = false;
     bool m_loading = false;
+    /// A daemon settingsChanged broadcast arrived while local edits were
+    /// pending, so onExternalSettingsChanged() deferred the reload instead
+    /// of clobbering them. Drained (one queued reload) by
+    /// maybeDrainPendingExternalReload() when the app next transitions to
+    /// fully clean; cleared without a reload by save(), whose whole-schema
+    /// flush supersedes the external state the reload would have adopted.
+    bool m_pendingExternalReload = false;
     /// Reentrancy guard for setActivePage(). A slot connected to
     /// activePageChanged that calls back into setActivePage would
     /// otherwise corrupt the m_loading toggle window.

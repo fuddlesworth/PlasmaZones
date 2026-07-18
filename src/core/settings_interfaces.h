@@ -507,6 +507,18 @@ public:
     virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
     virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
 
+    /// The committed-baseline shader tree — the last-persisted value the
+    /// per-surface animation dirty check and per-page Discard compare the live
+    /// tree against. The default returns the live tree, so a stub with no
+    /// baseline notion reports "never diverged"; the concrete Settings overrides
+    /// it to read its committed baseline. Implementations MUST apply the same
+    /// supported-path prune as shaderProfileTree() so live-vs-committed compares
+    /// prune-for-prune.
+    virtual PhosphorAnimationShaders::ShaderProfileTree committedShaderProfileTree() const
+    {
+        return shaderProfileTree();
+    }
+
     // Animation window filtering — gates animations BEFORE the app-rule
     // cascade. A class-pattern rule whose pattern matches the window's class
     // overrides the filter at the resolver layer, so users can re-enable

@@ -230,6 +230,34 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
         QCOMPARE(settings.decorationProfileTree(), tree);
     }
+
+    /// committedDecorationProfileTree() is the baseline the per-surface
+    /// decoration dirty check and scoped Discard compare against. It must track
+    /// the last load/save commit, NOT live edits — setDecorationProfileTree
+    /// persists to the store immediately but does not re-baseline, so live and
+    /// committed diverge until save(). A regression here silently breaks
+    /// per-page dirty/Discard for the decoration surface pages.
+    void testCommittedDecorationProfileTree_tracksBaselineNotLiveEdits()
+    {
+        IsolatedConfigGuard guard;
+        Settings a;
+
+        // Fresh load: committed baseline equals the live tree (the ConfigDefaults
+        // default), and carries no window.tiled override.
+        QVERIFY(a.committedDecorationProfileTree() == a.decorationProfileTree());
+        QVERIFY(!a.committedDecorationProfileTree().hasOverride(QStringLiteral("window.tiled")));
+
+        // Edit without save: live gains the window.tiled leaf; committed holds.
+        a.setDecorationProfileTree(makeBaselinePlusLeafTree());
+        QVERIFY(a.decorationProfileTree().hasOverride(QStringLiteral("window.tiled")));
+        QVERIFY(!a.committedDecorationProfileTree().hasOverride(QStringLiteral("window.tiled")));
+        QVERIFY(a.decorationProfileTree() != a.committedDecorationProfileTree());
+
+        // save() re-captures the baseline: committed catches up to live.
+        a.save();
+        QVERIFY(a.committedDecorationProfileTree().hasOverride(QStringLiteral("window.tiled")));
+        QVERIFY(a.committedDecorationProfileTree() == a.decorationProfileTree());
+    }
 };
 
 QTEST_MAIN(TestSettingsDecorationTree)

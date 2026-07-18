@@ -31,10 +31,15 @@ private Q_SLOTS:
 
     /// Guarantees no registry state leaks between test methods even
     /// when a test forgets to clean up after itself. See the matching
-    /// comment in test_profileloader.cpp.
+    /// comment in test_profileloader.cpp. The low-precedence tag is
+    /// reset here too: clear() deliberately preserves it (it's
+    /// configuration, not data), so a test that sets the tag and then
+    /// aborts on a failed assertion would otherwise leak it into every
+    /// subsequent test.
     void cleanup()
     {
         m_registry.clear();
+        m_registry.setLowPrecedenceOwnerTag(QString());
     }
 
     /// Verify that the published default-registry handle round-trips —
@@ -136,6 +141,39 @@ private Q_SLOTS:
 
         m_registry.registerProfile(QStringLiteral("y"), Profile{});
         QCOMPARE(m_registry.profileCount(), 2);
+    }
+
+    /// snapshotExcludingLowPrecedence must omit seed-owned entries so a
+    /// publisher flattening the registry into a ProfileTree cannot promote
+    /// low-precedence family defaults into overrides that outrank the
+    /// consumer's own baseline profile (a `window` seed shipped as an
+    /// override pins every window leg's duration, turning the user's
+    /// global animation settings into a no-op — the #795 regression).
+    void testSnapshotExcludingLowPrecedenceOmitsSeeds()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+
+        Profile seed;
+        seed.duration = 200.0;
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+
+        Profile userProfile;
+        userProfile.duration = 2000.0;
+        m_registry.registerProfile(QStringLiteral("window.movement.snapIn"), userProfile, QStringLiteral("user-files"));
+        m_registry.registerProfile(QStringLiteral("Global"), Profile{});
+
+        // No tag configured: identical to snapshot().
+        QCOMPARE(m_registry.snapshotExcludingLowPrecedence().size(), 3);
+
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+        const auto filtered = m_registry.snapshotExcludingLowPrecedence();
+        QCOMPARE(filtered.size(), 2);
+        QVERIFY(!filtered.contains(QStringLiteral("window")));
+        QVERIFY(filtered.contains(QStringLiteral("window.movement.snapIn")));
+        QVERIFY(filtered.contains(QStringLiteral("Global")));
+
+        // Full snapshot still carries the seed for in-process consumers.
+        QCOMPARE(m_registry.snapshot().size(), 3);
     }
 
     /// `ownerReloaded(tag)` fires exactly once per partitioned-reload

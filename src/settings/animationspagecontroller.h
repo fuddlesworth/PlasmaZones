@@ -187,6 +187,27 @@ public:
     /// in both cases. A caller must not treat -1 as "nothing to clear".
     int clearAllOverrides();
 
+    /// Scoped sibling of clearAllOverrides for the per-page kebab: clear only the
+    /// override files at @p eventPaths (one settings page's own event-path
+    /// subtree), leaving every other page's overrides untouched. Same snapshot /
+    /// return-code contract as clearAllOverrides (-1 = refused or partial). @p
+    /// eventPaths must be built-in event paths; non-built-in entries are skipped.
+    int clearOverridesUnder(const QStringList& eventPaths);
+
+    /// Scoped sibling of revertPending: restore ONLY the snapshotted override
+    /// files at @p eventPaths from their pre-edit content, leaving every other
+    /// page's staged file edits (and any preset / motion-set snapshots) pending.
+    /// Refuses (returns false) while an async discard owns the snapshot map. The
+    /// caller reverts the shader tree for the same paths separately (the tree is
+    /// Settings-owned; see the revertPending() caller contract). @return true
+    /// when every in-scope snapshot restored (or there were none).
+    bool revertPendingUnder(const QStringList& eventPaths);
+
+    /// True iff any of @p eventPaths carries a staged (snapshotted) override-file
+    /// edit — the file half of a per-page dirty check. The shader-tree half is a
+    /// value comparison the caller runs against committedShaderProfileTree().
+    bool hasScopedPendingFiles(const QStringList& eventPaths) const;
+
     /// Library of user-saved Profile presets. Each entry is a Profile JSON
     /// (`curve`, `duration`, `name`, …) sitting in the same `profiles/`
     /// dir as overrides — distinguished by the `name` field NOT matching
@@ -394,6 +415,14 @@ public:
     /// would double-dispatch, see settingscontroller_lifecycle.cpp).
     void commitPending();
 
+    /// Re-evaluate the value-based dirty state after an external commit point the
+    /// controller cannot observe on its own — chiefly Settings::save()'s
+    /// captureBaseline, which advances committedShaderProfileTree() without moving
+    /// the live tree (so no shaderProfileTreeChanged fires). SettingsController::
+    /// save() calls this right after m_settings.save(); the dirtyChanged forwarder
+    /// gates on an actual flip so a no-op refresh is free.
+    void refreshDirtyState();
+
     /// Restore every file in the snapshot to its pre-edit state and
     /// clear the snapshot. Called from `SettingsController::load()`
     /// (Discard). Emits `overrideChanged`/`userPresetsChanged`/
@@ -484,7 +513,6 @@ private:
     /// reflect GUI-thread state. Never alias them by reference —
     /// merging is done by key set in the worker's finished handler.
     QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
-    bool m_shaderTreeDirty = false;
     /// In-flight guard for asyncRevertPending — set true on dispatch
     /// and cleared in the QFutureWatcher::finished handler. A second
     /// asyncRevertPending invocation while a worker is running would
@@ -499,14 +527,6 @@ private:
     /// forward on this cached state keeps the framework's dirty
     /// Q_PROPERTY NOTIFY contract honest.
     bool m_lastHadPendingChanges = false;
-    /// Set to true while a controller-owned setter is mutating the
-    /// shader profile tree on m_settings. The shaderProfileTreeChanged
-    /// handler checks `m_mutatingShaderTree > 0` to distinguish our own
-    /// writes (which keep m_shaderTreeDirty true) from external reloads
-    /// (which should clear it). Counter, not bool: a nested re-entrant
-    /// write inside the same setShaderProfileTree call chain must not
-    /// prematurely clear the outer scope's protection.
-    int m_mutatingShaderTree = 0;
     /// Memoised eventSections() result — taxonomy is static for the
     /// process lifetime so subsequent QML rebinds reuse the same list.
     /// Populated lazily on first call. NOTE: if `ProfilePaths::

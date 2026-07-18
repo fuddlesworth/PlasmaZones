@@ -139,6 +139,7 @@ private:
     static QString sectionEnvironment();
     static QString sectionScreens(const Snapshot& snapshot);
     static QString sectionConfig();
+    static QString sectionRules();
     static QString sectionLayouts(const Snapshot& snapshot);
     static QString sectionAutotile(const Snapshot& snapshot);
     static QString sectionCompositorBridge(const Snapshot& snapshot);

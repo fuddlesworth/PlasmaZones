@@ -37,6 +37,42 @@ class TestSettingsAnimationProfile : public QObject
 
 private Q_SLOTS:
 
+    /// Two writers over one config file (settings app + daemon in
+    /// production): a composite-blob write through a STALE but CLEAN
+    /// backend must not resurrect old sibling fields over a value the
+    /// other writer already committed. Encodes the live #795 repro:
+    /// writer A saves duration=2000; writer B, whose cached document
+    /// predates that save, patches sequenceMode; the duration must
+    /// survive on disk because B's setter refreshes its clean backend
+    /// from disk before the read-modify-write.
+    void testAnimationProfile_staleCleanWriterDoesNotClobberSibling()
+    {
+        IsolatedConfigGuard guard;
+        {
+            // Establish the config file (runs migrations/stamping) so the
+            // later instances start from a committed, clean state.
+            Settings init;
+            init.save();
+        }
+
+        Settings writerB; // caches the pre-change document
+
+        {
+            Settings writerA;
+            writerA.setAnimationDuration(2000);
+            writerA.save();
+        }
+
+        // 0 is the non-default value (schema default is 1) — a default
+        // write would no-op in the setter and never exercise the blob RMW.
+        writerB.setAnimationSequenceMode(0);
+        writerB.save();
+
+        Settings reloaded;
+        QCOMPARE(reloaded.animationDuration(), 2000);
+        QCOMPARE(reloaded.animationSequenceMode(), 0);
+    }
+
     /// Every Profile field (curve, duration, minDistance, sequenceMode,
     /// staggerInterval) must round-trip through save → reload with the
     /// original value intact.

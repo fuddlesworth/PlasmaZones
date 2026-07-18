@@ -755,6 +755,7 @@ SettingsController::SettingsController(QObject* parent)
             m_rulesPage->model()->refreshLabels();
         }
     };
+    connect(this, &SettingsController::dirtyPagesChanged, this, &SettingsController::maybeDrainPendingExternalReload);
     connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::activitiesChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::layoutsChanged, this, refreshRuleLabels);

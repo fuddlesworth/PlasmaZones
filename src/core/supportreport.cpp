@@ -181,6 +181,16 @@ QString SupportReport::sectionConfig()
     return readAndRedactFile(ConfigDefaults::configFilePath(), QStringLiteral("config file"));
 }
 
+QString SupportReport::sectionRules()
+{
+    // Rules carry per-window and per-screen overrides (gaps, animation timing,
+    // opacity, placement) that config.json alone cannot explain — several
+    // reports were untriageable without them (discussions #795/#796).
+    if (!QFile::exists(ConfigDefaults::rulesFilePath()))
+        return QStringLiteral("*(no rules file)*\n");
+    return readAndRedactFile(ConfigDefaults::rulesFilePath(), QStringLiteral("rules file"));
+}
+
 QString SupportReport::sectionLayouts(const Snapshot& snapshot)
 {
     if (!snapshot.hasLayoutManager)
@@ -378,6 +388,10 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
 
     report += QStringLiteral("## Config\n");
     report += sectionConfig();
+    report += QLatin1Char('\n');
+
+    report += QStringLiteral("## Rules\n");
+    report += sectionRules();
     report += QLatin1Char('\n');
 
     report += QStringLiteral("## Layouts\n");

@@ -41,6 +41,11 @@ namespace PlasmaZones {
 void SettingsController::load()
 {
     m_loading = true;
+    // A full load adopts the on-disk state wholesale, which is everything a
+    // reload deferred by onExternalSettingsChanged() would have done — clear
+    // the flag so the clean transition at the end of this load doesn't
+    // schedule a redundant second reload.
+    m_pendingExternalReload = false;
     // Animation pages persist per-event motion overrides as separate
     // files (file-per-path under ~/.local/share/plasmazones/profiles/);
     // m_settings.load() alone wouldn't restore them on Discard. The
@@ -136,6 +141,14 @@ void SettingsController::save()
     // Save main settings (includes editor settings + VS configs persisted above)
     m_settings.save();
 
+    // save() re-captured the committed baseline, so the animation controller's
+    // value-based shader-tree dirty check must re-evaluate: apply() (commitPending)
+    // may have run earlier in the domain walk, while the tree still read
+    // "divergent" against the not-yet-recaptured baseline. This is a no-op flip
+    // guard away from free when nothing changed.
+    if (m_animationsPage != nullptr)
+        m_animationsPage->refreshDirtyState();
+
     // RuleController and AnimationsPageController are registered
     // as their own StagingDomains and the framework's applyAllAsync
     // walks them directly. Both registrations happen in
@@ -210,6 +223,13 @@ void SettingsController::save()
     // a spurious load() that reverts just-saved assignments. Posting the
     // reset through singleShot(0) drains those queued signals first, so
     // onExternalSettingsChanged() sees m_saving=true and returns early.
+    //
+    // A reload deferred while edits were pending is superseded by this save:
+    // the whole-schema flush above rewrote the file from this process's
+    // state, so re-reading disk afterwards would recover nothing of the
+    // external change. Clear the flag so the clean transition below doesn't
+    // fire a pointless reload.
+    m_pendingExternalReload = false;
     setNeedsSave(false);
     // Window-rule failure handling moved to RuleController itself
     // (see pushToDaemonAsync): a failed/partial-drop push keeps the page
@@ -242,6 +262,10 @@ void SettingsController::save()
 
 void SettingsController::defaults()
 {
+    // A factory reset rewrites the whole schema to disk just like save()
+    // does, superseding any reload deferred while edits were pending —
+    // clear the flag for the same reason save() does.
+    m_pendingExternalReload = false;
     // Hold m_loading = true through the ENTIRE reset cleanup, not just
     // the reset() call. revertPending() emits pendingChangesChanged
     // synchronously and the staged-order reset transitions through

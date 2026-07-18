@@ -114,6 +114,19 @@ public:
     /// the registry cannot encode in a flat snapshot.
     QHash<QString, Profile> snapshot() const;
 
+    /// Like snapshot(), but omitting entries owned by the configured
+    /// low-precedence tag (seed-style defaults). Publishers that
+    /// serialize a ProfileTree for an out-of-process consumer MUST use
+    /// this variant: tree overrides outrank the consumer's own baseline
+    /// profile, so a flat snapshot would promote low-precedence seeds
+    /// ABOVE the consumer's global profile — the exact shadowing
+    /// setLowPrecedenceOwnerTag() exists to prevent (a `window` family
+    /// seed would pin every window leg's duration and curve, turning
+    /// the user's global animation settings into a no-op on the
+    /// receiving side). With no low-precedence tag configured this is
+    /// identical to snapshot().
+    QHash<QString, Profile> snapshotExcludingLowPrecedence() const;
+
     /// Current path count. Thread-safe.
     int profileCount() const;
 
