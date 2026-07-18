@@ -65,7 +65,7 @@ SettingsFlickable {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
             visible: true
-            text: i18n("A profile captures your current settings. Only what differs from its parent profile (or the defaults) is stored. Activating a profile stages its settings — save to apply, or discard to revert.")
+            text: i18n("A profile captures your current settings and rules. Only what differs from its parent profile (or the defaults) is stored. Activating a profile stages its settings — save to apply, or discard to revert. Per-monitor and other hardware-specific settings are not included, so a profile stays portable between machines.")
         }
 
         // ── Save current settings as a new profile ──

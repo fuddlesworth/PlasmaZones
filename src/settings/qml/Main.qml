@@ -836,4 +836,81 @@ PhosphorUi.SettingsAppWindow {
             }
         }
     }
+
+    // Sticky sidebar-footer profile switcher — activate a settings profile from
+    // anywhere, mirroring the per-row Activate on the Profiles page. Selecting
+    // one STAGES it into the Save footer (applies on Save, reverts on Discard).
+    // Collapses to nothing until at least one profile exists, and (being a
+    // non-compact-aware footer consumer) hides in the narrow compact rail.
+    sidebar.footerContent: Component {
+        Item {
+            id: profileFooter
+
+            readonly property var profilesBridge: settingsController.profilesPage ? settingsController.profilesPage.bridge : null
+            property var profileRows: profilesBridge ? profilesBridge.availableProfiles() : []
+            readonly property int activeIndex: {
+                for (let i = 0; i < profileRows.length; ++i) {
+                    if (profileRows[i].active)
+                        return i;
+                }
+                return -1;
+            }
+
+            // Zero-height when there are no profiles, so the footer disappears.
+            implicitHeight: profileRows.length > 0 ? footerColumn.implicitHeight : 0
+
+            Connections {
+                function onProfilesChanged() {
+                    profileFooter.profileRows = profileFooter.profilesBridge.availableProfiles();
+                }
+
+                target: profileFooter.profilesBridge
+            }
+
+            ColumnLayout {
+                id: footerColumn
+
+                visible: profileFooter.profileRows.length > 0
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.smallSpacing
+                    Layout.rightMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Kirigami.Icon {
+                        source: "bookmarks"
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                    }
+
+                    ComboBox {
+                        Layout.fillWidth: true
+                        model: profileFooter.profileRows
+                        textRole: "name"
+                        // Bound to the active profile; `activated` fires only on a
+                        // real user pick (not this binding), so there is no loop.
+                        currentIndex: profileFooter.activeIndex
+                        displayText: profileFooter.activeIndex < 0 ? i18n("No profile") : currentText
+                        Accessible.name: i18n("Active profile")
+                        onActivated: function (index) {
+                            const row = profileFooter.profileRows[index];
+                            if (row && profileFooter.profilesBridge)
+                                profileFooter.profilesBridge.activateProfile(row.id);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

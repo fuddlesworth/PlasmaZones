@@ -32,8 +32,10 @@ namespace PlasmaZones {
 /// ```
 /// { "_version": 5, "id": "{uuid}", "name": …, "description": …,
 ///   "parent": "{uuid}" | null,
-///   "config": { "Group.Path": { "key": value, … }, … },   // sparse delta
-///   "rules":  { "order": [ "{uuid}", … ], "rules": [ … ] } // Phase 2
+///   "config": { "Group.Path": { "key": value, … }, … },   // sparse config delta
+///   "rules":  { "order": [ "{uuid}", … ],                 // resolved user-rule order
+///               "upserts": [ { …Rule… }, … ],             // rules added / changed vs parent
+///               "removedIds": [ "{uuid}", … ] }           // parent rules this profile drops
 /// }
 /// ```
 ///
@@ -43,12 +45,14 @@ namespace PlasmaZones {
 ///
 /// Profile-file CRUD (create / rename / delete / duplicate / import / export /
 /// reparent) writes to disk immediately. Only the ACTIVE POINTER and the applied
-/// settings follow the Save footer: activation stages the resolved config and a
-/// staged active id (both owned by the controller via the injected closures),
-/// which the controller commits on Save (writeActiveId) or reverts on Discard.
+/// settings follow the Save footer: activation stages the resolved config and
+/// user rules and a staged active id (owned by the controller via the injected
+/// closures), which the controller commits on Save (writeActiveId) or reverts on
+/// Discard.
 ///
-/// The config half is treated opaquely as key/value JSON. The `rules` section is
-/// carried through read/write untouched in Phase 1; Phase 2 wires its diff/apply.
+/// The config half is treated opaquely as key/value JSON. The rules half is an
+/// id-keyed delta against the parent-resolved user rule set (managed rules are
+/// daemon-owned and never carried); equality ignores the renormalized priority.
 class ProfileStore : public QObject
 {
     Q_OBJECT
