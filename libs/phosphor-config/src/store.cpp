@@ -99,6 +99,12 @@ void writeVariantTo(IGroup& g, const QString& key, const QVariant& value)
         // backed storage falls back to the stringified default impl.
         g.writeJson(key, QJsonArray::fromVariantList(value.toList()));
         break;
+    case QMetaType::QStringList:
+        // Same native-array shape as QVariantList — without this case a
+        // QStringList fell to the string fallback (a joined scalar), which
+        // the array-expecting read path then rejected back to the default.
+        g.writeJson(key, QJsonArray::fromStringList(value.toStringList()));
+        break;
     case QMetaType::QVariantMap:
         g.writeJson(key, QJsonObject::fromVariantMap(value.toMap()));
         break;
@@ -190,6 +196,22 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
         // `Store::read<QVariantMap>` path uses a stricter
         // absent-vs-malformed distinction for the Settings layer's own
         // needs.
+        return defaultValue;
+    }
+    case QMetaType::QStringList: {
+        // Same native-JSON-array shape as QVariantList; without this case a
+        // QStringList-typed key would fall to the string branch and a stored
+        // list would read back as a single coerced string.
+        const QJsonValue v = g.readJson(key);
+        if (v.isArray()) {
+            QStringList out;
+            const QJsonArray arr = v.toArray();
+            out.reserve(arr.size());
+            for (const QJsonValue& item : arr) {
+                out.append(item.toString());
+            }
+            return QVariant(out);
+        }
         return defaultValue;
     }
     case QMetaType::QVariantMap: {
@@ -456,13 +478,17 @@ QJsonObject Store::defaultsToJson() const
             return def.defaultValue.toInt();
         case QMetaType::LongLong:
             return def.defaultValue.toLongLong();
+        case QMetaType::ULongLong:
+            return def.defaultValue.toULongLong();
         case QMetaType::Double:
+        case QMetaType::Float:
             return def.defaultValue.toDouble();
         case QMetaType::QString:
             return def.defaultValue.toString();
-        case QMetaType::QStringList:
-            return def.defaultValue.toStringList();
         default:
+            // QColor / QVariantList / QVariantMap / QStringList: readVariantAs
+            // returns the raw default for these when the key is absent, so raw
+            // passthrough IS the mirror.
             return def.defaultValue;
         }
     };

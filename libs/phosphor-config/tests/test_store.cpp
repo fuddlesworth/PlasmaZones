@@ -33,6 +33,8 @@ private:
         s.groups[QStringLiteral("Appearance")] = {
             {QStringLiteral("Accent"), QColor(Qt::blue), QMetaType::QColor},
             {QStringLiteral("FontSize"), 12.0, QMetaType::Double},
+            {QStringLiteral("Tags"), QVariant(QStringList{QStringLiteral("a"), QStringLiteral("b")}),
+             QMetaType::QStringList},
         };
         return s;
     }
@@ -119,6 +121,33 @@ private Q_SLOTS:
         QCOMPARE(window.value(QStringLiteral("Width")).toInt(), 1024);
         // Untouched keys come out as the schema default.
         QCOMPARE(window.value(QStringLiteral("Height")).toInt(), 600);
+    }
+
+    /// A fresh store's export must be VALUE-identical to the defaults
+    /// snapshot: both walk the same schema, and exportToJson's absent-key path
+    /// returns the coerced default. Any divergence — a coercion handled by one
+    /// serializer and not the other (the QStringList case history) — fails
+    /// here rather than surfacing as a phantom diff in a consumer.
+    void defaultsToJsonMatchesFreshExport()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+        QCOMPARE(store.defaultsToJson(), store.exportToJson());
+    }
+
+    /// A stored QStringList round-trips as a JSON array instead of collapsing
+    /// through the string branch.
+    void stringListRoundTripsAsArray()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+        const QStringList written{QStringLiteral("x"), QStringLiteral("y"), QStringLiteral("z")};
+        store.write(QStringLiteral("Appearance"), QStringLiteral("Tags"), written);
+        QCOMPARE(store.readVariant(QStringLiteral("Appearance"), QStringLiteral("Tags")).toStringList(), written);
+        const QJsonValue exported =
+            store.exportToJson().value(QStringLiteral("Appearance")).toObject().value(QStringLiteral("Tags"));
+        QVERIFY(exported.isArray());
+        QCOMPARE(exported.toArray().size(), 3);
     }
 
     void importFromJsonOverwritesDeclaredKeysOnly()

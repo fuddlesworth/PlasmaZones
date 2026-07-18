@@ -19,6 +19,7 @@
  *     prune-on-write/read, autoAssignAllLayouts master toggle
  */
 
+#include <QSet>
 #include <QTest>
 #include <QColor>
 #include <QSignalSpy>
@@ -891,11 +892,39 @@ private Q_SLOTS:
         const QJsonObject exported = settings.exportConfigToJson();
         QCOMPARE(defaults.keys(), exported.keys());
         QCOMPARE(defaults.value(QStringLiteral("_version")), exported.value(QStringLiteral("_version")));
+        // The palette-derived keys are the one legitimate divergence: with
+        // UseSystem on (the default), load() runs applySystemColorScheme and
+        // writes the live palette's highlight/inactive/border/font colours
+        // into the store, so a fresh export carries THOSE, not the schema
+        // defaults. Everything else must be value-identical — any other
+        // difference is one serializer coercing what the other does not,
+        // the exact drift the delegation to Store::defaultsToJson prevents.
+        const QSet<QString> paletteDerived{
+            QStringLiteral("Snapping.Zones.Colors/Highlight"),
+            QStringLiteral("Snapping.Zones.Colors/Inactive"),
+            QStringLiteral("Snapping.Zones.Colors/Border"),
+            QStringLiteral("Snapping.Zones.Labels/FontColor"),
+        };
         for (const QString& group : exported.keys()) {
             if (group == QStringLiteral("_version")) {
                 continue;
             }
-            QCOMPARE(defaults.value(group).toObject().keys(), exported.value(group).toObject().keys());
+            const QJsonObject defaultGroup = defaults.value(group).toObject();
+            const QJsonObject exportedGroup = exported.value(group).toObject();
+            QCOMPARE(defaultGroup.keys(), exportedGroup.keys());
+            for (const QString& key : exportedGroup.keys()) {
+                if (paletteDerived.contains(group + QLatin1Char('/') + key)) {
+                    continue;
+                }
+                QVERIFY2(
+                    defaultGroup.value(key) == exportedGroup.value(key),
+                    qPrintable(QStringLiteral("%1/%2: default %3 != fresh export %4")
+                                   .arg(group, key,
+                                        QString::fromUtf8(QJsonDocument(QJsonObject{{key, defaultGroup.value(key)}})
+                                                              .toJson(QJsonDocument::Compact)),
+                                        QString::fromUtf8(QJsonDocument(QJsonObject{{key, exportedGroup.value(key)}})
+                                                              .toJson(QJsonDocument::Compact)))));
+            }
         }
     }
 
