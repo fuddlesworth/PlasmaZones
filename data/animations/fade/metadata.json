@@ -1,7 +1,7 @@
 {
     "id": "fade",
     "name": "Fade",
-    "description": "Gentle scale-and-fade transition. Opening eases scale from 0.95 to 1.0 with a smoothstep(0,0.8) fade-in. Closing eases scale from 1.0 to 0.95 with a smoothstep(1.0,0.2) fade-out.",
+    "description": "Gentle scale-and-fade transition. Opening eases scale from 0.95 to 1.0 while the window fades in. Closing eases scale from 1.0 to 0.95 while it fades out.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Fade",
@@ -27,7 +27,7 @@
             "id": "revealEnd",
             "name": "Reveal End",
             "type": "float",
-            "default": 0.8,
+            "default": 1.0,
             "min": 0.51,
             "max": 1.0
         }

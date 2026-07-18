@@ -3,7 +3,15 @@
 //
 // Fade Color transition — ported from liixini/shaders niri shader
 // (https://github.com/liixini/shaders/tree/main/fadecolor). Phased
-// fade — visibility ramps from 40% progress onward with smoothstep.
+// fade — visibility ramps from `p_colorPhase` onward with smoothstep.
+//
+// Deviation from niri: the phase DEFAULT is 0.0, not niri's hardcoded
+// 0.4. `reveal = smoothstep(phase, 1.0, p)` draws literally nothing
+// before p reaches the phase — at 0.4 the first 40% of an open leg is a
+// fully invisible window (and the last 40% of a close leg an invisible
+// corpse), which an eased progress curve stretches into perceived
+// launch lag (the phosphor-peek dead-domain bug). Raising the dial back
+// to 0.4 reproduces the niri timing exactly.
 //
 // Niri's fadecolor ships symmetric close.glsl/open.glsl — bodies are
 // identical apart from `p = niri_clamped_progress` vs
