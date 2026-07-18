@@ -897,32 +897,104 @@ PhosphorUi.SettingsAppWindow {
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
-                    Kirigami.Icon {
-                        source: "bookmarks"
+                    // The active profile's own identicon leads the switcher, so it
+                    // carries the same visual identity as its row on the Profiles
+                    // page (in place of a generic bookmark glyph). It sits OUTSIDE
+                    // the ComboBox: the Desktop style drives contentItem as a text
+                    // item, so replacing that breaks the control.
+                    Item {
+                        visible: profileCombo.activeRow !== null
                         Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                        implicitHeight: Kirigami.Units.iconSizes.smallMedium
+
+                        ProfileSignature {
+                            anchors.fill: parent
+                            signature: profileCombo.activeRow ? profileCombo.activeRow.signature : ""
+                        }
+
+                        // Modified badge — the settings have moved on from the
+                        // profile this mark represents.
+                        Rectangle {
+                            visible: profileCombo.activeRow !== null && profileCombo.activeRow.modified
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.rightMargin: -1
+                            anchors.topMargin: -1
+                            width: Kirigami.Units.smallSpacing * 1.5
+                            height: width
+                            radius: width / 2
+                            color: Kirigami.Theme.neutralTextColor
+                            border.width: 1
+                            border.color: Kirigami.Theme.backgroundColor
+                        }
                     }
 
                     ComboBox {
+                        id: profileCombo
+
+                        readonly property var activeRow: profileFooter.activeIndex >= 0 ? profileFooter.profileRows[profileFooter.activeIndex] : null
+
                         Layout.fillWidth: true
                         model: profileFooter.profileRows
                         textRole: "name"
                         // Bound to the active profile; `activated` fires only on a
                         // real user pick (not this binding), so there is no loop.
                         currentIndex: profileFooter.activeIndex
-                        displayText: {
-                            if (profileFooter.activeIndex < 0)
-                                return i18n("No profile");
-                            const activeRow = profileFooter.profileRows[profileFooter.activeIndex];
-                            return activeRow && activeRow.modified ? i18nc("active profile with unsaved deviations", "%1 — modified", currentText) : currentText;
-                        }
+                        displayText: profileCombo.activeRow ? profileCombo.activeRow.name : i18n("No profile")
                         Accessible.name: i18n("Active profile")
                         onActivated: function (index) {
                             const row = profileFooter.profileRows[index];
                             if (row && profileFooter.profilesBridge)
                                 profileFooter.profilesBridge.activateProfile(row.id);
                         }
+
+                        // Each entry carries its own identicon, so the dropdown
+                        // reads as a gallery of profiles, not a plain name list.
+                        delegate: ItemDelegate {
+                            id: profileEntry
+
+                            required property var modelData
+                            required property int index
+
+                            width: profileCombo.width
+                            highlighted: profileCombo.highlightedIndex === profileEntry.index
+
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.smallSpacing
+
+                                ProfileSignature {
+                                    signature: profileEntry.modelData.signature
+                                    Layout.alignment: Qt.AlignVCenter
+                                    Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                                    Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: profileEntry.modelData.name
+                                    elide: Text.ElideRight
+                                    font.bold: profileEntry.modelData.active
+                                }
+
+                                Kirigami.Icon {
+                                    visible: profileEntry.modelData.active
+                                    source: "dialog-ok"
+                                    Layout.alignment: Qt.AlignVCenter
+                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                    color: Kirigami.Theme.positiveTextColor
+                                }
+                            }
+                        }
+
+                        HoverHandler {
+                            id: profileComboHover
+                        }
+
+                        ToolTip.text: profileCombo.activeRow && profileCombo.activeRow.modified ? i18n("Active profile “%1” — the current settings have changed since it was applied", profileCombo.activeRow.name) : (profileCombo.activeRow ? i18n("Active profile “%1”", profileCombo.activeRow.name) : i18n("No profile is active"))
+                        ToolTip.visible: profileComboHover.hovered
                     }
                 }
             }
