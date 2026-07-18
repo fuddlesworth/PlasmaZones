@@ -31,12 +31,15 @@ ColumnLayout {
     /// state); omit it for ordinary values.
     required property var rows
 
-    /// Fixed column widths. Unlike the rule preview — whose action-type labels
-    /// are short enough that a minimum width governs — a settings breadcrumb
-    /// ("Snapping › Zones › Labels › Font color") easily outruns any floor, so
-    /// a minimum width would let each row set its own column edges and the
-    /// captions and pills would stagger. Every cell is therefore a FIXED width
-    /// with elision inside it, which is what keeps the columns square.
+    /// Fixed COLUMN widths — the pills inside them still hug their content, the
+    /// way the rule preview's value pills do.
+    ///
+    /// That preview holds its columns with a minimum width, which works because
+    /// an action-type label is short. A settings breadcrumb ("Snapping › Zones ›
+    /// Labels › Font color") outruns any floor, so a minimum would let each row
+    /// set its own edges and the captions would stagger. Pinning the CELL rather
+    /// than the pill keeps every column square without padding "0" out into a
+    /// box the width of a JSON blob.
     readonly property real subjectColumnWidth: Kirigami.Units.gridUnit * 18
     readonly property real captionColumnWidth: Kirigami.Units.gridUnit * 4
     readonly property real valueColumnWidth: Kirigami.Units.gridUnit * 10
@@ -181,47 +184,59 @@ ColumnLayout {
                             opacity: 0.55
                         }
 
-                        Rectangle {
+                        // Fixed-width cell; the pill within it is content-sized
+                        // and only capped at the column, so a short value stays
+                        // a short pill while a long one elides at the edge.
+                        Item {
                             Layout.alignment: Qt.AlignVCenter
                             Layout.preferredWidth: root.valueColumnWidth
-                            implicitHeight: pillContent.implicitHeight + Kirigami.Units.smallSpacing
-                            radius: Kirigami.Units.smallSpacing
-                            Kirigami.Theme.colorSet: Kirigami.Theme.View
-                            Kirigami.Theme.inherit: false
-                            color: Kirigami.Theme.alternateBackgroundColor
-                            border.width: 1
-                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                            implicitHeight: valuePill.implicitHeight
 
-                            RowLayout {
-                                id: pillContent
+                            Rectangle {
+                                id: valuePill
 
-                                anchors.fill: parent
-                                anchors.leftMargin: Kirigami.Units.smallSpacing
-                                anchors.rightMargin: Kirigami.Units.smallSpacing
-                                spacing: Kirigami.Units.smallSpacing
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Math.min(pillContent.implicitWidth + Kirigami.Units.largeSpacing * 2, parent.width)
+                                implicitHeight: pillContent.implicitHeight + Kirigami.Units.smallSpacing
+                                radius: Kirigami.Units.smallSpacing
+                                Kirigami.Theme.colorSet: Kirigami.Theme.View
+                                Kirigami.Theme.inherit: false
+                                color: Kirigami.Theme.alternateBackgroundColor
+                                border.width: 1
+                                border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
-                                // Swatch for a colour-valued setting, matching
-                                // how the rule preview renders colour params.
-                                Rectangle {
-                                    visible: root.isColorValue(pairRow.modelData.value)
-                                    Layout.alignment: Qt.AlignVCenter
-                                    implicitWidth: pillLabel.implicitHeight
-                                    implicitHeight: pillLabel.implicitHeight
-                                    radius: Math.round(Kirigami.Units.smallSpacing / 2)
-                                    color: root.isColorValue(pairRow.modelData.value) ? pairRow.modelData.value : "transparent"
-                                    border.width: 1
-                                    border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                                }
+                                RowLayout {
+                                    id: pillContent
 
-                                Label {
-                                    id: pillLabel
+                                    anchors.fill: parent
+                                    anchors.leftMargin: Kirigami.Units.smallSpacing
+                                    anchors.rightMargin: Kirigami.Units.smallSpacing
+                                    spacing: Kirigami.Units.smallSpacing
 
-                                    Layout.alignment: Qt.AlignVCenter
-                                    Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                    text: pairRow.modelData.value
-                                    color: pairRow.modelData.emphasis !== undefined ? pairRow.modelData.emphasis : Kirigami.Theme.textColor
-                                    font.family: Kirigami.Theme.smallFont.family
+                                    // Swatch for a colour-valued setting, matching
+                                    // how the rule preview renders colour params.
+                                    Rectangle {
+                                        visible: root.isColorValue(pairRow.modelData.value)
+                                        Layout.alignment: Qt.AlignVCenter
+                                        implicitWidth: pillLabel.implicitHeight
+                                        implicitHeight: pillLabel.implicitHeight
+                                        radius: Math.round(Kirigami.Units.smallSpacing / 2)
+                                        color: root.isColorValue(pairRow.modelData.value) ? pairRow.modelData.value : "transparent"
+                                        border.width: 1
+                                        border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                                    }
+
+                                    Label {
+                                        id: pillLabel
+
+                                        Layout.alignment: Qt.AlignVCenter
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                        text: pairRow.modelData.value
+                                        color: pairRow.modelData.emphasis !== undefined ? pairRow.modelData.emphasis : Kirigami.Theme.textColor
+                                        font.family: Kirigami.Theme.smallFont.family
+                                    }
                                 }
                             }
                         }
