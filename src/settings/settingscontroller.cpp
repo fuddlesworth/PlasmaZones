@@ -592,6 +592,14 @@ SettingsController::SettingsController(QObject* parent)
         connect(ruleModel, &QAbstractItemModel::rowsMoved, this, reattributeRuleDirty);
     }
 
+    // Profiles page — settings-profile CRUD + inheritance. Its ProfileStore is
+    // owned internally. The controller stages only the active-profile pointer
+    // into the Save footer; the applied config changes ride the normal Settings
+    // staging path (owning pages badge value-based). Registered via regPage in
+    // buildApplicationController(), which trackDomain()s it so its isDirty /
+    // apply / discard participate in the framework's Save/Discard.
+    m_profilesPage = new ProfilePageController(m_settings, this);
+
     // Wire screen / activity / layout label resolvers so the rule model and
     // monitor-overview render friendly names instead of raw connector strings,
     // activity UUIDs and layout UUIDs.

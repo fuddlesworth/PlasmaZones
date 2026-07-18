@@ -716,6 +716,54 @@ bool Settings::exportTo(const QString& filePath)
     return PhosphorConfig::JsonBackend::writeJsonAtomically(filePath, exportRoot);
 }
 
+// ── Settings-profiles support ────────────────────────────────────────────────
+
+QJsonObject Settings::exportConfigToJson() const
+{
+    return m_store->exportToJson();
+}
+
+QJsonObject Settings::defaultConfigJson() const
+{
+    // Build the schema-defaults blob directly from the schema so it is
+    // independent of the current in-memory values (unlike exportToJson, which
+    // reflects live edits). Stamp the same `_version` exportToJson uses so the
+    // blob round-trips through Store::importFromJson without a version refusal.
+    QJsonObject out;
+    const auto& schema = m_store->schema();
+    for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+        QJsonObject groupObj;
+        for (const auto& def : it.value()) {
+            groupObj.insert(def.key, QJsonValue::fromVariant(def.defaultValue));
+        }
+        out.insert(it.key(), groupObj);
+    }
+    if (!schema.versionKey.isEmpty()) {
+        out.insert(schema.versionKey, schema.version);
+    }
+    return out;
+}
+
+void Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
+{
+    // Same snapshot / re-emit contract as load(), minus the disk round-trip:
+    // snapshot the NOTIFY-able properties BEFORE mutating the store, overwrite
+    // the declared keys in memory (no commit/sync), then fire the NOTIFY for
+    // every property whose value actually changed. Deliberately NO
+    // captureBaseline() — the store must diverge from the committed baseline so
+    // the settings app reports the staged keys as unsaved edits.
+    const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
+
+    // importFromJson is additive/overwriting over declared keys; a
+    // fully-resolved profile blob carries every declared key (defaults included)
+    // so keys the profile leaves at default are written back to default too.
+    m_store->importFromJson(fullConfigBlob);
+
+    const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
+    if (anyChanged)
+        Q_EMIT settingsChanged();
+}
+
 // ── Per-page reset / discard support ────────────────────────────────────────
 
 QVector<QVariant> Settings::snapshotNotifyProperties() const

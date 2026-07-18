@@ -865,6 +865,14 @@ public:
     // sole writer.
     PLASMAZONES_EXPORT static QString rulesFilePath();
 
+    // Returns the absolute path to the settings-profiles directory
+    // (~/.config/plasmazones/profiles). Each profile is a single <uuid>.json
+    // file holding a sparse config delta (and user-rule subset) relative to its
+    // parent profile, plus an index.json sidecar tracking the active profile and
+    // display order. Sits under the config dir (not the data dir) so it never
+    // collides with the data-dir animation profiles subdir.
+    PLASMAZONES_EXPORT static QString profilesDir();
+
     // Window appearance (border / title bar / gap) defaults live in the config
     // store now (the Windows.* / Gaps.* groups), NOT in managed baseline rules.
     // These three ids no longer identify seeded rules — they exist only so the

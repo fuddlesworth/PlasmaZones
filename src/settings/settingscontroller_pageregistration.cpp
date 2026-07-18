@@ -133,6 +133,11 @@ void SettingsController::buildApplicationController()
             QStringLiteral("view-list-details"), /*collapsible=*/false, /*divider=*/true);
 
     // ── Block 3: tools & meta ──
+    // Profiles — settings-profile CRUD + inheritance. regPage trackDomain()s the
+    // controller so its staged active-profile pointer joins the Save/Discard
+    // transaction; the applied config rides the Settings staging path.
+    regPage(m_profilesPage, QString(), PhosphorI18n::tr("Profiles"), QStringLiteral("ProfilesPage.qml"),
+            QStringLiteral("bookmarks"));
     regPage(m_editorPage, QString(), PhosphorI18n::tr("Editor"), QStringLiteral("EditorPage.qml"),
             QStringLiteral("document-edit"));
     regVirtual(QStringLiteral("about"), QString(), PhosphorI18n::tr("About"), QStringLiteral("AboutPage.qml"),

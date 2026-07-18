@@ -1306,6 +1306,33 @@ public:
     /// discardKeys().
     void resetKeys(const ConfigKeyList& keys);
 
+    // ── Settings-profiles support (settings app) ────────────────────────────
+    /// The complete current config as one JSON blob — every schema-declared
+    /// key at its current in-memory value (schema default for never-written
+    /// keys), stamped with `_version`. Thin pass-through to Store::exportToJson.
+    /// Used by the profiles feature to diff the live config against a parent
+    /// profile's resolved blob when saving "current settings as a profile".
+    QJsonObject exportConfigToJson() const;
+
+    /// The schema-defaults config as one JSON blob — every declared key at its
+    /// schema default, stamped with `_version`. This is the root of a profile
+    /// inheritance chain (a profile with no parent stores its delta against
+    /// this). Independent of the current in-memory values.
+    QJsonObject defaultConfigJson() const;
+
+    /// Stage a fully-resolved config blob into memory WITHOUT committing to
+    /// disk. Writes every declared key present in @p fullConfigBlob through the
+    /// store (no sync/commit), then re-emits the Q_PROPERTY NOTIFY signals for
+    /// whatever actually changed — exactly the load() machinery, minus the
+    /// reparse/commit/captureBaseline. The store therefore diverges from the
+    /// committed baseline, so isKeyModified() reports the changed keys as
+    /// unsaved and the settings app's Save footer lights up; the user's Save
+    /// commits them normally. Used to activate a settings profile.
+    ///
+    /// SCOPE: Q_PROPERTY-backed keys only (per Phase 1). Per-screen maps,
+    /// virtual-screen configs, and per-mode disable lists are NOT staged here.
+    void applyConfigOverlayStaged(const QJsonObject& fullConfigBlob);
+
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     /// Derives the four zone-color keys from the current application palette.

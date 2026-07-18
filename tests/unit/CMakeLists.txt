@@ -1069,6 +1069,22 @@ target_link_libraries(test_decoration_sets_validation
 )
 add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_validation)
 
+# Settings profiles: the ProfileStore delta / inheritance-resolution engine
+# behind ProfilePageController::bridge. Driven with stub config closures, so it
+# links only the store itself (no PhosphorConfig::Store needed).
+add_executable(test_profilestore
+    settings/test_profilestore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/profilestore.cpp
+)
+target_link_libraries(test_profilestore
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        plasmazones_core
+)
+add_test(NAME test_profilestore COMMAND test_profilestore)
+
 # Rules page (Phase 4 of the window-rule refactor): RuleModel
 # derives SectionRole / summaries from a rule's shape; RuleController
 # stages CRUD by UUID and builds the monitor overview. Compiles the model /

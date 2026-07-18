@@ -450,6 +450,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("decorations-sets"),
         QStringLiteral("decorations-shaders"),
         QStringLiteral("rules"),
+        QStringLiteral("profiles"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
         QStringLiteral("about"),
