@@ -620,22 +620,10 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
 
     schema.groups[CD::editorFillOnDropGroup()] = {
         {CD::enabledKey(), CD::fillOnDropEnabled(), QMetaType::Bool},
-        {CD::modifierKey(),
-         CD::fillOnDropModifier(),
-         QMetaType::Int,
-         {},
-         modifierOr(CD::fillOnDropModifier()),
-         intChoices({{0, "disabled"_L1},
-                     {1, "shift"_L1},
-                     {2, "ctrl"_L1},
-                     {3, "alt"_L1},
-                     {4, "meta"_L1},
-                     {5, "ctrlAlt"_L1},
-                     {6, "ctrlShift"_L1},
-                     {7, "altShift"_L1},
-                     {8, "alwaysActive"_L1},
-                     {9, "altMeta"_L1},
-                     {10, "ctrlAltMeta"_L1}})},
+        // Qt::KeyboardModifier BITMASK, not the DragModifier enum that the
+        // identically named zone-span key uses — there is no closed choice
+        // set to declare here.
+        {CD::modifierKey(), CD::fillOnDropModifier(), QMetaType::Int, {}, modifierOr(CD::fillOnDropModifier())},
     };
 }
 

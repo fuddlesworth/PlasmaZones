@@ -339,6 +339,12 @@ p_add_test(test_configbackend_json config/test_configbackend_json.cpp)
 
 p_add_test(test_configmigration config/test_configmigration.cpp)
 
+# Binds the schema's declared choices to their user-facing labels.
+add_executable(test_settingsvaluelabels config/test_settingsvaluelabels.cpp)
+target_link_libraries(test_settingsvaluelabels
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_settingsvaluelabels COMMAND test_settingsvaluelabels)
+
 # v3 → v4 window-rule consolidation migration.
 add_executable(test_migration_v3_to_v4 config/test_migration_v3_to_v4.cpp)
 target_link_libraries(test_migration_v3_to_v4
