@@ -1,6 +1,18 @@
 {
     "releases": [
         {
+            "version": "3.2.2",
+            "date": "2026-07-18",
+            "highlights": [
+                "Fixed: window animations ignored the global Duration and Curve settings since 3.2.0 and always played at a fixed 200 ms. They follow your global settings again, and a per-event override still wins where you set one (#797)",
+                "Fixed: moving a window down or up to another monitor could jump to a monitor beside the current one when your monitors have different heights. The move now only targets a monitor that actually lines up in that direction (#797)",
+                "Fixed: resetting or discarding a single Decoration or Animations settings page could also revert its sibling pages. Each page now only touches its own settings (#794)",
+                "Fixed: resetting the Decoration OSDs or Popups page to defaults removed the built-in card border and shadow instead of restoring them. The built-in look now sits underneath your edits, so reset brings it back, and setups that had already lost it heal on their own (#798)",
+                "Fixed: window decorations could render upside down on the OpenGL backend when two or more decoration packs were combined or while a window was appearing or disappearing (#798)",
+                "Support reports now include your rules, quick layouts, layout settings, and settings profiles, with home paths redacted (#797)"
+            ]
+        },
+        {
             "version": "3.2.1",
             "date": "2026-07-17",
             "highlights": [
