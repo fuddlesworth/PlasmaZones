@@ -288,4 +288,47 @@ int AnimationsPageController::clearAllOverrides()
     return cleared;
 }
 
+int AnimationsPageController::clearOverridesUnder(const QStringList& eventPaths)
+{
+    // Scoped clearAllOverrides: same refusal/partial contract, but only over the
+    // caller's own page subtree. clearOverride() is a no-op (false) for a path
+    // with no override file, so passing the full in-scope path list clears just
+    // the real overrides and snapshots each for a later Discard.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "clearOverridesUnder: refusing while an async discard is in flight";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot reset while a discard is in progress."));
+        return -1;
+    }
+    int cleared = 0;
+    int failed = 0;
+    for (const QString& path : eventPaths) {
+        if (!isValidEventPath(path))
+            continue;
+        if (clearOverride(path))
+            ++cleared;
+        else if (hasOverride(path))
+            ++failed;
+    }
+    if (failed > 0) {
+        qCWarning(lcConfig) << "clearOverridesUnder:" << failed << "override files could not be removed";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Some animation overrides could not be reset."));
+        return -1;
+    }
+    return cleared;
+}
+
+bool AnimationsPageController::hasScopedPendingFiles(const QStringList& eventPaths) const
+{
+    // The file half of a per-page dirty check: any in-scope path whose override
+    // file carries a staged (snapshotted) edit. Keyed by the same file path
+    // setOverride/clearOverride snapshot under.
+    for (const QString& path : eventPaths) {
+        if (!isValidEventPath(path))
+            continue;
+        if (m_pendingFileSnapshots.contains(profileFilePath(path)))
+            return true;
+    }
+    return false;
+}
+
 } // namespace PlasmaZones

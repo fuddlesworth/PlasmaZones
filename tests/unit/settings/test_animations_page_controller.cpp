@@ -299,6 +299,75 @@ private Q_SLOTS:
         QCOMPARE(c.clearAllOverrides(), 0);
     }
 
+    // Per-page kebab Reset: clearing ONE surface's scope must leave every other
+    // surface's override files standing (the cross-page-isolation bug fix).
+    void clearOverridesUnder_clearsOnlyScopedFiles()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        const QVariantMap profile{{QStringLiteral("duration"), 250}};
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), profile));
+        QVERIFY(c.setOverride(QStringLiteral("window.appearance.open"), profile));
+
+        // Scope = the OSDs page (osd + its leaves). window.* must survive.
+        const QStringList osdScope{QStringLiteral("osd"), QStringLiteral("osd.show"), QStringLiteral("osd.pop"),
+                                   QStringLiteral("osd.hide")};
+        QCOMPARE(c.clearOverridesUnder(osdScope), 1);
+        QVERIFY(!c.hasOverride(QStringLiteral("osd.show")));
+        QVERIFY(c.hasOverride(QStringLiteral("window.appearance.open")));
+        // Re-running over the same scope now clears nothing.
+        QCOMPARE(c.clearOverridesUnder(osdScope), 0);
+    }
+
+    // Per-page kebab Discard: reverting ONE surface's scope restores only that
+    // surface's files and leaves the others staged (still pending).
+    void revertPendingUnder_restoresOnlyScopedFiles()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        const QVariantMap profile{{QStringLiteral("duration"), 250}};
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), profile));
+        QVERIFY(c.setOverride(QStringLiteral("window.appearance.open"), profile));
+        QVERIFY(c.hasPendingChanges());
+
+        const QStringList osdScope{QStringLiteral("osd"), QStringLiteral("osd.show"), QStringLiteral("osd.pop"),
+                                   QStringLiteral("osd.hide")};
+        const QStringList windowScope{QStringLiteral("window.appearance"), QStringLiteral("window.appearance.open")};
+
+        // The OSD file did not exist before this session, so reverting removes it;
+        // the window edit stays pending and on disk.
+        QVERIFY(c.revertPendingUnder(osdScope));
+        QVERIFY(!c.hasOverride(QStringLiteral("osd.show")));
+        QVERIFY(!c.hasScopedPendingFiles(osdScope));
+        QVERIFY(c.hasOverride(QStringLiteral("window.appearance.open")));
+        QVERIFY(c.hasScopedPendingFiles(windowScope));
+        QVERIFY(c.hasPendingChanges());
+    }
+
+    // hasScopedPendingFiles reports the file half of a per-page dirty check and
+    // must ignore edits outside the queried scope.
+    void hasScopedPendingFiles_reflectsOnlyScope()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        const QStringList osdScope{QStringLiteral("osd"), QStringLiteral("osd.show")};
+        const QStringList editorScope{QStringLiteral("editor"), QStringLiteral("editor.snapIn")};
+
+        QVERIFY(!c.hasScopedPendingFiles(osdScope));
+        QVERIFY(c.setOverride(QStringLiteral("osd.show"), {{QStringLiteral("duration"), 100}}));
+        QVERIFY(c.hasScopedPendingFiles(osdScope));
+        QVERIFY(!c.hasScopedPendingFiles(editorScope));
+    }
+
     // ─── Effective resolution ─────────────────────────────────────────────
 
     void resolvedProfile_unsetReturnsLibraryDefaults()

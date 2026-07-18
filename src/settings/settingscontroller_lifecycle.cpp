@@ -136,6 +136,14 @@ void SettingsController::save()
     // Save main settings (includes editor settings + VS configs persisted above)
     m_settings.save();
 
+    // save() re-captured the committed baseline, so the animation controller's
+    // value-based shader-tree dirty check must re-evaluate: apply() (commitPending)
+    // may have run earlier in the domain walk, while the tree still read
+    // "divergent" against the not-yet-recaptured baseline. This is a no-op flip
+    // guard away from free when nothing changed.
+    if (m_animationsPage != nullptr)
+        m_animationsPage->refreshDirtyState();
+
     // RuleController and AnimationsPageController are registered
     // as their own StagingDomains and the framework's applyAllAsync
     // walks them directly. Both registrations happen in
