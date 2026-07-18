@@ -1176,9 +1176,15 @@ public:
     // every other group: ConfigDefaults derives from ConfigKeys).
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Default DecorationProfileTree — the fallback the typed
-    /// `Settings::decorationProfileTree()` returns when the Decorations group
-    /// holds no `DecorationProfileTree` entry.
+    /// Built-in DecorationProfileTree seed layer. NOT persisted and NOT the
+    /// schema default (that is the empty tree — the stored blob holds only
+    /// user edits): `Settings::decorationProfileTree()` overlays this tree at
+    /// LOWEST precedence on every read via
+    /// `DecorationProfileTree::withSeedDefaults`, the same seed model as the
+    /// animation motion defaults (PhosphorProfileRegistry's low-precedence
+    /// owner tag). A user edit at a seeded path becomes a real override and
+    /// wins; clearing that override (per-page Reset) reveals the seed again;
+    /// an engaged-but-empty chain keeps the surface explicitly undecorated.
     ///
     /// The decoration tree is the user-applied surface-shader pack stack. Window
     /// border and title-bar appearance are owned by the window rules, not by this
@@ -1191,9 +1197,10 @@ public:
     /// surface-decoration pipeline rather than PopupFrame's built-in MultiEffect
     /// — a crisp neutral frame-contrast border plus a real, theme-tinted drop
     /// shadow. (Snap-assist is left undecorated: it carries its own anchor, not
-    /// PopupFrame, so it has no equivalent card chrome to replace.) These land
-    /// here (not as a daemon-only fallback) so they flow through the same tree
-    /// the Decoration pages edit and a user can retune or clear them. The border
+    /// PopupFrame, so it has no equivalent card chrome to replace.) These flow
+    /// through the same merged tree the Decoration pages edit, so a user can
+    /// retune them (a parameters-only retune keeps the seed chain) or clear
+    /// them (remove every pack, which persists an explicit empty chain). The border
     /// colour resolves from the theme in OverlayService::applyDecoration
     /// (useThemeNeutral, at frameContrast 0.2) so it tracks light and dark;
     /// edgeSoftness 0.5 keeps the 1px border a crisp hairline. The shadow pack is

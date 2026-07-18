@@ -138,9 +138,13 @@ struct UboFrameState
     // ── Audio ──────────────────────────────────────────────────────────
     int audioSpectrumSize = 0;
 
-    // ── NDC Y orientation (rhi->isYUpInNDC()) ──────────────────────────
-    /// True when the backend is Y-up-in-NDC (OpenGL). Drives the qt_Matrix
-    /// Y-flip the profile folds into fill().
+    // ── NDC Y orientation (per render target) ──────────────────────────
+    /// True when this draw should carry the NDC Y-flip: a Y-up-in-NDC backend
+    /// (OpenGL, rhi->isYUpInNDC()) AND rendering direct to the window — the
+    /// producer (ShaderNodeRhi::syncBaseUniforms) clears it when the item is
+    /// captured into a texture render target (a ShaderEffectSource layer),
+    /// where a flipped write would invert what the consumer samples. Drives
+    /// the qt_Matrix Y-flip the profile folds into fill().
     bool yUpInNDC = false;
 
     // ── Surface-only fields (BaseUniformProfile ignores these) ─────────

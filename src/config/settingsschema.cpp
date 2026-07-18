@@ -9,6 +9,7 @@
 #include "../core/enums.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorSurface/DecorationProfileTree.h>
 #include <QtGlobal>
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -1029,10 +1030,14 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::decorationsGroup()] = {
-        // Per-surface decoration tree. The default is the (empty) ConfigDefaults
-        // baseline serialized to a map; a user engages packs from the Decoration
-        // pages.
-        {CD::decorationProfileTreeKey(), CD::decorationProfileTree().toJson().toVariantMap(), QMetaType::QVariantMap},
+        // Per-surface decoration tree. The stored default is the EMPTY tree —
+        // the blob holds only user edits. The built-in card chrome for the OSD
+        // and PopupFrame popups (ConfigDefaults::decorationProfileTree) is NOT
+        // persisted: Settings overlays it as a lowest-precedence seed layer on
+        // every read (withSeedDefaults), so shipped default updates keep
+        // flowing to configs that never customized those surfaces.
+        {CD::decorationProfileTreeKey(), PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap(),
+         QMetaType::QVariantMap},
     };
     // What the decoration chain is allowed to keep redrawing. An animated pack
     // repaints every window carrying it on every vsync, which never lets the GPU

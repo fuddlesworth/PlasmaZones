@@ -1585,38 +1585,36 @@ void Settings::setShaderProfileTreeJson(const QString& json)
 // ── Decorations tree (PhosphorConfig::Store-backed) ─────────────────────────
 // Persisted as one nested JSON entry under Decorations/DecorationProfileTree,
 // mirroring how the animation shaderProfileTree persists under
-// Animations/ShaderProfileTree. The read-side falls back to the
-// ConfigDefaults tree (EMPTY / neutral: no baseline chain, no overrides —
-// border and titlebar visuals are owned by the window rules, see
-// ConfigDefaults::decorationProfileTree) when the store holds no entry, so a
-// fresh config starts with no shader-pack decoration.
+// Animations/ShaderProfileTree. The STORE holds only user edits (schema
+// default: the empty tree); the built-in card chrome for the OSD and the
+// PopupFrame popups (ConfigDefaults::decorationProfileTree) is overlaid as a
+// lowest-precedence seed layer on every read — the same model as the
+// animation seeds (PhosphorProfileRegistry's low-precedence owner tag), so
+// shipped default improvements reach users who never customized those
+// surfaces, and a user config that predates (or was written without) the
+// defaults still renders them. A user edit at a seeded path becomes a real
+// override and wins; an engaged-but-empty chain keeps a surface explicitly
+// undecorated (see DecorationProfileTree::withSeedDefaults).
 
 PhosphorSurfaceShaders::DecorationProfileTree Settings::decorationProfileTree() const
 {
     const QVariantMap map =
         m_store->read<QVariantMap>(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey());
-    // The Decorations schema registers a NON-empty default for this key (the
-    // serialized ConfigDefaults::decorationProfileTree), so a store built with
-    // the schema never returns empty here. The guard covers a store constructed
-    // WITHOUT the schema default (e.g. a bare test stub): fall back to the same
-    // canonical default rather than to an empty tree.
-    if (map.isEmpty())
-        return ConfigDefaults::decorationProfileTree();
-    return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map));
+    return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map))
+        .withSeedDefaults(ConfigDefaults::decorationProfileTree());
 }
 
 PhosphorSurfaceShaders::DecorationProfileTree Settings::committedDecorationProfileTree() const
 {
     // Read the baseline snapshot, not the live store — mirrors isKeyModified()'s
     // m_baseline.value(group).value(key) lookup so the two stay in lockstep. The
-    // empty→ConfigDefaults fallback matches decorationProfileTree() so a
-    // never-modified key compares equal to the live tree (both canonicalise to
-    // the same default) instead of spuriously reporting a diff.
+    // same seed overlay as decorationProfileTree() so a never-modified key
+    // compares equal to the live tree (both canonicalise to the same merged
+    // view) instead of spuriously reporting a diff.
     const QVariantMap map =
         m_baseline.value(ConfigDefaults::decorationsGroup()).value(ConfigDefaults::decorationProfileTreeKey()).toMap();
-    if (map.isEmpty())
-        return ConfigDefaults::decorationProfileTree();
-    return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map));
+    return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map))
+        .withSeedDefaults(ConfigDefaults::decorationProfileTree());
 }
 
 void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
@@ -1629,12 +1627,83 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
     // write from scripting/tests cannot stamp unsupported-path entries onto
     // disk. The read side (decorationProfileTree) passes through the same
     // filter, so the comparison below is pruned-vs-pruned.
-    const auto pruned = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(tree.toJson());
-    // Value-equality compare so a same-tree write doesn't fire a spurious
-    // changed signal. Compare against the effective current tree (the
-    // ConfigDefaults default when the store is empty) so writing the default
-    // back over an empty store is correctly a no-op.
-    if (pruned == decorationProfileTree())
+    auto pruned = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(tree.toJson());
+    // Strip the parts of an override the read-side seed overlay regenerates:
+    // callers read the MERGED tree (seed defaults injected), mutate, and write
+    // the whole tree back, so without this the injected card chrome would
+    // freeze into the stored blob on the first unrelated edit — and a later
+    // shipped default improvement would never reach this config. The strip is
+    // PER FIELD, not per override: a parameters-only retune of a seeded
+    // surface arrives as {chain: seed chain, parameters: user map}, and
+    // storing only the parameters keeps the chain seed-owned so shipped chain
+    // improvements still flow. Each strip is validated by regenerating the
+    // candidate through withSeedDefaults and requiring the WHOLE merged view
+    // back unchanged — not just this path's override. The whole-view check
+    // honours the overlay's injection gates everywhere: a field that merely
+    // LOOKS like a seed but whose removal would change the resolved result
+    // (a chain-only override whose parameters would then inject, a map
+    // shadowed by an engaged ancestor, or a stripped chain re-opening the
+    // master gate for a descendant seed path) is left alone.
+    const auto seeds = ConfigDefaults::decorationProfileTree();
+    // Order-insensitive merged-view equality: the tree's operator== also
+    // compares insertion order, and a strip-then-reinject legitimately moves
+    // the reinjected path to the end, while resolve() ignores order entirely.
+    const auto mergedEquivalent = [](const PhosphorSurfaceShaders::DecorationProfileTree& a,
+                                     const PhosphorSurfaceShaders::DecorationProfileTree& b) {
+        if (!(a.baseline() == b.baseline()))
+            return false;
+        const QStringList aPaths = a.overriddenPaths();
+        QSet<QString> paths(aPaths.cbegin(), aPaths.cend());
+        const QStringList bPaths = b.overriddenPaths();
+        for (const QString& p : bPaths)
+            paths.insert(p);
+        for (const QString& p : paths) {
+            if (a.hasOverride(p) != b.hasOverride(p))
+                return false;
+            if (a.hasOverride(p) && !(a.directOverride(p) == b.directOverride(p)))
+                return false;
+        }
+        return true;
+    };
+    for (const QString& path : seeds.overriddenPaths()) {
+        if (!pruned.hasOverride(path))
+            continue;
+        PhosphorSurfaceShaders::DecorationProfileTree without = pruned;
+        without.clearOverride(path);
+        const auto regenerated = without.withSeedDefaults(seeds);
+        if (!regenerated.hasOverride(path))
+            continue;
+        const auto seedView = regenerated.directOverride(path);
+        auto candidate = pruned.directOverride(path);
+        bool strippedAny = false;
+        const auto stripField = [&](auto member) {
+            auto& slot = candidate.*member;
+            const auto& regen = seedView.*member;
+            if (slot.has_value() && regen.has_value() && *slot == *regen) {
+                slot.reset();
+                strippedAny = true;
+            }
+        };
+        stripField(&PhosphorSurfaceShaders::DecorationProfile::chain);
+        stripField(&PhosphorSurfaceShaders::DecorationProfile::parameters);
+        stripField(&PhosphorSurfaceShaders::DecorationProfile::disabledPacks);
+        if (!strippedAny)
+            continue;
+        PhosphorSurfaceShaders::DecorationProfileTree candidateTree = pruned;
+        if (!candidate.chain && !candidate.parameters && !candidate.disabledPacks)
+            candidateTree.clearOverride(path);
+        else
+            candidateTree.setOverride(path, candidate);
+        if (mergedEquivalent(candidateTree.withSeedDefaults(seeds), pruned.withSeedDefaults(seeds)))
+            pruned = candidateTree;
+    }
+    // Value-equality compare against the STORED (raw, pre-overlay) tree so a
+    // same-tree write doesn't fire a spurious changed signal — writing the
+    // merged default view back over an empty store normalises to empty and is
+    // correctly a no-op.
+    const QVariantMap storedMap =
+        m_store->read<QVariantMap>(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey());
+    if (pruned == PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(storedMap)))
         return;
     m_store->write(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey(),
                    pruned.toJson().toVariantMap());
@@ -1651,11 +1720,12 @@ void Settings::setDecorationProfileTreeJson(const QString& json)
 {
     if (json.isEmpty()) {
         // Empty string = reset to the canonical default, exactly like the
-        // animation shaderProfileTree facade. That default is the EMPTY /
-        // neutral tree (ConfigDefaults::decorationProfileTree — border and
-        // titlebar visuals are rule-owned, the tree carries only opt-in
-        // shader-pack decoration), so clearing restores "no decoration".
-        setDecorationProfileTree(ConfigDefaults::decorationProfileTree());
+        // animation shaderProfileTree facade: drop every user edit (store the
+        // empty tree). The read side re-injects the built-in seed defaults
+        // (ConfigDefaults::decorationProfileTree card chrome for the OSD and
+        // PopupFrame popups); everything else returns to "no decoration"
+        // (border and titlebar visuals are rule-owned).
+        setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree{});
         return;
     }
     const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());

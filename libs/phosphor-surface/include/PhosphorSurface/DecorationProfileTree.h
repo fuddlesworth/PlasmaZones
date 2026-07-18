@@ -50,6 +50,26 @@ public:
     // ─────── Lookup ───────
 
     DecorationProfile resolve(const QString& surfacePath) const;
+    /// Two-layer seed overlay: returns a copy of this tree with @p seeds
+    /// injected as the LOWEST-precedence layer — the same seed model as
+    /// `PhosphorAnimation::PhosphorProfileRegistry::resolveWithInheritance`'s
+    /// low-precedence owner tag, expressed as a tree-to-tree merge.
+    ///
+    /// For each seed override path (and the seed baseline), a seed field is
+    /// copied in ONLY where this tree leaves room for it:
+    ///  - If this tree engages `chain` at the path or anywhere on its walk-up
+    ///    (baseline or an ancestor override), the path is skipped entirely —
+    ///    the user built their own look there, and injecting the seed's
+    ///    parameters or disable set under a foreign chain is meaningless.
+    ///    An engaged-but-empty chain therefore keeps a surface explicitly
+    ///    undecorated.
+    ///  - Otherwise `parameters` and `disabledPacks` each inject only when
+    ///    this tree engages that SAME field nowhere on the walk-up either, so
+    ///    a parameters-only retune (at the path or at an ancestor) keeps the
+    ///    seed chain while the user's map wins — an injected leaf field would
+    ///    otherwise shadow an engaged ancestor map in resolve()'s
+    ///    deepest-last overlay.
+    DecorationProfileTree withSeedDefaults(const DecorationProfileTree& seeds) const;
     /// Returns the override stored directly at @p surfacePath, or a
     /// default-constructed (all-unset) profile when none exists — which is
     /// indistinguishable from a real all-unset override. Pair with hasOverride()
