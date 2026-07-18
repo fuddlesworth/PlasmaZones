@@ -446,6 +446,12 @@ ColumnLayout {
             root._refreshModel();
         }
 
+        // Flipping the simple/advanced master toggle re-filters which pages
+        // the registry's tree accessors emit, so the rail must rebuild.
+        function onShowAdvancedChanged() {
+            root._refreshModel();
+        }
+
         target: root.controller.registry
     }
 

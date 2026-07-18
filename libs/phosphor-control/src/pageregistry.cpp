@@ -61,6 +61,63 @@ bool PageRegistry::registerPage(Entry entry)
     return true;
 }
 
+void PageRegistry::setPageVisibility(const QString& id, PageVisibility visibility)
+{
+    const auto it = m_indexById.constFind(id);
+    if (it == m_indexById.constEnd()) {
+        qWarning() << "PageRegistry::setPageVisibility: unknown page id" << id << "— ignoring";
+        return;
+    }
+    m_pages[it.value()].visibility = visibility;
+}
+
+bool PageRegistry::showAdvanced() const
+{
+    return m_showAdvanced;
+}
+
+void PageRegistry::setShowAdvanced(bool showAdvanced)
+{
+    if (m_showAdvanced == showAdvanced) {
+        return;
+    }
+    m_showAdvanced = showAdvanced;
+    Q_EMIT showAdvancedChanged();
+}
+
+bool PageRegistry::modeAllows(PageVisibility v) const
+{
+    switch (v) {
+    case PageVisibility::Always:
+        return true;
+    case PageVisibility::AdvancedOnly:
+        return m_showAdvanced;
+    case PageVisibility::SimpleOnly:
+        return !m_showAdvanced;
+    }
+    return true;
+}
+
+bool PageRegistry::isEntryVisible(const Entry& entry) const
+{
+    if (!modeAllows(entry.visibility)) {
+        return false;
+    }
+    // A navigable page (has its own QML) stands on its own tier. A virtual
+    // node (category header / drill parent with no QML) is worth showing
+    // only if it still leads somewhere — hide it once every descendant has
+    // been filtered out.
+    if (!entry.qmlSource.isEmpty()) {
+        return true;
+    }
+    for (const Entry& child : m_pages) {
+        if (child.parentId == entry.id && isEntryVisible(child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool PageRegistry::hasPage(const QString& id) const
 {
     return m_indexById.contains(id);
@@ -158,7 +215,7 @@ QVariantList PageRegistry::topLevelPagesData() const
 {
     QVariantList out;
     for (const Entry& e : m_pages) {
-        if (e.parentId.isEmpty()) {
+        if (e.parentId.isEmpty() && isEntryVisible(e)) {
             out.append(entryToVariant(e));
         }
     }
@@ -169,7 +226,7 @@ QVariantList PageRegistry::childPagesData(const QString& parentId) const
 {
     QVariantList out;
     for (const Entry& e : m_pages) {
-        if (e.parentId == parentId) {
+        if (e.parentId == parentId && isEntryVisible(e)) {
             out.append(entryToVariant(e));
         }
     }

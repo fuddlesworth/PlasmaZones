@@ -37,6 +37,13 @@ SettingsFlickable {
     // The title-bar scope row is only meaningful while title bars are hidden.
     readonly property bool hideTitleBarsOn: root.ctl.hideWindowTitleBars
 
+    // Simple/advanced gate. In simple mode this page keeps the everyday
+    // decoration controls (border on/off + width/radius/colour, hide title
+    // bars, gaps) and hides the power surfaces: the per-window "Apply to"
+    // scope pickers, focus-fade timing, opacity/tint, window filtering, and
+    // the performance card. Advanced mode shows everything.
+    readonly property bool advancedMode: settingsController.advancedMode
+
     // "Apply to" scope options for the border / title-bar values, in display
     // order. `scope` is the token stored in config (sourced from the controller so
     // it stays in lockstep with the schema validator and the effect); `label` is
@@ -177,7 +184,7 @@ SettingsFlickable {
                 }
 
                 SettingsRow {
-                    visible: root.borderVisible
+                    visible: root.borderVisible && root.advancedMode
                     title: i18n("Apply to")
                     searchAnchor: "borderScope"
                     description: i18n("Which windows get a border")
@@ -194,7 +201,7 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: root.borderVisible
+                    visible: root.borderVisible && root.advancedMode
                 }
 
                 SettingsRow {
@@ -345,6 +352,8 @@ SettingsFlickable {
             Layout.fillWidth: true
             headerText: i18n("Opacity and tint")
             searchAnchor: "opacityTint"
+            // Advanced-only: a niche visual layer most users leave off.
+            visible: root.advancedMode
             showToggle: true
             toggleChecked: root.ctl.showWindowOpacityTint
             onToggleClicked: checked => root.ctl.showWindowOpacityTint = checked
@@ -496,11 +505,11 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: root.hideTitleBarsOn
+                    visible: root.hideTitleBarsOn && root.advancedMode
                 }
 
                 SettingsRow {
-                    visible: root.hideTitleBarsOn
+                    visible: root.hideTitleBarsOn && root.advancedMode
                     title: i18n("Apply to")
                     searchAnchor: "hideTitleBarsScope"
                     description: i18n("Which windows lose their title bar")
@@ -516,9 +525,12 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                SettingsSeparator {
+                    visible: root.advancedMode
+                }
 
                 SettingsRow {
+                    visible: root.advancedMode
                     title: i18n("Focus fade duration")
                     searchAnchor: "focusFadeDuration"
                     description: i18n("How long decorations take to fade between focused and unfocused. Zero switches instantly.")
@@ -549,6 +561,8 @@ SettingsFlickable {
         // =================================================================
         WindowFilterCard {
             Layout.fillWidth: true
+            // Advanced-only: which windows get decorated is a power filter.
+            visible: root.advancedMode
 
             excludeTransient: appSettings.decorationExcludeTransientWindows
             transientDescription: i18n("Skip borders for dialogs, popups, and menus")
@@ -637,6 +651,8 @@ SettingsFlickable {
             Layout.fillWidth: true
             headerText: i18n("Performance")
             searchAnchor: "decorationPerformance"
+            // Advanced-only: decoration animation power tuning.
+            visible: root.advancedMode
             collapsible: true
 
             contentItem: ColumnLayout {

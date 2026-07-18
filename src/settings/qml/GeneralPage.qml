@@ -49,6 +49,10 @@ SettingsFlickable {
             headerText: i18n("Rendering")
             collapsible: true
             searchAnchor: "rendering"
+            // Advanced-only: the graphics backend is a power/troubleshooting
+            // choice, not an everyday setting. Whole-card gate — a direct
+            // ColumnLayout child drops out of layout when hidden.
+            visible: settingsController.advancedMode
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -105,6 +109,9 @@ SettingsFlickable {
             headerText: i18n("Shader Effects")
             searchAnchor: "shaderEffects"
             collapsible: true
+            // Advanced-only: shader frame-rate tuning is a fine-grained
+            // performance knob most users never touch.
+            visible: settingsController.advancedMode
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -139,6 +146,9 @@ SettingsFlickable {
             headerText: i18n("Audio Spectrum")
             searchAnchor: "audioSpectrum"
             collapsible: true
+            // Advanced-only: the full CAVA audio-analysis parameter set is
+            // the deepest power-user surface on this page.
+            visible: settingsController.advancedMode
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing

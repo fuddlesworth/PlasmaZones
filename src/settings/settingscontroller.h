@@ -91,6 +91,13 @@ class SettingsController : public QObject
     Q_PROPERTY(bool needsSave READ needsSave NOTIFY dirtyPagesChanged)
     Q_PROPERTY(QStringList dirtyPages READ dirtyPages NOTIFY dirtyPagesChanged)
     Q_PROPERTY(bool daemonRunning READ daemonRunning NOTIFY daemonRunningChanged)
+    // Simple/advanced UI mode. Runtime state only — persistence lives in the
+    // QML layer (a QtCore.Settings block in Main.qml, the same mechanism the
+    // filter/sort chrome uses), which pushes the restored value in at startup
+    // and writes user flips back out. The setter mirrors the value into the
+    // page registry (which filters the sidebar) and redirects away from a
+    // page the new mode can't show. Pages bind card/row `visible:` to this.
+    Q_PROPERTY(bool advancedMode READ advancedMode WRITE setAdvancedMode NOTIFY advancedModeChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
     Q_PROPERTY(UpdateChecker* updateChecker READ updateChecker CONSTANT)
@@ -174,6 +181,12 @@ public:
     Q_INVOKABLE void navigateTo(const QString& address);
 
     static const QSet<QString>& validPageNames();
+    /// The subset of validPageNames() that stays visible in simple mode.
+    /// Every leaf NOT in this set is stamped AdvancedOnly on the registry in
+    /// buildApplicationController(); virtual category parents are never
+    /// listed here (they auto-hide once all their leaves are filtered out).
+    /// Keep in sync with the classification pass in _pageregistration.cpp.
+    static const QSet<QString>& simpleModeAllowedPages();
     static const QHash<QString, QString>& parentPageRedirects();
     /// Parent name → set of leaf child page names. Covers the top-level sidebar
     /// categories AND the mid-level virtual parents nested beneath them (among
@@ -254,6 +267,12 @@ public:
     {
         return m_daemonController.isRunning();
     }
+
+    bool advancedMode() const
+    {
+        return m_advancedMode;
+    }
+    void setAdvancedMode(bool advanced);
 
     Settings* settings()
     {
@@ -591,6 +610,7 @@ Q_SIGNALS:
     /// window otherwise.
     void savingFinished();
     void daemonRunningChanged();
+    void advancedModeChanged();
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
     void availableAlgorithmsChanged();
@@ -795,6 +815,10 @@ private:
     QString m_lastSeenWhatsNewVersion;
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
+    /// Simple/advanced UI mode. Defaults false (simple) so a brand-new user
+    /// lands in the pared-down rail; the QML QtCore.Settings block restores
+    /// the remembered choice at startup for returning users.
+    bool m_advancedMode = false;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;
     /// Stack of external-edit page ids — `setNeedsSave(true)` targets

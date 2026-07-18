@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -178,6 +179,34 @@ PhosphorUi.SettingsAppWindow {
             Kirigami.Theme.inherit: false
             spacing: Kirigami.Units.smallSpacing
 
+            // Simple/advanced rail toggle. Off = simple (pared-down rail);
+            // on = the full page tree. Fully controlled: `checked` reads the
+            // controller and the toggle writes both the controller (live) and
+            // the QtCore.Settings store (persisted).
+            Label {
+                text: i18n("Advanced")
+                opacity: 0.7
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            SettingsSwitch {
+                Layout.alignment: Qt.AlignVCenter
+                checked: settingsController.advancedMode
+                accessibleName: i18n("Toggle advanced settings")
+                onToggled: function (newValue) {
+                    settingsController.advancedMode = newValue;
+                    uiModeSettings.advancedMode = newValue;
+                }
+            }
+
+            Kirigami.Separator {
+                Layout.alignment: Qt.AlignVCenter
+                Layout.fillHeight: true
+                Layout.preferredHeight: Kirigami.Units.gridUnit
+                Layout.leftMargin: Kirigami.Units.smallSpacing
+                Layout.rightMargin: Kirigami.Units.smallSpacing
+            }
+
             Rectangle {
                 id: daemonDot
 
@@ -294,7 +323,25 @@ PhosphorUi.SettingsAppWindow {
         }
     }
 
+    // Persisted simple/advanced UI mode. Uses the same QtCore.Settings
+    // mechanism the filter/sort chrome uses (LayoutFilterBar, ShaderBrowserPage)
+    // rather than daemon config — it is settings-app-local UI state. Default
+    // false = a brand-new user starts in simple mode; the stored value is
+    // pushed into the controller at startup (Component.onCompleted below) and
+    // the header toggle writes user flips back here.
+    Settings {
+        id: uiModeSettings
+        category: "UiMode"
+        property bool advancedMode: false
+    }
+
     Component.onCompleted: {
+        // Restore the remembered simple/advanced mode before anything else so
+        // the sidebar's first filtered build and the drill-state restore below
+        // both see the correct mode (a simple-mode restore may redirect the
+        // active page off an advanced-only target).
+        settingsController.advancedMode = uiModeSettings.advancedMode;
+
         // Zone previews app-wide must show the EFFECTIVE zone colors (the
         // same settings pipeline the daemon pushes into its overlays). The
         // ZoneColorDefaults singleton cannot resolve the appSettings context

@@ -229,6 +229,12 @@ void SettingsController::buildApplicationController()
                QStringLiteral("bookmark"));
 
     // Animations children — Transitions / Motion / Library categories drill in.
+    // The simple-mode surface leads: a SimpleOnly leaf (stamped below) that
+    // replaces the whole per-event tree when the user is in simple mode. In
+    // advanced mode it is filtered out and the General page leads instead.
+    regVirtual(QStringLiteral("animations-simple"), QStringLiteral("animations"), PhosphorI18n::tr("Animations"),
+               QStringLiteral("AnimationsSimplePage.qml"), QStringLiteral("media-playback-start"),
+               /*collapsible=*/false, /*divider=*/true);
     regVirtual(QStringLiteral("animations-general"), QStringLiteral("animations"), PhosphorI18n::tr("General"),
                QStringLiteral("AnimationsGeneralPage.qml"), QStringLiteral("configure"), /*collapsible=*/false,
                /*divider=*/true);
@@ -321,6 +327,26 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("decorations-shaders"), QStringLiteral("decorations-library"),
                PhosphorI18n::tr("Shaders"), QStringLiteral("DecorationShadersPage.qml"),
                QStringLiteral("preferences-desktop-display"));
+
+    // ── Simple/advanced classification ──
+    // Now that every page is registered, stamp the tier: any navigable leaf
+    // NOT in simpleModeAllowedPages() is AdvancedOnly, so it drops out of the
+    // rail in simple mode (and its now-empty category parents auto-hide). The
+    // allow-set holds only leaves; virtual parents stay Always. Then seed the
+    // registry's mode from m_advancedMode (default simple) so the very first
+    // sidebar build is already filtered. The QML QtCore.Settings block in
+    // Main.qml pushes the user's remembered choice in over this at startup.
+    for (const QString& leaf : validPageNames()) {
+        if (!simpleModeAllowedPages().contains(leaf)) {
+            m_app->registry()->setPageVisibility(leaf, PhosphorControl::PageRegistry::PageVisibility::AdvancedOnly);
+        }
+    }
+    // The simple-mode animations surface exists ONLY in simple mode — advanced
+    // mode has the full per-event tree instead. It is the sole SimpleOnly page
+    // today; future combined simple pages join it here.
+    m_app->registry()->setPageVisibility(QStringLiteral("animations-simple"),
+                                         PhosphorControl::PageRegistry::PageVisibility::SimpleOnly);
+    m_app->registry()->setShowAdvanced(m_advancedMode);
 
     // Bridge SettingsController.save/load to the framework's Apply/Cancel
     // (and to the global dirty flag QML chrome binds to).

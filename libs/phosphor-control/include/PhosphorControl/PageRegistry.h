@@ -42,8 +42,32 @@ class PHOSPHORCONTROL_EXPORT PageRegistry : public QObject
     Q_OBJECT
     QML_NAMED_ELEMENT(PageRegistry)
     QML_UNCREATABLE("PageRegistry is owned by ApplicationController.")
+    /// Master toggle for the two-tier "simple vs advanced" sidebar. When
+    /// false, entries marked AdvancedOnly are filtered out of the QML tree
+    /// accessors (topLevelPagesData / childPagesData) and any virtual
+    /// category left with no visible descendant vanishes with them; when
+    /// true, SimpleOnly entries are hidden instead. Defaults to true so an
+    /// app that never marks a page keeps the classic "show everything"
+    /// behaviour. The value is app UI state — the app drives it (persisted
+    /// however the app likes); the registry only consumes it for filtering.
+    Q_PROPERTY(bool showAdvanced READ showAdvanced WRITE setShowAdvanced NOTIFY showAdvancedChanged)
 
 public:
+    /// Per-entry visibility tier for the simple/advanced split. `Always`
+    /// (the default) shows the page in both modes; `AdvancedOnly` hides it
+    /// while `showAdvanced` is false; `SimpleOnly` hides it while
+    /// `showAdvanced` is true (for purpose-built simplified pages that a
+    /// richer advanced page supersedes). Filtering happens only in the
+    /// QML-facing tree accessors — `pageData` / `allPagesData` /
+    /// `controller` stay unfiltered so a currently-shown or dirty page
+    /// always resolves regardless of mode.
+    enum class PageVisibility {
+        Always,
+        AdvancedOnly,
+        SimpleOnly,
+    };
+    Q_ENUM(PageVisibility)
+
     /**
      * Public-by-value view of a registry entry. Consumers receive copies
      * via topLevelPages() / childPages() / allPages() / entry(); they
@@ -81,6 +105,10 @@ public:
         /// a category header. Suppressed while a search filter is active
         /// — dividers are navigation ornament, not match metadata.
         bool hasDividerAfter = false;
+        /// Simple/advanced tier for this page. Stamped after registration
+        /// via setPageVisibility(); defaults to Always so unclassified
+        /// pages show in both modes. See PageVisibility.
+        PageVisibility visibility = PageVisibility::Always;
     };
 
     explicit PageRegistry(QObject* parent = nullptr);
@@ -100,6 +128,18 @@ public:
      *  rejected page leaks into half-registered state where downstream
      *  systems mutate it but the UI cannot see it. */
     bool registerPage(Entry entry);
+
+    /// Stamp a page's simple/advanced tier after it has been registered.
+    /// No-op (with a warning) for an unknown id. Kept separate from
+    /// registerPage so the classification lives in one post-build pass in
+    /// the app rather than threaded through every registration call site.
+    /// Intended to run at startup before the first paint — it does not emit
+    /// a change signal of its own (the initial showAdvanced push drives the
+    /// first filtered build).
+    void setPageVisibility(const QString& id, PageVisibility visibility);
+
+    bool showAdvanced() const;
+    void setShowAdvanced(bool showAdvanced);
 
     Q_INVOKABLE bool hasPage(const QString& id) const;
     Q_INVOKABLE PhosphorControl::PageController* controller(const QString& id) const;
@@ -126,9 +166,24 @@ public:
 
 Q_SIGNALS:
     void pageRegistered(const QString& id);
+    void showAdvancedChanged();
 
 private:
+    /// True iff `v` should be shown under the current `m_showAdvanced` mode
+    /// (Always always; AdvancedOnly iff advanced; SimpleOnly iff simple).
+    bool modeAllows(PageVisibility v) const;
+    /// Full visibility test for a sidebar tree accessor: the entry's own
+    /// tier must match the mode AND, for a virtual node (no qmlSource), at
+    /// least one descendant must itself be visible — so an emptied-out
+    /// category header disappears with its children. Recursion is bounded
+    /// by the tree depth; the registry graph is acyclic by construction
+    /// (registerPage rejects a parentId that isn't already registered).
+    bool isEntryVisible(const Entry& entry) const;
+
     QList<Entry> m_pages;
+    /// Simple/advanced master mode. Defaults true so an app that never
+    /// classifies a page sees no behavioural change.
+    bool m_showAdvanced = true;
     // qsizetype matches QList::size()'s return type; avoids -Wnarrowing
     // when stricter build flags land. Settings registries are never
     // anywhere near 2^31 pages, but the narrowing is unnecessary.

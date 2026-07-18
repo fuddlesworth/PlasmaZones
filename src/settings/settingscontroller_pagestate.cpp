@@ -168,6 +168,31 @@ void SettingsController::setActivePage(const QString& page)
         qCDebug(PlasmaZones::lcCore) << "Unknown settings page requested:" << page;
         return;
     }
+    // Mode gate: a deep link / CLI --page / D-Bus request, a stale history
+    // entry, or a mode flip (setAdvancedMode re-runs this on the current page)
+    // may target a page the active mode hides. Redirect onto a page the rail
+    // can actually show rather than stranding the user on a hidden one.
+    // Internal rail clicks always name a visible page, so this only fires for
+    // out-of-band navigation and mode changes. Redirect targets are visible in
+    // their destination mode, so there is no recursion.
+    QString target = resolved;
+    if (!m_advancedMode) {
+        // Simple mode: advanced-only pages fall back to Overview (in both modes).
+        if (!simpleModeAllowedPages().contains(target)) {
+            qCDebug(PlasmaZones::lcCore) << "Advanced-only page" << target
+                                         << "requested in simple mode; redirecting to overview";
+            target = QStringLiteral("overview");
+        }
+    } else {
+        // Advanced mode: SimpleOnly pages have no place — send the animations
+        // simple surface to its advanced equivalent (General). animations-simple
+        // is the only SimpleOnly page today; generalise to a set if more appear.
+        if (target == QStringLiteral("animations-simple")) {
+            qCDebug(PlasmaZones::lcCore) << "Simple-only page" << target
+                                         << "requested in advanced mode; redirecting to animations-general";
+            target = QStringLiteral("animations-general");
+        }
+    }
     // Reentrancy guard: a slot connected to activePageChanged that
     // calls setActivePage again (e.g. a CLI --page handler that
     // redirects to a fallback page) would otherwise re-trigger
@@ -180,17 +205,36 @@ void SettingsController::setActivePage(const QString& page)
                                        << m_activePage << ")";
         return;
     }
-    if (m_activePage != resolved) {
+    if (m_activePage != target) {
         // m_loading suppresses onSettingsPropertyChanged — the QML Loader
         // reacts synchronously to activePageChanged and new page creation
         // may trigger NOTIFY signals that would otherwise mark pages dirty.
         m_settingActivePage = true;
         m_loading = true;
-        m_activePage = resolved;
+        m_activePage = target;
         Q_EMIT activePageChanged();
         m_loading = false;
         m_settingActivePage = false;
     }
+}
+
+void SettingsController::setAdvancedMode(bool advanced)
+{
+    if (m_advancedMode == advanced) {
+        return;
+    }
+    m_advancedMode = advanced;
+    // Pages bind card/row `visible:` to advancedMode — let them re-evaluate
+    // first, then re-filter the rail.
+    Q_EMIT advancedModeChanged();
+    if (m_app && m_app->registry()) {
+        m_app->registry()->setShowAdvanced(advanced);
+    }
+    // A mode flip can hide the page we're on (an advanced-only page when
+    // entering simple, or the SimpleOnly animations page when entering
+    // advanced). Re-run setActivePage against the current page: its gate
+    // redirects to a visible page when hidden and no-ops when still visible.
+    setActivePage(m_activePage);
 }
 
 void SettingsController::onSettingsPropertyChanged()

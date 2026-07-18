@@ -110,7 +110,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kAnimationsLibraryChildren{QStringLiteral("animations-presets"),
                                                           QStringLiteral("animations-motionsets"),
                                                           QStringLiteral("animations-shaders")};
-    static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general")};
+    static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-simple"),
+                                                         QStringLiteral("animations-general")};
     static const QSet<QString> kAnimationsAllLeaves = kAnimationsDirectChildren + kAnimationsTransitionsChildren
         + kAnimationsMotionChildren + kAnimationsLibraryChildren;
     // Decoration drill-down — Surfaces / Library sub-buckets, mirroring
@@ -454,6 +455,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("general"),
         QStringLiteral("about"),
         QStringLiteral("virtualscreens"),
+        QStringLiteral("animations-simple"),
         QStringLiteral("animations-general"),
         QStringLiteral("animations-windows"),
         QStringLiteral("animations-osds"),
@@ -467,6 +469,41 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-presets"),
         QStringLiteral("animations-motionsets"),
         QStringLiteral("animations-shaders"),
+    };
+    return pages;
+}
+
+const QSet<QString>& SettingsController::simpleModeAllowedPages()
+{
+    // The pared-down "simple mode" rail. Every id here is a leaf in
+    // validPageNames(); buildApplicationController() stamps every OTHER leaf
+    // AdvancedOnly on the registry, and the virtual category parents
+    // (placement / display / appearance / animations / decorations and the
+    // *-cat headers) auto-hide once all their leaves are filtered out — so
+    // they are deliberately absent from this set.
+    //
+    // Curation (Moderate tier): the everyday surfaces plus Rules. The rich
+    // per-surface pages (all *-shaders / *-ordering / *-shortcuts, the
+    // decoration surface/library pages, the animation transitions/motion/
+    // library breakdown, zone selector, tiling algorithm internals, virtual
+    // screens) are advanced-only. Several leaves kept here (general,
+    // snapping-overlay-behavior, tiling-behavior, window-appearance, rules,
+    // animations-general) are still content-heavy; their in-page card/row
+    // trims land separately. Keep in sync with validPageNames() and the
+    // classification pass in _pageregistration.cpp.
+    static const QSet<QString> pages{
+        QStringLiteral("overview"),
+        QStringLiteral("general"),
+        QStringLiteral("layouts"),
+        QStringLiteral("snapping-overlay-behavior"),
+        QStringLiteral("tiling-behavior"),
+        QStringLiteral("window-appearance"),
+        // The animations surface in simple mode is the dedicated SimpleOnly
+        // page, NOT the per-event General page (which is advanced-only).
+        QStringLiteral("animations-simple"),
+        QStringLiteral("rules"),
+        QStringLiteral("editor"),
+        QStringLiteral("about"),
     };
     return pages;
 }
