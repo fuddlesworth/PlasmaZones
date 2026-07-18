@@ -387,9 +387,12 @@ void SettingsController::onExternalSettingsChanged()
     // the user's pending changes and clearing the footer. Staging-domain
     // pages snapshot/revert their own state, but plain Q_PROPERTY edits
     // (e.g. the animation profile fields) have no such net. Keep the local
-    // edits and remember the deferred reload: setNeedsSave() drains it the
-    // next time the app transitions to fully clean (save or discard), so an
-    // externally-changed sibling page doesn't stay stale indefinitely.
+    // edits and remember the deferred reload: the next clean transition
+    // resolves it — dirtyPagesChanged fires maybeDrainPendingExternalReload
+    // (the per-page Discard path), while footer save/discard and defaults()
+    // clear or subsume the flag via their own disk rewrite or load(). Either
+    // way an externally-changed sibling page doesn't stay stale
+    // indefinitely.
     if (needsSave()) {
         qCInfo(lcCore) << "External settings change deferred: unsaved local edits take precedence";
         m_pendingExternalReload = true;
