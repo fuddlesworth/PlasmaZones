@@ -394,6 +394,22 @@ QHash<QString, Profile> PhosphorProfileRegistry::snapshot() const
     return m_profiles;
 }
 
+QHash<QString, Profile> PhosphorProfileRegistry::snapshotExcludingLowPrecedence() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_lowPrecedenceOwnerTag.isEmpty()) {
+        return m_profiles;
+    }
+    QHash<QString, Profile> filtered;
+    filtered.reserve(m_profiles.size());
+    for (auto it = m_profiles.constBegin(); it != m_profiles.constEnd(); ++it) {
+        if (m_owners.value(it.key()) != m_lowPrecedenceOwnerTag) {
+            filtered.insert(it.key(), it.value());
+        }
+    }
+    return filtered;
+}
+
 int PhosphorProfileRegistry::profileCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);

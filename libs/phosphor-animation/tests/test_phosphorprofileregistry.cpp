@@ -143,6 +143,41 @@ private Q_SLOTS:
     /// that want to coalesce UI updates across a rescan use this as
     /// the batch-boundary marker instead of reacting to each per-path
     /// signal individually.
+    /// snapshotExcludingLowPrecedence must omit seed-owned entries so a
+    /// publisher flattening the registry into a ProfileTree cannot promote
+    /// low-precedence family defaults into overrides that outrank the
+    /// consumer's own baseline profile (a `window` seed shipped as an
+    /// override pins every window leg's duration, turning the user's
+    /// global animation settings into a no-op — the #795 regression).
+    void testSnapshotExcludingLowPrecedenceOmitsSeeds()
+    {
+        const QString seedTag = QStringLiteral("family-seeds");
+
+        Profile seed;
+        seed.duration = 200.0;
+        m_registry.registerProfile(QStringLiteral("window"), seed, seedTag);
+
+        Profile userProfile;
+        userProfile.duration = 2000.0;
+        m_registry.registerProfile(QStringLiteral("window.movement.snapIn"), userProfile, QStringLiteral("user-files"));
+        m_registry.registerProfile(QStringLiteral("Global"), Profile{});
+
+        // No tag configured: identical to snapshot().
+        QCOMPARE(m_registry.snapshotExcludingLowPrecedence().size(), 3);
+
+        m_registry.setLowPrecedenceOwnerTag(seedTag);
+        const auto filtered = m_registry.snapshotExcludingLowPrecedence();
+        QCOMPARE(filtered.size(), 2);
+        QVERIFY(!filtered.contains(QStringLiteral("window")));
+        QVERIFY(filtered.contains(QStringLiteral("window.movement.snapIn")));
+        QVERIFY(filtered.contains(QStringLiteral("Global")));
+
+        // Full snapshot still carries the seed for in-process consumers.
+        QCOMPARE(m_registry.snapshot().size(), 3);
+
+        m_registry.setLowPrecedenceOwnerTag(QString());
+    }
+
     void testOwnerReloadedFiresOnceAfterPerPathBurst()
     {
         const QString tag = QStringLiteral("test-owner");
