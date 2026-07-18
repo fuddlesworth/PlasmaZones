@@ -225,7 +225,7 @@ ExpandableRowDelegate {
                 if (typeof value === "boolean")
                     return value ? i18nc("a boolean setting that is on", "On") : i18nc("a boolean setting that is off", "Off");
 
-                const layouts = appSettings && appSettings.layouts ? appSettings.layouts : [];
+                const layouts = settingsController.layouts ? settingsController.layouts : [];
                 if (kind === "layoutId")
                     return diffColumn.resolveById(layouts, value, "id", "displayName");
                 // Algorithms live in the layout list under an "autotile:" prefix,
@@ -233,18 +233,21 @@ ExpandableRowDelegate {
                 if (kind === "tilingAlgorithm")
                     return diffColumn.resolveById(layouts, "autotile:" + value, "id", "displayName", value);
                 if (kind === "screenId")
-                    return diffColumn.resolveById(appSettings && appSettings.screens ? appSettings.screens : [], value, "name", "displayLabel");
+                    return diffColumn.resolveById(settingsController.screens ? settingsController.screens : [], value, "name", "displayLabel");
                 if (kind === "virtualDesktop")
                     return diffColumn.resolveDesktop(value);
-                // Each catalogue hangs off appSettings, and they are separate
-                // registries — an animation pack and an overlay pack with the
-                // same id are different things, so the kind picks the source.
+                // The catalogues hang off settingsController, not appSettings —
+                // the rule preview reaches them through a local alias bag
+                // (RulesPage._editorAppSettings), which is why its code reads as
+                // appSettings.*. They are separate registries: an animation pack
+                // and an overlay pack sharing an id are different things, so the
+                // kind picks the source.
                 if (kind === "shaderPack")
-                    return diffColumn.resolvePack(appSettings ? appSettings.animationsController : null, value);
+                    return diffColumn.resolvePack(settingsController.animationsPage, value);
                 if (kind === "decorationPack")
-                    return diffColumn.resolvePack(appSettings ? appSettings.decorationPage : null, value);
+                    return diffColumn.resolvePack(settingsController.decorationPage, value);
                 if (kind === "overlayShader")
-                    return diffColumn.resolvePack(appSettings ? appSettings.snappingShadersPage : null, value);
+                    return diffColumn.resolvePack(settingsController.snappingShadersPage, value);
 
                 if (typeof value === "string")
                     return value.length > 0 ? value : i18nc("an empty text setting", "empty");
@@ -275,7 +278,7 @@ ExpandableRowDelegate {
             /// runtime, so an out-of-range number keeps its digits.
             function resolveDesktop(value) {
                 const index = Number(value);
-                const names = appSettings ? appSettings.virtualDesktopNames : null;
+                const names = settingsController.virtualDesktopNames;
                 if (!names || !isFinite(index) || index < 1 || index > names.length)
                     return String(value);
 
