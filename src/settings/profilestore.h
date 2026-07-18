@@ -280,8 +280,14 @@ private:
     /// @p segments is the humanized path walked so far, carried as a LIST so the
     /// view can nest shared prefixes instead of repeating a long breadcrumb on
     /// every row.
-    static void appendLeafRows(const QStringList& segments, const QJsonValue& before, const QJsonValue& after,
-                               int depth, QVariantList& rows, const QString& identityKey = QString());
+    /// @p rawGroup / @p rawKey are the UNhumanized names the value came from,
+    /// carried down so a leaf can look up how its key should be presented. A
+    /// leaf nested inside a structured key inherits that key's presentation,
+    /// which is what lets a pack id buried in the shader profile tree resolve
+    /// to a pack name.
+    static void appendLeafRows(const QString& rawGroup, const QString& rawKey, const QStringList& segments,
+                               const QJsonValue& before, const QJsonValue& after, int depth, QVariantList& rows,
+                               const QString& identityKey = QString());
 
     /// Stable hex digest of @p id's fully-resolved config + user rules. Keyed on
     /// the whole cascade, so a child that overrides nothing hashes identically

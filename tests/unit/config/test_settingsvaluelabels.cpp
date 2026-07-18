@@ -199,6 +199,66 @@ private Q_SLOTS:
         QVERIFY2(checked > 0, "no scaled keys found — the walk is broken, not clean");
     }
 
+    /// The end-to-end resolution a diff row depends on: stored value → schema
+    /// choice token → translated word.
+    void enumValueResolvesToItsLabel()
+    {
+        using CD = ConfigDefaults;
+        QCOMPARE(SettingsValueLabels::displayText(CD::snappingZoneSelectorGroup(), CD::layoutModeKey(), 2),
+                 QStringLiteral("Vertical"));
+        QCOMPARE(SettingsValueLabels::displayText(CD::snappingZoneSelectorGroup(), CD::layoutModeKey(), 0),
+                 QStringLiteral("Grid"));
+        // A token-valued key resolves the same way.
+        QCOMPARE(SettingsValueLabels::displayText(CD::renderingGroup(), CD::backendKey(), QStringLiteral("opengl")),
+                 QStringLiteral("OpenGL"));
+    }
+
+    /// A value outside the declared set yields nothing, so the view shows the
+    /// raw value rather than inventing a label for it.
+    void undeclaredEnumValueResolvesToNothing()
+    {
+        using CD = ConfigDefaults;
+        QVERIFY(SettingsValueLabels::displayText(CD::snappingZoneSelectorGroup(), CD::layoutModeKey(), 99).isEmpty());
+    }
+
+    /// Numbers carry their unit, and a ratio is scaled into the percentage the
+    /// settings page shows rather than reported as "0.8".
+    void numbersCarryUnitAndScale()
+    {
+        using CD = ConfigDefaults;
+        QCOMPARE(SettingsValueLabels::displayText(CD::windowsAppearanceGroup(), CD::widthKey(), 2),
+                 QStringLiteral("2 px"));
+        QCOMPARE(SettingsValueLabels::displayText(CD::snappingZonesOpacityGroup(), CD::activeKey(), 0.8),
+                 QStringLiteral("80%"));
+        // A ratio that lands between whole percents keeps a decimal instead of
+        // rounding to a number that never round-trips.
+        QCOMPARE(SettingsValueLabels::displayText(CD::snappingZonesOpacityGroup(), CD::activeKey(), 0.335),
+                 QStringLiteral("33.5%"));
+    }
+
+    /// Where the UI presents 0 as "Off", the diff says so too.
+    void zeroReadsAsOffWhereTheUiSaysSo()
+    {
+        using CD = ConfigDefaults;
+        QCOMPARE(SettingsValueLabels::displayText(CD::exclusionsGroup(), CD::minimumWindowWidthKey(), 0),
+                 QStringLiteral("Off"));
+        QCOMPARE(SettingsValueLabels::displayText(CD::exclusionsGroup(), CD::minimumWindowWidthKey(), 120),
+                 QStringLiteral("120 px"));
+    }
+
+    /// Live-resolved kinds return nothing from this side on purpose — only the
+    /// view knows which monitors are connected or which packs are installed.
+    void liveKindsDeferToTheView()
+    {
+        using CD = ConfigDefaults;
+        QVERIFY(SettingsValueLabels::displayText(CD::animationsGroup(), CD::shaderProfileTreeKey(),
+                                                 QStringLiteral("phosphor-stream"))
+                    .isEmpty());
+        QCOMPARE(SettingsValueLabels::kindName(
+                     SettingsValueLabels::descriptorFor(CD::animationsGroup(), CD::shaderProfileTreeKey()).kind),
+                 QStringLiteral("shaderPack"));
+    }
+
     /// The same token under two keys means two different things, which is the
     /// reason the table is keyed by (group, key) and not by token alone.
     void tokenMeaningIsKeyLocal()

@@ -6,6 +6,7 @@
 #include "../phosphor_i18n.h"
 #include "configdefaults.h"
 #include "configkeys.h"
+#include "settingsschema.h"
 
 #include <QHash>
 #include <QVariantMap>
@@ -248,6 +249,88 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
 }
 
 } // namespace
+
+QString kindName(ValueKind kind)
+{
+    switch (kind) {
+    case ValueKind::Enum:
+        return QStringLiteral("enum");
+    case ValueKind::Number:
+        return QStringLiteral("number");
+    case ValueKind::Color:
+        return QStringLiteral("color");
+    case ValueKind::LayoutId:
+        return QStringLiteral("layoutId");
+    case ValueKind::ScreenId:
+        return QStringLiteral("screenId");
+    case ValueKind::VirtualDesktop:
+        return QStringLiteral("virtualDesktop");
+    case ValueKind::TilingAlgorithm:
+        return QStringLiteral("tilingAlgorithm");
+    case ValueKind::ShaderPack:
+        return QStringLiteral("shaderPack");
+    case ValueKind::DecorationPack:
+        return QStringLiteral("decorationPack");
+    case ValueKind::OverlayShader:
+        return QStringLiteral("overlayShader");
+    case ValueKind::Trigger:
+        return QStringLiteral("trigger");
+    case ValueKind::Shortcut:
+        return QStringLiteral("shortcut");
+    case ValueKind::Plain:
+        break;
+    }
+    return QStringLiteral("plain");
+}
+
+QString displayText(const QString& group, const QString& key, const QVariant& value)
+{
+    const ValueDescriptor descriptor = descriptorFor(group, key);
+    switch (descriptor.kind) {
+    case ValueKind::Enum: {
+        // The schema owns the value → token mapping; this owns token → word.
+        // Built once: buildSettingsSchema() walks every group and is far too
+        // heavy to run per rendered row.
+        static const PhosphorConfig::Schema schema = buildSettingsSchema();
+        for (const PhosphorConfig::ChoiceDef& choice : schema.choicesFor(group, key)) {
+            if (choice.value == value) {
+                return enumLabel(group, key, choice.token);
+            }
+        }
+        // A value outside the declared set — hand-edited config, or a choice
+        // list that has fallen behind. The caller shows the raw value.
+        return {};
+    }
+    case ValueKind::Number: {
+        bool ok = false;
+        const double raw = value.toDouble(&ok);
+        if (!ok) {
+            return {};
+        }
+        if (descriptor.zeroMeansOff && qFuzzyIsNull(raw)) {
+            return PhosphorI18n::tr("Off");
+        }
+        const double scaled = raw * descriptor.displayScale;
+        // Whole numbers read as integers; a scaled ratio can land on a fraction
+        // (0.335 → 33.5%), so keep one decimal rather than rounding it away.
+        const QString number =
+            qFuzzyCompare(scaled, qRound(scaled)) ? QString::number(qRound(scaled)) : QString::number(scaled, 'f', 1);
+        if (descriptor.unit.isEmpty()) {
+            return number;
+        }
+        // "80%" but "2 px": a percent sign sits tight against its number, a
+        // unit word does not.
+        if (descriptor.unit == QLatin1String("%")) {
+            return number + descriptor.unit;
+        }
+        return PhosphorI18n::tr("%1 %2", "a number followed by its unit").arg(number, descriptor.unit);
+    }
+    default:
+        // Ids, triggers, shortcuts, colours and plain values are the view's to
+        // render — it has the live data and the swatch.
+        return {};
+    }
+}
 
 ValueDescriptor descriptorFor(const QString& group, const QString& key)
 {

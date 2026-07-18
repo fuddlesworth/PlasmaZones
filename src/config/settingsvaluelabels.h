@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 
 #include <QString>
+#include <QVariant>
 #include <QVariantList>
 
 namespace PlasmaZones {
@@ -85,6 +86,18 @@ PLASMAZONES_EXPORT ValueDescriptor descriptorFor(const QString& group, const QSt
 /// The translated label for one choice token of a key, or an empty string when
 /// the key or token has no declared label. Callers fall back to the raw value.
 PLASMAZONES_EXPORT QString enumLabel(const QString& group, const QString& key, const QString& token);
+
+/// Display text for a stored value, or an EMPTY string when this side cannot
+/// produce one.
+///
+/// Empty is a real answer, not a failure: an id kind resolves against live
+/// runtime state (connected monitors, installed packs) that only the view can
+/// see, and a trigger needs the view's modifier tables. The caller renders the
+/// raw value in those cases, or resolves it itself by @c kind.
+PLASMAZONES_EXPORT QString displayText(const QString& group, const QString& key, const QVariant& value);
+
+/// Stable name for a kind, for handing to QML where the enum is not available.
+PLASMAZONES_EXPORT QString kindName(ValueKind kind);
 
 /// Every (group, key, token) triple that carries a label, as
 /// `{group, key, token, label}` maps. Exists so a test can assert that every

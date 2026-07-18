@@ -4,6 +4,7 @@
 #include "profilestore.h"
 
 #include "../config/configkeys.h"
+#include "../config/settingsvaluelabels.h"
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
 
@@ -636,8 +637,9 @@ QStringList ProfileStore::humanizeGroupSegments(const QString& group)
     return humanized;
 }
 
-void ProfileStore::appendLeafRows(const QStringList& segments, const QJsonValue& before, const QJsonValue& after,
-                                  int depth, QVariantList& rows, const QString& identityKey)
+void ProfileStore::appendLeafRows(const QString& rawGroup, const QString& rawKey, const QStringList& segments,
+                                  const QJsonValue& before, const QJsonValue& after, int depth, QVariantList& rows,
+                                  const QString& identityKey)
 {
     // An unchanged subtree contributes nothing, which is what keeps the row
     // count proportional to the actual change rather than to the tree's size.
@@ -667,7 +669,7 @@ void ProfileStore::appendLeafRows(const QStringList& segments, const QJsonValue&
             if (key == identityKey) {
                 continue;
             }
-            appendLeafRows(segments + QStringList{humanizeKey(key)}, before.toObject().value(key),
+            appendLeafRows(rawGroup, rawKey, segments + QStringList{humanizeKey(key)}, before.toObject().value(key),
                            after.toObject().value(key), depth + 1, rows);
         }
         return;
@@ -682,7 +684,8 @@ void ProfileStore::appendLeafRows(const QStringList& segments, const QJsonValue&
             const QJsonValue afterItem = i < afterItems.size() ? afterItems.at(i) : QJsonValue();
             QString identity;
             const QString segment = arraySegmentLabel(afterItem.isUndefined() ? beforeItem : afterItem, i, &identity);
-            appendLeafRows(segments + QStringList{segment}, beforeItem, afterItem, depth + 1, rows, identity);
+            appendLeafRows(rawGroup, rawKey, segments + QStringList{segment}, beforeItem, afterItem, depth + 1, rows,
+                           identity);
         }
         return;
     }
@@ -691,6 +694,14 @@ void ProfileStore::appendLeafRows(const QStringList& segments, const QJsonValue&
     row.insert(QStringLiteral("segments"), segments);
     row.insert(QStringLiteral("before"), before.toVariant());
     row.insert(QStringLiteral("after"), after.toVariant());
+    // How to present this value. `kind` tells the view which values it must
+    // resolve itself against live state (a layout id, a connected monitor);
+    // the *Text fields carry what this side could already resolve — an enum's
+    // word, a number's unit — and are empty when it could not.
+    const ValueDescriptor descriptor = SettingsValueLabels::descriptorFor(rawGroup, rawKey);
+    row.insert(QStringLiteral("kind"), SettingsValueLabels::kindName(descriptor.kind));
+    row.insert(QStringLiteral("beforeText"), SettingsValueLabels::displayText(rawGroup, rawKey, before.toVariant()));
+    row.insert(QStringLiteral("afterText"), SettingsValueLabels::displayText(rawGroup, rawKey, after.toVariant()));
     rows.append(row);
 }
 
@@ -714,7 +725,7 @@ QVariantList ProfileStore::configChanges(const QString& id) const
         const QJsonObject group = git.value().toObject();
         const QJsonObject baseGroup = parentResolved.value(git.key()).toObject();
         for (auto kit = group.constBegin(); kit != group.constEnd(); ++kit) {
-            appendLeafRows(humanizeGroupSegments(git.key()) + QStringList{humanizeKey(kit.key())},
+            appendLeafRows(git.key(), kit.key(), humanizeGroupSegments(git.key()) + QStringList{humanizeKey(kit.key())},
                            baseGroup.value(kit.key()), kit.value(), 0, rows);
         }
     }

@@ -206,17 +206,89 @@ ExpandableRowDelegate {
             readonly property var configRows: row.bridge ? row.bridge.configChanges(row.profileId) : []
             readonly property var ruleRows: row.bridge ? row.bridge.ruleChanges(row.profileId) : []
 
-            /// Raw values arrive untranslated so the wording is decided here.
-            function formatValue(value) {
+            /// Display text for one side of a change.
+            ///
+            /// The store resolves what it can without live state (an enum's
+            /// word, a number's unit) and passes it as @p resolved. Everything
+            /// else is resolved here by @p kind, because it depends on what is
+            /// plugged in or installed right now — the same split, and the same
+            /// resolution sources, that ActionListView uses for rule params.
+            ///
+            /// Every branch falls back to the raw value rather than a blank: a
+            /// deleted layout or an unplugged monitor should still show the id
+            /// it refers to.
+            function formatValue(value, kind, resolved) {
+                if (resolved !== undefined && resolved.length > 0)
+                    return resolved;
                 if (value === undefined || value === null)
                     return i18nc("a setting with no value", "unset");
                 if (typeof value === "boolean")
                     return value ? i18nc("a boolean setting that is on", "On") : i18nc("a boolean setting that is off", "Off");
+
+                const layouts = appSettings && appSettings.layouts ? appSettings.layouts : [];
+                if (kind === "layoutId")
+                    return diffColumn.resolveById(layouts, value, "id", "displayName");
+                // Algorithms live in the layout list under an "autotile:" prefix,
+                // matching how the rule preview resolves them.
+                if (kind === "tilingAlgorithm")
+                    return diffColumn.resolveById(layouts, "autotile:" + value, "id", "displayName", value);
+                if (kind === "screenId")
+                    return diffColumn.resolveById(appSettings && appSettings.screens ? appSettings.screens : [], value, "name", "displayLabel");
+                if (kind === "virtualDesktop")
+                    return diffColumn.resolveDesktop(value);
+                // Each catalogue hangs off appSettings, and they are separate
+                // registries — an animation pack and an overlay pack with the
+                // same id are different things, so the kind picks the source.
+                if (kind === "shaderPack")
+                    return diffColumn.resolvePack(appSettings ? appSettings.animationsController : null, value);
+                if (kind === "decorationPack")
+                    return diffColumn.resolvePack(appSettings ? appSettings.decorationPage : null, value);
+                if (kind === "overlayShader")
+                    return diffColumn.resolvePack(appSettings ? appSettings.snappingShadersPage : null, value);
+
                 if (typeof value === "string")
                     return value.length > 0 ? value : i18nc("an empty text setting", "empty");
                 if (typeof value === "object")
                     return diffColumn.summarizeStructured(value);
                 return String(value);
+            }
+
+            /// Scan @p list for the entry whose @p idField matches @p value and
+            /// return its @p labelField. Falls back to @p fallback (or the raw
+            /// value) when the list has no such entry, which is the normal case
+            /// for anything deleted, uninstalled, or unplugged.
+            function resolveById(list, value, idField, labelField, fallback) {
+                const raw = fallback !== undefined ? fallback : String(value);
+                if (!list)
+                    return raw;
+
+                for (let i = 0; i < list.length; ++i) {
+                    if (list[i][idField] === value) {
+                        const label = list[i][labelField];
+                        return label !== undefined && label.length > 0 ? label : raw;
+                    }
+                }
+                return raw;
+            }
+
+            /// Virtual desktops are numbered from 1 and named by KWin at
+            /// runtime, so an out-of-range number keeps its digits.
+            function resolveDesktop(value) {
+                const index = Number(value);
+                const names = appSettings ? appSettings.virtualDesktopNames : null;
+                if (!names || !isFinite(index) || index < 1 || index > names.length)
+                    return String(value);
+
+                return i18nc("@item a virtual desktop, by number and name", "%1: %2", index, names[index - 1]);
+            }
+
+            /// Shader, decoration, and overlay packs each come from their own
+            /// catalogue, so the controller to ask is passed in.
+            function resolvePack(source, value) {
+                if (!source || typeof source.availableShaderEffects !== "function")
+                    return String(value);
+
+                return diffColumn.resolveById(source.availableShaderEffects(), value, "id", "name");
             }
 
             /// The store enumerates a structured setting into one row per changed
@@ -258,12 +330,12 @@ ExpandableRowDelegate {
                         "entries": [
                             {
                                 "caption": i18nc("@label the value a setting had before this profile", "From"),
-                                "value": diffColumn.formatValue(change.before),
+                                "value": diffColumn.formatValue(change.before, change.kind, change.beforeText),
                                 "detail": diffColumn.detailFor(change.before)
                             },
                             {
                                 "caption": i18nc("@label the value this profile sets", "To"),
-                                "value": diffColumn.formatValue(change.after),
+                                "value": diffColumn.formatValue(change.after, change.kind, change.afterText),
                                 "detail": diffColumn.detailFor(change.after)
                             }
                         ]
