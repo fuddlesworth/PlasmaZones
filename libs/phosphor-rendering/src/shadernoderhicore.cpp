@@ -342,6 +342,21 @@ void ShaderNodeRhi::prepare()
         return;
     }
 
+    // Window-vs-texture retarget detection. The qt_Matrix NDC Y-flip is
+    // per-render-target (see syncBaseUniforms): toggling a ShaderEffectSource's
+    // hideSource (SurfaceAnimator attaching to / detaching from a decoration
+    // stage) retargets this SAME node between the window and a layer texture
+    // with no property edit, so nothing else would mark the matrix region
+    // dirty. Force a full re-upload on the transition — qt_Matrix sits before
+    // every granular dirty region, so only the full path re-covers it. Rare
+    // (capture attach/detach), so the full upload costs nothing steady-state.
+    const bool intoTextureTarget = rt->resourceType() == QRhiResource::TextureRenderTarget;
+    if (m_lastTargetWasTexture.has_value() && *m_lastTargetWasTexture != intoTextureTarget) {
+        m_uniformsDirty = true;
+        m_didFullUploadOnce = false;
+    }
+    m_lastTargetWasTexture = intoTextureTarget;
+
     const int uboSize = m_uboProfile->baseSize() + (m_uniformExtension ? m_uniformExtension->extensionSize() : 0);
 
     if (!m_initialized) {

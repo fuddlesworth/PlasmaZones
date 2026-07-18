@@ -56,7 +56,21 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     state.isReversed = m_isReversed;
     state.didFullUploadOnce = m_didFullUploadOnce;
     state.sceneDataDirty = m_sceneDataDirty;
-    state.yUpInNDC = rhi->isYUpInNDC();
+    // The NDC Y-flip is a per-render-TARGET decision, not a per-backend
+    // constant. rhi->isYUpInNDC() says "OpenGL", but the flip it calls for is
+    // only correct when this draw lands in the WINDOW framebuffer (GL's
+    // bottom-origin present is what un-flips it on screen). When Qt Quick
+    // renders this item INTO A TEXTURE — a ShaderEffectSource layer: the
+    // decoration chain's inter-stage taps, or SurfaceAnimator's hide-source
+    // capture — the consumer samples that texture with the top-origin UV
+    // convention Qt keeps backend-uniform, so a flipped write inverts the
+    // sampled result (surface decorations rendered upside down on OpenGL for
+    // every chain of two or more packs, and during show/hide transitions).
+    // Mirrors the multipass buffer-pass identity pin in shadernoderhicore.cpp,
+    // which corrects the same FBO round-trip for our OWN offscreen targets.
+    QRhiRenderTarget* rt = renderTarget();
+    const bool intoTextureTarget = rt && rt->resourceType() == QRhiResource::TextureRenderTarget;
+    state.yUpInNDC = rhi->isYUpInNDC() && !intoTextureTarget;
 
     // Surface-only fields — read by a SurfaceUniformProfile, ignored by the
     // BaseUniformProfile (so the overlay/animation UBO bytes are unchanged).

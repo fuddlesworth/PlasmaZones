@@ -25,6 +25,7 @@
 #include <QVector4D>
 
 #include <array>
+#include <optional>
 #include <atomic>
 #include <map>
 #include <memory>
@@ -497,6 +498,12 @@ private:
     bool m_sceneDataDirty = true; ///< Scene header (resolution, mouse, date, params) changed
     bool m_appFieldsDirty = false; ///< Only appField0/appField1 changed (8-byte upload, not full scene header)
     bool m_didFullUploadOnce = false;
+    /// Whether the last prepared frame rendered into a texture render target
+    /// (a ShaderEffectSource layer) rather than the window. The qt_Matrix NDC
+    /// Y-flip is per-render-target; prepare() forces a full UBO re-upload when
+    /// this flips (hideSource capture attach/detach retargets the same node).
+    /// Unset until the first prepare().
+    std::optional<bool> m_lastTargetWasTexture;
 
     // ── UBO Profile (pluggable uniform buffer concern) ─────────────────
     /// Owns the concrete UBO struct, its byte size, per-frame fill, and the
