@@ -195,6 +195,8 @@ ExpandableRowDelegate {
     }
 
     // ── Expanded body: what this profile overrides, before → after ──
+    // Structured like the rule preview: a SectionHeaderPill over a tree view
+    // per half, so the two previews read as one design.
     Component {
         id: diffComponent
 
@@ -203,8 +205,6 @@ ExpandableRowDelegate {
 
             readonly property var configRows: row.bridge ? row.bridge.configChanges(row.profileId) : []
             readonly property var ruleRows: row.bridge ? row.bridge.ruleChanges(row.profileId) : []
-
-            spacing: Kirigami.Units.smallSpacing
 
             /// Raw values arrive untranslated so the wording is decided here.
             function formatValue(value) {
@@ -217,6 +217,58 @@ ExpandableRowDelegate {
                 return String(value);
             }
 
+            /// Config deltas as ProfileDiffView rows: the key, then FROM / TO.
+            readonly property var settingsRows: {
+                const out = [];
+                for (let i = 0; i < configRows.length; ++i) {
+                    const change = configRows[i];
+                    out.push({
+                        "label": change.group.length > 0 ? change.group + " › " + change.key : change.key,
+                        "entries": [
+                            {
+                                "caption": i18nc("@label the value a setting had before this profile", "From"),
+                                "value": diffColumn.formatValue(change.before)
+                            },
+                            {
+                                "caption": i18nc("@label the value this profile sets", "To"),
+                                "value": diffColumn.formatValue(change.after)
+                            }
+                        ]
+                    });
+                }
+                return out;
+            }
+
+            /// Rule deltas as ProfileDiffView rows: the rule, then its change.
+            readonly property var rulesRows: {
+                const out = [];
+                for (let i = 0; i < ruleRows.length; ++i) {
+                    const change = ruleRows[i];
+                    let label = i18nc("a rule this profile alters", "Changed");
+                    let tint = Kirigami.Theme.neutralTextColor;
+                    if (change.change === "added") {
+                        label = i18nc("a rule this profile adds", "Added");
+                        tint = Kirigami.Theme.positiveTextColor;
+                    } else if (change.change === "removed") {
+                        label = i18nc("a rule this profile drops", "Removed");
+                        tint = Kirigami.Theme.negativeTextColor;
+                    }
+                    out.push({
+                        "label": change.name,
+                        "entries": [
+                            {
+                                "caption": i18nc("@label how a rule differs from the parent profile", "Change"),
+                                "value": label,
+                                "emphasis": tint
+                            }
+                        ]
+                    });
+                }
+                return out;
+            }
+
+            spacing: Kirigami.Units.smallSpacing
+
             Label {
                 Layout.fillWidth: true
                 visible: diffColumn.configRows.length === 0 && diffColumn.ruleRows.length === 0
@@ -227,99 +279,27 @@ ExpandableRowDelegate {
 
             SectionHeaderPill {
                 Layout.alignment: Qt.AlignLeft
-                visible: diffColumn.configRows.length > 0
+                visible: diffColumn.settingsRows.length > 0
                 text: i18nc("@title diff section listing changed settings", "Settings")
             }
 
-            Repeater {
-                model: diffColumn.configRows
-
-                delegate: RowLayout {
-                    id: changeRow
-
-                    required property var modelData
-
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 14
-                        text: changeRow.modelData.group.length > 0 ? i18nc("settings breadcrumb followed by the key", "%1 › %2", changeRow.modelData.group, changeRow.modelData.key) : changeRow.modelData.key
-                        elide: Text.ElideRight
-                        font: Kirigami.Theme.smallFont
-                    }
-
-                    Label {
-                        text: diffColumn.formatValue(changeRow.modelData.before)
-                        elide: Text.ElideRight
-                        Layout.maximumWidth: Kirigami.Units.gridUnit * 8
-                        color: Kirigami.Theme.disabledTextColor
-                        font: Kirigami.Theme.smallFont
-                    }
-
-                    Kirigami.Icon {
-                        source: "arrow-right"
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                        opacity: 0.6
-                    }
-
-                    Label {
-                        text: diffColumn.formatValue(changeRow.modelData.after)
-                        elide: Text.ElideRight
-                        Layout.maximumWidth: Kirigami.Units.gridUnit * 8
-                        font.bold: true
-                    }
-                }
+            ProfileDiffView {
+                Layout.fillWidth: true
+                visible: diffColumn.settingsRows.length > 0
+                rows: diffColumn.settingsRows
             }
 
             SectionHeaderPill {
                 Layout.alignment: Qt.AlignLeft
                 Layout.topMargin: Kirigami.Units.smallSpacing
-                visible: diffColumn.ruleRows.length > 0
+                visible: diffColumn.rulesRows.length > 0
                 text: i18nc("@title diff section listing changed rules", "Rules")
             }
 
-            Repeater {
-                model: diffColumn.ruleRows
-
-                delegate: RowLayout {
-                    id: ruleChangeRow
-
-                    required property var modelData
-
-                    readonly property string changeLabel: {
-                        if (ruleChangeRow.modelData.change === "added")
-                            return i18nc("a rule this profile adds", "Added");
-                        if (ruleChangeRow.modelData.change === "removed")
-                            return i18nc("a rule this profile drops", "Removed");
-                        return i18nc("a rule this profile alters", "Changed");
-                    }
-                    readonly property color changeColor: {
-                        if (ruleChangeRow.modelData.change === "added")
-                            return Kirigami.Theme.positiveTextColor;
-                        if (ruleChangeRow.modelData.change === "removed")
-                            return Kirigami.Theme.negativeTextColor;
-                        return Kirigami.Theme.neutralTextColor;
-                    }
-
-                    Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Label {
-                        text: ruleChangeRow.changeLabel
-                        color: ruleChangeRow.changeColor
-                        font: Kirigami.Theme.smallFont
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: ruleChangeRow.modelData.name
-                        elide: Text.ElideRight
-                        font: Kirigami.Theme.smallFont
-                    }
-                }
+            ProfileDiffView {
+                Layout.fillWidth: true
+                visible: diffColumn.rulesRows.length > 0
+                rows: diffColumn.rulesRows
             }
         }
     }

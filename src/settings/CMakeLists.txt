@@ -295,6 +295,7 @@ qt_add_qml_module(plasmazones-settings
         qml/ProfileRow.qml
         qml/ProfileComboBox.qml
         qml/SectionHeaderPill.qml
+        qml/ProfileDiffView.qml
         qml/ProfileSignature.qml
         qml/NewProfileDialog.qml
         qml/MonitorOverview.qml
