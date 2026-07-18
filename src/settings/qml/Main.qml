@@ -837,16 +837,11 @@ PhosphorUi.SettingsAppWindow {
         }
     }
 
-    // Sticky sidebar-footer profile switcher — activate a settings profile from
+    // Sticky sidebar-header profile switcher — activate a settings profile from
     // anywhere, mirroring the per-row Activate on the Profiles page. Selecting
     // one STAGES it into the Save footer (applies on Save, reverts on Discard).
-    // Collapses to nothing until at least one profile exists, and (being a
-    // non-compact-aware footer consumer) hides in the narrow compact rail.
-    // Sticky sidebar-HEADER profile switcher — activate a settings profile from
-    // anywhere, mirroring the per-row Activate on the Profiles page. Selecting
-    // one STAGES it into the Save footer (applies on Save, reverts on Discard).
-    // Collapses to nothing until at least one profile exists, and (being a
-    // non-compact-aware header consumer) hides in the narrow compact rail.
+    // Collapses to nothing until at least one profile exists; in the narrow
+    // compact rail the combo hides and only the identicon mark remains.
     sidebar.headerContent: Component {
         Item {
             id: profileHeader
@@ -881,9 +876,18 @@ PhosphorUi.SettingsAppWindow {
 
             // A settings edit doesn't fire profilesChanged but can flip the
             // active profile's `modified` state — re-read so the marker updates.
+            // Debounced: settingsChanged fires per property change (a slider
+            // drag emits a burst), and each re-read walks every profile file.
+            Timer {
+                id: settingsEditRefresh
+
+                interval: 250
+                onTriggered: profileHeader.profileRows = profileHeader.profilesBridge ? profileHeader.profilesBridge.availableProfiles() : []
+            }
+
             Connections {
                 function onSettingsChanged() {
-                    profileHeader.profileRows = profileHeader.profilesBridge ? profileHeader.profilesBridge.availableProfiles() : [];
+                    settingsEditRefresh.restart();
                 }
 
                 target: appSettings

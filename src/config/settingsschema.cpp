@@ -3,6 +3,8 @@
 
 #include "settingsschema.h"
 
+#include "settingsschemachoices.h"
+
 #include "configdefaults.h"
 #include "configmigration.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
@@ -80,52 +82,6 @@ auto validColorOr(QColor fallback)
 /// qBound would silently reinterpret out-of-range values as the nearest
 /// neighbour — that's the exact bug the effect-side cache loader avoids,
 /// and both readers must agree (see testAutotile*_unknownValueClampsToFloat).
-/// Declare the legal values of an int-valued enum key.
-///
-/// The token is a STABLE identifier, never user-facing text: the words live
-/// app-side (settingsvaluelabels.cpp) keyed off these tokens, which is what
-/// keeps translated strings out of the config library. Renaming a token breaks
-/// that lookup, so treat them as shipped API.
-///
-/// Declaring choices does not validate anything — the validator beside it stays
-/// the single coercion path. This exists so a caller can READ BACK what a key
-/// accepts, which a clamp lambda cannot answer.
-QVector<PhosphorConfig::ChoiceDef> intChoices(std::initializer_list<std::pair<int, QLatin1StringView>> entries)
-{
-    QVector<PhosphorConfig::ChoiceDef> out;
-    out.reserve(static_cast<int>(entries.size()));
-    for (const auto& [value, token] : entries) {
-        out.append({QVariant(value), QString(token)});
-    }
-    return out;
-}
-
-/// Declare the legal values of a key whose stored value IS its token (the
-/// string-valued settings: rendering backend, audio mode, appearance scope).
-QVector<PhosphorConfig::ChoiceDef> tokenChoices(std::initializer_list<QLatin1StringView> tokens)
-{
-    QVector<PhosphorConfig::ChoiceDef> out;
-    out.reserve(static_cast<int>(tokens.size()));
-    for (const QLatin1StringView token : tokens) {
-        out.append({QVariant(QString(token)), QString(token)});
-    }
-    return out;
-}
-
-/// Same, for a key whose token set already exists as a ConfigDefaults accessor
-/// (rendering backend, audio channel mode, audio input method). Reusing the
-/// accessor keeps one list rather than a schema copy that can drift from the
-/// validator that normalizes against it.
-QVector<PhosphorConfig::ChoiceDef> tokenChoices(const QStringList& tokens)
-{
-    QVector<PhosphorConfig::ChoiceDef> out;
-    out.reserve(tokens.size());
-    for (const QString& token : tokens) {
-        out.append({QVariant(token), token});
-    }
-    return out;
-}
-
 auto validIntOr(std::initializer_list<int> valid, int fallback)
 {
     return [valid = QVector<int>(valid), fallback](const QVariant& v) -> QVariant {
@@ -1146,6 +1102,15 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
          {},
          clampInt(CD::decorationIdleTimeoutSecMin(), CD::decorationIdleTimeoutSecMax())},
     };
+}
+
+const PhosphorConfig::Schema& cachedSettingsSchema()
+{
+    // One immortal copy for read-only consumers (picker options, value
+    // labels). Settings itself keeps building a fresh Schema, since it hands
+    // ownership to its Store.
+    static const PhosphorConfig::Schema schema = buildSettingsSchema();
+    return schema;
 }
 
 } // namespace PlasmaZones

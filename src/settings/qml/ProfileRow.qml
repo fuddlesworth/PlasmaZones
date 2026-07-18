@@ -418,7 +418,7 @@ ExpandableRowDelegate {
             Label {
                 Layout.fillWidth: true
                 visible: diffColumn.configRows.length === 0 && diffColumn.ruleRows.length === 0
-                text: row.isRoot ? i18n("Nothing overridden — this profile matches the defaults.") : i18n("Nothing overridden — this profile matches “%1”.", row.parentName)
+                text: row.isRoot ? i18n("Nothing overridden. This profile matches the defaults.") : i18n("Nothing overridden. This profile matches “%1”.", row.parentName)
                 color: Kirigami.Theme.disabledTextColor
                 wrapMode: Text.WordWrap
             }

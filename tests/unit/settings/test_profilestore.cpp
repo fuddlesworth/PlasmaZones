@@ -35,6 +35,7 @@
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 
+#include "config/configmigration.h"
 #include "settings/profilestore.h"
 
 using namespace PlasmaZones;
@@ -161,6 +162,7 @@ private Q_SLOTS:
         };
         config.applyConfig = [this](const QJsonObject& blob) {
             m_lastApplied = blob;
+            return true;
         };
         config.stagedActiveId = [this]() {
             return m_staged;
@@ -240,7 +242,10 @@ private Q_SLOTS:
         QCOMPARE(gDelta.value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 3);
         QVERIFY(!gDelta.value(QStringLiteral("GroupA")).toObject().contains(QStringLiteral("k2")));
 
-        // Resolving G overlays defaults ← R ← C ← G.
+        // Resolving G overlays defaults ← R ← C ← G. Clear the staged pointer
+        // first: G is already staged-active and clean, and re-activating the
+        // clean active profile is deliberately a no-op.
+        m_staged.clear();
         QVERIFY(m_store->activateProfile(grand));
         QCOMPARE(groupAInt(m_lastApplied, QStringLiteral("k1")), 3);
         QCOMPARE(groupAStr(m_lastApplied, QStringLiteral("k2")), QStringLiteral("y"));
@@ -266,8 +271,10 @@ private Q_SLOTS:
         // Delete the middle node.
         QVERIFY(m_store->removeProfile(child));
 
-        // G is rebound to R, and its resolved config is unchanged.
+        // G is rebound to R, and its resolved config is unchanged. Activate
+        // from cold — clean re-activation of the staged profile is a no-op.
         QCOMPARE(storedParent(grand), root);
+        m_staged.clear();
         QVERIFY(m_store->activateProfile(grand));
         QCOMPARE(groupAInt(m_lastApplied, QStringLiteral("k1")), 3);
         QCOMPARE(groupAStr(m_lastApplied, QStringLiteral("k2")), QStringLiteral("y"));
@@ -357,6 +364,7 @@ private Q_SLOTS:
         QCOMPARE(rules.value(QStringLiteral("removedIds")).toArray().size(), 0);
 
         // Resolving the child still yields the rule.
+        m_staged.clear(); // activate from cold — clean re-activation is a no-op
         QVERIFY(m_store->activateProfile(child));
         QCOMPARE(ruleIds(m_lastAppliedRules), (QList<QUuid>{r1.id}));
     }
@@ -378,7 +386,9 @@ private Q_SLOTS:
 
         QVERIFY(m_store->removeProfile(child));
 
-        // G's resolved rule set is unchanged after the rebind.
+        // G's resolved rule set is unchanged after the rebind. Activate from
+        // cold — clean re-activation of the staged profile is a no-op.
+        m_staged.clear();
         QVERIFY(m_store->activateProfile(grand));
         QCOMPARE(ruleIds(m_lastAppliedRules), (QList<QUuid>{r1.id, r2.id, r3.id}));
     }
@@ -414,22 +424,29 @@ private Q_SLOTS:
         m_current[QStringLiteral("GroupA")] =
             QJsonObject{{QStringLiteral("k1"), 2}, {QStringLiteral("k2"), QStringLiteral("x")}};
         const QString id = m_store->createProfile(QStringLiteral("Work"), QString(), QString());
-        // Fresh profile matches current settings → not modified.
-        QVERIFY(!m_store->activeProfileModified());
+        // Fresh profile matches current settings → the row reads clean. The
+        // modified flag is asserted through availableProfiles() because that
+        // row is the ONLY production consumer of the state.
+        auto activeRowModified = [this]() {
+            const QVariantList rows = m_store->availableProfiles();
+            QVariantMap active;
+            for (const QVariant& row : rows) {
+                if (row.toMap().value(QStringLiteral("active")).toBool()) {
+                    active = row.toMap();
+                }
+            }
+            return active.value(QStringLiteral("modified")).toBool();
+        };
+        QVERIFY(!activeRowModified());
 
         // Edit the live config away from the profile.
         m_current[QStringLiteral("GroupA")] =
             QJsonObject{{QStringLiteral("k1"), 5}, {QStringLiteral("k2"), QStringLiteral("x")}};
-        QVERIFY(m_store->activeProfileModified());
-        // The active row carries the modified flag.
-        const QVariantList rows = m_store->availableProfiles();
-        QCOMPARE(rows.size(), 1);
-        QVERIFY(rows.first().toMap().value(QStringLiteral("active")).toBool());
-        QVERIFY(rows.first().toMap().value(QStringLiteral("modified")).toBool());
+        QVERIFY(activeRowModified());
 
         // Capture the current settings into the profile → clean again.
         QVERIFY(m_store->updateProfileFromCurrent(id));
-        QVERIFY(!m_store->activeProfileModified());
+        QVERIFY(!activeRowModified());
         QCOMPARE(storedConfig(id).value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 5);
     }
 
@@ -511,6 +528,106 @@ private Q_SLOTS:
         const QVariantMap after = row.value(QStringLiteral("after")).toMap();
         QCOMPARE(after.value(QStringLiteral("modifier")).toInt(), 134217728);
         QCOMPARE(after.value(QStringLiteral("mouseButton")).toInt(), 2);
+    }
+
+    /// setParent refuses to reparent a profile under its own descendant. The
+    /// resolve walk and depth ordering carry cycle guards, but this is the door
+    /// they guard — a cycle must never be constructible through the API.
+    void reparentUnderDescendantRefused()
+    {
+        m_current = baseDefaults();
+        const QString a = m_store->createProfile(QStringLiteral("A"), QString(), QString());
+        const QString b = m_store->createProfile(QStringLiteral("B"), QString(), a);
+        const QString c = m_store->createProfile(QStringLiteral("C"), QString(), b);
+
+        // A under its grandchild, and under itself.
+        QVERIFY(!m_store->setParent(a, c));
+        QVERIFY(!m_store->setParent(a, a));
+        // The tree is unchanged: A is still the root of the chain.
+        QCOMPARE(storedParent(a), QString());
+        QCOMPARE(storedParent(c), QUuid(b).toString());
+    }
+
+    /// A pathologically nested structured value stops recursing at the depth
+    /// cap and lands as one row carrying the remaining subtree, instead of
+    /// walking a hand-crafted file forever.
+    void configDiffStopsAtDepthCap()
+    {
+        m_current = baseDefaults();
+        // 9 levels of nesting, well past the cap of 6.
+        QJsonObject leaf{{QStringLiteral("v"), 1}};
+        QJsonValue nested = leaf;
+        for (int i = 0; i < 9; ++i) {
+            nested = QJsonObject{{QStringLiteral("n"), nested}};
+        }
+        QJsonObject groupA = baseDefaults().value(QStringLiteral("GroupA")).toObject();
+        groupA.insert(QStringLiteral("deep"), nested);
+        m_current[QStringLiteral("GroupA")] = groupA;
+
+        const QString id = m_store->createProfile(QStringLiteral("Deep"), QString(), QString());
+        const QVariantList rows = m_store->configChanges(id);
+        QCOMPARE(rows.size(), 1);
+        // The capped leaf carries the residual OBJECT, not a scalar — proof the
+        // walk stopped rather than descending to the buried "v".
+        QVERIFY(rows.first().toMap().value(QStringLiteral("after")).toMap().size() > 0);
+    }
+
+    /// Pin the profile envelope version to the config schema version.
+    ///
+    /// readProfileFile refuses any file stamped with a different version, and
+    /// loadAll drops it — so a ConfigSchemaVersion bump makes every saved
+    /// profile vanish unless the bump ships a profile-envelope migration
+    /// alongside the config one. This pin turns that silent data loss into a
+    /// loud failure at exactly the moment someone bumps the version: extend
+    /// the migration chain to cover profile files, then update this pin.
+    void profileFormatTracksConfigSchemaVersion()
+    {
+        QCOMPARE(ConfigSchemaVersion, 5);
+    }
+
+    /// When the settings store refuses the staged blob, activation aborts
+    /// whole: no rules staged, no active pointer flipped.
+    void refusedConfigApplyAbortsActivation()
+    {
+        m_current = baseDefaults();
+        const Rule r1 = makeRule(QStringLiteral("a"), QStringLiteral("a.desktop"));
+        m_currentRules = {r1};
+        const QString id = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+        // createProfile stages the new profile as active; clear for the test.
+        m_staged.clear();
+        m_lastAppliedRules.clear();
+
+        ProfileStore::Config config;
+        config.profilesDir = [this]() {
+            return m_dir->path();
+        };
+        config.currentConfig = [this]() {
+            return m_current;
+        };
+        config.defaultConfig = []() {
+            return baseDefaults();
+        };
+        config.applyConfig = [](const QJsonObject&) {
+            return false; // the store refuses (schema version mismatch)
+        };
+        config.stagedActiveId = [this]() {
+            return m_staged;
+        };
+        config.setStagedActiveId = [this](const QString& v) {
+            m_staged = v;
+        };
+        config.currentUserRules = [this]() {
+            return m_currentRules;
+        };
+        config.applyUserRules = [this](const QList<Rule>& rules) {
+            m_lastAppliedRules = rules;
+        };
+        config.formatVersion = 5;
+        ProfileStore refusingStore(std::move(config));
+
+        QVERIFY(!refusingStore.activateProfile(id));
+        QVERIFY(m_staged.isEmpty());
+        QVERIFY(m_lastAppliedRules.isEmpty());
     }
 
     /// ruleChanges classifies each rule difference against the parent.

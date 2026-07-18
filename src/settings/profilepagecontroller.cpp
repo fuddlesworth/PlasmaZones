@@ -32,7 +32,7 @@ ProfilePageController::ProfilePageController(Settings& settings, RuleController&
         // owning config pages badge dirty value-based and the global Save
         // commits it; no beginExternalEdit envelope is needed because every
         // key applied here is a schema-backed, value-based manifest key.
-        m_settings.applyConfigOverlayStaged(blob);
+        return m_settings.applyConfigOverlayStaged(blob);
     };
     config.stagedActiveId = [this]() {
         return m_stagedActiveId;

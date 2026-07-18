@@ -1348,7 +1348,9 @@ public:
     ///
     /// SCOPE: Q_PROPERTY-backed keys only (per Phase 1). Per-screen maps,
     /// virtual-screen configs, and per-mode disable lists are NOT staged here.
-    void applyConfigOverlayStaged(const QJsonObject& fullConfigBlob);
+    /// @return false when the store refused the blob (schema version mismatch)
+    /// — in that case nothing was staged and no signal fired.
+    bool applyConfigOverlayStaged(const QJsonObject& fullConfigBlob);
 
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;

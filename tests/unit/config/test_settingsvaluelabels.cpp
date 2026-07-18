@@ -282,7 +282,7 @@ private Q_SLOTS:
         // swallowing the rest of the file and leaving this class without a
         // vtable.
         static const QRegularExpression call(
-            QStringLiteral("valueOptions\\s*\\(\\s*\"([^\"]+)\"\\s*,\\s*\"([^\"]+)\"\\s*\\)"));
+            QStringLiteral("valueOptions\\s*\\(\\s*[\"']([^\"']+)[\"']\\s*,\\s*[\"']([^\"']+)[\"']\\s*\\)"));
 
         QStringList problems;
         int calls = 0;
@@ -312,6 +312,48 @@ private Q_SLOTS:
         problems.sort();
         QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("\n  "))));
         QVERIFY2(calls > 0, "no valueOptions() calls found in QML — the scan is broken, not clean");
+    }
+
+    /// Every UI-subset token must name a choice its key actually declares —
+    /// a subset that drifts from the schema would silently empty the picker.
+    void uiSubsetTokensAreDeclaredChoices()
+    {
+        const PhosphorConfig::Schema& schema = cachedSettingsSchema();
+        int checked = 0;
+        for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
+            for (const PhosphorConfig::KeyDef& def : git.value()) {
+                const QStringList subset = SettingsValueLabels::uiChoiceSubset(git.key(), def.key);
+                if (subset.isEmpty()) {
+                    continue;
+                }
+                QSet<QString> declared;
+                for (const PhosphorConfig::ChoiceDef& choice : def.choices) {
+                    declared.insert(choice.token);
+                }
+                for (const QString& token : subset) {
+                    QVERIFY2(declared.contains(token),
+                             qPrintable(QStringLiteral("%1/%2 subset token \"%3\" is not a declared choice")
+                                            .arg(git.key(), def.key, token)));
+                }
+                // A subset must actually narrow; equal-or-wider is a mistake.
+                QVERIFY2(
+                    subset.size() < def.choices.size(),
+                    qPrintable(QStringLiteral("%1/%2 subset does not narrow the choice set").arg(git.key(), def.key)));
+                ++checked;
+            }
+        }
+        QVERIFY2(checked > 0, "no UI subsets found — the walk is broken, not clean");
+    }
+
+    /// The audio input picker offers exactly the supported three backends,
+    /// while all ten stay legal on disk. This is the contract the picker
+    /// migration briefly broke by offering every legal token.
+    void audioInputPickerOffersSupportedSubsetOnly()
+    {
+        using CD = ConfigDefaults;
+        const QStringList subset = SettingsValueLabels::uiChoiceSubset(CD::shadersAudioGroup(), CD::inputMethodKey());
+        QCOMPARE(subset, (QStringList{QStringLiteral("auto"), QStringLiteral("pipewire"), QStringLiteral("pulse")}));
+        QCOMPARE(cachedSettingsSchema().choicesFor(CD::shadersAudioGroup(), CD::inputMethodKey()).size(), 10);
     }
 
     /// The same token under two keys means two different things, which is the

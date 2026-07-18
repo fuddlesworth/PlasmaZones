@@ -9,8 +9,6 @@
 //   * pageOwnedConfigKeys()  — leaf id → (group, key) manifest (per-page
 //     Reset / Discard).
 //   * validPageNames()       — the set of navigable leaf page ids.
-//   * valueOptions()         — (group, key) → the picker options an enum key
-//     declares, so a settings combo and the config schema cannot disagree.
 //
 // All methods here are members of PlasmaZones::SettingsController. Same class
 // as the sibling settingscontroller_pageregistration.cpp, separate translation
@@ -19,9 +17,6 @@
 #include "settingscontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../config/settingsschema.h"
-#include "../config/settingsvaluelabels.h"
-#include "../core/logging.h"
 
 #include <QHash>
 #include <QSet>
@@ -29,30 +24,6 @@
 #include <QStringList>
 
 namespace PlasmaZones {
-
-QVariantList SettingsController::valueOptions(const QString& group, const QString& key) const
-{
-    // One schema build, shared by every picker that asks.
-    static const PhosphorConfig::Schema schema = buildSettingsSchema();
-
-    QVariantList out;
-    const QVector<PhosphorConfig::ChoiceDef> choices = schema.choicesFor(group, key);
-    if (choices.isEmpty()) {
-        qCWarning(lcConfig) << "valueOptions: no declared choices for" << group << key
-                            << "— the picker will be empty. Check the (group, key) pair against the schema.";
-        return out;
-    }
-
-    for (const PhosphorConfig::ChoiceDef& choice : choices) {
-        const QString label = SettingsValueLabels::enumLabel(group, key, choice.token);
-        out.append(QVariantMap{
-            {QStringLiteral("value"), choice.value},
-            // A token with no word still shows something the user can report.
-            {QStringLiteral("text"), label.isEmpty() ? choice.token : label},
-        });
-    }
-    return out;
-}
 
 const QHash<QString, QString>& SettingsController::parentPageRedirects()
 {

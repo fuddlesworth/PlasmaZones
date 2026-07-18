@@ -70,8 +70,9 @@ public:
 
     /// Stage a fully-resolved config blob into the settings store WITHOUT
     /// committing to disk (Settings::applyConfigOverlayStaged), so the footer
-    /// lights and the user's Save commits it.
-    using ApplyConfigFn = std::function<void(const QJsonObject& /*fullConfigBlob*/)>;
+    /// lights and the user's Save commits it. Returns false when the store
+    /// refused the blob (schema version mismatch) and nothing was staged.
+    using ApplyConfigFn = std::function<bool(const QJsonObject& /*fullConfigBlob*/)>;
 
     /// Read / write the controller's STAGED active-profile id (the id shown as
     /// active in the list, reverted on Discard). Distinct from the committed
@@ -117,11 +118,6 @@ public:
     /// only on the active row when the live settings/rules have diverged from
     /// what that profile resolves to.
     Q_INVOKABLE QVariantList availableProfiles() const;
-
-    /// True when a profile is active and the current live config or user rules
-    /// differ from what that profile resolves to (i.e. the user has edited away
-    /// from it). Drives the "modified" marker in the page and switcher.
-    Q_INVOKABLE bool activeProfileModified() const;
 
     /// What @p id overrides relative to its parent, one row per changed LEAF:
     /// `{ segments, before, after }`. `segments` is the humanized path to the
@@ -184,7 +180,7 @@ public:
     Q_INVOKABLE void openProfilesDirectory();
 
     /// The STAGED active profile id (what the list badges), via the closure.
-    Q_INVOKABLE QString activeProfileId() const;
+    QString activeProfileId() const;
 
     /// Re-emit profilesChanged() so QML re-reads availableProfiles(). Used when
     /// the staged active id changes outside a store mutation (e.g. the
@@ -303,6 +299,19 @@ private:
 
     QJsonObject readIndex() const;
     void writeIndex(const QJsonObject& index);
+
+    /// The one path every mutation uses to announce itself: drops the signature
+    /// cache (signatures derive from the profile FILES, so any file mutation
+    /// invalidates them) and emits profilesChanged. Direct Q_EMIT would leave
+    /// stale signatures behind.
+    void notifyProfilesChanged();
+
+    /// Signatures are pure functions of the on-disk cascade, so they only
+    /// change when a profile file changes — never on a live settings edit.
+    /// Cached so availableProfiles(), which QML re-invokes on every
+    /// settingsChanged to refresh the active row's modified badge, does not
+    /// re-resolve and re-hash every cascade each time.
+    mutable QHash<QUuid, QString> m_signatureCache;
     QList<QUuid> readOrder() const;
     void appendToOrder(const QUuid& id);
     void removeFromOrder(const QUuid& id);

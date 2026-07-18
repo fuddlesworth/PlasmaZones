@@ -1087,6 +1087,7 @@ add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_valid
 add_executable(test_profilestore
     settings/test_profilestore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/profilestore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/profilestore_diff.cpp
 )
 target_link_libraries(test_profilestore
     PRIVATE

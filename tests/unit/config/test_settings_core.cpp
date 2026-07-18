@@ -832,6 +832,73 @@ private Q_SLOTS:
      * writes it and re-emits the per-property NOTIFY + settingsChanged exactly
      * once per real change, and the value survives a save/reload.
      */
+    /// The profiles staging seam: applyConfigOverlayStaged writes the blob's
+    /// values into memory, fires the per-property NOTIFY + settingsChanged,
+    /// and does NOT move the baseline — the staged key must read as modified
+    /// so the Save footer lights.
+    void testApplyConfigOverlayStaged_stagesWithoutCommitting()
+    {
+        IsolatedConfigGuard guard;
+        // load() captures the modified-tracking baseline itself.
+        Settings settings;
+        settings.load();
+
+        QJsonObject blob = settings.exportConfigToJson();
+        QJsonObject windows = blob.value(QStringLiteral("Windows")).toObject();
+        const int newWidth = windows.value(QStringLiteral("Width")).toInt() + 3;
+        windows.insert(QStringLiteral("Width"), newWidth);
+        blob.insert(QStringLiteral("Windows"), windows);
+
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(settings.applyConfigOverlayStaged(blob));
+        QCOMPARE(settings.windowBorderWidth(), newWidth);
+        QCOMPARE(changedSpy.count(), 1);
+        // Staged, not committed: the key diverges from the baseline.
+        QVERIFY(settings.isKeyModified(QStringLiteral("Windows"), QStringLiteral("Width")));
+    }
+
+    /// A blob stamped with a foreign schema version is refused whole: nothing
+    /// staged, nothing signalled, and the caller learns about it.
+    void testApplyConfigOverlayStaged_refusesForeignVersion()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.load();
+        const int before = settings.windowBorderWidth();
+
+        QJsonObject blob = settings.exportConfigToJson();
+        QJsonObject windows = blob.value(QStringLiteral("Windows")).toObject();
+        windows.insert(QStringLiteral("Width"), before + 3);
+        blob.insert(QStringLiteral("Windows"), windows);
+        blob.insert(QStringLiteral("_version"), 1); // ancient
+
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(!settings.applyConfigOverlayStaged(blob));
+        QCOMPARE(settings.windowBorderWidth(), before);
+        QCOMPARE(changedSpy.count(), 0);
+    }
+
+    /// defaultConfigJson delegates to the store's defaults snapshot, so it is
+    /// field-for-field comparable with exportConfigToJson — the invariant the
+    /// profiles delta engine diffs across.
+    void testDefaultConfigJson_matchesExportShape()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.load();
+
+        const QJsonObject defaults = settings.defaultConfigJson();
+        const QJsonObject exported = settings.exportConfigToJson();
+        QCOMPARE(defaults.keys(), exported.keys());
+        QCOMPARE(defaults.value(QStringLiteral("_version")), exported.value(QStringLiteral("_version")));
+        for (const QString& group : exported.keys()) {
+            if (group == QStringLiteral("_version")) {
+                continue;
+            }
+            QCOMPARE(defaults.value(group).toObject().keys(), exported.value(group).toObject().keys());
+        }
+    }
+
     void testConfigBackedGap_roundTripsAndEmits()
     {
         IsolatedConfigGuard guard;

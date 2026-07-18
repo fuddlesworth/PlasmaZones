@@ -91,6 +91,7 @@ set(plasmazones_settings_SRCS
     # Settings profiles: persistence/CRUD/inheritance store + its page controller.
     profilestore.h
     profilestore.cpp
+    profilestore_diff.cpp
     profilepagecontroller.h
     profilepagecontroller.cpp
     editorpagecontroller.h

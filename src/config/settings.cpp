@@ -725,26 +725,14 @@ QJsonObject Settings::exportConfigToJson() const
 
 QJsonObject Settings::defaultConfigJson() const
 {
-    // Build the schema-defaults blob directly from the schema so it is
-    // independent of the current in-memory values (unlike exportToJson, which
-    // reflects live edits). Stamp the same `_version` exportToJson uses so the
-    // blob round-trips through Store::importFromJson without a version refusal.
-    QJsonObject out;
-    const auto& schema = m_store->schema();
-    for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
-        QJsonObject groupObj;
-        for (const auto& def : it.value()) {
-            groupObj.insert(def.key, QJsonValue::fromVariant(def.defaultValue));
-        }
-        out.insert(it.key(), groupObj);
-    }
-    if (!schema.versionKey.isEmpty()) {
-        out.insert(schema.versionKey, schema.version);
-    }
-    return out;
+    // Store::defaultsToJson mirrors exportToJson's shape and version stamp;
+    // delegating keeps the two snapshots field-for-field comparable, which the
+    // profiles delta engine depends on. A local re-implementation here could
+    // drift from exportToJson's serialization without anything noticing.
+    return m_store->defaultsToJson();
 }
 
-void Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
+bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
 {
     // Same snapshot / re-emit contract as load(), minus the disk round-trip:
     // snapshot the NOTIFY-able properties BEFORE mutating the store, overwrite
@@ -752,16 +740,28 @@ void Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
     // every property whose value actually changed. Deliberately NO
     // captureBaseline() — the store must diverge from the committed baseline so
     // the settings app reports the staged keys as unsaved edits.
+    //
+    // Also deliberately no applySystemColorScheme() re-derivation: a profile
+    // captures the zone colours it was saved with, and activation stages those
+    // captured values even when UseSystemColors is on. The live palette is
+    // re-applied by the normal load() path once the user saves.
     const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
 
     // importFromJson is additive/overwriting over declared keys; a
     // fully-resolved profile blob carries every declared key (defaults included)
     // so keys the profile leaves at default are written back to default too.
-    m_store->importFromJson(fullConfigBlob);
+    // It REFUSES a blob stamped with a different schema version, writing
+    // nothing — surface that instead of silently staging a no-op.
+    if (!m_store->importFromJson(fullConfigBlob)) {
+        qCWarning(lcConfig) << "applyConfigOverlayStaged: store rejected the blob (schema version mismatch?)"
+                            << "— nothing was staged";
+        return false;
+    }
 
     const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
     if (anyChanged)
         Q_EMIT settingsChanged();
+    return true;
 }
 
 // ── Per-page reset / discard support ────────────────────────────────────────

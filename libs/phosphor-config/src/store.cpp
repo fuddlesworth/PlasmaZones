@@ -435,6 +435,25 @@ QJsonObject Store::exportToJson() const
     return out;
 }
 
+QJsonObject Store::defaultsToJson() const
+{
+    // Deliberately the same shape and version stamp as exportToJson: consumers
+    // diff the two snapshots key-for-key, so they must never drift apart. Keep
+    // any serialization change here mirrored there.
+    QJsonObject out;
+    for (auto git = d->schema.groups.constBegin(); git != d->schema.groups.constEnd(); ++git) {
+        QJsonObject groupObj;
+        for (const KeyDef& def : git.value()) {
+            groupObj[def.key] = QJsonValue::fromVariant(def.defaultValue);
+        }
+        out[git.key()] = groupObj;
+    }
+    if (!d->schema.versionKey.isEmpty()) {
+        out[d->schema.versionKey] = d->schema.version;
+    }
+    return out;
+}
+
 bool Store::importFromJson(const QJsonObject& snapshot)
 {
     // Reject snapshots stamped with a different schema version. Callers

@@ -96,6 +96,12 @@ PLASMAZONES_EXPORT QString enumLabel(const QString& group, const QString& key, c
 /// raw value in those cases, or resolves it itself by @c kind.
 PLASMAZONES_EXPORT QString displayText(const QString& group, const QString& key, const QVariant& value);
 
+/// Overload for callers that already resolved the descriptor (a diff walker
+/// formats two values per leaf; re-deriving the descriptor per value tripled
+/// the lookups). @p group / @p key are still needed for the enum token tables.
+PLASMAZONES_EXPORT QString displayText(const QString& group, const QString& key, const QVariant& value,
+                                       const ValueDescriptor& descriptor);
+
 /// Stable name for a kind, for handing to QML where the enum is not available.
 PLASMAZONES_EXPORT QString kindName(ValueKind kind);
 
@@ -104,6 +110,16 @@ PLASMAZONES_EXPORT QString kindName(ValueKind kind);
 /// choice declared in the config schema has a word for it, which is what keeps
 /// the two halves from drifting apart.
 PLASMAZONES_EXPORT QVariantList allEnumLabels();
+
+/// The tokens a settings PICKER should offer for @p key, when that is a strict
+/// subset of the key's legal values. Empty means offer every declared choice.
+///
+/// Legal-set and UI-set are different contracts: a key can accept values on
+/// disk that the picker deliberately does not offer (the audio input backends
+/// beyond the supported three stay valid for hand-edited configs). The schema
+/// declares what is LEGAL, so the diff can name any stored value; this narrows
+/// what is OFFERED.
+PLASMAZONES_EXPORT QStringList uiChoiceSubset(const QString& group, const QString& key);
 
 /// Every key carrying a declared presentation, as `{group, key}` maps. Exists so
 /// a test can assert each one names a key the schema actually declares — a

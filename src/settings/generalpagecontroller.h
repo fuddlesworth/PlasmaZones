@@ -38,8 +38,6 @@ class GeneralPageController : public PhosphorControl::PageController
 {
     Q_OBJECT
 
-    Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
-    Q_PROPERTY(QStringList renderingBackendDisplayNames READ renderingBackendDisplayNames CONSTANT)
     Q_PROPERTY(QString startupRenderingBackend READ startupRenderingBackend CONSTANT)
 
     Q_PROPERTY(int animationDurationMin READ animationDurationMin CONSTANT)
@@ -90,14 +88,6 @@ public:
     {
     }
 
-    QStringList renderingBackendOptions() const
-    {
-        return ConfigDefaults::renderingBackendOptions();
-    }
-    QStringList renderingBackendDisplayNames() const
-    {
-        return m_renderingBackendDisplayNames;
-    }
     QString startupRenderingBackend() const
     {
         return m_startupRenderingBackend;
@@ -179,7 +169,6 @@ public:
 
 private:
     /// Translated at construction so QML binds a stable list.
-    QStringList m_renderingBackendDisplayNames;
     /// Backend value at controller construction. Survives page recreation so
     /// the "restart required" InlineMessage stays visible after navigating
     /// away and back.

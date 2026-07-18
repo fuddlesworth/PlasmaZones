@@ -89,9 +89,18 @@ SettingsFlickable {
 
     // A settings edit doesn't fire profilesChanged, but it can flip the active
     // profile's `modified` state — re-read the rows so the badge stays honest.
+    // Debounced: settingsChanged fires per property change (a slider drag emits
+    // a burst), and each reload walks every profile file on disk.
+    Timer {
+        id: settingsEditRefresh
+
+        interval: 250
+        onTriggered: root._reload()
+    }
+
     Connections {
         function onSettingsChanged() {
-            root._reload();
+            settingsEditRefresh.restart();
         }
 
         target: appSettings
@@ -107,7 +116,7 @@ SettingsFlickable {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
             visible: true
-            text: i18n("A profile captures your current settings and rules. Only what differs from its parent profile (or the defaults) is stored. Activating a profile stages its settings — save to apply, or discard to revert. Per-monitor and other hardware-specific settings are not included, so a profile stays portable between machines.")
+            text: i18n("A profile captures your current settings and rules. Only what differs from its parent profile (or the defaults) is stored. Activating a profile stages its settings. Save to apply, or discard to revert. Per-monitor and other hardware-specific settings are not included, so a profile stays portable between machines.")
         }
 
         // ── Save current settings as a new profile ──

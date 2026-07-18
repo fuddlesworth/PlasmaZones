@@ -11,11 +11,6 @@ namespace PlasmaZones {
 GeneralPageController::GeneralPageController(ISettings& settings, QObject* parent)
     : PhosphorControl::PageController(QStringLiteral("general"), parent)
 {
-    // Translate rendering backend display names once at construction.
-    for (const auto& name : ConfigDefaults::renderingBackendDisplayNames()) {
-        m_renderingBackendDisplayNames.append(PhosphorI18n::tr(name.toUtf8().constData()));
-    }
-
     // Snapshot current backend so the QML "restart required" message
     // survives page recreation.
     m_startupRenderingBackend = settings.renderingBackend();

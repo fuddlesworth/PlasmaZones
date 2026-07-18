@@ -17,6 +17,8 @@
 #include "virtualscreenutils.h"
 #include "../config/configbackends.h"
 #include "../config/configdefaults.h"
+#include "../config/settingsschema.h"
+#include "../config/settingsvaluelabels.h"
 #include "../config/configmigration.h"
 #include "../common/layoutpreviewserialize.h"
 #include "../common/screenidresolver.h"
@@ -86,6 +88,34 @@
 #include <memory>
 
 namespace PlasmaZones {
+
+QVariantList SettingsController::valueOptions(const QString& group, const QString& key) const
+{
+    QVariantList out;
+    const QVector<PhosphorConfig::ChoiceDef> choices = cachedSettingsSchema().choicesFor(group, key);
+    if (choices.isEmpty()) {
+        qCWarning(lcConfig) << "valueOptions: no declared choices for" << group << key
+                            << "— the picker will be empty. Check the (group, key) pair against the schema.";
+        return out;
+    }
+
+    // A key can accept more values than its picker offers (legal set vs UI
+    // set); an empty subset means offer everything.
+    const QStringList offered = SettingsValueLabels::uiChoiceSubset(group, key);
+
+    for (const PhosphorConfig::ChoiceDef& choice : choices) {
+        if (!offered.isEmpty() && !offered.contains(choice.token)) {
+            continue;
+        }
+        const QString label = SettingsValueLabels::enumLabel(group, key, choice.token);
+        out.append(QVariantMap{
+            {QStringLiteral("value"), choice.value},
+            // A token with no word still shows something the user can report.
+            {QStringLiteral("text"), label.isEmpty() ? choice.token : label},
+        });
+    }
+    return out;
+}
 
 namespace {
 

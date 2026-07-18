@@ -82,9 +82,6 @@ class WindowAppearanceController : public PhosphorControl::PageController
     // ── "Apply to" scope tokens (single source: PhosphorCompositor::WindowAppearanceScope) ──
     // The QML "Apply to" pickers pair each token with an i18n label; exposing the
     // tokens here keeps them in lockstep with the schema validator and the effect.
-    Q_PROPERTY(QString scopeTokenTiled READ scopeTokenTiled CONSTANT)
-    Q_PROPERTY(QString scopeTokenNormal READ scopeTokenNormal CONSTANT)
-    Q_PROPERTY(QString scopeTokenAll READ scopeTokenAll CONSTANT)
 
     // ── Border colour sentinel + fallback (single source: ConfigDefaults) ──
     // The "follow the system accent" sentinel and the concrete colour the page
@@ -187,19 +184,6 @@ public:
     // tracking rides; these invokables are the per-monitor-aware path.
     Q_INVOKABLE QVariant gapValue(const QString& screenName, const QString& key) const;
     Q_INVOKABLE void writeGap(const QString& screenName, const QString& key, const QVariant& value);
-
-    QString scopeTokenTiled() const
-    {
-        return QString(::PhosphorCompositor::WindowAppearanceScope::Tiled);
-    }
-    QString scopeTokenNormal() const
-    {
-        return QString(::PhosphorCompositor::WindowAppearanceScope::Normal);
-    }
-    QString scopeTokenAll() const
-    {
-        return QString(::PhosphorCompositor::WindowAppearanceScope::All);
-    }
 
     QString accentColorToken() const
     {

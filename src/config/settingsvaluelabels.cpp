@@ -250,6 +250,18 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
 
 } // namespace
 
+QStringList uiChoiceSubset(const QString& group, const QString& key)
+{
+    // Shaders.Audio/InputMethod declares ten legal tokens so a hand-edited
+    // config still resolves to a name in the diff, but the picker offers only
+    // the supported three — the contract configdefaults.h documents. Every
+    // other enum key offers its full legal set.
+    if (group == CD::shadersAudioGroup() && key == CD::inputMethodKey()) {
+        return {QStringLiteral("auto"), QStringLiteral("pipewire"), QStringLiteral("pulse")};
+    }
+    return {};
+}
+
 QString kindName(ValueKind kind)
 {
     switch (kind) {
@@ -285,14 +297,15 @@ QString kindName(ValueKind kind)
 
 QString displayText(const QString& group, const QString& key, const QVariant& value)
 {
-    const ValueDescriptor descriptor = descriptorFor(group, key);
+    return displayText(group, key, value, descriptorFor(group, key));
+}
+
+QString displayText(const QString& group, const QString& key, const QVariant& value, const ValueDescriptor& descriptor)
+{
     switch (descriptor.kind) {
     case ValueKind::Enum: {
         // The schema owns the value → token mapping; this owns token → word.
-        // Built once: buildSettingsSchema() walks every group and is far too
-        // heavy to run per rendered row.
-        static const PhosphorConfig::Schema schema = buildSettingsSchema();
-        for (const PhosphorConfig::ChoiceDef& choice : schema.choicesFor(group, key)) {
+        for (const PhosphorConfig::ChoiceDef& choice : cachedSettingsSchema().choicesFor(group, key)) {
             if (choice.value == value) {
                 return enumLabel(group, key, choice.token);
             }
