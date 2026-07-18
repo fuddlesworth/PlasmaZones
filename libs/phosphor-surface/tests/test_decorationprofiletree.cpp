@@ -505,6 +505,25 @@ private Q_SLOTS:
                  "an engaged-but-empty user disable set must win over the seed baseline's");
     }
 
+    /// The injection gates read the ORIGINAL tree, never the partially merged
+    /// one: a seed carrying BOTH a baseline chain and an override must land in
+    /// full on an empty user tree — if the gates saw the merged tree, the
+    /// just-injected baseline chain would close the master gate and swallow
+    /// the override (and an injected category would swallow its descendant).
+    void withSeedDefaults_gatesReadOriginalTreeNotMerged()
+    {
+        DecorationProfileTree seeds;
+        DecorationProfile base;
+        base.chain = QStringList{QStringLiteral("glow")};
+        seeds.setBaseline(base);
+        seeds.setOverride(QStringLiteral("osd"),
+                          makeProfile(QStringList{QStringLiteral("border")}, 1.0, QStringLiteral("#112233")));
+
+        const DecorationProfileTree merged = DecorationProfileTree{}.withSeedDefaults(seeds);
+        QCOMPARE(merged, seeds);
+        QCOMPARE(merged.resolve(QStringLiteral("osd")).enabledChain(), QStringList{QStringLiteral("border")});
+    }
+
     /// disabledPacks injects like the other fields: it lands in an unengaged
     /// slot and an engaged (even empty) user slot blocks it.
     void withSeedDefaults_disabledPacksInjection()

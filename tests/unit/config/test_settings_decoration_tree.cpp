@@ -416,6 +416,46 @@ private Q_SLOTS:
                  0.95);
     }
 
+    /// The strip's whole-view guard must REFUSE a strip that would change the
+    /// resolved result: a chain-only override equal to the seed chain blocks
+    /// the seed's parameters via the master gate, so stripping it would let
+    /// the seed parameters inject. The override must persist as-is, and the
+    /// merged view must keep the osd free of seed parameters.
+    void testDecorationProfileTree_chainOnlySeedEqualOverrideIsNotStripped()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        const auto seedChain =
+            ConfigDefaults::decorationProfileTree().directOverride(QStringLiteral("osd")).effectiveChain();
+        PhosphorSurfaceShaders::DecorationProfileTree tree = a.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile chainOnly;
+        chainOnly.chain = seedChain;
+        tree.setOverride(QStringLiteral("osd"), chainOnly);
+        a.setDecorationProfileTree(tree);
+        a.save();
+
+        // Stored blob keeps the chain-engaged override.
+        QFile file(guard.configPath() + QStringLiteral("/plasmazones/config.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+        const auto stored =
+            PhosphorSurfaceShaders::DecorationProfileTree::fromJson(root.value(QLatin1String("Decorations"))
+                                                                        .toObject()
+                                                                        .value(QLatin1String("DecorationProfileTree"))
+                                                                        .toObject());
+        QVERIFY2(stored.hasOverride(QStringLiteral("osd"))
+                     && stored.directOverride(QStringLiteral("osd")).chain.has_value(),
+                 "a chain-only override must not be stripped even when it equals the seed chain");
+
+        // Merged view: the engaged chain closes the master gate, so the seed
+        // parameters must NOT appear at osd.
+        const auto merged = a.decorationProfileTree();
+        QCOMPARE(merged.resolve(QStringLiteral("osd")).enabledChain(), seedChain);
+        QVERIFY2(!merged.directOverride(QStringLiteral("osd")).parameters.has_value(),
+                 "seed parameters must not inject under a user-engaged chain");
+    }
+
     /// Cross-root isolation of the per-page Reset mechanism: clearing the
     /// "osd" root's overrides from the merged view (what
     /// SettingsController::resetPage does for the OSDs page) reveals the osd
