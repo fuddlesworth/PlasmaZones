@@ -46,9 +46,11 @@ vec4 pTransition(vec2 uv, float t) {
     // Deviation from the verbatim niri body: the boundary's travel is
     // normalized to the farthest possible ink edge — the corner distance
     // in the same aspect metric as `d`, plus the distortion bound
-    // (|distortion| <= 0.5 * 0.5 + 0.5 * 0.18 = 0.34 for fbm in [0, 1])
-    // and the feather. Niri's bare `p * speed - 0.15` with speed 1.7 was
-    // tuned near a full-screen 16:9 surface (last finger lands ≈ 0.91);
+    // (|distortion| <= 0.5 * 0.5 + 0.5 * 0.18 = 0.34, attained as fbm
+    // approaches 0; fbm(p, 5, 2.1) tops out near 0.97 so the positive
+    // side stays under +0.32) and the feather. Niri's bare
+    // `p * speed - 0.15` with speed 1.7 was tuned near a full-screen
+    // 16:9 surface (last finger lands ≈ 0.91);
     // the corner metric shrinks as the window narrows, so on a square
     // window the splash was done by p ≈ 0.72 and the tail sat on a
     // static frame — the phosphor-peek dead-domain bug, aspect-

@@ -14,13 +14,16 @@
 // dead-domain bug). Dial revealEnd back to 0.8 for the exact niri
 // timing.
 //
-// Niri's fade ships GENUINELY ASYMMETRIC close.glsl/open.glsl — open
-// uses `mix(0.95, 1.0, p)` for scale and `smoothstep(0.0, 0.8, p)` for
-// alpha, while close uses `mix(1.0, 0.95, p)` for scale and
-// `smoothstep(1.0, 0.2, p)` for alpha. These are different curves,
-// not a simple time-reversal, so the iTime flip alone can't express
-// both legs. We branch on `windowFadingIn` (open vs close leg) to select
-// the correct body, exposed as a `pIn`/`pOut` pair.
+// Niri's fade ships separate close.glsl/open.glsl bodies — open uses
+// `mix(0.95, 1.0, p)` for scale and `smoothstep(0.0, 0.8, p)` for
+// alpha, close `mix(1.0, 0.95, p)` and the reversed-edge
+// `smoothstep(1.0, 0.2, p)` (expressed below in the inverted-safe
+// form). Algebraically close(p) == open(1 − p) for BOTH curves and
+// every parameter choice (substitute q = 1 − p in either smoothstep
+// argument and the clamp terms are identical), so the pair is a pure
+// time-reversal. We still branch on `windowFadingIn` as a `pIn`/`pOut`
+// pair to mirror niri's two shipped files one-to-one, keeping each
+// leg's body diffable against its upstream original.
 //
 // Per the entry-point contract, the harness un-flips iTime to an
 // ABSOLUTE forward leg progress `t` in [0,1] running 0→1 on BOTH legs
@@ -42,9 +45,10 @@
 
 // Shared body for both legs. `t` is forward 0→1 leg progress (the harness
 // un-flipped iTime via legProgress()); `windowFadingIn` selects the niri
-// open vs close body — these legs are GENUINELY ASYMMETRIC (different
-// scale/alpha curves), not a simple time-reversal, so the direction is
-// threaded in rather than left to an iTime flip.
+// open vs close body. The legs are a pure time-reversal of each other
+// (see the header), but the split keeps each body diffable against its
+// niri file, so the direction is threaded in rather than left to an
+// iTime flip.
 vec4 fadeBody(vec2 uv, float t, bool windowFadingIn) {
     vec4 result;
     if (!windowFadingIn) {
@@ -68,7 +72,12 @@ vec4 fadeBody(vec2 uv, float t, bool windowFadingIn) {
         // boundaryMask: see noise.glsl. Crops off-window samples to transparent.
         vec4 color = surfaceColor(scaled_uv) * boundaryMask(scaled_uv);
 
-        float alpha = smoothstep(1.0 - p_revealStart, 1.0 - p_revealEnd, p);
+        // Inverted form rather than swapped arguments: smoothstep is
+        // undefined when edge0 >= edge1 per the GLSL spec, and niri's
+        // literal `smoothstep(1.0 - rS, 1.0 - rE, p)` is always reversed
+        // (rS caps at 0.49, rE floors at 0.51). Value-identical on a
+        // conformant driver: 1 - S(u) == S(1 - u).
+        float alpha = 1.0 - smoothstep(1.0 - p_revealEnd, 1.0 - p_revealStart, p);
 
         result = color * alpha;
     } else {

@@ -153,7 +153,7 @@ vec4 pTransition(vec2 uv, float t) {
     // dead-domain bug). Dropping the +0.1 bias lands the clear at exactly
     // progress = 1; the only head-side cost is BMW's faint pre-cracked
     // shard borders (threshold 0.01 at rest), which vanish.
-    if (shardGroup == i && (shardMap.x - pow(progress, 2.0)) > 0.0) {
+    if (shardGroup == i && (shardMap.x - progress * progress) > 0.0) {
       oColor = getClippedInputColor(coords);
     }
   }
