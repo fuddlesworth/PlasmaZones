@@ -995,6 +995,13 @@ public:
     PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override;
     void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) override;
 
+    /// The committed-baseline shader tree. Reads the ShaderProfileTree key from
+    /// the same committed baseline `isKeyModified()` uses, and applies the
+    /// identical supported-path prune as `shaderProfileTree()` so a
+    /// per-surface Discard/dirty check compares live-vs-committed on equal
+    /// footing. See `committedDecorationProfileTree()` for the sibling rationale.
+    PhosphorAnimationShaders::ShaderProfileTree committedShaderProfileTree() const override;
+
     /// String facade for the shaderProfileTreeJson Q_PROPERTY. Routes
     /// through the existing tree accessors so persistence is identical;
     /// the Q_PROPERTY entry is purely so the meta-object dirty-tracking
@@ -1010,6 +1017,16 @@ public:
     void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) override;
     QString decorationProfileTreeJson() const override;
     void setDecorationProfileTreeJson(const QString& json) override;
+
+    /// The committed-baseline decoration tree — the last-persisted value that
+    /// per-page Discard reverts to and the per-surface decoration dirty check
+    /// compares against. Reads the DecorationProfileTree key from the same
+    /// committed baseline `isKeyModified()` uses, with the identical
+    /// empty→ConfigDefaults fallback as `decorationProfileTree()`, so a
+    /// subtree-scoped Discard sees baseline-vs-current on equal footing. Not on
+    /// ISettings: the committed baseline is a Settings-internal dirty-tracking
+    /// concept, and only SettingsController's per-page kebab consumes it.
+    PhosphorSurfaceShaders::DecorationProfileTree committedDecorationProfileTree() const;
 
     // Decorations.Performance — PhosphorConfig::Store-backed.
     bool decorationAnimateFocusedOnly() const override;

@@ -175,24 +175,19 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                 &AnimationsPageController::shaderEffectsChanged);
     }
     if (m_settings) {
-        // Qt::DirectConnection is mandatory here: the
-        // m_mutatingShaderTree depth check below distinguishes "our
-        // own write" (depth > 0) from "external reload" (depth == 0),
-        // and that only works when the NOTIFY fires SYNCHRONOUSLY
-        // inside the MutatingShaderTreeScope. A queued connection
-        // would dispatch the lambda after the scope's destructor has
-        // already restored depth=0, the guard sees external-reload
-        // semantics, and the lambda silently clears m_shaderTreeDirty
-        // on the user's own write — a silent revert of staged edits.
+        // Sole emitter of pendingChangesChanged for shader-tree edits: EVERY
+        // tree change (our own mutators, an external Discard/import/load) funnels
+        // through Settings::setShaderProfileTree → this NOTIFY. Because dirtiness
+        // is now value-based (hasPendingChanges diffs live-vs-committed), the
+        // lambda no longer distinguishes own-writes from reloads or touches any
+        // flag — it just refreshes the cards and re-evaluates the dirty state.
         //
-        // m_asyncRevertInFlight guards a second race:
-        // SettingsController::discard() pairs our discard() with a
-        // follow-up Settings::load(), which fires shaderProfileTreeChanged
-        // while the asyncRevert worker is still running. The lambda must
-        // NOT clear m_shaderTreeDirty in that window — the worker's
-        // finished handler owns the terminal clear-and-emit sequence as
-        // part of discardResult — so it short-circuits while the flag is
-        // set.
+        // The async guard stays: SettingsController::discard() pairs our async
+        // discard() with a follow-up Settings::load() that fires this NOTIFY
+        // while the worker is still running. The worker's finished handler owns
+        // the terminal pendingChangesChanged + discardResult sequence, so the
+        // lambda must not fire pendingChangesChanged in that window or it would
+        // race the terminal emit and break the chrome's wait-counter.
         connect(
             m_settings, &ISettings::shaderProfileTreeChanged, this,
             [this]() {
@@ -200,25 +195,9 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                 // can't tell which path moved without diffing. QML pages refresh
                 // every visible event card on this signal which is cheap enough.
                 Q_EMIT shaderProfileChanged(QString());
-                // If this signal arrived from an external reload (Discard from
-                // another page, import, settings.load()), the on-disk tree is
-                // now authoritative — drop the staged-dirty flag so
-                // hasPendingChanges() does not report phantom edits. The
-                // m_mutatingShaderTree guard distinguishes our own writes
-                // (which keep the dirty flag set) from external reloads.
-                //
-                // While an asyncRevert worker is running, skip the clear:
-                // the worker's finished handler will reset m_shaderTreeDirty
-                // and emit pendingChangesChanged + discardResult together as
-                // the terminal sequence. Letting the lambda clear early would
-                // race the terminal emit and could fire pendingChangesChanged
-                // before discardResult, breaking the chrome's wait-counter.
                 if (m_asyncRevertInFlight)
                     return;
-                if (m_mutatingShaderTree == 0 && m_shaderTreeDirty) {
-                    m_shaderTreeDirty = false;
-                    Q_EMIT pendingChangesChanged();
-                }
+                Q_EMIT pendingChangesChanged();
             },
             Qt::DirectConnection);
     }
@@ -320,7 +299,16 @@ bool AnimationsPageController::dropFileSnapshotIfUnchanged(const QString& filePa
 
 bool AnimationsPageController::hasPendingChanges() const
 {
-    return !m_pendingFileSnapshots.isEmpty() || m_shaderTreeDirty;
+    // Value-based, not a sticky flag: the shader tree is dirty exactly when the
+    // live tree differs from the committed baseline. This lets a per-page kebab
+    // revert only ONE surface's tree paths and have hasPendingChanges() report
+    // the truth — a sticky bool would either stay set after a scoped revert
+    // (phantom "unsaved changes" footer) or get cleared wholesale by an external
+    // scoped write (dropping OTHER pages' still-pending tree edits). Files stay
+    // snapshot-based because a file has no committed-baseline value to diff.
+    if (!m_pendingFileSnapshots.isEmpty())
+        return true;
+    return m_settings != nullptr && m_settings->shaderProfileTree() != m_settings->committedShaderProfileTree();
 }
 
 bool AnimationsPageController::isDirty() const
@@ -333,20 +321,19 @@ void AnimationsPageController::apply()
     // Refuse Apply while an asyncRevertPending worker is still
     // rewriting profile files from its captured snapshot. Without
     // this, an apply() call mid-revert would clear m_pendingFileSnapshots
-    // and m_shaderTreeDirty — letting the worker's still-running
-    // file restores silently UNDO writes the user wanted to keep,
-    // then emit discardResult(true) on a now-clean page. Symmetric
-    // to the per-mutator guards (setOverride etc.) and to
-    // RuleController::m_asyncCommitInFlight.
+    // — letting the worker's still-running file restores silently UNDO
+    // writes the user wanted to keep, then emit discardResult(true) on a
+    // now-clean page. Symmetric to the per-mutator guards (setOverride
+    // etc.) and to RuleController::m_asyncCommitInFlight.
     if (m_asyncRevertInFlight) {
         Q_EMIT applyResult(false, PhosphorI18n::tr("Cannot save while a discard is in progress."));
         return;
     }
     commitPending();
-    // commitPending is synchronous (just clears the snapshot map +
-    // dirty bit; the per-edit writes already hit disk through
-    // setOverride). Signal completion immediately so the chrome's
-    // applyAllAsync wait-counter ticks down.
+    // commitPending is synchronous (just clears the snapshot map; the
+    // per-edit writes already hit disk through setOverride, and shader-tree
+    // dirtiness is value-based against the committed baseline). Signal
+    // completion immediately so the chrome's applyAllAsync wait-counter ticks down.
     Q_EMIT applyResult(true, QString());
 }
 
@@ -363,19 +350,35 @@ void AnimationsPageController::commitPending()
 {
     const bool had = hasPendingChanges();
     m_pendingFileSnapshots.clear();
-    m_shaderTreeDirty = false;
+    // No shader-tree flag to clear: tree dirtiness is value-based now. The tree's
+    // committed baseline is refreshed by Settings::save() (captureBaseline), which
+    // runs in the same apply pass; SettingsController::save() calls
+    // refreshDirtyState() afterwards so this controller re-evaluates once the
+    // baseline has caught up (apply() may run before the settings save in the
+    // domain walk, leaving the tree transiently "divergent" here).
     if (had)
         Q_EMIT pendingChangesChanged();
+}
+
+void AnimationsPageController::refreshDirtyState()
+{
+    // Poke the value-based dirty check after an external commit point the
+    // controller can't observe on its own — specifically Settings::save()'s
+    // captureBaseline, which makes committedShaderProfileTree() catch up to the
+    // live tree without firing shaderProfileTreeChanged (the value didn't move,
+    // only the baseline did). The pendingChangesChanged → dirtyChanged forwarder
+    // gates on an actual flip, so a no-op refresh costs nothing.
+    Q_EMIT pendingChangesChanged();
 }
 
 bool AnimationsPageController::revertPending()
 {
     // discard() / revertPending() is the StagingDomain contract for "undo
-    // everything since the last apply". This method:
-    //   * Restores every snapshotted profile file from disk.
-    //   * Clears our own dirty flag (m_shaderTreeDirty) only when all
-    //     snapshots restore successfully — partial-failure keeps the flag
-    //     so a retry path still sees hasPendingChanges()==true.
+    // everything since the last apply". This method restores every snapshotted
+    // profile file from disk and returns whether the snapshot map fully emptied
+    // (a retained entry is a restore that FAILED, so a caller must not declare
+    // the session clean while one stands). It owns the FILE half only — the
+    // shader tree is value-based and reverted by the caller (see below).
     //
     // IMPORTANT CALLER CONTRACT: the in-memory shader tree on m_settings
     // (Settings::shaderProfileTree) is NOT reverted here — that state is
@@ -454,13 +457,10 @@ bool AnimationsPageController::revertPending()
     }
     m_pendingFileSnapshots = std::move(retained);
 
-    // Clear shader-tree dirty when (and only when) every file snapshot was
-    // successfully restored. If `retained` is non-empty, some restores
-    // failed and the caller may retry — leave the dirty flag so the
-    // retry path still sees hasPendingChanges()==true.
-    if (m_pendingFileSnapshots.isEmpty()) {
-        m_shaderTreeDirty = false;
-    }
+    // No shader-tree flag to clear: tree dirtiness is value-based, and reverting
+    // the tree is the caller's job (Settings::load() on global discard, or the
+    // scoped tree revert in SettingsController::discardPage for a per-page
+    // discard). This method owns the FILE half only.
 
     // Bulk emit so QML sub-pages refresh exactly the rows that moved.
     for (const QString& path : overrideEvents)
@@ -475,6 +475,59 @@ bool AnimationsPageController::revertPending()
     // import, a defaults reset) must not do so while one is still staged: the
     // next Discard would write it back over the new state.
     return m_pendingFileSnapshots.isEmpty();
+}
+
+bool AnimationsPageController::revertPendingUnder(const QStringList& eventPaths)
+{
+    // Scoped synchronous revert for the per-page kebab Discard: restore ONLY the
+    // snapshotted override files at eventPaths, leaving every other page's staged
+    // file edits (and any preset / motion-set snapshots) pending. Mirrors
+    // revertPending's per-file restore, filtered to the in-scope file keys. Same
+    // async-in-flight refusal — a concurrent worker owns the snapshot map.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "revertPendingUnder: blocked while an async discard is in flight";
+        return false;
+    }
+
+    QStringList restoredEvents;
+    bool allRestored = true;
+    for (const QString& path : eventPaths) {
+        if (!isValidEventPath(path))
+            continue;
+        const QString filePath = profileFilePath(path);
+        const auto it = m_pendingFileSnapshots.constFind(filePath);
+        if (it == m_pendingFileSnapshots.cend())
+            continue; // no staged edit for this path
+
+        bool restored = false;
+        if (!it.value().has_value()) {
+            // File was absent pre-edit — remove it if the edit created one.
+            if (!QFile::exists(filePath) || QFile::remove(filePath))
+                restored = true;
+        } else {
+            QSaveFile f(filePath);
+            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                f.write(*it.value());
+                if (f.commit())
+                    restored = true;
+            }
+        }
+
+        if (!restored) {
+            qCWarning(lcConfig) << "revertPendingUnder: failed to restore" << filePath;
+            allRestored = false;
+            continue; // keep the snapshot so a retry can pick it up
+        }
+        m_pendingFileSnapshots.remove(filePath);
+        restoredEvents.append(path);
+    }
+
+    // Refresh exactly the rows that moved; one dirty re-eval for the batch.
+    for (const QString& path : restoredEvents)
+        Q_EMIT overrideChanged(path);
+    if (!restoredEvents.isEmpty())
+        Q_EMIT pendingChangesChanged();
+    return allRestored;
 }
 
 bool AnimationsPageController::asyncRevertInFlight() const
@@ -554,8 +607,10 @@ void AnimationsPageController::asyncRevertPending()
                 if (!result.retained.contains(key))
                     m_pendingFileSnapshots.remove(key);
             }
-            if (m_pendingFileSnapshots.isEmpty())
-                m_shaderTreeDirty = false;
+            // No shader-tree flag to clear: tree dirtiness is value-based. The
+            // global discard that dispatched this worker pairs it with a
+            // Settings::load() that re-baselines the tree, so hasPendingChanges()
+            // reads clean once the files are restored below.
 
             for (const QString& path : result.overrideEvents)
                 Q_EMIT overrideChanged(path);

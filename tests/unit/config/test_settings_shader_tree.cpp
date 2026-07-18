@@ -331,6 +331,39 @@ private Q_SLOTS:
         Settings reloaded;
         QCOMPARE(reloaded.autoAssignAllLayouts(), true);
     }
+
+    /// committedShaderProfileTree() is the baseline the per-surface animation
+    /// dirty check compares the live tree against. It must track the last
+    /// load/save commit, NOT live edits — a setShaderProfileTree write persists
+    /// to the store immediately but does not re-baseline, so live and committed
+    /// diverge until the next save(). This is the mechanism that replaced the
+    /// old sticky m_shaderTreeDirty flag; a regression here silently breaks
+    /// per-page dirty/Discard for every animation surface.
+    void testCommittedShaderProfileTree_tracksBaselineNotLiveEdits()
+    {
+        IsolatedConfigGuard guard;
+        Settings a;
+
+        // Fresh load: committed baseline equals the live tree.
+        QVERIFY(a.committedShaderProfileTree() == a.shaderProfileTree());
+        QVERIFY(!a.committedShaderProfileTree().hasOverride(QStringLiteral("osd.show")));
+
+        // Edit without save: the live tree gains the override; the committed
+        // baseline holds its pre-edit value, so the two diverge.
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        PhosphorAnimationShaders::ShaderProfile profile;
+        profile.effectId = QStringLiteral("pixelate");
+        tree.setOverride(QStringLiteral("osd.show"), profile);
+        a.setShaderProfileTree(tree);
+        QVERIFY(a.shaderProfileTree().hasOverride(QStringLiteral("osd.show")));
+        QVERIFY(!a.committedShaderProfileTree().hasOverride(QStringLiteral("osd.show")));
+        QVERIFY(a.shaderProfileTree() != a.committedShaderProfileTree());
+
+        // save() re-captures the baseline: committed catches up to live.
+        a.save();
+        QVERIFY(a.committedShaderProfileTree().hasOverride(QStringLiteral("osd.show")));
+        QVERIFY(a.committedShaderProfileTree() == a.shaderProfileTree());
+    }
 };
 
 QTEST_MAIN(TestSettingsShaderTree)

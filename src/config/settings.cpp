@@ -1472,6 +1472,18 @@ PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
         PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(map)));
 }
 
+PhosphorAnimationShaders::ShaderProfileTree Settings::committedShaderProfileTree() const
+{
+    // Baseline snapshot, not the live store — mirrors isKeyModified()'s
+    // m_baseline lookup and the shaderProfileTree() prune so the two trees
+    // compare prune-for-prune. No empty→ConfigDefaults fallback: the shader
+    // tree's schema default IS the empty tree (unlike the decoration tree).
+    const QVariantMap map =
+        m_baseline.value(ConfigDefaults::animationsGroup()).value(ConfigDefaults::shaderProfileTreeKey()).toMap();
+    return pruneShaderProfileTreeToSupportedPaths(
+        PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(map)));
+}
+
 void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
 {
     // Prune incoming tree at the persistence boundary — same rationale
@@ -1537,6 +1549,20 @@ PhosphorSurfaceShaders::DecorationProfileTree Settings::decorationProfileTree() 
     // the schema never returns empty here. The guard covers a store constructed
     // WITHOUT the schema default (e.g. a bare test stub): fall back to the same
     // canonical default rather than to an empty tree.
+    if (map.isEmpty())
+        return ConfigDefaults::decorationProfileTree();
+    return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map));
+}
+
+PhosphorSurfaceShaders::DecorationProfileTree Settings::committedDecorationProfileTree() const
+{
+    // Read the baseline snapshot, not the live store — mirrors isKeyModified()'s
+    // m_baseline.value(group).value(key) lookup so the two stay in lockstep. The
+    // empty→ConfigDefaults fallback matches decorationProfileTree() so a
+    // never-modified key compares equal to the live tree (both canonicalise to
+    // the same default) instead of spuriously reporting a diff.
+    const QVariantMap map =
+        m_baseline.value(ConfigDefaults::decorationsGroup()).value(ConfigDefaults::decorationProfileTreeKey()).toMap();
     if (map.isEmpty())
         return ConfigDefaults::decorationProfileTree();
     return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map));

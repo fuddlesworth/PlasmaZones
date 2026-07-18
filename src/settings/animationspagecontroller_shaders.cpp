@@ -58,33 +58,6 @@ namespace PlasmaZones {
 // unqualified — matches the sibling main TU's using-declaration.
 using namespace animations_controller_detail;
 
-namespace {
-/// RAII scope guard for AnimationsPageController::m_mutatingShaderTree.
-/// Increments the depth on construction, decrements on destruction —
-/// including the exception path through setShaderProfileTree, where a
-/// bare set/clear pair would leave the depth stuck >0 and silently
-/// disable external-reload dirty clearance for the rest of the process.
-/// Counter (not flag): the NOTIFY-driven external-reload handler's
-/// guard checks `depth > 0`, so a nested re-entrant write (inner scope
-/// destructs first) does NOT prematurely clear the outer's protection.
-struct MutatingShaderTreeScope
-{
-    int& depth;
-    explicit MutatingShaderTreeScope(int& d)
-        : depth(d)
-    {
-        ++depth;
-    }
-    ~MutatingShaderTreeScope()
-    {
-        --depth;
-    }
-    MutatingShaderTreeScope(const MutatingShaderTreeScope&) = delete;
-    MutatingShaderTreeScope& operator=(const MutatingShaderTreeScope&) = delete;
-};
-
-} // namespace
-
 bool AnimationsPageController::supportsShaderLeg(const QString& path) const
 {
     return eventPathSupportsShaderLeg(path);
@@ -316,12 +289,9 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
         if (tree.directOverride(path) == disabledProfile)
             return true;
         tree.setOverride(path, disabledProfile);
-        {
-            MutatingShaderTreeScope guard(m_mutatingShaderTree);
-            m_settings->setShaderProfileTree(tree);
-        }
-        m_shaderTreeDirty = true;
-        Q_EMIT pendingChangesChanged();
+        m_settings->setShaderProfileTree(tree);
+        // pendingChangesChanged is emitted by the shaderProfileTreeChanged
+        // handler (the sole emitter for tree edits); dirtiness is value-based.
         return true;
     }
 
@@ -356,12 +326,8 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (tree.directOverride(path) == profile)
         return true;
     tree.setOverride(path, profile);
-    {
-        MutatingShaderTreeScope guard(m_mutatingShaderTree);
-        m_settings->setShaderProfileTree(tree);
-    }
-    m_shaderTreeDirty = true;
-    Q_EMIT pendingChangesChanged();
+    m_settings->setShaderProfileTree(tree);
+    // pendingChangesChanged is emitted by the shaderProfileTreeChanged handler.
     return true;
 }
 
@@ -378,12 +344,8 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     if (!tree.hasOverride(path))
         return false;
     tree.clearOverride(path);
-    {
-        MutatingShaderTreeScope guard(m_mutatingShaderTree);
-        m_settings->setShaderProfileTree(tree);
-    }
-    m_shaderTreeDirty = true;
-    Q_EMIT pendingChangesChanged();
+    m_settings->setShaderProfileTree(tree);
+    // pendingChangesChanged is emitted by the shaderProfileTreeChanged handler.
     return true;
 }
 
@@ -413,12 +375,8 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
         return 0;
     for (const QString& p : toClear)
         tree.clearOverride(p);
-    {
-        MutatingShaderTreeScope guard(m_mutatingShaderTree);
-        m_settings->setShaderProfileTree(tree);
-    }
-    m_shaderTreeDirty = true;
-    Q_EMIT pendingChangesChanged();
+    m_settings->setShaderProfileTree(tree);
+    // pendingChangesChanged is emitted by the shaderProfileTreeChanged handler.
     return toClear.size();
 }
 
