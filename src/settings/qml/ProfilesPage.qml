@@ -86,34 +86,30 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Save current settings")
+            searchAnchor: "saveCurrent"
             collapsible: true
             initiallyCollapsed: root.profilesList.length > 0
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                Label {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Save everything as it is now as a new profile. Pick a parent to store only the differences from it.")
-                    color: Kirigami.Theme.disabledTextColor
-                    wrapMode: Text.WordWrap
-                }
+                SettingsRow {
+                    title: i18n("New profile")
+                    searchAnchor: "newProfile"
+                    description: i18n("Save everything as it is now as a new profile. Pick a parent to store only the differences from it.")
 
-                Button {
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.alignment: Qt.AlignLeft
-                    text: i18n("New profile…")
-                    icon.name: "list-add"
-                    Accessible.name: i18n("Create a new profile from the current settings")
-                    onClicked: {
-                        profileDialog.mode = "create";
-                        profileDialog.targetId = "";
-                        profileDialog.nameText = "";
-                        profileDialog.descriptionText = "";
-                        profileDialog.parentId = "";
-                        profileDialog.open();
+                    Button {
+                        text: i18n("New Profile…")
+                        icon.name: "list-add"
+                        Accessible.name: i18n("Create a new profile from the current settings")
+                        onClicked: {
+                            profileDialog.mode = "create";
+                            profileDialog.targetId = "";
+                            profileDialog.nameText = "";
+                            profileDialog.descriptionText = "";
+                            profileDialog.parentId = "";
+                            profileDialog.open();
+                        }
                     }
                 }
             }
@@ -124,6 +120,7 @@ SettingsFlickable {
             id: importCard
 
             headerText: i18n("Import a profile")
+            searchAnchor: "importProfile"
             description: i18n("Add a profile exported from PlasmaZones.")
             idleText: i18nc("@info drop-zone idle label", "Drop a profile file here to import it")
             hoverText: i18nc("@info drop-zone hover label", "Release to import the profile")
@@ -144,6 +141,7 @@ SettingsFlickable {
         SettingsCard {
             Layout.fillWidth: true
             headerText: i18n("Profiles")
+            searchAnchor: "profilesList"
             headerTrailingText: i18np("%n profile", "%n profiles", root.profilesList.length)
 
             contentItem: ColumnLayout {
