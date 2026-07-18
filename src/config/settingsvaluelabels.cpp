@@ -227,18 +227,16 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         // ── Ids resolved against live runtime data ──────────────────────────
         t.insert(pairKey(CD::snappingBehaviorWindowHandlingGroup(), CD::defaultLayoutIdKey()),
                  idKind(ValueKind::LayoutId));
-        t.insert(pairKey(CD::generalGroup(), CD::activeLayoutIdKey()), idKind(ValueKind::LayoutId));
-        t.insert(pairKey(CD::generalGroup(), CD::lastUsedScreenNameKey()), idKind(ValueKind::ScreenId));
-        t.insert(pairKey(CD::generalGroup(), CD::lastUsedDesktopKey()), idKind(ValueKind::VirtualDesktop));
         t.insert(pairKey(CD::tilingAlgorithmGroup(), CD::defaultKey()), idKind(ValueKind::TilingAlgorithm));
         t.insert(pairKey(CD::tilingBehaviorGroup(), CD::lockedScreensKey()), idKind(ValueKind::ScreenId));
         t.insert(pairKey(CD::animationsGroup(), CD::shaderProfileTreeKey()), idKind(ValueKind::ShaderPack));
         t.insert(pairKey(CD::decorationsGroup(), CD::decorationProfileTreeKey()), idKind(ValueKind::DecorationPack));
 
         // ── Triggers ────────────────────────────────────────────────────────
-        for (const QString& group :
-             {CD::snappingBehaviorGroup(), CD::snappingBehaviorZoneSpanGroup(), CD::snappingBehaviorSnapAssistGroup(),
-              CD::tilingBehaviorGroup(), CD::tilingBehaviorTriggersGroup()}) {
+        // Tiling.Behavior.Triggers has a group accessor but declares no keys —
+        // the tiling triggers live in Tiling.Behavior itself.
+        for (const QString& group : {CD::snappingBehaviorGroup(), CD::snappingBehaviorZoneSpanGroup(),
+                                     CD::snappingBehaviorSnapAssistGroup(), CD::tilingBehaviorGroup()}) {
             t.insert(pairKey(group, ConfigKeys::triggersKey()), idKind(ValueKind::Trigger));
         }
         t.insert(pairKey(CD::editorSnappingGroup(), CD::overrideModifierKey()), idKind(ValueKind::Trigger));
@@ -272,6 +270,27 @@ QString enumLabel(const QString& group, const QString& key, const QString& token
         return {};
     }
     return it->value(token);
+}
+
+QVariantList allDescribedKeys()
+{
+    QVariantList out;
+    const auto emit = [&out](const QString& pair) {
+        const QStringList parts = pair.split(QLatin1Char('\x1f'));
+        if (parts.size() == 2) {
+            out.append(QVariantMap{
+                {QStringLiteral("group"), parts.at(0)},
+                {QStringLiteral("key"), parts.at(1)},
+            });
+        }
+    };
+    for (auto it = descriptorTable().constBegin(); it != descriptorTable().constEnd(); ++it) {
+        emit(it.key());
+    }
+    for (auto it = enumLabelTable().constBegin(); it != enumLabelTable().constEnd(); ++it) {
+        emit(it.key());
+    }
+    return out;
 }
 
 QVariantList allEnumLabels()

@@ -92,6 +92,11 @@ PLASMAZONES_EXPORT QString enumLabel(const QString& group, const QString& key, c
 /// the two halves from drifting apart.
 PLASMAZONES_EXPORT QVariantList allEnumLabels();
 
+/// Every key carrying a declared presentation, as `{group, key}` maps. Exists so
+/// a test can assert each one names a key the schema actually declares — a
+/// mistyped pair would otherwise never match and silently render raw forever.
+PLASMAZONES_EXPORT QVariantList allDescribedKeys();
+
 } // namespace SettingsValueLabels
 
 } // namespace PlasmaZones

@@ -143,6 +143,62 @@ private Q_SLOTS:
         QCOMPARE(descriptor.displayScale, 1.0);
     }
 
+    /// Every described key must be one the schema actually declares. The table
+    /// is hand-written from an audit of the settings pages, so a mistyped or
+    /// renamed (group, key) pair is the most likely error in it — and the
+    /// failure mode is silent, since a pair that matches nothing simply never
+    /// resolves and the value renders raw forever.
+    void everyDescribedKeyExistsInTheSchema()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        QStringList missing;
+        const QVariantList described = SettingsValueLabels::allDescribedKeys();
+        for (const QVariant& row : described) {
+            const QVariantMap map = row.toMap();
+            const QString group = map.value(QStringLiteral("group")).toString();
+            const QString key = map.value(QStringLiteral("key")).toString();
+            if (!schema.findKey(group, key)) {
+                missing.append(group + QLatin1Char('/') + key);
+            }
+        }
+        missing.sort();
+        QVERIFY2(
+            missing.isEmpty(),
+            qPrintable(
+                QStringLiteral("described keys absent from the schema: %1").arg(missing.join(QLatin1String(", ")))));
+        QVERIFY2(!described.isEmpty(), "no described keys — the walk is broken, not clean");
+    }
+
+    /// A key displayed as a percentage must actually persist a 0.0-1.0 ratio.
+    /// Scaling a key that already stores 0-100 would render "8000%", and the
+    /// only signal that the scale is wrong is the number a user sees.
+    void percentScaledKeysStoreARatio()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        int checked = 0;
+        const QVariantList described = SettingsValueLabels::allDescribedKeys();
+        for (const QVariant& row : described) {
+            const QVariantMap map = row.toMap();
+            const QString group = map.value(QStringLiteral("group")).toString();
+            const QString key = map.value(QStringLiteral("key")).toString();
+            const ValueDescriptor descriptor = SettingsValueLabels::descriptorFor(group, key);
+            if (descriptor.displayScale == 1.0) {
+                continue;
+            }
+            const PhosphorConfig::KeyDef* def = schema.findKey(group, key);
+            QVERIFY(def);
+            const double value = def->defaultValue.toDouble();
+            QVERIFY2(value >= 0.0 && value <= 1.0,
+                     qPrintable(QStringLiteral("%1/%2 is scaled by %3 for display but defaults to %4, "
+                                               "which is not a 0.0-1.0 ratio")
+                                    .arg(group, key)
+                                    .arg(descriptor.displayScale)
+                                    .arg(value)));
+            ++checked;
+        }
+        QVERIFY2(checked > 0, "no scaled keys found — the walk is broken, not clean");
+    }
+
     /// The same token under two keys means two different things, which is the
     /// reason the table is keyed by (group, key) and not by token alone.
     void tokenMeaningIsKeyLocal()
