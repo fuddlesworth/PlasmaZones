@@ -6,6 +6,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
+import "SearchAnchorHelpers.js" as SearchAnchors
+
 /**
  * @brief One profile row in the Profiles page tree list.
  *
@@ -47,6 +49,23 @@ ExpandableRowDelegate {
 
     // The header fits on one row; the body is the read-only diff below.
     expansionContent: row.bridge ? diffComponent : null
+
+    // Deep-link anchor, so a profile hit in the global search scrolls to and
+    // pulses this exact row rather than just opening the page. Mirrors how the
+    // rule and layout rows register theirs (ReorderableColumn's anchorPrefix).
+    // callLater because the row is not yet parented into the page when
+    // Component.onCompleted runs, and pageFor walks the parent chain.
+    Component.onCompleted: Qt.callLater(function () {
+        const page = SearchAnchors.pageFor(row);
+        if (page)
+            page.registerSearchAnchor("profile:" + row.profileId, row, SearchAnchors.cardFor(row));
+    })
+
+    Component.onDestruction: {
+        const page = SearchAnchors.pageFor(row);
+        if (page)
+            page.unregisterSearchAnchor("profile:" + row.profileId);
+    }
 
     // Depth indent: a leading guide so nesting reads at a glance.
     Item {
