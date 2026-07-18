@@ -45,7 +45,11 @@ QString CrossSurfaceResolver::neighborOutputInDirection(const QString& screenId,
         }
     }
 
-    const int pick = PhosphorGeometry::directionalNeighbor(QRectF(sourceGeom), candidates, *dir);
+    // requireOverlap: outputs that share no perpendicular span with the source
+    // (e.g. a side-by-side monitor whose centre happens to sit lower) are not
+    // real up/down neighbours; without the flag a vertical move at the layout
+    // edge hops sideways to them (discussion #795).
+    const int pick = PhosphorGeometry::directionalNeighbor(QRectF(sourceGeom), candidates, *dir, true);
     return pick < 0 ? QString() : candidateIds.at(pick);
 }
 

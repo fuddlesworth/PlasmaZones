@@ -556,7 +556,13 @@ void SettingsAdaptor::initializeRegistry()
     if (m_profileRegistry) {
         auto* registry = m_profileRegistry;
         m_getters[QString(PhosphorProtocol::Service::SettingProperty::MotionProfileTree)] = [registry]() {
-            const QHash<QString, PhosphorAnimation::Profile> profiles = registry->snapshot();
+            // Seed-owned family defaults must NOT ship: every non-Global entry
+            // below becomes a tree OVERRIDE, and an override's engaged fields
+            // beat the effect's animator baseline in overlayChainOnto — a
+            // `window` seed would pin all window legs to its duration/curve and
+            // turn the global animation settings into a no-op (#795). Only
+            // user-authored per-event profiles may outrank the baseline.
+            const QHash<QString, PhosphorAnimation::Profile> profiles = registry->snapshotExcludingLowPrecedence();
             PhosphorAnimation::ProfileTree tree;
             for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
                 if (it.key() == PhosphorAnimation::ProfilePaths::Global) {

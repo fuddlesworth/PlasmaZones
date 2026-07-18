@@ -41,6 +41,11 @@ namespace PlasmaZones {
 void SettingsController::load()
 {
     m_loading = true;
+    // A full load adopts the on-disk state wholesale, which is everything a
+    // reload deferred by onExternalSettingsChanged() would have done — clear
+    // the flag so the clean transition at the end of this load doesn't
+    // schedule a redundant second reload.
+    m_pendingExternalReload = false;
     // Animation pages persist per-event motion overrides as separate
     // files (file-per-path under ~/.local/share/plasmazones/profiles/);
     // m_settings.load() alone wouldn't restore them on Discard. The
@@ -218,6 +223,13 @@ void SettingsController::save()
     // a spurious load() that reverts just-saved assignments. Posting the
     // reset through singleShot(0) drains those queued signals first, so
     // onExternalSettingsChanged() sees m_saving=true and returns early.
+    //
+    // A reload deferred while edits were pending is superseded by this save:
+    // the whole-schema flush above rewrote the file from this process's
+    // state, so re-reading disk afterwards would recover nothing of the
+    // external change. Clear the flag so the clean transition below doesn't
+    // fire a pointless reload.
+    m_pendingExternalReload = false;
     setNeedsSave(false);
     // Window-rule failure handling moved to RuleController itself
     // (see pushToDaemonAsync): a failed/partial-drop push keeps the page
@@ -250,6 +262,10 @@ void SettingsController::save()
 
 void SettingsController::defaults()
 {
+    // A factory reset rewrites the whole schema to disk just like save()
+    // does, superseding any reload deferred while edits were pending —
+    // clear the flag for the same reason save() does.
+    m_pendingExternalReload = false;
     // Hold m_loading = true through the ENTIRE reset cleanup, not just
     // the reset() call. revertPending() emits pendingChangesChanged
     // synchronously and the staged-order reset transitions through
