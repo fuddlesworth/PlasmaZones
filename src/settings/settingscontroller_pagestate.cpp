@@ -13,6 +13,8 @@
 
 #include "settingscontroller.h"
 
+#include "decorationpagescope.h"
+
 #include "../core/logging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -201,57 +203,12 @@ bool isDecorationPage(const QString& page)
     return SettingsController::pageGroupChildren().value(QStringLiteral("decorations")).contains(page);
 }
 
-// The DecorationProfileTree root a decoration surface page owns. The three
-// surface pages each edit exactly one root subtree — "window" (+ .tiled/.snapped/
-// .floating), "osd", or "popup" (+ .snapAssist/.zoneSelector/.layoutPicker) — so
-// per-page Reset/Discard/dirty must be scoped to that root or one surface's
-// revert clobbers the others (the bug this mapping fixes). The roots mirror the
-// surfacePath prefixes the QML pages bind (DecorationWindowsPage etc.) and the
-// DecorationSupportedPaths taxonomy. Returns an empty string for the non-surface
-// decoration leaves — the sets library and the read-only shaders browser — whose
-// Reset/Discard/dirty act on the whole editable tree (every root at once).
-QString decorationSurfaceRoot(const QString& page)
-{
-    static const QHash<QString, QString> roots{
-        {QStringLiteral("decorations-windows"), QStringLiteral("window")},
-        {QStringLiteral("decorations-osds"), QStringLiteral("osd")},
-        {QStringLiteral("decorations-popups"), QStringLiteral("popup")},
-    };
-    return roots.value(page);
-}
-
-// True iff @p path is @p root itself or a descendant of it ("window" owns
-// "window", "window.tiled", …; "osd" owns only "osd"). The dot guard keeps a
-// sibling root with a shared prefix from leaking in — there are none today, but
-// it costs nothing and documents the intent.
-bool decorationPathInRoot(const QString& path, const QString& root)
-{
-    return path == root || path.startsWith(root + QLatin1Char('.'));
-}
-
-// True iff the two trees' direct overrides differ anywhere under @p root. The
-// baseline (path "") is never under a surface root, so it is correctly excluded
-// — no surface page edits the global baseline (decoration sets carry none
-// either; see decorationpagecontroller_sets.cpp). Walks the union of both trees'
-// overridden paths so an override PRESENT in one and ABSENT in the other counts.
-bool decorationRootDiffers(const PhosphorSurfaceShaders::DecorationProfileTree& current,
-                           const PhosphorSurfaceShaders::DecorationProfileTree& baseline, const QString& root)
-{
-    QSet<QString> paths;
-    for (const QString& p : current.overriddenPaths())
-        if (decorationPathInRoot(p, root))
-            paths.insert(p);
-    for (const QString& p : baseline.overriddenPaths())
-        if (decorationPathInRoot(p, root))
-            paths.insert(p);
-    for (const QString& p : paths) {
-        if (current.hasOverride(p) != baseline.hasOverride(p))
-            return true;
-        if (current.directOverride(p) != baseline.directOverride(p))
-            return true;
-    }
-    return false;
-}
+// decorationSurfaceRoot / decorationPathInRoot / decorationRootDiffers moved
+// to decorationpagescope.{h,cpp}: they are pure page→root scoping logic with
+// no SettingsController dependency, split out so the root dispatch and
+// root-scoped diffing are directly unit-testable
+// (tests/unit/settings/test_decoration_page_scope.cpp) without constructing
+// the whole settings-app object graph.
 
 // The decoration "value" surface: one Store-backed key. It cannot ride the
 // pageOwnedConfigKeys manifest — every decoration leaf would own the

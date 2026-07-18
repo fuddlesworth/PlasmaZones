@@ -45,6 +45,11 @@ set(plasmazones_settings_SRCS
     settingscontroller_dbuswire.cpp
     # Active-page navigation + per-page dirty tracking + external-edit envelope.
     settingscontroller_pagestate.cpp
+    # Pure decoration page→root scoping helpers (root dispatch, prefix match,
+    # root-scoped tree diff), split from pagestate so they unit-test without
+    # the whole settings-app object graph.
+    decorationpagescope.h
+    decorationpagescope.cpp
     # RAII begin/endExternalEdit wrapper, extracted from settingscontroller.h.
     externaleditscope.h
     externaleditscope.cpp
