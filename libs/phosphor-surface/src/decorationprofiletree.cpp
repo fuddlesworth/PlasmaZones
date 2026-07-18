@@ -71,21 +71,22 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
 
     DecorationProfileTree merged = *this;
 
-    // Baseline: the walk for the root IS the baseline, so the per-field gates
-    // collapse to the baseline's own slots (chain unengaged as the master
-    // gate, then each unengaged field takes the seed's).
-    if (!m_baseline.chain.has_value()) {
+    // Baseline: the empty path's walk collapses to the baseline's own slots,
+    // so the SAME per-field gates apply — chain as the master gate, then each
+    // field checks its own engagement. Sharing the lambda keeps the baseline
+    // and per-path gate expressions from ever drifting apart.
+    if (!fieldEngagedOnWalk(QString(), &DecorationProfile::chain)) {
         DecorationProfile baseline = merged.m_baseline;
         bool changed = false;
         if (seeds.m_baseline.chain) {
             baseline.chain = seeds.m_baseline.chain;
             changed = true;
         }
-        if (!baseline.parameters && seeds.m_baseline.parameters) {
+        if (seeds.m_baseline.parameters && !fieldEngagedOnWalk(QString(), &DecorationProfile::parameters)) {
             baseline.parameters = seeds.m_baseline.parameters;
             changed = true;
         }
-        if (!baseline.disabledPacks && seeds.m_baseline.disabledPacks) {
+        if (seeds.m_baseline.disabledPacks && !fieldEngagedOnWalk(QString(), &DecorationProfile::disabledPacks)) {
             baseline.disabledPacks = seeds.m_baseline.disabledPacks;
             changed = true;
         }

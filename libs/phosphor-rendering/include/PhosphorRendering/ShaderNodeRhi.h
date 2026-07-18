@@ -25,11 +25,11 @@
 #include <QVector4D>
 
 #include <array>
-#include <optional>
 #include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 #include <rhi/qrhi.h>
 

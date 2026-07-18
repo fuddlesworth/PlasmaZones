@@ -476,6 +476,33 @@ private Q_SLOTS:
         QCOMPARE(mergedCustom.baseline().effectiveChain(), QStringList{QStringLiteral("border")});
         QVERIFY2(!mergedCustom.baseline().parameters.has_value(),
                  "seed baseline parameters must not leak under a user-engaged baseline chain");
+
+        // Chain UNengaged but a field engaged: the seed chain still lands
+        // while the engaged field keeps the user's value — the per-field
+        // baseline gates, one by one.
+        DecorationProfileTree tuned;
+        DecorationProfile tune;
+        QVariantMap ownParams;
+        ownParams.insert(QStringLiteral("glow"), QVariantMap{});
+        tune.parameters = ownParams;
+        tuned.setBaseline(tune);
+        const DecorationProfile tunedBaseline = tuned.withSeedDefaults(seeds).baseline();
+        QCOMPARE(tunedBaseline.effectiveChain(), QStringList{QStringLiteral("glow")});
+        QVERIFY2(tunedBaseline.parameters == ownParams,
+                 "an engaged user baseline parameters map must win over the seed's");
+
+        DecorationProfileTree allOn;
+        DecorationProfile keepAll;
+        keepAll.disabledPacks = QStringList{};
+        allOn.setBaseline(keepAll);
+        DecorationProfileTree seedsWithDisable = seeds;
+        DecorationProfile seedBase = seeds.baseline();
+        seedBase.disabledPacks = QStringList{QStringLiteral("glow")};
+        seedsWithDisable.setBaseline(seedBase);
+        const DecorationProfile allOnBaseline = allOn.withSeedDefaults(seedsWithDisable).baseline();
+        QCOMPARE(allOnBaseline.effectiveChain(), QStringList{QStringLiteral("glow")});
+        QVERIFY2(allOnBaseline.disabledPacks == QStringList{},
+                 "an engaged-but-empty user disable set must win over the seed baseline's");
     }
 
     /// disabledPacks injects like the other fields: it lands in an unengaged

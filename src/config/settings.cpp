@@ -1637,12 +1637,34 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
     // surface arrives as {chain: seed chain, parameters: user map}, and
     // storing only the parameters keeps the chain seed-owned so shipped chain
     // improvements still flow. Each strip is validated by regenerating the
-    // candidate through withSeedDefaults and requiring the ORIGINAL override
-    // back — that check inherently honours the overlay's injection gates, so
-    // a field that merely LOOKS like a seed but whose removal would change
-    // the resolved result (e.g. a chain-only override whose parameters would
-    // then inject, or a map shadowed by an engaged ancestor) is left alone.
+    // candidate through withSeedDefaults and requiring the WHOLE merged view
+    // back unchanged — not just this path's override. The whole-view check
+    // honours the overlay's injection gates everywhere: a field that merely
+    // LOOKS like a seed but whose removal would change the resolved result
+    // (a chain-only override whose parameters would then inject, a map
+    // shadowed by an engaged ancestor, or a stripped chain re-opening the
+    // master gate for a descendant seed path) is left alone.
     const auto seeds = ConfigDefaults::decorationProfileTree();
+    // Order-insensitive merged-view equality: the tree's operator== also
+    // compares insertion order, and a strip-then-reinject legitimately moves
+    // the reinjected path to the end, while resolve() ignores order entirely.
+    const auto mergedEquivalent = [](const PhosphorSurfaceShaders::DecorationProfileTree& a,
+                                     const PhosphorSurfaceShaders::DecorationProfileTree& b) {
+        if (!(a.baseline() == b.baseline()))
+            return false;
+        const QStringList aPaths = a.overriddenPaths();
+        QSet<QString> paths(aPaths.cbegin(), aPaths.cend());
+        const QStringList bPaths = b.overriddenPaths();
+        for (const QString& p : bPaths)
+            paths.insert(p);
+        for (const QString& p : paths) {
+            if (a.hasOverride(p) != b.hasOverride(p))
+                return false;
+            if (a.hasOverride(p) && !(a.directOverride(p) == b.directOverride(p)))
+                return false;
+        }
+        return true;
+    };
     for (const QString& path : seeds.overriddenPaths()) {
         if (!pruned.hasOverride(path))
             continue;
@@ -1652,8 +1674,7 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
         if (!regenerated.hasOverride(path))
             continue;
         const auto seedView = regenerated.directOverride(path);
-        const auto original = pruned.directOverride(path);
-        auto candidate = original;
+        auto candidate = pruned.directOverride(path);
         bool strippedAny = false;
         const auto stripField = [&](auto member) {
             auto& slot = candidate.*member;
@@ -1673,8 +1694,7 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
             candidateTree.clearOverride(path);
         else
             candidateTree.setOverride(path, candidate);
-        const auto verify = candidateTree.withSeedDefaults(seeds);
-        if (verify.hasOverride(path) && verify.directOverride(path) == original)
+        if (mergedEquivalent(candidateTree.withSeedDefaults(seeds), pruned.withSeedDefaults(seeds)))
             pruned = candidateTree;
     }
     // Value-equality compare against the STORED (raw, pre-overlay) tree so a
