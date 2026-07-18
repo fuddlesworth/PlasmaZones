@@ -1206,19 +1206,20 @@ add_test(NAME test_zone_zorder COMMAND test_zone_zorder)
 # ReplyMessage, which EditorController::saveLayout then treats as a landed write
 # (clean undo stack, no unsaved-changes prompt, work lost on close). The client
 # hard-binds the daemon's bus name, so the stub registry has to claim it — the
-# test skips itself when a real daemon already owns the name, hence the
-# dbus-run-session wrapper. DBusLayoutService lives in the editor executable
-# rather than a library, so its TU is compiled into the test directly.
-# ILayoutService.h declares its Q_OBJECT base entirely in the header, so it is
-# listed explicitly: AUTOMOC has to see it to emit the base's metaobject.
+# shared TEST_LAUNCHER's private bus (see the D-Bus isolation block at the
+# bottom) guarantees the name is unowned; when the launcher is unavailable the
+# test skips itself if a real daemon already owns the name. DBusLayoutService
+# lives in the editor executable rather than a library, so its TU is compiled
+# into the test directly. ILayoutService.h declares its Q_OBJECT base entirely
+# in the header, so it is listed explicitly: AUTOMOC has to see it to emit the
+# base's metaobject.
 add_executable(test_dbus_layout_service_replies editor/test_dbus_layout_service_replies.cpp
                ${CMAKE_SOURCE_DIR}/src/editor/services/DBusLayoutService.cpp
                ${CMAKE_SOURCE_DIR}/src/editor/services/ILayoutService.h)
 target_link_libraries(test_dbus_layout_service_replies
                       PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                               PhosphorProtocol::PhosphorProtocol)
-add_test(NAME test_dbus_layout_service_replies
-         COMMAND dbus-run-session -- $<TARGET_FILE:test_dbus_layout_service_replies>)
+add_test(NAME test_dbus_layout_service_replies COMMAND test_dbus_layout_service_replies)
 
 # Decoration page→root scoping helpers (decorationpagescope.{h,cpp}): the pure
 # dispatch/prefix/diff logic behind SettingsController's per-page decoration

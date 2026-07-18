@@ -287,7 +287,7 @@ int main(int argc, char** argv)
     // display/GL gate yet never compile the shaders. Exit with the ctest
     // SKIP_RETURN_CODE (see the target's test property) unless the developer
     // explicitly asked for the live run.
-    if (!qEnvironmentVariableIsSet("PLASMAZONES_GPU_TESTS")) {
+    if (qEnvironmentVariableIntValue("PLASMAZONES_GPU_TESTS") == 0) {
         fprintf(stderr, "SKIP: live-session GPU test — set PLASMAZONES_GPU_TESTS=1 to run it\n");
         return 77;
     }
