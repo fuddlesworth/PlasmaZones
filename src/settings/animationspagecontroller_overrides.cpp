@@ -141,8 +141,8 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     // taken before the worker started. A simultaneous setOverride on
     // a path the worker is processing would race: last writer wins on
     // disk (non-deterministic), and the worker's finished handler
-    // would clear the dirty bit afterward — silently dropping the
-    // user's concurrent edit. The QML chrome already gates the
+    // would drop this path's snapshot when it merges its results back,
+    // silently losing the user's concurrent edit. The QML chrome already gates the
     // editor controls on `discarding`, but defence-in-depth at the
     // C++ Q_INVOKABLE entry point protects programmatic callers.
     if (m_asyncRevertInFlight) {

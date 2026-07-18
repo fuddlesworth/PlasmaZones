@@ -330,10 +330,10 @@ void AnimationsPageController::apply()
         return;
     }
     commitPending();
-    // commitPending is synchronous (just clears the snapshot map +
-    // dirty bit; the per-edit writes already hit disk through
-    // setOverride). Signal completion immediately so the chrome's
-    // applyAllAsync wait-counter ticks down.
+    // commitPending is synchronous (just clears the snapshot map; the
+    // per-edit writes already hit disk through setOverride, and shader-tree
+    // dirtiness is value-based against the committed baseline). Signal
+    // completion immediately so the chrome's applyAllAsync wait-counter ticks down.
     Q_EMIT applyResult(true, QString());
 }
 
