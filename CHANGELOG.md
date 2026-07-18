@@ -5,6 +5,21 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.2] - 2026-07-18
+
+### Added
+
+- **Fuller support reports**: the support report archive now includes your rules, quick layouts, layout settings, and settings profiles, with home paths redacted, and the daemon's report gains a Rules section. Earlier reports were missing these files, which made several bug reports slow to diagnose ([#797](https://github.com/fuddlesworth/PlasmaZones/pull/797)).
+
+### Fixed
+
+- **Global animation settings work again**: since 3.2.0, window animations ignored the global Duration and Curve settings and always played at a fixed 200 ms. Windows follow the global settings again, and a per-event override still wins where you set one ([#797](https://github.com/fuddlesworth/PlasmaZones/pull/797)).
+- **Cross-monitor moves no longer hop sideways**: moving a window down or up to another monitor could jump to a monitor beside the current one when your monitors have different heights. The move now only targets a monitor that actually lines up in the direction of the move ([#797](https://github.com/fuddlesworth/PlasmaZones/pull/797)).
+- **Settings survive concurrent writers**: when the settings app and the daemon wrote the configuration at the same time, a stale in-memory copy could resurrect old values over a just-saved change, and an external change notification could silently drop unsaved edits. Both paths now stay coherent ([#797](https://github.com/fuddlesworth/PlasmaZones/pull/797)).
+- **Per-page Reset and Discard stay on their page**: on the Decoration and Animations settings families, resetting or discarding one page could also revert its sibling pages. Each page now only touches its own settings ([#794](https://github.com/fuddlesworth/PlasmaZones/pull/794)).
+- **Resetting OSD and Popup decorations restores the built-in look**: resetting the Decoration → OSDs or Decoration → Popups page removed the built-in card border and shadow instead of restoring them. The built-in chrome is now a default layer underneath your edits, so reset brings it back, and setups that had already lost it heal on their own ([#798](https://github.com/fuddlesworth/PlasmaZones/pull/798)).
+- **Upside-down decorations on OpenGL**: window decorations could render flipped vertically on the OpenGL backend when two or more decoration packs were combined, and during show or hide transitions. The Vulkan backend was unaffected ([#798](https://github.com/fuddlesworth/PlasmaZones/pull/798)).
+
 ## [3.2.1] - 2026-07-17
 
 ### Added

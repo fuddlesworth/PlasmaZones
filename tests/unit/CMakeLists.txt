@@ -1232,6 +1232,52 @@ target_link_libraries(test_dbus_layout_service_replies
 add_test(NAME test_dbus_layout_service_replies
          COMMAND dbus-run-session -- $<TARGET_FILE:test_dbus_layout_service_replies>)
 
+# Decoration page→root scoping helpers (decorationpagescope.{h,cpp}): the pure
+# dispatch/prefix/diff logic behind SettingsController's per-page decoration
+# Reset/Discard/dirty branches, compiled directly (it lives in the
+# plasmazones-settings executable). Pure QString + DecorationProfileTree — no
+# controller construction needed.
+add_executable(test_decoration_page_scope
+    settings/test_decoration_page_scope.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagescope.cpp
+)
+target_include_directories(test_decoration_page_scope PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_decoration_page_scope
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+)
+add_test(NAME test_decoration_page_scope COMMAND test_decoration_page_scope)
+
+# GPU-gated orientation guard for the per-render-target NDC Y-flip: renders a
+# two-stage surface-decoration chain (border + shadow via ShaderEffectSource
+# taps, mirroring SurfaceDecoration.qml) on a forced OpenGL scene graph and
+# asserts the sampled card content is upright. Skips itself cleanly when no
+# display server or GL context is available (its custom main drops the forced
+# offscreen QPA — an offscreen GL grab returns a uniform placeholder and
+# proves nothing).
+add_executable(test_surface_decoration_orientation
+    rendering/test_surface_decoration_orientation.cpp
+)
+target_compile_definitions(test_surface_decoration_orientation PRIVATE
+    PLASMAZONES_SOURCE_ROOT="${CMAKE_SOURCE_DIR}")
+target_link_libraries(test_surface_decoration_orientation
+    PRIVATE
+        Qt6::Test
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+        plasmazones_rendering
+        PhosphorSurface::PhosphorSurface
+)
+add_test(NAME test_surface_decoration_orientation COMMAND test_surface_decoration_orientation)
+# Headless runs exit with 77 from the test's custom main (no display server),
+# which ctest reports as SKIPPED rather than Passed — honest status for the
+# GPU gate. In-test QSKIPs still exit 0 via qExec (green, Qt's contract).
+set_tests_properties(test_surface_decoration_orientation PROPERTIES SKIP_RETURN_CODE 77)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation
 # Apply a shared environment to every test in this directory so new tests added

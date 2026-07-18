@@ -10,9 +10,13 @@
  * Decorations/DecorationProfileTree, mirroring how the animation
  * shaderProfileTree persists under Animations/ShaderProfileTree. Pinned
  * behaviour:
- *   - a fresh Settings returns the EMPTY/neutral ConfigDefaults tree
- *     (no baseline chain, no overrides — border/titlebar visuals are
- *     rule-owned, not tree-owned)
+ *   - a fresh Settings returns the ConfigDefaults tree: a neutral baseline
+ *     (no global chain — border/titlebar visuals are rule-owned) plus the
+ *     built-in card chrome for the OSD and PopupFrame popups
+ *   - the card chrome is a read-side SEED layer, not stored data: a blob
+ *     that lacks the seeded paths still renders them, an explicit empty
+ *     chain keeps a surface undecorated, and the write path strips
+ *     seed-identical overrides so the stored blob holds only user edits
  *   - setDecorationProfileTree round-trips a baseline chain + a leaf
  *     override across save/load and across a fresh Settings instance
  *     (the cross-process daemon path)
@@ -23,6 +27,7 @@
  *     malformed JSON is ignored (no signal, tree unchanged)
  */
 
+#include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
@@ -257,6 +262,246 @@ private Q_SLOTS:
         a.save();
         QVERIFY(a.committedDecorationProfileTree().hasOverride(QStringLiteral("window.tiled")));
         QVERIFY(a.committedDecorationProfileTree() == a.decorationProfileTree());
+    }
+
+    /// The card chrome is a read-side seed layer, not stored data: a persisted
+    /// blob that never mentions the seeded paths (a user edit elsewhere in the
+    /// tree, or a config written before the defaults existed) still renders
+    /// the OSD/popup defaults. Regression guard for the "boring square
+    /// surfaces" failure where any saved tree silently dropped the chrome.
+    void testDecorationProfileTree_seedsSurviveUnrelatedUserEdits()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        // An unrelated edit: window.tiled gets glow, nothing baseline, nothing
+        // at the seeded paths.
+        PhosphorSurfaceShaders::DecorationProfileTree tree = a.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile leaf;
+        leaf.chain = QStringList{QStringLiteral("glow")};
+        tree.setOverride(QStringLiteral("window.tiled"), leaf);
+        a.setDecorationProfileTree(tree);
+        a.save();
+
+        // Same instance and a fresh instance (the daemon's cross-process read)
+        // both keep the seeded chrome next to the user edit.
+        const auto reread = a.decorationProfileTree();
+        QCOMPARE(reread.directOverride(QStringLiteral("window.tiled")).effectiveChain(),
+                 QStringList{QStringLiteral("glow")});
+        QCOMPARE(reread.resolve(QStringLiteral("osd")).enabledChain(),
+                 (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));
+        Settings b;
+        QCOMPARE(b.decorationProfileTree().resolve(QStringLiteral("osd")).enabledChain(),
+                 (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));
+    }
+
+    /// The write path strips overrides the seed layer regenerates verbatim, so
+    /// the stored blob holds only user edits — a shipped default improvement
+    /// must reach configs that never customized the seeded surfaces. Callers
+    /// read the MERGED tree and write the whole tree back, so without the
+    /// strip the injected chrome would freeze into the blob on the first
+    /// unrelated edit.
+    void testDecorationProfileTree_writeStripsSeedIdenticalOverrides()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        // Write the merged view back with one real edit — the seed entries ride
+        // along exactly as injected.
+        PhosphorSurfaceShaders::DecorationProfileTree tree = a.decorationProfileTree();
+        QVERIFY(tree.hasOverride(QStringLiteral("osd")));
+        PhosphorSurfaceShaders::DecorationProfile leaf;
+        leaf.chain = QStringList{QStringLiteral("glow")};
+        tree.setOverride(QStringLiteral("window.tiled"), leaf);
+        a.setDecorationProfileTree(tree);
+        a.save();
+
+        // The persisted blob must carry ONLY the user edit.
+        QFile file(guard.configPath() + QStringLiteral("/plasmazones/config.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+        const QJsonObject blob = root.value(QLatin1String("Decorations"))
+                                     .toObject()
+                                     .value(QLatin1String("DecorationProfileTree"))
+                                     .toObject();
+        const auto stored = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(blob);
+        QCOMPARE(stored.overriddenPaths(), QStringList{QStringLiteral("window.tiled")});
+    }
+
+    /// Clearing a seeded surface's user override (what per-page Reset does)
+    /// reveals the seed chrome again, and an explicit empty chain persists as
+    /// "undecorated" across instances. Regression guard for the Reset flow
+    /// that left the OSD bare instead of restoring the defaults.
+    void testDecorationProfileTree_resetRevealsSeedsAndExplicitEmptySticks()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        // Customize the OSD, then clear the override (Reset).
+        PhosphorSurfaceShaders::DecorationProfileTree tree = a.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile custom;
+        custom.chain = QStringList{QStringLiteral("glow")};
+        tree.setOverride(QStringLiteral("osd"), custom);
+        a.setDecorationProfileTree(tree);
+        QCOMPARE(a.decorationProfileTree().resolve(QStringLiteral("osd")).enabledChain(),
+                 QStringList{QStringLiteral("glow")});
+
+        tree = a.decorationProfileTree();
+        QVERIFY(tree.clearOverride(QStringLiteral("osd")));
+        a.setDecorationProfileTree(tree);
+        QCOMPARE(a.decorationProfileTree().resolve(QStringLiteral("osd")).enabledChain(),
+                 (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));
+
+        // Explicitly undecorated: engaged-but-empty chain survives save + a
+        // fresh instance without the seed resurrecting.
+        tree = a.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile none;
+        none.chain = QStringList{};
+        tree.setOverride(QStringLiteral("osd"), none);
+        a.setDecorationProfileTree(tree);
+        a.save();
+        QVERIFY(a.decorationProfileTree().resolve(QStringLiteral("osd")).enabledChain().isEmpty());
+        Settings b;
+        QVERIFY2(b.decorationProfileTree().resolve(QStringLiteral("osd")).enabledChain().isEmpty(),
+                 "an explicit empty chain must persist as undecorated");
+    }
+
+    /// A parameters-only retune of a seeded surface persists ONLY the
+    /// parameters: the UI writes back the merged view (seed chain injected),
+    /// and the field-level strip must drop the seed-equal chain so it stays
+    /// seed-owned (a shipped chain improvement still reaches this config)
+    /// while the retuned map survives and resolves under the seed chain.
+    void testDecorationProfileTree_paramsOnlyRetuneKeepsChainSeedOwned()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        // Retune exactly as the UI does: read the merged tree, tweak one
+        // param on the seeded osd override, write the whole tree back.
+        PhosphorSurfaceShaders::DecorationProfileTree tree = a.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile osd = tree.directOverride(QStringLiteral("osd"));
+        QVERIFY(osd.chain.has_value());
+        QVariantMap params = osd.effectiveParameters();
+        QVariantMap shadowParams = params.value(QStringLiteral("shadow")).toMap();
+        shadowParams.insert(QStringLiteral("shadowStrength"), 0.95);
+        params.insert(QStringLiteral("shadow"), shadowParams);
+        osd.parameters = params;
+        tree.setOverride(QStringLiteral("osd"), osd);
+        a.setDecorationProfileTree(tree);
+        a.save();
+
+        // Stored blob: parameters engaged, chain NOT engaged (seed-owned).
+        QFile file(guard.configPath() + QStringLiteral("/plasmazones/config.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+        const auto stored =
+            PhosphorSurfaceShaders::DecorationProfileTree::fromJson(root.value(QLatin1String("Decorations"))
+                                                                        .toObject()
+                                                                        .value(QLatin1String("DecorationProfileTree"))
+                                                                        .toObject());
+        QVERIFY(stored.hasOverride(QStringLiteral("osd")));
+        QVERIFY2(!stored.directOverride(QStringLiteral("osd")).chain.has_value(),
+                 "a params-only retune must not freeze the seed chain into the blob");
+        QVERIFY(stored.directOverride(QStringLiteral("osd")).parameters.has_value());
+
+        // A fresh instance resolves the seed chain with the retuned map.
+        Settings b;
+        const auto resolved = b.decorationProfileTree().resolve(QStringLiteral("osd"));
+        QCOMPARE(resolved.enabledChain(), (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));
+        QCOMPARE(resolved.effectiveParameters()
+                     .value(QStringLiteral("shadow"))
+                     .toMap()
+                     .value(QStringLiteral("shadowStrength"))
+                     .toDouble(),
+                 0.95);
+    }
+
+    /// The strip's whole-view guard must REFUSE a strip that would change the
+    /// resolved result: a chain-only override equal to the seed chain blocks
+    /// the seed's parameters via the master gate, so stripping it would let
+    /// the seed parameters inject. The override must persist as-is, and the
+    /// merged view must keep the osd free of seed parameters.
+    void testDecorationProfileTree_chainOnlySeedEqualOverrideIsNotStripped()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        const auto seedChain =
+            ConfigDefaults::decorationProfileTree().directOverride(QStringLiteral("osd")).effectiveChain();
+        PhosphorSurfaceShaders::DecorationProfileTree tree = a.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile chainOnly;
+        chainOnly.chain = seedChain;
+        tree.setOverride(QStringLiteral("osd"), chainOnly);
+        a.setDecorationProfileTree(tree);
+        a.save();
+
+        // Stored blob keeps the chain-engaged override.
+        QFile file(guard.configPath() + QStringLiteral("/plasmazones/config.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+        const auto stored =
+            PhosphorSurfaceShaders::DecorationProfileTree::fromJson(root.value(QLatin1String("Decorations"))
+                                                                        .toObject()
+                                                                        .value(QLatin1String("DecorationProfileTree"))
+                                                                        .toObject());
+        QVERIFY2(stored.hasOverride(QStringLiteral("osd"))
+                     && stored.directOverride(QStringLiteral("osd")).chain.has_value(),
+                 "a chain-only override must not be stripped even when it equals the seed chain");
+
+        // Merged view: the engaged chain closes the master gate, so the seed
+        // parameters must NOT appear at osd.
+        const auto merged = a.decorationProfileTree();
+        QCOMPARE(merged.resolve(QStringLiteral("osd")).enabledChain(), seedChain);
+        QVERIFY2(!merged.directOverride(QStringLiteral("osd")).parameters.has_value(),
+                 "seed parameters must not inject under a user-engaged chain");
+    }
+
+    /// Cross-root isolation of the per-page Reset mechanism: clearing the
+    /// "osd" root's overrides from the merged view (what
+    /// SettingsController::resetPage does for the OSDs page) reveals the osd
+    /// seed again while a real popup edit stands, and the stored blob keeps
+    /// only that edit.
+    void testDecorationProfileTree_rootScopedClearPreservesSiblingRoots()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings a;
+        // A real edit in the popup root plus a customized osd.
+        PhosphorSurfaceShaders::DecorationProfileTree tree = a.decorationProfileTree();
+        PhosphorSurfaceShaders::DecorationProfile glow;
+        glow.chain = QStringList{QStringLiteral("glow")};
+        tree.setOverride(QStringLiteral("popup.zoneSelector"), glow);
+        tree.setOverride(QStringLiteral("osd"), glow);
+        a.setDecorationProfileTree(tree);
+
+        // resetPage("decorations-osds") mechanism: clear this root's overrides
+        // from the merged view and write back.
+        tree = a.decorationProfileTree();
+        const QStringList paths = tree.overriddenPaths();
+        for (const QString& path : paths) {
+            if (path == QLatin1String("osd") || path.startsWith(QLatin1String("osd.")))
+                tree.clearOverride(path);
+        }
+        a.setDecorationProfileTree(tree);
+        a.save();
+
+        // OSD seed chrome is back; the popup edit stands.
+        const auto merged = a.decorationProfileTree();
+        QCOMPARE(merged.resolve(QStringLiteral("osd")).enabledChain(),
+                 (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));
+        QCOMPARE(merged.resolve(QStringLiteral("popup.zoneSelector")).enabledChain(),
+                 QStringList{QStringLiteral("glow")});
+
+        // Stored blob holds only the popup edit.
+        QFile file(guard.configPath() + QStringLiteral("/plasmazones/config.json"));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+        const auto stored =
+            PhosphorSurfaceShaders::DecorationProfileTree::fromJson(root.value(QLatin1String("Decorations"))
+                                                                        .toObject()
+                                                                        .value(QLatin1String("DecorationProfileTree"))
+                                                                        .toObject());
+        QCOMPARE(stored.overriddenPaths(), QStringList{QStringLiteral("popup.zoneSelector")});
     }
 };
 
