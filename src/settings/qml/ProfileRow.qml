@@ -221,36 +221,47 @@ ExpandableRowDelegate {
                 if (resolved !== undefined && resolved.length > 0)
                     return resolved;
                 if (value === undefined || value === null)
-                    return i18nc("a setting with no value", "unset");
+                    return i18nc("a setting with no value", "Unset");
                 if (typeof value === "boolean")
                     return value ? i18nc("a boolean setting that is on", "On") : i18nc("a boolean setting that is off", "Off");
 
-                const layouts = settingsController.layouts ? settingsController.layouts : [];
-                if (kind === "layoutId")
-                    return diffColumn.resolveById(layouts, value, "id", "displayName");
-                // Algorithms live in the layout list under an "autotile:" prefix,
-                // matching how the rule preview resolves them.
-                if (kind === "tilingAlgorithm")
-                    return diffColumn.resolveById(layouts, "autotile:" + value, "id", "displayName", value);
-                if (kind === "screenId")
-                    return diffColumn.resolveById(settingsController.screens ? settingsController.screens : [], value, "name", "displayLabel");
+                // Id kinds only ever claim STRINGS.
+                //
+                // A leaf nested in a structured key inherits that key's kind, and
+                // a shader or decoration tree holds both pack ids and numeric
+                // parameters. Without this guard a parameter took the pack
+                // branch, missed the catalogue, and fell back to its raw value —
+                // which is how 0.9500000000000001 reached the pill, having
+                // skipped the number formatting further down.
+                if (typeof value === "string") {
+                    const layouts = settingsController.layouts ? settingsController.layouts : [];
+                    if (kind === "layoutId")
+                        return diffColumn.resolveById(layouts, value, "id", "displayName");
+                    // Algorithms live in the layout list under an "autotile:"
+                    // prefix, matching how the rule preview resolves them.
+                    if (kind === "tilingAlgorithm")
+                        return diffColumn.resolveById(layouts, "autotile:" + value, "id", "displayName", value);
+                    if (kind === "screenId")
+                        return diffColumn.resolveById(settingsController.screens ? settingsController.screens : [], value, "name", "displayLabel");
+                    // The catalogues hang off settingsController, not appSettings
+                    // — the rule preview reaches them through a local alias bag
+                    // (RulesPage._editorAppSettings), which is why its code reads
+                    // as appSettings.*. They are separate registries: an
+                    // animation pack and an overlay pack sharing an id are
+                    // different things, so the kind picks the source.
+                    if (kind === "shaderPack")
+                        return diffColumn.resolvePack(settingsController.animationsPage, value);
+                    if (kind === "decorationPack")
+                        return diffColumn.resolvePack(settingsController.decorationPage, value);
+                    if (kind === "overlayShader")
+                        return diffColumn.resolvePack(settingsController.snappingShadersPage, value);
+                }
+                // A desktop is a number, so it sits outside the string guard.
                 if (kind === "virtualDesktop")
                     return diffColumn.resolveDesktop(value);
-                // The catalogues hang off settingsController, not appSettings —
-                // the rule preview reaches them through a local alias bag
-                // (RulesPage._editorAppSettings), which is why its code reads as
-                // appSettings.*. They are separate registries: an animation pack
-                // and an overlay pack sharing an id are different things, so the
-                // kind picks the source.
-                if (kind === "shaderPack")
-                    return diffColumn.resolvePack(settingsController.animationsPage, value);
-                if (kind === "decorationPack")
-                    return diffColumn.resolvePack(settingsController.decorationPage, value);
-                if (kind === "overlayShader")
-                    return diffColumn.resolvePack(settingsController.snappingShadersPage, value);
 
                 if (typeof value === "string")
-                    return value.length > 0 ? value : i18nc("an empty text setting", "empty");
+                    return value.length > 0 ? value : i18nc("an empty text setting", "Empty");
                 if (typeof value === "object")
                     return diffColumn.summarizeStructured(value);
                 // A double that came out of JSON carries its binary
@@ -309,13 +320,13 @@ ExpandableRowDelegate {
             /// mouseButton: 2 }` reads as "Alt + Right".
             function summarizeStructured(value) {
                 if (value.modifier !== undefined || value.mouseButton !== undefined) {
-                    return TriggerLabels.label(value.modifier || 0, value.mouseButton || 0, i18nc("a trigger with no modifier or button set", "none"));
+                    return TriggerLabels.label(value.modifier || 0, value.mouseButton || 0, i18nc("a trigger with no modifier or button set", "None"));
                 }
                 // A shape the store could not descend into (it caps nesting
                 // depth). Report the size so the row still says something, and
                 // leave the payload on the tooltip.
                 const keys = Object.keys(value);
-                return keys.length === 0 ? i18nc("a structured setting holding nothing", "none") : i18np("%n entry", "%n entries", keys.length);
+                return keys.length === 0 ? i18nc("a structured setting holding nothing", "None") : i18np("%n entry", "%n entries", keys.length);
             }
 
             /// Full payload for a structured value, shown on the pill's tooltip
