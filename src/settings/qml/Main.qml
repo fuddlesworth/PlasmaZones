@@ -842,9 +842,14 @@ PhosphorUi.SettingsAppWindow {
     // one STAGES it into the Save footer (applies on Save, reverts on Discard).
     // Collapses to nothing until at least one profile exists, and (being a
     // non-compact-aware footer consumer) hides in the narrow compact rail.
-    sidebar.footerContent: Component {
+    // Sticky sidebar-HEADER profile switcher — activate a settings profile from
+    // anywhere, mirroring the per-row Activate on the Profiles page. Selecting
+    // one STAGES it into the Save footer (applies on Save, reverts on Discard).
+    // Collapses to nothing until at least one profile exists, and (being a
+    // non-compact-aware header consumer) hides in the narrow compact rail.
+    sidebar.headerContent: Component {
         Item {
-            id: profileFooter
+            id: profileHeader
 
             readonly property var profilesBridge: settingsController.profilesPage ? settingsController.profilesPage.bridge : null
             property var profileRows: profilesBridge ? profilesBridge.availableProfiles() : []
@@ -855,167 +860,143 @@ PhosphorUi.SettingsAppWindow {
                 }
                 return -1;
             }
+            readonly property var activeRow: activeIndex >= 0 ? profileRows[activeIndex] : null
 
-            // Zero-height when there are no profiles, so the footer disappears.
-            implicitHeight: profileRows.length > 0 ? footerColumn.implicitHeight : 0
+            // Zero-height when there are no profiles, so the band disappears.
+            implicitHeight: profileRows.length > 0 ? switcherRow.implicitHeight + Kirigami.Units.smallSpacing * 2 : 0
 
             Connections {
                 function onProfilesChanged() {
-                    profileFooter.profileRows = profileFooter.profilesBridge.availableProfiles();
+                    profileHeader.profileRows = profileHeader.profilesBridge.availableProfiles();
                 }
 
-                target: profileFooter.profilesBridge
+                target: profileHeader.profilesBridge
             }
 
             // A settings edit doesn't fire profilesChanged but can flip the
             // active profile's `modified` state — re-read so the marker updates.
             Connections {
                 function onSettingsChanged() {
-                    profileFooter.profileRows = profileFooter.profilesBridge ? profileFooter.profilesBridge.availableProfiles() : [];
+                    profileHeader.profileRows = profileHeader.profilesBridge ? profileHeader.profilesBridge.availableProfiles() : [];
                 }
 
                 target: appSettings
             }
 
-            ColumnLayout {
-                id: footerColumn
+            RowLayout {
+                id: switcherRow
 
-                visible: profileFooter.profileRows.length > 0
+                visible: profileHeader.profileRows.length > 0
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.bottom: parent.bottom
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Kirigami.Units.smallSpacing
+                anchors.rightMargin: Kirigami.Units.smallSpacing
                 spacing: Kirigami.Units.smallSpacing
 
-                Kirigami.Separator {
-                    Layout.fillWidth: true
+                // The active profile's mark, BESIDE the field rather than inside
+                // it. The Desktop style neither honours leftPadding for the text
+                // nor tolerates a replaced contentItem (it calls
+                // positionToRectangle on that item), so an in-field mark lands on
+                // top of the name.
+                Item {
+                    visible: profileHeader.activeRow !== null
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                    implicitHeight: Kirigami.Units.iconSizes.smallMedium
+
+                    ProfileSignature {
+                        anchors.fill: parent
+                        signature: profileHeader.activeRow ? profileHeader.activeRow.signature : ""
+                    }
+
+                    // Modified badge — the settings have moved on from the
+                    // profile this mark represents.
+                    Rectangle {
+                        visible: profileHeader.activeRow !== null && profileHeader.activeRow.modified
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.rightMargin: -1
+                        anchors.topMargin: -1
+                        width: Kirigami.Units.smallSpacing * 1.5
+                        height: width
+                        radius: width / 2
+                        color: Kirigami.Theme.neutralTextColor
+                        border.width: 1
+                        border.color: Kirigami.Theme.backgroundColor
+                    }
                 }
 
-                Item {
-                    id: profileSwitcherSlot
-
-                    readonly property real markSize: Kirigami.Units.iconSizes.smallMedium
+                ComboBox {
+                    id: profileCombo
 
                     Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.smallSpacing
-                    Layout.rightMargin: Kirigami.Units.smallSpacing
-                    Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    implicitHeight: profileCombo.implicitHeight
+                    model: profileHeader.profileRows
+                    textRole: "name"
+                    // Bound to the active profile; `activated` fires only on a
+                    // real user pick (not this binding), so there is no loop.
+                    currentIndex: profileHeader.activeIndex
+                    displayText: profileHeader.activeRow ? profileHeader.activeRow.name : i18n("No profile")
+                    Accessible.name: i18n("Active profile")
+                    onActivated: function (index) {
+                        const row = profileHeader.profileRows[index];
+                        if (row && profileHeader.profilesBridge)
+                            profileHeader.profilesBridge.activateProfile(row.id);
+                    }
 
-                    ComboBox {
-                        id: profileCombo
+                    // Deliberately no ToolTip: this control sits over the page
+                    // list, and a hover tip here covers the very dropdown the
+                    // user is reaching for. The Profiles page spells the state
+                    // out in words instead.
 
-                        readonly property var activeRow: profileFooter.activeIndex >= 0 ? profileFooter.profileRows[profileFooter.activeIndex] : null
+                    // Each entry carries its own identicon, so the dropdown
+                    // reads as a gallery of profiles, not a plain name list.
+                    delegate: ItemDelegate {
+                        id: profileEntry
 
-                        anchors.fill: parent
-                        // Room for the identicon overlaid in the left inset below.
-                        // Padding (not a replaced contentItem): the Desktop style
-                        // drives contentItem as a text item — it calls
-                        // positionToRectangle on it — so swapping that breaks the
-                        // control.
-                        leftPadding: profileSwitcherSlot.markSize + Kirigami.Units.smallSpacing * 2
-                        model: profileFooter.profileRows
-                        textRole: "name"
-                        // Bound to the active profile; `activated` fires only on a
-                        // real user pick (not this binding), so there is no loop.
-                        currentIndex: profileFooter.activeIndex
-                        displayText: profileCombo.activeRow ? profileCombo.activeRow.name : i18n("No profile")
-                        Accessible.name: i18n("Active profile")
-                        onActivated: function (index) {
-                            const row = profileFooter.profileRows[index];
-                            if (row && profileFooter.profilesBridge)
-                                profileFooter.profilesBridge.activateProfile(row.id);
-                        }
+                        required property var modelData
+                        required property int index
 
-                        // Each entry carries its own identicon, so the dropdown
-                        // reads as a gallery of profiles, not a plain name list.
-                        delegate: ItemDelegate {
-                            id: profileEntry
+                        width: profileCombo.width
+                        highlighted: profileCombo.highlightedIndex === profileEntry.index
 
-                            required property var modelData
-                            required property int index
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
 
-                            width: profileCombo.width
-                            highlighted: profileCombo.highlightedIndex === profileEntry.index
+                            ProfileSignature {
+                                signature: profileEntry.modelData.signature
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                            }
 
-                            contentItem: RowLayout {
-                                spacing: Kirigami.Units.smallSpacing
+                            Label {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
+                                text: profileEntry.modelData.name
+                                elide: Text.ElideRight
+                                font.bold: profileEntry.modelData.active
+                            }
 
-                                ProfileSignature {
-                                    signature: profileEntry.modelData.signature
-                                    Layout.alignment: Qt.AlignVCenter
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
-                                }
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    Layout.alignment: Qt.AlignVCenter
-                                    text: profileEntry.modelData.name
-                                    elide: Text.ElideRight
-                                    font.bold: profileEntry.modelData.active
-                                }
-
-                                Kirigami.Icon {
-                                    visible: profileEntry.modelData.active
-                                    source: "dialog-ok"
-                                    Layout.alignment: Qt.AlignVCenter
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                    color: Kirigami.Theme.positiveTextColor
-                                }
+                            Kirigami.Icon {
+                                visible: profileEntry.modelData.active
+                                source: "dialog-ok"
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                color: Kirigami.Theme.positiveTextColor
                             }
                         }
-
-                        HoverHandler {
-                            id: profileComboHover
-                        }
-
-                        ToolTip.text: profileCombo.activeRow && profileCombo.activeRow.modified ? i18n("Active profile “%1” — the current settings have changed since it was applied", profileCombo.activeRow.name) : (profileCombo.activeRow ? i18n("Active profile “%1”", profileCombo.activeRow.name) : i18n("No profile is active"))
-                        ToolTip.visible: profileComboHover.hovered
                     }
+                }
 
-                    // The style sizes the popup from the delegate's implicit
-                    // width, which a custom delegate does not supply — without
-                    // this the list collapses to a sliver. Pin it to the field.
-                    Binding {
-                        target: profileCombo.popup
-                        property: "width"
-                        value: profileCombo.width
-                    }
-
-                    // The active profile's mark, overlaid in the field's left
-                    // inset (the leftPadding above reserves the room). Declared
-                    // after the ComboBox so it paints on top; it carries no input
-                    // handlers, so clicks fall through and still open the list.
-                    Item {
-                        visible: profileCombo.activeRow !== null
-                        anchors.left: parent.left
-                        anchors.leftMargin: Kirigami.Units.smallSpacing
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: profileSwitcherSlot.markSize
-                        height: profileSwitcherSlot.markSize
-
-                        ProfileSignature {
-                            anchors.fill: parent
-                            signature: profileCombo.activeRow ? profileCombo.activeRow.signature : ""
-                        }
-
-                        // Modified badge — the settings have moved on from the
-                        // profile this mark represents.
-                        Rectangle {
-                            visible: profileCombo.activeRow !== null && profileCombo.activeRow.modified
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.rightMargin: -1
-                            anchors.topMargin: -1
-                            width: Kirigami.Units.smallSpacing * 1.5
-                            height: width
-                            radius: width / 2
-                            color: Kirigami.Theme.neutralTextColor
-                            border.width: 1
-                            border.color: Kirigami.Theme.backgroundColor
-                        }
-                    }
+                // The style sizes the popup from the delegate's implicit width,
+                // which a custom delegate does not supply — without this the
+                // list collapses to a sliver. Pin it to the field.
+                Binding {
+                    target: profileCombo.popup
+                    property: "width"
+                    value: profileCombo.width
                 }
             }
         }

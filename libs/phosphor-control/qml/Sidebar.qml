@@ -17,6 +17,9 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  *   ┌─────────────────────────┐
  *   │ SearchField  (sticky)   │
  *   ├─────────────────────────┤
+ *   ┌─────────────────────────┐
+ *   │ headerContent (sticky)  │
+ *   ├─────────────────────────┤
  *   │ Back button (when drilled)
  *   │ ListView (scrollable)   │
  *   │ — rows drill / toggle / │
@@ -44,6 +47,8 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  *     the sidebar, OUTSIDE the scroll area. Stays visible across
  *     drill / scroll. Used by Phosphor for the persistent daemon
  *     status + enable/disable toggle.
+ *   - `headerContent`: the same, at the very TOP (above the search
+ *     field). Used by Phosphor for the settings-profile switcher.
  */
 ColumnLayout {
     id: root
@@ -85,6 +90,14 @@ ColumnLayout {
      *  enable/disable toggle that should be reachable from every
      *  page). */
     property Component footerContent: null
+
+    /** Component instantiated at the very TOP of the sidebar, above the
+     *  search field and outside the scroll area, so it stays put across
+     *  drill / scroll. Same compact-awareness contract as
+     *  `footerContent`: a consumer that declares `property bool compact`
+     *  stays visible in the icon-only rail and receives the live value;
+     *  one that does not is hidden there. */
+    property Component headerContent: null
     /** Suppress per-row add/remove animations while the whole list is
      *  cross-fading on drill-in/out. */
     property bool _suppressAccordion: false
@@ -489,6 +502,42 @@ ColumnLayout {
 
     ListModel {
         id: visibleModel
+    }
+
+    // ── Sticky header slot (e.g. a profile switcher) ────────────────
+    // Mirrors footerLoader below; see its comments for the sizing and
+    // compact-awareness rationale.
+    Loader {
+        id: headerLoader
+
+        readonly property bool _consumerIsCompactAware: item ? item.hasOwnProperty("compact") : false
+
+        Layout.fillWidth: true
+        Layout.preferredWidth: 0
+        Layout.preferredHeight: item ? item.implicitHeight : 0
+        active: root.headerContent !== null
+        visible: active && (!root.compact || _consumerIsCompactAware)
+        sourceComponent: root.headerContent
+        onLoaded: {
+            PhosphorLoaderHelpers.bindItemWidthToLoader(headerLoader);
+            PhosphorLoaderHelpers.injectIfAssignable(headerLoader.item, "compact", root.compact);
+        }
+
+        Connections {
+            function onCompactChanged() {
+                if (headerLoader.item)
+                    PhosphorLoaderHelpers.injectIfAssignable(headerLoader.item, "compact", root.compact);
+            }
+
+            target: root
+        }
+    }
+
+    // Divides the header slot from what follows, so the slot reads as its
+    // own band rather than running into the list.
+    Kirigami.Separator {
+        Layout.fillWidth: true
+        visible: headerLoader.visible
     }
 
     // ── Sticky search field at the top ──────────────────────────────
