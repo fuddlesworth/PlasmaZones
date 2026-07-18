@@ -41,6 +41,11 @@ p_add_test(test_session_persistence core/test_session_persistence.cpp)
 p_add_test(test_session_persistence_layout core/test_session_persistence_layout.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ - QML i18n Context Substitution Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_localized_context_substitution core/test_localized_context_substitution.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Window Tracking Service Tests (lifecycle, session, queries)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wts_lifecycle core/test_wts_lifecycle.cpp)
