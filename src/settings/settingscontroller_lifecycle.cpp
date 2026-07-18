@@ -262,6 +262,10 @@ void SettingsController::save()
 
 void SettingsController::defaults()
 {
+    // A factory reset rewrites the whole schema to disk just like save()
+    // does, superseding any reload deferred while edits were pending —
+    // clear the flag for the same reason save() does.
+    m_pendingExternalReload = false;
     // Hold m_loading = true through the ENTIRE reset cleanup, not just
     // the reset() call. revertPending() emits pendingChangesChanged
     // synchronously and the staged-order reset transitions through
