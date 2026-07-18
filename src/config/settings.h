@@ -1462,6 +1462,14 @@ private:
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
 
+    /// Reparse the backend from disk IF it holds no pending writes.
+    /// Called by every composite-value setter (animation Profile blob,
+    /// shader/decoration profile trees, autotile per-algorithm map,
+    /// snapping and tiling trigger lists including the zoneSpan pair)
+    /// before its stale-sensitive read; see the definition for the
+    /// cross-process coherence rationale.
+    void refreshCleanBackendFromDisk();
+
     // Patch one field of the Profile JSON blob and emit the canonical
     // signal trio (per-field NOTIFY + animationProfileChanged + settingsChanged).
     //

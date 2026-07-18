@@ -651,6 +651,17 @@ void JsonBackend::reparseConfiguration()
 {
     Q_ASSERT_X(d->activeGroupCount == 0, "PhosphorConfig::JsonBackend::reparseConfiguration",
                "Cannot reparse while JsonGroup instances are alive");
+    // Release-build pair for the assert above: reloading d->root under a
+    // live JsonGroup view gives it inconsistent reads (and can drop its
+    // writes). Skipping the reload degrades safely — the caller keeps
+    // reading the cached document, which is the pre-reparse status quo.
+    if (d->activeGroupCount != 0) {
+        qWarning(
+            "PhosphorConfig::JsonBackend: reparseConfiguration called with %d live group view(s) — skipping "
+            "reload to keep them valid",
+            d->activeGroupCount);
+        return;
+    }
     loadFromDisk();
     d->dirty = false;
 }
@@ -1029,6 +1040,14 @@ void JsonBackend::replaceRoot(QJsonObject root)
 {
     Q_ASSERT_X(d->activeGroupCount == 0, "PhosphorConfig::JsonBackend::replaceRoot",
                "Cannot replaceRoot while JsonGroup instances are alive");
+    // Release-build pair, matching reparseConfiguration and deleteGroup:
+    // swapping the root under a live JsonGroup view gives it inconsistent
+    // reads. Refusing the swap keeps the caller on the pre-replace document.
+    if (d->activeGroupCount != 0) {
+        qWarning("PhosphorConfig::JsonBackend: replaceRoot called with %d live group view(s) — refusing the swap",
+                 d->activeGroupCount);
+        return;
+    }
     d->root = std::move(root);
     // Callers that pair this with a successful writeJsonAtomically()
     // know the on-disk and in-memory states match; they should call

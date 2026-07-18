@@ -1167,6 +1167,7 @@ PhosphorAnimation::Profile Settings::animationProfile() const
 
 void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 {
+    refreshCleanBackendFromDisk();
     // Change detection compares the merged QJsonObject against the
     // current stored blob via QJsonObject::operator==, NOT through a
     // semantic `Profile::operator==` check. The semantic comparison hits
@@ -1311,6 +1312,50 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 // (clamp for numerics, registry resolution for the curve string). The
 // helper is defined in this TU because it is consumed exclusively here;
 // keeping it private to settings.cpp keeps the .h surface compact.
+// Cross-process coherence for COMPOSITE values (multi-field JSON blobs stored
+// under one key: the animation Profile, the shader/decoration profile trees,
+// the per-algorithm autotile map, the snapping and tiling trigger lists
+// including the zoneSpan pair). Scalar keys are written atomically and
+// last-writer-wins per key is acceptable; composites are not, in two ways.
+// Read-modify-write setters (the animation Profile field patches) merge into
+// the WHOLE blob, so a stale cached document resurrects old sibling fields
+// over a value the other process just committed — proven live: a daemon-side
+// sequenceMode write landing between the settings app's save and the daemon's
+// reload permanently reverted a just-saved duration (#795). Whole-replace
+// setters (the trees, the per-algo map) compare against the cached blob for
+// their no-op guard, so a stale cache can wrongly swallow a write the disk
+// actually needs. Every composite setter therefore refreshes first.
+// Refreshing is only legal on a CLEAN backend: with local writes pending the
+// in-memory document is the freshest truth and a reparse would drop them.
+// The dirty flag makes this self-limiting on the slider hot path — the first
+// write of an edit burst marks the backend dirty, so later ticks skip the
+// reparse until the next save.
+// The refresh adopts external sibling values into the live store and the
+// baseline WITHOUT per-property NOTIFY emissions — deliberately, unlike
+// load(): this is a per-write guard, and the UI adopts external state
+// through the controller's reload path (onExternalSettingsChanged), not
+// here. Until that reload runs, a binding on an externally-changed sibling
+// may read stale; it self-heals on the next load().
+// The call sits at the TOP of each setter (not inside patchProfileField)
+// because the per-field setters evaluate their currentValue argument at the
+// call site: a refresh inside the helper would run AFTER that read, and the
+// no-op guard would compare against the stale value — swallowing exactly the
+// healing write the refresh exists to enable.
+void Settings::refreshCleanBackendFromDisk()
+{
+    if (!m_configBackend || m_configBackend->isDirty()) {
+        return;
+    }
+    m_configBackend->reparseConfiguration();
+    // A clean backend means no local uncommitted writes, so before the
+    // reparse the live store matched m_baseline. The reparse may adopt
+    // externally-committed changes to ANY key; without advancing the
+    // baseline those would be attributed to the local user as unsaved
+    // edits (phantom per-page dirty markers, and a per-page Discard would
+    // revert the external change to the stale session baseline).
+    captureBaseline();
+}
+
 template<typename T>
 void Settings::patchProfileField(const char* jsonFieldName, const T& currentValue, const T& newValue,
                                  void (Settings::*fieldChangedSignal)())
@@ -1336,6 +1381,7 @@ int Settings::animationDuration() const
 
 void Settings::setAnimationDuration(int duration)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationDurationMin(), duration, ConfigDefaults::animationDurationMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldDuration, animationDuration(), clamped,
@@ -1379,6 +1425,7 @@ void Settings::setAnimationEasingCurve(const QString& curve)
 
     // Compare against the raw-stored wire string (same shape the getter
     // returns) so no-op assignments short-circuit before any write.
+    refreshCleanBackendFromDisk();
     if (animationEasingCurve() == curve) {
         return;
     }
@@ -1424,6 +1471,7 @@ int Settings::animationMinDistance() const
 
 void Settings::setAnimationMinDistance(int distance)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationMinDistanceMin(), distance, ConfigDefaults::animationMinDistanceMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldMinDistance, animationMinDistance(), clamped,
@@ -1437,6 +1485,7 @@ int Settings::animationSequenceMode() const
 
 void Settings::setAnimationSequenceMode(int mode)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationSequenceModeMin(), mode, ConfigDefaults::animationSequenceModeMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldSequenceMode, animationSequenceMode(), clamped,
@@ -1450,6 +1499,7 @@ int Settings::animationStaggerInterval() const
 
 void Settings::setAnimationStaggerInterval(int ms)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationStaggerIntervalMin(), ms, ConfigDefaults::animationStaggerIntervalMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldStaggerInterval, animationStaggerInterval(), clamped,
@@ -1486,6 +1536,7 @@ PhosphorAnimationShaders::ShaderProfileTree Settings::committedShaderProfileTree
 
 void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
 {
+    refreshCleanBackendFromDisk();
     // Prune incoming tree at the persistence boundary — same rationale
     // as the read-side prune in shaderProfileTree(). Belt-and-braces:
     // the QML UI gates the picker via supportsShaderLeg(), but a
@@ -1570,6 +1621,7 @@ PhosphorSurfaceShaders::DecorationProfileTree Settings::committedDecorationProfi
 
 void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
 {
+    refreshCleanBackendFromDisk();
     // Prune the incoming tree at the persistence boundary — same
     // belt-and-braces rationale as setShaderProfileTree. fromJson is the
     // tree's canonical unsupported-path filter (setOverride itself does not
@@ -2535,6 +2587,11 @@ P_STORE_SET_BOOL(setZoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleAct
 void Settings::writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                                 TriggerListSignalFn specificSignal)
 {
+    // Trigger lists are whole-replace composites reachable over D-Bus from
+    // both processes, so the stale-guard refresh applies: a `before` read
+    // from a stale cache could equal the incoming value and swallow a write
+    // the disk actually needs.
+    refreshCleanBackendFromDisk();
     const QVariantList before = m_store->readVariant(group, key).toList();
     m_store->write(group, key, triggers.mid(0, MaxTriggersPerAction));
     const QVariantList after = m_store->readVariant(group, key).toList();
@@ -2569,6 +2626,10 @@ int Settings::zoneSpanModifierInt() const
 }
 void Settings::setZoneSpanModifier(DragModifier modifier)
 {
+    // Same composite stale-guard as writeTriggerList: the modifier synthesis
+    // below read-modify-writes the whole zoneSpan trigger list, so a stale
+    // cache would bake stale sibling trigger entries into the rewrite.
+    refreshCleanBackendFromDisk();
     // Write-then-compare so the schema's validIntOr validator gets the first
     // word on whether the request is valid. A pre-write equality check like
     // `before == static_cast<int>(modifier)` would let an invalid modifier
@@ -2655,6 +2716,9 @@ QVariantList Settings::zoneSpanTriggers() const
 }
 void Settings::setZoneSpanTriggers(const QVariantList& triggers)
 {
+    // Same composite stale-guard as writeTriggerList (zoneSpan keeps its own
+    // setter for the legacy-modifier sync, not to skip the refresh).
+    refreshCleanBackendFromDisk();
     // Post-write compare — see setDragActivationTriggers for the
     // canonicalisation rationale. Snapshot both triggers AND the legacy
     // modifier up front so we only emit the NOTIFY signals whose value
@@ -2854,6 +2918,10 @@ QVariantMap Settings::autotilePerAlgorithmSettings() const
 }
 void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
 {
+    // Dual-writer composite: the daemon's autotile engine persists this map
+    // and the settings app edits it, so the stale-guard refresh matters here
+    // as much as for the animation profile blob.
+    refreshCleanBackendFromDisk();
     // Pre-sanitize so the equality check compares against the canonicalised
     // form (the schema validator would canonicalise on both sides anyway,
     // but avoiding the redundant write keeps the settingsChanged signal

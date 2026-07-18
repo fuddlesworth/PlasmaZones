@@ -156,6 +156,16 @@ public:
     /// destroy it before asking for another group on this backend.
     virtual std::unique_ptr<IGroup> group(const QString& name) = 0;
 
+    /// Whether the in-memory document carries changes not yet committed to
+    /// disk. A clean backend may be re-read from disk without losing state;
+    /// a dirty one may not. The default @c true is deliberate: a backend
+    /// that cannot answer must report dirty, so callers treating "clean" as
+    /// the licence to reload never discard state they cannot see.
+    virtual bool isDirty() const
+    {
+        return true;
+    }
+
     /// Re-read configuration from disk, discarding any pending in-memory
     /// changes. Must not be called while a group view is live.
     ///

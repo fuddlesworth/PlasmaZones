@@ -20,6 +20,7 @@
 #include <PhosphorSurface/DecorationProfileTree.h>
 
 #include <QDebug>
+#include <QTimer>
 
 namespace PlasmaZones {
 
@@ -378,9 +379,26 @@ void SettingsController::onSettingsPropertyChanged()
 
 void SettingsController::onExternalSettingsChanged()
 {
-    if (!m_saving) {
-        load();
+    if (m_saving) {
+        return;
     }
+    // With unsaved edits on any page, a reload would reparse disk over the
+    // in-memory Settings and end in setNeedsSave(false) — silently dropping
+    // the user's pending changes and clearing the footer. Staging-domain
+    // pages snapshot/revert their own state, but plain Q_PROPERTY edits
+    // (e.g. the animation profile fields) have no such net. Keep the local
+    // edits and remember the deferred reload: the next clean transition
+    // resolves it — dirtyPagesChanged fires maybeDrainPendingExternalReload
+    // (the per-page Discard path), while footer save/discard and defaults()
+    // clear or subsume the flag via their own disk rewrite or load(). Either
+    // way an externally-changed sibling page doesn't stay stale
+    // indefinitely.
+    if (needsSave()) {
+        qCInfo(lcCore) << "External settings change deferred: unsaved local edits take precedence";
+        m_pendingExternalReload = true;
+        return;
+    }
+    load();
 }
 
 void SettingsController::setNeedsSave(bool needs)
@@ -410,6 +428,24 @@ void SettingsController::setNeedsSave(bool needs)
         m_dirtyPages.clear();
         Q_EMIT dirtyPagesChanged();
     }
+}
+
+void SettingsController::maybeDrainPendingExternalReload()
+{
+    // Drain a reload that onExternalSettingsChanged() deferred while edits
+    // were pending. Wired to dirtyPagesChanged (the one signal every
+    // clean-transition path emits — footer save/discard via setNeedsSave,
+    // per-page kebab Discard via reconcilePageDirty, the virtual-screens
+    // branch's direct removal), so an externally-changed sibling page is
+    // adopted as soon as the app is fully clean instead of staying stale.
+    // Queued (not inline): this fires inside save()/discard flows, and the
+    // re-entry goes back through onExternalSettingsChanged() so the
+    // m_saving guard and the dirty check re-evaluate at fire time.
+    if (!m_pendingExternalReload || needsSave() || m_saving || m_loading) {
+        return;
+    }
+    m_pendingExternalReload = false;
+    QTimer::singleShot(0, this, &SettingsController::onExternalSettingsChanged);
 }
 
 QStringList SettingsController::dirtyPages() const
