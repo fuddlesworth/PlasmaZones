@@ -9,11 +9,10 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief One profile row in the Profiles page tree list.
  *
- * Collapsed header: depth indentation · icon · name + parent subtitle · status
- * badge (Active / Modified) · primary actions (Activate, Update-when-modified).
- * Expanded body: inheritance breadcrumb + management actions (rename, duplicate,
- * set parent, export, delete). Actions are visible buttons (the RuleRow /
- * ShaderSetCard convention), not an overflow menu.
+ * A single non-expanding row (the ShaderSetCard convention): depth indentation ·
+ * icon · name + parent subtitle · status badge (Active / Modified) · a trailing
+ * strip of visible action buttons (activate, update-when-modified, rename,
+ * duplicate, set parent, export, delete). No overflow menu, no collapse.
  */
 ExpandableRowDelegate {
     id: row
@@ -38,9 +37,9 @@ ExpandableRowDelegate {
     signal exportRequested
     signal deleteRequested
 
-    expansionContent: expansionComponent
+    // Everything fits on one row — no expansion body.
+    expandable: false
 
-    // ── Collapsed header ──
     // Depth indent: a leading guide so nesting reads at a glance.
     Item {
         Layout.preferredWidth: row.depth * Kirigami.Units.gridUnit * 1.5
@@ -79,7 +78,10 @@ ExpandableRowDelegate {
         Label {
             Layout.fillWidth: true
             visible: text.length > 0
-            text: row.isRoot ? i18n("Based on defaults") : i18n("Inherits from “%1”", row.parentName)
+            text: {
+                const base = row.isRoot ? i18n("Based on defaults") : i18n("Inherits from “%1”", row.parentName);
+                return row.profileDescription.length > 0 ? (base + " · " + row.profileDescription) : base;
+            }
             elide: Text.ElideRight
             color: Kirigami.Theme.disabledTextColor
             font: Kirigami.Theme.smallFont
@@ -106,7 +108,7 @@ ExpandableRowDelegate {
         }
     }
 
-    // Primary action: activate (or re-apply, discarding edits, when modified).
+    // ── Trailing action strip — all visible, RuleRow-style ──
     ToolButton {
         icon.name: "dialog-ok-apply"
         Layout.alignment: Qt.AlignVCenter
@@ -119,79 +121,60 @@ ExpandableRowDelegate {
         onClicked: row.activateRequested()
     }
 
-    // Update the active profile to capture the current (modified) settings.
     ToolButton {
         icon.name: "document-save"
         Layout.alignment: Qt.AlignVCenter
-        visible: row.isActive && row.isModified
+        // Shown but disabled off the modified-active state, so the strip keeps
+        // its column alignment across rows (the RuleRow managed-delete idiom).
+        enabled: row.isActive && row.isModified
         ToolTip.text: i18n("Update this profile from the current settings")
         ToolTip.visible: hovered
         Accessible.name: i18n("Update profile %1 from current settings", row.profileName)
         onClicked: row.updateRequested()
     }
 
-    ExpandChevron {
-        expanded: row.expanded
+    ToolButton {
+        icon.name: "edit-rename"
+        Layout.alignment: Qt.AlignVCenter
+        ToolTip.text: i18n("Rename")
+        ToolTip.visible: hovered
+        Accessible.name: i18n("Rename profile %1", row.profileName)
+        onClicked: row.renameRequested()
     }
 
-    // ── Expanded body: inheritance detail + management actions ──
-    Component {
-        id: expansionComponent
+    ToolButton {
+        icon.name: "edit-copy"
+        Layout.alignment: Qt.AlignVCenter
+        ToolTip.text: i18n("Duplicate")
+        ToolTip.visible: hovered
+        Accessible.name: i18n("Duplicate profile %1", row.profileName)
+        onClicked: row.duplicateRequested()
+    }
 
-        ColumnLayout {
-            spacing: Kirigami.Units.smallSpacing
+    ToolButton {
+        icon.name: "document-import"
+        Layout.alignment: Qt.AlignVCenter
+        ToolTip.text: i18n("Set parent")
+        ToolTip.visible: hovered
+        Accessible.name: i18n("Set the parent of profile %1", row.profileName)
+        onClicked: row.setParentRequested()
+    }
 
-            Label {
-                Layout.fillWidth: true
-                visible: row.profileDescription.length > 0
-                text: row.profileDescription
-                wrapMode: Text.WordWrap
-                color: Kirigami.Theme.disabledTextColor
-            }
+    ToolButton {
+        icon.name: "document-export"
+        Layout.alignment: Qt.AlignVCenter
+        ToolTip.text: i18n("Export")
+        ToolTip.visible: hovered
+        Accessible.name: i18n("Export profile %1", row.profileName)
+        onClicked: row.exportRequested()
+    }
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                Button {
-                    flat: true
-                    text: i18n("Rename")
-                    icon.name: "edit-rename"
-                    onClicked: row.renameRequested()
-                }
-
-                Button {
-                    flat: true
-                    text: i18n("Duplicate")
-                    icon.name: "edit-copy"
-                    onClicked: row.duplicateRequested()
-                }
-
-                Button {
-                    flat: true
-                    text: i18n("Set parent")
-                    icon.name: "document-import"
-                    onClicked: row.setParentRequested()
-                }
-
-                Button {
-                    flat: true
-                    text: i18n("Export")
-                    icon.name: "document-export"
-                    onClicked: row.exportRequested()
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                Button {
-                    flat: true
-                    text: i18n("Delete")
-                    icon.name: "edit-delete"
-                    onClicked: row.deleteRequested()
-                }
-            }
-        }
+    ToolButton {
+        icon.name: "edit-delete"
+        Layout.alignment: Qt.AlignVCenter
+        ToolTip.text: i18n("Delete")
+        ToolTip.visible: hovered
+        Accessible.name: i18n("Delete profile %1", row.profileName)
+        onClicked: row.deleteRequested()
     }
 }
