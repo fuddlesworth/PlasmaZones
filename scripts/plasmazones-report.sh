@@ -8,9 +8,10 @@
 # and journal logs into a timestamped .tar.gz archive for attaching to
 # GitHub Issues or Discussions.
 #
-# The D-Bus report (report.md) already contains config/session/layout summaries,
-# but we also include the raw files (config.json, session.json, data/) so that
-# triagers can inspect exact JSON without re-serialization artefacts.
+# The D-Bus report (report.md) already contains config/session/rules/layout
+# summaries, but we also include the raw files (the whole config dir plus
+# data/) so that triagers can inspect exact JSON without re-serialization
+# artefacts.
 #
 # Requires: plasmazonesd running, busctl (or qdbus6/qdbus), perl (with JSON::PP for busctl)
 
@@ -51,7 +52,9 @@ while [[ $# -gt 0 ]]; do
             echo "  report.md        Redacted Markdown report from the daemon"
             echo "  config.json      Current configuration (home paths redacted)"
             echo "  session.json     Window session state (home paths redacted)"
-            echo "  data/            User data (layouts, algorithms, shaders, etc.)"
+            echo "  rules.json       Window/screen rules (home paths redacted)"
+            echo "  *.json, *.conf   Remaining config-dir files (quick layouts, settings profiles, etc.)"
+            echo "  data/            User data (layouts, algorithms, shaders, animation profiles, etc.)"
             echo "  journal.log      Recent plasmazonesd journal entries"
             echo "  kwin-effect.log  Recent PlasmaZones KWin effect journal entries"
             exit 0
@@ -148,13 +151,24 @@ redact_home() {
     fi
 }
 
-if [[ -f "$CONFIG_DIR/config.json" ]]; then
-    redact_home "$CONFIG_DIR/config.json" > "$STAGING/config.json"
-fi
-
-# 3. Session file (redact home paths — window classes/titles kept for diagnostic value)
-if [[ -f "$CONFIG_DIR/session.json" ]]; then
-    redact_home "$CONFIG_DIR/session.json" > "$STAGING/session.json"
+# Copy the entire config tree, not just config.json/session.json: rules.json,
+# quicklayouts.json, layout-settings.json, and the settings-profiles store
+# (profiles/) all shape effective behaviour, and their absence made several
+# reports untriageable (discussions #795/#796). Files land at the archive root
+# mirroring the on-disk layout, so config.json/session.json keep their
+# established locations. Window classes/titles are kept for diagnostic value;
+# home paths are redacted.
+if [[ -d "$CONFIG_DIR" ]]; then
+    find -P "$CONFIG_DIR" -maxdepth 3 -type f -print0 | while IFS= read -r -d '' f; do
+        rel="${f#"$CONFIG_DIR"/}"
+        mkdir -p "$STAGING/$(dirname "$rel")"
+        case "$f" in
+            *.json|*.conf|*.txt|*.ini)
+                redact_home "$f" > "$STAGING/$rel" ;;
+            *)
+                cp "$f" "$STAGING/$rel" ;;
+        esac
+    done
 fi
 
 # 4. User data directory (layouts, custom algorithms, shaders, etc.)
