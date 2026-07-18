@@ -253,6 +253,14 @@ ExpandableRowDelegate {
                     return value.length > 0 ? value : i18nc("an empty text setting", "empty");
                 if (typeof value === "object")
                     return diffColumn.summarizeStructured(value);
+                // A double that came out of JSON carries its binary
+                // representation with it: 0.95 round-trips as
+                // 0.9500000000000001. Nobody set that, and showing it suggests a
+                // precision the setting does not have. Four decimals is past
+                // anything the sliders can express, so this only ever trims
+                // noise, and parseFloat drops the zeros it leaves behind.
+                if (typeof value === "number" && !Number.isInteger(value))
+                    return String(parseFloat(value.toFixed(4)));
                 return String(value);
             }
 

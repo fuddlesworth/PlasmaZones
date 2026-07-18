@@ -46,7 +46,10 @@ ColumnLayout {
     /// floor, so a minimum would let each row set its own edges and the
     /// captions would stagger. Pinning the CELL rather than the pill keeps every
     /// column square without padding "0" out into a box the width of a blob.
-    readonly property real subjectColumnWidth: Kirigami.Units.gridUnit * 18
+    /// Wide enough that a folded path fits outright in the common case. The
+    /// rows have room to spare: the caption and value columns beyond this are
+    /// fixed, so widening the subject costs empty right margin, not layout.
+    readonly property real subjectColumnWidth: Kirigami.Units.gridUnit * 26
     readonly property real captionColumnWidth: Kirigami.Units.gridUnit * 4
     readonly property real valueColumnWidth: Kirigami.Units.gridUnit * 10
 
@@ -193,17 +196,28 @@ ColumnLayout {
                     color: entryDelegate.entries.length > 0 ? Kirigami.Theme.highlightColor : root._guideColor
                 }
 
-                // Subject label. The column SHRINKS by this row's indent so the
-                // captions and pills of every row still line up in one column
-                // no matter how deep the row sits.
+                // Subject label.
+                //
+                // A LEAF is held to the subject column, shrunk by its own
+                // indent, so the captions and pills of every row line up
+                // regardless of depth. A GROUPING row has no captions or pills
+                // to line up with, so holding it to that column only truncated
+                // it for nothing — it takes the whole row instead.
+                //
+                // Leaves elide in the MIDDLE. A folded path keeps its meaning at
+                // both ends ("Animations › … › Effect id"); eliding the tail
+                // throws away the half that says which setting this is.
                 Label {
+                    readonly property bool isLeaf: entryDelegate.entries.length > 0
+
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: Math.max(Kirigami.Units.gridUnit * 6, root.subjectColumnWidth - entryDelegate.depth * root._indentStep)
-                    Layout.maximumWidth: Layout.preferredWidth
+                    Layout.fillWidth: !isLeaf
+                    Layout.preferredWidth: isLeaf ? Math.max(Kirigami.Units.gridUnit * 6, root.subjectColumnWidth - entryDelegate.depth * root._indentStep) : -1
+                    Layout.maximumWidth: isLeaf ? Layout.preferredWidth : Number.POSITIVE_INFINITY
                     text: entryDelegate.modelData.label
-                    elide: Text.ElideRight
+                    elide: isLeaf ? Text.ElideMiddle : Text.ElideRight
                     font.bold: true
-                    opacity: entryDelegate.entries.length > 0 ? 1 : 0.7
+                    opacity: isLeaf ? 1 : 0.7
                 }
 
                 Repeater {
