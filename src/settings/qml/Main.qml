@@ -918,7 +918,13 @@ PhosphorUi.SettingsAppWindow {
                     // live, and Qt sized the item to satisfy both (left 0 +
                     // centre w/2 ⇒ width = row width) — anchors beat an explicit
                     // `width`, so the mark stretched across the whole row.
-                    x: profileHeader.compact ? Math.round((parent.width - width) / 2) : 0
+                    // Expanded: sit at the same inset as the page icons below.
+                    // SidebarRow pads its content by largeSpacing on top of the
+                    // list's own smallSpacing inset, so matching that puts this
+                    // mark on the sidebar's icon column instead of hard against
+                    // the edge. Compact centres, exactly as SidebarRow does when
+                    // it drops leftPadding to zero for the rail.
+                    x: profileHeader.compact ? Math.round((parent.width - width) / 2) : Kirigami.Units.largeSpacing
                     width: Kirigami.Units.iconSizes.smallMedium
                     height: Kirigami.Units.iconSizes.smallMedium
                     // Non-interactive on purpose: with no input handlers, clicks
@@ -953,7 +959,7 @@ PhosphorUi.SettingsAppWindow {
 
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.leftMargin: profileHeader.compact ? 0 : markSlot.width + Kirigami.Units.smallSpacing
+                    anchors.leftMargin: profileHeader.compact ? 0 : markSlot.x + markSlot.width + Kirigami.Units.smallSpacing
                     anchors.verticalCenter: parent.verticalCenter
                     // In the rail the field itself is hidden but stays laid out
                     // and interactive, so the mark on top of it still opens a
