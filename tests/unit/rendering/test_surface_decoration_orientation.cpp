@@ -15,12 +15,21 @@
  * asserts the gradient is upright: a wrong per-target flip on either pass
  * (the tap's texture render or the final direct draw) lands blue on top.
  *
- * GPU-gated: OpenGL context creation is probed BEFORE any QQuickView exists
- * (a failed scene-graph init is fatal inside Qt, not catchable). Headless
- * environments exit with the ctest SKIP_RETURN_CODE before QGuiApplication;
- * in-test gates (no GL context, wrong backend, no grab) QSKIP, which qExec
- * reports as a green run — either way CI without a GPU stays green without
- * pretending to cover this.
+ * OPT-IN: this test connects to the LIVE session (it must — an offscreen GL
+ * grab returns a uniform placeholder and proves nothing), and mapping a real
+ * window has side effects on a developer machine: the installed KWin effect
+ * reacts to the new window with D-Bus calls to org.plasmazones, whose
+ * activation service file spawns the installed plasmazonesd (and from there
+ * the daemon can launch plasmazones-settings) — processes a test run must
+ * never leave behind. CI containers have the inverse problem: a display and
+ * a GL context exist, so every environment gate passes, but the shader
+ * pipeline never becomes ready and the grab stays a uniform placeholder,
+ * failing the assert without testing anything. So the live run requires
+ * PLASMAZONES_GPU_TESTS=1; without it the test exits with the ctest
+ * SKIP_RETURN_CODE before QGuiApplication. When opted in, in-test gates
+ * (no GL context, wrong backend, no grab, chain never renders in either
+ * orientation) QSKIP, which qExec reports as a green run — a regression is
+ * only declared on the flip's actual signature (blue on top).
  */
 
 #include <QElapsedTimer>
@@ -35,6 +44,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
+
+#include <utility>
 
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
@@ -207,54 +218,86 @@ private Q_SLOTS:
         if (view.rendererInterface()->graphicsApi() != QSGRendererInterface::OpenGLRhi)
             QSKIP("Scene graph is not running on the OpenGL RHI backend");
 
-        // Upright gradient: red dominates the top of the card, blue the
-        // bottom. Channel-dominance beats exact colors — the border pack
-        // rounds corners and the sample points sit well inside the card.
-        const auto upright = [](const QImage& frame) {
-            if (frame.isNull())
-                return false;
-            const QColor top = frame.pixelColor(frame.width() / 2, frame.height() / 4);
-            const QColor bottom = frame.pixelColor(frame.width() / 2, frame.height() * 3 / 4);
-            return top.red() > 150 && top.blue() < 100 && bottom.blue() > 150 && bottom.red() < 100;
+        // Channel-dominance beats exact colors — the border pack rounds
+        // corners and the sample points sit well inside the card. Upright:
+        // red on top, blue on the bottom. Flipped (the regression's exact
+        // signature): blue on top, red on the bottom. A frame matching
+        // NEITHER means the chain hasn't rendered — still settling, or an
+        // environment whose shader pipeline never becomes ready and leaves
+        // the placeholder gray in place (observed in CI containers, where a
+        // display and GL context exist but shader compilation never
+        // completes). Only the flipped signature is a verdict.
+        const auto samples = [](const QImage& frame) {
+            return std::pair{frame.pixelColor(frame.width() / 2, frame.height() / 4),
+                             frame.pixelColor(frame.width() / 2, frame.height() * 3 / 4)};
+        };
+        const auto redDominant = [](const QColor& c) {
+            return c.red() > 150 && c.blue() < 100;
+        };
+        const auto blueDominant = [](const QColor& c) {
+            return c.blue() > 150 && c.red() < 100;
         };
 
         // Poll-grab until the async pack load and the two live capture folds
         // settle, instead of one grab after a magic fixed wait — a slow or
         // loaded GPU just takes more iterations. A genuinely flipped chain
-        // never satisfies the predicate, so the regression still times out
-        // into the failure assert below carrying the last frame's samples.
+        // (mutation-verified: reverting the per-target flip fix) presents the
+        // flipped signature within a frame or two of the upright timing, so
+        // the regression is caught as a hard failure, while a chain that
+        // never renders at all skips as an environment gate.
         QImage frame;
         bool sawUpright = false;
+        bool sawFlipped = false;
         QElapsedTimer settle;
         settle.start();
         while (settle.elapsed() < 5000) {
             QTest::qWait(150);
             frame = view.grabWindow();
-            if (upright(frame)) {
+            if (frame.isNull())
+                continue;
+            const auto [top, bottom] = samples(frame);
+            if (redDominant(top) && blueDominant(bottom)) {
                 sawUpright = true;
+                break;
+            }
+            if (blueDominant(top) && redDominant(bottom)) {
+                sawFlipped = true;
                 break;
             }
         }
         if (frame.isNull())
             QSKIP("grabWindow returned no image in this environment");
-        const QColor top = frame.pixelColor(frame.width() / 2, frame.height() / 4);
-        const QColor bottom = frame.pixelColor(frame.width() / 2, frame.height() * 3 / 4);
-        QVERIFY2(sawUpright,
-                 qPrintable(QStringLiteral("card never rendered upright (top %1, bottom %2) — a flipped chain "
-                                           "renders blue on top")
+        const auto [top, bottom] = samples(frame);
+        QVERIFY2(!sawFlipped,
+                 qPrintable(QStringLiteral("card rendered UPSIDE DOWN (top %1, bottom %2) — the per-target "
+                                           "NDC Y-flip regressed")
                                 .arg(top.name(), bottom.name())));
+        if (!sawUpright)
+            QSKIP(qPrintable(QStringLiteral("chain never rendered in either orientation (top %1, bottom %2) — "
+                                            "shader pipeline unavailable in this environment")
+                                 .arg(top.name(), bottom.name())));
     }
 };
 
 int main(int argc, char** argv)
 {
+    // Live-session runs are OPT-IN (see the header comment): mapping a real
+    // window makes the installed KWin effect D-Bus-activate the installed
+    // plasmazonesd on a developer machine, and CI containers pass every
+    // display/GL gate yet never compile the shaders. Exit with the ctest
+    // SKIP_RETURN_CODE (see the target's test property) unless the developer
+    // explicitly asked for the live run.
+    if (!qEnvironmentVariableIsSet("PLASMAZONES_GPU_TESTS")) {
+        fprintf(stderr, "SKIP: live-session GPU test — set PLASMAZONES_GPU_TESTS=1 to run it\n");
+        return 77;
+    }
     // A GL scene graph needs a real display server: under the offscreen QPA
     // (which the shared ctest environment forces for isolation) the window
     // renders nothing and grabWindow returns a uniform placeholder — the
     // asserts would fail without testing anything. Exit with the ctest
-    // SKIP_RETURN_CODE (see the target's test property) before
-    // QGuiApplication when headless; otherwise drop the forced offscreen
-    // platform so the scene graph presents on the session's compositor.
+    // SKIP_RETURN_CODE before QGuiApplication when headless; otherwise drop
+    // the forced offscreen platform so the scene graph presents on the
+    // session's compositor.
     // Assumption: a NON-empty display variable points at a live server — a
     // stale value would abort inside the QGuiApplication constructor (a QPA
     // connection failure is fatal, not catchable), which only a dead-socket

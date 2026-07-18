@@ -1237,10 +1237,13 @@ add_test(NAME test_decoration_page_scope COMMAND test_decoration_page_scope)
 # GPU-gated orientation guard for the per-render-target NDC Y-flip: renders a
 # two-stage surface-decoration chain (border + shadow via ShaderEffectSource
 # taps, mirroring SurfaceDecoration.qml) on a forced OpenGL scene graph and
-# asserts the sampled card content is upright. Skips itself cleanly when no
-# display server or GL context is available (its custom main drops the forced
-# offscreen QPA — an offscreen GL grab returns a uniform placeholder and
-# proves nothing).
+# asserts the sampled card content is upright. OPT-IN: it only runs with
+# PLASMAZONES_GPU_TESTS=1 in the environment, because it must present on the
+# LIVE session (its custom main drops the forced offscreen QPA — an offscreen
+# GL grab returns a uniform placeholder and proves nothing) and mapping a real
+# window D-Bus-activates the installed plasmazonesd via the KWin effect on a
+# developer machine, while CI containers pass the display/GL gates yet never
+# get a ready shader pipeline. Without the opt-in it exits as Skipped.
 add_executable(test_surface_decoration_orientation
     rendering/test_surface_decoration_orientation.cpp
 )
@@ -1256,7 +1259,7 @@ target_link_libraries(test_surface_decoration_orientation
         PhosphorSurface::PhosphorSurface
 )
 add_test(NAME test_surface_decoration_orientation COMMAND test_surface_decoration_orientation)
-# Headless runs exit with 77 from the test's custom main (no display server),
+# Non-opted-in and headless runs exit with 77 from the test's custom main,
 # which ctest reports as SKIPPED rather than Passed — honest status for the
 # GPU gate. In-test QSKIPs still exit 0 via qExec (green, Qt's contract).
 set_tests_properties(test_surface_decoration_orientation PROPERTIES SKIP_RETURN_CODE 77)
@@ -1287,4 +1290,37 @@ file(MAKE_DIRECTORY
 get_property(_all_tests DIRECTORY . PROPERTY TESTS)
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT
     "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${_pz_test_home}/config;XDG_DATA_HOME=${_pz_test_home}/data;XDG_STATE_HOME=${_pz_test_home}/state;XDG_CACHE_HOME=${_pz_test_home}/cache")
+
+# D-Bus isolation: run every test on its own PRIVATE session bus. Several
+# tests compile client sources whose async calls target the daemon's real
+# well-known name (org.plasmazones) with QDBus's default auto-start flag —
+# on a developer machine the installed org.plasmazones.service activation
+# file turns each such call into a spawn of the installed plasmazonesd,
+# left running after ctest exits. The custom bus config is essential: a
+# stock dbus-run-session bus still reads /usr/share/dbus-1/services, so the
+# installed daemon would be activated on the private bus too (as a child of
+# the private dbus-daemon — it then leaks into the session AND holds the
+# test's stdout pipe open, hanging ctest after the test passes). The config
+# declares no service directories, so activation is impossible and daemon
+# calls fail fast with ServiceUnknown; tests that register their own bus
+# names (adaptor routing, layout-service replies) get a clean bus where the
+# name is never already owned. Uses the TEST_LAUNCHER target property
+# (CMake 3.29+); when dbus-run-session or the CMake version is missing,
+# tests run directly on whatever bus the environment provides — the
+# pre-isolation status quo.
+find_program(_pz_dbus_run_session dbus-run-session)
+if(_pz_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
+    foreach(_pz_test IN LISTS _all_tests)
+        # Every add_test in this directory uses NAME == target; the guard
+        # keeps a future non-target test entry from breaking the configure.
+        if(TARGET ${_pz_test})
+            set_target_properties(${_pz_test} PROPERTIES
+                TEST_LAUNCHER
+                "${_pz_dbus_run_session};--config-file=${CMAKE_CURRENT_SOURCE_DIR}/test-session-bus.conf;--")
+        endif()
+    endforeach()
+else()
+    message(STATUS "PlasmaZones: dbus-run-session or CMake >= 3.29 unavailable — "
+                   "tests will use the ambient session bus")
+endif()
 # ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───
