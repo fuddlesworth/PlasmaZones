@@ -42,8 +42,36 @@ SettingsFlickable {
     contentHeight: content.implicitHeight
     clip: true
 
+    // "Defaults" (empty id) first, then every existing profile — the parent
+    // candidates for a new profile.
+    readonly property var parentOptions: {
+        const rows = [
+            {
+                "id": "",
+                "name": i18n("Defaults")
+            }
+        ];
+        for (let i = 0; i < profilesList.length; ++i)
+            rows.push(profilesList[i]);
+        return rows;
+    }
+
     function _reload() {
         root.profilesList = root.bridge ? root.bridge.availableProfiles() : [];
+    }
+
+    /// Commit the inline save form, then clear it for the next one (mirrors the
+    /// sets pages' save flow).
+    function _saveCurrent() {
+        if (!root.bridge)
+            return;
+
+        const parentId = parentCombo.currentValue !== undefined ? parentCombo.currentValue : "";
+        if (root.bridge.createProfile(nameField.text.trim(), descField.text.trim(), parentId).length > 0) {
+            nameField.text = "";
+            descField.text = "";
+            parentCombo.currentIndex = 0;
+        }
     }
 
     Connections {
@@ -93,23 +121,77 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
-                SettingsRow {
-                    title: i18n("New profile")
-                    searchAnchor: "newProfile"
-                    description: i18n("Save everything as it is now as a new profile. Pick a parent to store only the differences from it.")
+                Label {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    text: i18n("Save everything as it is now as a new profile. Pick a parent to store only the differences from it.")
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.WordWrap
+                }
+
+                // Stacked, not side-by-side — mirrors the sets pages: a 50/50
+                // row makes the description column unreadably narrow at the
+                // typical settings width. Save sits bottom-right so focus order
+                // matches typeflow (name → description → parent → save).
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    spacing: Kirigami.Units.smallSpacing
+
+                    TextField {
+                        id: nameField
+
+                        Layout.fillWidth: true
+                        placeholderText: i18n("Profile name…")
+                        Accessible.name: i18n("Profile name")
+                        onAccepted: if (saveButton.enabled)
+                            saveButton.clicked()
+                    }
+
+                    TextField {
+                        id: descField
+
+                        Layout.fillWidth: true
+                        placeholderText: i18n("Description (optional)…")
+                        Accessible.name: i18n("Profile description")
+                        onAccepted: if (saveButton.enabled)
+                            saveButton.clicked()
+                    }
+
+                    // Profiles-only addition to the sets form: what the new
+                    // profile inherits from, which decides what counts as a
+                    // difference worth storing.
+                    Label {
+                        text: i18n("Inherit from")
+                        color: Kirigami.Theme.disabledTextColor
+                    }
+
+                    ComboBox {
+                        id: parentCombo
+
+                        Layout.fillWidth: true
+                        model: root.parentOptions
+                        textRole: "name"
+                        valueRole: "id"
+                        currentIndex: 0
+                        Accessible.name: i18n("Parent profile")
+                    }
 
                     Button {
-                        text: i18n("New Profile…")
-                        icon.name: "list-add"
-                        Accessible.name: i18n("Create a new profile from the current settings")
-                        onClicked: {
-                            profileDialog.mode = "create";
-                            profileDialog.targetId = "";
-                            profileDialog.nameText = "";
-                            profileDialog.descriptionText = "";
-                            profileDialog.parentId = "";
-                            profileDialog.open();
-                        }
+                        id: saveButton
+
+                        Layout.alignment: Qt.AlignRight
+                        text: i18n("Save")
+                        icon.name: "document-save"
+                        Accessible.name: i18n("Save the current settings as a profile")
+                        // A colliding name is not a conflict here the way it is
+                        // for sets: profiles are keyed by uuid and the store
+                        // suffixes a duplicate display name, so there is nothing
+                        // to overwrite and nothing to confirm.
+                        enabled: nameField.text.trim().length > 0
+                        onClicked: root._saveCurrent()
                     }
                 }
             }
@@ -216,7 +298,7 @@ SettingsFlickable {
         deleteConfirm.open();
     }
 
-    // ── Create / rename / set-parent form ──
+    // ── Rename / set-parent form. Creating is inline on the card above. ──
     NewProfileDialog {
         id: profileDialog
 
@@ -227,14 +309,12 @@ SettingsFlickable {
             if (!root.bridge)
                 return;
 
-            if (profileDialog.mode === "create")
-                root.bridge.createProfile(name, description, parentId);
-            else if (profileDialog.mode === "rename")
+            if (profileDialog.mode === "rename")
                 root.bridge.renameProfile(profileDialog.targetId, name, description);
             else if (profileDialog.mode === "parent")
                 root.bridge.setParent(profileDialog.targetId, parentId);
 
-            // Reset the per-open excludeId so a later create/rename sees the full list.
+            // Reset the per-open excludeId so a later rename sees the full list.
             profileDialog.excludeId = "";
         }
     }

@@ -7,12 +7,14 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Small form dialog for creating, renaming, and reparenting a profile.
+ * @brief Small form dialog for renaming and reparenting a profile.
  *
- * Reused across three flows via `mode`:
- *   "create"  — name + description + parent picker → accepted(name, desc, parentId)
+ * Reused across two flows via `mode`:
  *   "rename"  — name + description (no parent picker) → accepted(name, desc, "")
  *   "parent"  — parent picker only → accepted("", "", parentId)
+ *
+ * Creating is NOT here: the Profiles page takes a new profile through an inline
+ * form on its "Save current settings" card, the way the sets pages do.
  *
  * The host wires `profiles` (the availableProfiles() rows) so the parent combo
  * can list the inheritance candidates, and `excludeId` to drop the profile
@@ -21,7 +23,7 @@ import org.kde.kirigami as Kirigami
 Kirigami.Dialog {
     id: root
 
-    property string mode: "create"
+    property string mode: "rename"
     property var profiles: []
     property string excludeId: ""
     property alias nameText: nameField.text
@@ -30,8 +32,8 @@ Kirigami.Dialog {
 
     signal profileAccepted(string name, string description, string parentId)
 
-    readonly property bool _showName: mode === "create" || mode === "rename"
-    readonly property bool _showParent: mode === "create" || mode === "parent"
+    readonly property bool _showName: mode === "rename"
+    readonly property bool _showParent: mode === "parent"
 
     // "Defaults" (empty id) first, then every profile except the excluded one.
     readonly property var _parentModel: {
@@ -48,7 +50,7 @@ Kirigami.Dialog {
         return rows;
     }
 
-    title: mode === "rename" ? i18n("Rename Profile") : (mode === "parent" ? i18n("Set Parent Profile") : i18n("New Profile"))
+    title: mode === "parent" ? i18n("Set Parent Profile") : i18n("Rename Profile")
     standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
     // Ok is meaningless for create/rename without a name.
     readonly property bool _acceptable: !root._showName || nameField.text.trim().length > 0

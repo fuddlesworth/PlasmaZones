@@ -171,7 +171,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("profiles"),
                             {PhosphorI18n::tr("profile"), PhosphorI18n::tr("profiles"), PhosphorI18n::tr("preset"),
                              PhosphorI18n::tr("switch"), PhosphorI18n::tr("import"), PhosphorI18n::tr("export"),
-                             PhosphorI18n::tr("inherit")});
+                             PhosphorI18n::tr("inherit"), PhosphorI18n::tr("create"), PhosphorI18n::tr("save")});
     search->setPageKeywords(QStringLiteral("editor"),
                             {PhosphorI18n::tr("editor"), PhosphorI18n::tr("layout"), PhosphorI18n::tr("design"),
                              PhosphorI18n::tr("zones")});
@@ -720,8 +720,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
 
     addSection(search, QStringLiteral("profiles"), QStringLiteral("saveCurrent"),
                PhosphorI18n::tr("Save current settings"));
-    addSetting(search, QStringLiteral("profiles"), QStringLiteral("newProfile"), PhosphorI18n::tr("New profile"),
-               {PhosphorI18n::tr("create"), PhosphorI18n::tr("save"), PhosphorI18n::tr("capture")});
     addSection(search, QStringLiteral("profiles"), QStringLiteral("importProfile"),
                PhosphorI18n::tr("Import a profile"));
     addSection(search, QStringLiteral("profiles"), QStringLiteral("profilesList"), PhosphorI18n::tr("Profiles"));
