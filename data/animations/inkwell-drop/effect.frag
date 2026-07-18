@@ -42,9 +42,26 @@ vec4 pTransition(vec2 uv, float t) {
     // aspect ratio that makes length(c) circular in pixel space is the
     // expanded rect's, not the bare frame's. Mismatch was a slight
     // ellipticity scaling with shadow padding.
-    c.x *= iResolution.x / max(iResolution.y, 0.0001);
+    float aspx = iResolution.x / max(iResolution.y, 0.0001);
+    c.x *= aspx;
     float d = length(c);
-    float front = p * p_frontSpeed;
+    // Deviation from niri: the front's travel is normalized to THIS
+    // window's farthest corner, measured in the same aspect-corrected
+    // metric as `d`. Niri's bare `front = p * speed` with speed 1.5 was
+    // tuned near a full-screen 16:9 surface (farthest corner ≈ 1.30):
+    // even there the last corner cleared at p ≈ 0.88, and the corner
+    // metric shrinks as the window narrows (≈ 0.89 on a square window),
+    // so the ink was done by p ≈ 0.6 and the rest of the leg sat on a
+    // static frame — the phosphor-peek dead-domain bug, aspect-
+    // conditioned like the desktop-phosphor projection. With the corner
+    // distance factored out, frontSpeed = 1 (the new default) lands the
+    // front on the farthest corner exactly at the end of the leg for any
+    // window shape; above 1 it completes early and holds, wave-warp's
+    // documented front-speed contract. The +0.02 covers the reveal
+    // band's full-opacity edge below.
+    vec2 fcorner = max(impact, 1.0 - impact);
+    float maxD = length(vec2(fcorner.x * aspx, fcorner.y));
+    float front = p * p_frontSpeed * (maxD + 0.02);
     float ring1 = sin((d - front) * 80.0) * exp(-abs(d - front) * 6.0);
     float ring2 = sin((d - front + 0.08) * 80.0) * exp(-abs(d - front + 0.08) * 8.0) * 0.6;
     float ring3 = sin((d - front + 0.16) * 80.0) * exp(-abs(d - front + 0.16) * 10.0) * 0.4;

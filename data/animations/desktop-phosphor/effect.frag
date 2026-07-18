@@ -54,16 +54,29 @@ vec2 graphNodePos(vec2 cell) {
     return cell + 0.2 + 0.6 * hash22(cell);
 }
 
-// Per-cell activation time in (0, ~0.65]: a directional ramp (the circuit
+// Per-cell activation time in [0.02, ~0.77]: a directional ramp (the circuit
 // lights up along the switch direction) plus a per-cell stagger so the
 // front reads as signal propagation, not a straight wipe. `extent` is the
 // graph-space screen extent, so the projection is normalized to [0,1]
 // regardless of resolution or density.
+//
+// The projection is normalized by the direction's L1 extent (desktop-wipe's
+// idiom) so proj spans exactly [0,1] corner-to-corner for ANY direction. The
+// old fixed * 0.7071 was sized for the diagonal only: an axis-aligned switch
+// (the common left/right case under p_followSwitch) compressed proj to
+// [0.15, 0.85], so the first node lit at t ≈ 0.12 and the flood was done by
+// t ≈ 0.79 — the same dead head/tail phosphor-peek had, which an ease-out
+// progress curve stretches into a visible hang on a settled screen. The
+// activation window's budget [0.02, 0.77] is sized against the flood: the
+// slowest pixel clears at a_max + (0.12 + 1.13) / floodSpeed ≈ 0.98, so the
+// reveal uses the whole [0,1] domain and the completion floor stays a
+// backstop. ext >= 1 for a unit vector, so no division by zero.
 float nodeActivation(vec2 nodePos, vec2 dir, vec2 extent) {
     vec2 nodeUV = nodePos / max(extent, vec2(1.0e-4));
-    float proj = clamp(dot(nodeUV - 0.5, dir) * 0.7071 + 0.5, 0.0, 1.0);
+    float ext = abs(dir.x) + abs(dir.y);
+    float proj = clamp(dot(nodeUV - 0.5, dir) / ext + 0.5, 0.0, 1.0);
     float stagger = classicHash(floor(nodePos * 7.3));
-    return 0.06 + proj * 0.44 + stagger * 0.14;
+    return 0.02 + proj * 0.61 + stagger * 0.14;
 }
 
 #endif // PLASMAZONES_KWIN
@@ -99,9 +112,11 @@ vec4 pTransition(vec2 uv, float t) {
     float env = smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.86, 0.97, t));
 
     // Flood speed in graph units per unit progress. The latest activation is
-    // ~0.64 and a pixel's own-cell node is at most ~1.14 units away, so by
-    // t = 1 the slowest front has travelled (1 - 0.64) * 6 = 2.16 units and
-    // every pixel has cleared its reveal smoothstep with margin.
+    // ~0.77 and a pixel's own-cell node is at most ~1.13 units away, so the
+    // slowest front clears its reveal smoothstep ((0.12 + 1.13) / 6 ≈ 0.21
+    // after activating) at t ≈ 0.98 — deliberately just inside the endpoint,
+    // so the reveal spans the whole timeline instead of settling early and
+    // hanging (see nodeActivation).
     const float floodSpeed = 6.0;
 
     // m: signed distance of the furthest-advanced reveal front past this
