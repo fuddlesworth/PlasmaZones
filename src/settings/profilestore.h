@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorRules/Rule.h>
+
 #include <QHash>
 #include <QJsonObject>
 #include <QList>
@@ -72,6 +74,13 @@ public:
     using ActiveGetFn = std::function<QString()>;
     using ActiveSetFn = std::function<void(const QString& /*id*/)>;
 
+    /// The current live USER rule subset (non-managed), and a sink that stages a
+    /// resolved user rule subset into the settings app's Rules page. Optional —
+    /// when unset the profile carries no rules (Phase 1 behaviour / config-only
+    /// tests).
+    using RulesFn = std::function<QList<PhosphorRules::Rule>()>;
+    using ApplyRulesFn = std::function<void(const QList<PhosphorRules::Rule>& /*userRules*/)>;
+
     struct Config
     {
         DirFn profilesDir;
@@ -80,6 +89,8 @@ public:
         ApplyConfigFn applyConfig;
         ActiveGetFn stagedActiveId;
         ActiveSetFn setStagedActiveId;
+        RulesFn currentUserRules; // optional
+        ApplyRulesFn applyUserRules; // optional
         /// On-disk envelope version (the config-schema version the delta keys
         /// belong to). Import/activate refuse a file stamped with a DIFFERENT
         /// version rather than mis-applying keys whose shape moved between
@@ -167,7 +178,12 @@ private:
         QString description;
         QUuid parent; // null → root
         QJsonObject configDelta; // sparse { group: { key: value } }
-        QJsonObject rulesSection; // carried verbatim in Phase 1
+        // Rule delta vs the parent-resolved user rule set (keyed by Rule::id):
+        // rules added or semantically changed, ids of parent rules dropped, and
+        // the resolved user-rule order.
+        QList<PhosphorRules::Rule> ruleUpserts;
+        QList<QUuid> ruleRemovedIds;
+        QList<QUuid> ruleOrder;
     };
 
     QString profilesDirectory() const;
@@ -189,6 +205,21 @@ private:
     /// Sparse delta of @p full vs @p base: keys where they differ. Skips the
     /// top-level `_version` marker (only group objects are walked).
     static QJsonObject diffConfig(const QJsonObject& full, const QJsonObject& base);
+
+    /// Full user rule set for @p id: the parent-resolved set with this profile's
+    /// delta applied (drop removedIds, upsert changed rules), reordered per the
+    /// profile's stored order.
+    QList<PhosphorRules::Rule> resolveRules(const QUuid& id, const QHash<QUuid, Record>& all) const;
+
+    /// Compute @p full's rule delta vs @p base into @p rec (upserts / removedIds
+    /// / order). Upserts are rules new to @p full or semantically changed;
+    /// equality ignores the renormalized `priority` so re-stamped priorities do
+    /// not register as changes.
+    static void computeRuleDelta(const QList<PhosphorRules::Rule>& full, const QList<PhosphorRules::Rule>& base,
+                                 Record& rec);
+
+    /// Rule equality ignoring `priority` (list-order is carried separately).
+    static bool rulesSemanticallyEqual(const PhosphorRules::Rule& a, const PhosphorRules::Rule& b);
 
     /// True when @p maybeAncestor is @p id or one of its ancestors.
     bool isSelfOrAncestor(const QUuid& maybeAncestor, const QUuid& id, const QHash<QUuid, Record>& all) const;

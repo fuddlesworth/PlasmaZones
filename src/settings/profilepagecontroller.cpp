@@ -7,12 +7,15 @@
 #include "../config/configmigration.h"
 #include "../config/settings.h"
 #include "profilestore.h"
+#include "rulecontroller.h"
+#include "rulemodel.h"
 
 namespace PlasmaZones {
 
-ProfilePageController::ProfilePageController(Settings& settings, QObject* parent)
+ProfilePageController::ProfilePageController(Settings& settings, RuleController& rules, QObject* parent)
     : PhosphorControl::PageController(QStringLiteral("profiles"), parent)
     , m_settings(settings)
+    , m_rules(rules)
 {
     ProfileStore::Config config;
     config.profilesDir = []() {
@@ -36,6 +39,19 @@ ProfilePageController::ProfilePageController(Settings& settings, QObject* parent
     };
     config.setStagedActiveId = [this](const QString& id) {
         updateStagedActive(id);
+    };
+    config.currentUserRules = [this]() {
+        // The live non-managed user rules from the Rules page's staged model.
+        QList<PhosphorRules::Rule> out;
+        for (const PhosphorRules::Rule& r : m_rules.model()->rules()) {
+            if (!r.managed)
+                out.append(r);
+        }
+        return out;
+    };
+    config.applyUserRules = [this](const QList<PhosphorRules::Rule>& userRules) {
+        // Stage into the Rules page model; the global Save commits over D-Bus.
+        m_rules.stageUserRules(userRules);
     };
     config.formatVersion = ConfigSchemaVersion;
 

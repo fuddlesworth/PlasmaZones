@@ -46,6 +46,34 @@ bool RuleController::userRulesDirty() const
     return userSubset(m_model.rules()) != userSubset(m_savedRules);
 }
 
+void RuleController::stageUserRules(const QList<PhosphorRules::Rule>& userRules)
+{
+    // Replace the user subset with the profile's resolved rules, keeping any
+    // managed rules the store owns. The incoming list already carries the
+    // desired order; renormalizePriorities re-stamps priority from list order
+    // (and pins managed rules to lowest precedence), exactly as the CRUD path.
+    QList<PhosphorRules::Rule> next;
+    next.reserve(userRules.size() + m_model.rules().size());
+    for (const PhosphorRules::Rule& r : userRules) {
+        PhosphorRules::Rule copy = r;
+        copy.managed = false; // defensive: a profile only ever carries user rules
+        next.append(copy);
+    }
+    for (const PhosphorRules::Rule& r : m_model.rules()) {
+        if (r.managed)
+            next.append(r);
+    }
+    m_model.setRules(next);
+    renormalizePriorities();
+
+    // Deliberately NOT captureSavedSnapshot(): the staged rules must read dirty
+    // so the Rules page badges and the global Save commits them. setRules fires
+    // modelReset, which SettingsController does NOT wire to the dirty reconcile
+    // (see the comment there), so emit dirtyChanged to drive
+    // reconcileRuleBackedDirty and update the footer.
+    Q_EMIT dirtyChanged();
+}
+
 void RuleController::resetManagedDefaults()
 {
     // Fire-and-forget: no out-args, and the model refresh comes from the daemon's

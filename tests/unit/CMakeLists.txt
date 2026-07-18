@@ -1082,6 +1082,7 @@ target_link_libraries(test_profilestore
         Qt6::Core
         Qt6::Gui
         plasmazones_core
+        PhosphorRules::PhosphorRules
 )
 add_test(NAME test_profilestore COMMAND test_profilestore)
 

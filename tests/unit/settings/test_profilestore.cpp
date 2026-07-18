@@ -22,6 +22,7 @@
  *   - The committed active pointer round-trips through index.json.
  */
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
@@ -30,9 +31,14 @@
 #include <QTest>
 #include <QUuid>
 
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/Rule.h>
+
 #include "settings/profilestore.h"
 
 using namespace PlasmaZones;
+using namespace PhosphorRules;
 
 namespace {
 
@@ -49,6 +55,30 @@ QJsonObject baseDefaults()
 int groupAInt(const QJsonObject& blob, const QString& key)
 {
     return blob.value(QStringLiteral("GroupA")).toObject().value(key).toInt(-999);
+}
+
+// A minimal registry-valid user rule (a Float action, param-less) so it
+// survives Rule::toJson → fromJson round-tripping through the profile file.
+Rule makeRule(const QString& name, const QString& appId, int priority = 100)
+{
+    Rule r;
+    r.id = QUuid::createUuid();
+    r.name = name;
+    r.priority = priority;
+    r.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, appId);
+    RuleAction floatAction;
+    floatAction.type = QString(ActionType::Float);
+    r.actions = {floatAction};
+    return r;
+}
+
+QList<QUuid> ruleIds(const QList<Rule>& rules)
+{
+    QList<QUuid> ids;
+    for (const Rule& r : rules) {
+        ids.append(r.id);
+    }
+    return ids;
 }
 
 QString groupAStr(const QJsonObject& blob, const QString& key)
@@ -68,10 +98,23 @@ private:
     QJsonObject m_current; // the stubbed "current live config"
     QJsonObject m_lastApplied; // captured from the applyConfig closure
     QString m_staged; // the stubbed staged active id
+    QList<Rule> m_currentRules; // the stubbed live user rules
+    QList<Rule> m_lastAppliedRules; // captured from the applyUserRules closure
 
     QUuid idOf(const QString& braced) const
     {
         return QUuid(braced);
+    }
+
+    // Read a profile file's stored rule-delta upserts / removedIds / order.
+    QJsonObject storedRules(const QString& bracedId) const
+    {
+        const QString path =
+            m_dir->path() + QLatin1Char('/') + QUuid(bracedId).toString(QUuid::WithoutBraces) + QStringLiteral(".json");
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly))
+            return {};
+        return QJsonDocument::fromJson(f.readAll()).object().value(QStringLiteral("rules")).toObject();
     }
 
     // Read a profile file's stored config delta straight off disk.
@@ -103,6 +146,8 @@ private Q_SLOTS:
         m_current = baseDefaults();
         m_lastApplied = QJsonObject();
         m_staged.clear();
+        m_currentRules.clear();
+        m_lastAppliedRules.clear();
 
         ProfileStore::Config config;
         config.profilesDir = [this]() {
@@ -122,6 +167,12 @@ private Q_SLOTS:
         };
         config.setStagedActiveId = [this](const QString& id) {
             m_staged = id;
+        };
+        config.currentUserRules = [this]() {
+            return m_currentRules;
+        };
+        config.applyUserRules = [this](const QList<Rule>& rules) {
+            m_lastAppliedRules = rules;
         };
         config.formatVersion = 5;
         m_store = new ProfileStore(std::move(config));
@@ -262,6 +313,74 @@ private Q_SLOTS:
 
         m_store->writeActiveId(QString());
         QVERIFY(m_store->committedActiveId().isEmpty());
+    }
+
+    /// A root profile captures the current user rules; activating it resolves
+    /// them back (same ids, in order).
+    void rulesCaptureAndResolve()
+    {
+        const Rule r1 = makeRule(QStringLiteral("float-a"), QStringLiteral("a.desktop"));
+        const Rule r2 = makeRule(QStringLiteral("float-b"), QStringLiteral("b.desktop"));
+        m_currentRules = {r1, r2};
+
+        const QString id = m_store->createProfile(QStringLiteral("Root"), QString(), QString());
+        QVERIFY(!id.isEmpty());
+
+        // Both rules were captured as upserts, in order.
+        const QJsonObject rules = storedRules(id);
+        QCOMPARE(rules.value(QStringLiteral("upserts")).toArray().size(), 2);
+        QCOMPARE(rules.value(QStringLiteral("order")).toArray().size(), 2);
+
+        // Move the live rules away, then activate: the applied rules are resolved.
+        m_currentRules.clear();
+        QVERIFY(m_store->activateProfile(id));
+        QCOMPARE(ruleIds(m_lastAppliedRules), (QList<QUuid>{r1.id, r2.id}));
+    }
+
+    /// A child that differs from its parent only by a re-stamped priority stores
+    /// NO rule delta (semantic equality ignores priority).
+    void rulePriorityIgnored()
+    {
+        const Rule r1 = makeRule(QStringLiteral("float-a"), QStringLiteral("a.desktop"), 100);
+        m_currentRules = {r1};
+        const QString root = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        // Same rule, only the priority differs (as renormalizePriorities would do).
+        Rule r1Reprioritised = r1;
+        r1Reprioritised.priority = 900;
+        m_currentRules = {r1Reprioritised};
+        const QString child = m_store->createProfile(QStringLiteral("C"), QString(), root);
+
+        // No upserts and no removals — the child inherits the rule unchanged.
+        const QJsonObject rules = storedRules(child);
+        QCOMPARE(rules.value(QStringLiteral("upserts")).toArray().size(), 0);
+        QCOMPARE(rules.value(QStringLiteral("removedIds")).toArray().size(), 0);
+
+        // Resolving the child still yields the rule.
+        QVERIFY(m_store->activateProfile(child));
+        QCOMPARE(ruleIds(m_lastAppliedRules), (QList<QUuid>{r1.id}));
+    }
+
+    /// Deleting a middle node keeps each child's resolved rule set unchanged.
+    void ruleReparentOnDelete()
+    {
+        const Rule r1 = makeRule(QStringLiteral("a"), QStringLiteral("a.desktop"));
+        m_currentRules = {r1};
+        const QString root = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        const Rule r2 = makeRule(QStringLiteral("b"), QStringLiteral("b.desktop"));
+        m_currentRules = {r1, r2};
+        const QString child = m_store->createProfile(QStringLiteral("C"), QString(), root);
+
+        const Rule r3 = makeRule(QStringLiteral("c"), QStringLiteral("c.desktop"));
+        m_currentRules = {r1, r2, r3};
+        const QString grand = m_store->createProfile(QStringLiteral("G"), QString(), child);
+
+        QVERIFY(m_store->removeProfile(child));
+
+        // G's resolved rule set is unchanged after the rebind.
+        QVERIFY(m_store->activateProfile(grand));
+        QCOMPARE(ruleIds(m_lastAppliedRules), (QList<QUuid>{r1.id, r2.id, r3.id}));
     }
 };
 

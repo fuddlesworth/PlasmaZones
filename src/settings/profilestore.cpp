@@ -30,6 +30,29 @@ constexpr QLatin1String kProfConfigKey{"config"};
 constexpr QLatin1String kProfRulesKey{"rules"};
 constexpr QLatin1String kProfActiveKey{"active"};
 constexpr QLatin1String kProfOrderKey{"order"};
+constexpr QLatin1String kProfUpsertsKey{"upserts"};
+constexpr QLatin1String kProfRemovedIdsKey{"removedIds"};
+
+QList<QUuid> parseUuidArray(const QJsonArray& arr)
+{
+    QList<QUuid> out;
+    for (const QJsonValue& v : arr) {
+        const QUuid id(v.toString());
+        if (!id.isNull()) {
+            out.append(id);
+        }
+    }
+    return out;
+}
+
+QJsonArray uuidArray(const QList<QUuid>& ids)
+{
+    QJsonArray arr;
+    for (const QUuid& id : ids) {
+        arr.append(id.toString());
+    }
+    return arr;
+}
 
 } // namespace
 
@@ -113,7 +136,17 @@ bool ProfileStore::readProfileFile(const QString& path, Record* out) const
     out->description = root.value(kProfDescriptionKey).toString();
     out->parent = QUuid(root.value(kProfParentKey).toString()); // null for a root profile
     out->configDelta = root.value(kProfConfigKey).toObject();
-    out->rulesSection = root.value(kProfRulesKey).toObject();
+
+    const QJsonObject rules = root.value(kProfRulesKey).toObject();
+    out->ruleOrder = parseUuidArray(rules.value(kProfOrderKey).toArray());
+    out->ruleRemovedIds = parseUuidArray(rules.value(kProfRemovedIdsKey).toArray());
+    out->ruleUpserts.clear();
+    const QJsonArray upserts = rules.value(kProfUpsertsKey).toArray();
+    for (const QJsonValue& v : upserts) {
+        if (auto rule = PhosphorRules::Rule::fromJson(v.toObject())) {
+            out->ruleUpserts.append(*rule);
+        }
+    }
     return true;
 }
 
@@ -127,7 +160,17 @@ QJsonObject ProfileStore::recordToJson(const Record& rec, int formatVersion)
     // A root profile stores null so the field is always present and explicit.
     root.insert(kProfParentKey, rec.parent.isNull() ? QJsonValue(QJsonValue::Null) : QJsonValue(rec.parent.toString()));
     root.insert(kProfConfigKey, rec.configDelta);
-    root.insert(kProfRulesKey, rec.rulesSection);
+
+    QJsonArray upserts;
+    for (const PhosphorRules::Rule& rule : rec.ruleUpserts) {
+        upserts.append(rule.toJson());
+    }
+    root.insert(kProfRulesKey,
+                QJsonObject{
+                    {kProfOrderKey, uuidArray(rec.ruleOrder)},
+                    {kProfUpsertsKey, upserts},
+                    {kProfRemovedIdsKey, uuidArray(rec.ruleRemovedIds)},
+                });
     return root;
 }
 
@@ -229,6 +272,99 @@ QJsonObject ProfileStore::resolveConfig(const QUuid& id, const QHash<QUuid, Reco
         overlayConfig(resolved, all.value(node).configDelta);
     }
     return resolved;
+}
+
+bool ProfileStore::rulesSemanticallyEqual(const PhosphorRules::Rule& a, const PhosphorRules::Rule& b)
+{
+    // Rule::operator== compares every field including the list-order-derived
+    // `priority`, which renormalizePriorities re-stamps. Neutralise priority so
+    // two rules that differ only by re-stamped priority read as equal (id /
+    // managed already match by construction of the caller).
+    PhosphorRules::Rule normalized = a;
+    normalized.priority = b.priority;
+    return normalized == b;
+}
+
+QList<PhosphorRules::Rule> ProfileStore::resolveRules(const QUuid& id, const QHash<QUuid, Record>& all) const
+{
+    // Chain root → … → id, so each profile's delta applies over its ancestors'.
+    QList<QUuid> chain;
+    QUuid cursor = id;
+    QSet<QUuid> seen;
+    while (!cursor.isNull() && all.contains(cursor) && !seen.contains(cursor)) {
+        seen.insert(cursor);
+        chain.prepend(cursor);
+        cursor = all.value(cursor).parent;
+    }
+
+    // Resolve the user rule set by id, applying each level's removals + upserts,
+    // then ordering per the deepest level that specifies an order.
+    QHash<QUuid, PhosphorRules::Rule> byId;
+    QList<QUuid> order; // insertion order fallback
+    for (const QUuid& node : chain) {
+        const Record& rec = all.value(node);
+        for (const QUuid& removed : rec.ruleRemovedIds) {
+            byId.remove(removed);
+            order.removeAll(removed);
+        }
+        for (const PhosphorRules::Rule& rule : rec.ruleUpserts) {
+            if (!byId.contains(rule.id)) {
+                order.append(rule.id);
+            }
+            byId.insert(rule.id, rule);
+        }
+        // A stored order for this level wins (captures the user's reordering).
+        if (!rec.ruleOrder.isEmpty()) {
+            QList<QUuid> reordered;
+            for (const QUuid& oid : rec.ruleOrder) {
+                if (byId.contains(oid) && !reordered.contains(oid)) {
+                    reordered.append(oid);
+                }
+            }
+            for (const QUuid& oid : order) {
+                if (byId.contains(oid) && !reordered.contains(oid)) {
+                    reordered.append(oid);
+                }
+            }
+            order = reordered;
+        }
+    }
+
+    QList<PhosphorRules::Rule> out;
+    for (const QUuid& oid : order) {
+        if (byId.contains(oid)) {
+            out.append(byId.value(oid));
+        }
+    }
+    return out;
+}
+
+void ProfileStore::computeRuleDelta(const QList<PhosphorRules::Rule>& full, const QList<PhosphorRules::Rule>& base,
+                                    Record& rec)
+{
+    QHash<QUuid, PhosphorRules::Rule> baseById;
+    for (const PhosphorRules::Rule& r : base) {
+        baseById.insert(r.id, r);
+    }
+    QSet<QUuid> fullIds;
+
+    rec.ruleUpserts.clear();
+    rec.ruleOrder.clear();
+    rec.ruleRemovedIds.clear();
+    for (const PhosphorRules::Rule& r : full) {
+        fullIds.insert(r.id);
+        rec.ruleOrder.append(r.id);
+        // New id, or present in the parent but semantically changed → store it.
+        if (!baseById.contains(r.id) || !rulesSemanticallyEqual(r, baseById.value(r.id))) {
+            rec.ruleUpserts.append(r);
+        }
+    }
+    // Parent rules the profile drops.
+    for (const PhosphorRules::Rule& r : base) {
+        if (!fullIds.contains(r.id)) {
+            rec.ruleRemovedIds.append(r.id);
+        }
+    }
 }
 
 bool ProfileStore::isSelfOrAncestor(const QUuid& maybeAncestor, const QUuid& id, const QHash<QUuid, Record>& all) const
@@ -442,6 +578,13 @@ QString ProfileStore::createProfile(const QString& name, const QString& descript
     const QJsonObject current = m_config.currentConfig ? m_config.currentConfig() : QJsonObject();
     rec.configDelta = diffConfig(current, parentResolved);
 
+    // Capture the current user rules as a delta against the parent-resolved set.
+    if (m_config.currentUserRules) {
+        const QList<PhosphorRules::Rule> parentRules =
+            parent.isNull() ? QList<PhosphorRules::Rule>() : resolveRules(parent, all);
+        computeRuleDelta(m_config.currentUserRules(), parentRules, rec);
+    }
+
     if (!writeProfileRecord(rec)) {
         return QString();
     }
@@ -526,8 +669,13 @@ bool ProfileStore::setParent(const QString& id, const QString& parentId)
     const QJsonObject newParentResolved = parent.isNull()
         ? (m_config.defaultConfig ? m_config.defaultConfig() : QJsonObject())
         : resolveConfig(parent, all);
+    // Re-flatten rules the same way, keeping the resolved user rule set unchanged.
+    const QList<PhosphorRules::Rule> resolvedRulesSelf = resolveRules(uid, all);
+    const QList<PhosphorRules::Rule> newParentRules =
+        parent.isNull() ? QList<PhosphorRules::Rule>() : resolveRules(parent, all);
     rec.parent = parent;
     rec.configDelta = diffConfig(resolvedSelf, newParentResolved);
+    computeRuleDelta(resolvedRulesSelf, newParentRules, rec);
     if (!writeProfileRecord(rec)) {
         return false;
     }
@@ -556,9 +704,13 @@ bool ProfileStore::removeProfile(const QString& id)
         const QJsonObject newParentResolved = grandparent.isNull()
             ? (m_config.defaultConfig ? m_config.defaultConfig() : QJsonObject())
             : resolveConfig(grandparent, all);
+        const QList<PhosphorRules::Rule> childRules = resolveRules(childId, all);
+        const QList<PhosphorRules::Rule> newParentRules =
+            grandparent.isNull() ? QList<PhosphorRules::Rule>() : resolveRules(grandparent, all);
         Record child = it.value();
         child.parent = grandparent;
         child.configDelta = diffConfig(childResolved, newParentResolved);
+        computeRuleDelta(childRules, newParentRules, child);
         if (!writeProfileRecord(child)) {
             return false;
         }
@@ -591,6 +743,10 @@ bool ProfileStore::activateProfile(const QString& id)
     // lights the Save footer). The controller's Save commits it.
     if (m_config.applyConfig) {
         m_config.applyConfig(resolveConfig(uid, all));
+    }
+    // Stage the resolved user rules into the Rules page the same way.
+    if (m_config.applyUserRules) {
+        m_config.applyUserRules(resolveRules(uid, all));
     }
     if (m_config.setStagedActiveId) {
         m_config.setStagedActiveId(id);

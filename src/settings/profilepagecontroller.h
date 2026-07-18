@@ -13,6 +13,7 @@
 namespace PlasmaZones {
 
 class Settings;
+class RuleController;
 
 /// Page controller for the "Profiles" settings page (id "profiles").
 ///
@@ -35,9 +36,10 @@ class ProfilePageController : public PhosphorControl::PageController
     Q_PROPERTY(PlasmaZones::ProfileStore* bridge READ bridge CONSTANT)
 
 public:
-    /// @p settings is required for every config diff/apply the store performs,
-    /// so it is taken by reference (a compile-time non-null guarantee).
-    explicit ProfilePageController(Settings& settings, QObject* parent = nullptr);
+    /// @p settings and @p rules are required for every config/rule diff/apply
+    /// the store performs, so they are taken by reference (a compile-time
+    /// non-null guarantee).
+    ProfilePageController(Settings& settings, RuleController& rules, QObject* parent = nullptr);
 
     ProfileStore* bridge() const
     {
@@ -57,6 +59,7 @@ private:
     void updateStagedActive(const QString& id);
 
     Settings& m_settings;
+    RuleController& m_rules;
     ProfileStore* m_store = nullptr;
     QString m_committedActiveId;
     QString m_stagedActiveId;

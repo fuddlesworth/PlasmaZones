@@ -598,7 +598,7 @@ SettingsController::SettingsController(QObject* parent)
     // staging path (owning pages badge value-based). Registered via regPage in
     // buildApplicationController(), which trackDomain()s it so its isDirty /
     // apply / discard participate in the framework's Save/Discard.
-    m_profilesPage = new ProfilePageController(m_settings, this);
+    m_profilesPage = new ProfilePageController(m_settings, *m_rulesPage, this);
 
     // Wire screen / activity / layout label resolvers so the rule model and
     // monitor-overview render friendly names instead of raw connector strings,
