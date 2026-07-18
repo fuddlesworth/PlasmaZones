@@ -293,6 +293,7 @@ qt_add_qml_module(plasmazones-settings
         # Settings profiles: tree list page, expandable row, new-profile dialog.
         qml/ProfilesPage.qml
         qml/ProfileRow.qml
+        qml/ProfileComboBox.qml
         qml/ProfileSignature.qml
         qml/NewProfileDialog.qml
         qml/MonitorOverview.qml

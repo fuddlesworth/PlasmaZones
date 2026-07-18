@@ -168,13 +168,11 @@ SettingsFlickable {
                         color: Kirigami.Theme.disabledTextColor
                     }
 
-                    ComboBox {
+                    ProfileComboBox {
                         id: parentCombo
 
                         Layout.fillWidth: true
                         model: root.parentOptions
-                        textRole: "name"
-                        valueRole: "id"
                         currentIndex: 0
                         Accessible.name: i18n("Parent profile")
                     }

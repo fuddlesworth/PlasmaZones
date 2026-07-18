@@ -4,8 +4,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Templates as T
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.phosphor.control as PhosphorUi
@@ -950,7 +948,7 @@ PhosphorUi.SettingsAppWindow {
                     }
                 }
 
-                ComboBox {
+                ProfileComboBox {
                     id: profileCombo
 
                     anchors.left: parent.left
@@ -963,7 +961,6 @@ PhosphorUi.SettingsAppWindow {
                     // invisible item takes no input.
                     opacity: profileHeader.compact ? 0 : 1
                     model: profileHeader.profileRows
-                    textRole: "name"
                     // Bound to the active profile; `activated` fires only on a
                     // real user pick (not this binding), so there is no loop.
                     currentIndex: profileHeader.activeIndex
@@ -973,199 +970,6 @@ PhosphorUi.SettingsAppWindow {
                         const row = profileHeader.profileRows[index];
                         if (row && profileHeader.profilesBridge)
                             profileHeader.profilesBridge.activateProfile(row.id);
-                    }
-
-                    // Deliberately no ToolTip: this control sits over the page
-                    // list, and a hover tip here covers the very dropdown the
-                    // user is reaching for. The Profiles page spells the state
-                    // out in words instead.
-
-                    // Each entry carries its own identicon, so the dropdown
-                    // reads as a gallery of profiles, not a plain name list.
-                    // ── Custom popup ────────────────────────────────────
-                    // Same override LayoutComboBox uses, so this dropdown gets
-                    // the app's popup surface (View colour set, themed border,
-                    // rounded corners) instead of the desktop style's stock
-                    // Menu-based popup. Reparented to Overlay.overlay with a
-                    // high z so it escapes any modal layer; `popupType: Item`
-                    // keeps it in-scene, so outside-click dismissal has to be
-                    // handled by the catcher below (Qt's CloseOnPressOutside is
-                    // unreliable once the popup is reparented).
-                    popup: T.Popup {
-                        id: profilePopup
-
-                        popupType: T.Popup.Item
-                        parent: Overlay.overlay
-                        z: 999999
-                        modal: false
-                        dim: false
-                        closePolicy: T.Popup.CloseOnEscape
-                        // Positioned imperatively: a declarative mapToItem
-                        // binding does not re-evaluate when an ancestor moves,
-                        // which would pin the popup at overlay origin.
-                        x: 0
-                        y: 0
-                        onAboutToShow: {
-                            if (parent) {
-                                const pos = profileCombo.mapToItem(parent, 0, profileCombo.height);
-                                x = pos.x;
-                                y = pos.y;
-                            }
-                        }
-                        // Floored so the list stays readable when the field is
-                        // only as wide as the compact rail.
-                        width: Math.max(profileCombo.width, Kirigami.Units.gridUnit * 12)
-                        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (profileCombo.Window.window ? profileCombo.Window.window.height : 600) - topMargin - bottomMargin)
-                        topMargin: Kirigami.Units.smallSpacing
-                        bottomMargin: Kirigami.Units.smallSpacing
-                        padding: 1
-                        // The Desktop style's field background reads
-                        // `popup.exit.running` (its ComboBox.qml:128). A bare
-                        // Popup leaves enter/exit null, so that binding throws
-                        // "Cannot read property 'running' of null" on every
-                        // repaint. Declaring empty transitions gives it
-                        // something non-null to read.
-                        enter: Transition {}
-                        exit: Transition {}
-
-                        // The View colorSet is pinned on the contentItem and
-                        // background individually, NOT on the Popup node:
-                        // Kirigami's theme attachment resolves through
-                        // parentItem(), and those parent to the internal popup
-                        // item, so a pin on the Popup never reaches them.
-                        contentItem: ListView {
-                            Kirigami.Theme.colorSet: Kirigami.Theme.View
-                            Kirigami.Theme.inherit: false
-                            clip: true
-                            implicitHeight: contentHeight
-                            model: profileCombo.delegateModel
-                            currentIndex: profileCombo.highlightedIndex
-                            highlightMoveDuration: 0
-
-                            ScrollBar.vertical: ScrollBar {
-                                policy: ScrollBar.AsNeeded
-                            }
-                        }
-
-                        background: Rectangle {
-                            Kirigami.Theme.colorSet: Kirigami.Theme.View
-                            Kirigami.Theme.inherit: false
-                            color: Kirigami.Theme.backgroundColor
-                            border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                            border.width: 1
-                            radius: Kirigami.Units.smallSpacing
-                        }
-                    }
-
-                    // Outside-click closer, mirroring LayoutComboBox: while the
-                    // popup is open a transparent catcher fills the overlay,
-                    // closes on any outside press, and consumes the press when
-                    // it lands on the field itself so it cannot immediately
-                    // re-open.
-                    Loader {
-                        active: profilePopup.opened
-                        sourceComponent: profileCatcher
-                    }
-
-                    Component {
-                        id: profileCatcher
-
-                        Item {
-                            id: catcher
-
-                            z: 999998
-                            Component.onCompleted: {
-                                const ovr = profileCombo.Overlay.overlay;
-                                if (ovr) {
-                                    parent = ovr;
-                                    anchors.fill = ovr;
-                                }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                                propagateComposedEvents: true
-                                onPressed: function (mouse) {
-                                    const fieldPos = profileCombo.mapToItem(catcher, 0, 0);
-                                    const onField = mouse.x >= fieldPos.x && mouse.y >= fieldPos.y && mouse.x < fieldPos.x + profileCombo.width && mouse.y < fieldPos.y + profileCombo.height;
-                                    profilePopup.close();
-                                    mouse.accepted = onField;
-                                }
-                            }
-                        }
-                    }
-
-                    // Styling follows LayoutComboBox's popup delegate, the app's
-                    // dropdown convention: View colour set, a 0.15-alpha
-                    // highlight wash over an opaque row, and a leading checkmark
-                    // (with a spacer when absent) marking the current entry
-                    // rather than a second highlight band.
-                    delegate: ItemDelegate {
-                        id: profileEntry
-
-                        required property var modelData
-                        required property int index
-
-                        readonly property bool isCurrentSelection: profileCombo.currentIndex === profileEntry.index
-
-                        Kirigami.Theme.colorSet: Kirigami.Theme.View
-                        Kirigami.Theme.inherit: false
-
-                        // Follow the popup's list, NOT the field: in the compact
-                        // rail the field is only as wide as the rail, and sizing
-                        // entries to it squeezes the names out of existence.
-                        // Reserve the scrollbar gutter so the row ends at its
-                        // edge rather than running under it.
-                        width: {
-                            const view = profileEntry.ListView.view;
-                            if (!view)
-                                return profileCombo.width;
-                            const bar = view.ScrollBar ? view.ScrollBar.vertical : null;
-                            return view.width - (bar && bar.visible ? bar.width : 0);
-                        }
-                        // Only the hovered / keyboard-navigated row highlights;
-                        // the current one is marked by the checkmark instead.
-                        highlighted: profileCombo.highlightedIndex === profileEntry.index
-
-                        background: Rectangle {
-                            color: profileEntry.highlighted ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : Kirigami.Theme.backgroundColor
-                        }
-
-                        contentItem: RowLayout {
-                            spacing: Kirigami.Units.smallSpacing
-
-                            Kirigami.Icon {
-                                visible: profileEntry.isCurrentSelection
-                                source: "checkmark"
-                                Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                color: Kirigami.Theme.textColor
-                            }
-
-                            // Keeps the marks and names aligned on unchecked rows.
-                            Item {
-                                visible: !profileEntry.isCurrentSelection
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                            }
-
-                            ProfileSignature {
-                                signature: profileEntry.modelData.signature
-                                Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
-                            }
-
-                            Label {
-                                Layout.fillWidth: true
-                                Layout.alignment: Qt.AlignVCenter
-                                text: profileEntry.modelData.name
-                                elide: Text.ElideRight
-                                color: Kirigami.Theme.textColor
-                            }
-                        }
                     }
                 }
             }

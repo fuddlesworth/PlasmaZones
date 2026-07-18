@@ -102,15 +102,13 @@ Kirigami.Dialog {
             color: Kirigami.Theme.disabledTextColor
         }
 
-        ComboBox {
+        ProfileComboBox {
             id: parentCombo
 
             visible: root._showParent
             Layout.fillWidth: true
             Layout.minimumWidth: Kirigami.Units.gridUnit * 18
             model: root._parentModel
-            textRole: "name"
-            valueRole: "id"
             Accessible.name: i18n("Parent profile")
             currentIndex: {
                 for (let i = 0; i < root._parentModel.length; ++i) {
