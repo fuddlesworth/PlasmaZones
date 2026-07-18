@@ -13,6 +13,8 @@
 #include <QtGlobal>
 #include <PhosphorScreens/ScreenIdentity.h>
 
+using namespace Qt::StringLiterals;
+
 namespace PlasmaZones {
 
 PhosphorConfig::Schema buildSettingsSchema()
@@ -78,6 +80,52 @@ auto validColorOr(QColor fallback)
 /// qBound would silently reinterpret out-of-range values as the nearest
 /// neighbour — that's the exact bug the effect-side cache loader avoids,
 /// and both readers must agree (see testAutotile*_unknownValueClampsToFloat).
+/// Declare the legal values of an int-valued enum key.
+///
+/// The token is a STABLE identifier, never user-facing text: the words live
+/// app-side (settingsvaluelabels.cpp) keyed off these tokens, which is what
+/// keeps translated strings out of the config library. Renaming a token breaks
+/// that lookup, so treat them as shipped API.
+///
+/// Declaring choices does not validate anything — the validator beside it stays
+/// the single coercion path. This exists so a caller can READ BACK what a key
+/// accepts, which a clamp lambda cannot answer.
+QVector<PhosphorConfig::ChoiceDef> intChoices(std::initializer_list<std::pair<int, QLatin1StringView>> entries)
+{
+    QVector<PhosphorConfig::ChoiceDef> out;
+    out.reserve(static_cast<int>(entries.size()));
+    for (const auto& [value, token] : entries) {
+        out.append({QVariant(value), QString(token)});
+    }
+    return out;
+}
+
+/// Declare the legal values of a key whose stored value IS its token (the
+/// string-valued settings: rendering backend, audio mode, appearance scope).
+QVector<PhosphorConfig::ChoiceDef> tokenChoices(std::initializer_list<QLatin1StringView> tokens)
+{
+    QVector<PhosphorConfig::ChoiceDef> out;
+    out.reserve(static_cast<int>(tokens.size()));
+    for (const QLatin1StringView token : tokens) {
+        out.append({QVariant(QString(token)), QString(token)});
+    }
+    return out;
+}
+
+/// Same, for a key whose token set already exists as a ConfigDefaults accessor
+/// (rendering backend, audio channel mode, audio input method). Reusing the
+/// accessor keeps one list rather than a schema copy that can drift from the
+/// validator that normalizes against it.
+QVector<PhosphorConfig::ChoiceDef> tokenChoices(const QStringList& tokens)
+{
+    QVector<PhosphorConfig::ChoiceDef> out;
+    out.reserve(tokens.size());
+    for (const QString& token : tokens) {
+        out.append({QVariant(token), token});
+    }
+    return out;
+}
+
 auto validIntOr(std::initializer_list<int> valid, int fallback)
 {
     return [valid = QVector<int>(valid), fallback](const QVariant& v) -> QVariant {
@@ -234,7 +282,8 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
          {},
          [](const QVariant& v) {
              return QVariant(CD::normalizeAudioChannelMode(v.toString()));
-         }},
+         },
+         tokenChoices(CD::audioChannelModeOptions())},
         {CD::reverseKey(), CD::audioReverse(), QMetaType::Bool},
         {CD::extraSmoothingKey(),
          CD::audioExtraSmoothing(),
@@ -247,7 +296,8 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
          {},
          [](const QVariant& v) {
              return QVariant(CD::normalizeAudioInputMethod(v.toString()));
-         }},
+         },
+         tokenChoices(CD::audioInputMethodOptions())},
         {CD::inputSourceKey(), CD::audioInputSource(), QMetaType::QString},
     };
 }
@@ -386,7 +436,8 @@ void appendRenderingSchema(PhosphorConfig::Schema& schema)
          {},
          [](const QVariant& v) {
              return QVariant(CD::normalizeRenderingBackend(v.toString()));
-         }},
+         },
+         tokenChoices(CD::renderingBackendOptions())},
     };
 }
 
@@ -569,7 +620,22 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
 
     schema.groups[CD::editorFillOnDropGroup()] = {
         {CD::enabledKey(), CD::fillOnDropEnabled(), QMetaType::Bool},
-        {CD::modifierKey(), CD::fillOnDropModifier(), QMetaType::Int, {}, modifierOr(CD::fillOnDropModifier())},
+        {CD::modifierKey(),
+         CD::fillOnDropModifier(),
+         QMetaType::Int,
+         {},
+         modifierOr(CD::fillOnDropModifier()),
+         intChoices({{0, "disabled"_L1},
+                     {1, "shift"_L1},
+                     {2, "ctrl"_L1},
+                     {3, "alt"_L1},
+                     {4, "meta"_L1},
+                     {5, "ctrlAlt"_L1},
+                     {6, "ctrlShift"_L1},
+                     {7, "altShift"_L1},
+                     {8, "alwaysActive"_L1},
+                     {9, "altMeta"_L1},
+                     {10, "ctrlAltMeta"_L1}})},
     };
 }
 
@@ -681,12 +747,18 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
         {CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool},
         {CD::osdOnDesktopSwitchKey(), CD::showOsdOnDesktopSwitch(), QMetaType::Bool},
         {CD::navigationOsdKey(), CD::showNavigationOsd(), QMetaType::Bool},
-        {CD::osdStyleKey(), CD::osdStyle(), QMetaType::Int, {}, clampInt(CD::osdStyleMin(), CD::osdStyleMax())},
+        {CD::osdStyleKey(),
+         CD::osdStyle(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::osdStyleMin(), CD::osdStyleMax()),
+         intChoices({{0, "none"_L1}, {1, "text"_L1}, {2, "preview"_L1}})},
         {CD::overlayDisplayModeKey(),
          CD::overlayDisplayMode(),
          QMetaType::Int,
          {},
-         clampInt(CD::overlayDisplayModeMin(), CD::overlayDisplayModeMax())},
+         clampInt(CD::overlayDisplayModeMin(), CD::overlayDisplayModeMax()),
+         intChoices({{0, "zoneRectangles"_L1}, {1, "layoutPreview"_L1}})},
     };
 }
 
@@ -709,13 +781,22 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          CD::position(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(ZoneSelectorPosition::TopLeft),
-                  static_cast<int>(ZoneSelectorPosition::BottomRight))},
+         clampInt(static_cast<int>(ZoneSelectorPosition::TopLeft), static_cast<int>(ZoneSelectorPosition::BottomRight)),
+         intChoices({{0, "topLeft"_L1},
+                     {1, "top"_L1},
+                     {2, "topRight"_L1},
+                     {3, "left"_L1},
+                     {4, "center"_L1},
+                     {5, "right"_L1},
+                     {6, "bottomLeft"_L1},
+                     {7, "bottom"_L1},
+                     {8, "bottomRight"_L1}})},
         {CD::layoutModeKey(),
          CD::layoutMode(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(ZoneSelectorLayoutMode::Grid), static_cast<int>(ZoneSelectorLayoutMode::Vertical))},
+         clampInt(static_cast<int>(ZoneSelectorLayoutMode::Grid), static_cast<int>(ZoneSelectorLayoutMode::Vertical)),
+         intChoices({{0, "grid"_L1}, {1, "horizontal"_L1}, {2, "vertical"_L1}})},
         {CD::previewWidthKey(),
          CD::previewWidth(),
          QMetaType::Int,
@@ -736,7 +817,8 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          CD::sizeMode(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(ZoneSelectorSizeMode::Auto), static_cast<int>(ZoneSelectorSizeMode::Manual))},
+         clampInt(static_cast<int>(ZoneSelectorSizeMode::Auto), static_cast<int>(ZoneSelectorSizeMode::Manual)),
+         intChoices({{0, "auto"_L1}, {1, "manual"_L1}})},
         {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
     };
 }
@@ -780,7 +862,18 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      static_cast<int>(DragModifier::CtrlShift), static_cast<int>(DragModifier::AltShift),
                      static_cast<int>(DragModifier::AlwaysActive), static_cast<int>(DragModifier::AltMeta),
                      static_cast<int>(DragModifier::CtrlAltMeta)},
-                    static_cast<int>(DragModifier::Disabled))},
+                    static_cast<int>(DragModifier::Disabled)),
+         intChoices({{0, "disabled"_L1},
+                     {1, "shift"_L1},
+                     {2, "ctrl"_L1},
+                     {3, "alt"_L1},
+                     {4, "meta"_L1},
+                     {5, "ctrlAlt"_L1},
+                     {6, "ctrlShift"_L1},
+                     {7, "altShift"_L1},
+                     {8, "alwaysActive"_L1},
+                     {9, "altMeta"_L1},
+                     {10, "ctrlAltMeta"_L1}})},
         {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::zoneSpanToggleMode(), QMetaType::Bool},
     };
@@ -802,7 +895,8 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
-                  static_cast<int>(StickyWindowHandling::IgnoreAll))},
+                  static_cast<int>(StickyWindowHandling::IgnoreAll)),
+         intChoices({{0, "treatAsNormal"_L1}, {1, "restoreOnly"_L1}, {2, "ignoreAll"_L1}})},
         {CD::restoreOnLoginKey(), CD::restoreWindowsToZonesOnLogin(), QMetaType::Bool},
         {CD::restoreFloatedOnLoginKey(), CD::snappingRestoreFloatedWindowsOnLogin(), QMetaType::Bool},
         {CD::unfloatFallbackToZoneKey(), CD::snapUnfloatFallbackToZone(), QMetaType::Bool},
@@ -863,7 +957,8 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          CD::autotileInsertPosition(),
          QMetaType::Int,
          {},
-         clampInt(CD::autotileInsertPositionMin(), CD::autotileInsertPositionMax())},
+         clampInt(CD::autotileInsertPositionMin(), CD::autotileInsertPositionMax()),
+         intChoices({{0, "end"_L1}, {1, "afterFocused"_L1}, {2, "asMaster"_L1}})},
         {CD::focusNewWindowsKey(), CD::autotileFocusNewWindows(), QMetaType::Bool},
         {CD::focusFollowsMouseKey(), CD::autotileFocusFollowsMouse(), QMetaType::Bool},
         {CD::respectMinimumSizeKey(), CD::autotileRespectMinimumSize(), QMetaType::Bool},
@@ -873,20 +968,23 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
-                  static_cast<int>(StickyWindowHandling::IgnoreAll))},
+                  static_cast<int>(StickyWindowHandling::IgnoreAll)),
+         intChoices({{0, "treatAsNormal"_L1}, {1, "restoreOnly"_L1}, {2, "ignoreAll"_L1}})},
         {CD::dragBehaviorKey(),
          CD::autotileDragBehavior(),
          QMetaType::Int,
          {},
          validIntOr({static_cast<int>(AutotileDragBehavior::Float), static_cast<int>(AutotileDragBehavior::Reorder)},
-                    static_cast<int>(AutotileDragBehavior::Float))},
+                    static_cast<int>(AutotileDragBehavior::Float)),
+         intChoices({{0, "float"_L1}, {1, "reorder"_L1}})},
         {CD::overflowBehaviorKey(),
          CD::autotileOverflowBehavior(),
          QMetaType::Int,
          {},
          validIntOr(
              {static_cast<int>(AutotileOverflowBehavior::Float), static_cast<int>(AutotileOverflowBehavior::Unlimited)},
-             static_cast<int>(AutotileOverflowBehavior::Float))},
+             static_cast<int>(AutotileOverflowBehavior::Float)),
+         intChoices({{0, "float"_L1}, {1, "unlimited"_L1}})},
         {CD::lockedScreensKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::triggersKey(), CD::autotileDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
@@ -927,7 +1025,8 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          CD::windowBorderScope(),
          QMetaType::QString,
          {},
-         scopeValidator(CD::windowBorderScope())},
+         scopeValidator(CD::windowBorderScope()),
+         tokenChoices({WAS::Tiled, WAS::Normal, WAS::All})},
         {CD::widthKey(),
          CD::windowBorderWidth(),
          QMetaType::Int,
@@ -953,7 +1052,8 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          CD::windowTitleBarScope(),
          QMetaType::QString,
          {},
-         scopeValidator(CD::windowTitleBarScope())},
+         scopeValidator(CD::windowTitleBarScope()),
+         tokenChoices({WAS::Tiled, WAS::Normal, WAS::All})},
         {CD::focusFadeDurationKey(),
          CD::focusFadeDuration(),
          QMetaType::Int,
@@ -967,7 +1067,8 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          CD::windowOpacityTintScope(),
          QMetaType::QString,
          {},
-         scopeValidator(CD::windowOpacityTintScope())},
+         scopeValidator(CD::windowOpacityTintScope()),
+         tokenChoices({WAS::Tiled, WAS::Normal, WAS::All})},
         {CD::opacityKey(),
          CD::windowOpacity(),
          QMetaType::Double,

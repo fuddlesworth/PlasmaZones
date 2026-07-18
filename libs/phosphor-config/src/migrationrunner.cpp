@@ -38,6 +38,14 @@ QVariant Schema::defaultFor(const QString& group, const QString& key) const
     return {};
 }
 
+QVector<ChoiceDef> Schema::choicesFor(const QString& group, const QString& key) const
+{
+    if (const KeyDef* def = findKey(group, key)) {
+        return def->choices;
+    }
+    return {};
+}
+
 // ─── MigrationRunner ─────────────────────────────────────────────────────────
 
 MigrationRunner::MigrationRunner(const Schema& schema)
