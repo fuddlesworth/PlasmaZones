@@ -98,6 +98,8 @@ SettingsFlickable {
             Layout.fillWidth: true
             headerText: i18n("Window Handling")
             searchAnchor: "windowHandling"
+            // Advanced-only: insert position, overflow, sticky, drag behaviour.
+            visible: settingsController.advancedMode
             collapsible: true
 
             contentItem: ColumnLayout {
@@ -276,6 +278,8 @@ SettingsFlickable {
             Layout.fillWidth: true
             headerText: i18n("Focus")
             searchAnchor: "focus"
+            // Advanced-only: focus-follows-mouse and new-window focus policy.
+            visible: settingsController.advancedMode
             collapsible: true
 
             contentItem: ColumnLayout {

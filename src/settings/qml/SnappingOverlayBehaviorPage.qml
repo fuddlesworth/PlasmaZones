@@ -118,6 +118,9 @@ SettingsFlickable {
         Item {
             Layout.fillWidth: true
             implicitHeight: zoneSpanCard.implicitHeight
+            // Advanced-only: multi-zone spanning is a power behaviour. Gate the
+            // wrapper so the reserved height collapses with the card.
+            visible: settingsController.advancedMode
 
             SettingsCard {
                 id: zoneSpanCard
@@ -207,6 +210,8 @@ SettingsFlickable {
         Item {
             Layout.fillWidth: true
             implicitHeight: displayCard.implicitHeight
+            // Advanced-only: multi-monitor / aspect-ratio display filtering.
+            visible: settingsController.advancedMode
 
             SettingsCard {
                 id: displayCard
