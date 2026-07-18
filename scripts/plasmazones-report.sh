@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
             echo "  config.json      Current configuration (home paths redacted)"
             echo "  session.json     Window session state (home paths redacted)"
             echo "  rules.json       Window/screen rules (home paths redacted)"
-            echo "  *.json, *.conf   Remaining config-dir files (quick layouts, settings profiles, etc.)"
+            echo "  ...              Remaining config-dir files (quick layouts, settings profiles, etc.)"
             echo "  data/            User data (layouts, algorithms, shaders, animation profiles, etc.)"
             echo "  journal.log      Recent plasmazonesd journal entries"
             echo "  kwin-effect.log  Recent PlasmaZones KWin effect journal entries"
@@ -200,12 +200,15 @@ if [[ -d "$DATA_DIR" ]]; then
     find -P "$DATA_DIR" -maxdepth 5 -type f -print0 | while IFS= read -r -d '' f; do
         rel="${f#"$DATA_DIR"/}"
         mkdir -p "$STAGING/data/$(dirname "$rel")"
-        case "$f" in
-            *.json|*.js|*.glsl|*.frag|*.vert|*.conf|*.txt|*.qml|*.yaml|*.yml|*.toml|*.css|*.ini)
-                redact_home "$f" > "$STAGING/data/$rel" ;;
-            *)
-                cp "$f" "$STAGING/data/$rel" ;;
-        esac
+        # Text detection instead of an extension allowlist, matching the
+        # config-dir loop: an allowlist misses real text formats (a
+        # user-authored .luau algorithm, for one) and would ship them with
+        # home paths intact.
+        if grep -Iq . "$f" 2>/dev/null; then
+            redact_home "$f" > "$STAGING/data/$rel"
+        else
+            cp "$f" "$STAGING/data/$rel"
+        fi
     done
 fi
 
