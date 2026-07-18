@@ -571,6 +571,105 @@ void ProfileStore::depthFirstOrder(const QHash<QUuid, Record>& all, QList<QUuid>
     }
 }
 
+QString ProfileStore::humanizeKey(const QString& key)
+{
+    // camelCase / PascalCase → spaced sentence case: "borderWidth" becomes
+    // "Border width", so a delta row reads as prose rather than as a config key.
+    QString out;
+    out.reserve(key.size() + 4);
+    for (int i = 0; i < key.size(); ++i) {
+        const QChar c = key.at(i);
+        if (i == 0) {
+            out.append(c.toUpper());
+        } else if (c.isUpper() && !key.at(i - 1).isUpper()) {
+            out.append(QLatin1Char(' '));
+            out.append(c.toLower());
+        } else {
+            out.append(c);
+        }
+    }
+    return out;
+}
+
+QString ProfileStore::humanizeGroup(const QString& group)
+{
+    // Dot-path groups render as a breadcrumb, each segment humanized:
+    // "Snapping.Behavior.ZoneSpan" → "Snapping › Behavior › Zone span".
+    const QStringList parts = group.split(QLatin1Char('.'), Qt::SkipEmptyParts);
+    QStringList humanized;
+    humanized.reserve(parts.size());
+    for (const QString& part : parts) {
+        humanized.append(humanizeKey(part));
+    }
+    return humanized.join(QStringLiteral(" › "));
+}
+
+QVariantList ProfileStore::configChanges(const QString& id) const
+{
+    const QHash<QUuid, Record> all = loadAll();
+    const QUuid uid(id);
+    if (!all.contains(uid)) {
+        return {};
+    }
+    const Record& rec = all.value(uid);
+    // The stored delta IS the set of overridden keys; the parent-resolved blob
+    // supplies what each was before this profile changed it.
+    const QUuid parent = rec.parent;
+    const QJsonObject parentResolved = parent.isNull() || !all.contains(parent)
+        ? (m_config.defaultConfig ? m_config.defaultConfig() : QJsonObject())
+        : resolveConfig(parent, all);
+
+    QVariantList rows;
+    for (auto git = rec.configDelta.constBegin(); git != rec.configDelta.constEnd(); ++git) {
+        const QJsonObject group = git.value().toObject();
+        const QJsonObject baseGroup = parentResolved.value(git.key()).toObject();
+        for (auto kit = group.constBegin(); kit != group.constEnd(); ++kit) {
+            QVariantMap row;
+            row.insert(QStringLiteral("group"), humanizeGroup(git.key()));
+            row.insert(QStringLiteral("key"), humanizeKey(kit.key()));
+            row.insert(QStringLiteral("before"), baseGroup.value(kit.key()).toVariant());
+            row.insert(QStringLiteral("after"), kit.value().toVariant());
+            rows.append(row);
+        }
+    }
+    return rows;
+}
+
+QVariantList ProfileStore::ruleChanges(const QString& id) const
+{
+    const QHash<QUuid, Record> all = loadAll();
+    const QUuid uid(id);
+    if (!all.contains(uid)) {
+        return {};
+    }
+    const Record& rec = all.value(uid);
+    const QUuid parent = rec.parent;
+    const QList<PhosphorRules::Rule> parentRules =
+        parent.isNull() || !all.contains(parent) ? QList<PhosphorRules::Rule>() : resolveRules(parent, all);
+    QHash<QUuid, PhosphorRules::Rule> parentById;
+    for (const PhosphorRules::Rule& rule : parentRules) {
+        parentById.insert(rule.id, rule);
+    }
+
+    QVariantList rows;
+    for (const PhosphorRules::Rule& rule : rec.ruleUpserts) {
+        QVariantMap row;
+        row.insert(QStringLiteral("name"), rule.name);
+        row.insert(QStringLiteral("change"),
+                   parentById.contains(rule.id) ? QStringLiteral("changed") : QStringLiteral("added"));
+        rows.append(row);
+    }
+    for (const QUuid& removed : rec.ruleRemovedIds) {
+        QVariantMap row;
+        // Name the rule as the PARENT knows it — this profile no longer carries it.
+        row.insert(QStringLiteral("name"),
+                   parentById.contains(removed) ? parentById.value(removed).name : removed.toString());
+        row.insert(QStringLiteral("change"), QStringLiteral("removed"));
+        rows.append(row);
+    }
+    return rows;
+}
+
 QString ProfileStore::profileSignature(const QUuid& id, const QHash<QUuid, Record>& all) const
 {
     // Hash the RESOLVED cascade, not this profile's delta: two profiles that end

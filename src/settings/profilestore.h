@@ -122,6 +122,17 @@ public:
     /// from it). Drives the "modified" marker in the page and switcher.
     Q_INVOKABLE bool activeProfileModified() const;
 
+    /// What @p id overrides relative to its parent, one row per key:
+    /// `{ group, key, before, after }`. `group`/`key` are humanized for
+    /// display; `before`/`after` are the raw values so QML formats them in the
+    /// user's locale. Empty when the profile overrides nothing.
+    Q_INVOKABLE QVariantList configChanges(const QString& id) const;
+
+    /// The rule differences @p id introduces relative to its parent, one row
+    /// per rule: `{ name, change }` where change is "added", "changed", or
+    /// "removed".
+    Q_INVOKABLE QVariantList ruleChanges(const QString& id) const;
+
     /// Rewrite @p id's delta to capture the CURRENT live settings and rules
     /// (recomputed against its parent). Used by "Update profile from current
     /// settings" when the active profile has been edited away from.
@@ -251,6 +262,11 @@ private:
     /// Depth-first display order (roots in sibling order, each followed by its
     /// subtree), with each id's inheritance depth. @p all is the loaded map.
     void depthFirstOrder(const QHash<QUuid, Record>& all, QList<QUuid>& orderOut, QHash<QUuid, int>& depthOut) const;
+
+    /// "Snapping.Behavior.ZoneSpan" → "Snapping › Behavior › Zone span".
+    static QString humanizeGroup(const QString& group);
+    /// "borderWidth" → "Border width".
+    static QString humanizeKey(const QString& key);
 
     /// Stable hex digest of @p id's fully-resolved config + user rules. Keyed on
     /// the whole cascade, so a child that overrides nothing hashes identically

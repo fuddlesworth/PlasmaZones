@@ -9,16 +9,24 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief One profile row in the Profiles page tree list.
  *
- * A single non-expanding row (the ShaderSetCard convention): depth indentation ·
- * icon · name + parent subtitle · status badge (Active / Modified) · a trailing
- * strip of visible action buttons (activate, update-when-modified, rename,
- * duplicate, set parent, export, delete). No overflow menu, no collapse.
+ * Collapsed: depth indentation · identicon · name + parent subtitle · status
+ * badge (Active / Modified) · a trailing strip of visible action buttons
+ * (activate, update-when-modified, rename, duplicate, set parent, export,
+ * delete). Every action stays on the row — no overflow menu.
+ *
+ * Expanded (the rule row's pattern): a read-only diff of what this profile
+ * overrides relative to its parent, split into SETTINGS and RULES sections
+ * under the shared SectionHeaderPill capsules.
  */
 ExpandableRowDelegate {
     id: row
 
     /// One row map from ProfileStore::availableProfiles().
     required property var modelData
+
+    /// The ProfileStore, for the on-demand diff the expansion shows. Null
+    /// disables expansion entirely (the shell keeps the row collapsed).
+    property var bridge: null
 
     readonly property string profileId: modelData.id
     readonly property string profileName: modelData.name
@@ -37,8 +45,8 @@ ExpandableRowDelegate {
     signal exportRequested
     signal deleteRequested
 
-    // Everything fits on one row — no expansion body.
-    expandable: false
+    // The header fits on one row; the body is the read-only diff below.
+    expansionContent: row.bridge ? diffComponent : null
 
     // Depth indent: a leading guide so nesting reads at a glance.
     Item {
@@ -184,5 +192,135 @@ ExpandableRowDelegate {
         ToolTip.visible: hovered
         Accessible.name: i18n("Delete profile %1", row.profileName)
         onClicked: row.deleteRequested()
+    }
+
+    // ── Expanded body: what this profile overrides, before → after ──
+    Component {
+        id: diffComponent
+
+        ColumnLayout {
+            id: diffColumn
+
+            readonly property var configRows: row.bridge ? row.bridge.configChanges(row.profileId) : []
+            readonly property var ruleRows: row.bridge ? row.bridge.ruleChanges(row.profileId) : []
+
+            spacing: Kirigami.Units.smallSpacing
+
+            /// Raw values arrive untranslated so the wording is decided here.
+            function formatValue(value) {
+                if (value === undefined || value === null)
+                    return i18nc("a setting with no value", "unset");
+                if (typeof value === "boolean")
+                    return value ? i18nc("a boolean setting that is on", "On") : i18nc("a boolean setting that is off", "Off");
+                if (typeof value === "string" && value.length === 0)
+                    return i18nc("an empty text setting", "empty");
+                return String(value);
+            }
+
+            Label {
+                Layout.fillWidth: true
+                visible: diffColumn.configRows.length === 0 && diffColumn.ruleRows.length === 0
+                text: row.isRoot ? i18n("Nothing overridden — this profile matches the defaults.") : i18n("Nothing overridden — this profile matches “%1”.", row.parentName)
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.WordWrap
+            }
+
+            SectionHeaderPill {
+                Layout.alignment: Qt.AlignLeft
+                visible: diffColumn.configRows.length > 0
+                text: i18nc("@title diff section listing changed settings", "Settings")
+            }
+
+            Repeater {
+                model: diffColumn.configRows
+
+                delegate: RowLayout {
+                    id: changeRow
+
+                    required property var modelData
+
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                        text: changeRow.modelData.group.length > 0 ? i18nc("settings breadcrumb followed by the key", "%1 › %2", changeRow.modelData.group, changeRow.modelData.key) : changeRow.modelData.key
+                        elide: Text.ElideRight
+                        font: Kirigami.Theme.smallFont
+                    }
+
+                    Label {
+                        text: diffColumn.formatValue(changeRow.modelData.before)
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: Kirigami.Units.gridUnit * 8
+                        color: Kirigami.Theme.disabledTextColor
+                        font: Kirigami.Theme.smallFont
+                    }
+
+                    Kirigami.Icon {
+                        source: "arrow-right"
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        opacity: 0.6
+                    }
+
+                    Label {
+                        text: diffColumn.formatValue(changeRow.modelData.after)
+                        elide: Text.ElideRight
+                        Layout.maximumWidth: Kirigami.Units.gridUnit * 8
+                        font.bold: true
+                    }
+                }
+            }
+
+            SectionHeaderPill {
+                Layout.alignment: Qt.AlignLeft
+                Layout.topMargin: Kirigami.Units.smallSpacing
+                visible: diffColumn.ruleRows.length > 0
+                text: i18nc("@title diff section listing changed rules", "Rules")
+            }
+
+            Repeater {
+                model: diffColumn.ruleRows
+
+                delegate: RowLayout {
+                    id: ruleChangeRow
+
+                    required property var modelData
+
+                    readonly property string changeLabel: {
+                        if (ruleChangeRow.modelData.change === "added")
+                            return i18nc("a rule this profile adds", "Added");
+                        if (ruleChangeRow.modelData.change === "removed")
+                            return i18nc("a rule this profile drops", "Removed");
+                        return i18nc("a rule this profile alters", "Changed");
+                    }
+                    readonly property color changeColor: {
+                        if (ruleChangeRow.modelData.change === "added")
+                            return Kirigami.Theme.positiveTextColor;
+                        if (ruleChangeRow.modelData.change === "removed")
+                            return Kirigami.Theme.negativeTextColor;
+                        return Kirigami.Theme.neutralTextColor;
+                    }
+
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        text: ruleChangeRow.changeLabel
+                        color: ruleChangeRow.changeColor
+                        font: Kirigami.Theme.smallFont
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: ruleChangeRow.modelData.name
+                        elide: Text.ElideRight
+                        font: Kirigami.Theme.smallFont
+                    }
+                }
+            }
+        }
     }
 }

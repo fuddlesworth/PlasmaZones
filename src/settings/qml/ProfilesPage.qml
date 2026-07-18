@@ -241,6 +241,7 @@ SettingsFlickable {
 
                     delegate: ProfileRow {
                         Layout.fillWidth: true
+                        bridge: root.bridge
                         Layout.leftMargin: Kirigami.Units.smallSpacing
                         Layout.rightMargin: Kirigami.Units.smallSpacing
 

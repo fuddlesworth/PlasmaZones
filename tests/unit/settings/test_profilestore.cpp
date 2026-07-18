@@ -433,6 +433,63 @@ private Q_SLOTS:
         QCOMPARE(storedConfig(id).value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 5);
     }
 
+    /// configChanges reports each overridden key with the value it had in the
+    /// parent (schema defaults at the root) and the value this profile sets.
+    void configDiffAgainstParent()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 2}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        const QString rootId = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        // Root profile: "before" is the schema default (1), not empty.
+        const QVariantList rootRows = m_store->configChanges(rootId);
+        QCOMPARE(rootRows.size(), 1);
+        const QVariantMap rootRow = rootRows.first().toMap();
+        QCOMPARE(rootRow.value(QStringLiteral("group")).toString(), QStringLiteral("Group a"));
+        QCOMPARE(rootRow.value(QStringLiteral("key")).toString(), QStringLiteral("K1"));
+        QCOMPARE(rootRow.value(QStringLiteral("before")).toInt(), 1);
+        QCOMPARE(rootRow.value(QStringLiteral("after")).toInt(), 2);
+
+        // Child profile: "before" is the PARENT's value, not the default.
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 5}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        const QString childId = m_store->createProfile(QStringLiteral("C"), QString(), rootId);
+        const QVariantList childRows = m_store->configChanges(childId);
+        QCOMPARE(childRows.size(), 1);
+        QCOMPARE(childRows.first().toMap().value(QStringLiteral("before")).toInt(), 2);
+        QCOMPARE(childRows.first().toMap().value(QStringLiteral("after")).toInt(), 5);
+    }
+
+    /// ruleChanges classifies each rule difference against the parent.
+    void ruleDiffAgainstParent()
+    {
+        const Rule r1 = makeRule(QStringLiteral("a"), QStringLiteral("a.desktop"));
+        m_currentRules = {r1};
+        const QString rootId = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        // Against the empty root baseline the rule is new.
+        const QVariantList rootRows = m_store->ruleChanges(rootId);
+        QCOMPARE(rootRows.size(), 1);
+        QCOMPARE(rootRows.first().toMap().value(QStringLiteral("change")).toString(), QStringLiteral("added"));
+        QCOMPARE(rootRows.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("a"));
+
+        // The child drops r1 and adds r2.
+        const Rule r2 = makeRule(QStringLiteral("b"), QStringLiteral("b.desktop"));
+        m_currentRules = {r2};
+        const QString childId = m_store->createProfile(QStringLiteral("C"), QString(), rootId);
+
+        QHash<QString, QString> changeByName;
+        for (const QVariant& v : m_store->ruleChanges(childId)) {
+            changeByName.insert(v.toMap().value(QStringLiteral("name")).toString(),
+                                v.toMap().value(QStringLiteral("change")).toString());
+        }
+        QCOMPARE(changeByName.size(), 2);
+        QCOMPARE(changeByName.value(QStringLiteral("b")), QStringLiteral("added"));
+        // Named as the PARENT knows it — the child no longer carries the rule.
+        QCOMPARE(changeByName.value(QStringLiteral("a")), QStringLiteral("removed"));
+    }
+
     /// The row signature is derived from the RESOLVED cascade: a child that
     /// overrides nothing hashes identically to its parent, and diverges as soon
     /// as it overrides something.
