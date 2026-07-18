@@ -1,6 +1,14 @@
 {
     "releases": [
         {
+            "version": "3.2.3",
+            "date": "2026-07-18",
+            "highlights": [
+                "Fixed: seven animation packs (Fade, Fade Color, Broken Glass, Voronoi Shatter, Ink Splash, Inkwell Drop, and Desktop Phosphor) finished their visible motion early or started it late, so part of the transition looked frozen. Each pack now animates across its whole duration (#800)",
+                "Fixed: a few plural strings in the settings app, such as the zone count in the layout picker, showed a literal placeholder instead of the number. The counts substitute correctly again (#801)"
+            ]
+        },
+        {
             "version": "3.2.2",
             "date": "2026-07-18",
             "highlights": [

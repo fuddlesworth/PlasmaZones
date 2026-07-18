@@ -5,6 +5,13 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.3] - 2026-07-18
+
+### Fixed
+
+- **Animations no longer freeze partway through**: seven animation packs (Fade, Fade Color, Broken Glass, Voronoi Shatter, Ink Splash, Inkwell Drop, and Desktop Phosphor) finished their visible motion early or started it late, so part of the transition looked frozen. Each pack now animates across its whole duration, in both directions ([#800](https://github.com/fuddlesworth/PlasmaZones/pull/800)).
+- **Counts show up in plural text again**: a few plural strings in the settings app, such as the zone count in the layout picker, displayed a literal placeholder instead of the number. The counts substitute correctly again ([#801](https://github.com/fuddlesworth/PlasmaZones/pull/801)).
+
 ## [3.2.2] - 2026-07-18
 
 ### Added
