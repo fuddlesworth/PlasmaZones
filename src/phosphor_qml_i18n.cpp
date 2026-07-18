@@ -12,9 +12,11 @@ PhosphorLocalizedContext::PhosphorLocalizedContext(QObject* parent)
 QString PhosphorLocalizedContext::substituteArgs(QString text, const QVariant& a1, const QVariant& a2,
                                                  const QVariant& a3, const QVariant& a4, const QVariant& a5)
 {
-    // Use multi-arg QString::arg() to prevent double-substitution when
-    // argument values themselves contain %N markers. Sequential .arg()
-    // calls would replace markers introduced by earlier substitutions.
+    // Single left-to-right scan so %N markers introduced by an argument's
+    // own value are never re-substituted (a layout named "%2" must come
+    // out verbatim). Sequential QString::replace passes would substitute
+    // markers injected by earlier substitutions. %N with no matching
+    // argument stays literal, matching the previous behaviour.
     QStringList args;
     if (a1.isValid())
         args << a1.toString();
@@ -26,9 +28,21 @@ QString PhosphorLocalizedContext::substituteArgs(QString text, const QVariant& a
         args << a4.toString();
     if (a5.isValid())
         args << a5.toString();
-    for (int i = 0; i < args.size(); ++i)
-        text = text.replace(QStringLiteral("%") + QString::number(i + 1), args.at(i));
-    return text;
+    QString out;
+    out.reserve(text.size());
+    for (qsizetype i = 0; i < text.size(); ++i) {
+        const QChar c = text.at(i);
+        if (c == QLatin1Char('%') && i + 1 < text.size()) {
+            const int digit = text.at(i + 1).digitValue();
+            if (digit >= 1 && digit <= args.size()) {
+                out += args.at(digit - 1);
+                ++i;
+                continue;
+            }
+        }
+        out += c;
+    }
+    return out;
 }
 
 QString PhosphorLocalizedContext::i18n(const QString& text, const QVariant& a1, const QVariant& a2, const QVariant& a3,
