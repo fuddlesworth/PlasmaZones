@@ -106,7 +106,11 @@ public:
 
     /// Saved profiles, one row per file, in DEPTH-FIRST (tree) order:
     /// `{ id, name, description, parentId, parentName, isRoot, depth, active,
-    ///    modified }`.
+    ///    modified, signature }`.
+    /// `signature` is a stable hex digest of the profile's RESOLVED config +
+    /// user rules — the whole cascade, not just this profile's delta — which
+    /// QML renders as a small identicon. Two profiles that resolve to the same
+    /// settings therefore carry the same signature.
     /// `depth` is the inheritance depth (0 for a root) for indented rendering.
     /// `active` reflects the controller's STAGED active id. `modified` is true
     /// only on the active row when the live settings/rules have diverged from
@@ -247,6 +251,11 @@ private:
     /// Depth-first display order (roots in sibling order, each followed by its
     /// subtree), with each id's inheritance depth. @p all is the loaded map.
     void depthFirstOrder(const QHash<QUuid, Record>& all, QList<QUuid>& orderOut, QHash<QUuid, int>& depthOut) const;
+
+    /// Stable hex digest of @p id's fully-resolved config + user rules. Keyed on
+    /// the whole cascade, so a child that overrides nothing hashes identically
+    /// to its parent. QML renders it as an identicon.
+    QString profileSignature(const QUuid& id, const QHash<QUuid, Record>& all) const;
 
     /// True when @p maybeAncestor is @p id or one of its ancestors.
     bool isSelfOrAncestor(const QUuid& maybeAncestor, const QUuid& id, const QHash<QUuid, Record>& all) const;

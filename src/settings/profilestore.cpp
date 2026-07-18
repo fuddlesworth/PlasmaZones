@@ -6,6 +6,7 @@
 #include "../core/logging.h"
 #include "../phosphor_i18n.h"
 
+#include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -570,6 +571,18 @@ void ProfileStore::depthFirstOrder(const QHash<QUuid, Record>& all, QList<QUuid>
     }
 }
 
+QString ProfileStore::profileSignature(const QUuid& id, const QHash<QUuid, Record>& all) const
+{
+    // Hash the RESOLVED cascade, not this profile's delta: two profiles that end
+    // up at the same settings should carry the same signature. QJsonObject keys
+    // serialize in sorted order, so the Compact form is a canonical encoding.
+    QByteArray payload = QJsonDocument(resolveConfig(id, all)).toJson(QJsonDocument::Compact);
+    for (const PhosphorRules::Rule& rule : resolveRules(id, all)) {
+        payload += QJsonDocument(rule.toJson()).toJson(QJsonDocument::Compact);
+    }
+    return QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha1).toHex());
+}
+
 QVariantList ProfileStore::availableProfiles() const
 {
     const QHash<QUuid, Record> all = loadAll();
@@ -596,6 +609,7 @@ QVariantList ProfileStore::availableProfiles() const
         const bool active = idStr == stagedActive;
         row.insert(QStringLiteral("active"), active);
         row.insert(QStringLiteral("modified"), active && activeModified);
+        row.insert(QStringLiteral("signature"), profileSignature(id, all));
         rows.append(row);
     }
     return rows;

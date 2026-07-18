@@ -55,12 +55,20 @@ ExpandableRowDelegate {
         }
     }
 
-    Kirigami.Icon {
-        source: "bookmarks"
+    // Identicon derived from the profile's resolved settings — two profiles
+    // that cascade to the same values draw the same mark.
+    ProfileSignature {
+        signature: row.modelData.signature
         Layout.alignment: Qt.AlignVCenter
-        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-        opacity: 0.7
+        Layout.preferredWidth: Kirigami.Units.iconSizes.medium
+        Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+
+        HoverHandler {
+            id: signatureHover
+        }
+
+        ToolTip.text: i18n("A visual fingerprint of everything this profile resolves to, including what it inherits.")
+        ToolTip.visible: signatureHover.hovered
     }
 
     ColumnLayout {

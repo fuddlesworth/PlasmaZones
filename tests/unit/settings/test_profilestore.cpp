@@ -432,6 +432,39 @@ private Q_SLOTS:
         QVERIFY(!m_store->activeProfileModified());
         QCOMPARE(storedConfig(id).value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 5);
     }
+
+    /// The row signature is derived from the RESOLVED cascade: a child that
+    /// overrides nothing hashes identically to its parent, and diverges as soon
+    /// as it overrides something.
+    void signatureFollowsCascade()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 2}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        m_store->createProfile(QStringLiteral("R"), QString(), QString());
+        const QString rootId = m_staged; // createProfile stages the new profile
+
+        // A child capturing the same live settings overrides nothing.
+        m_store->createProfile(QStringLiteral("Same"), QString(), rootId);
+
+        // A child that changes a value does override something.
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 9}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        m_store->createProfile(QStringLiteral("Diff"), QString(), rootId);
+
+        QHash<QString, QString> signatureByName;
+        for (const QVariant& v : m_store->availableProfiles()) {
+            const QVariantMap row = v.toMap();
+            signatureByName.insert(row.value(QStringLiteral("name")).toString(),
+                                   row.value(QStringLiteral("signature")).toString());
+        }
+
+        QVERIFY(!signatureByName.value(QStringLiteral("R")).isEmpty());
+        // Same resolved settings → same mark.
+        QCOMPARE(signatureByName.value(QStringLiteral("Same")), signatureByName.value(QStringLiteral("R")));
+        // Diverged cascade → different mark.
+        QVERIFY(signatureByName.value(QStringLiteral("Diff")) != signatureByName.value(QStringLiteral("R")));
+    }
 };
 
 QTEST_MAIN(TestProfileStore)
