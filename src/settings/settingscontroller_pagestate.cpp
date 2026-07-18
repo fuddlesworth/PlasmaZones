@@ -378,9 +378,21 @@ void SettingsController::onSettingsPropertyChanged()
 
 void SettingsController::onExternalSettingsChanged()
 {
-    if (!m_saving) {
-        load();
+    if (m_saving) {
+        return;
     }
+    // With unsaved edits on any page, a reload would reparse disk over the
+    // in-memory Settings and end in setNeedsSave(false) — silently dropping
+    // the user's pending changes and clearing the footer. Staging-domain
+    // pages snapshot/revert their own state, but plain Q_PROPERTY edits
+    // (e.g. the animation profile fields) have no such net. Keep the local
+    // edits; the user resolves the divergence by saving over the external
+    // change or discarding.
+    if (needsSave()) {
+        qCInfo(lcCore) << "External settings change ignored: unsaved local edits take precedence";
+        return;
+    }
+    load();
 }
 
 void SettingsController::setNeedsSave(bool needs)

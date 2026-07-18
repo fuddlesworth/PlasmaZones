@@ -1167,6 +1167,7 @@ PhosphorAnimation::Profile Settings::animationProfile() const
 
 void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 {
+    refreshCleanBackendFromDisk();
     // Change detection compares the merged QJsonObject against the
     // current stored blob via QJsonObject::operator==, NOT through a
     // semantic `Profile::operator==` check. The semantic comparison hits
@@ -1311,6 +1312,30 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 // (clamp for numerics, registry resolution for the curve string). The
 // helper is defined in this TU because it is consumed exclusively here;
 // keeping it private to settings.cpp keeps the .h surface compact.
+// Cross-process coherence for COMPOSITE values (multi-field JSON blobs stored
+// under one key: the animation Profile, the shader/decoration profile trees,
+// the per-algorithm autotile map). Scalar keys are written atomically and
+// last-writer-wins per key is acceptable; composites are not, in two ways.
+// Read-modify-write setters (the animation Profile field patches) merge into
+// the WHOLE blob, so a stale cached document resurrects old sibling fields
+// over a value the other process just committed — proven live: a daemon-side
+// sequenceMode write landing between the settings app's save and the daemon's
+// reload permanently reverted a just-saved duration (#795). Whole-replace
+// setters (the trees, the per-algo map) compare against the cached blob for
+// their no-op guard, so a stale cache can wrongly swallow a write the disk
+// actually needs. Every composite setter therefore refreshes first.
+// Refreshing is only legal on a CLEAN backend: with local writes pending the
+// in-memory document is the freshest truth and a reparse would drop them.
+// The dirty flag makes this self-limiting on the slider hot path — the first
+// write of an edit burst marks the backend dirty, so later ticks skip the
+// reparse until the next save.
+void Settings::refreshCleanBackendFromDisk()
+{
+    if (m_configBackend && !m_configBackend->isDirty()) {
+        m_configBackend->reparseConfiguration();
+    }
+}
+
 template<typename T>
 void Settings::patchProfileField(const char* jsonFieldName, const T& currentValue, const T& newValue,
                                  void (Settings::*fieldChangedSignal)())
@@ -1336,6 +1361,7 @@ int Settings::animationDuration() const
 
 void Settings::setAnimationDuration(int duration)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationDurationMin(), duration, ConfigDefaults::animationDurationMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldDuration, animationDuration(), clamped,
@@ -1379,6 +1405,7 @@ void Settings::setAnimationEasingCurve(const QString& curve)
 
     // Compare against the raw-stored wire string (same shape the getter
     // returns) so no-op assignments short-circuit before any write.
+    refreshCleanBackendFromDisk();
     if (animationEasingCurve() == curve) {
         return;
     }
@@ -1424,6 +1451,7 @@ int Settings::animationMinDistance() const
 
 void Settings::setAnimationMinDistance(int distance)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationMinDistanceMin(), distance, ConfigDefaults::animationMinDistanceMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldMinDistance, animationMinDistance(), clamped,
@@ -1437,6 +1465,7 @@ int Settings::animationSequenceMode() const
 
 void Settings::setAnimationSequenceMode(int mode)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationSequenceModeMin(), mode, ConfigDefaults::animationSequenceModeMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldSequenceMode, animationSequenceMode(), clamped,
@@ -1450,6 +1479,7 @@ int Settings::animationStaggerInterval() const
 
 void Settings::setAnimationStaggerInterval(int ms)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationStaggerIntervalMin(), ms, ConfigDefaults::animationStaggerIntervalMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldStaggerInterval, animationStaggerInterval(), clamped,
@@ -1486,6 +1516,7 @@ PhosphorAnimationShaders::ShaderProfileTree Settings::committedShaderProfileTree
 
 void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
 {
+    refreshCleanBackendFromDisk();
     // Prune incoming tree at the persistence boundary — same rationale
     // as the read-side prune in shaderProfileTree(). Belt-and-braces:
     // the QML UI gates the picker via supportsShaderLeg(), but a
@@ -1570,6 +1601,7 @@ PhosphorSurfaceShaders::DecorationProfileTree Settings::committedDecorationProfi
 
 void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
 {
+    refreshCleanBackendFromDisk();
     // Prune the incoming tree at the persistence boundary — same
     // belt-and-braces rationale as setShaderProfileTree. fromJson is the
     // tree's canonical unsupported-path filter (setOverride itself does not
@@ -2854,6 +2886,10 @@ QVariantMap Settings::autotilePerAlgorithmSettings() const
 }
 void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
 {
+    // Dual-writer composite: the daemon's autotile engine persists this map
+    // and the settings app edits it, so the stale-guard refresh matters here
+    // as much as for the animation profile blob.
+    refreshCleanBackendFromDisk();
     // Pre-sanitize so the equality check compares against the canonicalised
     // form (the schema validator would canonicalise on both sides anyway,
     // but avoiding the redundant write keeps the settingsChanged signal

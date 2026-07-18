@@ -138,11 +138,6 @@ private Q_SLOTS:
         QCOMPARE(m_registry.profileCount(), 2);
     }
 
-    /// `ownerReloaded(tag)` fires exactly once per partitioned-reload
-    /// batch, AFTER every per-path `profileChanged` signal. Consumers
-    /// that want to coalesce UI updates across a rescan use this as
-    /// the batch-boundary marker instead of reacting to each per-path
-    /// signal individually.
     /// snapshotExcludingLowPrecedence must omit seed-owned entries so a
     /// publisher flattening the registry into a ProfileTree cannot promote
     /// low-precedence family defaults into overrides that outrank the
@@ -178,6 +173,11 @@ private Q_SLOTS:
         m_registry.setLowPrecedenceOwnerTag(QString());
     }
 
+    /// `ownerReloaded(tag)` fires exactly once per partitioned-reload
+    /// batch, AFTER every per-path `profileChanged` signal. Consumers
+    /// that want to coalesce UI updates across a rescan use this as
+    /// the batch-boundary marker instead of reacting to each per-path
+    /// signal individually.
     void testOwnerReloadedFiresOnceAfterPerPathBurst()
     {
         const QString tag = QStringLiteral("test-owner");
