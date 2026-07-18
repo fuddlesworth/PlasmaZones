@@ -867,6 +867,16 @@ PhosphorUi.SettingsAppWindow {
                 target: profileFooter.profilesBridge
             }
 
+            // A settings edit doesn't fire profilesChanged but can flip the
+            // active profile's `modified` state — re-read so the marker updates.
+            Connections {
+                function onSettingsChanged() {
+                    profileFooter.profileRows = profileFooter.profilesBridge ? profileFooter.profilesBridge.availableProfiles() : [];
+                }
+
+                target: appSettings
+            }
+
             ColumnLayout {
                 id: footerColumn
 
@@ -901,7 +911,12 @@ PhosphorUi.SettingsAppWindow {
                         // Bound to the active profile; `activated` fires only on a
                         // real user pick (not this binding), so there is no loop.
                         currentIndex: profileFooter.activeIndex
-                        displayText: profileFooter.activeIndex < 0 ? i18n("No profile") : currentText
+                        displayText: {
+                            if (profileFooter.activeIndex < 0)
+                                return i18n("No profile");
+                            const activeRow = profileFooter.profileRows[profileFooter.activeIndex];
+                            return activeRow && activeRow.modified ? i18nc("active profile with unsaved deviations", "%1 — modified", currentText) : currentText;
+                        }
                         Accessible.name: i18n("Active profile")
                         onActivated: function (index) {
                             const row = profileFooter.profileRows[index];

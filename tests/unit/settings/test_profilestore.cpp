@@ -382,6 +382,56 @@ private Q_SLOTS:
         QVERIFY(m_store->activateProfile(grand));
         QCOMPARE(ruleIds(m_lastAppliedRules), (QList<QUuid>{r1.id, r2.id, r3.id}));
     }
+
+    /// availableProfiles returns rows in depth-first (tree) order with a depth
+    /// per row.
+    void depthFirstOrdering()
+    {
+        m_current = baseDefaults();
+        const QString rootId = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+        const QString c1 = m_store->createProfile(QStringLiteral("C1"), QString(), rootId);
+        const QString c2 = m_store->createProfile(QStringLiteral("C2"), QString(), rootId);
+        const QString g = m_store->createProfile(QStringLiteral("G"), QString(), c1);
+
+        const QVariantList rows = m_store->availableProfiles();
+        QStringList names;
+        QList<int> depths;
+        for (const QVariant& v : rows) {
+            names.append(v.toMap().value(QStringLiteral("name")).toString());
+            depths.append(v.toMap().value(QStringLiteral("depth")).toInt());
+        }
+        // Depth-first: R, then C1 and its subtree (G), then C2.
+        QCOMPARE(names,
+                 (QStringList{QStringLiteral("R"), QStringLiteral("C1"), QStringLiteral("G"), QStringLiteral("C2")}));
+        QCOMPARE(depths, (QList<int>{0, 1, 2, 1}));
+    }
+
+    /// The active profile reports modified after a config edit and clean again
+    /// after updateProfileFromCurrent.
+    void modifiedStateAndUpdate()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 2}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        const QString id = m_store->createProfile(QStringLiteral("Work"), QString(), QString());
+        // Fresh profile matches current settings → not modified.
+        QVERIFY(!m_store->activeProfileModified());
+
+        // Edit the live config away from the profile.
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 5}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        QVERIFY(m_store->activeProfileModified());
+        // The active row carries the modified flag.
+        const QVariantList rows = m_store->availableProfiles();
+        QCOMPARE(rows.size(), 1);
+        QVERIFY(rows.first().toMap().value(QStringLiteral("active")).toBool());
+        QVERIFY(rows.first().toMap().value(QStringLiteral("modified")).toBool());
+
+        // Capture the current settings into the profile → clean again.
+        QVERIFY(m_store->updateProfileFromCurrent(id));
+        QVERIFY(!m_store->activeProfileModified());
+        QCOMPARE(storedConfig(id).value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 5);
+    }
 };
 
 QTEST_MAIN(TestProfileStore)

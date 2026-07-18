@@ -505,29 +505,80 @@ void ProfileStore::refresh()
     Q_EMIT profilesChanged();
 }
 
-QVariantList ProfileStore::availableProfiles() const
+void ProfileStore::depthFirstOrder(const QHash<QUuid, Record>& all, QList<QUuid>& orderOut,
+                                   QHash<QUuid, int>& depthOut) const
 {
-    const QHash<QUuid, Record> all = loadAll();
-    const QString stagedActive = activeProfileId();
+    orderOut.clear();
+    depthOut.clear();
 
-    // Display order: index.json order first (for ids still present), then any
-    // profiles not yet in the order (hand-placed / freshly imported), by name.
-    QList<QUuid> ordered;
+    // Sibling order: index.json order first (for ids still present), then any
+    // profiles not in the order (hand-placed / freshly imported), by name.
+    QList<QUuid> flat;
     for (const QUuid& id : readOrder()) {
-        if (all.contains(id) && !ordered.contains(id)) {
-            ordered.append(id);
+        if (all.contains(id) && !flat.contains(id)) {
+            flat.append(id);
         }
     }
     QList<QUuid> leftovers;
     for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
-        if (!ordered.contains(it.key())) {
+        if (!flat.contains(it.key())) {
             leftovers.append(it.key());
         }
     }
     std::sort(leftovers.begin(), leftovers.end(), [&](const QUuid& a, const QUuid& b) {
         return all.value(a).name.compare(all.value(b).name, Qt::CaseInsensitive) < 0;
     });
-    ordered.append(leftovers);
+    flat.append(leftovers);
+
+    // Children of each node, in sibling (flat) order. A profile whose parent is
+    // null or missing is a root.
+    const auto isRoot = [&](const QUuid& id) {
+        const QUuid p = all.value(id).parent;
+        return p.isNull() || !all.contains(p);
+    };
+    QHash<QUuid, QList<QUuid>> childrenOf;
+    for (const QUuid& id : flat) {
+        if (!isRoot(id)) {
+            childrenOf[all.value(id).parent].append(id);
+        }
+    }
+
+    // Depth-first walk from each root, cycle-guarded.
+    QSet<QUuid> visited;
+    std::function<void(const QUuid&, int)> visit = [&](const QUuid& id, int depth) {
+        if (visited.contains(id)) {
+            return;
+        }
+        visited.insert(id);
+        orderOut.append(id);
+        depthOut.insert(id, depth);
+        for (const QUuid& child : childrenOf.value(id)) {
+            visit(child, depth + 1);
+        }
+    };
+    for (const QUuid& id : flat) {
+        if (isRoot(id)) {
+            visit(id, 0);
+        }
+    }
+    // Any node not reached (part of a cycle) is appended at depth 0 so it stays
+    // visible and editable.
+    for (const QUuid& id : flat) {
+        if (!visited.contains(id)) {
+            visit(id, 0);
+        }
+    }
+}
+
+QVariantList ProfileStore::availableProfiles() const
+{
+    const QHash<QUuid, Record> all = loadAll();
+    const QString stagedActive = activeProfileId();
+    const bool activeModified = isActiveModified(all);
+
+    QList<QUuid> ordered;
+    QHash<QUuid, int> depth;
+    depthFirstOrder(all, ordered, depth);
 
     QVariantList rows;
     for (const QUuid& id : ordered) {
@@ -540,11 +591,89 @@ QVariantList ProfileStore::availableProfiles() const
         row.insert(QStringLiteral("parentId"), rec.parent.isNull() ? QString() : rec.parent.toString());
         row.insert(QStringLiteral("parentName"),
                    rec.parent.isNull() || !all.contains(rec.parent) ? QString() : all.value(rec.parent).name);
-        row.insert(QStringLiteral("isRoot"), rec.parent.isNull());
-        row.insert(QStringLiteral("active"), idStr == stagedActive);
+        row.insert(QStringLiteral("isRoot"), rec.parent.isNull() || !all.contains(rec.parent));
+        row.insert(QStringLiteral("depth"), depth.value(id, 0));
+        const bool active = idStr == stagedActive;
+        row.insert(QStringLiteral("active"), active);
+        row.insert(QStringLiteral("modified"), active && activeModified);
         rows.append(row);
     }
     return rows;
+}
+
+bool ProfileStore::isActiveModified(const QHash<QUuid, Record>& all) const
+{
+    const QUuid uid(activeProfileId());
+    if (uid.isNull() || !all.contains(uid)) {
+        return false;
+    }
+
+    // Config: compare the profile's resolved blob to the live config, key by key
+    // (both carry every declared key). Skip the top-level `_version` marker.
+    if (m_config.currentConfig) {
+        const QJsonObject resolved = resolveConfig(uid, all);
+        const QJsonObject current = m_config.currentConfig();
+        for (auto git = resolved.constBegin(); git != resolved.constEnd(); ++git) {
+            if (!git.value().isObject()) {
+                continue;
+            }
+            if (current.value(git.key()).toObject() != git.value().toObject()) {
+                return true;
+            }
+        }
+    }
+
+    // Rules: compare resolved user rules to the live user rules, order-sensitive,
+    // ignoring the renormalized priority (rulesSemanticallyEqual).
+    if (m_config.currentUserRules) {
+        const QList<PhosphorRules::Rule> resolved = resolveRules(uid, all);
+        const QList<PhosphorRules::Rule> current = m_config.currentUserRules();
+        if (resolved.size() != current.size()) {
+            return true;
+        }
+        for (int i = 0; i < resolved.size(); ++i) {
+            if (resolved[i].id != current[i].id || !rulesSemanticallyEqual(resolved[i], current[i])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ProfileStore::activeProfileModified() const
+{
+    return isActiveModified(loadAll());
+}
+
+bool ProfileStore::updateProfileFromCurrent(const QString& id)
+{
+    QHash<QUuid, Record> all = loadAll();
+    const QUuid uid(id);
+    if (!all.contains(uid)) {
+        return false;
+    }
+    Record rec = all.value(uid);
+    const QUuid parent = rec.parent;
+
+    // Recompute the config + rule delta from the current live settings, against
+    // the same parent-resolved baseline createProfile uses.
+    const QJsonObject parentResolved = parent.isNull() || !all.contains(parent)
+        ? (m_config.defaultConfig ? m_config.defaultConfig() : QJsonObject())
+        : resolveConfig(parent, all);
+    const QJsonObject current = m_config.currentConfig ? m_config.currentConfig() : QJsonObject();
+    rec.configDelta = diffConfig(current, parentResolved);
+
+    if (m_config.currentUserRules) {
+        const QList<PhosphorRules::Rule> parentRules =
+            parent.isNull() || !all.contains(parent) ? QList<PhosphorRules::Rule>() : resolveRules(parent, all);
+        computeRuleDelta(m_config.currentUserRules(), parentRules, rec);
+    }
+
+    if (!writeProfileRecord(rec)) {
+        return false;
+    }
+    Q_EMIT profilesChanged();
+    return true;
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────

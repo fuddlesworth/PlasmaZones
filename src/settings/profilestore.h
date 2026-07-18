@@ -104,10 +104,24 @@ public:
 
     explicit ProfileStore(Config config, QObject* parent = nullptr);
 
-    /// Saved profiles, one row per file, in display order:
-    /// `{ id, name, description, parentId, parentName, isRoot, active }`.
-    /// `active` reflects the controller's STAGED active id.
+    /// Saved profiles, one row per file, in DEPTH-FIRST (tree) order:
+    /// `{ id, name, description, parentId, parentName, isRoot, depth, active,
+    ///    modified }`.
+    /// `depth` is the inheritance depth (0 for a root) for indented rendering.
+    /// `active` reflects the controller's STAGED active id. `modified` is true
+    /// only on the active row when the live settings/rules have diverged from
+    /// what that profile resolves to.
     Q_INVOKABLE QVariantList availableProfiles() const;
+
+    /// True when a profile is active and the current live config or user rules
+    /// differ from what that profile resolves to (i.e. the user has edited away
+    /// from it). Drives the "modified" marker in the page and switcher.
+    Q_INVOKABLE bool activeProfileModified() const;
+
+    /// Rewrite @p id's delta to capture the CURRENT live settings and rules
+    /// (recomputed against its parent). Used by "Update profile from current
+    /// settings" when the active profile has been edited away from.
+    Q_INVOKABLE bool updateProfileFromCurrent(const QString& id);
 
     /// Capture the CURRENT live config as a new profile whose delta is computed
     /// against @p parentId's resolved config (empty @p parentId = root, delta vs
@@ -224,6 +238,15 @@ private:
 
     /// Rule equality ignoring `priority` (list-order is carried separately).
     static bool rulesSemanticallyEqual(const PhosphorRules::Rule& a, const PhosphorRules::Rule& b);
+
+    /// True when the staged-active profile's resolved config/rules differ from
+    /// the current live values. @p all is the loaded profile map (passed in to
+    /// avoid a re-scan). False when there is no active profile.
+    bool isActiveModified(const QHash<QUuid, Record>& all) const;
+
+    /// Depth-first display order (roots in sibling order, each followed by its
+    /// subtree), with each id's inheritance depth. @p all is the loaded map.
+    void depthFirstOrder(const QHash<QUuid, Record>& all, QList<QUuid>& orderOut, QHash<QUuid, int>& depthOut) const;
 
     /// True when @p maybeAncestor is @p id or one of its ancestors.
     bool isSelfOrAncestor(const QUuid& maybeAncestor, const QUuid& id, const QHash<QUuid, Record>& all) const;

@@ -42,9 +42,13 @@ SettingsFlickable {
     contentHeight: content.implicitHeight
     clip: true
 
+    function _reload() {
+        root.profilesList = root.bridge ? root.bridge.availableProfiles() : [];
+    }
+
     Connections {
         function onProfilesChanged() {
-            root.profilesList = root.bridge ? root.bridge.availableProfiles() : [];
+            root._reload();
         }
 
         function onToastRequested(text) {
@@ -53,6 +57,16 @@ SettingsFlickable {
         }
 
         target: root.bridge
+    }
+
+    // A settings edit doesn't fire profilesChanged, but it can flip the active
+    // profile's `modified` state — re-read the rows so the badge stays honest.
+    Connections {
+        function onSettingsChanged() {
+            root._reload();
+        }
+
+        target: appSettings
     }
 
     ColumnLayout {
@@ -147,120 +161,61 @@ SettingsFlickable {
                 Repeater {
                     model: root.profilesList
 
-                    delegate: ColumnLayout {
-                        id: rowLayout
-
-                        required property var modelData
-
+                    delegate: ProfileRow {
                         Layout.fillWidth: true
-                        spacing: 0
+                        Layout.leftMargin: Kirigami.Units.smallSpacing
+                        Layout.rightMargin: Kirigami.Units.smallSpacing
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.leftMargin: Kirigami.Units.largeSpacing
-                            Layout.rightMargin: Kirigami.Units.smallSpacing
-                            Layout.topMargin: Kirigami.Units.smallSpacing
-                            Layout.bottomMargin: Kirigami.Units.smallSpacing
-                            spacing: Kirigami.Units.smallSpacing
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: rowLayout.modelData.name
-                                    elide: Text.ElideRight
-                                    font.bold: rowLayout.modelData.active
-                                }
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    visible: text.length > 0
-                                    text: {
-                                        const d = rowLayout.modelData.description;
-                                        const p = rowLayout.modelData.isRoot ? i18n("Based on defaults") : i18n("Based on “%1”", rowLayout.modelData.parentName);
-                                        return d && d.length > 0 ? (p + " · " + d) : p;
-                                    }
-                                    elide: Text.ElideRight
-                                    color: Kirigami.Theme.disabledTextColor
-                                    font: Kirigami.Theme.smallFont
-                                }
-                            }
-
-                            // Active badge — highlight-coloured, only on the staged
-                            // active profile.
-                            RowLayout {
-                                visible: rowLayout.modelData.active
-                                spacing: Kirigami.Units.smallSpacing
-
-                                Kirigami.Icon {
-                                    source: "dialog-ok-apply"
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                    color: Kirigami.Theme.positiveTextColor
-                                }
-
-                                Label {
-                                    text: i18n("Active")
-                                    color: Kirigami.Theme.positiveTextColor
-                                    font: Kirigami.Theme.smallFont
-                                }
-                            }
-
-                            ToolButton {
-                                icon.name: "overflow-menu"
-                                Accessible.name: i18n("Profile actions for %1", rowLayout.modelData.name)
-                                onClicked: contextMenu.showFor(rowLayout.modelData)
-                            }
-                        }
-
-                        Kirigami.Separator {
-                            Layout.fillWidth: true
-                            visible: rowLayout.modelData !== root.profilesList[root.profilesList.length - 1]
-                        }
+                        onActivateRequested: root._activate(modelData)
+                        onUpdateRequested: root._update(modelData)
+                        onRenameRequested: root._rename(modelData)
+                        onDuplicateRequested: root._duplicate(modelData)
+                        onSetParentRequested: root._setParent(modelData)
+                        onExportRequested: root._export(modelData)
+                        onDeleteRequested: root._delete(modelData)
                     }
                 }
             }
         }
     }
 
-    // ── Shared row context menu ──
-    ProfileContextMenu {
-        id: contextMenu
-
-        onActivateRequested: row => {
-            if (root.bridge)
-                root.bridge.activateProfile(row.id);
-        }
-        onDuplicateRequested: row => {
-            if (root.bridge)
-                root.bridge.duplicateProfile(row.id);
-        }
-        onRenameRequested: row => {
-            profileDialog.mode = "rename";
-            profileDialog.targetId = row.id;
-            profileDialog.nameText = row.name;
-            profileDialog.descriptionText = row.description;
-            profileDialog.open();
-        }
-        onSetParentRequested: row => {
-            profileDialog.mode = "parent";
-            profileDialog.targetId = row.id;
-            profileDialog.excludeId = row.id;
-            profileDialog.parentId = row.parentId;
-            profileDialog.open();
-        }
-        onExportRequested: row => {
-            exportDialog.profileId = row.id;
-            exportDialog.currentFile = "file:" + row.name.replace(/[^a-zA-Z0-9 _-]/g, "_") + ".json";
-            exportDialog.open();
-        }
-        onDeleteRequested: row => {
-            deleteConfirm.profileId = row.id;
-            deleteConfirm.profileName = row.name;
-            deleteConfirm.open();
-        }
+    // ── Row action handlers (wired from each ProfileRow's signals) ──
+    function _activate(m) {
+        if (root.bridge)
+            root.bridge.activateProfile(m.id);
+    }
+    function _update(m) {
+        if (root.bridge)
+            root.bridge.updateProfileFromCurrent(m.id);
+    }
+    function _duplicate(m) {
+        if (root.bridge)
+            root.bridge.duplicateProfile(m.id);
+    }
+    function _rename(m) {
+        profileDialog.mode = "rename";
+        profileDialog.targetId = m.id;
+        profileDialog.excludeId = "";
+        profileDialog.nameText = m.name;
+        profileDialog.descriptionText = m.description;
+        profileDialog.open();
+    }
+    function _setParent(m) {
+        profileDialog.mode = "parent";
+        profileDialog.targetId = m.id;
+        profileDialog.excludeId = m.id;
+        profileDialog.parentId = m.parentId;
+        profileDialog.open();
+    }
+    function _export(m) {
+        exportDialog.profileId = m.id;
+        exportDialog.currentFile = "file:" + m.name.replace(/[^a-zA-Z0-9 _-]/g, "_") + ".json";
+        exportDialog.open();
+    }
+    function _delete(m) {
+        deleteConfirm.profileId = m.id;
+        deleteConfirm.profileName = m.name;
+        deleteConfirm.open();
     }
 
     // ── Create / rename / set-parent form ──

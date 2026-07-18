@@ -285,9 +285,9 @@ qt_add_qml_module(plasmazones-settings
         # assignment / app-rule surfaces. Every component (including the
         # recursively-instantiated MatchExpressionEditor) MUST be listed.
         qml/RulesPage.qml
-        # Settings profiles: list page, per-row context menu, new-profile dialog.
+        # Settings profiles: tree list page, expandable row, new-profile dialog.
         qml/ProfilesPage.qml
-        qml/ProfileContextMenu.qml
+        qml/ProfileRow.qml
         qml/NewProfileDialog.qml
         qml/MonitorOverview.qml
         qml/MonitorOverviewTile.qml
