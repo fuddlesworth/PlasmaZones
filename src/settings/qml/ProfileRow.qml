@@ -212,8 +212,19 @@ ExpandableRowDelegate {
                     return i18nc("a setting with no value", "unset");
                 if (typeof value === "boolean")
                     return value ? i18nc("a boolean setting that is on", "On") : i18nc("a boolean setting that is off", "Off");
-                if (typeof value === "string" && value.length === 0)
-                    return i18nc("an empty text setting", "empty");
+                if (typeof value === "string")
+                    return value.length > 0 ? value : i18nc("an empty text setting", "empty");
+                // Structured settings (a shader profile tree, a trigger list)
+                // arrive as objects or arrays. Plain String() on those yields
+                // "[object V4ReferenceObject]", which tells the user nothing —
+                // serialise them instead and let the pill elide the tail.
+                if (typeof value === "object") {
+                    try {
+                        return JSON.stringify(value);
+                    } catch (error) {
+                        return i18nc("a structured setting that could not be rendered", "(structured value)");
+                    }
+                }
                 return String(value);
             }
 

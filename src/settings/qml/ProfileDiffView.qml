@@ -31,6 +31,16 @@ ColumnLayout {
     /// state); omit it for ordinary values.
     required property var rows
 
+    /// Fixed column widths. Unlike the rule preview — whose action-type labels
+    /// are short enough that a minimum width governs — a settings breadcrumb
+    /// ("Snapping › Zones › Labels › Font color") easily outruns any floor, so
+    /// a minimum width would let each row set its own column edges and the
+    /// captions and pills would stagger. Every cell is therefore a FIXED width
+    /// with elision inside it, which is what keeps the columns square.
+    readonly property real subjectColumnWidth: Kirigami.Units.gridUnit * 18
+    readonly property real captionColumnWidth: Kirigami.Units.gridUnit * 4
+    readonly property real valueColumnWidth: Kirigami.Units.gridUnit * 10
+
     /// Tree visualisation constants — kept in lockstep with ActionListView's
     /// and MatchExpressionView's equivalents so all three trees look like one.
     readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
@@ -132,12 +142,14 @@ ColumnLayout {
                     color: Kirigami.Theme.highlightColor
                 }
 
-                // Subject label — the same K=13gu base column the rule preview
-                // uses, minus one indentStep, so this tree's subject column
-                // lines up with the rule tree's field column.
+                // Subject label — a fixed column so every row's caption and
+                // pills start at the same x; a long breadcrumb elides rather
+                // than pushing this row's columns out of line with its
+                // neighbours'.
                 Label {
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.minimumWidth: Math.max(Kirigami.Units.gridUnit * 4, Kirigami.Units.gridUnit * 13 - root._indentStep)
+                    Layout.preferredWidth: root.subjectColumnWidth
+                    Layout.maximumWidth: root.subjectColumnWidth
                     text: entryDelegate.modelData.label
                     elide: Text.ElideRight
                     font.bold: true
@@ -156,12 +168,9 @@ ColumnLayout {
 
                         Label {
                             Layout.alignment: Qt.AlignVCenter
-                            // First caption keeps the 8-gridUnit floor so its
-                            // pill lands in the same column as the rule
-                            // preview's value pills; later ones flow at their
-                            // text width so a short caption doesn't pad out
-                            // into dead space.
-                            Layout.minimumWidth: pairRow.index === 0 ? Kirigami.Units.gridUnit * 8 : 0
+                            Layout.preferredWidth: root.captionColumnWidth
+                            Layout.maximumWidth: root.captionColumnWidth
+                            elide: Text.ElideRight
                             text: pairRow.modelData.caption
                             // One binding: a font.<sub> sibling next to a whole-group `font:` is an
                             // illegal duplicate binding that fails the whole document. FontUtils
@@ -174,7 +183,7 @@ ColumnLayout {
 
                         Rectangle {
                             Layout.alignment: Qt.AlignVCenter
-                            implicitWidth: pillContent.implicitWidth + Kirigami.Units.largeSpacing * 2
+                            Layout.preferredWidth: root.valueColumnWidth
                             implicitHeight: pillContent.implicitHeight + Kirigami.Units.smallSpacing
                             radius: Kirigami.Units.smallSpacing
                             Kirigami.Theme.colorSet: Kirigami.Theme.View
@@ -186,7 +195,9 @@ ColumnLayout {
                             RowLayout {
                                 id: pillContent
 
-                                anchors.centerIn: parent
+                                anchors.fill: parent
+                                anchors.leftMargin: Kirigami.Units.smallSpacing
+                                anchors.rightMargin: Kirigami.Units.smallSpacing
                                 spacing: Kirigami.Units.smallSpacing
 
                                 // Swatch for a colour-valued setting, matching
@@ -206,6 +217,8 @@ ColumnLayout {
                                     id: pillLabel
 
                                     Layout.alignment: Qt.AlignVCenter
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
                                     text: pairRow.modelData.value
                                     color: pairRow.modelData.emphasis !== undefined ? pairRow.modelData.emphasis : Kirigami.Theme.textColor
                                     font.family: Kirigami.Theme.smallFont.family
