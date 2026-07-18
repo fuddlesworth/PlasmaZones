@@ -912,8 +912,13 @@ PhosphorUi.SettingsAppWindow {
                     visible: profileHeader.activeRow !== null
                     anchors.verticalCenter: parent.verticalCenter
                     // Beside the field when expanded; centred over it in the rail.
-                    anchors.left: profileHeader.compact ? undefined : parent.left
-                    anchors.horizontalCenter: profileHeader.compact ? parent.horizontalCenter : undefined
+                    // Positioned with `x`, NOT by swapping anchors: assigning
+                    // `undefined` to an anchor does not reliably clear it, so
+                    // toggling compact left both `left` and `horizontalCenter`
+                    // live, and Qt sized the item to satisfy both (left 0 +
+                    // centre w/2 ⇒ width = row width) — anchors beat an explicit
+                    // `width`, so the mark stretched across the whole row.
+                    x: profileHeader.compact ? Math.round((parent.width - width) / 2) : 0
                     width: Kirigami.Units.iconSizes.smallMedium
                     height: Kirigami.Units.iconSizes.smallMedium
                     // Non-interactive on purpose: with no input handlers, clicks
@@ -981,7 +986,10 @@ PhosphorUi.SettingsAppWindow {
                         required property var modelData
                         required property int index
 
-                        width: profileCombo.width
+                        // Follow the popup's list, NOT the field: in the compact
+                        // rail the field is only as wide as the rail, and sizing
+                        // entries to it squeezes the names out of existence.
+                        width: profileEntry.ListView.view ? profileEntry.ListView.view.width : profileCombo.width
                         highlighted: profileCombo.highlightedIndex === profileEntry.index
 
                         contentItem: RowLayout {
