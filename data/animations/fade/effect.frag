@@ -3,9 +3,16 @@
 //
 // Fade transition — ported from liixini/shaders niri shader
 // (https://github.com/liixini/shaders/tree/main/fade). Gentle scale-
-// and-fade transition. Open eases scale 0.95→1.0 with smoothstep(0,0.8)
-// fade-in; close eases scale 1.0→0.95 with smoothstep(1.0,0.2)
-// fade-out.
+// and-fade transition. Open eases scale 0.95→1.0 while alpha ramps
+// smoothstep(revealStart, revealEnd, p); close mirrors both curves.
+//
+// Deviation from niri: revealEnd DEFAULTS to 1.0 where niri hardcodes
+// 0.8. smoothstep(0, 0.8) pins alpha at 1 for the last 20% of the open
+// leg (and the first 20% of the close leg) while the only other motion
+// is the final 1% of the scale ease — an imperceptible dead band that
+// an eased progress curve stretches into a hang (the phosphor-peek
+// dead-domain bug). Dial revealEnd back to 0.8 for the exact niri
+// timing.
 //
 // Niri's fade ships GENUINELY ASYMMETRIC close.glsl/open.glsl — open
 // uses `mix(0.95, 1.0, p)` for scale and `smoothstep(0.0, 0.8, p)` for

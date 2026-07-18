@@ -8,9 +8,10 @@
 //
 // Niri's ink-splash ships symmetric close.glsl/open.glsl. PlasmaZones'
 // runtime flips iTime on reverse legs (1→0 on close, 0→1 on open),
-// so we use the niri OPEN body verbatim with `niri_clamped_progress`
-// translated to `clamp(iTime, 0.0, 1.0)` and the runtime flip
-// auto-mirrors the visual on close — no iIsReversed branch needed.
+// so we use the niri OPEN body with `niri_clamped_progress` translated
+// to `clamp(iTime, 0.0, 1.0)` and the runtime flip auto-mirrors the
+// visual on close — no iIsReversed branch needed. One timeline
+// deviation from the verbatim body: see the boundary comment below.
 //
 // niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
 // == texture coords here), so the matrix multiply is dropped and
@@ -38,10 +39,27 @@ vec4 pTransition(vec2 uv, float t) {
     float fingers = fbm(uv * p_fingerScale * screenScale, 5, 2.1);
     float distortion = (blob - 0.5) * 0.5 + (fingers - 0.5) * 0.18;
     vec2 c = uv - vec2(0.5);
-    c.x *= iAnchorSize.x / max(iAnchorSize.y, 0.0001);
+    float aspx = iAnchorSize.x / max(iAnchorSize.y, 0.0001);
+    c.x *= aspx;
     float d = length(c);
     float splash_d = d + distortion;
-    float boundary = p * p_splashSpeed - 0.15;
+    // Deviation from the verbatim niri body: the boundary's travel is
+    // normalized to the farthest possible ink edge — the corner distance
+    // in the same aspect metric as `d`, plus the distortion bound
+    // (|distortion| <= 0.5 * 0.5 + 0.5 * 0.18 = 0.34 for fbm in [0, 1])
+    // and the feather. Niri's bare `p * speed - 0.15` with speed 1.7 was
+    // tuned near a full-screen 16:9 surface (last finger lands ≈ 0.91);
+    // the corner metric shrinks as the window narrows, so on a square
+    // window the splash was done by p ≈ 0.72 and the tail sat on a
+    // static frame — the phosphor-peek dead-domain bug, aspect-
+    // conditioned like the desktop-phosphor projection. With the extent
+    // factored out, splashSpeed = 1 (the new default) lands the last
+    // finger exactly at the end of the leg for any window shape; above 1
+    // it completes early and holds, wave-warp's documented front-speed
+    // contract. The -0.15 head bias (niri's) is preserved on both sides
+    // so t = 0 renders identically.
+    float maxD = 0.5 * length(vec2(aspx, 1.0)) + 0.34 + p_edgeSoftness;
+    float boundary = p * p_splashSpeed * (maxD + 0.15) - 0.15;
     float diff = splash_d - boundary;
     float reveal = smoothstep(p_edgeSoftness, -p_edgeSoftness, diff);
 

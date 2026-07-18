@@ -146,7 +146,14 @@ vec4 pTransition(vec2 uv, float t) {
     // the bin of the current shard.
     float shardGroup = floor(shardMap.g * SHARD_LAYERS * 0.999);
 
-    if (shardGroup == i && (shardMap.x - pow(progress + 0.1, 2.0)) > 0.0) {
+    // BMW's threshold was pow(progress + 0.1, 2.0), which reaches 1.0 at
+    // progress = 0.9 — every shard (shardMap.x <= 1) had popped out by 90%
+    // of the leg, leaving a 10% empty band at the destroy tail (and the
+    // same dead band at the head of an open leg, the phosphor-peek
+    // dead-domain bug). Dropping the +0.1 bias lands the clear at exactly
+    // progress = 1; the only head-side cost is BMW's faint pre-cracked
+    // shard borders (threshold 0.01 at rest), which vanish.
+    if (shardGroup == i && (shardMap.x - pow(progress, 2.0)) > 0.0) {
       oColor = getClippedInputColor(coords);
     }
   }
