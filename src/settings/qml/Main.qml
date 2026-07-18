@@ -851,6 +851,12 @@ PhosphorUi.SettingsAppWindow {
         Item {
             id: profileHeader
 
+            // Declaring `compact` opts this slot into staying visible in the
+            // icon-only rail (the Sidebar hides unaware consumers there) and
+            // makes it receive the live value. In the rail there is no room for
+            // the name field, so only the mark is shown — see switcherRow.
+            property bool compact: false
+
             readonly property var profilesBridge: settingsController.profilesPage ? settingsController.profilesPage.bridge : null
             property var profileRows: profilesBridge ? profilesBridge.availableProfiles() : []
             readonly property int activeIndex: {
@@ -883,7 +889,13 @@ PhosphorUi.SettingsAppWindow {
                 target: appSettings
             }
 
-            RowLayout {
+            // Anchored rather than a RowLayout: the mark sits BESIDE the field
+            // when expanded but CENTRED OVER it in the compact rail, and only
+            // anchors can express both. The mark is never inside the field —
+            // the Desktop style neither honours leftPadding for the text nor
+            // tolerates a replaced contentItem (it calls positionToRectangle on
+            // that item), so an in-field mark lands on top of the name.
+            Item {
                 id: switcherRow
 
                 visible: profileHeader.profileRows.length > 0
@@ -892,18 +904,22 @@ PhosphorUi.SettingsAppWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.leftMargin: Kirigami.Units.smallSpacing
                 anchors.rightMargin: Kirigami.Units.smallSpacing
-                spacing: Kirigami.Units.smallSpacing
+                implicitHeight: profileCombo.implicitHeight
 
-                // The active profile's mark, BESIDE the field rather than inside
-                // it. The Desktop style neither honours leftPadding for the text
-                // nor tolerates a replaced contentItem (it calls
-                // positionToRectangle on that item), so an in-field mark lands on
-                // top of the name.
                 Item {
+                    id: markSlot
+
                     visible: profileHeader.activeRow !== null
-                    Layout.alignment: Qt.AlignVCenter
-                    implicitWidth: Kirigami.Units.iconSizes.smallMedium
-                    implicitHeight: Kirigami.Units.iconSizes.smallMedium
+                    anchors.verticalCenter: parent.verticalCenter
+                    // Beside the field when expanded; centred over it in the rail.
+                    anchors.left: profileHeader.compact ? undefined : parent.left
+                    anchors.horizontalCenter: profileHeader.compact ? parent.horizontalCenter : undefined
+                    width: Kirigami.Units.iconSizes.smallMedium
+                    height: Kirigami.Units.iconSizes.smallMedium
+                    // Non-interactive on purpose: with no input handlers, clicks
+                    // fall through to the ComboBox beneath, so tapping the mark
+                    // in the rail opens the profile list.
+                    z: 1
 
                     ProfileSignature {
                         anchors.fill: parent
@@ -930,7 +946,15 @@ PhosphorUi.SettingsAppWindow {
                 ComboBox {
                     id: profileCombo
 
-                    Layout.fillWidth: true
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: profileHeader.compact ? 0 : markSlot.width + Kirigami.Units.smallSpacing
+                    anchors.verticalCenter: parent.verticalCenter
+                    // In the rail the field itself is hidden but stays laid out
+                    // and interactive, so the mark on top of it still opens a
+                    // correctly-anchored popup. opacity (not visible) because an
+                    // invisible item takes no input.
+                    opacity: profileHeader.compact ? 0 : 1
                     model: profileHeader.profileRows
                     textRole: "name"
                     // Bound to the active profile; `activated` fires only on a
@@ -996,7 +1020,9 @@ PhosphorUi.SettingsAppWindow {
                 Binding {
                     target: profileCombo.popup
                     property: "width"
-                    value: profileCombo.width
+                    // Floor it so the list stays readable when the field itself
+                    // is only as wide as the compact rail.
+                    value: Math.max(profileCombo.width, Kirigami.Units.gridUnit * 12)
                 }
             }
         }
