@@ -8,11 +8,15 @@ import org.kde.kirigami as Kirigami
  * @brief Identicon for a profile's resolved settings.
  *
  * Renders the hex digest ProfileStore hands back as `signature` (a hash of the
- * profile's fully-resolved config + rules) into a small symmetric glyph: hue
- * from the leading bytes, a horizontally-mirrored 5x5 cell pattern from the
- * bits after them. Purely derived — two profiles that resolve to the same
- * settings therefore draw the same mark, and any change to the cascade
- * redraws it.
+ * profile's fully-resolved config + rules) as a small symmetric pattern chip:
+ * a 4x4 grid mirrored about its vertical centre, inked cells drawn in the
+ * theme's highlight colour and the rest left as a faint wash of the same
+ * colour. Deliberately monochrome — the mark takes its colour from the active
+ * colour scheme so it never fights the palette, and profiles are told apart by
+ * pattern alone.
+ *
+ * Two profiles that resolve to the same settings draw the same mark; any change
+ * to the cascade redraws it.
  */
 Item {
     id: sig
@@ -20,26 +24,25 @@ Item {
     /// Hex digest from ProfileStore::availableProfiles()'s `signature` field.
     property string signature: ""
 
-    /// Grid is 5 wide, mirrored about the centre column, so only the left
-    /// three columns carry information (3 x 5 = 15 bits).
-    readonly property int _gridSize: 5
-    readonly property int _halfColumns: 3
+    /// 4 columns mirrored about the centre, so only the left two carry
+    /// information (2 x 4 = 8 bits of pattern).
+    readonly property int _gridSize: 4
+    readonly property int _halfColumns: 2
 
-    readonly property int _hue: signature.length >= 4 ? parseInt(signature.substring(0, 4), 16) % 360 : 0
-    readonly property color _inkColor: Qt.hsla(sig._hue / 360, 0.55, 0.6, 1)
+    readonly property real _cellSpacing: Math.max(1, Math.round(width * 0.06))
+    readonly property real _cellSize: Math.max(1, (width - (sig._gridSize - 1) * sig._cellSpacing) / sig._gridSize)
 
-    /// True when the cell at @p index (row-major over the 5x5 grid) is inked.
-    /// Mirrors the right half onto the left, then reads one bit out of the
-    /// digest nibbles following the hue bytes.
+    /// True when the cell at @p index (row-major over the grid) is inked.
+    /// Mirrors the right half onto the left, then reads one digest bit.
     function cellInked(index) {
-        if (signature.length < 8)
+        if (signature.length < 2)
             return false;
 
         const column = index % sig._gridSize;
         const row = Math.floor(index / sig._gridSize);
-        const mirrored = column > 2 ? sig._gridSize - 1 - column : column;
-        const bit = row * sig._halfColumns + mirrored; // 0..14
-        const nibbleIndex = 4 + Math.floor(bit / 4);
+        const mirrored = column >= sig._halfColumns ? sig._gridSize - 1 - column : column;
+        const bit = row * sig._halfColumns + mirrored; // 0..7
+        const nibbleIndex = Math.floor(bit / 4);
         if (nibbleIndex >= signature.length)
             return false;
 
@@ -50,21 +53,11 @@ Item {
     implicitWidth: Kirigami.Units.iconSizes.medium
     implicitHeight: Kirigami.Units.iconSizes.medium
 
-    // Tinted plate behind the pattern so a sparse glyph still reads as a mark
-    // rather than a few floating dots.
-    Rectangle {
-        anchors.fill: parent
-        radius: Kirigami.Units.smallSpacing
-        color: sig._inkColor
-        opacity: 0.18
-    }
-
     Grid {
-        anchors.fill: parent
-        anchors.margins: Math.round(sig.width / 10)
+        anchors.centerIn: parent
         columns: sig._gridSize
         rows: sig._gridSize
-        spacing: 0
+        spacing: sig._cellSpacing
 
         Repeater {
             model: sig._gridSize * sig._gridSize
@@ -72,10 +65,13 @@ Item {
             delegate: Rectangle {
                 required property int index
 
-                width: Math.floor((sig.width - 2 * Math.round(sig.width / 10)) / sig._gridSize)
-                height: width
-                color: sig.cellInked(index) ? sig._inkColor : "transparent"
+                width: sig._cellSize
+                height: sig._cellSize
                 radius: width * 0.25
+                color: Kirigami.Theme.highlightColor
+                // Unlit cells stay as a faint wash so the chip keeps a readable
+                // shape instead of collapsing into a few floating dots.
+                opacity: sig.cellInked(index) ? 1 : 0.15
             }
         }
     }

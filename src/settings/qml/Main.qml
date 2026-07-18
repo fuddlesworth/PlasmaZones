@@ -890,52 +890,29 @@ PhosphorUi.SettingsAppWindow {
                     Layout.fillWidth: true
                 }
 
-                RowLayout {
+                Item {
+                    id: profileSwitcherSlot
+
+                    readonly property real markSize: Kirigami.Units.iconSizes.smallMedium
+
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.smallSpacing
                     Layout.rightMargin: Kirigami.Units.smallSpacing
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    spacing: Kirigami.Units.smallSpacing
-
-                    // The active profile's own identicon leads the switcher, so it
-                    // carries the same visual identity as its row on the Profiles
-                    // page (in place of a generic bookmark glyph). It sits OUTSIDE
-                    // the ComboBox: the Desktop style drives contentItem as a text
-                    // item, so replacing that breaks the control.
-                    Item {
-                        visible: profileCombo.activeRow !== null
-                        Layout.alignment: Qt.AlignVCenter
-                        implicitWidth: Kirigami.Units.iconSizes.smallMedium
-                        implicitHeight: Kirigami.Units.iconSizes.smallMedium
-
-                        ProfileSignature {
-                            anchors.fill: parent
-                            signature: profileCombo.activeRow ? profileCombo.activeRow.signature : ""
-                        }
-
-                        // Modified badge — the settings have moved on from the
-                        // profile this mark represents.
-                        Rectangle {
-                            visible: profileCombo.activeRow !== null && profileCombo.activeRow.modified
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.rightMargin: -1
-                            anchors.topMargin: -1
-                            width: Kirigami.Units.smallSpacing * 1.5
-                            height: width
-                            radius: width / 2
-                            color: Kirigami.Theme.neutralTextColor
-                            border.width: 1
-                            border.color: Kirigami.Theme.backgroundColor
-                        }
-                    }
+                    implicitHeight: profileCombo.implicitHeight
 
                     ComboBox {
                         id: profileCombo
 
                         readonly property var activeRow: profileFooter.activeIndex >= 0 ? profileFooter.profileRows[profileFooter.activeIndex] : null
 
-                        Layout.fillWidth: true
+                        anchors.fill: parent
+                        // Room for the identicon overlaid in the left inset below.
+                        // Padding (not a replaced contentItem): the Desktop style
+                        // drives contentItem as a text item — it calls
+                        // positionToRectangle on it — so swapping that breaks the
+                        // control.
+                        leftPadding: profileSwitcherSlot.markSize + Kirigami.Units.smallSpacing * 2
                         model: profileFooter.profileRows
                         textRole: "name"
                         // Bound to the active profile; `activated` fires only on a
@@ -995,6 +972,49 @@ PhosphorUi.SettingsAppWindow {
 
                         ToolTip.text: profileCombo.activeRow && profileCombo.activeRow.modified ? i18n("Active profile “%1” — the current settings have changed since it was applied", profileCombo.activeRow.name) : (profileCombo.activeRow ? i18n("Active profile “%1”", profileCombo.activeRow.name) : i18n("No profile is active"))
                         ToolTip.visible: profileComboHover.hovered
+                    }
+
+                    // The style sizes the popup from the delegate's implicit
+                    // width, which a custom delegate does not supply — without
+                    // this the list collapses to a sliver. Pin it to the field.
+                    Binding {
+                        target: profileCombo.popup
+                        property: "width"
+                        value: profileCombo.width
+                    }
+
+                    // The active profile's mark, overlaid in the field's left
+                    // inset (the leftPadding above reserves the room). Declared
+                    // after the ComboBox so it paints on top; it carries no input
+                    // handlers, so clicks fall through and still open the list.
+                    Item {
+                        visible: profileCombo.activeRow !== null
+                        anchors.left: parent.left
+                        anchors.leftMargin: Kirigami.Units.smallSpacing
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: profileSwitcherSlot.markSize
+                        height: profileSwitcherSlot.markSize
+
+                        ProfileSignature {
+                            anchors.fill: parent
+                            signature: profileCombo.activeRow ? profileCombo.activeRow.signature : ""
+                        }
+
+                        // Modified badge — the settings have moved on from the
+                        // profile this mark represents.
+                        Rectangle {
+                            visible: profileCombo.activeRow !== null && profileCombo.activeRow.modified
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.rightMargin: -1
+                            anchors.topMargin: -1
+                            width: Kirigami.Units.smallSpacing * 1.5
+                            height: width
+                            radius: width / 2
+                            color: Kirigami.Theme.neutralTextColor
+                            border.width: 1
+                            border.color: Kirigami.Theme.backgroundColor
+                        }
                     }
                 }
             }
