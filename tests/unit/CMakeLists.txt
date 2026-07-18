@@ -1256,6 +1256,10 @@ target_link_libraries(test_surface_decoration_orientation
         PhosphorSurface::PhosphorSurface
 )
 add_test(NAME test_surface_decoration_orientation COMMAND test_surface_decoration_orientation)
+# Headless runs exit with 77 from the test's custom main (no display server),
+# which ctest reports as SKIPPED rather than Passed — honest status for the
+# GPU gate. In-test QSKIPs still exit 0 via qExec (green, Qt's contract).
+set_tests_properties(test_surface_decoration_orientation PROPERTIES SKIP_RETURN_CODE 77)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation

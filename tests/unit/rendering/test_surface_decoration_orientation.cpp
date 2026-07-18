@@ -12,17 +12,18 @@
  * upside down on OpenGL. The test forces QSG_RHI_BACKEND=opengl, replicates
  * SurfaceDecoration.qml's capture/stage fold over a red-top/blue-bottom
  * gradient card with the bundled border+shadow packs, grabs the window, and
- * asserts the gradient is upright. One scene covers both flip directions: a
- * wrong flip on the tap pass OR on the final direct draw each lands blue on
- * top.
+ * asserts the gradient is upright: a wrong per-target flip on either pass
+ * (the tap's texture render or the final direct draw) lands blue on top.
  *
  * GPU-gated: OpenGL context creation is probed BEFORE any QQuickView exists
- * (a failed scene-graph init is fatal inside Qt, not catchable), and the
- * test QSKIPs cleanly on headless/software environments that cannot provide
- * a GL scene graph, so CI without a GPU stays green without pretending to
- * cover this.
+ * (a failed scene-graph init is fatal inside Qt, not catchable). Headless
+ * environments exit with the ctest SKIP_RETURN_CODE before QGuiApplication;
+ * in-test gates (no GL context, wrong backend, no grab) QSKIP, which qExec
+ * reports as a green run — either way CI without a GPU stays green without
+ * pretending to cover this.
  */
 
+#include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QImage>
 #include <QOffscreenSurface>
@@ -197,28 +198,51 @@ private Q_SLOTS:
 
         // The whole point is the OpenGL path; if Qt fell back to another
         // backend despite QSG_RHI_BACKEND=opengl, the run proves nothing.
-        QTRY_VERIFY_WITH_TIMEOUT(view.rendererInterface() != nullptr, 5000);
+        // A never-materializing renderer interface is an environment gate
+        // like the others on this init path, so it skips rather than fails.
+        for (int waited = 0; view.rendererInterface() == nullptr && waited < 5000; waited += 100)
+            QTest::qWait(100);
+        if (view.rendererInterface() == nullptr)
+            QSKIP("Scene graph renderer interface never materialized");
         if (view.rendererInterface()->graphicsApi() != QSGRendererInterface::OpenGLRhi)
             QSKIP("Scene graph is not running on the OpenGL RHI backend");
-
-        // Let the registry-async chain settle and the live captures fold.
-        QTest::qWait(600);
-        const QImage frame = view.grabWindow();
-        if (frame.isNull())
-            QSKIP("grabWindow returned no image in this environment");
 
         // Upright gradient: red dominates the top of the card, blue the
         // bottom. Channel-dominance beats exact colors — the border pack
         // rounds corners and the sample points sit well inside the card.
+        const auto upright = [](const QImage& frame) {
+            if (frame.isNull())
+                return false;
+            const QColor top = frame.pixelColor(frame.width() / 2, frame.height() / 4);
+            const QColor bottom = frame.pixelColor(frame.width() / 2, frame.height() * 3 / 4);
+            return top.red() > 150 && top.blue() < 100 && bottom.blue() > 150 && bottom.red() < 100;
+        };
+
+        // Poll-grab until the async pack load and the two live capture folds
+        // settle, instead of one grab after a magic fixed wait — a slow or
+        // loaded GPU just takes more iterations. A genuinely flipped chain
+        // never satisfies the predicate, so the regression still times out
+        // into the failure assert below carrying the last frame's samples.
+        QImage frame;
+        bool sawUpright = false;
+        QElapsedTimer settle;
+        settle.start();
+        while (settle.elapsed() < 5000) {
+            QTest::qWait(150);
+            frame = view.grabWindow();
+            if (upright(frame)) {
+                sawUpright = true;
+                break;
+            }
+        }
+        if (frame.isNull())
+            QSKIP("grabWindow returned no image in this environment");
         const QColor top = frame.pixelColor(frame.width() / 2, frame.height() / 4);
         const QColor bottom = frame.pixelColor(frame.width() / 2, frame.height() * 3 / 4);
-        QVERIFY2(
-            top.red() > 150 && top.blue() < 100,
-            qPrintable(
-                QStringLiteral("top of the card is not red (got %1) — chain rendered upside down").arg(top.name())));
-        QVERIFY2(bottom.blue() > 150 && bottom.red() < 100,
-                 qPrintable(QStringLiteral("bottom of the card is not blue (got %1) — chain rendered upside down")
-                                .arg(bottom.name())));
+        QVERIFY2(sawUpright,
+                 qPrintable(QStringLiteral("card never rendered upright (top %1, bottom %2) — a flipped chain "
+                                           "renders blue on top")
+                                .arg(top.name(), bottom.name())));
     }
 };
 
@@ -227,12 +251,17 @@ int main(int argc, char** argv)
     // A GL scene graph needs a real display server: under the offscreen QPA
     // (which the shared ctest environment forces for isolation) the window
     // renders nothing and grabWindow returns a uniform placeholder — the
-    // asserts would fail without testing anything. Exit as skipped before
+    // asserts would fail without testing anything. Exit with the ctest
+    // SKIP_RETURN_CODE (see the target's test property) before
     // QGuiApplication when headless; otherwise drop the forced offscreen
     // platform so the scene graph presents on the session's compositor.
+    // Assumption: a NON-empty display variable points at a live server — a
+    // stale value would abort inside the QGuiApplication constructor (a QPA
+    // connection failure is fatal, not catchable), which only a dead-socket
+    // environment can trigger.
     if (qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && qEnvironmentVariableIsEmpty("DISPLAY")) {
         fprintf(stderr, "SKIP: no display server available — GPU-gated test not run\n");
-        return 0;
+        return 77;
     }
     qunsetenv("QT_QPA_PLATFORM");
     // Must precede QGuiApplication: the flip regression is OpenGL-specific
