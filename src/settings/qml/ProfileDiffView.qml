@@ -26,9 +26,11 @@ import "FontUtils.js" as FontUtils
 ColumnLayout {
     id: root
 
-    /// `[{ label, entries: [{ caption, value, emphasis }] }, ...]`. `emphasis`
-    /// is an optional colour for the pill text (a rule's added / removed
-    /// state); omit it for ordinary values.
+    /// `[{ label, entries: [{ caption, value, emphasis, detail }] }, ...]`.
+    /// `emphasis` is an optional colour for the pill text (a rule's added /
+    /// removed state); `detail` is optional long-form text shown on the pill's
+    /// tooltip (the full payload behind a summarised structured value). Omit
+    /// both for ordinary values.
     required property var rows
 
     /// Fixed COLUMN widths — the pills inside them still hug their content, the

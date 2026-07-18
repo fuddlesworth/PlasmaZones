@@ -214,18 +214,50 @@ ExpandableRowDelegate {
                     return value ? i18nc("a boolean setting that is on", "On") : i18nc("a boolean setting that is off", "Off");
                 if (typeof value === "string")
                     return value.length > 0 ? value : i18nc("an empty text setting", "empty");
-                // Structured settings (a shader profile tree, a trigger list)
-                // arrive as objects or arrays. Plain String() on those yields
-                // "[object V4ReferenceObject]", which tells the user nothing —
-                // serialise them instead and let the pill elide the tail.
-                if (typeof value === "object") {
-                    try {
-                        return JSON.stringify(value);
-                    } catch (error) {
-                        return i18nc("a structured setting that could not be rendered", "(structured value)");
-                    }
-                }
+                if (typeof value === "object")
+                    return diffColumn.summarizeStructured(value);
                 return String(value);
+            }
+
+            /// Structured settings (a shader profile tree, a trigger list) have
+            /// no useful one-line form — dumping their JSON into the pill says
+            /// nothing a reader can act on. Summarise the SHAPE instead, which
+            /// is what a diff actually needs ("2 overrides" became "3
+            /// overrides"), and keep the payload on the tooltip for anyone who
+            /// wants it.
+            function summarizeStructured(value) {
+                if (diffColumn.isListLike(value)) {
+                    return value.length === 0 ? i18nc("a list setting holding nothing", "none") : i18np("%1 item", "%1 items", value.length);
+                }
+                // The shader / decoration profile trees carry their per-path
+                // entries under `overrides`; count those rather than the two
+                // top-level keys, which never vary.
+                if (diffColumn.isListLike(value.overrides)) {
+                    return value.overrides.length === 0 ? i18nc("a profile tree with nothing overridden", "none") : i18np("%1 override", "%1 overrides", value.overrides.length);
+                }
+                const keys = Object.keys(value);
+                return keys.length === 0 ? i18nc("a structured setting holding nothing", "none") : i18np("%1 entry", "%1 entries", keys.length);
+            }
+
+            /// A QVariantList arriving from C++ is NOT a JS Array — Array.isArray
+            /// answers false for it, which silently sent every list down the
+            /// generic object branch and reported a trigger list as "1 entries".
+            /// Test the shape instead: lists carry a numeric length, maps do not.
+            function isListLike(value) {
+                return value !== undefined && value !== null && typeof value === "object" && typeof value.length === "number";
+            }
+
+            /// Full payload for a structured value, shown on the pill's tooltip
+            /// so summarising costs the reader nothing. Empty for plain values.
+            function detailFor(value) {
+                if (typeof value !== "object" || value === null)
+                    return "";
+
+                try {
+                    return JSON.stringify(value, null, 2);
+                } catch (error) {
+                    return "";
+                }
             }
 
             /// Config deltas as ProfileDiffView rows: the key, then FROM / TO.
@@ -238,11 +270,13 @@ ExpandableRowDelegate {
                         "entries": [
                             {
                                 "caption": i18nc("@label the value a setting had before this profile", "From"),
-                                "value": diffColumn.formatValue(change.before)
+                                "value": diffColumn.formatValue(change.before),
+                                "detail": diffColumn.detailFor(change.before)
                             },
                             {
                                 "caption": i18nc("@label the value this profile sets", "To"),
-                                "value": diffColumn.formatValue(change.after)
+                                "value": diffColumn.formatValue(change.after),
+                                "detail": diffColumn.detailFor(change.after)
                             }
                         ]
                     });
