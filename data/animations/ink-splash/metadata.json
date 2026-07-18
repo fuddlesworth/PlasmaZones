@@ -27,8 +27,8 @@
             "id": "splashSpeed",
             "name": "Splash Speed",
             "type": "float",
-            "default": 1.7,
-            "min": 0.8,
+            "default": 1.0,
+            "min": 1.0,
             "max": 3.0
         },
         {
