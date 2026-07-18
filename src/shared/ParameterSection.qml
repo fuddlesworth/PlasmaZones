@@ -89,7 +89,7 @@ ColumnLayout {
         // substitution leaves translators with detached "collapse"/"expand"
         // tokens that can't be re-ordered, gendered, or pluralised. `i18ncp`
         // handles singular/plural for the count.
-        Accessible.description: root.expanded ? i18ncp("@info:tooltip expanded section", "%1 parameter. Click to collapse.", "%1 parameters. Click to collapse.", root.paramCount) : i18ncp("@info:tooltip collapsed section", "%1 parameter. Click to expand.", "%1 parameters. Click to expand.", root.paramCount)
+        Accessible.description: root.expanded ? i18ncp("@info:tooltip expanded section", "%n parameter. Click to collapse.", "%n parameters. Click to collapse.", root.paramCount) : i18ncp("@info:tooltip collapsed section", "%n parameter. Click to expand.", "%n parameters. Click to expand.", root.paramCount)
         onClicked: root.toggled()
 
         contentItem: Item {
