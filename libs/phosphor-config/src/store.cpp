@@ -437,14 +437,41 @@ QJsonObject Store::exportToJson() const
 
 QJsonObject Store::defaultsToJson() const
 {
-    // Deliberately the same shape and version stamp as exportToJson: consumers
-    // diff the two snapshots key-for-key, so they must never drift apart. Keep
-    // any serialization change here mirrored there.
+    // Deliberately the same shape, version stamp, AND type coercion as
+    // exportToJson: consumers diff the two snapshots key-for-key, so they must
+    // never drift apart. exportToJson routes every value through
+    // readVariantAs, which coerces to expectedType — for an absent key that
+    // means the DEFAULT arrives coerced. Mirror that here, or a KeyDef whose
+    // default's typeId differs from its expectedType in a JSON-visible way
+    // (a string-typed key defaulting to an int: "2" vs 2) would silently diff
+    // at default. The Store constructor asserts that mismatch in debug builds;
+    // this keeps the two snapshots aligned in release builds regardless.
+    const auto coerced = [](const KeyDef& def) -> QVariant {
+        switch (def.expectedType != QMetaType::UnknownType ? static_cast<int>(def.expectedType)
+                                                           : def.defaultValue.typeId()) {
+        case QMetaType::Bool:
+            return def.defaultValue.toBool();
+        case QMetaType::Int:
+        case QMetaType::UInt:
+            return def.defaultValue.toInt();
+        case QMetaType::LongLong:
+            return def.defaultValue.toLongLong();
+        case QMetaType::Double:
+            return def.defaultValue.toDouble();
+        case QMetaType::QString:
+            return def.defaultValue.toString();
+        case QMetaType::QStringList:
+            return def.defaultValue.toStringList();
+        default:
+            return def.defaultValue;
+        }
+    };
+
     QJsonObject out;
     for (auto git = d->schema.groups.constBegin(); git != d->schema.groups.constEnd(); ++git) {
         QJsonObject groupObj;
         for (const KeyDef& def : git.value()) {
-            groupObj[def.key] = QJsonValue::fromVariant(def.defaultValue);
+            groupObj[def.key] = QJsonValue::fromVariant(coerced(def));
         }
         out[git.key()] = groupObj;
     }

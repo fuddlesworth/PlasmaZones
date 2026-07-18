@@ -121,6 +121,13 @@ bool ProfileStore::readProfileFile(const QString& path, Record* out) const
 
     // Refuse a file stamped with a different schema version rather than
     // mis-applying config-delta keys whose shape moved between versions.
+    //
+    // There is deliberately no migration chain here YET: profiles ship in the
+    // same release as schema v5, so no older profile file can exist. The
+    // profileFormatTracksConfigSchemaVersion test pins the version so the
+    // next ConfigSchemaVersion bump fails loudly there, forcing that bump to
+    // ship a profile-envelope migration instead of silently orphaning every
+    // saved profile through this refusal.
     const QJsonValue versionVal = root.value(kProfVersionKey);
     if (!versionVal.isDouble() || versionVal.toInt() != m_config.formatVersion) {
         qCWarning(lcConfig) << "ProfileStore: profile file" << path << "has version" << versionVal

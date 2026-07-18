@@ -8,12 +8,15 @@
 
 #include "profilestore.h"
 
+#include "../config/configkeys.h"
 #include "../config/settingsvaluelabels.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QVariantMap>
+
+#include <algorithm>
 
 namespace PlasmaZones {
 
