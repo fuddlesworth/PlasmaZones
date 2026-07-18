@@ -61,10 +61,11 @@ PHOSPHORGEOMETRY_EXPORT std::optional<Direction> directionFromString(QStringView
  *        next output) instead of swapping with a window that's offset away.
  *        Cross-output move-picking wants it too: a side-by-side monitor
  *        whose centre sits below the source must not resolve as the "down"
- *        output. In-layout zone-adjacency and virtual-screen-swap callers
- *        leave it false (default) so an offset-but-present neighbour still
- *        resolves — a swap targets whatever region occupies that direction,
- *        diagonal or not.
+ *        output. All other callers leave it false (default) so an
+ *        offset-but-present neighbour still resolves: zone adjacency and
+ *        virtual-screen swap target whatever occupies that direction,
+ *        diagonal or not, and the cross-output entry-window pick wants a
+ *        best-effort landing target rather than an arbitrary fallback.
  *
  * @return index into @p candidates, or -1 when no candidate lies in
  *         @p direction. Candidates sharing @p focus's centre are skipped.

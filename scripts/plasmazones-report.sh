@@ -174,12 +174,15 @@ if [[ -d "$CONFIG_DIR" ]]; then
                 continue ;;
         esac
         mkdir -p "$STAGING/$(dirname "$rel")"
-        case "$f" in
-            *.json|*.conf|*.txt|*.ini)
-                redact_home "$f" > "$STAGING/$rel" ;;
-            *)
-                cp "$f" "$STAGING/$rel" ;;
-        esac
+        # Redact every text file, not just known extensions: config-dir files
+        # are the likeliest to embed home paths, and an extensionless text
+        # config copied verbatim would leak them into a report meant for
+        # public attachment. grep -I detects binary content.
+        if grep -Iq . "$f" 2>/dev/null; then
+            redact_home "$f" > "$STAGING/$rel"
+        else
+            cp "$f" "$STAGING/$rel"
+        fi
     done
 fi
 

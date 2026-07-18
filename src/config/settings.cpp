@@ -1314,7 +1314,8 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 // keeping it private to settings.cpp keeps the .h surface compact.
 // Cross-process coherence for COMPOSITE values (multi-field JSON blobs stored
 // under one key: the animation Profile, the shader/decoration profile trees,
-// the per-algorithm autotile map). Scalar keys are written atomically and
+// the per-algorithm autotile map, the snapping trigger lists including the
+// zoneSpan pair). Scalar keys are written atomically and
 // last-writer-wins per key is acceptable; composites are not, in two ways.
 // Read-modify-write setters (the animation Profile field patches) merge into
 // the WHOLE blob, so a stale cached document resurrects old sibling fields
@@ -1329,6 +1330,12 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 // The dirty flag makes this self-limiting on the slider hot path — the first
 // write of an edit burst marks the backend dirty, so later ticks skip the
 // reparse until the next save.
+// The refresh adopts external sibling values into the live store and the
+// baseline WITHOUT per-property NOTIFY emissions — deliberately, unlike
+// load(): this is a per-write guard, and the UI adopts external state
+// through the controller's reload path (onExternalSettingsChanged), not
+// here. Until that reload runs, a binding on an externally-changed sibling
+// may read stale; it self-heals on the next load().
 // The call sits at the TOP of each setter (not inside patchProfileField)
 // because the per-field setters evaluate their currentValue argument at the
 // call site: a refresh inside the helper would run AFTER that read, and the
@@ -2619,6 +2626,10 @@ int Settings::zoneSpanModifierInt() const
 }
 void Settings::setZoneSpanModifier(DragModifier modifier)
 {
+    // Same composite stale-guard as writeTriggerList: the modifier synthesis
+    // below read-modify-writes the whole zoneSpan trigger list, so a stale
+    // cache would bake stale sibling trigger entries into the rewrite.
+    refreshCleanBackendFromDisk();
     // Write-then-compare so the schema's validIntOr validator gets the first
     // word on whether the request is valid. A pre-write equality check like
     // `before == static_cast<int>(modifier)` would let an invalid modifier
@@ -2705,6 +2716,9 @@ QVariantList Settings::zoneSpanTriggers() const
 }
 void Settings::setZoneSpanTriggers(const QVariantList& triggers)
 {
+    // Same composite stale-guard as writeTriggerList (zoneSpan keeps its own
+    // setter for the legacy-modifier sync, not to skip the refresh).
+    refreshCleanBackendFromDisk();
     // Post-write compare — see setDragActivationTriggers for the
     // canonicalisation rationale. Snapshot both triggers AND the legacy
     // modifier up front so we only emit the NOTIFY signals whose value

@@ -1497,9 +1497,10 @@ private:
     //                         every successful write.
     /// Reparse the backend from disk IF it holds no pending writes.
     /// Called by every composite-value setter (animation Profile blob,
-    /// shader/decoration profile trees, autotile per-algorithm map)
-    /// before its stale-sensitive read; see the definition for the
-    /// cross-process coherence rationale.
+    /// shader/decoration profile trees, autotile per-algorithm map,
+    /// snapping trigger lists including the zoneSpan pair) before its
+    /// stale-sensitive read; see the definition for the cross-process
+    /// coherence rationale.
     void refreshCleanBackendFromDisk();
 
     template<typename T>

@@ -41,6 +41,11 @@ namespace PlasmaZones {
 void SettingsController::load()
 {
     m_loading = true;
+    // A full load adopts the on-disk state wholesale, which is everything a
+    // reload deferred by onExternalSettingsChanged() would have done — clear
+    // the flag so the clean transition at the end of this load doesn't
+    // schedule a redundant second reload.
+    m_pendingExternalReload = false;
     // Animation pages persist per-event motion overrides as separate
     // files (file-per-path under ~/.local/share/plasmazones/profiles/);
     // m_settings.load() alone wouldn't restore them on Discard. The
