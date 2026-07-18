@@ -1314,8 +1314,8 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 // keeping it private to settings.cpp keeps the .h surface compact.
 // Cross-process coherence for COMPOSITE values (multi-field JSON blobs stored
 // under one key: the animation Profile, the shader/decoration profile trees,
-// the per-algorithm autotile map, the snapping trigger lists including the
-// zoneSpan pair). Scalar keys are written atomically and
+// the per-algorithm autotile map, the snapping and tiling trigger lists
+// including the zoneSpan pair). Scalar keys are written atomically and
 // last-writer-wins per key is acceptable; composites are not, in two ways.
 // Read-modify-write setters (the animation Profile field patches) merge into
 // the WHOLE blob, so a stale cached document resurrects old sibling fields

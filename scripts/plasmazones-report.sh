@@ -129,7 +129,7 @@ trap 'rm -rf "$STAGING"' EXIT
 # Use printf to avoid heredoc delimiter collision if the report contains the delimiter.
 printf '%s\n' "$REPORT" > "$STAGING/report.md"
 
-# 2. Config file (redact home paths)
+# 2. Config directory (redact home paths in text files)
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/plasmazones"
 # Guard against empty or root HOME (e.g., running from a systemd service without User=,
 # or running as root where HOME=/ would mangle every absolute path).
@@ -159,7 +159,10 @@ redact_home() {
 # established locations. Window classes/titles are kept for diagnostic value;
 # home paths are redacted.
 if [[ -d "$CONFIG_DIR" ]]; then
-    SKIPPED_CONF_DEEP=$(find -P "$CONFIG_DIR" -mindepth 4 -type f 2>/dev/null | head -1)
+    # `|| true` absorbs SIGPIPE-141 when head closes the pipe while find is
+    # still writing — under `set -euo pipefail` that would otherwise abort
+    # the whole script precisely when deep nesting exists.
+    SKIPPED_CONF_DEEP=$(find -P "$CONFIG_DIR" -mindepth 4 -type f 2>/dev/null | head -1 || true)
     if [[ -n "$SKIPPED_CONF_DEEP" ]]; then
         echo "Warning: some config files nested deeper than 3 levels were skipped" >&2
     fi
@@ -186,14 +189,15 @@ if [[ -d "$CONFIG_DIR" ]]; then
     done
 fi
 
-# 4. User data directory (layouts, custom algorithms, shaders, etc.)
+# 3. User data directory (layouts, custom algorithms, shaders, etc.)
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasmazones"
 if [[ -d "$DATA_DIR" ]]; then
     mkdir -p "$STAGING/data"
     # Copy tree structure, redacting home paths in text files.
     # Use -print0/read -d '' for filenames with newlines or special chars.
     # Warn if files are skipped due to depth limit so triagers know the archive is incomplete.
-    SKIPPED_DEEP=$(find -P "$DATA_DIR" -mindepth 6 -type f 2>/dev/null | head -1)
+    # Same SIGPIPE absorption as the config-dir guard above.
+    SKIPPED_DEEP=$(find -P "$DATA_DIR" -mindepth 6 -type f 2>/dev/null | head -1 || true)
     if [[ -n "$SKIPPED_DEEP" ]]; then
         echo "Warning: some data files nested deeper than 5 levels were skipped" >&2
     fi
@@ -212,7 +216,7 @@ if [[ -d "$DATA_DIR" ]]; then
     done
 fi
 
-# 5. Journal logs
+# 4. Journal logs
 # This duplicates the journal section in report.md but provides raw log lines
 # (no Markdown wrapping) for easier grep/analysis by triagers.
 if command -v journalctl &>/dev/null; then
