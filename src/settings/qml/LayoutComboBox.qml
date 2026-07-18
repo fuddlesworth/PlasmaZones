@@ -410,6 +410,12 @@ ComboBox {
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
         padding: 1
+        // The Desktop style's field background reads `popup.exit.running`
+        // (its ComboBox.qml:128). A bare Popup leaves enter/exit null, so that
+        // binding throws "Cannot read property 'running' of null" the moment
+        // the control is pressed. Empty transitions give it something non-null.
+        enter: Transition {}
+        exit: Transition {}
         onClosed: {
             if (root._rebuildPending) {
                 root._rebuildPending = false;
