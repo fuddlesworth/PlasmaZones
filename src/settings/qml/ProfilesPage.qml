@@ -84,14 +84,12 @@ SettingsFlickable {
         }
     }
 
+    // Toasts are NOT forwarded here: the bridge's toastRequested is wired at
+    // window scope in Main.qml, because the sidebar switcher can raise one
+    // while any page is loaded.
     Connections {
         function onProfilesChanged() {
             root._reload();
-        }
-
-        function onToastRequested(text) {
-            if (typeof window !== "undefined" && window && window.showToast)
-                window.showToast(text);
         }
 
         target: root.bridge

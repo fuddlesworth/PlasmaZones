@@ -132,6 +132,17 @@ PhosphorUi.SettingsAppWindow {
         }
     }
 
+    // The profile store's refusals also cross pages: the sticky sidebar
+    // switcher can activate a profile from anywhere, so a schema-mismatch
+    // toast raised on, say, the Snapping page must still surface.
+    Connections {
+        target: settingsController.profilesPage ? settingsController.profilesPage.bridge : null
+
+        function onToastRequested(text) {
+            window.showToast(text);
+        }
+    }
+
     controller: settingsController.app
     title: i18n("PlasmaZones Settings")
     // Sized in Kirigami grid units so the window scales with the

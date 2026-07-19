@@ -301,7 +301,8 @@ private:
     /// to a pack name.
     /// @p rawPath is the machine address of the leaf below the key's value —
     /// one step per level: `{key}` for an object member, `{identityKey,
-    /// identityValue}` for an array element with an identifying field, `{index}`
+    /// identityValue, index}` for an array element with an identifying field
+    /// (the index breaks ties between duplicate identities), `{index}`
     /// otherwise — carried onto the row for revertConfigChange.
     static void appendLeafRows(const QString& rawGroup, const QString& rawKey, const QStringList& segments,
                                const QVariantList& rawPath, const QJsonValue& before, const QJsonValue& after,

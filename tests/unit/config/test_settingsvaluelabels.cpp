@@ -356,6 +356,28 @@ private Q_SLOTS:
         QCOMPARE(cachedSettingsSchema().choicesFor(CD::shadersAudioGroup(), CD::inputMethodKey()).size(), 10);
     }
 
+    /// WindowAppearancePage sources ONE valueOptions("Windows","BorderScope")
+    /// list for all three "Apply to" pickers (border, title bar, opacity/tint),
+    /// so the three scope keys must declare the identical token set in the
+    /// identical order. Diverging one key would render its picker blank with
+    /// nothing else catching it.
+    void windowScopeKeysShareOneTokenSet()
+    {
+        using CD = ConfigDefaults;
+        const PhosphorConfig::Schema& schema = cachedSettingsSchema();
+        const auto tokensOf = [&](const QString& key) {
+            QStringList tokens;
+            for (const PhosphorConfig::ChoiceDef& choice : schema.choicesFor(CD::windowsAppearanceGroup(), key)) {
+                tokens.append(choice.token);
+            }
+            return tokens;
+        };
+        const QStringList border = tokensOf(CD::borderScopeKey());
+        QVERIFY(!border.isEmpty());
+        QCOMPARE(tokensOf(CD::titleBarScopeKey()), border);
+        QCOMPARE(tokensOf(CD::opacityTintScopeKey()), border);
+    }
+
     /// The same token under two keys means two different things, which is the
     /// reason the table is keyed by (group, key) and not by token alone.
     void tokenMeaningIsKeyLocal()

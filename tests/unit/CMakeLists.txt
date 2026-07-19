@@ -1088,6 +1088,7 @@ add_executable(test_profilestore
     settings/test_profilestore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/profilestore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/profilestore_diff.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/profilestore_revert.cpp
 )
 target_link_libraries(test_profilestore
     PRIVATE

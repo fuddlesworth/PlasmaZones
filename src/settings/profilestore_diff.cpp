@@ -16,8 +16,6 @@
 #include <QJsonValue>
 #include <QVariantMap>
 
-#include <algorithm>
-
 namespace PlasmaZones {
 
 namespace {
@@ -131,24 +129,62 @@ void ProfileStore::appendLeafRows(const QString& rawGroup, const QString& rawKey
     if (depth < maxDepth && listed) {
         const QJsonArray beforeItems = before.toArray();
         const QJsonArray afterItems = after.toArray();
-        const int count = std::max(beforeItems.size(), afterItems.size());
-        for (int i = 0; i < count; ++i) {
-            const QJsonValue beforeItem = i < beforeItems.size() ? beforeItems.at(i) : QJsonValue();
-            const QJsonValue afterItem = i < afterItems.size() ? afterItems.at(i) : QJsonValue();
+        // Pair elements by their identifying field, position only as the
+        // fallback — the same axis the revert step addresses by. Positional
+        // pairing would misreport a reordered array as pairs of unrelated
+        // entries changing into each other.
+        QList<bool> beforeClaimed;
+        beforeClaimed.resize(beforeItems.size());
+        for (int i = 0; i < afterItems.size(); ++i) {
+            const QJsonValue afterItem = afterItems.at(i);
             QString identity;
-            const QString segment = arraySegmentLabel(afterItem.isUndefined() ? beforeItem : afterItem, i, &identity);
-            // Address the element by its identifying field when it has one —
-            // positions shift as siblings come and go, the identity does not.
+            const QString segment = arraySegmentLabel(afterItem, i, &identity);
+            int beforeIndex = -1;
+            if (!identity.isEmpty()) {
+                const QJsonValue identityValue = afterItem.toObject().value(identity);
+                for (int b = 0; b < beforeItems.size(); ++b) {
+                    if (!beforeClaimed.at(b) && beforeItems.at(b).toObject().value(identity) == identityValue) {
+                        beforeIndex = b;
+                        break;
+                    }
+                }
+            } else if (i < beforeItems.size() && !beforeClaimed.at(i)) {
+                beforeIndex = i;
+            }
+            const QJsonValue beforeItem = beforeIndex >= 0 ? beforeItems.at(beforeIndex) : QJsonValue();
+            if (beforeIndex >= 0) {
+                beforeClaimed[beforeIndex] = true;
+            }
             QVariantMap step;
             if (!identity.isEmpty()) {
                 step.insert(QStringLiteral("identityKey"), identity);
-                step.insert(QStringLiteral("identityValue"),
-                            (afterItem.isUndefined() ? beforeItem : afterItem).toObject().value(identity).toVariant());
+                step.insert(QStringLiteral("identityValue"), afterItem.toObject().value(identity).toVariant());
+                // Tiebreak for a hand-edited file carrying two elements with
+                // the same identity value: the revert prefers this position.
+                step.insert(QStringLiteral("index"), i);
             } else {
                 step.insert(QStringLiteral("index"), i);
             }
             appendLeafRows(rawGroup, rawKey, segments + QStringList{segment}, rawPath + QVariantList{step}, beforeItem,
                            afterItem, depth + 1, rows, identity);
+        }
+        // Elements only the parent carries (this profile dropped them).
+        for (int b = 0; b < beforeItems.size(); ++b) {
+            if (beforeClaimed.at(b)) {
+                continue;
+            }
+            const QJsonValue beforeItem = beforeItems.at(b);
+            QString identity;
+            const QString segment = arraySegmentLabel(beforeItem, b, &identity);
+            QVariantMap step;
+            if (!identity.isEmpty()) {
+                step.insert(QStringLiteral("identityKey"), identity);
+                step.insert(QStringLiteral("identityValue"), beforeItem.toObject().value(identity).toVariant());
+            } else {
+                step.insert(QStringLiteral("index"), b);
+            }
+            appendLeafRows(rawGroup, rawKey, segments + QStringList{segment}, rawPath + QVariantList{step}, beforeItem,
+                           QJsonValue(), depth + 1, rows, identity);
         }
         return;
     }

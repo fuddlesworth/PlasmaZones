@@ -55,7 +55,7 @@ function _node(label) {
     return {
         "label": label,
         "children": [],
-        "byLabel": ({}),
+        "byLabel": Object.create(null),
         "entries": null,
         "source": null
     };
@@ -83,7 +83,7 @@ function _factorSuffixes(node) {
 
     // Group siblings by the tail their single leaf hangs off. A child with more
     // than one leaf has no single tail to hoist and stays where it is.
-    const groups = ({});
+    const groups = Object.create(null);
     const order = [];
     for (let c = 0; c < node.children.length; ++c) {
         const tail = _soleLeafPath(node.children[c]);
@@ -107,7 +107,7 @@ function _factorSuffixes(node) {
 
     // Only a tail shared by at least two siblings is worth a node of its own.
     const rebuilt = [];
-    const claimed = ({});
+    const claimed = Object.create(null);
     for (let o = 0; o < order.length; ++o) {
         const group = groups[order[o]];
         if (group.members.length < 2) {
@@ -117,7 +117,7 @@ function _factorSuffixes(node) {
             claimed[group.members[m].label] = order[o];
         }
     }
-    const emitted = ({});
+    const emitted = Object.create(null);
     for (let k = 0; k < node.children.length; ++k) {
         const child = node.children[k];
         const key = claimed[child.label];

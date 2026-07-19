@@ -576,11 +576,12 @@ bool Store::importFromJson(const QJsonObject& snapshot)
                     value = converted;
                 }
             }
-            // Deliberately unconditional: re-writing an unchanged value marks
-            // the backend's internal dirty flag, but upstream dirty tracking
-            // is value-based (Settings::isKeyModified) and change notification
-            // is emit-on-change, so the redundant write is harmless and a
-            // per-key read-compare here would double the import cost.
+            // Deliberately no pre-compare here: write() itself reads back and
+            // short-circuits an unchanged existing value, so a compare at this
+            // level would just duplicate that work. A genuinely changed value
+            // marks the backend dirty, which staging relies on — a later
+            // composite setter's refreshCleanBackendFromDisk sees the dirty
+            // flag and will not clobber staged values with a disk reparse.
             write(git.key(), def.key, value);
         }
     }

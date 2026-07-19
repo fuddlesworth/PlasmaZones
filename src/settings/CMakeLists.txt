@@ -92,6 +92,7 @@ set(plasmazones_settings_SRCS
     profilestore.h
     profilestore.cpp
     profilestore_diff.cpp
+    profilestore_revert.cpp
     profilepagecontroller.h
     profilepagecontroller.cpp
     editorpagecontroller.h
