@@ -87,9 +87,12 @@ void Registry::rebind(const QString& id, const QKeySequence& seq)
         if (it->registered && m_backend) {
             m_backend->unregisterShortcut(id);
         }
+        // Reset the full sent-state to match a fresh Entry — the backend has
+        // forgotten this id, so every lastSent field must say "nothing sent".
         it->registered = false;
         it->lastSentDefault = QKeySequence();
         it->lastSentCurrent = QKeySequence();
+        it->lastSentPersistent = true;
         return;
     }
     if (it->binding.currentSeq == seq) {
