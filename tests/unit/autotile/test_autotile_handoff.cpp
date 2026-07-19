@@ -99,6 +99,43 @@ private Q_SLOTS:
         QCOMPARE(engine.screenForTrackedWindow(windowId), screen);
     }
 
+    void testHandoffReceive_announcesFloatBitOnPassiveChannel()
+    {
+        // handoffReceive must announce the received float bit via
+        // windowFloatingStateSynced (the passive channel) for BOTH arrival
+        // kinds. A cross-mode move of a floating window arrives with
+        // wasFloating=false after the source engine's handoffRelease cleared
+        // its bit silently — without this emission, subscribers that last
+        // heard "floating" (the effect's FloatingCache) stay stale until a
+        // daemon reconnect. The emission is deliberately unconditional; the
+        // adaptor's last-broadcast gate owns dedup.
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+        QVERIFY(spy.isValid());
+
+        PhosphorEngine::IPlacementEngine::HandoffContext tiled;
+        tiled.windowId = QStringLiteral("win-arrives-tiled");
+        tiled.toScreenId = screen;
+        tiled.wasFloating = false;
+        engine.handoffReceive(tiled);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(0).toString(), tiled.windowId);
+        QCOMPARE(spy.at(0).at(1).toBool(), false);
+        QCOMPARE(spy.at(0).at(2).toString(), screen);
+
+        PhosphorEngine::IPlacementEngine::HandoffContext floating;
+        floating.windowId = QStringLiteral("win-arrives-floating");
+        floating.toScreenId = screen;
+        floating.wasFloating = true;
+        engine.handoffReceive(floating);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.at(1).at(0).toString(), floating.windowId);
+        QCOMPARE(spy.at(1).at(1).toBool(), true);
+        QCOMPARE(spy.at(1).at(2).toString(), screen);
+    }
+
     void testHandoffReceive_insertIndex_placesAtPartnerSlot()
     {
         // A cross-mode SWAP arrival carries ctx.insertIndex so the focused window

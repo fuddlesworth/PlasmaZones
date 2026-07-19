@@ -165,6 +165,19 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
 // windowFloatingClearedForSnap, which this adaptor relays to its own
 // windowFloatingChanged D-Bus signal in the constructor wiring.
 
+void WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, bool floating, const QString& screenId)
+{
+    // Same dedup key as the setWindowFloating gate — see the header doc:
+    // every emission channel must keep m_broadcastFloating equal to what
+    // subscribers last heard, or the gate turns from a dedup into a
+    // suppressor of genuine changes.
+    if (m_broadcastFloating.value(windowId, false) == floating) {
+        return;
+    }
+    m_broadcastFloating[windowId] = floating;
+    Q_EMIT windowFloatingChanged(windowId, floating, screenId);
+}
+
 void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating)
 {
     if (!validateWindowId(windowId, QStringLiteral("set float for screen"))) {
@@ -187,21 +200,41 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         source = m_autotileEngine.data();
     }
 
-    if (dest && floating && !dest->isWindowTracked(windowId)) {
-        // Build the HandoffContext from whichever engine actually claims the
-        // window — fromEngineId stays empty when neither side tracks it (e.g.
-        // a brand-new floating dialog), so receive-side reasoning that depends
-        // on the source mode correctly degrades.
-        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
-        ctx.windowId = windowId;
-        ctx.toScreenId = screenId;
-        ctx.wasFloating = true;
-        if (source && source->isWindowTracked(windowId)) {
-            ctx.fromEngineId = source->engineId();
-            ctx.sourceGeometry = m_frameGeometry.value(windowId);
-            source->handoffRelease(windowId);
+    // Float: adopt an untracked window unconditionally (a brand-new floating
+    // dialog is a valid target — fromEngineId stays empty when neither side
+    // tracks it, so receive-side reasoning that depends on the source mode
+    // correctly degrades).
+    // Unfloat: adopt ONLY a window the OTHER engine still tracks. Without
+    // this, the unfloat dead-ends: setWindowFloat below targets the
+    // destination engine, which doesn't track the window and early-returns,
+    // while the source engine's float bit stays set with no broadcast — the
+    // window reads floating through its own context's mode lens forever. The
+    // handoff releases the source (clearing its bit) and the receive tiles
+    // the arrival (wasFloating=false) and announces the new state on the
+    // passive sync channel.
+    if (dest && !dest->isWindowTracked(windowId)) {
+        const bool sourceTracked = source && source->isWindowTracked(windowId);
+        if (floating || sourceTracked) {
+            PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+            ctx.windowId = windowId;
+            ctx.toScreenId = screenId;
+            ctx.wasFloating = floating;
+            if (sourceTracked) {
+                ctx.fromEngineId = source->engineId();
+                ctx.sourceGeometry = m_frameGeometry.value(windowId);
+                source->handoffRelease(windowId);
+            }
+            dest->handoffReceive(ctx);
+            if (!floating) {
+                // The source's float bit was released silently and only the
+                // autotile receive announces a non-floating arrival on the
+                // passive channel (snap's handoffReceive announces float
+                // re-homes only) — relay the unfloat here so BOTH adoption
+                // directions broadcast it. The chokepoint dedups when the
+                // autotile passive sync already did.
+                relayWindowFloatingChanged(windowId, false, screenId);
+            }
         }
-        dest->handoffReceive(ctx);
     }
 
     if (dest) {

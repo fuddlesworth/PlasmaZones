@@ -2051,6 +2051,20 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     }
     m_states.setKeyForWindow(windowId, destKey);
 
+    // Announce the received float bit on the passive channel (the snap twin
+    // emits from its handoffReceive too; this engine previously set the bit
+    // silently). A cross-mode move/swap of a floating window arrives with
+    // wasFloating=false after the source engine's handoffRelease cleared its
+    // bit without emitting — without this, subscribers that last heard
+    // "floating" (the effect's FloatingCache) stay stale until a daemon
+    // reconnect. Deliberately UNCONDITIONAL, not divergence-gated against
+    // the WTS resolver: mid-handoff the resolver already reads the cleared
+    // source bit, so it cannot tell what subscribers last heard — the
+    // adaptor's last-broadcast gate owns that dedup. Passive signal, not
+    // windowFloatingChanged: the window already has a valid position and
+    // must not ride the pre-tile geometry restore.
+    Q_EMIT windowFloatingStateSynced(windowId, ctx.wasFloating, ctx.toScreenId);
+
     // Trigger a retile so a non-floating arrival actually lands in a tile;
     // floating arrivals retile too because their displacement may free a
     // slot for the remaining tiled set.

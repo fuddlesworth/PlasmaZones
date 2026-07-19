@@ -213,7 +213,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::windowStateChanged);
         connect(snap, &PhosphorSnapEngine::SnapEngine::windowFloatingClearedForSnap, this,
                 [this](const QString& windowId, const QString& screenId) {
-                    Q_EMIT windowFloatingChanged(windowId, false, screenId);
+                    // Through the relay chokepoint so m_broadcastFloating
+                    // tracks this emission too (see relayWindowFloatingChanged).
+                    relayWindowFloatingChanged(windowId, false, screenId);
                 });
         // Unified model: keep the live placement record current on every snap
         // state change (commit / uncommit) so the persisted state always matches

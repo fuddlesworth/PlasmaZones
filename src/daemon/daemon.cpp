@@ -48,6 +48,7 @@
 #include "rendering/zoneentryscaffold.h"
 #include "rendering/zoneshadernoderhi.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -1641,15 +1642,35 @@ bool Daemon::init()
     // Mode resolution: the window's tracked screen (WTS screenForWindow, with
     // the autotile engine's own tracked screen as the fallback for windows snap
     // never saw) → LayoutRegistry::modeForScreen → the owning engine.
+    //
+    // Resolved at the WINDOW's OWN desktop (registry metadata), not the
+    // screen's current one. The window's desktop is per-window data, never
+    // the context key: reading through the screen's CURRENT desktop made the
+    // effective float answer flip when a per-output desktop switch crossed a
+    // snap↔autotile mode boundary — with no windowFloatingChanged broadcast,
+    // stranding every flat float mirror (the effect's FloatingCache) until a
+    // daemon reconnect. A window on the screen's current desktop (and the
+    // sticky / unknown-desktop case, virtualDesktop 0) resolves exactly as
+    // before via the fallback.
     {
         auto screenModeForWindow = [this, autotilePtr = QPointer(autotileEngine)](
                                        const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
             QString screenId;
+            const PhosphorPlacement::WindowTrackingService* wts = nullptr;
             if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-                screenId = m_windowTrackingAdaptor->service()->screenForWindow(windowId);
+                wts = m_windowTrackingAdaptor->service();
+                screenId = wts->screenForWindow(windowId);
             }
             if (!screenId.isEmpty() && m_layoutManager) {
-                return m_layoutManager->modeForScreen(screenId, currentDesktopForScreen(screenId), currentActivity());
+                int desktop = currentDesktopForScreen(screenId);
+                if (wts && wts->windowRegistry()) {
+                    const std::optional<PhosphorEngine::WindowMetadata> meta =
+                        wts->windowRegistry()->metadata(::PhosphorIdentity::WindowId::extractInstanceId(windowId));
+                    if (meta && meta->virtualDesktop > 0) {
+                        desktop = meta->virtualDesktop;
+                    }
+                }
+                return m_layoutManager->modeForScreen(screenId, desktop, currentActivity());
             }
             // No tracked screen in WTS (e.g. a window snap never saw): if the
             // autotile engine tracks it, its current mode is Autotile. Otherwise

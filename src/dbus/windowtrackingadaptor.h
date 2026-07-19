@@ -938,6 +938,18 @@ public:
     // `pruneExcludedPendingRestores` / `requestReapplyWindowGeometries`
     // pair above.
     /**
+     * @brief Single broadcast chokepoint for engine-relayed float changes.
+     *
+     * Updates m_broadcastFloating and emits windowFloatingChanged, deduped
+     * against the last value actually broadcast. Engine signal relays MUST
+     * route through this (never signal-to-signal into windowFloatingChanged,
+     * never a bare Q_EMIT): a direct emission leaves m_broadcastFloating
+     * stale, and the setWindowFloating gate then suppresses the next genuine
+     * change on the engine-sync channel (e.g. a cross-mode handoff's
+     * float-cleared sync after a snap-side float).
+     */
+    void relayWindowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
+    /**
      * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats).
      * Gets validated geometry, emits applyGeometryRequested if found, clears stored geometry.
      * @return true if geometry was applied, false if none stored
