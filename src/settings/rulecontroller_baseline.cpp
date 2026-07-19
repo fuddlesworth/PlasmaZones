@@ -64,6 +64,14 @@ void RuleController::stageUserRules(const QList<PhosphorRules::Rule>& userRules)
     QList<PhosphorRules::Rule> next;
     next.reserve(userRules.size() + m_model.rules().size());
     for (const PhosphorRules::Rule& r : userRules) {
+        // Same threat surface as the managed-id collision below: a hand-edited
+        // profile file can carry rules the CRUD path (addRule) would refuse.
+        // A null id breaks the model's valid-unique-id invariant; enforce the
+        // same boundary here.
+        if (r.id.isNull()) {
+            qCWarning(lcConfig) << "stageUserRules: dropping a profile rule with a null id";
+            continue;
+        }
         // A hand-edited profile file could carry a rule whose id collides with
         // a managed rule; appending it would put two rules with the same UUID
         // in the set. Managed rules are daemon-owned, so the managed one wins.

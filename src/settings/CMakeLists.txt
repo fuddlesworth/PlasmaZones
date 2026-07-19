@@ -299,6 +299,7 @@ qt_add_qml_module(plasmazones-settings
         qml/ProfilesPage.qml
         qml/ProfileRow.qml
         qml/ProfileComboBox.qml
+        qml/ProfileSwitcherHeader.qml
         qml/SectionHeaderPill.qml
         qml/ProfileDiffView.qml
         qml/ProfileDiffTree.js

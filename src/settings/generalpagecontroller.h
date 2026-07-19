@@ -16,11 +16,11 @@ class ISettings;
 
 /// Q_PROPERTY surface for the "General" settings page.
 ///
-/// Owns the rendering-backend picker data (options list, translated display
-/// names, and the startup-time backend snapshot that keeps the "restart
-/// required" InlineMessage visible across page navigation), plus the
-/// animation-duration / min-distance / stagger-interval slider bounds that
-/// the EasingSettings sub-component consumes.
+/// Owns the startup-time rendering-backend snapshot that keeps the "restart
+/// required" InlineMessage visible across page navigation (the picker's
+/// options come from SettingsController::valueOptions and the schema), plus
+/// the animation-duration / min-distance / stagger-interval slider bounds
+/// that the EasingSettings sub-component consumes.
 ///
 /// Import/export of the full config stays on SettingsController — those are
 /// top-level app actions that touch every page, not a "General" concern.

@@ -3215,11 +3215,18 @@ QStringList Settings::lockedScreens() const
 void Settings::setLockedScreens(const QStringList& screens)
 {
     // Whole-replace writers (the settings app pushing a full list) still
-    // deserve a fresh no-op compare, so refresh here too. The read-modify-
-    // write path is guarded at the TOP of setContextLocked — a refresh only
-    // here would run AFTER that path's stale read (see the composite-setter
-    // ordering note above patchProfileField).
+    // deserve a fresh no-op compare, so refresh here. The composite path
+    // (setContextLocked) refreshed before ITS read and calls
+    // writeLockedScreens below instead — refreshing again here would reopen
+    // the read-to-write window that its top-of-function refresh closed, by
+    // pulling in a concurrent writer's commit AFTER the merged list was built
+    // and then overwriting it.
     refreshCleanBackendFromDisk();
+    writeLockedScreens(screens);
+}
+
+void Settings::writeLockedScreens(const QStringList& screens)
+{
     // Post-write compare — see writeDisableEntries for the canonicalisation
     // rationale.
     const QString before =
@@ -3305,9 +3312,9 @@ void Settings::setContextLocked(const QString& screenIdOrName, int virtualDeskto
     QStringList current = lockedScreens();
     if (locked && !current.contains(key)) {
         current.append(key);
-        setLockedScreens(current);
+        writeLockedScreens(current);
     } else if (!locked && current.removeAll(key) > 0) {
-        setLockedScreens(current);
+        writeLockedScreens(current);
     }
 }
 

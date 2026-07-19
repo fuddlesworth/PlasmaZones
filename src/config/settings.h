@@ -1059,6 +1059,16 @@ public:
     void setAutotileOverflowBehaviorInt(int behavior);
     QStringList lockedScreens() const override;
     void setLockedScreens(const QStringList& screens) override;
+
+private:
+    /// The write half of setLockedScreens, without the pre-write disk refresh.
+    /// The composite read-modify-write path (setContextLocked) refreshes once
+    /// before its read and must NOT refresh again between read and write, or a
+    /// concurrent writer's commit lands in the store only to be overwritten by
+    /// the already-merged list.
+    void writeLockedScreens(const QStringList& screens);
+
+public:
     bool isScreenLocked(const QString& screenIdOrName) const override;
     void setScreenLocked(const QString& screenIdOrName, bool locked) override;
     bool isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const override;

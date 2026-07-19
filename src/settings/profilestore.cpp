@@ -435,6 +435,14 @@ QJsonObject ProfileStore::readIndex() const
     if (path.isEmpty()) {
         return QJsonObject();
     }
+    // Same prologue as readProfileFile, for the same reason: this directory is
+    // user-writable and openProfilesDirectory() invites hand-placed files, so
+    // a fifo/device (which would block) or an oversized file must be refused
+    // before the open/readAll.
+    const QFileInfo info(path);
+    if (!info.isFile() || info.size() > kMaxProfileFileBytes) {
+        return QJsonObject();
+    }
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly)) {
         return QJsonObject();
@@ -794,6 +802,12 @@ bool ProfileStore::renameProfile(const QString& id, const QString& newName, cons
     if (finalName.isEmpty()) {
         Q_EMIT toastRequested(PhosphorI18n::tr("Please enter a name for the profile."));
         return false;
+    }
+    // Create/duplicate/import auto-suffix silently, but a rename is the user
+    // typing an exact target name; say so when it had to be adjusted.
+    if (finalName != newName.trimmed()) {
+        Q_EMIT toastRequested(PhosphorI18n::tr("Another profile is named “%1”, so this one is now “%2”.")
+                                  .arg(newName.trimmed(), finalName));
     }
     Record rec = all.value(uid);
     if (rec.name == finalName && rec.description == description.trimmed()) {
