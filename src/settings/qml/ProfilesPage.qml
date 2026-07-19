@@ -59,6 +59,13 @@ SettingsFlickable {
         return rows;
     }
 
+    /// Ids of the profiles whose rows are expanded. Held HERE because _reload()
+    /// replaces the row model wholesale, destroying every delegate along with
+    /// its expansion state; rows seed from this map on creation and report
+    /// toggles back into it. Mutated in place — the object's identity is the
+    /// point, not change notification.
+    readonly property var _expandedIds: ({})
+
     function _reload() {
         root.profilesList = root.bridge ? root.bridge.availableProfiles() : [];
     }
@@ -259,6 +266,14 @@ SettingsFlickable {
                         bridge: root.bridge
                         Layout.leftMargin: Kirigami.Units.smallSpacing
                         Layout.rightMargin: Kirigami.Units.smallSpacing
+                        // Seed from the page-held map: _reload() rebuilds the
+                        // model wholesale, so a row mid-expansion (a per-row
+                        // revert fires profilesChanged) is destroyed and
+                        // recreated — without this it snapped shut. The click
+                        // toggle severs the binding, which is fine: creation is
+                        // the only moment the seed matters.
+                        expanded: root._expandedIds[modelData.id] === true
+                        onExpandedChanged: root._expandedIds[modelData.id] = expanded
 
                         onActivateRequested: root._activate(modelData)
                         onUpdateRequested: root._update(modelData)
