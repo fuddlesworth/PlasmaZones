@@ -1466,6 +1466,9 @@ public:
     }
 
     // ── Virtual Screen Defaults ───────────────────────────────────────
+    /// Deliberately untranslated: this catalogue takes no i18n dependency
+    /// (matching the layering note on defaultLayoutVisibilitySettings), and
+    /// the name doubles as the stored fallback, which must not vary by locale.
     static QString defaultVirtualScreenName(int index)
     {
         return QStringLiteral("Screen %1").arg(index + 1);

@@ -32,7 +32,10 @@ enum class ValueKind {
     Enum,
     /// A number, optionally scaled for display and carrying a unit.
     Number,
-    /// A colour string, which the view also renders as a swatch.
+    /// A colour string, which the view also renders as a swatch. No key maps
+    /// here yet: the diff view type-sniffs colour-shaped VALUES for its swatch
+    /// (so the colour keys work as Plain), and this kind is reserved for when
+    /// a key needs colour presentation the sniff cannot infer.
     Color,
     /// Ids resolved against LIVE runtime data, which the C++ side cannot see:
     /// the view resolves these the way ActionListView does, and every one of

@@ -266,6 +266,13 @@ ExpandableRowDelegate {
                 // which is how 0.9500000000000001 reached the pill, having
                 // skipped the number formatting further down.
                 if (typeof value === "string") {
+                    // An id kind holding an EMPTY string is "nothing selected",
+                    // not a lookup miss — without this it slipped past the
+                    // undefined/null guard, missed every catalogue, and
+                    // rendered a blank pill.
+                    const idKinds = ["layoutId", "tilingAlgorithm", "screenId", "shaderPack", "decorationPack", "overlayShader"];
+                    if (value.length === 0 && idKinds.indexOf(kind) >= 0)
+                        return i18nc("a setting with no value", "Unset");
                     const layouts = settingsController.layouts ? settingsController.layouts : [];
                     if (kind === "layoutId")
                         return diffColumn.resolveById(layouts, value, "id", "displayName");

@@ -537,11 +537,19 @@ QJsonObject Store::defaultsToJson() const
             return def.defaultValue.toDouble();
         case QMetaType::QString:
             return def.defaultValue.toString();
-        default:
-            // QColor / QVariantList / QVariantMap / QStringList: readVariantAs
-            // returns the raw default for these when the key is absent, so raw
-            // passthrough IS the mirror.
+        case QMetaType::QColor:
+        case QMetaType::QVariantList:
+        case QMetaType::QVariantMap:
+        case QMetaType::QStringList:
+            // readVariantAs returns the raw default for these when the key is
+            // absent, so raw passthrough IS the mirror.
             return def.defaultValue;
+        default:
+            // Any other type falls into readVariantAs's string branch on the
+            // export side, so stringify here too — a raw passthrough would
+            // serialize an exotic default (QDateTime, QByteArray, …)
+            // differently from exportToJson and phantom-diff at default.
+            return def.defaultValue.toString();
         }
     };
 

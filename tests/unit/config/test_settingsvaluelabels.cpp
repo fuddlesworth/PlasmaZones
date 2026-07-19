@@ -93,10 +93,14 @@ private Q_SLOTS:
             }
         }
 
-        const QSet<QString> orphans = labelledTriples() - declared;
+        const QSet<QString> labelled = labelledTriples();
+        const QSet<QString> orphans = labelled - declared;
         QVERIFY2(orphans.isEmpty(),
                  qPrintable(QStringLiteral("labels with no matching schema choice: %1")
                                 .arg(QStringList(orphans.constBegin(), orphans.constEnd()).join(QLatin1String(", ")))));
+        // Guard the guard: an empty label table subtracts to an empty orphan
+        // set and would pass while checking nothing.
+        QVERIFY2(!labelled.isEmpty(), "no labels found — the walk is broken, not clean");
     }
 
     /// A declared value must be one its own key actually accepts. The validator

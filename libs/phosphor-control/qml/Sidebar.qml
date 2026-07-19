@@ -207,9 +207,8 @@ ColumnLayout {
             // starts with its own seen-marker for itself only.
             const seen = new Set();
             const walk = function walk(parentId, depth, kids) {
-                if (depth > root._maxWalkDepth || seen.has(parentId))
+                if (depth > root._maxWalkDepth)
                     return;
-                seen.add(parentId);
                 for (let i = 0; i < kids.length; ++i) {
                     const child = kids[i];
                     // Skip duplicate child ids — a malformed registry
@@ -218,9 +217,15 @@ ColumnLayout {
                     // the current scope; without this guard the
                     // delegate's required-property bindings see two
                     // rows with identical pageIds and ListView's
-                    // diff against visibleModel goes sideways.
+                    // diff against visibleModel goes sideways. Every
+                    // EMITTED id is marked here (the root is marked
+                    // before the first call), which also covers the
+                    // self-loop / cross-parent recursion cases the old
+                    // entry-guard caught — an already-seen id is never
+                    // emitted, so it is never recursed into either.
                     if (seen.has(child.id))
                         continue;
+                    seen.add(child.id);
 
                     // Single _scopeChildren call per child — used for
                     // the hasChildren predicate AND (when expanded)
@@ -264,6 +269,7 @@ ColumnLayout {
                         });
                 }
             };
+            seen.add(root.currentParentId);
             walk(root.currentParentId, 0, root._scopeChildren(root.currentParentId));
             return out;
         }
@@ -295,16 +301,19 @@ ColumnLayout {
             return null;
         };
         const collect = function collect(parentId, breadcrumb, depth) {
-            if (depth > root._maxWalkDepth || seen.has(parentId))
+            if (depth > root._maxWalkDepth)
                 return;
-            seen.add(parentId);
             const kids = root._scopeChildren(parentId);
             for (let i = 0; i < kids.length; ++i) {
                 const child = kids[i];
                 // Sibling-level / self-loop dupe guard (mirrors the
-                // no-search branch above).
+                // no-search branch above): every VISITED id is marked
+                // here, the scope root before the first call, so an
+                // already-seen id is neither matched again nor
+                // recursed into.
                 if (seen.has(child.id))
                     continue;
+                seen.add(child.id);
 
                 // Fetch the child's children ONCE — _hasChildren below would
                 // have called childPagesData(child.id) and the recursion into
@@ -356,6 +365,7 @@ ColumnLayout {
                 }
             }
         };
+        seen.add(root.currentParentId);
         collect(root.currentParentId, "", 0);
         return matches;
     }

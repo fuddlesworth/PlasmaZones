@@ -278,7 +278,11 @@ ComboBox {
     }
 
     function clearSelection() {
-        currentIndex = 0;
+        // Row 0 is only "no selection" when the None/Default entry exists;
+        // with showNoneOption off, row 0 is a real layout and selecting it
+        // would silently commit the first entry (same invariant as
+        // updateSelection's empty-id case).
+        currentIndex = showNoneOption ? 0 : -1;
     }
 
     Accessible.name: i18n("Layout selection")

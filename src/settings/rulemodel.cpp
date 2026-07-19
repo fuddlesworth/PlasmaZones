@@ -7,6 +7,7 @@
 
 #include "../phosphor_i18n.h"
 
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
@@ -182,17 +183,16 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
 
     // Active layout: a snap layout id resolves via the SetSnappingLayout lookup;
     // an autotile id ("autotile:<algo>") resolves its algorithm via the tiling
-    // lookup after stripping the prefix (mirroring the settings controller's
-    // prefixing), so the collapsed summary matches the expanded tree — which
-    // resolves both id shapes through appSettings.layouts. Unknown ids round-trip
-    // verbatim.
+    // lookup after stripping the prefix (LayoutId is the one owner of that
+    // prefix; the settings controller builds ids with the same helpers), so
+    // the collapsed summary matches the expanded tree — which resolves both id
+    // shapes through appSettings.layouts. Unknown ids round-trip verbatim.
     if (predicate.field == Field::ActiveLayout) {
         const QString value = predicate.value.toString();
         QString label = value;
-        static const QString autotilePrefix = QStringLiteral("autotile:");
-        if (value.startsWith(autotilePrefix)) {
+        if (PhosphorLayout::LayoutId::isAutotile(value)) {
             if (tilingAlgorithmLookup) {
-                const QString resolved = tilingAlgorithmLookup(value.mid(autotilePrefix.size()));
+                const QString resolved = tilingAlgorithmLookup(PhosphorLayout::LayoutId::extractAlgorithmId(value));
                 if (!resolved.isEmpty()) {
                     label = resolved;
                 }

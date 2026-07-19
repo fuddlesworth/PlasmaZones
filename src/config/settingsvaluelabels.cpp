@@ -371,7 +371,10 @@ QString enumLabel(const QString& group, const QString& key, const QString& token
 QVariantList allDescribedKeys()
 {
     QVariantList out;
-    const auto emit = [&out](const QString& pair) {
+    // Named appendPair, not `emit`: that identifier only compiles because the
+    // build defines QT_NO_KEYWORDS, and shadowing the Qt macro the rest of the
+    // codebase avoids via Q_EMIT invites confusion.
+    const auto appendPair = [&out](const QString& pair) {
         const QStringList parts = pair.split(QLatin1Char('\x1f'));
         if (parts.size() == 2) {
             out.append(QVariantMap{
@@ -381,10 +384,10 @@ QVariantList allDescribedKeys()
         }
     };
     for (auto it = descriptorTable().constBegin(); it != descriptorTable().constEnd(); ++it) {
-        emit(it.key());
+        appendPair(it.key());
     }
     for (auto it = enumLabelTable().constBegin(); it != enumLabelTable().constEnd(); ++it) {
-        emit(it.key());
+        appendPair(it.key());
     }
     return out;
 }
