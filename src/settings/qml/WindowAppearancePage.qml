@@ -37,29 +37,19 @@ SettingsFlickable {
     // The title-bar scope row is only meaningful while title bars are hidden.
     readonly property bool hideTitleBarsOn: root.ctl.hideWindowTitleBars
 
-    // "Apply to" scope options for the border / title-bar values, in display
-    // order. `scope` is the token stored in config (sourced from the controller so
-    // it stays in lockstep with the schema validator and the effect); `label` is
-    // user-facing text.
-    readonly property var scopeOptions: [
-        {
-            "scope": root.ctl.scopeTokenTiled,
-            "label": i18n("Tiled and snapped windows")
-        },
-        {
-            "scope": root.ctl.scopeTokenNormal,
-            "label": i18n("All normal windows")
-        },
-        {
-            "scope": root.ctl.scopeTokenAll,
-            "label": i18n("All windows")
-        }
-    ]
+    // "Apply to" scope options for the border / title-bar / opacity values, in
+    // the order the schema declares them. The three keys share one token set,
+    // so one lookup serves all three pickers.
+    //
+    // Sourced from the schema rather than written out here: the tokens are the
+    // ones the validator accepts and the words come from the shared label
+    // table, so a picker cannot offer a scope the effect would reject.
+    readonly property var scopeOptions: settingsController.valueOptions("Windows", "BorderScope")
 
     // Index of @p scope in scopeOptions, or -1 when it is not a listed token.
     function scopeIndex(scope) {
         for (var i = 0; i < root.scopeOptions.length; ++i) {
-            if (root.scopeOptions[i].scope === scope) {
+            if (root.scopeOptions[i].value === scope) {
                 return i;
             }
         }
@@ -186,10 +176,10 @@ SettingsFlickable {
                         id: borderScopeCombo
 
                         Accessible.name: i18n("Apply borders to")
-                        textRole: "label"
+                        textRole: "text"
                         model: root.scopeOptions
                         currentIndex: root.scopeIndex(root.ctl.borderScope)
-                        onActivated: index => root.ctl.borderScope = root.scopeOptions[index].scope
+                        onActivated: index => root.ctl.borderScope = root.scopeOptions[index].value
                     }
                 }
 
@@ -372,10 +362,10 @@ SettingsFlickable {
                         id: opacityTintScopeCombo
 
                         Accessible.name: i18n("Apply opacity and tint to")
-                        textRole: "label"
+                        textRole: "text"
                         model: root.scopeOptions
                         currentIndex: root.scopeIndex(root.ctl.opacityTintScope)
-                        onActivated: index => root.ctl.opacityTintScope = root.scopeOptions[index].scope
+                        onActivated: index => root.ctl.opacityTintScope = root.scopeOptions[index].value
                     }
                 }
 
@@ -509,10 +499,10 @@ SettingsFlickable {
                         id: titleBarScopeCombo
 
                         Accessible.name: i18n("Hide title bars on")
-                        textRole: "label"
+                        textRole: "text"
                         model: root.scopeOptions
                         currentIndex: root.scopeIndex(root.ctl.titleBarScope)
-                        onActivated: index => root.ctl.titleBarScope = root.scopeOptions[index].scope
+                        onActivated: index => root.ctl.titleBarScope = root.scopeOptions[index].value
                     }
                 }
 

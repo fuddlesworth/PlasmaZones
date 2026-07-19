@@ -62,6 +62,29 @@ PhosphorUi.SettingsAppWindow {
             "super-ultrawide": aspectRatioLabelsObject.superUltrawide,
             "portrait": aspectRatioLabelsObject.portrait
         })
+    // Name of the profile a pending (staged, unsaved) switch would apply,
+    // refreshed from the bridge on profilesChanged — every staged-active
+    // mutation announces itself through that signal. Empty when no profile
+    // switch is pending or the switch clears the active profile.
+    property string _pendingProfileName
+
+    // Make the Save footer say what Save will actually do when the batch
+    // includes a profile switch: a plain "Unsaved changes" hides that the
+    // staged edits ARE the selected profile's settings.
+    unsavedChangesMessage: settingsController.profilesPage && settingsController.profilesPage.dirty && window._pendingProfileName.length > 0 ? i18n("Unsaved changes. Saving applies the profile “%1”.", window._pendingProfileName) : ""
+
+    function _refreshPendingProfileName() {
+        const page = settingsController.profilesPage;
+        const rows = page && page.bridge ? page.bridge.availableProfiles() : [];
+        for (let i = 0; i < rows.length; ++i) {
+            if (rows[i].active) {
+                window._pendingProfileName = rows[i].name;
+                return;
+            }
+        }
+        window._pendingProfileName = "";
+    }
+
     // Keyboard-shortcut overlay state.
     property bool _showShortcuts: false
 
@@ -129,6 +152,22 @@ PhosphorUi.SettingsAppWindow {
 
         function onToastRequested(text) {
             window.showToast(text);
+        }
+    }
+
+    // The profile store's refusals also cross pages: the sticky sidebar
+    // switcher can activate a profile from anywhere, so a schema-mismatch
+    // toast raised on, say, the Snapping page must still surface. The same
+    // scope applies to the staged-active name the footer message shows.
+    Connections {
+        target: settingsController.profilesPage ? settingsController.profilesPage.bridge : null
+
+        function onToastRequested(text) {
+            window.showToast(text);
+        }
+
+        function onProfilesChanged() {
+            window._refreshPendingProfileName();
         }
     }
 
@@ -485,10 +524,14 @@ PhosphorUi.SettingsAppWindow {
     /// True while the global search dropdown is open — suppresses page-step
     /// shortcuts so ↑/↓/Enter drive the results list, not page navigation.
     property bool _searchOpen: false
+    /// True while the sidebar profile switcher's dropdown is open. Mirrored
+    /// out of the header Component (whose ids are not reachable from this
+    /// scope) by a Binding next to the combo.
+    property bool _profilePopupOpen: false
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen && !window._profilePopupOpen
 
     Shortcut {
         sequence: "Ctrl+PgUp"
@@ -834,6 +877,21 @@ PhosphorUi.SettingsAppWindow {
                     settingsController.endExternalEdit();
                 }
             }
+        }
+    }
+
+    // Sticky sidebar-header profile switcher — activate a settings profile from
+    // anywhere, mirroring the per-row Activate on the Profiles page. Selecting
+    // one STAGES it into the Save footer (applies on Save, reverts on Discard).
+    // Collapses to nothing until at least one profile exists; in the narrow
+    // compact rail the combo hides and only the identicon mark remains.
+    sidebar.headerContent: Component {
+        ProfileSwitcherHeader {
+            // Suppress Ctrl+PgUp/PgDown page-stepping while the dropdown is
+            // open, like every other window-scoped popup folded into
+            // _navShortcutsEnabled. Wired here because the extracted widget
+            // cannot resolve the window id across files.
+            onPopupOpenChanged: window._profilePopupOpen = popupOpen
         }
     }
 }

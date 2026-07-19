@@ -17,6 +17,9 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  *   ┌─────────────────────────┐
  *   │ SearchField  (sticky)   │
  *   ├─────────────────────────┤
+ *   ┌─────────────────────────┐
+ *   │ headerContent (sticky)  │
+ *   ├─────────────────────────┤
  *   │ Back button (when drilled)
  *   │ ListView (scrollable)   │
  *   │ — rows drill / toggle / │
@@ -44,6 +47,8 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  *     the sidebar, OUTSIDE the scroll area. Stays visible across
  *     drill / scroll. Used by Phosphor for the persistent daemon
  *     status + enable/disable toggle.
+ *   - `headerContent`: the same, at the very TOP (above the search
+ *     field). Used by Phosphor for the settings-profile switcher.
  */
 ColumnLayout {
     id: root
@@ -85,6 +90,14 @@ ColumnLayout {
      *  enable/disable toggle that should be reachable from every
      *  page). */
     property Component footerContent: null
+
+    /** Component instantiated at the very TOP of the sidebar, above the
+     *  search field and outside the scroll area, so it stays put across
+     *  drill / scroll. Same compact-awareness contract as
+     *  `footerContent`: a consumer that declares `property bool compact`
+     *  stays visible in the icon-only rail and receives the live value;
+     *  one that does not is hidden there. */
+    property Component headerContent: null
     /** Suppress per-row add/remove animations while the whole list is
      *  cross-fading on drill-in/out. */
     property bool _suppressAccordion: false
@@ -194,9 +207,8 @@ ColumnLayout {
             // starts with its own seen-marker for itself only.
             const seen = new Set();
             const walk = function walk(parentId, depth, kids) {
-                if (depth > root._maxWalkDepth || seen.has(parentId))
+                if (depth > root._maxWalkDepth)
                     return;
-                seen.add(parentId);
                 for (let i = 0; i < kids.length; ++i) {
                     const child = kids[i];
                     // Skip duplicate child ids — a malformed registry
@@ -205,9 +217,15 @@ ColumnLayout {
                     // the current scope; without this guard the
                     // delegate's required-property bindings see two
                     // rows with identical pageIds and ListView's
-                    // diff against visibleModel goes sideways.
+                    // diff against visibleModel goes sideways. Every
+                    // EMITTED id is marked here (the root is marked
+                    // before the first call), which also covers the
+                    // self-loop / cross-parent recursion cases the old
+                    // entry-guard caught — an already-seen id is never
+                    // emitted, so it is never recursed into either.
                     if (seen.has(child.id))
                         continue;
+                    seen.add(child.id);
 
                     // Single _scopeChildren call per child — used for
                     // the hasChildren predicate AND (when expanded)
@@ -251,6 +269,7 @@ ColumnLayout {
                         });
                 }
             };
+            seen.add(root.currentParentId);
             walk(root.currentParentId, 0, root._scopeChildren(root.currentParentId));
             return out;
         }
@@ -282,16 +301,19 @@ ColumnLayout {
             return null;
         };
         const collect = function collect(parentId, breadcrumb, depth) {
-            if (depth > root._maxWalkDepth || seen.has(parentId))
+            if (depth > root._maxWalkDepth)
                 return;
-            seen.add(parentId);
             const kids = root._scopeChildren(parentId);
             for (let i = 0; i < kids.length; ++i) {
                 const child = kids[i];
                 // Sibling-level / self-loop dupe guard (mirrors the
-                // no-search branch above).
+                // no-search branch above): every VISITED id is marked
+                // here, the scope root before the first call, so an
+                // already-seen id is neither matched again nor
+                // recursed into.
                 if (seen.has(child.id))
                     continue;
+                seen.add(child.id);
 
                 // Fetch the child's children ONCE — _hasChildren below would
                 // have called childPagesData(child.id) and the recursion into
@@ -343,6 +365,7 @@ ColumnLayout {
                 }
             }
         };
+        seen.add(root.currentParentId);
         collect(root.currentParentId, "", 0);
         return matches;
     }
@@ -489,6 +512,45 @@ ColumnLayout {
 
     ListModel {
         id: visibleModel
+    }
+
+    // ── Sticky header slot (e.g. a profile switcher) ────────────────
+    // Mirrors footerLoader below; see its comments for the sizing and
+    // compact-awareness rationale.
+    Loader {
+        id: headerLoader
+
+        readonly property bool _consumerIsCompactAware: item ? item.hasOwnProperty("compact") : false
+
+        Layout.fillWidth: true
+        Layout.preferredWidth: 0
+        Layout.preferredHeight: item ? item.implicitHeight : 0
+        active: root.headerContent !== null
+        visible: active && (!root.compact || _consumerIsCompactAware)
+        sourceComponent: root.headerContent
+        onLoaded: {
+            PhosphorLoaderHelpers.bindItemWidthToLoader(headerLoader);
+            PhosphorLoaderHelpers.injectIfAssignable(headerLoader.item, "compact", root.compact);
+        }
+
+        Connections {
+            function onCompactChanged() {
+                if (headerLoader.item)
+                    PhosphorLoaderHelpers.injectIfAssignable(headerLoader.item, "compact", root.compact);
+            }
+
+            target: root
+        }
+    }
+
+    // Divides the header slot from what follows, so the slot reads as its
+    // own band rather than running into the list. Also gated on the slot
+    // actually having content: a consumer that collapses to zero height (the
+    // profile switcher with no profiles saved) must not leave a stray divider
+    // line above the search field.
+    Kirigami.Separator {
+        Layout.fillWidth: true
+        visible: headerLoader.visible && headerLoader.item !== null && headerLoader.item.implicitHeight > 0
     }
 
     // ── Sticky search field at the top ──────────────────────────────

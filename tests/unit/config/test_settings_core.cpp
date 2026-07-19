@@ -19,6 +19,7 @@
  *     prune-on-write/read, autoAssignAllLayouts master toggle
  */
 
+#include <QSet>
 #include <QTest>
 #include <QColor>
 #include <QSignalSpy>
@@ -395,6 +396,44 @@ private Q_SLOTS:
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
+    }
+
+    /**
+     * The context-lock toggle is a read-modify-write over the whole
+     * lockedScreens list (the daemon and the settings app are concurrent
+     * writers, guarded by refreshCleanBackendFromDisk at the top of
+     * setContextLocked). Pin the round-trip, the same-state no-op, and the
+     * loud refusal of the unrepresentable (screen, 0, activity) shape —
+     * silently composing a whole-screen lock there would be data loss.
+     */
+    void testContextLock_roundTripNoOpAndInvalidShape()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QSignalSpy lockSpy(&settings, &Settings::lockedScreensChanged);
+
+        settings.setContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work"), true);
+        QVERIFY(settings.isContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work")));
+        QCOMPARE(settings.lockedScreens(), QStringList{QStringLiteral("DP-1:2:work")});
+        QCOMPARE(lockSpy.count(), 1);
+
+        // Locking an already-locked context is a no-op: no write, no signal.
+        settings.setContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work"), true);
+        QCOMPARE(lockSpy.count(), 1);
+
+        // (screen, 0, activity) has no representable form — refused loudly,
+        // nothing written, instead of degrading to a whole-screen lock.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("activity supplied without")));
+        settings.setContextLocked(QStringLiteral("DP-2"), 0, QStringLiteral("work"), true);
+        QCOMPARE(settings.lockedScreens(), QStringList{QStringLiteral("DP-1:2:work")});
+        QCOMPARE(lockSpy.count(), 1);
+
+        // Unlock round-trips back to empty.
+        settings.setContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work"), false);
+        QVERIFY(!settings.isContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work")));
+        QVERIFY(settings.lockedScreens().isEmpty());
+        QCOMPARE(lockSpy.count(), 2);
     }
 
     /**
@@ -832,6 +871,101 @@ private Q_SLOTS:
      * writes it and re-emits the per-property NOTIFY + settingsChanged exactly
      * once per real change, and the value survives a save/reload.
      */
+    /// The profiles staging seam: applyConfigOverlayStaged writes the blob's
+    /// values into memory, fires the per-property NOTIFY + settingsChanged,
+    /// and does NOT move the baseline — the staged key must read as modified
+    /// so the Save footer lights.
+    void testApplyConfigOverlayStaged_stagesWithoutCommitting()
+    {
+        IsolatedConfigGuard guard;
+        // load() captures the modified-tracking baseline itself.
+        Settings settings;
+        settings.load();
+
+        QJsonObject blob = settings.exportConfigToJson();
+        QJsonObject windows = blob.value(QStringLiteral("Windows")).toObject();
+        const int newWidth = windows.value(QStringLiteral("Width")).toInt() + 3;
+        windows.insert(QStringLiteral("Width"), newWidth);
+        blob.insert(QStringLiteral("Windows"), windows);
+
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(settings.applyConfigOverlayStaged(blob));
+        QCOMPARE(settings.windowBorderWidth(), newWidth);
+        QCOMPARE(changedSpy.count(), 1);
+        // Staged, not committed: the key diverges from the baseline.
+        QVERIFY(settings.isKeyModified(QStringLiteral("Windows"), QStringLiteral("Width")));
+    }
+
+    /// A blob stamped with a foreign schema version is refused whole: nothing
+    /// staged, nothing signalled, and the caller learns about it.
+    void testApplyConfigOverlayStaged_refusesForeignVersion()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.load();
+        const int before = settings.windowBorderWidth();
+
+        QJsonObject blob = settings.exportConfigToJson();
+        QJsonObject windows = blob.value(QStringLiteral("Windows")).toObject();
+        windows.insert(QStringLiteral("Width"), before + 3);
+        blob.insert(QStringLiteral("Windows"), windows);
+        blob.insert(QStringLiteral("_version"), 1); // ancient
+
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(!settings.applyConfigOverlayStaged(blob));
+        QCOMPARE(settings.windowBorderWidth(), before);
+        QCOMPARE(changedSpy.count(), 0);
+    }
+
+    /// defaultConfigJson delegates to the store's defaults snapshot, so it is
+    /// field-for-field comparable with exportConfigToJson — the invariant the
+    /// profiles delta engine diffs across.
+    void testDefaultConfigJson_matchesExportShape()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.load();
+
+        const QJsonObject defaults = settings.defaultConfigJson();
+        const QJsonObject exported = settings.exportConfigToJson();
+        QCOMPARE(defaults.keys(), exported.keys());
+        QCOMPARE(defaults.value(QStringLiteral("_version")), exported.value(QStringLiteral("_version")));
+        // The palette-derived keys are the one legitimate divergence: with
+        // UseSystem on (the default), load() runs applySystemColorScheme and
+        // writes the live palette's highlight/inactive/border/font colours
+        // into the store, so a fresh export carries THOSE, not the schema
+        // defaults. Everything else must be value-identical — any other
+        // difference is one serializer coercing what the other does not,
+        // the exact drift the delegation to Store::defaultsToJson prevents.
+        const QSet<QString> paletteDerived{
+            QStringLiteral("Snapping.Zones.Colors/Highlight"),
+            QStringLiteral("Snapping.Zones.Colors/Inactive"),
+            QStringLiteral("Snapping.Zones.Colors/Border"),
+            QStringLiteral("Snapping.Zones.Labels/FontColor"),
+        };
+        for (const QString& group : exported.keys()) {
+            if (group == QStringLiteral("_version")) {
+                continue;
+            }
+            const QJsonObject defaultGroup = defaults.value(group).toObject();
+            const QJsonObject exportedGroup = exported.value(group).toObject();
+            QCOMPARE(defaultGroup.keys(), exportedGroup.keys());
+            for (const QString& key : exportedGroup.keys()) {
+                if (paletteDerived.contains(group + QLatin1Char('/') + key)) {
+                    continue;
+                }
+                QVERIFY2(
+                    defaultGroup.value(key) == exportedGroup.value(key),
+                    qPrintable(QStringLiteral("%1/%2: default %3 != fresh export %4")
+                                   .arg(group, key,
+                                        QString::fromUtf8(QJsonDocument(QJsonObject{{key, defaultGroup.value(key)}})
+                                                              .toJson(QJsonDocument::Compact)),
+                                        QString::fromUtf8(QJsonDocument(QJsonObject{{key, exportedGroup.value(key)}})
+                                                              .toJson(QJsonDocument::Compact)))));
+            }
+        }
+    }
+
     void testConfigBackedGap_roundTripsAndEmits()
     {
         IsolatedConfigGuard guard;

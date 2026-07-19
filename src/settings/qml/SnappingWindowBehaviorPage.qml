@@ -229,20 +229,7 @@ SettingsFlickable {
                             Accessible.name: i18n("Sticky windows")
                             textRole: "text"
                             valueRole: "value"
-                            model: [
-                                {
-                                    "text": i18n("Treat as normal"),
-                                    "value": 0
-                                },
-                                {
-                                    "text": i18n("Restore only"),
-                                    "value": 1
-                                },
-                                {
-                                    "text": i18n("Ignore all"),
-                                    "value": 2
-                                }
-                            ]
+                            model: settingsController.valueOptions("Snapping.Behavior.WindowHandling", "StickyWindowHandling")
                             currentIndex: Math.max(0, indexOfValue(appSettings.snappingStickyWindowHandling))
                             onActivated: appSettings.snappingStickyWindowHandling = currentValue
                         }

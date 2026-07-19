@@ -865,6 +865,14 @@ public:
     // sole writer.
     PLASMAZONES_EXPORT static QString rulesFilePath();
 
+    // Returns the absolute path to the settings-profiles directory
+    // (~/.config/plasmazones/profiles). Each profile is a single <uuid>.json
+    // file holding a sparse config delta (and user-rule subset) relative to its
+    // parent profile, plus an index.json sidecar tracking the active profile and
+    // display order. Sits under the config dir (not the data dir) so it never
+    // collides with the data-dir animation profiles subdir.
+    PLASMAZONES_EXPORT static QString profilesDir();
+
     // Window appearance (border / title bar / gap) defaults live in the config
     // store now (the Windows.* / Gaps.* groups), NOT in managed baseline rules.
     // These three ids no longer identify seeded rules — they exist only so the
@@ -954,60 +962,24 @@ public:
         return QStringLiteral("auto");
     }
 
-    struct RenderingBackendEntry
-    {
-        QString key;
-        QString displayName;
-    };
-
-    // Single source of truth for backend keys and display names.
-    // Order here determines ComboBox order in the settings UI.
-    // When adding entries, also add the display name to the translation catalog.
-    static const QList<RenderingBackendEntry>& renderingBackendEntries()
-    {
-        // QT_TRANSLATE_NOOP marks the display names for lupdate
-        // extraction under the project's "plasmazones" context while
-        // keeping the literal as the runtime value — GeneralPageController
-        // resolves the translated form via PhosphorI18n::tr() at display time.
-        // Without the macro, lupdate wouldn't see the source strings
-        // and the .ts catalog would never carry the translations.
-        static const QList<RenderingBackendEntry> entries = {
-            {QStringLiteral("auto"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "Automatic"))},
-            {QStringLiteral("vulkan"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "Vulkan"))},
-            {QStringLiteral("opengl"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "OpenGL"))},
-        };
-        return entries;
-    }
-
+    // Single source of truth for the legal backend tokens. Order here is the
+    // schema's declaration order, which is the order pickers offer. The
+    // user-facing words for these tokens live in settingsvaluelabels.cpp, the
+    // app-side label table every enum key resolves through.
     static const QStringList& renderingBackendOptions()
     {
-        static const QStringList keys = [] {
-            QStringList k;
-            for (const auto& e : renderingBackendEntries())
-                k.append(e.key);
-            return k;
-        }();
+        static const QStringList keys = {
+            QStringLiteral("auto"),
+            QStringLiteral("vulkan"),
+            QStringLiteral("opengl"),
+        };
         return keys;
-    }
-
-    // Untranslated display names — use for translation source only.
-    // GeneralPageController translates these via PhosphorI18n::tr() at runtime.
-    static QStringList renderingBackendDisplayNames()
-    {
-        QStringList names;
-        for (const auto& e : renderingBackendEntries())
-            names.append(e.displayName);
-        return names;
     }
 
     static QString normalizeRenderingBackend(const QString& raw)
     {
         const QString normalized = raw.toLower().trimmed();
-        for (const auto& e : renderingBackendEntries()) {
-            if (e.key == normalized)
-                return normalized;
-        }
-        return renderingBackend();
+        return renderingBackendOptions().contains(normalized) ? normalized : renderingBackend();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1494,6 +1466,9 @@ public:
     }
 
     // ── Virtual Screen Defaults ───────────────────────────────────────
+    /// Deliberately untranslated: this catalogue takes no i18n dependency
+    /// (matching the layering note on defaultLayoutVisibilitySettings), and
+    /// the name doubles as the stored fallback, which must not vary by locale.
     static QString defaultVirtualScreenName(int index)
     {
         return QStringLiteral("Screen %1").arg(index + 1);

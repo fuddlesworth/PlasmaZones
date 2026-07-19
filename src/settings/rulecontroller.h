@@ -202,6 +202,14 @@ public:
     /// reload the model.
     void resetManagedDefaults();
 
+    /// Stage a resolved USER rule subset (non-managed) into the live model,
+    /// preserving any managed rules, applying the given order, and
+    /// renormalizing priorities. Leaves the committed snapshot untouched so the
+    /// Rules page reports dirty and the normal Save commits it. Used by the
+    /// settings-profiles feature when a profile is activated — the whole-set
+    /// replacement matches the daemon's setAllRules D-Bus contract.
+    void stageUserRules(const QList<PhosphorRules::Rule>& userRules);
+
     // ── Rule CRUD — keyed by UUID, never by index ─────────────────────────
 
     /// Build a fresh, never-yet-stored rule for the given guided subject and

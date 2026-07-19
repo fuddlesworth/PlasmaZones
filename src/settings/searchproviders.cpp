@@ -5,7 +5,11 @@
 
 #include "settingscontroller.h"
 #include "rulecontroller.h"
+#include "profilepagecontroller.h"
+#include "profilestore.h"
 #include "rulemodel.h"
+
+#include "../phosphor_i18n.h"
 
 #include <QModelIndex>
 #include <QVariantMap>
@@ -69,10 +73,11 @@ QVector<SearchEntry> RulesSearchProvider::searchEntries() const
     out.reserve(rows);
     for (int i = 0; i < rows; ++i) {
         const QModelIndex idx = model->index(i);
+        // titleFor never returns empty: an unnamed (auto-stamped context) rule
+        // falls back to its lookup-resolved match summary, the same title the
+        // Rules page and the profile diff show. Searching must not skip those.
         const QString name = model->data(idx, RuleModel::NameRole).toString();
-        if (name.isEmpty()) {
-            continue;
-        }
+        const QString title = model->titleFor(model->rules().at(i));
 
         SearchEntry e;
         e.kind = SearchEntry::Kind::Entity;
@@ -83,11 +88,60 @@ QVector<SearchEntry> RulesSearchProvider::searchEntries() const
         if (!id.isEmpty()) {
             e.anchor = QStringLiteral("rule:") + id;
         }
-        e.title = name;
-        // The match summary is the meaningful per-rule context; when absent, leave
-        // the subtitle empty so SearchController auto-derives the page breadcrumb.
-        e.subtitle = model->data(idx, RuleModel::MatchSummaryRole).toString();
+        e.title = title;
+        // The match summary is the meaningful per-rule context; for an unnamed
+        // rule it already IS the title, so leave the subtitle empty (the
+        // SearchController then auto-derives the page breadcrumb).
+        e.subtitle = name.isEmpty() ? QString() : model->data(idx, RuleModel::MatchSummaryRole).toString();
         e.icon = QStringLiteral("window-symbolic");
+        out.push_back(e);
+    }
+    return out;
+}
+
+QVector<SearchEntry> ProfilesSearchProvider::searchEntries() const
+{
+    QVector<SearchEntry> out;
+    if (m_controller == nullptr) {
+        return out;
+    }
+    ProfilePageController* page = m_controller->profilesPage();
+    if (page == nullptr || page->bridge() == nullptr) {
+        return out;
+    }
+
+    const QVariantList profiles = page->bridge()->availableProfiles();
+    out.reserve(profiles.size());
+    for (const QVariant& v : profiles) {
+        const QVariantMap m = v.toMap();
+        const QString name = m.value(QStringLiteral("name")).toString();
+        if (name.isEmpty()) {
+            continue;
+        }
+
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Entity;
+        e.pageId = QStringLiteral("profiles");
+        // Per-profile reveal anchor; ProfileRow registers "profile:<id>" with
+        // the page (id is the braced QUuid availableProfiles() reports), so a
+        // result scrolls to and pulses that exact row.
+        const QString id = m.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty()) {
+            e.anchor = QStringLiteral("profile:") + id;
+        }
+        e.title = name;
+        // What the profile inherits from is the per-profile context worth
+        // showing, the way a rule shows its match summary. A description, when
+        // the user wrote one, says more than the parent name, so it wins.
+        const QString description = m.value(QStringLiteral("description")).toString();
+        if (!description.isEmpty()) {
+            e.subtitle = description;
+        } else if (!m.value(QStringLiteral("isRoot")).toBool()) {
+            e.subtitle = PhosphorI18n::tr("Inherits from “%1”").arg(m.value(QStringLiteral("parentName")).toString());
+        } else {
+            e.subtitle = PhosphorI18n::tr("Based on defaults");
+        }
+        e.icon = QStringLiteral("bookmarks");
         out.push_back(e);
     }
     return out;

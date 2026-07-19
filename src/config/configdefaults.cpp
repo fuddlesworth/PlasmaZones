@@ -39,6 +39,11 @@ QString ConfigDefaults::rulesFilePath()
     return configDir() + QStringLiteral("/plasmazones/rules.json");
 }
 
+QString ConfigDefaults::profilesDir()
+{
+    return configDir() + QStringLiteral("/plasmazones/profiles");
+}
+
 QString ConfigDefaults::quickLayoutsFilePath()
 {
     return configDir() + QStringLiteral("/plasmazones/quicklayouts.json");

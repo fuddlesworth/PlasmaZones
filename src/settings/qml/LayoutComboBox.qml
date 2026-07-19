@@ -278,7 +278,11 @@ ComboBox {
     }
 
     function clearSelection() {
-        currentIndex = 0;
+        // Row 0 is only "no selection" when the None/Default entry exists;
+        // with showNoneOption off, row 0 is a real layout and selecting it
+        // would silently commit the first entry (same invariant as
+        // updateSelection's empty-id case).
+        currentIndex = showNoneOption ? 0 : -1;
     }
 
     Accessible.name: i18n("Layout selection")
@@ -410,6 +414,12 @@ ComboBox {
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
         padding: 1
+        // The Desktop style's field background reads `popup.exit.running`
+        // (its ComboBox.qml:128). A bare Popup leaves enter/exit null, so that
+        // binding throws "Cannot read property 'running' of null" the moment
+        // the control is pressed. Empty transitions give it something non-null.
+        enter: Transition {}
+        exit: Transition {}
         onClosed: {
             if (root._rebuildPending) {
                 root._rebuildPending = false;
