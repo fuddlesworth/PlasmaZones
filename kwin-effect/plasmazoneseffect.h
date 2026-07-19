@@ -620,6 +620,13 @@ private:
     /// only fires when the daemon service is registered.
     void reportScreenDesktop(const QString& screenId, int desktop);
     QString getWindowScreenId(KWin::EffectWindow* w) const;
+    /// Resolve the KWin output a window sits on by POSITION (the output whose
+    /// geometry contains the window centre), falling back to w->screen() only
+    /// when no output contains the centre. Never trust w->screen() first: KWin
+    /// can assign a window the wrong one of two identical-model outputs
+    /// (Discussion #724). Shared by getWindowScreenId and the activation-time
+    /// desktop report in notifyWindowActivated.
+    KWin::LogicalOutput* windowOutput(KWin::EffectWindow* w) const;
     AutotileHandler* autotileHandler() const
     {
         return m_autotileHandler.get();
