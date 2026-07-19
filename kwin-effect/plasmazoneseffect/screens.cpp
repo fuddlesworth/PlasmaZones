@@ -104,6 +104,25 @@ void PlasmaZonesEffect::reportScreenDesktop(const QString& screenId, int desktop
     }
 }
 
+// Resolve the monitor by the window's POSITION — the KWin output whose geometry
+// contains the window centre — NOT w->screen(). KWin can assign a window the
+// wrong one of two identical-model outputs, so trusting w->screen() made the
+// effect disagree with the daemon about which monitor a window sits on, which
+// then bounced a snapped window off to the other monitor (Discussion #724).
+// Mirrors the snap-assist path in snaphandler.cpp. The w->screen() fallback
+// only fires when no output contains the centre (window fully off-screen
+// mid-reconfigure).
+KWin::LogicalOutput* PlasmaZonesEffect::windowOutput(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return nullptr;
+    }
+    const QPointF cf = w->frameGeometry().center();
+    const QPoint c(qRound(cf.x()), qRound(cf.y()));
+    KWin::LogicalOutput* output = KWin::effects->screenAt(c);
+    return output ? output : w->screen();
+}
+
 QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
 {
     if (!w) {
@@ -112,21 +131,13 @@ QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
     const QPointF cf = w->frameGeometry().center();
     const QPoint c(qRound(cf.x()), qRound(cf.y()));
 
-    // Resolve the monitor by the window's POSITION — the KWin output whose geometry
-    // contains the window centre — NOT w->screen(). KWin can assign a window the
-    // wrong one of two identical-model outputs, so trusting w->screen() made the
-    // effect disagree with the daemon about which monitor a window sits on, which
-    // then bounced a snapped window off to the other monitor (Discussion #724).
-    // outputScreenId derives the id from the KWin output's OWN EDID (manufacturer /
-    // model / connector), which agrees with the daemon per-output — the bug was only
-    // the window→output trust. Mirrors the snap-assist path in snaphandler.cpp.
-    // (QScreen can't be used here: inside the compositor QScreen::manufacturer() /
-    // model() are empty, so a QScreen-derived id degrades to "::serial".)
-    const KWin::LogicalOutput* output = KWin::effects->screenAt(c);
-    if (!output) {
-        output = w->screen();
-    }
-    return resolveEffectiveScreenId(c, output);
+    // Position-resolved output (see windowOutput). outputScreenId derives the
+    // id from the KWin output's OWN EDID (manufacturer / model / connector),
+    // which agrees with the daemon per-output — the #724 bug was only the
+    // window→output trust. (QScreen can't be used here: inside the compositor
+    // QScreen::manufacturer() / model() are empty, so a QScreen-derived id
+    // degrades to "::serial".)
+    return resolveEffectiveScreenId(c, windowOutput(w));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
