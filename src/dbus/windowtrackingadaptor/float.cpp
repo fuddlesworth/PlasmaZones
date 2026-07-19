@@ -223,6 +223,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     //     rule/pre-float re-snap chance, and a window it cannot re-snap
     //     stays a free (unmanaged) window, which is what unfloating a
     //     window snap never tracked means.
+    bool recaptureAfterFloatWrite = false;
     if (dest && !dest->isWindowTracked(windowId)) {
         const bool sourceTracked = source && source->isWindowTracked(windowId);
         const bool destIsAutotile = m_autotileEngine && dest == m_autotileEngine.data();
@@ -243,6 +244,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         } else if (sourceTracked) {
             source->handoffRelease(windowId);
             relayWindowFloatingChanged(windowId, false, screenId);
+            recaptureAfterFloatWrite = true;
         }
     }
 
@@ -253,6 +255,16 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         // that drifted to another monitor while floating non-deterministically
         // teleports it back to its source-monitor zone (Discussion #724).
         dest->setWindowFloat(windowId, floating, screenId);
+    }
+    if (recaptureAfterFloatWrite) {
+        // Snap-dest unfloat: when unfloatToZone above re-snapped the window,
+        // the commitSnap wiring already refreshed the live placement record —
+        // this recapture is then an idempotent repeat. When it FAILED OPEN
+        // (no rule/pre-float zone) nothing else refreshes the record, and it
+        // would keep its prior floating slot while the broadcast above said
+        // not-floating; capture after the write so the persisted record
+        // matches what subscribers were told.
+        captureWindowPlacement(windowId);
     }
 }
 

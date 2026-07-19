@@ -1061,11 +1061,21 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     for (const QString& windowId : windowIds) {
-        // Update WTS state directly — don't call setWindowFloating()
-        // on the adaptor since that emits a D-Bus windowFloatingChanged
-        // signal which the effect doesn't need (it already processed
-        // the float from the windowsTileRequested batch).
+        // Update WTS state directly (not adaptor setWindowFloating: its extra
+        // windowStateChanged/placement-capture side emissions are wrong for a
+        // batch the effect already applied), but DO route the broadcast
+        // bookkeeping through the relay chokepoint. Skipping it left
+        // m_broadcastFloating at not-floating for a batch-floated window, so
+        // the next genuine unfloat broadcast hit false==false in the gate and
+        // was suppressed — stranding the effect's float cache exactly like
+        // the silent flips this contract exists to prevent. The relay's
+        // windowFloatingChanged emission is redundant for the effect (it
+        // already processed the float from the windowsTileRequested batch;
+        // the cache write is idempotent) and overflow floats are rare, so
+        // the spare signal is the price of keeping the last-broadcast
+        // contract single-owner and universal.
         wts->setWindowFloating(windowId, true);
+        m_windowTrackingAdaptor->relayWindowFloatingChanged(windowId, true, screenId);
         m_autotileEngine->markModeSpecificFloated(windowId);
         // Same cross-VS preservation logic as the single-window handler
         const QString preFloatScreen = wts->preFloatScreen(windowId);
