@@ -337,6 +337,15 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 motionOverridePtr = &motionProfile;
         }
 
+        // Where the animator's replacement animation departs FROM. The
+        // shader geometry-morph below must anchor its iFromRect at the
+        // same point (see the re-anchor branch there): the animator's
+        // retarget resets progress to 0 and re-anchors at this rect, so a
+        // morph that keeps its old fromGeometry would draw
+        // lerp(originalFrom, newTo, 0) on the next frame — a visible jump
+        // back to the ORIGINAL departure rect on every rapid successive
+        // move (discussion #795).
+        QRectF morphAnchor(oldFrame);
         if (m_windowAnimator->hasAnimation(window)) {
             // Capture the displaced animation's endpoints before retarget
             // modifies or deletes the entry. On a rapid reversal where
@@ -352,6 +361,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             const QRectF visualPos = m_windowAnimator->currentValue(window, QRectF(oldFrame));
             const auto result = m_windowAnimator->retargetWithResult(
                 window, targetFrame, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
+            morphAnchor = visualPos;
             if (result == PhosphorAnimation::RetargetResult::DegenerateReap) {
                 // Retarget collapsed (current visual ≈ new target).
                 // Start a fresh animation from the displaced target
@@ -361,6 +371,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                 // there's no visual distance to cover.
                 const QRectF animFrom = (displacedTarget != targetFrame) ? displacedTarget : visualPos;
                 m_windowAnimator->startAnimation(window, animFrom, targetFrame, motionOverridePtr);
+                morphAnchor = animFrom;
             }
         } else {
             m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame, motionOverridePtr);
@@ -468,13 +479,23 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                     // On a RETARGET mid-morph, beginShaderTransition short-
                     // circuits (same shader) and keeps the existing transition,
                     // so its captured snapshot already holds the ORIGINAL old
-                    // content. Preserve it (and fromGeometry) and only redirect
-                    // the destination — re-capturing here would grab the
-                    // mid-morph/new content and collapse the cross-fade. Only a
-                    // fresh morph (no snapshot yet) anchors fromGeometry and
-                    // requests the capture.
+                    // content. Preserve the snapshot — re-capturing here would
+                    // grab the mid-morph/new content and collapse the
+                    // cross-fade — but RE-ANCHOR fromGeometry at the animator's
+                    // new departure rect: the retarget above reset the animator
+                    // progress to 0, so the morph's very next frame draws
+                    // lerp(fromGeometry, toGeometry, 0). Keeping the stale
+                    // origin made rapid successive moves visibly jump back to
+                    // the original departure rect and replay (#795). Only a
+                    // fresh morph (no snapshot yet) requests the capture.
+                    // morphAnchor == oldFrame on a fresh start, so the
+                    // unconditional assignment also covers the pre-fix
+                    // fresh-morph anchoring — and fixes the sibling mismatch
+                    // where a retarget landing before the first paint anchored
+                    // at the already-committed previous target instead of the
+                    // animator's departure rect.
+                    mt->fromGeometry = morphAnchor;
                     if (!mt->oldSnapshot) {
-                        mt->fromGeometry = QRectF(oldFrame);
                         mt->needsSnapshot = true;
                     }
                 }
