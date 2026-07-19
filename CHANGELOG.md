@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.4] - 2026-07-18
+
+### Fixed
+
+- **Rapid move shortcuts no longer jump back**: pressing a move-window shortcut again while the previous move was still animating made the window visibly jump back to where the sequence started and replay the animation from there. Redirecting a move mid-flight now continues smoothly from the window's current position ([#803](https://github.com/fuddlesworth/PlasmaZones/pull/803)).
+
 ## [3.2.3] - 2026-07-18
 
 ### Fixed
