@@ -196,7 +196,9 @@ SettingsController::~SettingsController()
         m_rulesPage->setSnappingLayoutLookup({});
         m_rulesPage->setTilingAlgorithmLookup({});
         // The shader resolver captures `this` and reaches m_animationShaderRegistry;
-        // clear it too so the cleared set stays symmetric with what's installed.
+        // clear it too so the cleared set covers every lookup THIS controller
+        // installs (the curve resolver is QML-installed and captures only
+        // RuleController-owned state, so it is deliberately left alone).
         m_rulesPage->setShaderEffectLookup({});
         // The overlay-shader resolver reaches m_overlayShaderRegistry — clear it
         // too for the same symmetry.

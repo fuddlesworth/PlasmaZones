@@ -67,7 +67,7 @@ struct ValueDescriptor
     double displayScale = 1.0;
 
     /// True where the UI presents 0 as "Off" rather than as a zero quantity
-    /// (the minimum window size filters, the animation move threshold).
+    /// (the minimum window size filters).
     bool zeroMeansOff = false;
 };
 

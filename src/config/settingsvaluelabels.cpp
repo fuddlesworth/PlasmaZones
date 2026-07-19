@@ -206,6 +206,7 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::windowsAppearanceGroup(), CD::radiusKey()), number(px));
         t.insert(pairKey(CD::snappingZoneSelectorGroup(), CD::triggerDistanceKey()), number(px));
         t.insert(pairKey(CD::snappingZoneSelectorGroup(), CD::previewWidthKey()), number(px));
+        t.insert(pairKey(CD::snappingZoneSelectorGroup(), CD::previewHeightKey()), number(px));
 
         // ── Durations. IdleTimeoutSec is the one stored in seconds. ─────────
         t.insert(pairKey(CD::windowsAppearanceGroup(), CD::focusFadeDurationKey()), number(ms));

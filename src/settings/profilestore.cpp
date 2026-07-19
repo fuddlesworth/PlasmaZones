@@ -428,6 +428,9 @@ QString ProfileStore::uniqueName(const QString& desired, const QHash<QUuid, Reco
 
 QJsonObject ProfileStore::readIndex() const
 {
+    if (m_indexCache) {
+        return *m_indexCache;
+    }
     const QString path = indexFilePath();
     if (path.isEmpty()) {
         return QJsonObject();
@@ -437,7 +440,9 @@ QJsonObject ProfileStore::readIndex() const
         return QJsonObject();
     }
     const auto doc = QJsonDocument::fromJson(f.readAll());
-    return doc.isObject() ? doc.object() : QJsonObject();
+    QJsonObject index = doc.isObject() ? doc.object() : QJsonObject();
+    m_indexCache = index;
+    return index;
 }
 
 bool ProfileStore::writeIndex(const QJsonObject& index)
@@ -455,6 +460,7 @@ bool ProfileStore::writeIndex(const QJsonObject& index)
         qCWarning(lcConfig) << "ProfileStore: could not write index.json:" << file.errorString();
         return false;
     }
+    m_indexCache = index;
     return true;
 }
 
@@ -879,19 +885,21 @@ bool ProfileStore::removeProfile(const QString& id)
 
     // Rebind each direct child to the deleted node's parent, re-flattening its
     // delta so its resolved config is unchanged. Compute every child's resolved
-    // config against the CURRENT tree before mutating anything.
+    // config against the CURRENT tree before mutating anything. The new
+    // parent's resolution depends only on the grandparent, so it is computed
+    // once, not per child.
+    const QJsonObject newParentResolved = grandparent.isNull()
+        ? (m_config.defaultConfig ? m_config.defaultConfig() : QJsonObject())
+        : resolveConfig(grandparent, all);
+    const QList<PhosphorRules::Rule> newParentRules =
+        grandparent.isNull() ? QList<PhosphorRules::Rule>() : resolveRules(grandparent, all);
     for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
         if (it.value().parent != uid) {
             continue;
         }
         const QUuid childId = it.key();
         const QJsonObject childResolved = resolveConfig(childId, all);
-        const QJsonObject newParentResolved = grandparent.isNull()
-            ? (m_config.defaultConfig ? m_config.defaultConfig() : QJsonObject())
-            : resolveConfig(grandparent, all);
         const QList<PhosphorRules::Rule> childRules = resolveRules(childId, all);
-        const QList<PhosphorRules::Rule> newParentRules =
-            grandparent.isNull() ? QList<PhosphorRules::Rule>() : resolveRules(grandparent, all);
         Record child = it.value();
         child.parent = grandparent;
         child.configDelta = diffConfig(childResolved, newParentResolved);

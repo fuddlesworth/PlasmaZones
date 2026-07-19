@@ -3214,6 +3214,12 @@ QStringList Settings::lockedScreens() const
 }
 void Settings::setLockedScreens(const QStringList& screens)
 {
+    // setContextLocked routes here after a read-modify-write over the whole
+    // list, and the daemon's lock toggle and the settings app's D-Bus writes
+    // are concurrent writers — refresh a clean backend first so a stale cache
+    // cannot silently drop an externally-added screen from the merge (same
+    // guard every composite RMW setter carries).
+    refreshCleanBackendFromDisk();
     // Post-write compare — see writeDisableEntries for the canonicalisation
     // rationale.
     const QString before =

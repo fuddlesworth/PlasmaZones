@@ -6,9 +6,11 @@
 #include <PhosphorConfig/Store.h>
 
 #include <QColor>
+#include <QDateTime>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimeZone>
 
 #include <limits>
 #include <memory>
@@ -35,6 +37,11 @@ private:
             {QStringLiteral("FontSize"), 12.0, QMetaType::Double},
             {QStringLiteral("Tags"), QVariant(QStringList{QStringLiteral("a"), QStringLiteral("b")}),
              QMetaType::QStringList},
+            // An exotic type outside the explicit dispatch cases: both
+            // writeVariantTo and the two JSON serializers stringify it, so this
+            // key pins the fallthrough branches against drifting apart.
+            {QStringLiteral("Stamp"), QDateTime::fromSecsSinceEpoch(1752600000, QTimeZone::utc()),
+             QMetaType::QDateTime},
         };
         return s;
     }

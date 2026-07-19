@@ -367,6 +367,13 @@ private:
     /// so between mutations loadAll() can skip the directory scan + JSON parse
     /// that availableProfiles() would otherwise repeat on every settingsChanged.
     mutable std::optional<QHash<QUuid, Record>> m_recordCache;
+
+    /// The parsed index.json, kept coherent by its own funnel pair instead of
+    /// notifyProfilesChanged: readIndex() fills it, writeIndex() (the ONE
+    /// writer) replaces it on a successful commit — so availableProfiles()'
+    /// per-settingsChanged re-reads skip the disk parse for the sibling order
+    /// too. Same hand-edit trade-off as m_recordCache.
+    mutable std::optional<QJsonObject> m_indexCache;
     QList<QUuid> readOrder() const;
     void appendToOrder(const QUuid& id);
     void removeFromOrder(const QUuid& id);
