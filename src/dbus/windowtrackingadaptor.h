@@ -633,7 +633,10 @@ public:
 
     /// Unified placement capture orchestrator: ask each engine for @p windowId's
     /// current placement, stamp it with the live frame geometry, and record it in
-    /// the WindowPlacementStore (or clear the record if no engine manages it).
+    /// the WindowPlacementStore. When NO engine manages the window, any existing
+    /// record is left intact (never cleared here — records are per-mode memory,
+    /// only merge-updated, consumed, or explicitly pruned); with an
+    /// @p authoritativeScreen it records a floating-close placement instead.
     /// Shadow-written in P1; the single funnel every state-change + close hook
     /// calls so the persisted record always reflects the window's live state.
     ///
