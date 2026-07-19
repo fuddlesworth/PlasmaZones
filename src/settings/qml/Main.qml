@@ -284,50 +284,69 @@ PhosphorUi.SettingsAppWindow {
     // Discard; today every resettable page is also discardable, so the two
     // predicates match. Both route through a window-scoped confirm.
     breadcrumbTrailing: Component {
-        ToolButton {
-            id: pageActionsButton
+        Row {
+            spacing: 0
 
-            // Re-evaluates on activePageChanged (activePage is referenced), so
-            // the button appears/disappears as the user moves between pages.
-            visible: settingsController.pageSupportsReset(settingsController.activePage) || settingsController.pageSupportsDiscard(settingsController.activePage)
-            icon.name: "overflow-menu"
-            display: AbstractButton.IconOnly
-            text: i18n("Page actions")
-            Accessible.name: i18n("Page actions")
+            // Discoverability affordance for the help overlay: the "?"
+            // shortcut is invisible until you already know it, so give it a
+            // permanent button in the chrome. Sits before the per-page
+            // kebab, always visible.
+            ToolButton {
+                icon.name: "input-keyboard"
+                display: AbstractButton.IconOnly
+                text: i18n("Keyboard shortcuts")
+                Accessible.name: i18n("Keyboard shortcuts")
+                ToolTip.visible: hovered
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+                ToolTip.text: i18nc("@info:tooltip, ? is the keyboard shortcut", "Keyboard shortcuts (?)")
+                onClicked: window._showShortcuts = !window._showShortcuts
+            }
 
-            onClicked: pageActionsMenu.popup()
+            ToolButton {
+                id: pageActionsButton
 
-            Menu {
-                id: pageActionsMenu
+                // Re-evaluates on activePageChanged (activePage is referenced), so
+                // the button appears/disappears as the user moves between pages.
+                visible: settingsController.pageSupportsReset(settingsController.activePage) || settingsController.pageSupportsDiscard(settingsController.activePage)
+                icon.name: "overflow-menu"
+                display: AbstractButton.IconOnly
+                text: i18n("Page actions")
+                Accessible.name: i18n("Page actions")
 
-                MenuItem {
-                    text: i18n("Reset page to defaults")
-                    Accessible.name: text
-                    icon.name: "document-revert"
-                    visible: settingsController.pageSupportsReset(settingsController.activePage)
-                    // Disabled while a global Save/Discard batch is in flight: a
-                    // per-page reset mid-batch could race the async revert (e.g.
-                    // the animation controller's async file restore) and leave a
-                    // partial reset.
-                    enabled: !settingsController.app.applying && !settingsController.app.discarding
-                    onTriggered: resetPageConfirmDialog.open()
-                }
+                onClicked: pageActionsMenu.popup()
 
-                MenuItem {
-                    text: i18n("Discard changes on this page")
-                    Accessible.name: text
-                    icon.name: "edit-undo"
-                    visible: settingsController.pageSupportsDiscard(settingsController.activePage)
-                    // Enabled only when the page carries unsaved edits and no
-                    // global Save/Discard batch is in flight. `dirtyPages` is
-                    // referenced purely to re-run this binding on
-                    // dirtyPagesChanged (isPageDirty itself is a function call
-                    // whose only QML dependency would otherwise be activePage).
-                    enabled: {
-                        void settingsController.dirtyPages;
-                        return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activePage);
+                Menu {
+                    id: pageActionsMenu
+
+                    MenuItem {
+                        text: i18n("Reset page to defaults")
+                        Accessible.name: text
+                        icon.name: "document-revert"
+                        visible: settingsController.pageSupportsReset(settingsController.activePage)
+                        // Disabled while a global Save/Discard batch is in flight: a
+                        // per-page reset mid-batch could race the async revert (e.g.
+                        // the animation controller's async file restore) and leave a
+                        // partial reset.
+                        enabled: !settingsController.app.applying && !settingsController.app.discarding
+                        onTriggered: resetPageConfirmDialog.open()
                     }
-                    onTriggered: discardPageConfirmDialog.open()
+
+                    MenuItem {
+                        text: i18n("Discard changes on this page")
+                        Accessible.name: text
+                        icon.name: "edit-undo"
+                        visible: settingsController.pageSupportsDiscard(settingsController.activePage)
+                        // Enabled only when the page carries unsaved edits and no
+                        // global Save/Discard batch is in flight. `dirtyPages` is
+                        // referenced purely to re-run this binding on
+                        // dirtyPagesChanged (isPageDirty itself is a function call
+                        // whose only QML dependency would otherwise be activePage).
+                        enabled: {
+                            void settingsController.dirtyPages;
+                            return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activePage);
+                        }
+                        onTriggered: discardPageConfirmDialog.open()
+                    }
                 }
             }
         }
