@@ -1583,13 +1583,13 @@ public:
     }
     static QString toggleCheatsheetShortcut()
     {
-        // The "?" help idiom (physically Meta+Shift+/ on US layouts). Stored
-        // as the produced symbol, NOT "Meta+Shift+/": KWin strips Shift as a
-        // consumed modifier when translating the keysym, so the compositor
-        // delivers Meta+Question and a Meta+Shift+/ registration never
-        // matches. (Letters are special-cased by KWin, which is why
-        // Meta+Shift+E etc. work spelled with Shift.)
-        return QStringLiteral("Meta+?");
+        // Meta+Alt+<key> matches the layouts family (Meta+Alt+[ ] Space).
+        // "/" carries the help idiom without involving Shift — which
+        // matters: a Shift+symbol chord like Meta+Shift+/ can NEVER fire
+        // on Wayland because KWin strips Shift as a consumed modifier when
+        // the keysym translation uses it (delivers Meta+Question). Any
+        // future default here must avoid Shift+symbol spellings.
+        return QStringLiteral("Meta+Alt+/");
     }
     static QString previousLayoutShortcut()
     {

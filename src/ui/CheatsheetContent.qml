@@ -87,20 +87,51 @@ Item {
         return byCat;
     }
 
+    /// Groups packed into `metrics.columns` buckets, greedy shortest-column
+    /// first, so every column carries a similar row count and the card has
+    /// no dead space (a naive Flow wraps whole rows of columns and leaves a
+    /// tall group's siblings floating over a gap). Groups keep their display
+    /// order within each column.
+    readonly property var columnBuckets: {
+        var n = metrics.columns;
+        var buckets = [];
+        var weights = [];
+        for (var c = 0; c < n; c++) {
+            buckets.push([]);
+            weights.push(0);
+        }
+        for (var g = 0; g < groups.length; g++) {
+            var target = 0;
+            for (var k = 1; k < n; k++) {
+                if (weights[k] < weights[target])
+                    target = k;
+            }
+            buckets[target].push(groups[g]);
+            // A group costs its rows plus a fixed heading + inter-group gap
+            // allowance; row units are all the same height so counting rows
+            // is an honest proxy for pixels.
+            weights[target] += groups[g].rows.length + 2;
+        }
+        return buckets;
+    }
+
+    // Metrics mirror LayoutPickerContent's card chrome exactly (paddingSide
+    // side/bottom padding, title one paddingSide down) so the two popups
+    // read as siblings.
     QtObject {
         id: metrics
 
-        readonly property int containerPadding: Kirigami.Units.gridUnit * 2
-        readonly property int columnWidth: Kirigami.Units.gridUnit * 19
+        readonly property int paddingSide: Kirigami.Units.gridUnit
+        readonly property int columnWidth: Kirigami.Units.gridUnit * 18
         readonly property int columnSpacing: Kirigami.Units.gridUnit * 2
         readonly property int maxColumns: 3
         readonly property int columns: {
-            var avail = root.width * 0.9 - containerPadding * 2;
+            var avail = root.width * 0.9 - paddingSide * 2;
             var fit = Math.floor((avail + columnSpacing) / (columnWidth + columnSpacing));
-            return Math.max(1, Math.min(maxColumns, fit));
+            return Math.max(1, Math.min(maxColumns, Math.min(fit, root.groups.length)));
         }
         readonly property int contentWidth: columns * columnWidth + (columns - 1) * columnSpacing
-        readonly property int maxContentHeight: Math.round(root.height * 0.85) - containerPadding * 2
+        readonly property int maxContentHeight: Math.round(root.height * 0.85) - paddingSide * 3 - Math.round(Kirigami.Theme.defaultFont.pixelSize * 1.4)
     }
 
     // Backdrop — click outside to dismiss, same bare click-only backdrop
@@ -117,8 +148,10 @@ Item {
         id: container
 
         anchors.centerIn: parent
-        width: metrics.contentWidth + metrics.containerPadding * 2
-        height: contentColumn.implicitHeight + metrics.containerPadding * 2
+        width: metrics.contentWidth + metrics.paddingSide * 2
+        // top padding + title + gap below title + content + bottom padding —
+        // same vertical rhythm as LayoutPickerContent.
+        height: titleLabel.height + scroller.height + metrics.paddingSide * 3
 
         Accessible.name: i18n("Keyboard shortcuts")
 
@@ -132,111 +165,124 @@ Item {
             }
         }
 
-        ColumnLayout {
-            id: contentColumn
+        // Title — shared popup-card typography (PopupCardTitle), anchored
+        // exactly like the picker's "Choose Layout".
+        PopupCardTitle {
+            id: titleLabel
 
-            anchors.fill: parent
-            anchors.margins: metrics.containerPadding
-            spacing: Kirigami.Units.largeSpacing
+            anchors.top: parent.top
+            anchors.topMargin: metrics.paddingSide
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: i18n("Keyboard Shortcuts")
+        }
 
-            // Title — same centered DemiBold style as the picker's
-            // "Choose Layout".
-            Label {
-                Layout.fillWidth: true
-                text: i18n("Keyboard Shortcuts")
-                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.4
-                font.weight: Font.DemiBold
-                horizontalAlignment: Text.AlignHCenter
-            }
+        Flickable {
+            id: scroller
 
-            Flickable {
-                id: scroller
+            anchors.top: titleLabel.bottom
+            anchors.topMargin: metrics.paddingSide
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: metrics.contentWidth
+            height: Math.min(bucketsRow.implicitHeight, metrics.maxContentHeight)
+            contentWidth: width
+            contentHeight: bucketsRow.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
 
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(groupFlow.implicitHeight, metrics.maxContentHeight)
-                contentWidth: width
-                contentHeight: groupFlow.implicitHeight
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
+            Row {
+                id: bucketsRow
 
-                Flow {
-                    id: groupFlow
+                spacing: metrics.columnSpacing
 
-                    width: scroller.width
-                    spacing: metrics.columnSpacing
+                Repeater {
+                    model: root.columnBuckets
 
-                    Repeater {
-                        model: root.groups
+                    delegate: Column {
+                        id: bucketColumn
 
-                        delegate: Column {
-                            id: groupColumn
+                        required property var modelData
 
-                            required property var modelData
+                        width: metrics.columnWidth
+                        spacing: Kirigami.Units.largeSpacing
 
-                            width: metrics.columnWidth
-                            spacing: Kirigami.Units.smallSpacing
+                        Repeater {
+                            model: bucketColumn.modelData
 
-                            Kirigami.Heading {
-                                level: 4
-                                text: groupColumn.modelData.name
-                                color: Kirigami.Theme.disabledTextColor
-                            }
+                            delegate: Column {
+                                id: groupColumn
 
-                            Repeater {
-                                model: groupColumn.modelData.rows
+                                required property var modelData
 
-                                delegate: RowLayout {
-                                    id: shortcutRow
+                                width: metrics.columnWidth
+                                spacing: Kirigami.Units.smallSpacing
 
-                                    required property var modelData
+                                Kirigami.Heading {
+                                    level: 4
+                                    text: groupColumn.modelData.name
+                                    color: Kirigami.Theme.disabledTextColor
+                                }
 
-                                    width: metrics.columnWidth
-                                    spacing: Kirigami.Units.smallSpacing
+                                Repeater {
+                                    model: groupColumn.modelData.rows
 
-                                    Accessible.role: Accessible.StaticText
-                                    Accessible.name: shortcutRow.modelData.assigned ? i18nc("shortcut row: action, keys", "%1, %2", shortcutRow.modelData.label, shortcutRow.modelData.triggers[0]) : i18nc("shortcut row: action unassigned", "%1, unassigned", shortcutRow.modelData.label)
+                                    delegate: RowLayout {
+                                        id: shortcutRow
 
-                                    Label {
-                                        text: shortcutRow.modelData.label
-                                        elide: Text.ElideRight
-                                        font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
-                                        Layout.fillWidth: true
-                                    }
+                                        required property var modelData
 
-                                    // One chip per key token of the first
-                                    // bound sequence. A trailing "+" means
-                                    // the plus key itself is the final token.
-                                    Row {
-                                        spacing: Math.round(Kirigami.Units.smallSpacing / 2)
-                                        visible: shortcutRow.modelData.assigned
+                                        width: metrics.columnWidth
+                                        spacing: Kirigami.Units.smallSpacing
 
-                                        Repeater {
-                                            model: {
-                                                if (!shortcutRow.modelData.assigned)
-                                                    return [];
+                                        Accessible.role: Accessible.StaticText
+                                        Accessible.name: shortcutRow.modelData.assigned ? i18nc("shortcut row: action, keys", "%1, %2", shortcutRow.modelData.label, shortcutRow.modelData.triggers[0]) : i18nc("shortcut row: action unassigned", "%1, unassigned", shortcutRow.modelData.label)
 
-                                                var seq = shortcutRow.modelData.triggers[0];
-                                                var parts = seq.split("+").filter(function (p) {
-                                                    return p.length > 0;
-                                                });
-                                                if (seq.endsWith("+"))
-                                                    parts.push("+");
-                                                return parts;
-                                            }
+                                        Label {
+                                            text: shortcutRow.modelData.label
+                                            // Wrap, never elide: the model ships
+                                            // group-contextual short labels sized
+                                            // to fit, and a pathological case
+                                            // (translation, custom font) grows a
+                                            // second line instead of losing text.
+                                            wrapMode: Text.Wrap
+                                            font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
+                                            Layout.fillWidth: true
+                                        }
 
-                                            delegate: KeyChip {
-                                                required property var modelData
+                                        // One chip per key token of the first
+                                        // bound sequence. A trailing "+" means
+                                        // the plus key itself is the final token.
+                                        Row {
+                                            spacing: Math.round(Kirigami.Units.smallSpacing / 2)
+                                            visible: shortcutRow.modelData.assigned
 
-                                                text: modelData
+                                            Repeater {
+                                                model: {
+                                                    if (!shortcutRow.modelData.assigned)
+                                                        return [];
+
+                                                    var seq = shortcutRow.modelData.triggers[0];
+                                                    var parts = seq.split("+").filter(function (p) {
+                                                        return p.length > 0;
+                                                    });
+                                                    if (seq.endsWith("+"))
+                                                        parts.push("+");
+                                                    return parts;
+                                                }
+
+                                                delegate: KeyChip {
+                                                    required property var modelData
+
+                                                    text: modelData
+                                                }
                                             }
                                         }
-                                    }
 
-                                    Label {
-                                        text: i18n("Unassigned")
-                                        color: Kirigami.Theme.disabledTextColor
-                                        font.italic: true
-                                        visible: !shortcutRow.modelData.assigned
+                                        Label {
+                                            text: i18n("Unassigned")
+                                            color: Kirigami.Theme.disabledTextColor
+                                            font.italic: true
+                                            visible: !shortcutRow.modelData.assigned
+                                        }
                                     }
                                 }
                             }

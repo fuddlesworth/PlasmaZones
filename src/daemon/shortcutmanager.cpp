@@ -98,218 +98,238 @@ struct StaticEntry
 
 const StaticEntry kStaticEntries[] = {
     // ─── Core ──────────────────────────────────────────────────────────────
-    {kIdOpenEditor, &ConfigDefaults::openEditorShortcut, &Settings::openEditorShortcut, "Open Zone Editor",
+    {kIdOpenEditor, &ConfigDefaults::openEditorShortcut, &Settings::openEditorShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Open Zone Editor"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->openEditorRequested();
      }},
-    {kIdOpenSettings, &ConfigDefaults::openSettingsShortcut, &Settings::openSettingsShortcut, "Open Settings",
+    {kIdOpenSettings, &ConfigDefaults::openSettingsShortcut, &Settings::openSettingsShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Open Settings"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->openSettingsRequested();
      }},
-    {kIdPreviousLayout, &ConfigDefaults::previousLayoutShortcut, &Settings::previousLayoutShortcut, "Previous Layout",
+    {kIdPreviousLayout, &ConfigDefaults::previousLayoutShortcut, &Settings::previousLayoutShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Previous Layout"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->previousLayoutRequested();
      }},
-    {kIdNextLayout, &ConfigDefaults::nextLayoutShortcut, &Settings::nextLayoutShortcut, "Next Layout",
+    {kIdNextLayout, &ConfigDefaults::nextLayoutShortcut, &Settings::nextLayoutShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Next Layout"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->nextLayoutRequested();
      }},
 
     // ─── Move window ───────────────────────────────────────────────────────
-    {kIdMoveWindowLeft, &ConfigDefaults::moveWindowLeftShortcut, &Settings::moveWindowLeftShortcut, "Move Window Left",
+    {kIdMoveWindowLeft, &ConfigDefaults::moveWindowLeftShortcut, &Settings::moveWindowLeftShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Move Window Left"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->moveWindowRequested(NavigationDirection::Left);
      }},
     {kIdMoveWindowRight, &ConfigDefaults::moveWindowRightShortcut, &Settings::moveWindowRightShortcut,
-     "Move Window Right",
+     QT_TRANSLATE_NOOP("plasmazones", "Move Window Right"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->moveWindowRequested(NavigationDirection::Right);
      }},
-    {kIdMoveWindowUp, &ConfigDefaults::moveWindowUpShortcut, &Settings::moveWindowUpShortcut, "Move Window Up",
+    {kIdMoveWindowUp, &ConfigDefaults::moveWindowUpShortcut, &Settings::moveWindowUpShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Move Window Up"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->moveWindowRequested(NavigationDirection::Up);
      }},
-    {kIdMoveWindowDown, &ConfigDefaults::moveWindowDownShortcut, &Settings::moveWindowDownShortcut, "Move Window Down",
+    {kIdMoveWindowDown, &ConfigDefaults::moveWindowDownShortcut, &Settings::moveWindowDownShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Move Window Down"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->moveWindowRequested(NavigationDirection::Down);
      }},
 
     // ─── Focus zone ────────────────────────────────────────────────────────
-    {kIdFocusZoneLeft, &ConfigDefaults::focusZoneLeftShortcut, &Settings::focusZoneLeftShortcut, "Focus Zone Left",
+    {kIdFocusZoneLeft, &ConfigDefaults::focusZoneLeftShortcut, &Settings::focusZoneLeftShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Zone Left"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->focusZoneRequested(NavigationDirection::Left);
      }},
-    {kIdFocusZoneRight, &ConfigDefaults::focusZoneRightShortcut, &Settings::focusZoneRightShortcut, "Focus Zone Right",
+    {kIdFocusZoneRight, &ConfigDefaults::focusZoneRightShortcut, &Settings::focusZoneRightShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Zone Right"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->focusZoneRequested(NavigationDirection::Right);
      }},
-    {kIdFocusZoneUp, &ConfigDefaults::focusZoneUpShortcut, &Settings::focusZoneUpShortcut, "Focus Zone Up",
+    {kIdFocusZoneUp, &ConfigDefaults::focusZoneUpShortcut, &Settings::focusZoneUpShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Zone Up"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->focusZoneRequested(NavigationDirection::Up);
      }},
-    {kIdFocusZoneDown, &ConfigDefaults::focusZoneDownShortcut, &Settings::focusZoneDownShortcut, "Focus Zone Down",
+    {kIdFocusZoneDown, &ConfigDefaults::focusZoneDownShortcut, &Settings::focusZoneDownShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Zone Down"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->focusZoneRequested(NavigationDirection::Down);
      }},
 
     // ─── Non-directional navigation ────────────────────────────────────────
     {kIdPushToEmptyZone, &ConfigDefaults::pushToEmptyZoneShortcut, &Settings::pushToEmptyZoneShortcut,
-     "Move Window to Empty Zone",
+     QT_TRANSLATE_NOOP("plasmazones", "Move Window to Empty Zone"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->pushToEmptyZoneRequested();
      }},
     {kIdRestoreWindowSize, &ConfigDefaults::restoreWindowSizeShortcut, &Settings::restoreWindowSizeShortcut,
-     "Restore Window Size",
+     QT_TRANSLATE_NOOP("plasmazones", "Restore Window Size"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->restoreWindowSizeRequested();
      }},
     {kIdToggleWindowFloat, &ConfigDefaults::toggleWindowFloatShortcut, &Settings::toggleWindowFloatShortcut,
-     "Toggle Window Floating",
+     QT_TRANSLATE_NOOP("plasmazones", "Toggle Window Floating"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->toggleWindowFloatRequested();
      }},
 
     // ─── Swap window ───────────────────────────────────────────────────────
-    {kIdSwapWindowLeft, &ConfigDefaults::swapWindowLeftShortcut, &Settings::swapWindowLeftShortcut, "Swap Window Left",
+    {kIdSwapWindowLeft, &ConfigDefaults::swapWindowLeftShortcut, &Settings::swapWindowLeftShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Swap Window Left"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->swapWindowRequested(NavigationDirection::Left);
      }},
     {kIdSwapWindowRight, &ConfigDefaults::swapWindowRightShortcut, &Settings::swapWindowRightShortcut,
-     "Swap Window Right",
+     QT_TRANSLATE_NOOP("plasmazones", "Swap Window Right"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->swapWindowRequested(NavigationDirection::Right);
      }},
-    {kIdSwapWindowUp, &ConfigDefaults::swapWindowUpShortcut, &Settings::swapWindowUpShortcut, "Swap Window Up",
+    {kIdSwapWindowUp, &ConfigDefaults::swapWindowUpShortcut, &Settings::swapWindowUpShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Swap Window Up"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->swapWindowRequested(NavigationDirection::Up);
      }},
-    {kIdSwapWindowDown, &ConfigDefaults::swapWindowDownShortcut, &Settings::swapWindowDownShortcut, "Swap Window Down",
+    {kIdSwapWindowDown, &ConfigDefaults::swapWindowDownShortcut, &Settings::swapWindowDownShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Swap Window Down"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->swapWindowRequested(NavigationDirection::Down);
      }},
 
     // ─── Swap virtual screen ───────────────────────────────────────────────
     {kIdSwapVirtualScreenLeft, &ConfigDefaults::swapVirtualScreenLeftShortcut, &Settings::swapVirtualScreenLeftShortcut,
-     "Swap Virtual Screen Left",
+     QT_TRANSLATE_NOOP("plasmazones", "Swap Virtual Screen Left"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->swapVirtualScreenRequested(NavigationDirection::Left);
      }},
     {kIdSwapVirtualScreenRight, &ConfigDefaults::swapVirtualScreenRightShortcut,
-     &Settings::swapVirtualScreenRightShortcut, "Swap Virtual Screen Right",
+     &Settings::swapVirtualScreenRightShortcut, QT_TRANSLATE_NOOP("plasmazones", "Swap Virtual Screen Right"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->swapVirtualScreenRequested(NavigationDirection::Right);
      }},
     {kIdSwapVirtualScreenUp, &ConfigDefaults::swapVirtualScreenUpShortcut, &Settings::swapVirtualScreenUpShortcut,
-     "Swap Virtual Screen Up",
+     QT_TRANSLATE_NOOP("plasmazones", "Swap Virtual Screen Up"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->swapVirtualScreenRequested(NavigationDirection::Up);
      }},
     {kIdSwapVirtualScreenDown, &ConfigDefaults::swapVirtualScreenDownShortcut, &Settings::swapVirtualScreenDownShortcut,
-     "Swap Virtual Screen Down",
+     QT_TRANSLATE_NOOP("plasmazones", "Swap Virtual Screen Down"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->swapVirtualScreenRequested(NavigationDirection::Down);
      }},
 
     // ─── Rotate virtual screens ────────────────────────────────────────────
     {kIdRotateVirtualScreensCW, &ConfigDefaults::rotateVirtualScreensClockwiseShortcut,
-     &Settings::rotateVirtualScreensClockwiseShortcut, "Rotate Virtual Screens Clockwise",
+     &Settings::rotateVirtualScreensClockwiseShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Rotate Virtual Screens Clockwise"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->rotateVirtualScreensRequested(true);
      }},
     {kIdRotateVirtualScreensCCW, &ConfigDefaults::rotateVirtualScreensCounterclockwiseShortcut,
-     &Settings::rotateVirtualScreensCounterclockwiseShortcut, "Rotate Virtual Screens Counterclockwise",
+     &Settings::rotateVirtualScreensCounterclockwiseShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Rotate Virtual Screens Counterclockwise"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->rotateVirtualScreensRequested(false);
      }},
 
     // ─── Rotate windows ────────────────────────────────────────────────────
     {kIdRotateWindowsCW, &ConfigDefaults::rotateWindowsClockwiseShortcut, &Settings::rotateWindowsClockwiseShortcut,
-     "Rotate Windows Clockwise",
+     QT_TRANSLATE_NOOP("plasmazones", "Rotate Windows Clockwise"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->rotateWindowsRequested(true);
      }},
     {kIdRotateWindowsCCW, &ConfigDefaults::rotateWindowsCounterclockwiseShortcut,
-     &Settings::rotateWindowsCounterclockwiseShortcut, "Rotate Windows Counterclockwise",
+     &Settings::rotateWindowsCounterclockwiseShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Rotate Windows Counterclockwise"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->rotateWindowsRequested(false);
      }},
 
     // ─── Cycle window in zone ──────────────────────────────────────────────
     {kIdCycleWindowForward, &ConfigDefaults::cycleWindowForwardShortcut, &Settings::cycleWindowForwardShortcut,
-     "Cycle Window Forward in Zone",
+     QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Forward in Zone"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->cycleWindowsInZoneRequested(true);
      }},
     {kIdCycleWindowBackward, &ConfigDefaults::cycleWindowBackwardShortcut, &Settings::cycleWindowBackwardShortcut,
-     "Cycle Window Backward in Zone",
+     QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Backward in Zone"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->cycleWindowsInZoneRequested(false);
      }},
 
     // ─── Misc layout ops ───────────────────────────────────────────────────
     {kIdResnapToNewLayout, &ConfigDefaults::resnapToNewLayoutShortcut, &Settings::resnapToNewLayoutShortcut,
-     "Reapply Layout to Windows",
+     QT_TRANSLATE_NOOP("plasmazones", "Reapply Layout to Windows"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->resnapToNewLayoutRequested();
      }},
     {kIdSnapAllWindows, &ConfigDefaults::snapAllWindowsShortcut, &Settings::snapAllWindowsShortcut,
-     "Snap All Windows to Zones",
+     QT_TRANSLATE_NOOP("plasmazones", "Snap All Windows to Zones"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->snapAllWindowsRequested();
      }},
-    {kIdLayoutPicker, &ConfigDefaults::layoutPickerShortcut, &Settings::layoutPickerShortcut, "Open Layout Picker",
+    {kIdLayoutPicker, &ConfigDefaults::layoutPickerShortcut, &Settings::layoutPickerShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Open Layout Picker"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->layoutPickerRequested();
      }},
     {kIdToggleLayoutLock, &ConfigDefaults::toggleLayoutLockShortcut, &Settings::toggleLayoutLockShortcut,
-     "Toggle Layout Lock",
+     QT_TRANSLATE_NOOP("plasmazones", "Toggle Layout Lock"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->toggleLayoutLockRequested();
      }},
 
     // ─── Autotile ──────────────────────────────────────────────────────────
-    {kIdToggleAutotile, &ConfigDefaults::autotileToggleShortcut, &Settings::autotileToggleShortcut, "Toggle Autotile",
+    {kIdToggleAutotile, &ConfigDefaults::autotileToggleShortcut, &Settings::autotileToggleShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Toggle Autotile"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->toggleAutotileRequested();
      }},
     {kIdFocusMaster, &ConfigDefaults::autotileFocusMasterShortcut, &Settings::autotileFocusMasterShortcut,
-     "Focus Master Window",
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Master Window"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->focusMasterRequested();
      }},
     {kIdSwapMaster, &ConfigDefaults::autotileSwapMasterShortcut, &Settings::autotileSwapMasterShortcut,
-     "Swap with Master",
+     QT_TRANSLATE_NOOP("plasmazones", "Swap with Master"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->swapWithMasterRequested();
      }},
     {kIdIncreaseMasterRatio, &ConfigDefaults::autotileIncMasterRatioShortcut, &Settings::autotileIncMasterRatioShortcut,
-     "Increase Master Ratio",
+     QT_TRANSLATE_NOOP("plasmazones", "Increase Master Ratio"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->increaseMasterRatioRequested();
      }},
     {kIdDecreaseMasterRatio, &ConfigDefaults::autotileDecMasterRatioShortcut, &Settings::autotileDecMasterRatioShortcut,
-     "Decrease Master Ratio",
+     QT_TRANSLATE_NOOP("plasmazones", "Decrease Master Ratio"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->decreaseMasterRatioRequested();
      }},
     {kIdIncreaseMasterCount, &ConfigDefaults::autotileIncMasterCountShortcut, &Settings::autotileIncMasterCountShortcut,
-     "Increase Master Count",
+     QT_TRANSLATE_NOOP("plasmazones", "Increase Master Count"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->increaseMasterCountRequested();
      }},
     {kIdDecreaseMasterCount, &ConfigDefaults::autotileDecMasterCountShortcut, &Settings::autotileDecMasterCountShortcut,
-     "Decrease Master Count",
+     QT_TRANSLATE_NOOP("plasmazones", "Decrease Master Count"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->decreaseMasterCountRequested();
      }},
-    {kIdRetile, &ConfigDefaults::autotileRetileShortcut, &Settings::autotileRetileShortcut, "Retile Windows",
+    {kIdRetile, &ConfigDefaults::autotileRetileShortcut, &Settings::autotileRetileShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Retile Windows"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->retileRequested();
      }},
 
     // ─── Cheatsheet ────────────────────────────────────────────────────────
     {kIdToggleCheatsheet, &ConfigDefaults::toggleCheatsheetShortcut, &Settings::toggleCheatsheetShortcut,
-     "Open Shortcut Cheatsheet",
+     QT_TRANSLATE_NOOP("plasmazones", "Open Shortcut Cheatsheet"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->toggleCheatsheetRequested();
      }},
@@ -349,57 +369,78 @@ struct CatalogMeta
     // "all" | "snapping" | "autotile" — string form matches what the QML
     // filter consumes; no enum round-trip needed.
     const char* mode;
+    // Optional cheatsheet display label. The registration description must
+    // stand alone (System Settings lists it without context), but on the
+    // sheet the group heading already carries the context, so rows that
+    // repeat it ("Rotate Virtual Screens Clockwise" under "Virtual
+    // Screens") overflow the column for no information. nullptr = use the
+    // registration description.
+    const char* shortLabel = nullptr;
 };
 
 CatalogMeta catalogMetaForId(const QString& id)
 {
     static const QHash<QString, CatalogMeta> kMeta = [] {
         QHash<QString, CatalogMeta> m;
-        const auto add = [&m](const char* id, const char* category, int order, const char* mode) {
-            m.insert(QLatin1String(id), {category, order, mode});
+        const auto add = [&m](const char* id, const char* category, int order, const char* mode,
+                              const char* shortLabel = nullptr) {
+            m.insert(QLatin1String(id), {category, order, mode, shortLabel});
         };
-        add(kIdOpenEditor, "General", 0, "all");
-        add(kIdOpenSettings, "General", 0, "all");
-        add(kIdToggleCheatsheet, "General", 0, "all");
-        add(kIdToggleWindowFloat, "General", 0, "all");
-        add(kIdToggleAutotile, "General", 0, "all");
-        add(kIdPreviousLayout, "Layouts", 1, "all");
-        add(kIdNextLayout, "Layouts", 1, "all");
-        add(kIdLayoutPicker, "Layouts", 1, "all");
-        add(kIdToggleLayoutLock, "Layouts", 1, "all");
-        add(kIdResnapToNewLayout, "Layouts", 1, "all");
-        add(kIdSnapAllWindows, "Layouts", 1, "all");
-        add(kIdPushToEmptyZone, "Snap to Zone", 3, "snapping");
-        add(kIdRestoreWindowSize, "Snap to Zone", 3, "snapping");
-        add(kIdMoveWindowLeft, "Move Window", 4, "all");
-        add(kIdMoveWindowRight, "Move Window", 4, "all");
-        add(kIdMoveWindowUp, "Move Window", 4, "all");
-        add(kIdMoveWindowDown, "Move Window", 4, "all");
-        add(kIdFocusZoneLeft, "Focus", 5, "all");
-        add(kIdFocusZoneRight, "Focus", 5, "all");
-        add(kIdFocusZoneUp, "Focus", 5, "all");
-        add(kIdFocusZoneDown, "Focus", 5, "all");
-        add(kIdSwapWindowLeft, "Swap Window", 6, "all");
-        add(kIdSwapWindowRight, "Swap Window", 6, "all");
-        add(kIdSwapWindowUp, "Swap Window", 6, "all");
-        add(kIdSwapWindowDown, "Swap Window", 6, "all");
-        add(kIdRotateWindowsCW, "Window Order", 7, "snapping");
-        add(kIdRotateWindowsCCW, "Window Order", 7, "snapping");
-        add(kIdCycleWindowForward, "Window Order", 7, "snapping");
-        add(kIdCycleWindowBackward, "Window Order", 7, "snapping");
-        add(kIdSwapVirtualScreenLeft, "Virtual Screens", 8, "all");
-        add(kIdSwapVirtualScreenRight, "Virtual Screens", 8, "all");
-        add(kIdSwapVirtualScreenUp, "Virtual Screens", 8, "all");
-        add(kIdSwapVirtualScreenDown, "Virtual Screens", 8, "all");
-        add(kIdRotateVirtualScreensCW, "Virtual Screens", 8, "all");
-        add(kIdRotateVirtualScreensCCW, "Virtual Screens", 8, "all");
-        add(kIdFocusMaster, "Autotile", 9, "autotile");
-        add(kIdSwapMaster, "Autotile", 9, "autotile");
-        add(kIdIncreaseMasterRatio, "Autotile", 9, "autotile");
-        add(kIdDecreaseMasterRatio, "Autotile", 9, "autotile");
-        add(kIdIncreaseMasterCount, "Autotile", 9, "autotile");
-        add(kIdDecreaseMasterCount, "Autotile", 9, "autotile");
-        add(kIdRetile, "Autotile", 9, "autotile");
+        add(kIdOpenEditor, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
+        add(kIdOpenSettings, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
+        add(kIdToggleCheatsheet, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
+        add(kIdToggleWindowFloat, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
+        add(kIdToggleAutotile, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
+        add(kIdPreviousLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
+        add(kIdNextLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
+        add(kIdLayoutPicker, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
+        add(kIdToggleLayoutLock, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
+        add(kIdResnapToNewLayout, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
+        add(kIdSnapAllWindows, QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all");
+        add(kIdPushToEmptyZone, QT_TRANSLATE_NOOP("plasmazones", "Snap to Zone"), 3, "snapping");
+        add(kIdRestoreWindowSize, QT_TRANSLATE_NOOP("plasmazones", "Snap to Zone"), 3, "snapping");
+        // Directional families compress to one row each in cheatsheetModel(),
+        // so Move/Focus/Swap/rotate/cycle all fit one "Windows" group instead
+        // of four near-empty ones.
+        add(kIdMoveWindowLeft, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdMoveWindowRight, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdMoveWindowUp, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdMoveWindowDown, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdFocusZoneLeft, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdFocusZoneRight, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdFocusZoneUp, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdFocusZoneDown, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdSwapWindowLeft, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdSwapWindowRight, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdSwapWindowUp, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdSwapWindowDown, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "all");
+        add(kIdRotateWindowsCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
+            QT_TRANSLATE_NOOP("plasmazones", "Rotate Clockwise"));
+        add(kIdRotateWindowsCCW, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
+            QT_TRANSLATE_NOOP("plasmazones", "Rotate Counterclockwise"));
+        add(kIdCycleWindowForward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Forward in Zone"));
+        add(kIdCycleWindowBackward, QT_TRANSLATE_NOOP("plasmazones", "Windows"), 4, "snapping",
+            QT_TRANSLATE_NOOP("plasmazones", "Cycle Backward in Zone"));
+        add(kIdSwapVirtualScreenLeft, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+            QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Left"));
+        add(kIdSwapVirtualScreenRight, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+            QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Right"));
+        add(kIdSwapVirtualScreenUp, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+            QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Up"));
+        add(kIdSwapVirtualScreenDown, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+            QT_TRANSLATE_NOOP("plasmazones", "Swap Screen Down"));
+        add(kIdRotateVirtualScreensCW, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+            QT_TRANSLATE_NOOP("plasmazones", "Rotate Clockwise"));
+        add(kIdRotateVirtualScreensCCW, QT_TRANSLATE_NOOP("plasmazones", "Virtual Screens"), 8, "all",
+            QT_TRANSLATE_NOOP("plasmazones", "Rotate Counterclockwise"));
+        add(kIdFocusMaster, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
+        add(kIdSwapMaster, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
+        add(kIdIncreaseMasterRatio, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
+        add(kIdDecreaseMasterRatio, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
+        add(kIdIncreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
+        add(kIdDecreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
+        add(kIdRetile, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         return m;
     }();
 
@@ -409,15 +450,15 @@ CatalogMeta catalogMetaForId(const QString& id)
     }
     // Indexed slot families are prefix-keyed, not enumerated above.
     if (id.startsWith(QLatin1String("quick_layout_"))) {
-        return {"Layouts", 1, "all"};
+        return {QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "all"};
     }
     if (id.startsWith(QLatin1String("snap_to_zone_"))) {
-        return {"Snap to Zone", 3, "snapping"};
+        return {QT_TRANSLATE_NOOP("plasmazones", "Snap to Zone"), 3, "snapping"};
     }
     // A shortcut added to the table without catalog metadata still shows up
     // (miscategorised beats invisible), and the log points at the fix.
     qCWarning(lcShortcuts) << "cheatsheet: no catalog metadata for shortcut id" << id;
-    return {"Other", 99, "all"};
+    return {QT_TRANSLATE_NOOP("plasmazones", "Other"), 99, "all"};
 }
 
 // QKeySequence(QString) silently returns an empty sequence on malformed
@@ -665,8 +706,9 @@ void ShortcutManager::drainPendingAdhocOps()
 
 QVariantList ShortcutManager::cheatsheetModel() const
 {
-    QVariantList rows;
+    QVector<QVariantMap> rows;
     rows.reserve(m_entries.size());
+    QHash<QString, int> rowIndexById;
     for (const auto& e : m_entries) {
         const CatalogMeta meta = catalogMetaForId(e.id);
         QStringList triggers;
@@ -675,21 +717,118 @@ QVariantList ShortcutManager::cheatsheetModel() const
         }
         QVariantMap row;
         row.insert(QStringLiteral("id"), e.id);
-        row.insert(QStringLiteral("label"), e.description);
+        row.insert(QStringLiteral("label"), meta.shortLabel ? PhosphorI18n::tr(meta.shortLabel) : e.description);
         row.insert(QStringLiteral("category"), PhosphorI18n::tr(meta.category));
         row.insert(QStringLiteral("categoryOrder"), meta.categoryOrder);
         row.insert(QStringLiteral("triggers"), triggers);
         row.insert(QStringLiteral("assigned"), !triggers.isEmpty());
         row.insert(QStringLiteral("mode"), QString::fromLatin1(meta.mode));
+        rowIndexById.insert(e.id, rows.size());
         rows.push_back(row);
+    }
+
+    // ─── Family compression ────────────────────────────────────────────────
+    // The numbered slot families (9 rows each) and the directional quads
+    // (4 rows each) dominate the sheet as walls of near-identical lines.
+    // When every member of a family is assigned, all members share the same
+    // modifier prefix, and each member's final key token is the expected one
+    // (its digit / direction), the family collapses into ONE row whose last
+    // chip is a range token ("1…9") or "Arrows". Any deviation — a member
+    // unassigned, a rebind off-pattern — falls back to the individual rows,
+    // because a compressed row would then lie about what the keys do.
+    struct FamilySpec
+    {
+        QStringList ids;
+        QStringList expectedLastTokens;
+        QString combinedLabel;
+        QString tailToken;
+    };
+    const QStringList arrowTokens{QStringLiteral("Left"), QStringLiteral("Right"), QStringLiteral("Up"),
+                                  QStringLiteral("Down")};
+    const QString arrowsTail = PhosphorI18n::tr("Arrows");
+    QStringList digitTokens;
+    QStringList quickLayoutIds;
+    QStringList snapToZoneIds;
+    for (int i = 0; i < 9; ++i) {
+        digitTokens.append(QString::number(i + 1));
+        quickLayoutIds.append(quickLayoutId(i));
+        snapToZoneIds.append(snapToZoneId(i));
+    }
+    const QVector<FamilySpec> families = {
+        {quickLayoutIds, digitTokens, PhosphorI18n::tr("Apply Layout 1-9"), QStringLiteral("1…9")},
+        {snapToZoneIds, digitTokens, PhosphorI18n::tr("Snap to Zone 1-9"), QStringLiteral("1…9")},
+        {{QString::fromLatin1(kIdMoveWindowLeft), QString::fromLatin1(kIdMoveWindowRight),
+          QString::fromLatin1(kIdMoveWindowUp), QString::fromLatin1(kIdMoveWindowDown)},
+         arrowTokens,
+         PhosphorI18n::tr("Move Window"),
+         arrowsTail},
+        {{QString::fromLatin1(kIdFocusZoneLeft), QString::fromLatin1(kIdFocusZoneRight),
+          QString::fromLatin1(kIdFocusZoneUp), QString::fromLatin1(kIdFocusZoneDown)},
+         arrowTokens,
+         PhosphorI18n::tr("Focus Zone"),
+         arrowsTail},
+        {{QString::fromLatin1(kIdSwapWindowLeft), QString::fromLatin1(kIdSwapWindowRight),
+          QString::fromLatin1(kIdSwapWindowUp), QString::fromLatin1(kIdSwapWindowDown)},
+         arrowTokens,
+         PhosphorI18n::tr("Swap Window"),
+         arrowsTail},
+        {{QString::fromLatin1(kIdSwapVirtualScreenLeft), QString::fromLatin1(kIdSwapVirtualScreenRight),
+          QString::fromLatin1(kIdSwapVirtualScreenUp), QString::fromLatin1(kIdSwapVirtualScreenDown)},
+         arrowTokens,
+         // Group heading ("Virtual Screens") carries the context.
+         PhosphorI18n::tr("Swap Screens"),
+         arrowsTail},
+    };
+
+    QSet<int> removedIndices;
+    for (const auto& family : families) {
+        QString sharedPrefix;
+        bool compressible = true;
+        for (int m = 0; m < family.ids.size() && compressible; ++m) {
+            const int idx = rowIndexById.value(family.ids[m], -1);
+            if (idx < 0 || !rows[idx].value(QLatin1String("assigned")).toBool()) {
+                compressible = false;
+                break;
+            }
+            const QString seq = rows[idx].value(QLatin1String("triggers")).toStringList().value(0);
+            const int split = seq.lastIndexOf(QLatin1Char('+'));
+            if (split <= 0 || seq.mid(split + 1) != family.expectedLastTokens[m]) {
+                compressible = false;
+                break;
+            }
+            const QString prefix = seq.left(split);
+            if (m == 0) {
+                sharedPrefix = prefix;
+            } else if (prefix != sharedPrefix) {
+                compressible = false;
+            }
+        }
+        if (!compressible) {
+            continue;
+        }
+        const int firstIdx = rowIndexById.value(family.ids.first());
+        QVariantMap& row = rows[firstIdx];
+        row.insert(QStringLiteral("label"), family.combinedLabel);
+        row.insert(QStringLiteral("triggers"), QStringList{sharedPrefix + QLatin1Char('+') + family.tailToken});
+        for (int m = 1; m < family.ids.size(); ++m) {
+            removedIndices.insert(rowIndexById.value(family.ids[m]));
+        }
+    }
+
+    QVariantList out;
+    out.reserve(rows.size());
+    for (int i = 0; i < rows.size(); ++i) {
+        if (!removedIndices.contains(i)) {
+            out.push_back(rows[i]);
+        }
     }
     // Category blocks in display order; stable sort keeps the table's
     // hand-authored order within each category.
-    std::stable_sort(rows.begin(), rows.end(), [](const QVariant& a, const QVariant& b) {
+    std::stable_sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
         return a.toMap().value(QLatin1String("categoryOrder")).toInt()
             < b.toMap().value(QLatin1String("categoryOrder")).toInt();
     });
-    return rows;
+    return out;
 }
 
 void ShortcutManager::rebindAll()
