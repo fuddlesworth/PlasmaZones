@@ -571,7 +571,7 @@
         <translation>განლაგება მინიჭებული არაა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="756"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="766"/>
         <source>Dismiss Shortcut Cheatsheet</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1006,7 +1006,7 @@
     </message>
     <message>
         <location filename="../src/settings/animationspagecontroller_shaders.cpp" line="138"/>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="98"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="100"/>
         <source>Could not create the user shader directory.</source>
         <translation>მომხმარებლის შეიდერის საქაღალდის შექმნა ვერ მოხერხდა.</translation>
     </message>
@@ -2708,7 +2708,12 @@
         <translation>განლაგების ამრჩევი</translation>
     </message>
     <message>
-        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="119"/>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="58"/>
+        <source>Shortcut Cheatsheet</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="121"/>
         <source>Global default</source>
         <translation>გლობალური ნაგულისხმევი</translation>
     </message>

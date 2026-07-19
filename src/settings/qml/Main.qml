@@ -325,6 +325,10 @@ PhosphorUi.SettingsAppWindow {
                 Menu {
                     id: pageActionsMenu
 
+                    // Mirror open-state to the window scope for the
+                    // page-step shortcut guard — see _pageActionsMenuOpen.
+                    onVisibleChanged: window._pageActionsMenuOpen = visible
+
                     MenuItem {
                         text: i18n("Reset page to defaults")
                         Accessible.name: text
@@ -554,10 +558,16 @@ PhosphorUi.SettingsAppWindow {
     /// out of the header Component (whose ids are not reachable from this
     /// scope) by a Binding next to the combo.
     property bool _profilePopupOpen: false
+    /// True while the per-page kebab menu (breadcrumbTrailing Component) is
+    /// open. Same mirror pattern as _profilePopupOpen: the menu's id is not
+    /// reachable from this scope, so the menu writes the flag on
+    /// open/close. Guards the page-step shortcuts from switching the page
+    /// underneath an open menu, matching the layoutContextMenu guard.
+    property bool _pageActionsMenuOpen: false
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen && !window._profilePopupOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen && !window._profilePopupOpen && !window._pageActionsMenuOpen
 
     Shortcut {
         sequence: "Ctrl+PgUp"

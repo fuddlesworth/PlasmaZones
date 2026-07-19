@@ -230,11 +230,14 @@ void OverlayService::resetModalSingletonsForDestroyedId(const QString& id)
     // release off those signals, and a stale visible=true would swallow
     // the next toggle press showing nothing. Signals fire even though the
     // slot never animated out — dismissal-on-teardown is part of each
-    // signal's documented contract. Called from BOTH teardown paths
-    // (destroyAllWindowsForPhysicalScreen and onVirtualScreensChanged's
-    // physical-removal branch): whichever runs first removes the
-    // m_screenStates keys, so each path must reset for the ids it
-    // destroys rather than relying on the other.
+    // signal's documented contract. Called from EVERY teardown site that
+    // destroys a shell able to host a visible modal
+    // (destroyAllWindowsForPhysicalScreen's loop, and onVirtualScreensChanged's
+    // physical-removal branch AND its VS-reconfig bare-physId destroy):
+    // whichever runs first removes the m_screenStates keys or zeroes the
+    // ShellState, so each site must reset for the ids it destroys rather
+    // than relying on another. Idempotent — the first call clears the
+    // screen id, making any later call for the same id a no-op.
     if (id == m_snapAssistScreenId) {
         m_snapAssistVisible = false;
         m_snapAssistScreenId.clear();
@@ -311,6 +314,12 @@ void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
         destroyOverlayWindow(physicalScreenId);
         destroyZoneSelectorWindow(physicalScreenId);
         destroyPassiveShell(physicalScreenId);
+        // A modal open on the pre-split bare-physId shell just lost its
+        // slot. The later destroyAllWindowsForPhysicalScreen loop CANNOT
+        // reset it: destroyShell's PreDestroy hook already zeroed every
+        // field that loop matches on (overlayPhysScreen, shell physScreen),
+        // so the bare-physId entry is skipped there.
+        resetModalSingletonsForDestroyedId(physicalScreenId);
     }
 
     // Clear selected zone before destroying windows. The selection

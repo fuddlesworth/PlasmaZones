@@ -184,6 +184,9 @@ Item {
             anchors.top: titleLabel.bottom
             anchors.topMargin: metrics.paddingSide
             anchors.horizontalCenter: parent.horizontalCenter
+            width: metrics.contentWidth
+            wrapMode: Text.Wrap
+            horizontalAlignment: Text.AlignHCenter
             text: i18n("No shortcuts apply in the current mode.")
             color: Kirigami.Theme.disabledTextColor
             visible: root.groups.length === 0

@@ -223,7 +223,11 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
     // autoloading flag a persisted user override wins over what we just
     // pushed, and seeding the wrong value would suppress-or-emit
     // inconsistently. A genuinely external change still reports, because
-    // it differs from this seed.
+    // it differs from this seed. Known boundary: if an external rebind
+    // has landed in kglobalaccel's table but its change echo is still
+    // queued when a re-register interleaves, this seed absorbs that echo
+    // and one display refresh is lost — the grab itself stays correct
+    // (autoload), so the cost is a stale label until the next report.
     m_impl->lastReportedTriggers.insert(id, KGlobalAccel::self()->shortcut(entry.action));
 }
 
