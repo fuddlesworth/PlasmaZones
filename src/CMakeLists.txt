@@ -477,12 +477,12 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/osd.cpp
     daemon/overlayservice/priming.cpp
     daemon/overlayservice/rekey.cpp
+    daemon/overlayservice/cheatsheet.cpp
     daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
     daemon/overlayservice/shellhost_bridge.cpp
     daemon/overlayservice/selector_update.cpp
     daemon/overlayservice/shader.cpp
-    daemon/overlayservice/cheatsheet.cpp
     daemon/overlayservice/snapassist.cpp
     daemon/overlayservice.h
     daemon/overlayservice_types.h

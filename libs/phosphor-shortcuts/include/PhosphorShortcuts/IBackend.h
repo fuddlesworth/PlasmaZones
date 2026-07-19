@@ -8,6 +8,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <optional>
+
 #include "phosphorshortcuts_export.h"
 
 namespace PhosphorShortcuts {
@@ -125,15 +127,23 @@ public:
      * that do have structured sequences (KGlobalAccel) return
      * QKeySequence::toString(QKeySequence::PortableText) per sequence.
      *
-     * An empty list means "this backend cannot report" — callers must fall
-     * back to their own stored current sequence, NOT treat the id as
-     * unbound. The default implementation reports nothing (correct for the
-     * D-Bus trigger fallback, which has no key grabs at all).
+     * Tri-state on purpose:
+     *  - std::nullopt   → this backend cannot report for the id; callers
+     *    fall back to their own stored current sequence.
+     *  - engaged, empty → the backend AUTHORITATIVELY reports the id as
+     *    unbound (e.g. the user cleared the key in System Settings).
+     *    Callers must NOT fall back — the stored sequence is stale.
+     *  - engaged, non-empty → the effective trigger strings.
+     * Folding the first two into one empty list made a cleared binding
+     * display as its stale stored value.
+     *
+     * The default implementation reports nullopt (correct for the D-Bus
+     * trigger fallback, which has no key grabs at all).
      */
-    virtual QStringList currentTriggers(const QString& id) const
+    virtual std::optional<QStringList> currentTriggers(const QString& id) const
     {
         Q_UNUSED(id);
-        return {};
+        return std::nullopt;
     }
 
 Q_SIGNALS:

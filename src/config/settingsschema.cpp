@@ -445,7 +445,9 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 // snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation),
 // Tiling (autotile master/ratio/count controls + retile toggle), Editor
 // (zone editor shortcuts — duplicate, split, fill). All QString keys, no
-// validators needed.
+// validators needed — plus the trailing Cheatsheet group, whose Enabled
+// key is the one Bool in this function (shortcut-adjacent surface, see
+// the inline note at its definition).
 
 namespace {
 // Helper: append a string KeyDef with no validator. Cuts the noise in the

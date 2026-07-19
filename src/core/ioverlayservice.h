@@ -193,8 +193,8 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when the shortcut cheatsheet overlay is dismissed for
-     * any reason (re-press of the toggle, backdrop click, Escape, peek
-     * release, screen-removed teardown). Daemon subscribes to release the
+     * any reason (re-press of the toggle, backdrop click, Escape,
+     * screen-removed teardown). Daemon subscribes to release the
      * cheatsheet's dedicated Escape ad-hoc grab.
      */
     void cheatsheetDismissed();

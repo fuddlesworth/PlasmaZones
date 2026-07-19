@@ -676,6 +676,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Snap Assist Shown"));
     addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.snapAssist.hide"),
                PhosphorI18n::tr("Snap Assist Hidden"));
+    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.cheatsheet.show"),
+               PhosphorI18n::tr("Shortcut Cheatsheet Shown"));
+    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.cheatsheet.hide"),
+               PhosphorI18n::tr("Shortcut Cheatsheet Hidden"));
     // Desktop page.
     addSetting(search, QStringLiteral("animations-desktops"), QStringLiteral("desktop.switch"),
                PhosphorI18n::tr("Desktop Switched"));

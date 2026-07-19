@@ -67,9 +67,13 @@ public:
         Q_EMIT activated(id);
     }
 
-    QStringList currentTriggers(const QString& id) const override
+    std::optional<QStringList> currentTriggers(const QString& id) const override
     {
-        return reportedTriggers.value(id);
+        const auto it = reportedTriggers.constFind(id);
+        if (it == reportedTriggers.constEnd()) {
+            return std::nullopt;
+        }
+        return *it;
     }
 
     void reportTriggers(const QString& id, const QStringList& triggers)
@@ -710,6 +714,22 @@ private Q_SLOTS:
 
         // Unknown id → empty, not a fallback.
         QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.ghost")), QStringList());
+    }
+
+    void effectiveTriggers_backendEmptyIsAuthoritativeUnbound()
+    {
+        // A backend that CAN report and reports an empty list means the
+        // user cleared the binding out-of-process (System Settings). The
+        // registry must NOT fall back to its stored sequence — that would
+        // display a key that no longer fires (the stale-assigned bug).
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        backend.reportTriggers(QStringLiteral("pz.a"), {});
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.a")), QStringList());
     }
 
     void triggersChanged_forwardsOnlyOwnedIds()

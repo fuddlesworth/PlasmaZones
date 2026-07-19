@@ -439,6 +439,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::renderingGroup(), // "Rendering"
         ConfigDefaults::shadersGroup(), // "Shaders"
         ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling
+        ConfigDefaults::cheatsheetGroup(), // "Cheatsheet"
         ConfigDefaults::animationsGroup(), // "Animations"
         ConfigDefaults::animationsWindowFilteringGroup(), // "Animations.WindowFiltering"
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop

@@ -370,7 +370,7 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
     }
     // Diagnostic log gated on lcOverlay().isDebugEnabled() - qCDebug
     // gates the OUTPUT but Qt evaluates argument expressions
-    // unconditionally, so the seven extra resolveShaderEffect calls
+    // unconditionally, so the ten extra resolveShaderEffect calls
     // would run even when debug logging is disabled. Each
     // ShaderProfileTree::resolve walks the parent chain and overlay-
     // merges every override; on a typical settings-edit signal storm
@@ -385,7 +385,9 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
                                      << " layoutPicker.show=" << resolveShaderEffect(tree, PP::PopupLayoutPickerShow)
                                      << " layoutPicker.hide=" << resolveShaderEffect(tree, PP::PopupLayoutPickerHide)
                                      << " snapAssist.show=" << resolveShaderEffect(tree, PP::PopupSnapAssistShow)
-                                     << " snapAssist.hide=" << resolveShaderEffect(tree, PP::PopupSnapAssistHide);
+                                     << " snapAssist.hide=" << resolveShaderEffect(tree, PP::PopupSnapAssistHide)
+                                     << " cheatsheet.show=" << resolveShaderEffect(tree, PP::PopupCheatsheetShow)
+                                     << " cheatsheet.hide=" << resolveShaderEffect(tree, PP::PopupCheatsheetHide);
     }
     // Route through the lib so animator-config writes share the same
     // host that owns slot lifecycle (3.x) and surface lifecycle (2.x).

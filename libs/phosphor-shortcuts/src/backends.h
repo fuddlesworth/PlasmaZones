@@ -55,7 +55,7 @@ public:
     void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
-    QStringList currentTriggers(const QString& id) const override;
+    std::optional<QStringList> currentTriggers(const QString& id) const override;
 
 private Q_SLOTS:
     void onSessionCreated(QDBusPendingCallWatcher* watcher);
@@ -157,7 +157,7 @@ public:
     void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
-    QStringList currentTriggers(const QString& id) const override;
+    std::optional<QStringList> currentTriggers(const QString& id) const override;
 
 private:
     // QAction ownership is an implementation detail of this backend —

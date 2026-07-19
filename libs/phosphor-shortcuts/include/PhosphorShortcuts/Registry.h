@@ -103,9 +103,10 @@ public:
      * Display strings for the key(s) the user EFFECTIVELY has to press for
      * an id right now. Prefers the backend's read-back
      * (IBackend::currentTriggers — which sees out-of-process overrides like
-     * System Settings rebinds); falls back to the registry's own current
-     * sequence when the backend cannot report. Empty means the id is
-     * genuinely unbound (or unknown).
+     * System Settings rebinds, INCLUDING a cleared binding, which reports
+     * engaged-empty and is honored as unbound); falls back to the
+     * registry's own current sequence only when the backend cannot report
+     * at all. Empty means the id is genuinely unbound (or unknown).
      */
     QStringList effectiveTriggers(const QString& id) const;
 

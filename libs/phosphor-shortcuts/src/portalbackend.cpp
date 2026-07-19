@@ -511,6 +511,11 @@ void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap
     // versus when it leaves a grab dangling (spec limitation — see
     // unregisterShortcut).
     const QVariant shortcutsVar = results.value(QStringLiteral("shortcuts"));
+    // Ids whose trigger_description changed this Response. Collected and
+    // emitted AFTER the parse loop: a synchronous triggersChanged consumer
+    // that mutates backend state (unregisterShortcut) mid-iteration would
+    // otherwise invalidate the maps this loop is reading.
+    QStringList changedTriggerIds;
     if (shortcutsVar.canConvert<QDBusArgument>()) {
         QDBusArgument arg = shortcutsVar.value<QDBusArgument>();
         arg.beginArray();
@@ -556,23 +561,32 @@ void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap
                     } else {
                         m_confirmedTriggers.insert(id, triggers);
                     }
-                    Q_EMIT triggersChanged(id);
+                    changedTriggerIds.append(id);
                 }
             }
         }
         arg.endArray();
     }
     m_pendingBindResponse.clear();
+    for (const QString& changedId : std::as_const(changedTriggerIds)) {
+        Q_EMIT triggersChanged(changedId);
+    }
     qCDebug(lcPhosphorShortcuts) << "Portal BindShortcuts Response: success, results=" << results;
     Q_EMIT ready();
 }
 
-QStringList PortalBackend::currentTriggers(const QString& id) const
+std::optional<QStringList> PortalBackend::currentTriggers(const QString& id) const
 {
-    // Only what the compositor has explicitly described. An id bound but
-    // never described returns empty, which callers treat as "fall back to
-    // your own stored sequence" per the IBackend contract.
-    return m_confirmedTriggers.value(id);
+    // Engaged only for ids the compositor has explicitly described in a
+    // BindShortcuts Response. An id bound but never described yields
+    // nullopt ("cannot report" — caller falls back to its stored
+    // sequence); the portal has no "cleared binding" concept, so an
+    // engaged-empty result never occurs here.
+    const auto it = m_confirmedTriggers.constFind(id);
+    if (it == m_confirmedTriggers.constEnd()) {
+        return std::nullopt;
+    }
+    return *it;
 }
 
 void PortalBackend::onActivated(const QDBusObjectPath& /*sessionHandle*/, const QString& shortcutId,

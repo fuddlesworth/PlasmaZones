@@ -274,42 +274,42 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="748"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="762"/>
         <source>Arrows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="758"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="772"/>
         <source>Apply Layout 1-9</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="759"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="773"/>
         <source>Snap to Zone 1-9</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="763"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="777"/>
         <source>Move Window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="768"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="782"/>
         <source>Focus Zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="773"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="787"/>
         <source>Swap Window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="779"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="793"/>
         <source>Swap Screens</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="873"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="896"/>
         <source>Apply Layout %1</source>
         <translation>განლაგების %1 გადატარება</translation>
     </message>
@@ -697,7 +697,7 @@
         <translation>სერვისები ინიციალიზებული არაა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="891"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="914"/>
         <source>Snap to Zone %1</source>
         <translation>მიმაგრება ზონასთან %1</translation>
     </message>
@@ -3445,13 +3445,13 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="150"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="689"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
         <source>peek</source>
         <translation>შეხედვა</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="151"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="689"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
         <source>show desktop</source>
         <translation>სამუშაო მაგიდის ჩვენება</translation>
     </message>
@@ -3500,17 +3500,17 @@
         <translation>მოძრაობის ნაკრები</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="744"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="748"/>
         <source>Save current settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="746"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="750"/>
         <source>Import a profile</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="747"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="751"/>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="85"/>
         <source>Profiles</source>
         <translation type="unfinished"></translation>
@@ -4743,7 +4743,17 @@
         <translation>მიმაგრების დამხმარე დამალულია</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="681"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="680"/>
+        <source>Shortcut Cheatsheet Shown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="682"/>
+        <source>Shortcut Cheatsheet Hidden</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="685"/>
         <source>Desktop Switched</source>
         <translation>სამუშაო მაგიდა გადართულია</translation>
     </message>
@@ -5314,139 +5324,139 @@
         <translation>შენახული ნაკრებები</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="689"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
         <source>Peeked at Desktop</source>
         <translation>სამუშაო მაგიდის შეხედვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="739"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="743"/>
         <source>Snap Out of Zone</source>
         <translation>ზონიდან მოხსნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="691"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="695"/>
         <source>Slide In</source>
         <translation>შემოცურება</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="697"/>
         <source>Slide Out</source>
         <translation>გამოსრიალება</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="695"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="713"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="699"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="717"/>
         <source>Fade In</source>
         <translation>თანდათანობითი გამოჩენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="697"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="715"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="701"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="719"/>
         <source>Fade Out</source>
         <translation>თანდათანობითი გაქრობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="698"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="702"/>
         <source>Hover</source>
         <translation>თავზე დაცურება</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="699"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="703"/>
         <source>Press</source>
         <translation>დაჭერა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="701"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="705"/>
         <source>Toggle On</source>
         <translation>ჩართვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="703"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="707"/>
         <source>Toggle Off</source>
         <translation>გამორთვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="705"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="709"/>
         <source>Show (badge)</source>
         <translation>ჩვენება (სამკერდე ნიშანი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="707"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="711"/>
         <source>Hide (badge)</source>
         <translation>დამალვა (სამკერდე ნიშანი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="709"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="713"/>
         <source>Pulse (badge)</source>
         <translation>პულსაცია (სამკერდე ნიშანი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="710"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="714"/>
         <source>Tint</source>
         <translation>ტონირება</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="711"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="715"/>
         <source>Dim</source>
         <translation>დაბინდვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="717"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="721"/>
         <source>Reorder</source>
         <translation>თანმიმდევრობის შეცვლა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="719"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="723"/>
         <source>Expand (accordion)</source>
         <translation>გაშლა (აკორდეონი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="721"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="725"/>
         <source>Collapse (accordion)</source>
         <translation>აკეცვა (აკორდეონი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="723"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="727"/>
         <source>Progress</source>
         <translation>მიმდინარეობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="725"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="729"/>
         <source>Zone Highlight</source>
         <translation>ზონის გამოკვეთა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="727"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="731"/>
         <source>Zone Highlight: Pop</source>
         <translation>ზონის გამოკვეთა: ამოხტომა</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="729"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="733"/>
         <source>Zone Highlight: Border</source>
         <translation>ზონის გამოკვეთა: საზღვარი</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="731"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="735"/>
         <source>Zone Overlay: Layout-Switch Flash</source>
         <translation>ზონის გადადება: განლაგების გადართვის ციმციმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="733"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="737"/>
         <source>Cursor Hover</source>
         <translation>კურსორის დაცურება</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="735"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="739"/>
         <source>Cursor Click</source>
         <translation>კურსორის დაწკაპუნება</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="737"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="741"/>
         <source>Snap Into Zone (Fill Preview)</source>
         <translation>ზონაში მიმაგრება (შევსების გადახედვა)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="741"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="745"/>
         <source>Snap Resize (Drag Preview)</source>
         <translation>მიმაგრებით ზომის შეცვლა (გადათრევის გადახედვა)</translation>
     </message>

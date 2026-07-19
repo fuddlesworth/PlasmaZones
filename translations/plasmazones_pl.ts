@@ -274,42 +274,42 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="748"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="762"/>
         <source>Arrows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="758"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="772"/>
         <source>Apply Layout 1-9</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="759"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="773"/>
         <source>Snap to Zone 1-9</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="763"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="777"/>
         <source>Move Window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="768"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="782"/>
         <source>Focus Zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="773"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="787"/>
         <source>Swap Window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="779"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="793"/>
         <source>Swap Screens</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="873"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="896"/>
         <source>Apply Layout %1</source>
         <translation>Zastosuj układ %1</translation>
     </message>
@@ -697,7 +697,7 @@
         <translation>Usługi nie zostały zainicjowane</translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="891"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="914"/>
         <source>Snap to Zone %1</source>
         <translation>Przyciągnij do strefy %1</translation>
     </message>
@@ -3449,13 +3449,13 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="150"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="689"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
         <source>peek</source>
         <translation>podejrzyj</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="151"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="689"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
         <source>show desktop</source>
         <translation>pokaż pulpit</translation>
     </message>
@@ -3504,17 +3504,17 @@
         <translation>zestaw ruchu</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="744"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="748"/>
         <source>Save current settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="746"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="750"/>
         <source>Import a profile</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="747"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="751"/>
         <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="85"/>
         <source>Profiles</source>
         <translation type="unfinished"></translation>
@@ -4747,7 +4747,17 @@
         <translation>Ukryto asystenta przyciągania</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="681"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="680"/>
+        <source>Shortcut Cheatsheet Shown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="682"/>
+        <source>Shortcut Cheatsheet Hidden</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="685"/>
         <source>Desktop Switched</source>
         <translation>Przełączono pulpit</translation>
     </message>
@@ -5318,139 +5328,139 @@
         <translation>Zapisane zestawy</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="689"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
         <source>Peeked at Desktop</source>
         <translation>Podejrzano pulpit</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="739"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="743"/>
         <source>Snap Out of Zone</source>
         <translation>Odczep od strefy</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="691"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="695"/>
         <source>Slide In</source>
         <translation>Wsunięcie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="697"/>
         <source>Slide Out</source>
         <translation>Wysunięcie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="695"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="713"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="699"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="717"/>
         <source>Fade In</source>
         <translation>Pojawienie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="697"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="715"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="701"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="719"/>
         <source>Fade Out</source>
         <translation>Zanikanie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="698"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="702"/>
         <source>Hover</source>
         <translation>Najechanie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="699"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="703"/>
         <source>Press</source>
         <translation>Naciśnięcie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="701"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="705"/>
         <source>Toggle On</source>
         <translation>Włączenie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="703"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="707"/>
         <source>Toggle Off</source>
         <translation>Wyłączenie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="705"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="709"/>
         <source>Show (badge)</source>
         <translation>Pokaż (plakietka)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="707"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="711"/>
         <source>Hide (badge)</source>
         <translation>Ukryj (plakietka)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="709"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="713"/>
         <source>Pulse (badge)</source>
         <translation>Pulsowanie (plakietka)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="710"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="714"/>
         <source>Tint</source>
         <translation>Zabarwienie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="711"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="715"/>
         <source>Dim</source>
         <translation>Przyciemnienie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="717"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="721"/>
         <source>Reorder</source>
         <translation>Zmiana kolejności</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="719"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="723"/>
         <source>Expand (accordion)</source>
         <translation>Rozwinięcie (akordeon)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="721"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="725"/>
         <source>Collapse (accordion)</source>
         <translation>Zwinięcie (akordeon)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="723"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="727"/>
         <source>Progress</source>
         <translation>Postęp</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="725"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="729"/>
         <source>Zone Highlight</source>
         <translation>Podświetlenie strefy</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="727"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="731"/>
         <source>Zone Highlight: Pop</source>
         <translation>Podświetlenie strefy: uskok</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="729"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="733"/>
         <source>Zone Highlight: Border</source>
         <translation>Podświetlenie strefy: obramowanie</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="731"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="735"/>
         <source>Zone Overlay: Layout-Switch Flash</source>
         <translation>Nakładka strefy: błysk przy zmianie układu</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="733"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="737"/>
         <source>Cursor Hover</source>
         <translation>Najechanie kursorem</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="735"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="739"/>
         <source>Cursor Click</source>
         <translation>Kliknięcie kursorem</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="737"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="741"/>
         <source>Snap Into Zone (Fill Preview)</source>
         <translation>Przyciągnięcie do strefy (podgląd wypełnienia)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="741"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="745"/>
         <source>Snap Resize (Drag Preview)</source>
         <translation>Zmiana rozmiaru przyciągania (podgląd przeciągania)</translation>
     </message>

@@ -715,6 +715,20 @@ QVariantList ShortcutManager::cheatsheetModel() const
         if (m_registry) {
             triggers = m_registry->effectiveTriggers(e.id);
         }
+        // Normalize to PortableText where the string parses as a key
+        // sequence. KGlobalAccel read-back is PortableText already, but the
+        // Portal backend relays the compositor's trigger_description
+        // verbatim, which may be native/localized spelling — without
+        // normalization the family compression's token compares silently
+        // fail and the sheet shows all 26 uncompressed rows. A string that
+        // doesn't parse stays verbatim (better an odd chip than a lost
+        // binding).
+        for (QString& t : triggers) {
+            const QKeySequence parsed(t);
+            if (!parsed.isEmpty()) {
+                t = parsed.toString(QKeySequence::PortableText);
+            }
+        }
         QVariantMap row;
         row.insert(QStringLiteral("id"), e.id);
         row.insert(QStringLiteral("label"), meta.shortLabel ? PhosphorI18n::tr(meta.shortLabel) : e.description);
@@ -782,6 +796,15 @@ QVariantList ShortcutManager::cheatsheetModel() const
 
     QSet<int> removedIndices;
     for (const auto& family : families) {
+        // The two lists are parallel arrays; a mismatched spec would index
+        // expectedLastTokens out of bounds below. All current families are
+        // 9/9 or 4/4 — this guards the table against a future bad entry.
+        Q_ASSERT(family.ids.size() == family.expectedLastTokens.size());
+        if (family.ids.size() != family.expectedLastTokens.size()) {
+            qCWarning(lcShortcuts) << "cheatsheet: family spec size mismatch for" << family.combinedLabel
+                                   << "— skipping compression";
+            continue;
+        }
         QString sharedPrefix;
         bool compressible = true;
         for (int m = 0; m < family.ids.size() && compressible; ++m) {

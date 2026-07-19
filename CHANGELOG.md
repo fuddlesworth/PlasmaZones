@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **Shortcut cheatsheet overlay**: a new overlay that lists every PlasmaZones global shortcut with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ (rebindable in System Settings) and dismiss it with Escape, a backdrop click, or the shortcut again. The sheet is mode aware: shortcuts that do nothing in the current tiling mode are hidden, and it updates live when you switch modes or rebind a key. Shortcuts you have unbound stay listed as unassigned so you can discover them.
+- **Shortcut cheatsheet overlay**: a new overlay that lists every PlasmaZones global shortcut with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ (rebindable in System Settings) and dismiss it with Escape, a backdrop click, or the shortcut again. The sheet is mode aware. Shortcuts that do nothing in the current tiling mode are hidden, and it updates live when you switch modes or rebind a key. Shortcuts you have unbound stay listed as unassigned so you can discover them.
 
 ## [3.2.5] - 2026-07-19
 

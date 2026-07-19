@@ -122,7 +122,7 @@ void OverlayService::hideCheatsheet()
     if (!m_cheatsheetVisible) {
         // Always emit dismissed so the daemon's Escape-grab release path
         // runs even on idempotent calls — multiple call sites converge
-        // here (toggle re-press, backdrop, Escape, peek release).
+        // here (toggle re-press, backdrop, Escape).
         Q_EMIT cheatsheetDismissed();
         return;
     }

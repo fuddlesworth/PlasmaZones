@@ -164,9 +164,13 @@ QStringList Registry::effectiveTriggers(const QString& id) const
         return {};
     }
     if (m_backend) {
-        const QStringList fromBackend = m_backend->currentTriggers(id);
-        if (!fromBackend.isEmpty()) {
-            return fromBackend;
+        // Engaged optional is authoritative EVEN WHEN EMPTY: an empty
+        // report means the user cleared the binding out-of-process, and
+        // falling back to our stored sequence would display a key that no
+        // longer fires. Only a disengaged optional ("cannot report") falls
+        // through to the stored value.
+        if (const std::optional<QStringList> fromBackend = m_backend->currentTriggers(id)) {
+            return *fromBackend;
         }
     }
     // Backend can't report (Portal before a described Response, DBusTrigger,

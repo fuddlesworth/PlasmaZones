@@ -49,6 +49,10 @@ public:
         bool persistent = true;
     };
     QHash<QString, Entry> entries;
+    // Last KGlobalAccel::shortcut() value reported via triggersChanged, per
+    // id. Gates the globalShortcutChanged fan-out so self-originated echoes
+    // and repeats don't trigger redundant consumer rebuilds.
+    QHash<QString, QList<QKeySequence>> lastReportedTriggers;
 };
 
 KGlobalAccelBackend::KGlobalAccelBackend(QObject* parent)
@@ -74,17 +78,29 @@ KGlobalAccelBackend::KGlobalAccelBackend(QObject* parent)
     // Surface external rebinds (the user editing our component in System
     // Settings) as triggersChanged so consumers displaying bindings can
     // re-query currentTriggers(). The signal passes the QAction; it is ours
-    // iff its objectName matches a registered id (we objectName every action
-    // to its id above).
+    // iff its objectName matches a registered id (registerShortcut()
+    // objectNames every action to its id). Deduped against the last
+    // reported value: kglobalaccel may echo changes we originated
+    // ourselves (setShortcut during registration/rebind), and consumers
+    // rebuild their whole display model per emission — without the gate a
+    // bulk registration fans out into dozens of identical rebuilds.
     connect(KGlobalAccel::self(), &KGlobalAccel::globalShortcutChanged, this,
             [this](QAction* action, const QKeySequence& /*seq*/) {
                 if (!action) {
                     return;
                 }
                 const QString id = action->objectName();
-                if (m_impl->entries.contains(id) && m_impl->entries.value(id).action == action) {
-                    Q_EMIT triggersChanged(id);
+                const auto it = m_impl->entries.constFind(id);
+                if (it == m_impl->entries.constEnd() || it->action != action) {
+                    return;
                 }
+                const QList<QKeySequence> seqs = KGlobalAccel::self()->shortcut(action);
+                if (m_impl->lastReportedTriggers.constFind(id) != m_impl->lastReportedTriggers.constEnd()
+                    && m_impl->lastReportedTriggers.value(id) == seqs) {
+                    return;
+                }
+                m_impl->lastReportedTriggers.insert(id, seqs);
+                Q_EMIT triggersChanged(id);
             });
 }
 
@@ -241,17 +257,20 @@ void KGlobalAccelBackend::unregisterShortcut(const QString& id)
     }
 }
 
-QStringList KGlobalAccelBackend::currentTriggers(const QString& id) const
+std::optional<QStringList> KGlobalAccelBackend::currentTriggers(const QString& id) const
 {
     const auto it = m_impl->entries.constFind(id);
     if (it == m_impl->entries.constEnd() || !it->action) {
-        return {};
+        // Unknown id — nothing to report; the caller's own value stands.
+        return std::nullopt;
     }
     // KGlobalAccel::shortcut returns the ACTIVE sequences — including a user
     // override persisted in kglobalshortcutsrc, which setShortcut's
     // autoloading behaviour lets win over whatever currentSeq we pushed.
     // This is exactly the "what does the user really press" answer that our
-    // own bookkeeping (lastCurrent) cannot give.
+    // own bookkeeping (lastCurrent) cannot give. An engaged-but-empty
+    // result is AUTHORITATIVE: the user cleared the binding, and falling
+    // back to the stored sequence would display a key that no longer works.
     QStringList out;
     const QList<QKeySequence> seqs = KGlobalAccel::self()->shortcut(it->action);
     for (const QKeySequence& seq : seqs) {

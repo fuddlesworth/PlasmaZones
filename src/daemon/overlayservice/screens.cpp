@@ -175,6 +175,31 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
                 // dead keys.
                 m_shellHost->removeState(id);
             }
+
+            // The modal singletons (snap assist, layout picker, cheatsheet)
+            // track which screen's slot shows them. Destroying that
+            // screen's shell just destroyed the slot, so the visible flag
+            // and screen id must reset AND the dismissed signals must fire:
+            // the daemon's Escape ad-hoc grabs release off those signals,
+            // and a stale visible=true would swallow the next toggle press
+            // showing nothing. Signals fire even though the slot never
+            // animated out — dismissal-on-teardown is part of each
+            // signal's documented contract.
+            if (id == m_snapAssistScreenId) {
+                m_snapAssistVisible = false;
+                m_snapAssistScreenId.clear();
+                Q_EMIT snapAssistDismissed();
+            }
+            if (id == m_layoutPickerScreenId) {
+                m_layoutPickerVisible = false;
+                m_layoutPickerScreenId.clear();
+                Q_EMIT layoutPickerDismissed();
+            }
+            if (id == m_cheatsheetScreenId) {
+                m_cheatsheetVisible = false;
+                m_cheatsheetScreenId.clear();
+                Q_EMIT cheatsheetDismissed();
+            }
         }
     }
 

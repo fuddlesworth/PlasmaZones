@@ -123,10 +123,11 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
     // Cheatsheet: popup surface family, dedicated `.show` leaf, picker-style
     // fade+scale envelope.
     const PAL::SurfaceAnimator::Config cheatsheetConfig{.showProfile = QStringLiteral("popup.cheatsheet.show"),
-                                                        .hideProfile = {},
+                                                        .hideProfile = QStringLiteral("popup.cheatsheet.hide"),
                                                         .showScaleProfile = QStringLiteral("popup.cheatsheet.show"),
-                                                        .hideScaleProfile = {},
+                                                        .hideScaleProfile = QStringLiteral("popup.cheatsheet.hide"),
                                                         .showScaleFrom = 0.94,
+                                                        .hideScaleTo = 0.97,
                                                         .showShaderEffectId = {},
                                                         .hideShaderEffectId = {},
                                                         .showShaderProfile = {},
@@ -184,6 +185,9 @@ private Q_SLOTS:
         QCOMPARE(cfg.showProfile, QStringLiteral("popup.cheatsheet.show"));
         QCOMPARE(cfg.showScaleProfile, QStringLiteral("popup.cheatsheet.show"));
         QCOMPARE(cfg.showScaleFrom, 0.94);
+        QCOMPARE(cfg.hideProfile, QStringLiteral("popup.cheatsheet.hide"));
+        QCOMPARE(cfg.hideScaleProfile, QStringLiteral("popup.cheatsheet.hide"));
+        QCOMPARE(cfg.hideScaleTo, 0.97);
     }
 
     /// Per-instance OSD role resolves to the registered osd config. If

@@ -34,8 +34,6 @@ Item {
     /// Global autotile feature gate. When off, the Autotile group hides in
     /// every mode (the mode is unreachable, so its shortcuts are noise).
     property bool autotileAvailable: true
-    /// Corner radius the surface decoration rounds to (forwarded from slot).
-    property real cardCornerRadius: Kirigami.Units.largeSpacing * 2
     property string fontFamily: ""
     property real fontSizeScale: 1
 
@@ -245,6 +243,7 @@ Item {
                                             // second line instead of losing text.
                                             wrapMode: Text.Wrap
                                             font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
+                                            font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * root.fontSizeScale)
                                             Layout.fillWidth: true
                                         }
 

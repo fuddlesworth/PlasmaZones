@@ -1164,8 +1164,8 @@ public:
     /// pack (e.g. glow) from the Decoration pages.
     ///
     /// The PopupFrame-based card surfaces are the exception: the OSD ("osd") and
-    /// the two PopupFrame popups ("popup.layoutPicker", "popup.zoneSelector")
-    /// ship a default chain that chromes their cards through the
+    /// the three PopupFrame popups ("popup.layoutPicker", "popup.zoneSelector",
+    /// "popup.cheatsheet") ship a default chain that chromes their cards through the
     /// surface-decoration pipeline rather than PopupFrame's built-in MultiEffect
     /// — a crisp neutral frame-contrast border plus a real, theme-tinted drop
     /// shadow. (Snap-assist is left undecorated: it carries its own anchor, not

@@ -48,7 +48,8 @@ Window {
     // true` so vertex shaders bind to the visible OSD body rather than
     // the fullscreen slot Item.
     // Sibling slots below: snapAssistSlot (z=2), layoutPickerSlot (z=2),
-    // zoneSelectorSlot (z=1), mainOverlaySlot (z=0). The osdSlot's z is
+    // cheatsheetSlot (z=2), zoneSelectorSlot (z=1), mainOverlaySlot (z=0).
+    // The osdSlot's z is
     // dynamic (3 normally, 1.5 while a modal slot is visible — see the
     // binding on osdSlot). Each is a sibling Item with its own
     // properties + Loader, animated independently via the
@@ -600,6 +601,12 @@ Window {
         property real cardCornerRadius: Kirigami.Units.largeSpacing * 2
         property string fontFamily: ""
         property real fontSizeScale: 1
+        // Declared-but-unforwarded contract (same as zoneSelectorSlot):
+        // fontWeight/fontItalic/fontUnderline/fontStrikeout are written by
+        // C++ writeFontProperties but CheatsheetContent doesn't consume
+        // them — the sheet keeps the theme's row weight/decoration on
+        // purpose. The declarations MUST stay: deleting one silently
+        // demotes the C++ write to a dead dynamic property.
         property int fontWeight: Font.Bold
         property bool fontItalic: false
         property bool fontUnderline: false
@@ -644,7 +651,6 @@ Window {
                 shortcuts: cheatsheetSlot.shortcuts
                 currentMode: cheatsheetSlot.currentMode
                 autotileAvailable: cheatsheetSlot.autotileAvailable
-                cardCornerRadius: cheatsheetSlot.cardCornerRadius
                 fontFamily: cheatsheetSlot.fontFamily
                 fontSizeScale: cheatsheetSlot.fontSizeScale
             }
