@@ -56,6 +56,13 @@ Kirigami.Dialog {
     readonly property bool _acceptable: !root._showName || nameField.text.trim().length > 0
 
     onOpened: {
+        // Installed on open, not at construction, matching the sets pages'
+        // edit dialog: Ok stays disabled while the name is empty so a blank
+        // rename cannot silently close as a no-op (Enter is gated the same
+        // way in the fields' onAccepted).
+        standardButton(Kirigami.Dialog.Ok).enabled = Qt.binding(function () {
+            return root._acceptable;
+        });
         if (root._showName)
             nameField.forceActiveFocus();
         else

@@ -212,6 +212,10 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
             }
             return QVariant(out);
         }
+        // No legacy-string fallback here (unlike QVariantList above): before
+        // this branch existed, a QStringList write fell to the string branch
+        // and stored an empty string, so there is no parseable legacy data to
+        // recover.
         return defaultValue;
     }
     case QMetaType::QVariantMap: {
@@ -245,25 +249,36 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
 {
     Q_ASSERT_X(backend != nullptr, "PhosphorConfig::Store", "backend must not be null");
 
-#ifndef QT_NO_DEBUG
-    // Debug-only schema invariant: when a KeyDef declares both
-    // `expectedType` AND a non-Invalid `defaultValue`, the default's
-    // typeId must match `expectedType`. A mismatch silently routes
-    // reads through the wrong branch of `readVariantAs`'s switch,
-    // producing surprising effective values; the assertion turns the
-    // latent bug into a fail-fast at Store construction.
-    for (auto groupIt = d->schema.groups.constBegin(); groupIt != d->schema.groups.constEnd(); ++groupIt) {
-        for (const auto& def : groupIt.value()) {
-            if (def.expectedType == QMetaType::UnknownType || !def.defaultValue.isValid())
+    // Schema invariant: when a KeyDef declares both `expectedType` AND a
+    // non-Invalid `defaultValue`, the default's typeId must match
+    // `expectedType`. A mismatch silently routes reads through the wrong
+    // branch of `readVariantAs`'s switch, producing surprising effective
+    // values. Debug builds fail fast at Store construction; release builds
+    // convert the stored default to the declared type in place, so every
+    // downstream consumer — notably the exportToJson/defaultsToJson snapshot
+    // pair — sees one consistent type either way.
+    for (auto groupIt = d->schema.groups.begin(); groupIt != d->schema.groups.end(); ++groupIt) {
+        for (auto& def : groupIt.value()) {
+            if (def.expectedType == QMetaType::UnknownType || !def.defaultValue.isValid()
+                || def.defaultValue.typeId() == int(def.expectedType)) {
                 continue;
-            Q_ASSERT_X(def.defaultValue.typeId() == int(def.expectedType), "PhosphorConfig::Store",
+            }
+            Q_ASSERT_X(false, "PhosphorConfig::Store",
                        qPrintable(QStringLiteral("Schema KeyDef [%1.%2]: defaultValue typeId %3 != expectedType %4")
                                       .arg(groupIt.key(), def.key)
                                       .arg(def.defaultValue.typeId())
                                       .arg(int(def.expectedType))));
+            QVariant converted = def.defaultValue;
+            if (converted.convert(QMetaType(def.expectedType))) {
+                def.defaultValue = converted;
+            } else {
+                qWarning(
+                    "PhosphorConfig::Store: schema KeyDef [%s.%s]: defaultValue typeId %d does not match "
+                    "expectedType %d and cannot be converted — reads will fall back to the mismatched default.",
+                    qPrintable(groupIt.key()), qPrintable(def.key), def.defaultValue.typeId(), int(def.expectedType));
+            }
         }
     }
-#endif
 
     // Path resolver: install via the backend's polymorphic hook. Backends
     // without a resolver concept inherit the no-op default, so the call is
@@ -466,8 +481,10 @@ QJsonObject Store::defaultsToJson() const
     // means the DEFAULT arrives coerced. Mirror that here, or a KeyDef whose
     // default's typeId differs from its expectedType in a JSON-visible way
     // (a string-typed key defaulting to an int: "2" vs 2) would silently diff
-    // at default. The Store constructor asserts that mismatch in debug builds;
-    // this keeps the two snapshots aligned in release builds regardless.
+    // at default. The Store constructor enforces that the two typeIds agree
+    // (debug assert; release builds convert the default in place), so the
+    // scalar mirror below is belt-and-braces for defaults the constructor
+    // could not convert.
     const auto coerced = [](const KeyDef& def) -> QVariant {
         switch (def.expectedType != QMetaType::UnknownType ? static_cast<int>(def.expectedType)
                                                            : def.defaultValue.typeId()) {
@@ -559,6 +576,11 @@ bool Store::importFromJson(const QJsonObject& snapshot)
                     value = converted;
                 }
             }
+            // Deliberately unconditional: re-writing an unchanged value marks
+            // the backend's internal dirty flag, but upstream dirty tracking
+            // is value-based (Settings::isKeyModified) and change notification
+            // is emit-on-change, so the redundant write is harmless and a
+            // per-key read-compare here would double the import cost.
             write(git.key(), def.key, value);
         }
     }

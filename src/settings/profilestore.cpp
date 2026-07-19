@@ -434,20 +434,22 @@ QJsonObject ProfileStore::readIndex() const
     return doc.isObject() ? doc.object() : QJsonObject();
 }
 
-void ProfileStore::writeIndex(const QJsonObject& index)
+bool ProfileStore::writeIndex(const QJsonObject& index)
 {
     const QString dir = profilesDirectory();
     const QString path = indexFilePath();
     if (path.isEmpty() || dir.isEmpty() || !QDir().mkpath(dir)) {
         qCWarning(lcConfig) << "ProfileStore: cannot write index.json under" << dir;
-        return;
+        return false;
     }
     QSaveFile file(path);
     const QByteArray payload = QJsonDocument(index).toJson(QJsonDocument::Indented);
     if (!(file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(payload) == payload.size()
           && file.commit())) {
         qCWarning(lcConfig) << "ProfileStore: could not write index.json:" << file.errorString();
+        return false;
     }
+    return true;
 }
 
 QList<QUuid> ProfileStore::readOrder() const
@@ -496,11 +498,11 @@ QString ProfileStore::committedActiveId() const
     return readIndex().value(kProfActiveKey).toString();
 }
 
-void ProfileStore::writeActiveId(const QString& id)
+bool ProfileStore::writeActiveId(const QString& id)
 {
     QJsonObject index = readIndex();
     index.insert(kProfActiveKey, id.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(id));
-    writeIndex(index);
+    return writeIndex(index);
 }
 
 // ── Query ─────────────────────────────────────────────────────────────────────
@@ -792,6 +794,10 @@ QString ProfileStore::duplicateProfile(const QString& id)
     }
     Record rec = all.value(uid);
     rec.id = QUuid::createUuid();
+    // ruleUpserts is copied verbatim, so the clone shares Rule::ids with the
+    // original. Intentional: each profile resolves its own independent chain,
+    // and the shared id is what lets the clone keep overriding the same parent
+    // rule its source did.
     rec.name = uniqueName(PhosphorI18n::tr("%1 (copy)").arg(rec.name), all);
     if (rec.name.isEmpty()) {
         return QString();

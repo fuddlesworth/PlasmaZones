@@ -238,7 +238,7 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         // the tiling triggers live in Tiling.Behavior itself.
         for (const QString& group : {CD::snappingBehaviorGroup(), CD::snappingBehaviorZoneSpanGroup(),
                                      CD::snappingBehaviorSnapAssistGroup(), CD::tilingBehaviorGroup()}) {
-            t.insert(pairKey(group, ConfigKeys::triggersKey()), idKind(ValueKind::Trigger));
+            t.insert(pairKey(group, CD::triggersKey()), idKind(ValueKind::Trigger));
         }
         t.insert(pairKey(CD::editorSnappingGroup(), CD::overrideModifierKey()), idKind(ValueKind::Trigger));
         t.insert(pairKey(CD::editorFillOnDropGroup(), CD::modifierKey()), idKind(ValueKind::Trigger));

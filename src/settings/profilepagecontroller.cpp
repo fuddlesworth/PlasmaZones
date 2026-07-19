@@ -6,6 +6,7 @@
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"
 #include "../config/settings.h"
+#include "../phosphor_i18n.h"
 #include "profilestore.h"
 #include "rulecontroller.h"
 #include "rulemodel.h"
@@ -77,7 +78,12 @@ void ProfilePageController::updateStagedActive(const QString& id)
 void ProfilePageController::apply()
 {
     if (m_stagedActiveId != m_committedActiveId) {
-        m_store->writeActiveId(m_stagedActiveId);
+        if (!m_store->writeActiveId(m_stagedActiveId)) {
+            // Keep the staged pointer (and the dirty state) so Save can be
+            // retried instead of reporting a success that never hit disk.
+            Q_EMIT applyResult(false, PhosphorI18n::tr("Could not save the active profile selection."));
+            return;
+        }
         m_committedActiveId = m_stagedActiveId;
         Q_EMIT dirtyChanged();
     }

@@ -27,9 +27,12 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QSaveFile>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUuid>
+
+#include <algorithm>
 
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/RuleAction.h>
@@ -690,6 +693,77 @@ private Q_SLOTS:
         QCOMPARE(signatureByName.value(QStringLiteral("Same")), signatureByName.value(QStringLiteral("R")));
         // Diverged cascade → different mark.
         QVERIFY(signatureByName.value(QStringLiteral("Diff")) != signatureByName.value(QStringLiteral("R")));
+    }
+
+    /// Deleting the profile that is BOTH staged and committed active clears
+    /// both pointers: the staged one drives the UI, and a dangling committed
+    /// one in index.json would be re-adopted as staged on next launch.
+    void deleteActiveProfileClearsPointers()
+    {
+        m_current = baseDefaults();
+        const QString id = m_store->createProfile(QStringLiteral("Active"), QString(), QString());
+        QCOMPARE(m_staged, id); // createProfile stages the new profile
+        QVERIFY(m_store->writeActiveId(id)); // and Save commits it
+        QCOMPARE(m_store->committedActiveId(), id);
+
+        QVERIFY(m_store->removeProfile(id));
+        QVERIFY(m_staged.isEmpty());
+        QVERIFY(m_store->committedActiveId().isEmpty());
+    }
+
+    /// An empty or whitespace-only name is refused: nothing is created and the
+    /// failure surfaces as a toast.
+    void emptyNameRefused()
+    {
+        m_current = baseDefaults();
+        QSignalSpy toasts(m_store, &ProfileStore::toastRequested);
+        QVERIFY(m_store->createProfile(QString(), QString(), QString()).isEmpty());
+        QVERIFY(m_store->createProfile(QStringLiteral("   "), QString(), QString()).isEmpty());
+        QCOMPARE(m_store->availableProfiles().size(), 0);
+        QCOMPARE(toasts.count(), 2);
+    }
+
+    /// A colliding display name is uniquified with a numeric suffix rather than
+    /// refused — profiles are keyed by uuid, so nothing is overwritten.
+    void duplicateNameUniquified()
+    {
+        m_current = baseDefaults();
+        const QString first = m_store->createProfile(QStringLiteral("Work"), QString(), QString());
+        const QString second = m_store->createProfile(QStringLiteral("Work"), QString(), QString());
+        QVERIFY(!second.isEmpty());
+        QVERIFY(first != second);
+
+        QStringList names;
+        for (const QVariant& v : m_store->availableProfiles()) {
+            names.append(v.toMap().value(QStringLiteral("name")).toString());
+        }
+        std::sort(names.begin(), names.end());
+        QCOMPARE(names, (QStringList{QStringLiteral("Work"), QStringLiteral("Work (2)")}));
+    }
+
+    /// An unparseable profile file (or one whose root is not an object) is
+    /// skipped on load and refused on import, instead of surfacing a phantom
+    /// row or aborting the whole scan.
+    void corruptFileSkipped()
+    {
+        const QString path = m_dir->path() + QLatin1Char('/') + QUuid::createUuid().toString(QUuid::WithoutBraces)
+            + QStringLiteral(".json");
+        {
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("{ not json at all ///");
+        }
+        QCOMPARE(m_store->availableProfiles().size(), 0);
+        QVERIFY(m_store->importProfile(path).isEmpty());
+
+        // A well-formed document with a non-object root is equally refused.
+        {
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            f.write("[1, 2, 3]");
+        }
+        QCOMPARE(m_store->availableProfiles().size(), 0);
+        QVERIFY(m_store->importProfile(path).isEmpty());
     }
 };
 

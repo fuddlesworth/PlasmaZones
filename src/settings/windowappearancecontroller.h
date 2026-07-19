@@ -79,14 +79,10 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
     Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
 
-    // ── "Apply to" scope tokens (single source: PhosphorCompositor::WindowAppearanceScope) ──
-    // The QML "Apply to" pickers pair each token with an i18n label; exposing the
-    // tokens here keeps them in lockstep with the schema validator and the effect.
-
     // ── Border colour sentinel + fallback (single source: ConfigDefaults) ──
     // The "follow the system accent" sentinel and the concrete colour the page
     // seeds when the user leaves accent mode. Exposed here so QML never hardcodes
-    // either literal, mirroring the scope-token treatment above.
+    // either literal.
     Q_PROPERTY(QString accentColorToken READ accentColorToken CONSTANT)
     Q_PROPERTY(QString defaultBorderColorHex READ defaultBorderColorHex CONSTANT)
 

@@ -268,6 +268,17 @@ ColumnLayout {
                                 border.width: 1
                                 border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
+                                // Long-form payload on hover — the pill elides at the
+                                // column edge, the tooltip carries the whole value.
+                                HoverHandler {
+                                    id: pillHover
+
+                                    enabled: (pairRow.modelData.detail || "") !== ""
+                                }
+                                ToolTip.visible: pillHover.hovered
+                                ToolTip.text: pairRow.modelData.detail || ""
+                                ToolTip.delay: Kirigami.Units.toolTipDelay
+
                                 RowLayout {
                                     id: pillContent
 

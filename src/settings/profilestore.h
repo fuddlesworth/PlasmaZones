@@ -191,7 +191,9 @@ public:
     /// The COMMITTED active id from index.json (the controller's Discard target).
     QString committedActiveId() const;
     /// Persist @p id as the committed active id in index.json (called on Save).
-    void writeActiveId(const QString& id);
+    /// False when index.json could not be written, so the caller can keep the
+    /// staged pointer dirty and report the failure instead of claiming success.
+    bool writeActiveId(const QString& id);
 
 Q_SIGNALS:
     /// Any change to the saved-profile list or the staged active id. QML
@@ -298,7 +300,8 @@ private:
     QString uniqueName(const QString& desired, const QHash<QUuid, Record>& all, const QUuid& excludeId = QUuid()) const;
 
     QJsonObject readIndex() const;
-    void writeIndex(const QJsonObject& index);
+    /// False when the directory or file could not be written (already logged).
+    bool writeIndex(const QJsonObject& index);
 
     /// The one path every mutation uses to announce itself: drops the signature
     /// cache (signatures derive from the profile FILES, so any file mutation

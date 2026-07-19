@@ -17,7 +17,8 @@ import org.kde.kirigami as Kirigami
  *
  * Talks to `settingsController.profilesPage.bridge` (a PlasmaZones::ProfileStore):
  *   QVariantList availableProfiles()   // rows: id, name, description,
- *                                      //   parentId, parentName, isRoot, active
+ *                                      //   parentId, parentName, isRoot, depth,
+ *                                      //   active, modified, signature
  *   QString createProfile(name, description, parentId)
  *   bool    renameProfile(id, newName, description)
  *   QString duplicateProfile(id)
@@ -182,7 +183,10 @@ SettingsFlickable {
 
                         Layout.fillWidth: true
                         model: root.parentOptions
-                        currentIndex: 0
+                        // No `currentIndex: 0` binding: the ComboBox default is
+                        // already 0, and _saveCurrent() resets the selection
+                        // imperatively after a save — a binding here would just
+                        // be severed by that write.
                         Accessible.name: i18n("Parent profile")
                     }
 
