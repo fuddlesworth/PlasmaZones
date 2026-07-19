@@ -277,7 +277,6 @@ ColumnLayout {
                                 }
                                 ToolTip.visible: pillHover.hovered
                                 ToolTip.text: pairRow.modelData.detail || ""
-                                ToolTip.delay: Kirigami.Units.toolTipDelay
 
                                 RowLayout {
                                     id: pillContent
