@@ -1362,20 +1362,12 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // activates the window its current desktop is already updated, and
     // fire-and-forget calls share one ordered D-Bus connection, so reporting
     // here guarantees the daemon switches context first. reportScreenDesktop
-    // dedups, so outside a desktop switch this is a no-op. Resolve the output
-    // by window position, mirroring getWindowScreenId (Discussion #724:
-    // w->screen() can disagree with the daemon on identical-model outputs).
-    {
-        const QPointF cf = w->frameGeometry().center();
-        const QPoint c(qRound(cf.x()), qRound(cf.y()));
-        KWin::LogicalOutput* output = KWin::effects->screenAt(c);
-        if (!output) {
-            output = w->screen();
-        }
-        if (output) {
-            if (auto* vd = KWin::effects->currentDesktop(output)) {
-                reportScreenDesktop(outputScreenId(output), static_cast<int>(vd->x11DesktopNumber()));
-            }
+    // dedups, so outside a desktop switch this is a no-op. windowOutput
+    // resolves by window position (Discussion #724: w->screen() can disagree
+    // with the daemon on identical-model outputs).
+    if (KWin::LogicalOutput* output = windowOutput(w)) {
+        if (auto* vd = KWin::effects->currentDesktop(output)) {
+            reportScreenDesktop(outputScreenId(output), static_cast<int>(vd->x11DesktopNumber()));
         }
     }
 
