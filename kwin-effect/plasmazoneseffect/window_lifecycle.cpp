@@ -1351,6 +1351,34 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     QString windowId = getWindowId(w);
     QString screenId = getWindowScreenId(w);
 
+    // Push the output's current desktop BEFORE the activation notifies. On a
+    // virtual-desktop switch KWin activates the destination desktop's
+    // last-focused window before EffectsHandler::desktopChanged fires, so the
+    // daemon would otherwise process this focus event while its per-screen
+    // desktop context still points at the desktop the user just left — the
+    // autotile engine then sees a same-screen context mismatch and migrates
+    // the activated window into the WRONG desktop's tiling state (discussion
+    // #728: cross-desktop tile leak on rapid switching). By the time KWin
+    // activates the window its current desktop is already updated, and
+    // fire-and-forget calls share one ordered D-Bus connection, so reporting
+    // here guarantees the daemon switches context first. reportScreenDesktop
+    // dedups, so outside a desktop switch this is a no-op. Resolve the output
+    // by window position, mirroring getWindowScreenId (Discussion #724:
+    // w->screen() can disagree with the daemon on identical-model outputs).
+    {
+        const QPointF cf = w->frameGeometry().center();
+        const QPoint c(qRound(cf.x()), qRound(cf.y()));
+        KWin::LogicalOutput* output = KWin::effects->screenAt(c);
+        if (!output) {
+            output = w->screen();
+        }
+        if (output) {
+            if (auto* vd = KWin::effects->currentDesktop(output)) {
+                reportScreenDesktop(outputScreenId(output), static_cast<int>(vd->x11DesktopNumber()));
+            }
+        }
+    }
+
     qCDebug(lcEffect) << "Notifying daemon: windowActivated" << windowId << "on screen" << screenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                    QStringLiteral("windowActivated"), {windowId, screenId});
