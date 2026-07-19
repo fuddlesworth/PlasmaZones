@@ -73,7 +73,8 @@ MigrationRunner::MigrationRunner(const Schema& schema)
     // runInMemory doesn't pay the sort cost on every call. Stable sort
     // preserves the relative order of any (illegal but possible) duplicate
     // fromVersion entries — the runner skips the second one anyway (after the
-    // first bumps the version, the duplicate's fromVersion no longer matches).
+    // first bumps the version, the duplicate's fromVersion no longer matches,
+    // or the target-reached break fires first when the bump hit the target).
     // Short-circuit on 0/1 steps (the common case: single-version or
     // freshly-introduced schema) to avoid spinning up a comparator.
     if (m_orderedSteps.size() > 1) {

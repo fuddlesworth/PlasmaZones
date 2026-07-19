@@ -66,6 +66,22 @@ ProfilePageController::ProfilePageController(Settings& settings, RuleController&
     // Seed both pointers from the committed value on disk so the page starts clean.
     m_committedActiveId = m_store->committedActiveId();
     m_stagedActiveId = m_committedActiveId;
+
+    // Track every committed-pointer write, including the ones the store makes
+    // on its own (removeProfile clears the pointer when the active profile is
+    // deleted). Without this the cached copy goes stale: the page reads
+    // spuriously dirty and a Discard would resurrect the deleted id as the
+    // staged pointer.
+    connect(m_store, &ProfileStore::committedActiveIdChanged, this, [this](const QString& id) {
+        if (m_committedActiveId == id) {
+            return;
+        }
+        const bool wasDirty = isDirty();
+        m_committedActiveId = id;
+        if (isDirty() != wasDirty) {
+            Q_EMIT dirtyChanged();
+        }
+    });
 }
 
 void ProfilePageController::updateStagedActive(const QString& id)
@@ -89,8 +105,8 @@ void ProfilePageController::apply()
             Q_EMIT applyResult(false, PhosphorI18n::tr("Could not save the active profile selection."));
             return;
         }
-        m_committedActiveId = m_stagedActiveId;
-        Q_EMIT dirtyChanged();
+        // m_committedActiveId and dirtyChanged are handled by the
+        // committedActiveIdChanged connection writeActiveId just fired.
     }
     // Synchronous domain — the framework's async batch driver waits on this.
     Q_EMIT applyResult(true, QString());

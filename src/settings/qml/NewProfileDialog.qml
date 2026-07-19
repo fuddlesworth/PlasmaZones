@@ -63,6 +63,19 @@ Kirigami.Dialog {
         standardButton(Kirigami.Dialog.Ok).enabled = Qt.binding(function () {
             return root._acceptable;
         });
+        // Seed the parent picker imperatively on every open. A declarative
+        // currentIndex binding would be severed the first time the user picks
+        // an item (ComboBox assigns currentIndex internally), and this dialog
+        // is a single reused instance — a severed binding would show, and
+        // silently commit, the previous invocation's parent.
+        let seeded = 0;
+        for (let i = 0; i < root._parentModel.length; ++i) {
+            if (root._parentModel[i].id === root.parentId) {
+                seeded = i;
+                break;
+            }
+        }
+        parentCombo.currentIndex = seeded;
         if (root._showName)
             nameField.forceActiveFocus();
         else
@@ -117,13 +130,8 @@ Kirigami.Dialog {
             Layout.minimumWidth: Kirigami.Units.gridUnit * 18
             model: root._parentModel
             Accessible.name: i18n("Parent profile")
-            currentIndex: {
-                for (let i = 0; i < root._parentModel.length; ++i) {
-                    if (root._parentModel[i].id === root.parentId)
-                        return i;
-                }
-                return 0;
-            }
+            // currentIndex is seeded imperatively in root.onOpened — see the
+            // note there; a binding here would not survive the first user pick.
         }
 
         Label {

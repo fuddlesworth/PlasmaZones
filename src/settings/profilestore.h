@@ -226,6 +226,12 @@ Q_SIGNALS:
     /// reloads availableProfiles() on this.
     void profilesChanged();
 
+    /// The committed active pointer in index.json changed (empty = none).
+    /// Emitted from writeActiveId — the ONE path that persists the pointer —
+    /// so the controller's cached copy stays in lockstep even when the store
+    /// clears the pointer itself (removeProfile deleting the active profile).
+    void committedActiveIdChanged(const QString& id);
+
     /// User-facing failure reason for the chrome toast.
     void toastRequested(const QString& text);
 

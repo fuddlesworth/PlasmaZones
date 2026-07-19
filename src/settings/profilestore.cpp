@@ -508,7 +508,11 @@ bool ProfileStore::writeActiveId(const QString& id)
 {
     QJsonObject index = readIndex();
     index.insert(kProfActiveKey, id.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(id));
-    return writeIndex(index);
+    if (!writeIndex(index)) {
+        return false;
+    }
+    Q_EMIT committedActiveIdChanged(id);
+    return true;
 }
 
 // ── Query ─────────────────────────────────────────────────────────────────────
@@ -783,6 +787,9 @@ bool ProfileStore::renameProfile(const QString& id, const QString& newName, cons
         return false;
     }
     Record rec = all.value(uid);
+    if (rec.name == finalName && rec.description == description.trimmed()) {
+        return true; // no-op, like setParent's same-parent guard
+    }
     rec.name = finalName;
     rec.description = description.trimmed();
     if (!writeProfileRecord(rec)) {

@@ -415,14 +415,19 @@ void Store::reset(const QString& group, const QString& key)
     if (!def) {
         return;
     }
-    auto g = d->backend->group(group);
-    if (!g->hasKey(key)) {
-        // Key isn't on disk, so the read path already returns the default.
-        // Skipping the write avoids stamping a default-valued key and dirtying
-        // the backend on otherwise-idempotent reset() calls.
-        return;
+    // Scope the group handle like write() does: a changed() slot that writes
+    // re-entrantly would otherwise hit the backend's single-active-group guard
+    // while this handle is still alive.
+    {
+        auto g = d->backend->group(group);
+        if (!g->hasKey(key)) {
+            // Key isn't on disk, so the read path already returns the default.
+            // Skipping the write avoids stamping a default-valued key and
+            // dirtying the backend on otherwise-idempotent reset() calls.
+            return;
+        }
+        writeVariantTo(*g, key, def->defaultValue);
     }
-    writeVariantTo(*g, key, def->defaultValue);
     Q_EMIT changed(group, key);
 }
 
@@ -433,17 +438,25 @@ void Store::resetGroup(const QString& group)
         return;
     }
     // Hold a single IGroup for the whole group so we don't pay the
-    // resolver/path-walk cost once per declared key.
-    auto g = d->backend->group(group);
-    for (const KeyDef& def : *it) {
-        // Skip absent keys for the same reason as reset() — otherwise
-        // resetGroup() on a pristine install stamps every default to disk
-        // with no observable behavior change but a full file rewrite.
-        if (!g->hasKey(def.key)) {
-            continue;
+    // resolver/path-walk cost once per declared key — but release it before
+    // emitting, like write(), so a changed() slot that writes re-entrantly
+    // doesn't hit the backend's single-active-group guard.
+    QStringList resetKeys;
+    {
+        auto g = d->backend->group(group);
+        for (const KeyDef& def : *it) {
+            // Skip absent keys for the same reason as reset() — otherwise
+            // resetGroup() on a pristine install stamps every default to disk
+            // with no observable behavior change but a full file rewrite.
+            if (!g->hasKey(def.key)) {
+                continue;
+            }
+            writeVariantTo(*g, def.key, def.defaultValue);
+            resetKeys.append(def.key);
         }
-        writeVariantTo(*g, def.key, def.defaultValue);
-        Q_EMIT changed(group, def.key);
+    }
+    for (const QString& key : resetKeys) {
+        Q_EMIT changed(group, key);
     }
 }
 

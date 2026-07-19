@@ -306,17 +306,34 @@ private Q_SLOTS:
         QVERIFY(m_store->importProfile(path).isEmpty());
     }
 
-    /// The committed active pointer round-trips through index.json.
+    /// The committed active pointer round-trips through index.json, and every
+    /// successful write announces itself via committedActiveIdChanged so the
+    /// page controller's cached copy can never go stale (removeProfile clears
+    /// the pointer store-side when the active profile is deleted).
     void activePointerRoundTrip()
     {
         m_current = baseDefaults();
         const QString id = m_store->createProfile(QStringLiteral("P"), QString(), QString());
         QVERIFY(m_store->committedActiveId().isEmpty());
 
+        QSignalSpy committedSpy(m_store, &ProfileStore::committedActiveIdChanged);
         m_store->writeActiveId(id);
         QCOMPARE(m_store->committedActiveId(), id);
+        QCOMPARE(committedSpy.count(), 1);
+        QCOMPARE(committedSpy.last().first().toString(), id);
 
         m_store->writeActiveId(QString());
+        QVERIFY(m_store->committedActiveId().isEmpty());
+        QCOMPARE(committedSpy.count(), 2);
+        QVERIFY(committedSpy.last().first().toString().isEmpty());
+
+        // Deleting the committed-active profile clears the pointer through the
+        // same funnel, so the change is announced too.
+        m_store->writeActiveId(id);
+        QCOMPARE(committedSpy.count(), 3);
+        QVERIFY(m_store->removeProfile(id));
+        QCOMPARE(committedSpy.count(), 4);
+        QVERIFY(committedSpy.last().first().toString().isEmpty());
         QVERIFY(m_store->committedActiveId().isEmpty());
     }
 
