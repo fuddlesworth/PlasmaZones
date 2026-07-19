@@ -62,6 +62,29 @@ PhosphorUi.SettingsAppWindow {
             "super-ultrawide": aspectRatioLabelsObject.superUltrawide,
             "portrait": aspectRatioLabelsObject.portrait
         })
+    // Name of the profile a pending (staged, unsaved) switch would apply,
+    // refreshed from the bridge on profilesChanged — every staged-active
+    // mutation announces itself through that signal. Empty when no profile
+    // switch is pending or the switch clears the active profile.
+    property string _pendingProfileName
+
+    // Make the Save footer say what Save will actually do when the batch
+    // includes a profile switch: a plain "Unsaved changes" hides that the
+    // staged edits ARE the selected profile's settings.
+    unsavedChangesMessage: settingsController.profilesPage && settingsController.profilesPage.dirty && window._pendingProfileName.length > 0 ? i18n("Unsaved changes. Saving applies the profile “%1”.", window._pendingProfileName) : ""
+
+    function _refreshPendingProfileName() {
+        const page = settingsController.profilesPage;
+        const rows = page && page.bridge ? page.bridge.availableProfiles() : [];
+        for (let i = 0; i < rows.length; ++i) {
+            if (rows[i].active) {
+                window._pendingProfileName = rows[i].name;
+                return;
+            }
+        }
+        window._pendingProfileName = "";
+    }
+
     // Keyboard-shortcut overlay state.
     property bool _showShortcuts: false
 
@@ -134,12 +157,17 @@ PhosphorUi.SettingsAppWindow {
 
     // The profile store's refusals also cross pages: the sticky sidebar
     // switcher can activate a profile from anywhere, so a schema-mismatch
-    // toast raised on, say, the Snapping page must still surface.
+    // toast raised on, say, the Snapping page must still surface. The same
+    // scope applies to the staged-active name the footer message shows.
     Connections {
         target: settingsController.profilesPage ? settingsController.profilesPage.bridge : null
 
         function onToastRequested(text) {
             window.showToast(text);
+        }
+
+        function onProfilesChanged() {
+            window._refreshPendingProfileName();
         }
     }
 
