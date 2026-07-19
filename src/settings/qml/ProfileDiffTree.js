@@ -38,7 +38,9 @@ function buildRows(rows) {
             node = child;
         }
         node.entries = source.entries;
-        node.source = source;
+        // The input row's OWN `source` field (the store row a revert hands
+        // back), not the whole view row — the view row nests it.
+        node.source = source.source !== undefined ? source.source : null;
     }
 
     _factorSuffixes(rootNode);
