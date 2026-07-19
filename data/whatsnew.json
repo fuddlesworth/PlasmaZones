@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.2.5",
+            "date": "2026-07-19",
+            "highlights": [
+                "Fixed: switching between virtual desktops that each have their own tiled windows could pull a window into the wrong desktop's tiling, leaving ghost tiles behind and windows overlapping. Each desktop now keeps its own layout intact (#806)"
+            ]
+        },
+        {
             "version": "3.2.4",
             "date": "2026-07-18",
             "highlights": [

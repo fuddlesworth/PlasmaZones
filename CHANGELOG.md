@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.5] - 2026-07-19
+
+### Fixed
+
+- **Tiled windows no longer scramble when switching virtual desktops**: switching between desktops that each have their own tiled windows could pull a window into the wrong desktop's tiling, leaving ghost tiles on one desktop and overlapping or floating windows on the other. The tiling state now switches to the new desktop before any window focus is processed, so each desktop keeps its own layout intact ([#806](https://github.com/fuddlesworth/PlasmaZones/pull/806)).
+
 ## [3.2.4] - 2026-07-18
 
 ### Fixed
