@@ -15,7 +15,301 @@
         <translation>Добавить зону</translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="592"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="102"/>
+        <source>Open Zone Editor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="107"/>
+        <source>Open Settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="112"/>
+        <source>Previous Layout</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="117"/>
+        <source>Next Layout</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="124"/>
+        <source>Move Window Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="129"/>
+        <source>Move Window Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="134"/>
+        <source>Move Window Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="139"/>
+        <source>Move Window Down</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="146"/>
+        <source>Focus Zone Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="151"/>
+        <source>Focus Zone Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="156"/>
+        <source>Focus Zone Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="161"/>
+        <source>Focus Zone Down</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="168"/>
+        <source>Move Window to Empty Zone</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="173"/>
+        <source>Restore Window Size</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="178"/>
+        <source>Toggle Window Floating</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="185"/>
+        <source>Swap Window Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="190"/>
+        <source>Swap Window Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="195"/>
+        <source>Swap Window Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="200"/>
+        <source>Swap Window Down</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="207"/>
+        <source>Swap Virtual Screen Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="212"/>
+        <source>Swap Virtual Screen Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="217"/>
+        <source>Swap Virtual Screen Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="222"/>
+        <source>Swap Virtual Screen Down</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="230"/>
+        <source>Rotate Virtual Screens Clockwise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="236"/>
+        <source>Rotate Virtual Screens Counterclockwise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="243"/>
+        <source>Rotate Windows Clockwise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="249"/>
+        <source>Rotate Windows Counterclockwise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="256"/>
+        <source>Cycle Window Forward in Zone</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="261"/>
+        <source>Cycle Window Backward in Zone</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="268"/>
+        <source>Reapply Layout to Windows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="273"/>
+        <source>Snap All Windows to Zones</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="278"/>
+        <source>Open Layout Picker</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="283"/>
+        <source>Toggle Layout Lock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="290"/>
+        <source>Toggle Autotile</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="295"/>
+        <source>Focus Master Window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="300"/>
+        <source>Swap with Master</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="305"/>
+        <source>Increase Master Ratio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="310"/>
+        <source>Decrease Master Ratio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="315"/>
+        <source>Increase Master Count</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="320"/>
+        <source>Decrease Master Count</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="325"/>
+        <source>Retile Windows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="332"/>
+        <source>Open Shortcut Cheatsheet</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="400"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="401"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="456"/>
+        <source>Snap to Zone</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="418"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="434"/>
+        <source>Rotate Clockwise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="420"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="436"/>
+        <source>Rotate Counterclockwise</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="422"/>
+        <source>Cycle Forward in Zone</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="424"/>
+        <source>Cycle Backward in Zone</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="426"/>
+        <source>Swap Screen Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="428"/>
+        <source>Swap Screen Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="430"/>
+        <source>Swap Screen Up</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="432"/>
+        <source>Swap Screen Down</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="748"/>
+        <source>Arrows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="758"/>
+        <source>Apply Layout 1-9</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="759"/>
+        <source>Snap to Zone 1-9</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="763"/>
+        <source>Move Window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="768"/>
+        <source>Focus Zone</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="773"/>
+        <source>Swap Window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="779"/>
+        <source>Swap Screens</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="873"/>
         <source>Apply Layout %1</source>
         <translation>Применить раскладку %1</translation>
     </message>
@@ -277,6 +571,11 @@
         <translation>Раскладка не назначена</translation>
     </message>
     <message>
+        <location filename="../src/daemon/daemon/osd.cpp" line="756"/>
+        <source>Dismiss Shortcut Cheatsheet</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/editor/controller/layout.cpp" line="498"/>
         <source>Layout service not initialized</source>
         <translation>Служба раскладок не инициализирована</translation>
@@ -398,7 +697,7 @@
         <translation>Службы не инициализированы</translation>
     </message>
     <message>
-        <location filename="../src/daemon/shortcutmanager.cpp" line="610"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="891"/>
         <source>Snap to Zone %1</source>
         <translation>Прилепить к зоне %1</translation>
     </message>
@@ -681,18 +980,18 @@
         <translation>Невозможно изменить наборы, пока выполняется отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="342"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="329"/>
         <source>Cannot save while a discard is in progress.</source>
         <translation>Невозможно сохранить, пока выполняется отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="507"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="560"/>
         <location filename="../src/settings/rulecontroller.cpp" line="150"/>
         <source>Discard already in flight.</source>
         <translation>Отмена изменений уже выполняется.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/animationspagecontroller.cpp" line="575"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="630"/>
         <source>Could not restore %n profile file(s). They remain pending.</source>
         <translation>
             <numerusform>Не удалось восстановить %n файл профиля. Он остаётся в ожидании.</numerusform>
@@ -701,13 +1000,13 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="709"/>
-        <location filename="../src/settings/animationspagecontroller.cpp" line="719"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="764"/>
+        <location filename="../src/settings/animationspagecontroller.cpp" line="774"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation>Невозможно изменить предустановки, пока выполняется отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/animationspagecontroller_shaders.cpp" line="165"/>
+        <location filename="../src/settings/animationspagecontroller_shaders.cpp" line="138"/>
         <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="98"/>
         <source>Could not create the user shader directory.</source>
         <translation>Не удалось создать пользовательский каталог шейдеров.</translation>
@@ -771,22 +1070,22 @@
         <translation>В файле не найдено допустимых раскладок</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="108"/>
+        <location filename="../src/settings/main.cpp" line="110"/>
         <source>PlasmaZones Settings</source>
         <translation>Параметры PlasmaZones</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="113"/>
+        <location filename="../src/settings/main.cpp" line="115"/>
         <source>Open a specific settings page</source>
         <translation>Открыть определённую страницу параметров</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="116"/>
+        <location filename="../src/settings/main.cpp" line="118"/>
         <source>Reveal a specific setting on the page (deep link)</source>
         <translation>Показать определённый параметр на странице (прямая ссылка)</translation>
     </message>
     <message>
-        <location filename="../src/settings/main.cpp" line="120"/>
+        <location filename="../src/settings/main.cpp" line="122"/>
         <source>Reveal a specific section on the page (deep link)</source>
         <translation>Показать определённый раздел на странице (прямая ссылка)</translation>
     </message>
@@ -815,7 +1114,7 @@
         <location filename="../src/settings/ruleauthoring.cpp" line="238"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="243"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="788"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="147"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="155"/>
         <source>Tiling</source>
         <translation>Мозаичное размещение</translation>
     </message>
@@ -830,6 +1129,7 @@
         <translation>Контекст</translation>
     </message>
     <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="461"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="106"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="218"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="260"/>
@@ -1018,13 +1318,13 @@
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="226"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="402"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="406"/>
         <source>Gaps</source>
         <translation>Зазоры</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="249"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="168"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="176"/>
         <source>Overlay</source>
         <translation>Наложение</translation>
     </message>
@@ -1035,15 +1335,15 @@
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="255"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="97"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="174"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="105"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="182"/>
         <source>Appearance</source>
         <translation>Внешний вид</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="258"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="188"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="212"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="196"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="220"/>
         <source>Window</source>
         <translation>Окно</translation>
     </message>
@@ -1108,7 +1408,7 @@
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="348"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="411"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
         <source>Border color</source>
         <translation>Цвет рамки</translation>
     </message>
@@ -1179,7 +1479,7 @@
         <location filename="../src/settings/ruleauthoring.cpp" line="432"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="764"/>
         <location filename="../src/settings/rulemodel.cpp" line="902"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="260"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="268"/>
         <source>Desktop</source>
         <translation>Рабочий стол</translation>
     </message>
@@ -1213,11 +1513,18 @@
         <location filename="../src/settings/ruleauthoring.cpp" line="787"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="834"/>
         <location filename="../src/settings/rulemodel.cpp" line="241"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="145"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="153"/>
         <source>Snapping</source>
         <translation>Прилипание</translation>
     </message>
     <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="437"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="438"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="439"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="440"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="441"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="442"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="443"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="837"/>
         <location filename="../src/settings/rulemodel.cpp" line="243"/>
         <source>Autotile</source>
@@ -1311,7 +1618,7 @@
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="357"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="353"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="357"/>
         <source>Tint color</source>
         <translation>Цвет оттенка</translation>
     </message>
@@ -1517,7 +1824,7 @@
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="652"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="905"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="356"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="360"/>
         <source>Hide title bars</source>
         <translation>Скрывать заголовки окон</translation>
     </message>
@@ -1827,14 +2134,15 @@
         <translation>Одно или несколько правил не прошли проверку и не были сохранены. Подробности см. в журнале.</translation>
     </message>
     <message>
+        <location filename="../src/settings/profilestore.cpp" line="838"/>
         <location filename="../src/settings/rulecontroller.cpp" line="657"/>
         <source>%1 (copy)</source>
         <translation>%1 (копия)</translation>
     </message>
     <message>
-        <location filename="../src/settings/rulemodel.cpp" line="164"/>
-        <location filename="../src/settings/rulemodel.cpp" line="171"/>
-        <location filename="../src/settings/rulemodel.cpp" line="179"/>
+        <location filename="../src/settings/rulemodel.cpp" line="165"/>
+        <location filename="../src/settings/rulemodel.cpp" line="172"/>
+        <location filename="../src/settings/rulemodel.cpp" line="180"/>
         <location filename="../src/settings/rulemodel.cpp" line="206"/>
         <location filename="../src/settings/rulemodel.cpp" line="214"/>
         <location filename="../src/settings/rulemodel.cpp" line="219"/>
@@ -1913,8 +2221,8 @@
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="345"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="276"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="345"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="280"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
         <source>Opacity</source>
         <translation>Непрозрачность</translation>
     </message>
@@ -2043,7 +2351,7 @@
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="920"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="411"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="415"/>
         <source>Per-side outer gaps</source>
         <translation>Внешние зазоры для каждой стороны</translation>
     </message>
@@ -2069,7 +2377,7 @@
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="454"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="348"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="352"/>
         <source>Tint strength</source>
         <translation>Сила оттенка</translation>
     </message>
@@ -2190,6 +2498,7 @@
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="625"/>
+        <location filename="../src/settings/rulemodel.cpp" line="1118"/>
         <source>Everywhere</source>
         <translation>Везде</translation>
     </message>
@@ -2210,7 +2519,7 @@
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="863"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="107"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="115"/>
         <source>Animations</source>
         <translation>Анимации</translation>
     </message>
@@ -2271,19 +2580,19 @@
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="894"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="629"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="633"/>
         <source>Maximized</source>
         <translation>Развёрнуто</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="896"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="620"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="624"/>
         <source>Minimized</source>
         <translation>Свёрнуто</translation>
     </message>
     <message>
         <location filename="../src/settings/rulemodel.cpp" line="898"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="622"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="626"/>
         <source>Focused</source>
         <translation>В фокусе</translation>
     </message>
@@ -2392,7 +2701,7 @@
     </message>
     <message>
         <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="50"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="315"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="323"/>
         <source>Popups</source>
         <translation>Всплывающие окна</translation>
     </message>
@@ -2619,15 +2928,15 @@
         <location filename="../src/settings/searchcatalog.cpp" line="56"/>
         <location filename="../src/settings/searchcatalog.cpp" line="64"/>
         <location filename="../src/settings/searchcatalog.cpp" line="170"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="228"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="437"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="232"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="441"/>
         <source>monitor</source>
         <translation>экран</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="56"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="435"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="447"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="439"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="451"/>
         <source>display</source>
         <translation>дисплей</translation>
     </message>
@@ -2653,13 +2962,13 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="59"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="185"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="189"/>
         <source>opengl</source>
         <translation>opengl</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="60"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="185"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="189"/>
         <source>vulkan</source>
         <translation>vulkan</translation>
     </message>
@@ -2670,13 +2979,15 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="60"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="550"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="173"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="554"/>
         <source>export</source>
         <translation>экспорт</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="61"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="552"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="173"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="556"/>
         <source>import</source>
         <translation>импорт</translation>
     </message>
@@ -2687,7 +2998,7 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="63"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="486"/>
         <source>split</source>
         <translation>разделение</translation>
     </message>
@@ -2703,7 +3014,7 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="66"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="172"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="176"/>
         <source>layout</source>
         <translation>раскладка</translation>
     </message>
@@ -2714,7 +3025,7 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="66"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="567"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="571"/>
         <source>grid</source>
         <translation>сетка</translation>
     </message>
@@ -2722,6 +3033,7 @@
         <location filename="../src/settings/searchcatalog.cpp" line="67"/>
         <location filename="../src/settings/searchcatalog.cpp" line="138"/>
         <location filename="../src/settings/searchcatalog.cpp" line="155"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="172"/>
         <source>preset</source>
         <translation>предустановка</translation>
     </message>
@@ -2738,21 +3050,21 @@
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="75"/>
         <location filename="../src/settings/searchcatalog.cpp" line="125"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="422"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
         <source>overlay</source>
         <translation>наложение</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="75"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="422"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
         <source>trigger</source>
         <translation>триггер</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="75"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="409"/>
         <location filename="../src/settings/searchcatalog.cpp" line="413"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="562"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="566"/>
         <source>edge</source>
         <translation>край</translation>
     </message>
@@ -2776,17 +3088,17 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="78"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="285"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="288"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="290"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="289"/>
         <location filename="../src/settings/searchcatalog.cpp" line="292"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="307"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="332"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="335"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="338"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="352"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="354"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="294"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="311"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="336"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="339"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="342"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="353"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="356"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="358"/>
         <source>colour</source>
         <translation>цвет</translation>
     </message>
@@ -2797,18 +3109,18 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="79"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="298"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="302"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="304"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="347"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="350"/>
         <source>transparency</source>
         <translation>прозрачность</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="79"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="285"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="332"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="352"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="289"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="336"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="356"/>
         <source>theme</source>
         <translation>тема</translation>
     </message>
@@ -2817,9 +3129,9 @@
         <location filename="../src/settings/searchcatalog.cpp" line="147"/>
         <location filename="../src/settings/searchcatalog.cpp" line="159"/>
         <location filename="../src/settings/searchcatalog.cpp" line="164"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="329"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="392"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="330"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="333"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="396"/>
         <source>border</source>
         <translation>рамка</translation>
     </message>
@@ -2830,8 +3142,8 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="81"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="442"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="557"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="446"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="561"/>
         <source>picker</source>
         <translation>выбор</translation>
     </message>
@@ -2844,7 +3156,7 @@
         <location filename="../src/settings/searchcatalog.cpp" line="82"/>
         <location filename="../src/settings/searchcatalog.cpp" line="125"/>
         <location filename="../src/settings/searchcatalog.cpp" line="153"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="240"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="244"/>
         <source>popup</source>
         <translation>всплывающее окно</translation>
     </message>
@@ -2866,9 +3178,9 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="85"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="424"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="444"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="448"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="501"/>
         <source>modifier</source>
         <translation>модификатор</translation>
     </message>
@@ -2889,7 +3201,7 @@
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="87"/>
         <location filename="../src/settings/searchcatalog.cpp" line="102"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="501"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="505"/>
         <source>order</source>
         <translation>порядок</translation>
     </message>
@@ -2948,7 +3260,7 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="96"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="235"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
         <source>tiling</source>
         <translation>мозаичное размещение</translation>
     </message>
@@ -2960,20 +3272,20 @@
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="97"/>
         <location filename="../src/settings/searchcatalog.cpp" line="166"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="404"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="407"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="408"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="411"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="416"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="421"/>
         <source>gap</source>
         <translation>зазор</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="97"/>
         <location filename="../src/settings/searchcatalog.cpp" line="167"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="404"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="407"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="408"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="411"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="416"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="421"/>
         <source>spacing</source>
         <translation>интервал</translation>
     </message>
@@ -2999,15 +3311,15 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="100"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="481"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="489"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="485"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="493"/>
         <source>master</source>
         <translation>главная область</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="100"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="494"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="497"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="498"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="501"/>
         <source>stack</source>
         <translation>стопка</translation>
     </message>
@@ -3017,8 +3329,8 @@
         <location filename="../src/settings/searchcatalog.cpp" line="125"/>
         <location filename="../src/settings/searchcatalog.cpp" line="133"/>
         <location filename="../src/settings/searchcatalog.cpp" line="136"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="188"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="317"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="192"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="321"/>
         <source>animation</source>
         <translation>анимация</translation>
     </message>
@@ -3108,7 +3420,7 @@
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="123"/>
         <location filename="../src/settings/searchcatalog.cpp" line="151"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="542"/>
         <source>on-screen display</source>
         <translation>экранное сообщение</translation>
     </message>
@@ -3129,18 +3441,19 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="128"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="173"/>
         <source>switch</source>
         <translation>переключение</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="128"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="663"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="667"/>
         <source>peek</source>
         <translation>заглянуть</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="129"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="663"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="667"/>
         <source>show desktop</source>
         <translation>показать рабочий стол</translation>
     </message>
@@ -3166,7 +3479,7 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="136"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="172"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="176"/>
         <source>editor</source>
         <translation>редактор</translation>
     </message>
@@ -3179,6 +3492,7 @@
         <location filename="../src/settings/searchcatalog.cpp" line="139"/>
         <location filename="../src/settings/searchcatalog.cpp" line="141"/>
         <location filename="../src/settings/searchcatalog.cpp" line="156"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="172"/>
         <source>profile</source>
         <translation>профиль</translation>
     </message>
@@ -3186,6 +3500,22 @@
         <location filename="../src/settings/searchcatalog.cpp" line="141"/>
         <source>motion set</source>
         <translation>набор движений</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="722"/>
+        <source>Save current settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="724"/>
+        <source>Import a profile</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="725"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="85"/>
+        <source>Profiles</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="116"/>
@@ -3203,7 +3533,7 @@
         <location filename="../src/settings/searchcatalog.cpp" line="151"/>
         <location filename="../src/settings/searchcatalog.cpp" line="153"/>
         <location filename="../src/settings/searchcatalog.cpp" line="165"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="357"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="361"/>
         <source>decoration</source>
         <translation>оформление</translation>
     </message>
@@ -3216,27 +3546,27 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="166"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="404"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="407"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="408"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="411"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="416"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="421"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="507"/>
         <source>gaps</source>
         <translation>зазоры</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="167"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="408"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="413"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="409"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
         <source>padding</source>
         <translation>отступ</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="167"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="408"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="413"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="409"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="417"/>
         <source>margin</source>
         <translation>поле</translation>
     </message>
@@ -3252,7 +3582,7 @@
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="169"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="510"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="514"/>
         <source>float</source>
         <translation>сделать плавающим</translation>
     </message>
@@ -3262,360 +3592,360 @@
         <translation>комната</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="172"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="176"/>
         <source>design</source>
         <translation>оформление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="173"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="177"/>
         <source>zones</source>
         <translation>зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="175"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="179"/>
         <source>about</source>
         <translation>о программе</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="175"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="179"/>
         <source>version</source>
         <translation>версия</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="175"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="179"/>
         <source>license</source>
         <translation>лицензия</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="176"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="180"/>
         <source>credits</source>
         <translation>авторы</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="182"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="186"/>
         <source>Rendering</source>
         <translation>Отрисовка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="184"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="188"/>
         <source>Rendering backend</source>
         <translation>Движок отрисовки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="185"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="189"/>
         <source>graphics</source>
         <translation>графика</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="237"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="388"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="241"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="392"/>
         <source>Window filtering</source>
         <translation>Фильтрация окон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="239"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="390"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="533"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="243"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="537"/>
         <source>Exclude transient windows</source>
         <translation>Исключать вспомогательные окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="240"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="244"/>
         <source>dialog</source>
         <translation>диалоговое окно</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="153"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="240"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="244"/>
         <source>tooltip</source>
         <translation>подсказка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="251"/>
         <source>Reset</source>
         <translation>Сбросить</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="248"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="252"/>
         <source>reset to defaults</source>
         <translation>сбросить к значениям по умолчанию</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="248"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="252"/>
         <source>defaults</source>
         <translation>значения по умолчанию</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="248"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="459"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="252"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="463"/>
         <source>restore</source>
         <translation>восстановить</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="254"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="266"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="258"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="270"/>
         <source>Triggers</source>
         <translation>Триггеры</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="256"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="260"/>
         <source>Zone Span</source>
         <translation>Охват зон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="258"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="85"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="262"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="93"/>
         <source>Display</source>
         <translation>Отображение</translation>
     </message>
     <message>
         <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="52"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="261"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="265"/>
         <source>Snap Assist</source>
         <translation>Помощник прилипания</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="263"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="268"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="267"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="272"/>
         <source>Window Handling</source>
         <translation>Обработка окон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="264"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="269"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="268"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="273"/>
         <source>Focus</source>
         <translation>Фокус</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="274"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="278"/>
         <source>Colors</source>
         <translation>Цвета</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="278"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="282"/>
         <source>Border</source>
         <translation>Рамка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="280"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="284"/>
         <source>Zone Labels</source>
         <translation>Подписи зон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="282"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="286"/>
         <source>Effects</source>
         <translation>Эффекты</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="186"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="190"/>
         <source>Shader Effects</source>
         <translation>Эффекты шейдеров</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="284"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="288"/>
         <source>System accent color</source>
         <translation>Системный акцентный цвет</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="285"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="332"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="352"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="289"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="336"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="356"/>
         <source>scheme</source>
         <translation>схема</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="405"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="287"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="291"/>
         <source>Highlight color</source>
         <translation>Цвет подсветки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="288"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
         <source>active</source>
         <translation>активный</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="288"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
         <source>hover</source>
         <translation>наведение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="290"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="294"/>
         <source>Inactive color</source>
         <translation>Цвет неактивной зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="290"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="338"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="294"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="342"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="367"/>
         <source>unfocused</source>
         <translation>без фокуса</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="292"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="335"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="338"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="339"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="342"/>
         <source>outline</source>
         <translation>контур</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="295"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="299"/>
         <source>Import colors</source>
         <translation>Импорт цветов</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
         <source>pywal</source>
         <translation>pywal</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
         <source>json</source>
         <translation>json</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="296"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="552"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="556"/>
         <source>load</source>
         <translation>загрузить</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="298"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="302"/>
         <source>Active opacity</source>
         <translation>Непрозрачность активной зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="298"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="302"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="304"/>
         <source>alpha</source>
         <translation>альфа</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="300"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="304"/>
         <source>Inactive opacity</source>
         <translation>Непрозрачность неактивной зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="302"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="324"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
         <source>Border width</source>
         <translation>Ширина рамки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="302"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="324"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
         <source>thickness</source>
         <translation>толщина</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="243"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="246"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="302"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="312"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="324"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="395"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="486"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="544"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="250"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="316"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="399"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="402"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="490"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="545"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="548"/>
         <source>size</source>
         <translation>размер</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="304"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
         <source>Border radius</source>
         <translation>Радиус скругления</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="304"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="330"/>
         <source>rounding</source>
         <translation>скругление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="304"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
         <source>corner</source>
         <translation>угол</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="306"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="310"/>
         <source>Label color</source>
         <translation>Цвет надписи</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="307"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="312"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="311"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="316"/>
         <source>text</source>
         <translation>текст</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="307"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="311"/>
         <source>font</source>
         <translation>шрифт</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="308"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="312"/>
         <source>Font</source>
         <translation>Шрифт</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="309"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
         <source>typeface</source>
         <translation>гарнитура</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="309"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
         <source>family</source>
         <translation>семейство</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="309"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="313"/>
         <source>style</source>
         <translation>начертание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="311"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="315"/>
         <source>Label scale</source>
         <translation>Масштаб надписи</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="312"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="316"/>
         <source>multiplier</source>
         <translation>множитель</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="314"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="318"/>
         <source>Zone numbers</source>
         <translation>Номера зон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="315"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="319"/>
         <source>index</source>
         <translation>индекс</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="315"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="319"/>
         <source>digit</source>
         <translation>цифра</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="315"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="319"/>
         <source>label</source>
         <translation>надпись</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="317"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="321"/>
         <source>Flash on layout switch</source>
         <translation>Мигать при переключении раскладки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="317"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="321"/>
         <source>blink</source>
         <translation>мигание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="187"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="191"/>
         <source>Frame rate</source>
         <translation>Частота кадров</translation>
     </message>
@@ -3657,1427 +3987,1443 @@
         <translation>размытие</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="188"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="172"/>
+        <source>profiles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="174"/>
+        <source>inherit</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="174"/>
+        <source>create</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="192"/>
         <source>fps</source>
         <translation>fps</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="188"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="192"/>
         <source>refresh</source>
         <translation>обновление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="189"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="193"/>
         <source>Audio Spectrum</source>
         <translation>Звуковой спектр</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="191"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="195"/>
         <source>Audio spectrum</source>
         <translation>Звуковой спектр</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="192"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="195"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="198"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="201"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="203"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="206"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="209"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="196"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="199"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="205"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="207"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="210"/>
         <location filename="../src/settings/searchcatalog.cpp" line="213"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="216"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="218"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="221"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="223"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="220"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="222"/>
         <location filename="../src/settings/searchcatalog.cpp" line="225"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="228"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="227"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="229"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="232"/>
         <source>cava</source>
         <translation>cava</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="192"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="196"/>
         <source>music</source>
         <translation>музыка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="192"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="196"/>
         <source>visualizer</source>
         <translation>визуализатор</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="193"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="197"/>
         <source>sound</source>
         <translation>звук</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="194"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="198"/>
         <source>Spectrum bars</source>
         <translation>Полосы спектра</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="195"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="199"/>
         <source>bands</source>
         <translation>полосы</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="195"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="209"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="199"/>
         <location filename="../src/settings/searchcatalog.cpp" line="213"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
         <source>frequency</source>
         <translation>частота</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="197"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="201"/>
         <source>Noise reduction</source>
         <translation>Шумоподавление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="198"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="201"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="205"/>
         <source>smoothing</source>
         <translation>сглаживание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="198"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="201"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="221"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="205"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="225"/>
         <source>smooth</source>
         <translation>плавный</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="200"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="204"/>
         <source>Extra smoothing</source>
         <translation>Дополнительное сглаживание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="202"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="206"/>
         <source>Automatic gain</source>
         <translation>Автоматическое усиление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="203"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="207"/>
         <source>autosens</source>
         <translation>авточувствительность</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="203"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="207"/>
         <source>sensitivity</source>
         <translation>чувствительность</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="204"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="206"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="208"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="210"/>
         <source>gain</source>
         <translation>усиление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="205"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="209"/>
         <source>Sensitivity</source>
         <translation>Чувствительность</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="208"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="212"/>
         <source>Lowest frequency</source>
         <translation>Нижняя частота</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="209"/>
         <location filename="../src/settings/searchcatalog.cpp" line="213"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
         <source>cutoff</source>
         <translation>срез</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="210"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="214"/>
         <source>bass</source>
         <translation>бас</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="212"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="216"/>
         <source>Highest frequency</source>
         <translation>Верхняя частота</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="214"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="218"/>
         <source>treble</source>
         <translation>высокие частоты</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="215"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="219"/>
         <source>Channels</source>
         <translation>Каналы</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="216"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="220"/>
         <source>stereo</source>
         <translation>стерео</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="216"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="220"/>
         <source>mono</source>
         <translation>моно</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="217"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="221"/>
         <source>Reverse bar order</source>
         <translation>Обратный порядок полос</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="218"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="222"/>
         <source>flip</source>
         <translation>перевернуть</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="218"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="222"/>
         <source>mirror</source>
         <translation>зеркально</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="220"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="224"/>
         <source>Monstercat filter</source>
         <translation>Фильтр Monstercat</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="221"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="223"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="225"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="227"/>
         <source>filter</source>
         <translation>фильтр</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="222"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="226"/>
         <source>Wave filter</source>
         <translation>Волновой фильтр</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="223"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="227"/>
         <source>wave</source>
         <translation>волна</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="224"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="228"/>
         <source>Audio backend</source>
         <translation>Звуковой движок</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="225"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="229"/>
         <source>pipewire</source>
         <translation>pipewire</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="225"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="229"/>
         <source>pulseaudio</source>
         <translation>pulseaudio</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="226"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="229"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="230"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="233"/>
         <source>capture</source>
         <translation>захват</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="227"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="231"/>
         <source>Audio source</source>
         <translation>Источник звука</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="228"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="232"/>
         <source>device</source>
         <translation>устройство</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="231"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="235"/>
         <source>Layout assignment</source>
         <translation>Назначение раскладки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="233"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="237"/>
         <source>Don&apos;t assign a layout by default</source>
         <translation>Не назначать раскладку по умолчанию</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="234"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="238"/>
         <source>default</source>
         <translation>по умолчанию</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="234"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="238"/>
         <source>assign</source>
         <translation>назначить</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="234"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="238"/>
         <source>snapping</source>
         <translation>прилипание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="320"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="324"/>
         <source>Borders</source>
         <translation>Рамки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="322"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="123"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="131"/>
         <source>Decorations</source>
         <translation>Оформление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="326"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="330"/>
         <source>Corner radius</source>
         <translation>Радиус скругления углов</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="328"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="332"/>
         <source>Apply borders to</source>
         <translation>Применять рамки к</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="329"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="360"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="333"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="347"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="364"/>
         <source>scope</source>
         <translation>область действия</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="329"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="343"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="360"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="333"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="347"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="364"/>
         <source>which windows</source>
         <translation>какие окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="331"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="335"/>
         <source>Use system accent color</source>
         <translation>Использовать акцентный цвет системы</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="334"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="338"/>
         <source>Active border color</source>
         <translation>Цвет рамки активного окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="335"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="339"/>
         <source>focused</source>
         <translation>в фокусе</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="337"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="341"/>
         <source>Inactive border color</source>
         <translation>Цвет рамки неактивного окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="340"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="344"/>
         <source>Opacity and tint</source>
         <translation>Непрозрачность и оттенок</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="342"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
         <source>Apply opacity and tint to</source>
         <translation>Применять непрозрачность и оттенок к</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="350"/>
         <source>translucent</source>
         <translation>полупрозрачный</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="354"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="353"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="358"/>
         <source>wash</source>
         <translation>заливка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="349"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="353"/>
         <source>blend</source>
         <translation>смешивание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="351"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="355"/>
         <source>Use system accent color for the tint</source>
         <translation>Использовать акцентный цвет системы для оттенка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="354"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="358"/>
         <source>accent</source>
         <translation>акцент</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="357"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="360"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="361"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="364"/>
         <source>titlebar</source>
         <translation>заголовок окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="357"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="361"/>
         <source>header</source>
         <translation>шапка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="359"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
         <source>Hide title bars on</source>
         <translation>Скрывать заголовки окон на</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="362"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="366"/>
         <source>Focus fade duration</source>
         <translation>Длительность плавного изменения фокуса</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="346"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="350"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="367"/>
         <source>fade</source>
         <translation>плавное появление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="363"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="367"/>
         <source>dim</source>
         <translation>затемнение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="364"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="368"/>
         <source>cross-fade</source>
         <translation>перекрёстное затухание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="370"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="374"/>
         <source>Performance</source>
         <translation>Производительность</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="372"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="376"/>
         <source>Animate only the active window</source>
         <translation>Анимировать только активное окно</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
         <location filename="../src/settings/searchcatalog.cpp" line="377"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
         <source>performance</source>
         <translation>производительность</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
         <location filename="../src/settings/searchcatalog.cpp" line="377"/>
         <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
         <source>power</source>
         <translation>энергопотребление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="373"/>
         <location filename="../src/settings/searchcatalog.cpp" line="377"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="382"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="386"/>
         <source>battery</source>
         <translation>батарея</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="374"/>
         <location filename="../src/settings/searchcatalog.cpp" line="378"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="382"/>
         <source>gpu</source>
         <translation>gpu</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="374"/>
         <location filename="../src/settings/searchcatalog.cpp" line="378"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="382"/>
         <source>heat</source>
         <translation>нагрев</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="376"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="380"/>
         <source>Pause while you are away</source>
         <translation>Приостанавливать, когда вас нет</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="378"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="382"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
         <source>idle</source>
         <translation>простой</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="380"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="384"/>
         <source>Idle after</source>
         <translation>Простой через</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="381"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="385"/>
         <source>timeout</source>
         <translation>тайм-аут</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="403"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="407"/>
         <source>Inner gap</source>
         <translation>Внутренний зазор</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="405"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="409"/>
         <source>inner</source>
         <translation>внутренний</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="406"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="410"/>
         <source>Outer gap</source>
         <translation>Внешний зазор</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="408"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="412"/>
         <source>outer</source>
         <translation>внешний</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="414"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="418"/>
         <source>side</source>
         <translation>сторона</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="416"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="420"/>
         <source>Smart gaps</source>
         <translation>Умные зазоры</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="418"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="422"/>
         <source>smart</source>
         <translation>умный</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="418"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="422"/>
         <source>single</source>
         <translation>одиночный</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="422"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
         <source>Activate on every drag</source>
         <translation>Активировать при каждом перетаскивании</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="424"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
         <source>Hold to activate</source>
         <translation>Удерживать для активации</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="424"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
         <source>deactivate</source>
         <translation>деактивировать</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
         <location filename="../src/settings/searchcatalog.cpp" line="430"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="499"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="434"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
         <source>Toggle mode</source>
         <translation>Режим переключения</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
         <location filename="../src/settings/searchcatalog.cpp" line="430"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="499"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="434"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
         <source>tap</source>
         <translation>касание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="426"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="430"/>
         <source>activation</source>
         <translation>активация</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="432"/>
         <source>Span modifier</source>
         <translation>Модификатор охвата</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="432"/>
         <source>zone span</source>
         <translation>охват зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="428"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="432"/>
         <source>paint</source>
         <translation>рисование</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="430"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="434"/>
         <source>span</source>
         <translation>охват</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="432"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="436"/>
         <source>Edge threshold</source>
         <translation>Порог у края</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="432"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="562"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="436"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="566"/>
         <source>distance</source>
         <translation>расстояние</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="432"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="436"/>
         <source>multi-zone</source>
         <translation>несколько зон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="434"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="438"/>
         <source>Show zones on all monitors</source>
         <translation>Показывать зоны на всех экранах</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="435"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="439"/>
         <source>screens</source>
         <translation>экраны</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="437"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="441"/>
         <source>Filter by aspect ratio</source>
         <translation>Фильтр по соотношению сторон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="437"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="453"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="441"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="457"/>
         <source>layouts</source>
         <translation>раскладки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="441"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="445"/>
         <source>Always show after snapping</source>
         <translation>Всегда показывать после прилипания</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="442"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="444"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="446"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="448"/>
         <source>snap assist</source>
         <translation>помощник прилипания</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="444"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="448"/>
         <source>Hold to enable</source>
         <translation>Удерживать для включения</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="446"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="450"/>
         <source>Re-snap on resolution change</source>
         <translation>Заново прилеплять при смене разрешения</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="447"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="451"/>
         <source>resolution</source>
         <translation>разрешение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="449"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="453"/>
         <source>Open new windows in the last-used zone</source>
         <translation>Открывать новые окна в последней использованной зоне</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="450"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="514"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="454"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="473"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="518"/>
         <source>new window</source>
         <translation>новое окно</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="450"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="454"/>
         <source>last zone</source>
         <translation>последняя зона</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="452"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="456"/>
         <source>Auto-assign new windows for all layouts</source>
         <translation>Автоматически назначать новые окна для всех раскладок</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="453"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="457"/>
         <source>auto-assign</source>
         <translation>автоназначение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="603"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="609"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="607"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="613"/>
         <source>User sets</source>
         <translation>Наборы пользователя</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="616"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="620"/>
         <source>Opened</source>
         <translation>Открыто</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="618"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="622"/>
         <source>Closed</source>
         <translation>Закрыто</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="626"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="630"/>
         <source>Dragged</source>
         <translation>Перетащено</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="631"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="635"/>
         <source>Snapped Into Zone</source>
         <translation>Прилеплено к зоне</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="633"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="637"/>
         <source>Snapped Out of Zone</source>
         <translation>Откреплено от зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="635"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="639"/>
         <source>Layout Switched</source>
         <translation>Раскладка переключена</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="637"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="641"/>
         <source>Shown</source>
         <translation>Показано</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="638"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="642"/>
         <source>Hidden</source>
         <translation>Скрыто</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="639"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="643"/>
         <source>Emphasized</source>
         <translation>С акцентом</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="642"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="646"/>
         <source>Zone Selector Shown</source>
         <translation>Выбор зоны показан</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="644"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="648"/>
         <source>Zone Selector Hidden</source>
         <translation>Выбор зоны скрыт</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="646"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="650"/>
         <source>Layout Picker Shown</source>
         <translation>Выбор раскладки показан</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="648"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="652"/>
         <source>Layout Picker Hidden</source>
         <translation>Выбор раскладки скрыт</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="650"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="654"/>
         <source>Snap Assist Shown</source>
         <translation>Помощник прилипания показан</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="652"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="656"/>
         <source>Snap Assist Hidden</source>
         <translation>Помощник прилипания скрыт</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="655"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="659"/>
         <source>Desktop Switched</source>
         <translation>Рабочий стол переключён</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="593"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="902"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="455"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="459"/>
         <source>Restore size on unsnap</source>
         <translation>Восстанавливать размер при откреплении</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="456"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="460"/>
         <source>unsnap</source>
         <translation>открепление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="456"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="460"/>
         <source>original size</source>
         <translation>исходный размер</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="458"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="462"/>
         <source>Restore windows to their previous zone</source>
         <translation>Восстанавливать окна в их предыдущую зону</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="459"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="463"/>
         <source>login</source>
         <translation>вход в систему</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="461"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
         <source>Restore unsnapped windows to their previous position</source>
         <translation>Восстанавливать откреплённые окна в их предыдущее положение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="462"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="506"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="466"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="510"/>
         <source>floated</source>
         <translation>плавающее</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="462"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="501"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="506"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="466"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="505"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="510"/>
         <source>position</source>
         <translation>положение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="464"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="468"/>
         <source>Unfloat to a zone when there is no previous zone</source>
         <translation>Прилеплять к зоне, когда предыдущей зоны нет</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
         <source>unfloat</source>
         <translation>сделать не плавающим</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="465"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
         <source>fallback</source>
         <translation>запасной вариант</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="508"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
         <source>Sticky windows</source>
         <translation>Окна на всех рабочих столах</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="508"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
         <source>all desktops</source>
         <translation>все рабочие столы</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="467"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="508"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
         <source>sticky</source>
         <translation>на всех рабочих столах</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="514"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="473"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="518"/>
         <source>Focus new windows</source>
         <translation>Передавать фокус новым окнам</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="114"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="374"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="469"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="514"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="378"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="473"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="475"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="518"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="520"/>
         <source>focus</source>
         <translation>фокус</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="475"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="520"/>
         <source>Focus follows mouse</source>
         <translation>Фокус следует за мышью</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="471"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="475"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="520"/>
         <source>pointer</source>
         <translation>указатель</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="238"/>
         <location filename="../src/settings/ruleauthoring.cpp" line="283"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="474"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="219"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="478"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="227"/>
         <source>Algorithm</source>
         <translation>Алгоритм</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="476"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="480"/>
         <source>Max windows</source>
         <translation>Максимум окон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="477"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="481"/>
         <source>windows</source>
         <translation>окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="477"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="481"/>
         <source>maximum</source>
         <translation>максимум</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="477"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="489"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="570"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="481"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="493"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="574"/>
         <source>count</source>
         <translation>количество</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="478"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
         <source>limit</source>
         <translation>предел</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="480"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="484"/>
         <source>Master ratio</source>
         <translation>Соотношение главной области</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="481"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="489"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="485"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="493"/>
         <source>center</source>
         <translation>центр</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="481"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="486"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="485"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="490"/>
         <source>ratio</source>
         <translation>соотношение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="482"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="486"/>
         <source>proportion</source>
         <translation>пропорция</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="485"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="489"/>
         <source>Ratio step size</source>
         <translation>Шаг изменения соотношения</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="486"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="490"/>
         <source>step</source>
         <translation>шаг</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="486"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="490"/>
         <source>increment</source>
         <translation>приращение</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="292"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="488"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="492"/>
         <source>Master count</source>
         <translation>Число главных окон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="490"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="494"/>
         <source>number</source>
         <translation>число</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="494"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="498"/>
         <source>Always re-insert on drag</source>
         <translation>Всегда вставлять заново при перетаскивании</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="494"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="498"/>
         <source>insert</source>
         <translation>вставка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="496"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="500"/>
         <source>Hold to re-insert into stack</source>
         <translation>Удерживать для вставки обратно в стопку</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="499"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
         <source>stack preview</source>
         <translation>предпросмотр стопки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="501"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="505"/>
         <source>New window placement</source>
         <translation>Размещение новых окон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="507"/>
         <source>Respect minimum size</source>
         <translation>Учитывать минимальный размер</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="503"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="507"/>
         <source>minimum</source>
         <translation>минимум</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="505"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="509"/>
         <source>Restore untiled windows to their previous position</source>
         <translation>Восстанавливать неразмещённые окна в их предыдущее положение</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="301"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="510"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="514"/>
         <source>Drag behavior</source>
         <translation>Поведение при перетаскивании</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="510"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="514"/>
         <source>reorder</source>
         <translation>переупорядочивание</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="298"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
         <source>Overflow behavior</source>
         <translation>Поведение при переполнении</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
         <source>max windows</source>
         <translation>максимум окон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="512"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="516"/>
         <source>unlimited</source>
         <translation>без ограничений</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="520"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="524"/>
         <source>Global animation defaults</source>
         <translation>Глобальные параметры анимации по умолчанию</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="522"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="526"/>
         <source>Multiple windows</source>
         <translation>Несколько окон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="523"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="527"/>
         <source>sequence</source>
         <translation>последовательность</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="523"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="527"/>
         <source>simultaneous</source>
         <translation>одновременно</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="523"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="527"/>
         <source>one by one</source>
         <translation>по очереди</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="525"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="529"/>
         <source>Stagger delay</source>
         <translation>Задержка между окнами</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="526"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="530"/>
         <source>pause</source>
         <translation>пауза</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="526"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="530"/>
         <source>interval</source>
         <translation>интервал</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="526"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="530"/>
         <source>delay</source>
         <translation>задержка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="528"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="532"/>
         <source>Minimum distance</source>
         <translation>Минимальное расстояние</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="243"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="246"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="395"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="398"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="529"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="544"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="250"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="399"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="402"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="533"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="545"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="548"/>
         <source>threshold</source>
         <translation>порог</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="529"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="533"/>
         <source>skip</source>
         <translation>пропустить</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="529"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="533"/>
         <source>geometry</source>
         <translation>геометрия</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="531"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="535"/>
         <source>Window Filtering</source>
         <translation>Фильтрация окон</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="391"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="534"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="395"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
         <source>dialogs</source>
         <translation>диалоги</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="391"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="534"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="395"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
         <source>popups</source>
         <translation>всплывающие окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="534"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
         <source>tooltips</source>
         <translation>подсказки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="391"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="535"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="395"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="539"/>
         <source>menus</source>
         <translation>меню</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="537"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
         <source>Exclude notifications and OSDs</source>
         <translation>Исключить уведомления и OSD</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="542"/>
         <source>volume</source>
         <translation>громкость</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="538"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="542"/>
         <source>brightness</source>
         <translation>яркость</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="242"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="394"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="540"/>
-        <source>Minimum window width</source>
-        <translation>Минимальная ширина окна</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="243"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="395"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="541"/>
-        <source>narrow</source>
-        <translation>узкое</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="245"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="397"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="543"/>
-        <source>Minimum window height</source>
-        <translation>Минимальная высота окна</translation>
     </message>
     <message>
         <location filename="../src/settings/searchcatalog.cpp" line="246"/>
         <location filename="../src/settings/searchcatalog.cpp" line="398"/>
         <location filename="../src/settings/searchcatalog.cpp" line="544"/>
+        <source>Minimum window width</source>
+        <translation>Минимальная ширина окна</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="247"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="399"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="545"/>
+        <source>narrow</source>
+        <translation>узкое</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="249"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="401"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="547"/>
+        <source>Minimum window height</source>
+        <translation>Минимальная высота окна</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchcatalog.cpp" line="250"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="402"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="548"/>
         <source>short</source>
         <translation>низкое</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="548"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="192"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="223"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="552"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="200"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="231"/>
         <source>Configuration</source>
         <translation>Настройка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="549"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="553"/>
         <source>Backup</source>
         <translation>Резервная копия</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="550"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="174"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="554"/>
         <source>save</source>
         <translation>сохранить</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="550"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="552"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="554"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="556"/>
         <source>data</source>
         <translation>данные</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="551"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="555"/>
         <source>Restore</source>
         <translation>Восстановить</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="556"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="560"/>
         <source>Zone selector popup</source>
         <translation>Всплывающее окно выбора зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="557"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="561"/>
         <source>enable</source>
         <translation>включить</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="557"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="561"/>
         <source>toggle</source>
         <translation>переключить</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="559"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="563"/>
         <source>Position &amp; Trigger</source>
         <translation>Положение и триггер</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="561"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="565"/>
         <source>Trigger distance</source>
         <translation>Расстояние срабатывания</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="562"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="566"/>
         <source>proximity</source>
         <translation>близость</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="564"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="568"/>
         <source>Layout Arrangement</source>
         <translation>Расположение раскладки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="566"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="570"/>
         <source>Arrangement</source>
         <translation>Расположение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="567"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="571"/>
         <source>horizontal</source>
         <translation>горизонтальное</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="567"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="571"/>
         <source>vertical</source>
         <translation>вертикальное</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="569"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="573"/>
         <source>Grid columns</source>
         <translation>Столбцы сетки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="570"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="574"/>
         <source>columns</source>
         <translation>столбцы</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="570"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="574"/>
         <source>per row</source>
         <translation>в строке</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="572"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="576"/>
         <source>Max visible rows</source>
         <translation>Максимум видимых строк</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="573"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="577"/>
         <source>rows</source>
         <translation>строки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="573"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="577"/>
         <source>scroll</source>
         <translation>прокрутка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="573"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="577"/>
         <source>visible</source>
         <translation>видимых</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="575"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="579"/>
         <source>Preview Size</source>
         <translation>Размер предпросмотра</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="579"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="583"/>
         <source>Snapping Layout Priority</source>
         <translation>Приоритет раскладок при прилипании</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="581"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="585"/>
         <source>Tiling Algorithm Priority</source>
         <translation>Приоритет алгоритмов мозаичного размещения</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="583"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="587"/>
         <source>Snapping Quick Shortcuts</source>
         <translation>Быстрые комбинации клавиш прилипания</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="585"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="589"/>
         <source>Tiling Quick Shortcuts</source>
         <translation>Быстрые комбинации клавиш мозаичного размещения</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="591"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="593"/>
         <location filename="../src/settings/searchcatalog.cpp" line="595"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="597"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="599"/>
         <source>User shaders</source>
         <translation>Пользовательские шейдеры</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="597"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="601"/>
         <source>Easing Presets</source>
         <translation>Предустановки плавности</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="599"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="603"/>
         <source>Spring Presets</source>
         <translation>Предустановки пружины</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="601"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="607"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="605"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="611"/>
         <source>Save current state</source>
         <translation>Сохранить текущее состояние</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="605"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="611"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="609"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="615"/>
         <source>Saved sets</source>
         <translation>Сохранённые наборы</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="663"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="667"/>
         <source>Peeked at Desktop</source>
         <translation>Заглядывание на рабочий стол</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="713"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="717"/>
         <source>Snap Out of Zone</source>
         <translation>Открепление от зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="665"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="669"/>
         <source>Slide In</source>
         <translation>Вдвигание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="667"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="671"/>
         <source>Slide Out</source>
         <translation>Выдвигание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="669"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="687"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="673"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="691"/>
         <source>Fade In</source>
         <translation>Появление</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="671"/>
-        <location filename="../src/settings/searchcatalog.cpp" line="689"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="675"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
         <source>Fade Out</source>
         <translation>Исчезание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="672"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="676"/>
         <source>Hover</source>
         <translation>Наведение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="673"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="677"/>
         <source>Press</source>
         <translation>Нажатие</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="675"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="679"/>
         <source>Toggle On</source>
         <translation>Включение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="677"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="681"/>
         <source>Toggle Off</source>
         <translation>Отключение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="679"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="683"/>
         <source>Show (badge)</source>
         <translation>Показ (значок)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="681"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="685"/>
         <source>Hide (badge)</source>
         <translation>Скрытие (значок)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="683"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="687"/>
         <source>Pulse (badge)</source>
         <translation>Пульсация (значок)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="684"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="688"/>
         <source>Tint</source>
         <translation>Оттенок</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="685"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="689"/>
         <source>Dim</source>
         <translation>Затемнение</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="691"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="695"/>
         <source>Reorder</source>
         <translation>Переупорядочивание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="693"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="697"/>
         <source>Expand (accordion)</source>
         <translation>Разворачивание (аккордеон)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="695"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="699"/>
         <source>Collapse (accordion)</source>
         <translation>Сворачивание (аккордеон)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="697"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="701"/>
         <source>Progress</source>
         <translation>Прогресс</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="699"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="703"/>
         <source>Zone Highlight</source>
         <translation>Подсветка зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="701"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="705"/>
         <source>Zone Highlight: Pop</source>
         <translation>Подсветка зоны: всплывание</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="703"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="707"/>
         <source>Zone Highlight: Border</source>
         <translation>Подсветка зоны: рамка</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="705"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="709"/>
         <source>Zone Overlay: Layout-Switch Flash</source>
         <translation>Наложение зоны: вспышка при смене раскладки</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="707"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="711"/>
         <source>Cursor Hover</source>
         <translation>Наведение курсора</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="709"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="713"/>
         <source>Cursor Click</source>
         <translation>Щелчок курсора</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="711"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="715"/>
         <source>Snap Into Zone (Fill Preview)</source>
         <translation>Прилипание к зоне (предпросмотр заполнения)</translation>
     </message>
     <message>
-        <location filename="../src/settings/searchcatalog.cpp" line="715"/>
+        <location filename="../src/settings/searchcatalog.cpp" line="719"/>
         <source>Snap Resize (Drag Preview)</source>
         <translation>Изменение размера прилипанием (предпросмотр перетаскивания)</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller.cpp" line="661"/>
+        <location filename="../src/settings/settingscontroller.cpp" line="717"/>
         <source>Zone %1</source>
         <translation>Зона %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller.cpp" line="663"/>
+        <location filename="../src/settings/settingscontroller.cpp" line="719"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
@@ -5137,160 +5483,194 @@
         <translation>Не удалось обновить соотношение сторон: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_lifecycle.cpp" line="187"/>
+        <location filename="../src/settings/settingscontroller_lifecycle.cpp" line="200"/>
         <source>Failed to apply assignment changes: %1</source>
         <translation>Не удалось применить изменения назначения: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="77"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="78"/>
         <source>Overview</source>
         <translation>Обзор</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="81"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="232"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="302"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="389"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="390"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="391"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="392"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="393"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="89"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="240"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="310"/>
         <source>General</source>
         <translation>Общие</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="91"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="99"/>
         <source>Placement</source>
         <translation>Размещение</translation>
     </message>
     <message>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="405"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="406"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="407"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="408"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="409"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="410"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="411"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="412"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="413"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="414"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="415"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="416"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="417"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="419"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="421"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="423"/>
         <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="40"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="253"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="312"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="261"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="320"/>
         <source>Windows</source>
         <translation>Окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="132"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="140"/>
         <source>Rules</source>
         <translation>Правила</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="136"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="144"/>
         <source>Editor</source>
         <translation>Редактор</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="138"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="146"/>
         <source>About</source>
         <translation>О программе</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="151"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="425"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="427"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="429"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="431"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="433"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="435"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="159"/>
         <source>Virtual Screens</source>
         <translation>Виртуальные экраны</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="153"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="394"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="395"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="396"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="397"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="398"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="399"/>
+        <location filename="../src/daemon/shortcutmanager.cpp" line="453"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="161"/>
         <source>Layouts</source>
         <translation>Раскладки</translation>
     </message>
     <message>
         <location filename="../src/settings/ruleauthoring.cpp" line="243"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="171"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="179"/>
         <source>Behavior</source>
         <translation>Поведение</translation>
     </message>
     <message>
         <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="54"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="181"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="189"/>
         <source>Zone Selector</source>
         <translation>Выбор зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="194"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="225"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="202"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="233"/>
         <source>Priority</source>
         <translation>Приоритет</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="197"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="228"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="205"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="236"/>
         <source>Quick Shortcuts</source>
         <translation>Быстрые комбинации клавиш</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="199"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="287"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="322"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="207"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="295"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="330"/>
         <source>Shaders</source>
         <translation>Шейдеры</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="239"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="247"/>
         <source>Transitions</source>
         <translation>Переходы</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="247"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="255"/>
         <source>Motion</source>
         <translation>Движение</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="264"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="272"/>
         <source>Window Motion</source>
         <translation>Движение окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="271"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="279"/>
         <source>Window Dragging</source>
         <translation>Перетаскивание окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="306"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="314"/>
         <source>Surfaces</source>
         <translation>Поверхности</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="319"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="327"/>
         <source>Decoration Sets</source>
         <translation>Наборы оформления</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="249"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="308"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="257"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="316"/>
         <source>Library</source>
         <translation>Библиотека</translation>
     </message>
     <message>
         <location filename="../src/settings/decorationpagecontroller_browser.cpp" line="48"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="254"/>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="313"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="262"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="321"/>
         <source>OSDs</source>
         <translation>OSD</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="257"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="265"/>
         <source>Overlays</source>
         <translation>Наложения</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="274"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="282"/>
         <source>Side Panels</source>
         <translation>Боковые панели</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="276"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="284"/>
         <source>Widgets</source>
         <translation>Виджеты</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="279"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="287"/>
         <source>Layout Editor</source>
         <translation>Редактор раскладок</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="282"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="290"/>
         <source>Presets</source>
         <translation>Предустановки</translation>
     </message>
     <message>
-        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="285"/>
+        <location filename="../src/settings/settingscontroller_pageregistration.cpp" line="293"/>
         <source>Motion Sets</source>
         <translation>Наборы движения</translation>
     </message>
@@ -5418,14 +5798,74 @@
         <translation>Набор переименован, но старый файл удалить не удалось. Удалите его вручную из папки наборов.</translation>
     </message>
     <message>
+        <location filename="../src/settings/profilestore.cpp" line="195"/>
+        <location filename="../src/settings/profilestore.cpp" line="1071"/>
+        <source>Could not create the profiles folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="204"/>
+        <source>Could not write the profile to disk.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="750"/>
+        <location filename="../src/settings/profilestore.cpp" line="803"/>
+        <source>Please enter a name for the profile.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="809"/>
+        <source>Another profile is named “%1”, so this one is now “%2”.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="864"/>
+        <source>A profile cannot inherit from itself.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="932"/>
+        <source>Could not delete the profile.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="976"/>
+        <source>Could not apply this profile. Its settings do not match this version.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="996"/>
         <location filename="../src/settings/shadersetstore.cpp" line="605"/>
         <source>Could not write to that location.</source>
         <translation>Не удалось записать в это расположение.</translation>
     </message>
     <message>
+        <location filename="../src/settings/profilestore.cpp" line="1006"/>
+        <location filename="../src/settings/profilestore.cpp" line="1011"/>
+        <source>Could not read that profile.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="1018"/>
         <location filename="../src/settings/shadersetstore.cpp" line="631"/>
         <source>Could not write to %1.</source>
         <translation>Не удалось записать в %1.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="1039"/>
+        <source>That file is not a readable profile.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="1056"/>
+        <source>Imported profile</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore.cpp" line="1076"/>
+        <source>Could not open the profiles folder.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/shadersetstore.cpp" line="652"/>
@@ -5495,12 +5935,14 @@
     </message>
     <message>
         <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="260"/>
-        <location filename="../src/settings/animationspagecontroller_shaders.cpp" line="407"/>
+        <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="299"/>
+        <location filename="../src/settings/animationspagecontroller_shaders.cpp" line="369"/>
         <source>Cannot reset while a discard is in progress.</source>
         <translation>Нельзя выполнить сброс, пока идёт отмена изменений.</translation>
     </message>
     <message>
         <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="282"/>
+        <location filename="../src/settings/animationspagecontroller_overrides.cpp" line="314"/>
         <source>Some animation overrides could not be reset.</source>
         <translation>Некоторые переопределения анимаций сбросить не удалось.</translation>
     </message>
@@ -5568,6 +6010,26 @@
         <location filename="../src/settings/settingscontroller_session.cpp" line="770"/>
         <source>Your settings were imported, but the animation pages still show the old ones. Reopen the settings window to see the imported values.</source>
         <translation>Ваши параметры импортированы, но на страницах анимаций по-прежнему показаны старые. Откройте окно параметров заново, чтобы увидеть импортированные значения.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilepagecontroller.cpp" line="105"/>
+        <source>Could not save the active profile selection.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/profilestore_diff.cpp" line="263"/>
+        <source>Unnamed rule</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchproviders.cpp" line="140"/>
+        <source>Inherits from “%1”</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/searchproviders.cpp" line="142"/>
+        <source>Based on defaults</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>
