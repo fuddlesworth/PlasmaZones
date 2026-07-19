@@ -523,8 +523,11 @@ QJsonObject Store::defaultsToJson() const
         case QMetaType::Bool:
             return def.defaultValue.toBool();
         case QMetaType::Int:
-        case QMetaType::UInt:
             return def.defaultValue.toInt();
+        case QMetaType::UInt:
+            // Own case, like readVariantAs's UInt branch: toInt() would fold
+            // an above-INT_MAX default to 0 and diff against exportToJson.
+            return def.defaultValue.toUInt();
         case QMetaType::LongLong:
             return def.defaultValue.toLongLong();
         case QMetaType::ULongLong:

@@ -114,6 +114,13 @@ QVariantList SettingsController::valueOptions(const QString& group, const QStrin
             {QStringLiteral("text"), label.isEmpty() ? choice.token : label},
         });
     }
+    if (out.isEmpty()) {
+        // A non-empty UI subset whose tokens match none of the declared
+        // choices filters everything out — the same silent-empty-picker
+        // failure the no-choices branch above warns about.
+        qCWarning(lcConfig) << "valueOptions: the UI subset for" << group << key
+                            << "matches none of the schema's choice tokens — the picker will be empty.";
+    }
     return out;
 }
 

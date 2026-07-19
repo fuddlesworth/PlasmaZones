@@ -67,7 +67,10 @@ Kirigami.Dialog {
         // currentIndex binding would be severed the first time the user picks
         // an item (ComboBox assigns currentIndex internally), and this dialog
         // is a single reused instance — a severed binding would show, and
-        // silently commit, the previous invocation's parent.
+        // silently commit, the previous invocation's parent. Reset the
+        // recorded pick too, so a mid-open model refresh re-seeds from THIS
+        // invocation's parentId and not a previous invocation's choice.
+        parentCombo.chosenParentId = "";
         let seeded = 0;
         for (let i = 0; i < root._parentModel.length; ++i) {
             if (root._parentModel[i].id === root.parentId) {
@@ -132,6 +135,19 @@ Kirigami.Dialog {
             Accessible.name: i18n("Parent profile")
             // currentIndex is seeded imperatively in root.onOpened — see the
             // note there; a binding here would not survive the first user pick.
+            // If the profile list refreshes while the dialog is open (a
+            // debounced settings-edit re-read), the model rebuild resets
+            // currentIndex — re-seed from the user's pick (or the original
+            // parent when nothing was picked yet), mirroring the save form.
+            property string chosenParentId: ""
+            onActivated: chosenParentId = currentValue !== undefined ? currentValue : ""
+            onModelChanged: {
+                if (!root.visible)
+                    return;
+                const wanted = chosenParentId !== "" ? chosenParentId : root.parentId;
+                const idx = indexOfValue(wanted);
+                currentIndex = idx >= 0 ? idx : 0;
+            }
         }
 
         Label {

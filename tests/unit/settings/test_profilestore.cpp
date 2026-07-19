@@ -322,6 +322,11 @@ private Q_SLOTS:
         QCOMPARE(committedSpy.count(), 1);
         QCOMPARE(committedSpy.last().first().toString(), id);
 
+        // Re-writing the SAME pointer succeeds but announces nothing — the
+        // signal fires only on a real change.
+        QVERIFY(m_store->writeActiveId(id));
+        QCOMPARE(committedSpy.count(), 1);
+
         m_store->writeActiveId(QString());
         QVERIFY(m_store->committedActiveId().isEmpty());
         QCOMPARE(committedSpy.count(), 2);
