@@ -62,6 +62,11 @@ ComboBox {
         height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (root.Window.window ? root.Window.window.height : 600) - topMargin - bottomMargin)
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
+        // Horizontal clamping is off (-1) unless the side margins are set, so a
+        // combo near the window edge would overflow and clip (same fix as
+        // WideComboBox's popup).
+        leftMargin: Kirigami.Units.smallSpacing
+        rightMargin: Kirigami.Units.smallSpacing
         padding: 1
         // The Desktop style's field background reads `popup.exit.running` (its
         // ComboBox.qml:128). A bare Popup leaves enter/exit null, so that

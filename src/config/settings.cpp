@@ -744,7 +744,9 @@ bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
     // Also deliberately no applySystemColorScheme() re-derivation: a profile
     // captures the zone colours it was saved with, and activation stages those
     // captured values even when UseSystemColors is on. The live palette is
-    // re-applied by the normal load() path once the user saves.
+    // re-derived on the next load() or palette-change event (app restart, a
+    // Discard-triggered reload, or a theme switch) — save() itself only
+    // commits, it does not re-run the palette derivation.
     const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
 
     // importFromJson is additive/overwriting over declared keys; a

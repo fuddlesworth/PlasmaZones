@@ -907,7 +907,7 @@ PhosphorUi.SettingsAppWindow {
 
             Connections {
                 function onProfilesChanged() {
-                    profileHeader.profileRows = profileHeader.profilesBridge.availableProfiles();
+                    profileHeader.profileRows = profileHeader.profilesBridge ? profileHeader.profilesBridge.availableProfiles() : [];
                 }
 
                 target: profileHeader.profilesBridge

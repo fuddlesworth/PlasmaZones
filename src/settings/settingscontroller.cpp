@@ -163,6 +163,15 @@ void SettingsController::sortMergedLayoutList(QVariantList& list)
 
 SettingsController::~SettingsController()
 {
+    // The ProfilePageController's ProfileStore holds closures over m_rulesPage
+    // (a RuleController&). Both are children of `this`, and ~QObject deletes
+    // children in construction order — m_rulesPage first — which would leave
+    // the store holding a dangling reference for the remainder of teardown.
+    // Delete the profiles page up front so the reference holder is gone while
+    // the RuleController is still alive.
+    delete m_profilesPage;
+    m_profilesPage = nullptr;
+
     // Tear down the RuleController's label lookups while the
     // captured member containers (m_layouts, m_activities, m_screens,
     // etc.) are still alive. Members destruct in reverse declaration

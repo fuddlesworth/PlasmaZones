@@ -168,7 +168,6 @@ public:
     }
 
 private:
-    /// Translated at construction so QML binds a stable list.
     /// Backend value at controller construction. Survives page recreation so
     /// the "restart required" InlineMessage stays visible after navigating
     /// away and back.

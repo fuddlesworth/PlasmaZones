@@ -209,6 +209,9 @@ bool ProfileStore::writeProfileRecord(const Record& rec)
 
 QHash<QUuid, ProfileStore::Record> ProfileStore::loadAll() const
 {
+    if (m_recordCache) {
+        return *m_recordCache;
+    }
     QHash<QUuid, Record> result;
     const QString dirPath = profilesDirectory();
     if (dirPath.isEmpty()) {
@@ -225,6 +228,7 @@ QHash<QUuid, ProfileStore::Record> ProfileStore::loadAll() const
             result.insert(rec.id, rec);
         }
     }
+    m_recordCache = result;
     return result;
 }
 
@@ -522,6 +526,7 @@ void ProfileStore::refresh()
 void ProfileStore::notifyProfilesChanged()
 {
     m_signatureCache.clear();
+    m_recordCache.reset();
     Q_EMIT profilesChanged();
 }
 

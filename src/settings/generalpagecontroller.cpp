@@ -4,7 +4,6 @@
 #include "generalpagecontroller.h"
 
 #include "../core/isettings.h"
-#include "../phosphor_i18n.h"
 
 namespace PlasmaZones {
 

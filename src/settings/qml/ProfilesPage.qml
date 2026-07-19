@@ -123,7 +123,7 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            visible: true
+            visible: true // InlineMessage defaults to hidden; shown as a permanent explainer.
             text: i18n("A profile captures your current settings and rules. Only what differs from its parent profile (or the defaults) is stored. Activating a profile stages its settings. Save to apply, or discard to revert. Per-monitor and other hardware-specific settings are not included, so a profile stays portable between machines.")
         }
 
@@ -363,6 +363,7 @@ SettingsFlickable {
                 onTriggered: {
                     if (root.bridge)
                         root.bridge.removeProfile(deleteConfirm.profileId);
+                    delete root._expandedIds[deleteConfirm.profileId];
                     deleteConfirm.close();
                 }
             }

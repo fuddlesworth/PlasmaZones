@@ -15,6 +15,7 @@
 #include <QVariantList>
 
 #include <functional>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -249,7 +250,9 @@ private:
     QString indexFilePath() const;
 
     /// Read every `<uuid>.json` in the directory into a map keyed by id. A
-    /// malformed or version-mismatched file is skipped with a warning.
+    /// malformed or version-mismatched file is skipped with a warning. Served
+    /// from m_recordCache between mutations; the scan runs only after a
+    /// notifyProfilesChanged reset.
     QHash<QUuid, Record> loadAll() const;
     bool readProfileFile(const QString& path, Record* out) const;
     bool writeProfileRecord(const Record& rec);
@@ -352,6 +355,12 @@ private:
     /// settingsChanged to refresh the active row's modified badge, does not
     /// re-resolve and re-hash every cascade each time.
     mutable QHash<QUuid, QString> m_signatureCache;
+
+    /// The loaded record map, cached for the same reason as m_signatureCache:
+    /// every mutation funnels through notifyProfilesChanged (which resets it),
+    /// so between mutations loadAll() can skip the directory scan + JSON parse
+    /// that availableProfiles() would otherwise repeat on every settingsChanged.
+    mutable std::optional<QHash<QUuid, Record>> m_recordCache;
     QList<QUuid> readOrder() const;
     void appendToOrder(const QUuid& id);
     void removeFromOrder(const QUuid& id);

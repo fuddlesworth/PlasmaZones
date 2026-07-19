@@ -105,11 +105,6 @@ private:
     QList<Rule> m_currentRules; // the stubbed live user rules
     QList<Rule> m_lastAppliedRules; // captured from the applyUserRules closure
 
-    QUuid idOf(const QString& braced) const
-    {
-        return QUuid(braced);
-    }
-
     // Read a profile file's stored rule-delta upserts / removedIds / order.
     QJsonObject storedRules(const QString& bracedId) const
     {
@@ -929,6 +924,136 @@ private Q_SLOTS:
         QVERIFY(m_store->activateProfile(child));
         QCOMPARE(m_lastAppliedRules.size(), 1);
         QCOMPARE(m_lastAppliedRules.first().name, QStringLiteral("original"));
+    }
+
+    /// renameProfile updates name and description in place, and a colliding
+    /// name is uniquified the same way createProfile's is.
+    void renameUpdatesRowAndUniquifies()
+    {
+        m_current = baseDefaults();
+        m_store->createProfile(QStringLiteral("Work"), QString(), QString());
+        const QString id = m_store->createProfile(QStringLiteral("Play"), QString(), QString());
+
+        QVERIFY(m_store->renameProfile(id, QStringLiteral("Gaming"), QStringLiteral("evening machine")));
+        QVariantMap renamed;
+        for (const QVariant& v : m_store->availableProfiles()) {
+            if (v.toMap().value(QStringLiteral("id")).toString() == id) {
+                renamed = v.toMap();
+            }
+        }
+        QCOMPARE(renamed.value(QStringLiteral("name")).toString(), QStringLiteral("Gaming"));
+        QCOMPARE(renamed.value(QStringLiteral("description")).toString(), QStringLiteral("evening machine"));
+
+        // Renaming onto an existing name is uniquified, not refused.
+        QVERIFY(m_store->renameProfile(id, QStringLiteral("Work"), QString()));
+        for (const QVariant& v : m_store->availableProfiles()) {
+            if (v.toMap().value(QStringLiteral("id")).toString() == id) {
+                renamed = v.toMap();
+            }
+        }
+        QCOMPARE(renamed.value(QStringLiteral("name")).toString(), QStringLiteral("Work (2)"));
+    }
+
+    /// duplicateProfile mints a fresh id with a derived unique name, and the
+    /// clone resolves to the same settings (identical row signature).
+    void duplicateKeepsResolvedConfig()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 7}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        const QString original = m_store->createProfile(QStringLiteral("Work"), QString(), QString());
+
+        const QString clone = m_store->duplicateProfile(original);
+        QVERIFY(!clone.isEmpty());
+        QVERIFY(clone != original);
+
+        QHash<QString, QVariantMap> rowById;
+        for (const QVariant& v : m_store->availableProfiles()) {
+            rowById.insert(v.toMap().value(QStringLiteral("id")).toString(), v.toMap());
+        }
+        QCOMPARE(rowById.size(), 2);
+        QCOMPARE(rowById.value(clone).value(QStringLiteral("name")).toString(), QStringLiteral("Work (copy)"));
+        // Same resolved cascade → same signature (the identicon the UI shows).
+        QCOMPARE(rowById.value(clone).value(QStringLiteral("signature")).toString(),
+                 rowById.value(original).value(QStringLiteral("signature")).toString());
+    }
+
+    /// Exporting a root profile and importing the file back yields a NEW
+    /// profile (fresh id, uniquified name) that resolves to the same settings.
+    void exportImportRoundTrip()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 7}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        const QString original = m_store->createProfile(QStringLiteral("Work"), QString(), QString());
+
+        const QString destPath = m_dir->path() + QStringLiteral("/exported-profile");
+        QVERIFY(m_store->exportProfile(original, destPath));
+
+        const QString imported = m_store->importProfile(destPath);
+        QVERIFY(!imported.isEmpty());
+        QVERIFY(imported != original);
+
+        QHash<QString, QVariantMap> rowById;
+        for (const QVariant& v : m_store->availableProfiles()) {
+            rowById.insert(v.toMap().value(QStringLiteral("id")).toString(), v.toMap());
+        }
+        QCOMPARE(rowById.size(), 2);
+        // Uniquified, never overwriting the original.
+        QCOMPARE(rowById.value(imported).value(QStringLiteral("name")).toString(), QStringLiteral("Work (2)"));
+        // Identical resolved settings → identical signature.
+        QCOMPARE(rowById.value(imported).value(QStringLiteral("signature")).toString(),
+                 rowById.value(original).value(QStringLiteral("signature")).toString());
+    }
+
+    /// A successful setParent re-flattens the delta so the profile's RESOLVED
+    /// config (and rules) are unchanged under the new parent.
+    void reparentKeepsResolvedConfig()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 2}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        const QString parent = m_store->createProfile(QStringLiteral("P"), QString(), QString());
+
+        // An unrelated root with its own overrides.
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 9}, {QStringLiteral("k2"), QStringLiteral("z")}};
+        const QString moved = m_store->createProfile(QStringLiteral("M"), QString(), QString());
+
+        QVERIFY(m_store->setParent(moved, parent));
+        QCOMPARE(storedParent(moved), parent);
+
+        // Resolved config is what it was before the reparent.
+        m_staged.clear();
+        QVERIFY(m_store->activateProfile(moved));
+        QCOMPARE(groupAInt(m_lastApplied, QStringLiteral("k1")), 9);
+        QCOMPARE(groupAStr(m_lastApplied, QStringLiteral("k2")), QStringLiteral("z"));
+    }
+
+    /// A unicode display name survives the create → disk → reload round trip
+    /// intact (files are keyed by uuid, so the name only ever lives as JSON).
+    void unicodeNameRoundTrips()
+    {
+        m_current = baseDefaults();
+        const QString name = QStringLiteral("Büro 日本語 🚀");
+        const QString id = m_store->createProfile(name, QString(), QString());
+        QVERIFY(!id.isEmpty());
+
+        // Force a cold reload from disk through a second store over the same
+        // directory, so the assertion covers the persisted form and not the
+        // in-memory record cache.
+        ProfileStore::Config config;
+        config.profilesDir = [this]() {
+            return m_dir->path();
+        };
+        config.defaultConfig = []() {
+            return baseDefaults();
+        };
+        config.formatVersion = 5;
+        ProfileStore reloaded(std::move(config));
+        const QVariantList rows = reloaded.availableProfiles();
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first().toMap().value(QStringLiteral("name")).toString(), name);
     }
 };
 

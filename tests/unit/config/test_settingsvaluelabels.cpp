@@ -57,19 +57,23 @@ private Q_SLOTS:
     void everyDeclaredChoiceHasALabel()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
+        // Accumulate instead of asserting per row: a mid-loop failure would
+        // abort the walk and mask every later drifted choice.
+        QStringList missing;
         int checked = 0;
         for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
             for (const PhosphorConfig::KeyDef& def : git.value()) {
                 for (const PhosphorConfig::ChoiceDef& choice : def.choices) {
-                    const QString label = SettingsValueLabels::enumLabel(git.key(), def.key, choice.token);
-                    QVERIFY2(
-                        !label.isEmpty(),
-                        qPrintable(
-                            QStringLiteral("no label for %1/%2 token \"%3\"").arg(git.key(), def.key, choice.token)));
+                    if (SettingsValueLabels::enumLabel(git.key(), def.key, choice.token).isEmpty()) {
+                        missing.append(QStringLiteral("%1/%2 token \"%3\"").arg(git.key(), def.key, choice.token));
+                    }
                     ++checked;
                 }
             }
         }
+        missing.sort();
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("no label for: %1").arg(missing.join(QLatin1String(", ")))));
         // Guard the guard: an empty schema walk would pass every assertion
         // above while checking nothing at all.
         QVERIFY2(checked > 0, "no choices found in the schema — the walk is broken, not clean");
@@ -102,6 +106,10 @@ private Q_SLOTS:
     void everyDeclaredValueSurvivesItsValidator()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
+        // Accumulate instead of asserting per row so one drifted choice does
+        // not mask the rest of a multi-key regression.
+        QStringList problems;
+        int checked = 0;
         for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
             for (const PhosphorConfig::KeyDef& def : git.value()) {
                 if (!def.validator) {
@@ -109,13 +117,18 @@ private Q_SLOTS:
                 }
                 for (const PhosphorConfig::ChoiceDef& choice : def.choices) {
                     const QVariant coerced = def.validator(choice.value);
-                    QVERIFY2(coerced == choice.value,
-                             qPrintable(QStringLiteral("%1/%2 declares %3 (\"%4\") but its validator coerces it to %5")
-                                            .arg(git.key(), def.key, choice.value.toString(), choice.token,
-                                                 coerced.toString())));
+                    if (coerced != choice.value) {
+                        problems.append(
+                            QStringLiteral("%1/%2 declares %3 (\"%4\") but its validator coerces it to %5")
+                                .arg(git.key(), def.key, choice.value.toString(), choice.token, coerced.toString()));
+                    }
+                    ++checked;
                 }
             }
         }
+        problems.sort();
+        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("\n  "))));
+        QVERIFY2(checked > 0, "no validated choices found — the walk is broken, not clean");
     }
 
     /// A key carrying choices reports itself as an enum, which is what makes
@@ -123,15 +136,26 @@ private Q_SLOTS:
     void keysWithChoicesDescribeAsEnum()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
+        // Accumulate instead of asserting per row so one drifted key does not
+        // mask the rest.
+        QStringList problems;
+        int checked = 0;
         for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
             for (const PhosphorConfig::KeyDef& def : git.value()) {
                 if (def.choices.isEmpty()) {
                     continue;
                 }
                 const ValueDescriptor descriptor = SettingsValueLabels::descriptorFor(git.key(), def.key);
-                QCOMPARE(descriptor.kind, ValueKind::Enum);
+                if (descriptor.kind != ValueKind::Enum) {
+                    problems.append(
+                        QStringLiteral("%1/%2 carries choices but does not describe as Enum").arg(git.key(), def.key));
+                }
+                ++checked;
             }
         }
+        problems.sort();
+        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("\n  "))));
+        QVERIFY2(checked > 0, "no choice-bearing keys found — the walk is broken, not clean");
     }
 
     /// An undescribed key degrades to Plain rather than failing, matching the
@@ -177,6 +201,9 @@ private Q_SLOTS:
     void percentScaledKeysStoreARatio()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
+        // Accumulate instead of asserting per row so one bad key does not mask
+        // the rest.
+        QStringList problems;
         int checked = 0;
         const QVariantList described = SettingsValueLabels::allDescribedKeys();
         for (const QVariant& row : described) {
@@ -188,16 +215,23 @@ private Q_SLOTS:
                 continue;
             }
             const PhosphorConfig::KeyDef* def = schema.findKey(group, key);
-            QVERIFY(def);
+            if (!def) {
+                problems.append(
+                    QStringLiteral("%1/%2 is scaled for display but absent from the schema").arg(group, key));
+                continue;
+            }
             const double value = def->defaultValue.toDouble();
-            QVERIFY2(value >= 0.0 && value <= 1.0,
-                     qPrintable(QStringLiteral("%1/%2 is scaled by %3 for display but defaults to %4, "
+            if (value < 0.0 || value > 1.0) {
+                problems.append(QStringLiteral("%1/%2 is scaled by %3 for display but defaults to %4, "
                                                "which is not a 0.0-1.0 ratio")
                                     .arg(group, key)
                                     .arg(descriptor.displayScale)
-                                    .arg(value)));
+                                    .arg(value));
+            }
             ++checked;
         }
+        problems.sort();
+        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("\n  "))));
         QVERIFY2(checked > 0, "no scaled keys found — the walk is broken, not clean");
     }
 
@@ -319,6 +353,9 @@ private Q_SLOTS:
     void uiSubsetTokensAreDeclaredChoices()
     {
         const PhosphorConfig::Schema& schema = cachedSettingsSchema();
+        // Accumulate instead of asserting per row so one drifted subset does
+        // not mask the rest.
+        QStringList problems;
         int checked = 0;
         for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
             for (const PhosphorConfig::KeyDef& def : git.value()) {
@@ -331,17 +368,21 @@ private Q_SLOTS:
                     declared.insert(choice.token);
                 }
                 for (const QString& token : subset) {
-                    QVERIFY2(declared.contains(token),
-                             qPrintable(QStringLiteral("%1/%2 subset token \"%3\" is not a declared choice")
-                                            .arg(git.key(), def.key, token)));
+                    if (!declared.contains(token)) {
+                        problems.append(QStringLiteral("%1/%2 subset token \"%3\" is not a declared choice")
+                                            .arg(git.key(), def.key, token));
+                    }
                 }
                 // A subset must actually narrow; equal-or-wider is a mistake.
-                QVERIFY2(
-                    subset.size() < def.choices.size(),
-                    qPrintable(QStringLiteral("%1/%2 subset does not narrow the choice set").arg(git.key(), def.key)));
+                if (subset.size() >= def.choices.size()) {
+                    problems.append(
+                        QStringLiteral("%1/%2 subset does not narrow the choice set").arg(git.key(), def.key));
+                }
                 ++checked;
             }
         }
+        problems.sort();
+        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("\n  "))));
         QVERIFY2(checked > 0, "no UI subsets found — the walk is broken, not clean");
     }
 

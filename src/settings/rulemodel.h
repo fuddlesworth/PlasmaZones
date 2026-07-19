@@ -276,8 +276,9 @@ public:
 
     /// The title the Rules page renders for @p rule: displayName when the
     /// user typed one, otherwise the lookup-resolved match summary (the same
-    /// fallback RuleRow binds). Never empty. Public so the profile diff can
-    /// name unnamed rules exactly the way the Rules page does.
+    /// fallback RuleRow binds). Never empty. Public so the profile diff and
+    /// the rules search provider can name unnamed rules exactly the way the
+    /// Rules page does.
     QString titleFor(const PhosphorRules::Rule& rule) const;
 
 Q_SIGNALS:
