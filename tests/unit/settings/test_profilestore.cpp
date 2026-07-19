@@ -871,6 +871,42 @@ private Q_SLOTS:
         QCOMPARE(ruleIds(m_lastAppliedRules), (QList<QUuid>{r1.id}));
     }
 
+    /// A rule with no name still gets a readable diff row: the wired
+    /// ruleTitle closure's text when present, the generic fallback otherwise.
+    void unnamedRuleGetsTitle()
+    {
+        const Rule unnamed = makeRule(QString(), QStringLiteral("a.desktop"));
+        m_currentRules = {unnamed};
+        const QString id = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        // Default store (no ruleTitle closure): generic fallback, never blank.
+        QCOMPARE(m_store->ruleChanges(id).first().toMap().value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Unnamed rule"));
+
+        // With the closure wired (the app wires RuleModel::titleFor), its
+        // text wins.
+        ProfileStore::Config config;
+        config.profilesDir = [this]() {
+            return m_dir->path();
+        };
+        config.defaultConfig = []() {
+            return baseDefaults();
+        };
+        config.stagedActiveId = [this]() {
+            return m_staged;
+        };
+        config.currentUserRules = [this]() {
+            return m_currentRules;
+        };
+        config.ruleTitle = [](const Rule&) {
+            return QStringLiteral("Window class: steam");
+        };
+        config.formatVersion = 5;
+        ProfileStore titledStore(std::move(config));
+        QCOMPARE(titledStore.ruleChanges(id).first().toMap().value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Window class: steam"));
+    }
+
     /// Reverting a CHANGED rule falls back to the parent's version, keeping the
     /// rule itself.
     void revertChangedRule()

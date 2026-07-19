@@ -87,6 +87,12 @@ public:
     using RulesFn = std::function<QList<PhosphorRules::Rule>()>;
     using ApplyRulesFn = std::function<void(const QList<PhosphorRules::Rule>& /*userRules*/)>;
 
+    /// Display title for a rule in the diff rows. Optional — wired to
+    /// RuleModel::titleFor so an unnamed (or auto-stamped context) rule reads
+    /// exactly as the Rules page renders it; without it the raw stored name
+    /// is used, with a generic fallback when that is empty.
+    using RuleTitleFn = std::function<QString(const PhosphorRules::Rule&)>;
+
     struct Config
     {
         DirFn profilesDir;
@@ -97,6 +103,7 @@ public:
         ActiveSetFn setStagedActiveId;
         RulesFn currentUserRules; // optional
         ApplyRulesFn applyUserRules; // optional
+        RuleTitleFn ruleTitle; // optional
         /// On-disk envelope version (the config-schema version the delta keys
         /// belong to). Import/activate refuse a file stamped with a DIFFERENT
         /// version rather than mis-applying keys whose shape moved between
@@ -130,7 +137,9 @@ public:
 
     /// The rule differences @p id introduces relative to its parent, one row
     /// per rule: `{ id, name, change }` where change is "added", "changed", or
-    /// "removed" and `id` is what revertRuleChange consumes.
+    /// "removed" and `id` is what revertRuleChange consumes. `name` is the
+    /// display title (the ruleTitle closure's result, so an unnamed rule reads
+    /// as its match summary, the way the Rules page titles it).
     Q_INVOKABLE QVariantList ruleChanges(const QString& id) const;
 
     /// Revert ONE configChanges() row: restore the parent's value at the row's

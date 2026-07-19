@@ -1106,4 +1106,18 @@ QString RuleModel::displayName(const PhosphorRules::Rule& rule) const
     return rule.name;
 }
 
+QString RuleModel::titleFor(const PhosphorRules::Rule& rule) const
+{
+    const QString name = displayName(rule);
+    if (!name.isEmpty()) {
+        return name;
+    }
+    // Mirror MatchSummaryRole's special case so a context-only catch-all
+    // reads "Everywhere" here too, not "Any window".
+    if (rule.match.isCatchAll() && ruleActionsAreContextOnly(rule.actions)) {
+        return PhosphorI18n::tr("Everywhere");
+    }
+    return matchSummary(rule.match);
+}
+
 } // namespace PlasmaZones

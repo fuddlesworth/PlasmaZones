@@ -415,6 +415,10 @@ ExpandableRowDelegate {
                     }
                     out.push({
                         "label": change.name,
+                        // Distinct rules can share a display title (two
+                        // unnamed rules with similar matches) — key the tree
+                        // node by rule id so they never merge into one row.
+                        "treeKey": change.id,
                         "source": change,
                         "entries": [
                             {

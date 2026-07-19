@@ -54,6 +54,11 @@ ProfilePageController::ProfilePageController(Settings& settings, RuleController&
         // Stage into the Rules page model; the global Save commits over D-Bus.
         m_rules.stageUserRules(userRules);
     };
+    config.ruleTitle = [this](const PhosphorRules::Rule& rule) {
+        // Same title the Rules page renders, so an unnamed rule reads as its
+        // match summary in the profile diff too.
+        return m_rules.model()->titleFor(rule);
+    };
     config.formatVersion = ConfigSchemaVersion;
 
     m_store = new ProfileStore(std::move(config), this);

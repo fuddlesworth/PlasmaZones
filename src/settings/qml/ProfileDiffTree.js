@@ -29,10 +29,14 @@ function buildRows(rows) {
         let node = rootNode;
         for (let s = 0; s < segments.length; ++s) {
             const label = segments[s];
-            let child = node.byLabel[label];
+            // A row may carry a `treeKey` making its LEAF node unique even
+            // when another row shares its display label (two unnamed rules
+            // with the same match summary must not merge into one row).
+            const mapKey = s === segments.length - 1 && source.treeKey !== undefined ? String(source.treeKey) : label;
+            let child = node.byLabel[mapKey];
             if (child === undefined) {
                 child = _node(label);
-                node.byLabel[label] = child;
+                node.byLabel[mapKey] = child;
                 node.children.push(child);
             }
             node = child;

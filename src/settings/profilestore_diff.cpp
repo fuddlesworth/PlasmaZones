@@ -10,6 +10,7 @@
 
 #include "../config/configkeys.h"
 #include "../config/settingsvaluelabels.h"
+#include "../phosphor_i18n.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -254,11 +255,19 @@ QVariantList ProfileStore::ruleChanges(const QString& id) const
         parentById.insert(rule.id, rule);
     }
 
+    // Title rules the way the Rules page does (unnamed and auto-stamped
+    // context rules read as their match summary), with a generic last resort
+    // so a row can never render blank.
+    const auto titleOf = [this](const PhosphorRules::Rule& rule) {
+        const QString title = m_config.ruleTitle ? m_config.ruleTitle(rule) : rule.name;
+        return title.isEmpty() ? PhosphorI18n::tr("Unnamed rule") : title;
+    };
+
     QVariantList rows;
     for (const PhosphorRules::Rule& rule : rec.ruleUpserts) {
         QVariantMap row;
         row.insert(QStringLiteral("id"), rule.id.toString());
-        row.insert(QStringLiteral("name"), rule.name);
+        row.insert(QStringLiteral("name"), titleOf(rule));
         row.insert(QStringLiteral("change"),
                    parentById.contains(rule.id) ? QStringLiteral("changed") : QStringLiteral("added"));
         rows.append(row);
@@ -268,7 +277,7 @@ QVariantList ProfileStore::ruleChanges(const QString& id) const
         row.insert(QStringLiteral("id"), removed.toString());
         // Name the rule as the PARENT knows it — this profile no longer carries it.
         row.insert(QStringLiteral("name"),
-                   parentById.contains(removed) ? parentById.value(removed).name : removed.toString());
+                   parentById.contains(removed) ? titleOf(parentById.value(removed)) : removed.toString());
         row.insert(QStringLiteral("change"), QStringLiteral("removed"));
         rows.append(row);
     }
