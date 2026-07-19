@@ -197,6 +197,7 @@ void PortalBackend::unregisterShortcut(const QString& id)
     m_pending.remove(id);
     m_descriptions.remove(id);
     m_lastSentPreferred.remove(id);
+    m_confirmedTriggers.remove(id);
     // If an in-flight BindShortcuts batch was carrying this id, drop it from
     // the snapshot so a successful Response doesn't promote a since-released
     // grab back into m_lastSentPreferred.
@@ -537,6 +538,26 @@ void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap
                 if (snapIt != m_pendingBindResponse.constEnd()) {
                     m_lastSentPreferred.insert(id, snapIt->preferred);
                 }
+                // trigger_description is the compositor's human-readable
+                // statement of the key(s) it actually assigned — the only
+                // read-back the spec offers. Capture it for
+                // currentTriggers() and notify on change so binding
+                // displays can refresh. The Response covers ids from prior
+                // batches too (BindShortcuts is additive), so this also
+                // picks up compositor-side rebinds between batches.
+                const QString trigger = opts.value(QStringLiteral("trigger_description")).toString();
+                QStringList triggers;
+                if (!trigger.isEmpty()) {
+                    triggers.append(trigger);
+                }
+                if (m_confirmedTriggers.value(id) != triggers) {
+                    if (triggers.isEmpty()) {
+                        m_confirmedTriggers.remove(id);
+                    } else {
+                        m_confirmedTriggers.insert(id, triggers);
+                    }
+                    Q_EMIT triggersChanged(id);
+                }
             }
         }
         arg.endArray();
@@ -544,6 +565,14 @@ void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap
     m_pendingBindResponse.clear();
     qCDebug(lcPhosphorShortcuts) << "Portal BindShortcuts Response: success, results=" << results;
     Q_EMIT ready();
+}
+
+QStringList PortalBackend::currentTriggers(const QString& id) const
+{
+    // Only what the compositor has explicitly described. An id bound but
+    // never described returns empty, which callers treat as "fall back to
+    // your own stored sequence" per the IBackend contract.
+    return m_confirmedTriggers.value(id);
 }
 
 void PortalBackend::onActivated(const QDBusObjectPath& /*sessionHandle*/, const QString& shortcutId,

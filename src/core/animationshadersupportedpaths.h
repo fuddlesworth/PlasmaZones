@@ -40,6 +40,8 @@ inline QStringList shaderConsumedLeafEventPaths()
         PP::PopupZoneSelectorHide,
         PP::PopupSnapAssistShow,
         PP::PopupSnapAssistHide,
+        PP::PopupCheatsheetShow,
+        PP::PopupCheatsheetHide,
         //
         // Window family — driven by the KWin OffscreenEffect under
         // kwin-effect/plasmazoneseffect/ via tryBeginShaderForEvent

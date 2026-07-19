@@ -479,6 +479,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/shellhost_bridge.cpp
     daemon/overlayservice/selector_update.cpp
     daemon/overlayservice/shader.cpp
+    daemon/overlayservice/cheatsheet.cpp
     daemon/overlayservice/snapassist.cpp
     daemon/overlayservice.h
     daemon/overlayservice_types.h

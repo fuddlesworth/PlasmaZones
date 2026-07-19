@@ -6,6 +6,7 @@
 #include <QKeySequence>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 #include "phosphorshortcuts_export.h"
 
@@ -113,6 +114,28 @@ public:
      */
     virtual void flush() = 0;
 
+    /**
+     * The key sequence(s) the backend believes are EFFECTIVELY bound for an
+     * id right now — i.e. what the user actually has to press, including any
+     * override applied outside this process (System Settings rebind on
+     * KGlobalAccel, compositor-assigned trigger on Portal).
+     *
+     * Returned as display strings rather than QKeySequence because the XDG
+     * Portal only reports a human-readable `trigger_description`; backends
+     * that do have structured sequences (KGlobalAccel) return
+     * QKeySequence::toString(QKeySequence::PortableText) per sequence.
+     *
+     * An empty list means "this backend cannot report" — callers must fall
+     * back to their own stored current sequence, NOT treat the id as
+     * unbound. The default implementation reports nothing (correct for the
+     * D-Bus trigger fallback, which has no key grabs at all).
+     */
+    virtual QStringList currentTriggers(const QString& id) const
+    {
+        Q_UNUSED(id);
+        return {};
+    }
+
 Q_SIGNALS:
     /**
      * Emitted when the backend observes the user triggering a registered
@@ -126,6 +149,16 @@ Q_SIGNALS:
      * here.
      */
     void ready();
+
+    /**
+     * Emitted when the effective binding for an id changes outside the
+     * register/update flow — e.g. the user rebinds it in System Settings
+     * (KGlobalAccel) or the compositor confirms/assigns a trigger (Portal
+     * BindShortcuts Response). Consumers displaying bindings re-query
+     * currentTriggers() on this signal. Backends that cannot observe
+     * external changes simply never emit it.
+     */
+    void triggersChanged(QString id);
 };
 
 } // namespace PhosphorShortcuts

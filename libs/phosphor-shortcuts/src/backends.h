@@ -55,6 +55,7 @@ public:
     void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
+    QStringList currentTriggers(const QString& id) const override;
 
 private Q_SLOTS:
     void onSessionCreated(QDBusPendingCallWatcher* watcher);
@@ -122,6 +123,13 @@ private:
     // field because onAnyRequestResponse drops them by path compare.
     QHash<QString, Pending> m_pendingBindResponse;
 
+    // Per-id trigger_description strings from the most recent successful
+    // BindShortcuts Response — the compositor's own human-readable statement
+    // of what the user actually presses. This is the only read-back the XDG
+    // spec offers (no structured key sequences). Absent for ids the
+    // compositor never described.
+    QHash<QString, QStringList> m_confirmedTriggers;
+
     // Per-id preferred_trigger that the compositor has successfully
     // acknowledged via a BindShortcuts Response. updateShortcut uses this
     // to short-circuit "rebind with same defaultSeq": Portal's newTrigger
@@ -149,6 +157,7 @@ public:
     void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
+    QStringList currentTriggers(const QString& id) const override;
 
 private:
     // QAction ownership is an implementation detail of this backend —

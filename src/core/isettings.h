@@ -283,6 +283,10 @@ public:
     virtual int fillOnDropModifier() const = 0;
     virtual void setFillOnDropModifier(int mod) = 0;
 
+    // Shortcut cheatsheet overlay
+    virtual bool cheatsheetEnabled() const = 0;
+    virtual void setCheatsheetEnabled(bool enabled) = 0;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-screen overrides — category-keyed maps of setting key → value that
     // live alongside the global setting. Defaults are no-op bodies so backends
@@ -515,6 +519,7 @@ Q_SIGNALS:
     // Global shortcuts
     void openEditorShortcutChanged();
     void openSettingsShortcutChanged();
+    void toggleCheatsheetShortcutChanged();
     void previousLayoutShortcutChanged();
     void nextLayoutShortcutChanged();
     void quickLayout1ShortcutChanged();
@@ -584,6 +589,9 @@ Q_SIGNALS:
     void swapVirtualScreenDownShortcutChanged();
     void rotateVirtualScreensClockwiseShortcutChanged();
     void rotateVirtualScreensCounterclockwiseShortcutChanged();
+
+    // Shortcut cheatsheet overlay
+    void cheatsheetEnabledChanged();
 
     // Autotile settings
     void autotileEnabledChanged();

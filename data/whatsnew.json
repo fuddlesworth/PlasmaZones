@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.3.0",
+            "date": "2026-07-19",
+            "highlights": [
+                "New: a shortcut cheatsheet overlay that shows your global shortcuts with the keys you actually have bound, grouped by category. Open it with Meta+? and it only lists the shortcuts that apply in the current tiling mode"
+            ]
+        },
+        {
             "version": "3.2.5",
             "date": "2026-07-19",
             "highlights": [

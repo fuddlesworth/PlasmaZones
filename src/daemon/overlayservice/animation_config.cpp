@@ -198,6 +198,31 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
         .hideShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerHide, 1.0 - kHideScaleTo)};
 }
 
+/// Cheatsheet: fade+scale twin of the layout picker. Every leg resolves
+/// under `popup.cheatsheet.*` so a Settings-UI edit affects only the
+/// cheatsheet; with no override set, resolution walks up to `popup` and
+/// finally library defaults. The scale envelope matches the picker's
+/// (large centered card, softer than the OSD pop).
+PAL::SurfaceAnimator::Config buildCheatsheetConfig(const PAS::ShaderProfileTree& tree)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    constexpr double kShowScaleFrom = 0.94;
+    constexpr double kHideScaleTo = 0.97;
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = PP::PopupCheatsheetShow,
+        .hideProfile = PP::PopupCheatsheetHide,
+        .showScaleProfile = PP::PopupCheatsheetShow,
+        .hideScaleProfile = PP::PopupCheatsheetHide,
+        .showScaleFrom = kShowScaleFrom,
+        .hideScaleTo = kHideScaleTo,
+        .showShaderEffectId = resolveShaderEffect(tree, PP::PopupCheatsheetShow),
+        .hideShaderEffectId = resolveShaderEffect(tree, PP::PopupCheatsheetHide),
+        .showShaderProfile = PP::PopupCheatsheetShow,
+        .hideShaderProfile = PP::PopupCheatsheetHide,
+        .showShaderParameters = resolveShaderParameters(tree, PP::PopupCheatsheetShow, 1.0 - kShowScaleFrom),
+        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupCheatsheetHide, 1.0 - kHideScaleTo)};
+}
+
 /// ZoneSelector: opacity-only show/hide. `keepMappedOnHide=true` so the
 /// hide animation actually paints.
 ///
@@ -372,6 +397,7 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
     m_shellHost->registerConfigForRole(PhosphorRoles::LayoutPicker, buildLayoutPickerConfig(tree));
     m_shellHost->registerConfigForRole(PhosphorRoles::ZoneSelector, buildZoneSelectorConfig(tree));
     m_shellHost->registerConfigForRole(PhosphorRoles::SnapAssist, buildSnapAssistConfig(tree));
+    m_shellHost->registerConfigForRole(PhosphorRoles::Cheatsheet, buildCheatsheetConfig(tree));
 }
 
 } // namespace PlasmaZones

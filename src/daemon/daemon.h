@@ -244,6 +244,26 @@ public:
     /// no OSD.
     void showNotAssignedOsd(const QString& screenId);
 
+    // Shortcut cheatsheet overlay (impls in daemon/osd.cpp).
+    /// Toggle the cheatsheet on the cursor's screen. Show path resolves the
+    /// screen's tiling mode + the shortcut catalog and pushes both into the
+    /// overlay (daemon-mediated push), dismisses any other Escape-consuming
+    /// modal first (picker / snap assist — at most one Escape grab consumer
+    /// at a time), then binds the sheet's dedicated Escape ad-hoc grab.
+    void toggleCheatsheet();
+    /// Re-push catalog + mode into a visible cheatsheet — live refilter on
+    /// mode switches, rebinds, and the autotile feature gate. No-op when
+    /// hidden. Mode is re-resolved for the screen the sheet is BOUND to
+    /// (not the cursor's current screen).
+    void refreshCheatsheetIfVisible();
+    /// Release the cheatsheet's Escape ad-hoc grab. Connected to
+    /// OverlayService::cheatsheetDismissed in start.cpp.
+    void onCheatsheetDismissed();
+    /// Show path for the toggle shortcut: resolve cursor screen, catalog,
+    /// per-screen mode; dismiss sibling Escape-consuming modals; show and
+    /// bind the Escape grab. Returns true when the sheet became visible.
+    bool showCheatsheetOnCursorScreen();
+
 private:
     /**
      * @brief Show layout OSD for an autotile algorithm (visual zone preview)

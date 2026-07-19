@@ -100,6 +100,16 @@ public:
     QKeySequence shortcut(const QString& id) const;
 
     /**
+     * Display strings for the key(s) the user EFFECTIVELY has to press for
+     * an id right now. Prefers the backend's read-back
+     * (IBackend::currentTriggers — which sees out-of-process overrides like
+     * System Settings rebinds); falls back to the registry's own current
+     * sequence when the backend cannot report. Empty means the id is
+     * genuinely unbound (or unknown).
+     */
+    QStringList effectiveTriggers(const QString& id) const;
+
+    /**
      * Enumerate registered bindings, sorted by id for deterministic output.
      *
      * @param persistentOnly If true, transient bindings (those registered with
@@ -124,6 +134,13 @@ Q_SIGNALS:
      * Forwarded from IBackend::ready().
      */
     void ready();
+
+    /**
+     * Forwarded from IBackend::triggersChanged for ids this registry owns —
+     * the effective binding changed outside the bind/rebind flow (external
+     * rebind, compositor assignment). Re-query effectiveTriggers() on it.
+     */
+    void triggersChanged(QString id);
 
 private Q_SLOTS:
     void onBackendActivated(QString id);

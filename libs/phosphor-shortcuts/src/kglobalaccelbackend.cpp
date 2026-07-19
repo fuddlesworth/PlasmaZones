@@ -70,6 +70,22 @@ KGlobalAccelBackend::KGlobalAccelBackend(QObject* parent)
     }
     qCInfo(lcPhosphorShortcuts) << "KGlobalAccelBackend: active (component:" << QCoreApplication::applicationName()
                                 << ")";
+
+    // Surface external rebinds (the user editing our component in System
+    // Settings) as triggersChanged so consumers displaying bindings can
+    // re-query currentTriggers(). The signal passes the QAction; it is ours
+    // iff its objectName matches a registered id (we objectName every action
+    // to its id above).
+    connect(KGlobalAccel::self(), &KGlobalAccel::globalShortcutChanged, this,
+            [this](QAction* action, const QKeySequence& /*seq*/) {
+                if (!action) {
+                    return;
+                }
+                const QString id = action->objectName();
+                if (m_impl->entries.contains(id) && m_impl->entries.value(id).action == action) {
+                    Q_EMIT triggersChanged(id);
+                }
+            });
 }
 
 KGlobalAccelBackend::~KGlobalAccelBackend()
@@ -223,6 +239,27 @@ void KGlobalAccelBackend::unregisterShortcut(const QString& id)
         KGlobalAccel::self()->removeAllShortcuts(action);
         action->deleteLater();
     }
+}
+
+QStringList KGlobalAccelBackend::currentTriggers(const QString& id) const
+{
+    const auto it = m_impl->entries.constFind(id);
+    if (it == m_impl->entries.constEnd() || !it->action) {
+        return {};
+    }
+    // KGlobalAccel::shortcut returns the ACTIVE sequences — including a user
+    // override persisted in kglobalshortcutsrc, which setShortcut's
+    // autoloading behaviour lets win over whatever currentSeq we pushed.
+    // This is exactly the "what does the user really press" answer that our
+    // own bookkeeping (lastCurrent) cannot give.
+    QStringList out;
+    const QList<QKeySequence> seqs = KGlobalAccel::self()->shortcut(it->action);
+    for (const QKeySequence& seq : seqs) {
+        if (!seq.isEmpty()) {
+            out.append(seq.toString(QKeySequence::PortableText));
+        }
+    }
+    return out;
 }
 
 void KGlobalAccelBackend::flush()

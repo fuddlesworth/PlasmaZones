@@ -13,5 +13,7 @@
         <file alias="PassiveOverlayShell.qml">../ui/PassiveOverlayShell.qml</file>
         <file alias="SnapAssistContent.qml">../ui/SnapAssistContent.qml</file>
         <file alias="LayoutPickerContent.qml">../ui/LayoutPickerContent.qml</file>
+        <file alias="CheatsheetContent.qml">../ui/CheatsheetContent.qml</file>
+        <file alias="KeyChip.qml">../ui/KeyChip.qml</file>
     </qresource>
 </RCC>

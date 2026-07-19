@@ -8,6 +8,7 @@
 #include <QKeySequence>
 #include <QObject>
 #include <QString>
+#include <QVariantList>
 #include <QVector>
 
 #include <functional>
@@ -75,9 +76,30 @@ public:
      */
     void unregisterAdhocShortcut(const QString& id) override;
 
+    /**
+     * Catalog of every settings-driven shortcut for the cheatsheet overlay,
+     * one QVariantMap per row, sorted by display category:
+     *   id (QString), label (translated QString),
+     *   category (translated QString), categoryOrder (int),
+     *   triggers (QStringList — the user's EFFECTIVE keys via backend
+     *   read-back, falling back to the config value), assigned (bool),
+     *   mode ("all" | "snapping" | "autotile" — which tiling mode the
+     *   action is meaningful in; the overlay filters on it).
+     * Ad-hoc/transient grabs never appear. Empty before registerShortcuts().
+     */
+    QVariantList cheatsheetModel() const;
+
 Q_SIGNALS:
+    /**
+     * The cheatsheet catalog's contents changed: a sequence was rebound
+     * (in-process or externally via System Settings / compositor) or the
+     * registration batch settled. Consumers re-query cheatsheetModel().
+     */
+    void cheatsheetModelChanged();
+
     void openEditorRequested();
     void openSettingsRequested();
+    void toggleCheatsheetRequested();
     void previousLayoutRequested();
     void nextLayoutRequested();
     void quickLayoutRequested(int number);

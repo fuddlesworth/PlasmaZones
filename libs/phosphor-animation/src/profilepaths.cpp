@@ -75,6 +75,9 @@ const QString PopupLayoutPickerHide = QStringLiteral("popup.layoutPicker.hide");
 const QString PopupSnapAssist = QStringLiteral("popup.snapAssist");
 const QString PopupSnapAssistShow = QStringLiteral("popup.snapAssist.show");
 const QString PopupSnapAssistHide = QStringLiteral("popup.snapAssist.hide");
+const QString PopupCheatsheet = QStringLiteral("popup.cheatsheet");
+const QString PopupCheatsheetShow = QStringLiteral("popup.cheatsheet.show");
+const QString PopupCheatsheetHide = QStringLiteral("popup.cheatsheet.hide");
 
 // panel.*
 const QString Panel = QStringLiteral("panel");
@@ -162,6 +165,9 @@ QStringList allBuiltInPaths()
         PopupSnapAssist,
         PopupSnapAssistShow,
         PopupSnapAssistHide,
+        PopupCheatsheet,
+        PopupCheatsheetShow,
+        PopupCheatsheetHide,
         Panel,
         PanelSlideIn,
         PanelSlideOut,
@@ -283,7 +289,7 @@ QString defaultShaderEffectIdForPath(const QString& path)
     // preserved by seeding fade's `scaleAmount` daemon-side (animation_config).
     if (path == OsdShow || path == OsdHide || path == PopupZoneSelectorShow || path == PopupZoneSelectorHide
         || path == PopupLayoutPickerShow || path == PopupLayoutPickerHide || path == PopupSnapAssistShow
-        || path == PopupSnapAssistHide) {
+        || path == PopupSnapAssistHide || path == PopupCheatsheetShow || path == PopupCheatsheetHide) {
         return QStringLiteral("fade");
     }
     // The desktop transitions (switch AND peek) have NO built-in default: both

@@ -175,6 +175,8 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
              "selector on this screen");
     wireSlot(PhosphorSlotKeys::MainOverlay(), "mainOverlaySlotItem", PhosphorRoles::ZoneOverlay,
              "main overlay on this screen");
+    wireSlot(PhosphorSlotKeys::Cheatsheet(), "cheatsheetSlotItem", PhosphorRoles::Cheatsheet,
+             "cheatsheet on this screen");
 
     // Wire QML signals → animator-driven slot hide / forward.
     // String-based SIGNAL/SLOT macros are required here because the source
@@ -187,6 +189,7 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
                      SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
     QObject::connect(window, SIGNAL(layoutPickerSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
     QObject::connect(window, SIGNAL(layoutPickerDismissRequested()), this, SLOT(onLayoutPickerDismissRequested()));
+    QObject::connect(window, SIGNAL(cheatsheetDismissRequested()), this, SLOT(onCheatsheetDismissRequested()));
     // No zoneSelectorZoneSelected wiring: the zone-selector slot is input-
     // transparent by design and hit-testing runs in C++ via
     // updateSelectorPosition. ZoneSelectorContent's zone previews declare no
@@ -325,8 +328,9 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // real drag-end via dismissOverlayWindow - that is the right edge
     // for the shell to actually unmap when no other slot is up.
     const bool anyVisible = isVisible(s.osdSlot()) || isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot())
-        || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot());
-    const bool anyInputGrabbing = isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot());
+        || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot()) || isVisible(s.cheatsheetSlot());
+    const bool anyInputGrabbing =
+        isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
 
     m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing);
 }

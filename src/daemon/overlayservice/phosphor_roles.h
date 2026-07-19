@@ -109,6 +109,15 @@ inline const PhosphorLayer::Role SnapAssist =
 inline const PhosphorLayer::Role LayoutPicker =
     PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-layout-picker"));
 
+/// Shortcut-cheatsheet config-only role. Same shape as LayoutPicker — the
+/// sheet is an Item slot inside the per-screen passive shell and this role
+/// exists purely as the SurfaceAnimator config lookup key. Escape-to-dismiss
+/// rides a dedicated KGlobalAccel ad-hoc grab registered on show and
+/// released on dismiss (the shell is kbd-None). Singleton at the daemon
+/// level — m_cheatsheetScreenId tracks which screen's slot is active.
+inline const PhosphorLayer::Role Cheatsheet =
+    PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-cheatsheet"));
+
 /// Shader preview (editor Shader Settings dialog). Floating Overlay
 /// layer, no anchors, no keyboard. Singleton. Positioned programmatically
 /// by the caller.

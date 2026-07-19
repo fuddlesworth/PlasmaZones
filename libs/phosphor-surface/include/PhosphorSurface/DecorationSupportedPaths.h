@@ -35,6 +35,7 @@ inline QStringList decorationLeafSurfacePaths()
         QStringLiteral("popup.snapAssist"),
         QStringLiteral("popup.zoneSelector"),
         QStringLiteral("popup.layoutPicker"),
+        QStringLiteral("popup.cheatsheet"),
     };
 }
 

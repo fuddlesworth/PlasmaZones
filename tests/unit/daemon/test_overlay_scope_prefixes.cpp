@@ -120,6 +120,21 @@ std::unique_ptr<PAL::SurfaceAnimator> buildAnimatorMatchingDaemon(PhosphorAnimat
                                                         .hideShaderParameters = {}};
     anim->registerConfigForRole(PhosphorRoles::SnapAssist, snapAssistConfig);
 
+    // Cheatsheet: popup surface family, dedicated `.show` leaf, picker-style
+    // fade+scale envelope.
+    const PAL::SurfaceAnimator::Config cheatsheetConfig{.showProfile = QStringLiteral("popup.cheatsheet.show"),
+                                                        .hideProfile = {},
+                                                        .showScaleProfile = QStringLiteral("popup.cheatsheet.show"),
+                                                        .hideScaleProfile = {},
+                                                        .showScaleFrom = 0.94,
+                                                        .showShaderEffectId = {},
+                                                        .hideShaderEffectId = {},
+                                                        .showShaderProfile = {},
+                                                        .hideShaderProfile = {},
+                                                        .showShaderParameters = {},
+                                                        .hideShaderParameters = {}};
+    anim->registerConfigForRole(PhosphorRoles::Cheatsheet, cheatsheetConfig);
+
     return anim;
 }
 
@@ -155,6 +170,20 @@ private Q_SLOTS:
         QCOMPARE(PhosphorRoles::ZoneSelector.scopePrefix, QStringLiteral("plasmazones-zone-selector"));
         QCOMPARE(PhosphorRoles::SnapAssist.scopePrefix, QStringLiteral("plasmazones-snap-assist"));
         QCOMPARE(PhosphorRoles::LayoutPicker.scopePrefix, QStringLiteral("plasmazones-layout-picker"));
+        QCOMPARE(PhosphorRoles::Cheatsheet.scopePrefix, QStringLiteral("plasmazones-cheatsheet"));
+    }
+
+    /// Per-instance cheatsheet role resolves to its own registered config
+    /// (popup.cheatsheet.* legs), not the picker's or the library default.
+    void cheatsheet_scope_resolves_to_registered_config()
+    {
+        PhosphorAnimation::PhosphorProfileRegistry registry;
+        const auto anim = buildAnimatorMatchingDaemon(registry);
+        const auto role = perInstanceRole(PhosphorRoles::Cheatsheet, QStringLiteral("DP-1"), 7);
+        const auto cfg = anim->configForRole(role);
+        QCOMPARE(cfg.showProfile, QStringLiteral("popup.cheatsheet.show"));
+        QCOMPARE(cfg.showScaleProfile, QStringLiteral("popup.cheatsheet.show"));
+        QCOMPARE(cfg.showScaleFrom, 0.94);
     }
 
     /// Per-instance OSD role resolves to the registered osd config. If

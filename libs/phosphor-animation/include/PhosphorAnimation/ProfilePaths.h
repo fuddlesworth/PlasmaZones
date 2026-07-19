@@ -96,6 +96,9 @@ PHOSPHORANIMATION_EXPORT extern const QString PopupLayoutPickerHide;
 PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssist;
 PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssistShow;
 PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssistHide;
+PHOSPHORANIMATION_EXPORT extern const QString PopupCheatsheet;
+PHOSPHORANIMATION_EXPORT extern const QString PopupCheatsheetShow;
+PHOSPHORANIMATION_EXPORT extern const QString PopupCheatsheetHide;
 
 // panel.* — persistent in-app side surfaces (settings nav rail, editor
 // property panel). Absorbs the former sidebar.* root — sidebars are panels.

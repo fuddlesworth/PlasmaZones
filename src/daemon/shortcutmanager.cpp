@@ -12,6 +12,9 @@
 #include <PhosphorShortcuts/IBackend.h>
 #include <PhosphorShortcuts/Registry.h>
 
+#include <QHash>
+#include <QVariantMap>
+
 #include <algorithm>
 
 namespace PlasmaZones {
@@ -63,6 +66,7 @@ constexpr auto kIdDecreaseMasterRatio = "decrease_master_ratio";
 constexpr auto kIdIncreaseMasterCount = "increase_master_count";
 constexpr auto kIdDecreaseMasterCount = "decrease_master_count";
 constexpr auto kIdRetile = "retile";
+constexpr auto kIdToggleCheatsheet = "toggle_cheatsheet";
 
 QString quickLayoutId(int slotZeroBased)
 {
@@ -302,6 +306,13 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->retileRequested();
      }},
+
+    // ─── Cheatsheet ────────────────────────────────────────────────────────
+    {kIdToggleCheatsheet, &ConfigDefaults::toggleCheatsheetShortcut, &Settings::toggleCheatsheetShortcut,
+     "Open Shortcut Cheatsheet",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->toggleCheatsheetRequested();
+     }},
 };
 
 // Indexed slot defaults — array of static accessors so the slot loop can
@@ -317,6 +328,97 @@ constexpr DefaultGetter kSnapToZoneDefaults[9] = {
     &ConfigDefaults::snapToZone4Shortcut, &ConfigDefaults::snapToZone5Shortcut, &ConfigDefaults::snapToZone6Shortcut,
     &ConfigDefaults::snapToZone7Shortcut, &ConfigDefaults::snapToZone8Shortcut, &ConfigDefaults::snapToZone9Shortcut,
 };
+
+// ─── Cheatsheet catalog metadata ────────────────────────────────────────────
+// Display category + mode applicability per shortcut id, consumed by
+// cheatsheetModel(). Kept as a separate id-keyed table (rather than columns
+// on kStaticEntries) so registration stays independent of presentation and
+// the whole classification reads in one place. Category labels are
+// untranslated keys; cheatsheetModel() runs them through PhosphorI18n::tr.
+//
+// Mode classification contract (maintainer-decided):
+//  - directional move/focus/swap are generic navigation → all modes
+//  - zone-centric ops (snap-to-zone slots, empty-zone push, restore size,
+//    cycle/rotate within zones) are hard no-ops off snapping → snapping
+//  - master-stack ops are hard no-ops off autotile → autotile
+//  - toggle_autotile is the doorway INTO autotile → all modes, always shown
+struct CatalogMeta
+{
+    const char* category;
+    int categoryOrder;
+    // "all" | "snapping" | "autotile" — string form matches what the QML
+    // filter consumes; no enum round-trip needed.
+    const char* mode;
+};
+
+CatalogMeta catalogMetaForId(const QString& id)
+{
+    static const QHash<QString, CatalogMeta> kMeta = [] {
+        QHash<QString, CatalogMeta> m;
+        const auto add = [&m](const char* id, const char* category, int order, const char* mode) {
+            m.insert(QLatin1String(id), {category, order, mode});
+        };
+        add(kIdOpenEditor, "General", 0, "all");
+        add(kIdOpenSettings, "General", 0, "all");
+        add(kIdToggleCheatsheet, "General", 0, "all");
+        add(kIdToggleWindowFloat, "General", 0, "all");
+        add(kIdToggleAutotile, "General", 0, "all");
+        add(kIdPreviousLayout, "Layouts", 1, "all");
+        add(kIdNextLayout, "Layouts", 1, "all");
+        add(kIdLayoutPicker, "Layouts", 1, "all");
+        add(kIdToggleLayoutLock, "Layouts", 1, "all");
+        add(kIdResnapToNewLayout, "Layouts", 1, "all");
+        add(kIdSnapAllWindows, "Layouts", 1, "all");
+        add(kIdPushToEmptyZone, "Snap to Zone", 3, "snapping");
+        add(kIdRestoreWindowSize, "Snap to Zone", 3, "snapping");
+        add(kIdMoveWindowLeft, "Move Window", 4, "all");
+        add(kIdMoveWindowRight, "Move Window", 4, "all");
+        add(kIdMoveWindowUp, "Move Window", 4, "all");
+        add(kIdMoveWindowDown, "Move Window", 4, "all");
+        add(kIdFocusZoneLeft, "Focus", 5, "all");
+        add(kIdFocusZoneRight, "Focus", 5, "all");
+        add(kIdFocusZoneUp, "Focus", 5, "all");
+        add(kIdFocusZoneDown, "Focus", 5, "all");
+        add(kIdSwapWindowLeft, "Swap Window", 6, "all");
+        add(kIdSwapWindowRight, "Swap Window", 6, "all");
+        add(kIdSwapWindowUp, "Swap Window", 6, "all");
+        add(kIdSwapWindowDown, "Swap Window", 6, "all");
+        add(kIdRotateWindowsCW, "Window Order", 7, "snapping");
+        add(kIdRotateWindowsCCW, "Window Order", 7, "snapping");
+        add(kIdCycleWindowForward, "Window Order", 7, "snapping");
+        add(kIdCycleWindowBackward, "Window Order", 7, "snapping");
+        add(kIdSwapVirtualScreenLeft, "Virtual Screens", 8, "all");
+        add(kIdSwapVirtualScreenRight, "Virtual Screens", 8, "all");
+        add(kIdSwapVirtualScreenUp, "Virtual Screens", 8, "all");
+        add(kIdSwapVirtualScreenDown, "Virtual Screens", 8, "all");
+        add(kIdRotateVirtualScreensCW, "Virtual Screens", 8, "all");
+        add(kIdRotateVirtualScreensCCW, "Virtual Screens", 8, "all");
+        add(kIdFocusMaster, "Autotile", 9, "autotile");
+        add(kIdSwapMaster, "Autotile", 9, "autotile");
+        add(kIdIncreaseMasterRatio, "Autotile", 9, "autotile");
+        add(kIdDecreaseMasterRatio, "Autotile", 9, "autotile");
+        add(kIdIncreaseMasterCount, "Autotile", 9, "autotile");
+        add(kIdDecreaseMasterCount, "Autotile", 9, "autotile");
+        add(kIdRetile, "Autotile", 9, "autotile");
+        return m;
+    }();
+
+    const auto it = kMeta.constFind(id);
+    if (it != kMeta.constEnd()) {
+        return *it;
+    }
+    // Indexed slot families are prefix-keyed, not enumerated above.
+    if (id.startsWith(QLatin1String("quick_layout_"))) {
+        return {"Layouts", 1, "all"};
+    }
+    if (id.startsWith(QLatin1String("snap_to_zone_"))) {
+        return {"Snap to Zone", 3, "snapping"};
+    }
+    // A shortcut added to the table without catalog metadata still shows up
+    // (miscategorised beats invisible), and the log points at the fix.
+    qCWarning(lcShortcuts) << "cheatsheet: no catalog metadata for shortcut id" << id;
+    return {"Other", 99, "all"};
+}
 
 // QKeySequence(QString) silently returns an empty sequence on malformed
 // input. Wrap with a warning log so a typo in the config surfaces from the
@@ -388,6 +490,11 @@ void ShortcutManager::registerShortcuts()
     }
     if (!m_registry) {
         m_registry = std::make_unique<PhosphorShortcuts::Registry>(m_backend.get(), nullptr);
+        // External rebinds (System Settings, compositor-side) invalidate the
+        // cheatsheet catalog's trigger strings. Registry filters to owned ids.
+        connect(m_registry.get(), &PhosphorShortcuts::Registry::triggersChanged, this, [this](const QString&) {
+            Q_EMIT cheatsheetModelChanged();
+        });
     }
 
     m_registrationInProgress = true;
@@ -416,6 +523,9 @@ void ShortcutManager::registerShortcuts()
             // flag is cleared so each drained op goes through the normal
             // path instead of re-queuing itself.
             drainPendingAdhocOps();
+            // The catalog is first meaningful once the batch has settled
+            // (backend read-back can answer now).
+            Q_EMIT cheatsheetModelChanged();
         },
         Qt::SingleShotConnection);
 
@@ -434,6 +544,9 @@ void ShortcutManager::updateShortcuts()
     }
     rebindAll();
     m_registry->flush();
+    // Sequences may have changed with the settings — cheap to over-notify,
+    // consumers re-query lazily.
+    Q_EMIT cheatsheetModelChanged();
 }
 
 void ShortcutManager::unregisterShortcuts()
@@ -548,6 +661,35 @@ void ShortcutManager::drainPendingAdhocOps()
             unregisterAdhocShortcut(op.id);
         }
     }
+}
+
+QVariantList ShortcutManager::cheatsheetModel() const
+{
+    QVariantList rows;
+    rows.reserve(m_entries.size());
+    for (const auto& e : m_entries) {
+        const CatalogMeta meta = catalogMetaForId(e.id);
+        QStringList triggers;
+        if (m_registry) {
+            triggers = m_registry->effectiveTriggers(e.id);
+        }
+        QVariantMap row;
+        row.insert(QStringLiteral("id"), e.id);
+        row.insert(QStringLiteral("label"), e.description);
+        row.insert(QStringLiteral("category"), PhosphorI18n::tr(meta.category));
+        row.insert(QStringLiteral("categoryOrder"), meta.categoryOrder);
+        row.insert(QStringLiteral("triggers"), triggers);
+        row.insert(QStringLiteral("assigned"), !triggers.isEmpty());
+        row.insert(QStringLiteral("mode"), QString::fromLatin1(meta.mode));
+        rows.push_back(row);
+    }
+    // Category blocks in display order; stable sort keeps the table's
+    // hand-authored order within each category.
+    std::stable_sort(rows.begin(), rows.end(), [](const QVariant& a, const QVariant& b) {
+        return a.toMap().value(QLatin1String("categoryOrder")).toInt()
+            < b.toMap().value(QLatin1String("categoryOrder")).toInt();
+    });
+    return rows;
 }
 
 void ShortcutManager::rebindAll()

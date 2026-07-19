@@ -1242,6 +1242,7 @@ public:
         tree.setOverride(QStringLiteral("osd"), card);
         tree.setOverride(QStringLiteral("popup.layoutPicker"), card);
         tree.setOverride(QStringLiteral("popup.zoneSelector"), card);
+        tree.setOverride(QStringLiteral("popup.cheatsheet"), card);
         return tree;
     }
 
@@ -1586,6 +1587,14 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Shortcut Cheatsheet Overlay
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool cheatsheetEnabled()
+    {
+        return true;
+    }
+    // ═══════════════════════════════════════════════════════════════════════════
     // Global Shortcuts
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1596,6 +1605,16 @@ public:
     static QString openSettingsShortcut()
     {
         return QStringLiteral("Meta+Shift+P");
+    }
+    static QString toggleCheatsheetShortcut()
+    {
+        // The "?" help idiom (physically Meta+Shift+/ on US layouts). Stored
+        // as the produced symbol, NOT "Meta+Shift+/": KWin strips Shift as a
+        // consumed modifier when translating the keysym, so the compositor
+        // delivers Meta+Question and a Meta+Shift+/ registration never
+        // matches. (Letters are special-cased by KWin, which is why
+        // Meta+Shift+E etc. work spelled with Shift.)
+        return QStringLiteral("Meta+?");
     }
     static QString previousLayoutShortcut()
     {

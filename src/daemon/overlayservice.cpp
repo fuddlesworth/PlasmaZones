@@ -101,6 +101,11 @@ QQuickItem* OverlayService::PerScreenOverlayState::mainOverlaySlot() const
     return slotItemOrNull(*this, PhosphorSlotKeys::MainOverlay());
 }
 
+QQuickItem* OverlayService::PerScreenOverlayState::cheatsheetSlot() const
+{
+    return slotItemOrNull(*this, PhosphorSlotKeys::Cheatsheet());
+}
+
 // Per-role SurfaceAnimator config builders + setupSurfaceAnimator +
 // applyShaderProfilesToAnimator live in overlayservice/animation_config.cpp.
 

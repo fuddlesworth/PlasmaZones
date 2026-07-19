@@ -456,6 +456,7 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     QVector<PhosphorConfig::KeyDef> globals;
     addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut());
     addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut());
+    addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut());
     addShortcut(globals, CD::previousLayoutKey(), CD::previousLayoutShortcut());
     addShortcut(globals, CD::nextLayoutKey(), CD::nextLayoutShortcut());
     const QString quickDefaults[9] = {
@@ -515,6 +516,13 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::incMasterCountKey(), CD::autotileIncMasterCountShortcut(), QMetaType::QString},
         {CD::decMasterCountKey(), CD::autotileDecMasterCountShortcut(), QMetaType::QString},
         {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString},
+    };
+
+    // Cheatsheet overlay knobs live here rather than in their own append
+    // function — the group exists for the cheatsheet's toggle trigger,
+    // which is shortcut-adjacent surface.
+    schema.groups[CD::cheatsheetGroup()] = {
+        {CD::enabledKey(), CD::cheatsheetEnabled(), QMetaType::Bool},
     };
 }
 

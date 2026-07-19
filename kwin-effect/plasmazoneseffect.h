@@ -1792,6 +1792,7 @@ private:
     Qt::KeyboardModifiers m_currentModifiers = Qt::NoModifier;
     Qt::MouseButtons m_currentMouseButtons = Qt::NoButton;
     bool m_keyboardGrabbed = false;
+
     // Re-entrancy guard: true while captureOldWindowSnapshot's drawWindow walks
     // the chain, so paint/apply hooks behave plainly during the raw capture
     // pass (no morph quad deform / re-capture).

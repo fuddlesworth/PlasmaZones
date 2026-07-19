@@ -48,4 +48,10 @@ inline const QString& MainOverlay()
     return s;
 }
 
+inline const QString& Cheatsheet()
+{
+    static const auto s = QStringLiteral("cheatsheet");
+    return s;
+}
+
 } // namespace PlasmaZones::PhosphorSlotKeys

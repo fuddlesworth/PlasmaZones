@@ -354,6 +354,23 @@ public:
     void showLayoutPicker(const QString& screenId = QString());
     bool isLayoutPickerVisible() const override;
 
+    // Shortcut cheatsheet overlay (display-only shortcut reference card).
+    // Daemon-mediated push: the caller resolves the catalog + current mode
+    // (per-screen tri-state) and hands them in; the service owns only slot
+    // lifecycle. `currentMode` is "snapping" | "autotile" | "scrolling";
+    // `autotileAvailable` mirrors the global feature gate (when false the
+    // Autotile group hides regardless of mode).
+    void showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,
+                        bool autotileAvailable);
+    void hideCheatsheet();
+    bool isCheatsheetVisible() const;
+    /// Re-push model/mode into an already-visible cheatsheet (live refilter
+    /// on mode switch or rebind). No-op when hidden — the next show
+    /// re-resolves everything anyway.
+    void refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable);
+    /// Screen the visible cheatsheet is bound to; empty when hidden.
+    QString cheatsheetScreenId() const;
+
     /// Forwarders to the active picker slot's QML moveSelection /
     /// confirmSelection functions. Used by global-accel callbacks
     /// (registered by WindowDragAdaptor on picker show) since the
@@ -422,6 +439,11 @@ private Q_SLOTS:
     /// Receiver for the shell's `layoutPickerDismissRequested` QML
     /// signal (backdrop click). Routes to hideLayoutPicker.
     void onLayoutPickerDismissRequested();
+
+    /// Receiver for the shell's `cheatsheetDismissRequested` QML signal
+    /// (backdrop click; the Escape ad-hoc grab routes to hideCheatsheet
+    /// directly). Routes to hideCheatsheet.
+    void onCheatsheetDismissRequested();
 
 private:
     // Sync CAVA service state (start/stop/reconfigure) with current settings AND
@@ -736,6 +758,10 @@ private:
     QString m_layoutPickerScreenId;
     bool m_layoutPickerVisible = false;
 
+    // Shortcut cheatsheet — same singleton-slot shape as the picker.
+    QString m_cheatsheetScreenId;
+    bool m_cheatsheetVisible = false;
+
     bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
     /// Surfaces currently in the prime cycle (between primeSurfaceRender-
     /// Pipeline's show and its frameSwapped-driven hide). User-triggered
@@ -855,6 +881,10 @@ private:
     /// Animator-driven slot-hide completion for layout-picker. Mirrors
     /// onSnapAssistSlotHideCompleted pattern.
     void onLayoutPickerSlotHideCompleted(const QString& effectiveId);
+
+    /// Animator-driven slot-hide completion for the cheatsheet. Mirrors
+    /// onLayoutPickerSlotHideCompleted.
+    void onCheatsheetSlotHideCompleted(const QString& effectiveId);
 
     /// Animator-driven slot-hide completion for zone-selector.
     void onZoneSelectorSlotHideCompleted(const QString& effectiveId);

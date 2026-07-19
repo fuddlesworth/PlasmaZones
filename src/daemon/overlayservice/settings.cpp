@@ -118,6 +118,8 @@ void OverlayService::setSettings(ISettings* settings)
                         applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
                     if (m_layoutPickerVisible)
                         applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
+                    if (m_cheatsheetVisible)
+                        applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
                 }
             });
 

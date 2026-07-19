@@ -410,6 +410,11 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("snapAssistTriggers")] = QStringLiteral("stringlist");
 
+    // Shortcut cheatsheet overlay. cheatsheetEnabled is settings-app
+    // surface. The toggle shortcut itself is NOT on this wire — like every
+    // other static shortcut it rebinds via KGlobalAccel / System Settings.
+    REGISTER_BOOL_SETTING("cheatsheetEnabled", cheatsheetEnabled, setCheatsheetEnabled)
+
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
 
