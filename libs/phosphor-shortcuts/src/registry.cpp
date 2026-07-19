@@ -71,10 +71,28 @@ void Registry::rebind(const QString& id, const QKeySequence& seq)
         return;
     }
     if (seq.isEmpty()) {
-        // An empty sequence would otherwise leave the grab registered with no
-        // key (the pre-library stale-Wayland-grab hazard from discussion #155).
-        // Route through unbind() so the backend drops the grab cleanly.
-        unbind(id);
+        // Clearing a shortcut must release the grab (an empty sequence left
+        // registered is the pre-library stale-Wayland-grab hazard from
+        // discussion #155) but must NOT forget the entry. Consumers rebind by
+        // id on every settings change (ShortcutManager::rebindAll walks its
+        // own table), so an evaporated entry turned every later rebind for
+        // the id into a warning no-op — a cleared shortcut could never be
+        // re-enabled until process restart (discussion #809). Drop the
+        // backend registration here, keep the entry, and reset the sent-state
+        // so a later non-empty rebind() re-registers through flush().
+        if (it->binding.currentSeq.isEmpty()) {
+            return;
+        }
+        it->binding.currentSeq = QKeySequence();
+        if (it->registered && m_backend) {
+            m_backend->unregisterShortcut(id);
+        }
+        // Reset the full sent-state to match a fresh Entry — the backend has
+        // forgotten this id, so every lastSent field must say "nothing sent".
+        it->registered = false;
+        it->lastSentDefault = QKeySequence();
+        it->lastSentCurrent = QKeySequence();
+        it->lastSentPersistent = true;
         return;
     }
     if (it->binding.currentSeq == seq) {
