@@ -506,12 +506,15 @@ QString ProfileStore::committedActiveId() const
 
 bool ProfileStore::writeActiveId(const QString& id)
 {
+    const bool changed = committedActiveId() != id;
     QJsonObject index = readIndex();
     index.insert(kProfActiveKey, id.isEmpty() ? QJsonValue(QJsonValue::Null) : QJsonValue(id));
     if (!writeIndex(index)) {
         return false;
     }
-    Q_EMIT committedActiveIdChanged(id);
+    if (changed) {
+        Q_EMIT committedActiveIdChanged(id);
+    }
     return true;
 }
 
@@ -913,6 +916,10 @@ bool ProfileStore::removeProfile(const QString& id)
     // staged one drives the UI; the committed one lives in index.json, and left
     // dangling it would be re-adopted as the staged id on next launch (or on
     // Discard), pointing the page at a profile that no longer exists.
+    // The two clears are separate notifications, so the controller passes
+    // through a one-call transient where only one pointer is cleared and the
+    // page reads dirty; the second clear lands synchronously right after, so
+    // no UI frame ever observes it.
     if (m_config.stagedActiveId && m_config.setStagedActiveId && m_config.stagedActiveId() == id) {
         m_config.setStagedActiveId(QString());
     }

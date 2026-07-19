@@ -21,6 +21,7 @@ import org.kde.kirigami as Kirigami
  *                                      //   active, modified, signature
  *   QString createProfile(name, description, parentId)
  *   bool    renameProfile(id, newName, description)
+ *   bool    updateProfileFromCurrent(id)
  *   QString duplicateProfile(id)
  *   bool    setParent(id, parentId)
  *   bool    removeProfile(id)
@@ -80,6 +81,7 @@ SettingsFlickable {
         if (root.bridge.createProfile(nameField.text.trim(), descField.text.trim(), parentId).length > 0) {
             nameField.text = "";
             descField.text = "";
+            parentCombo.chosenParentId = "";
             parentCombo.currentIndex = 0;
         }
     }
@@ -188,6 +190,14 @@ SettingsFlickable {
                     ProfileComboBox {
                         id: parentCombo
 
+                        // The user's pick, held by id so it survives model
+                        // reloads: parentOptions rebinds on every
+                        // profilesChanged / debounced settings edit, and a
+                        // model reassignment resets currentIndex — without
+                        // this a half-filled form silently dropped its
+                        // chosen parent back to "Defaults".
+                        property string chosenParentId: ""
+
                         Layout.fillWidth: true
                         model: root.parentOptions
                         // No `currentIndex: 0` binding: the ComboBox default is
@@ -195,6 +205,13 @@ SettingsFlickable {
                         // imperatively after a save — a binding here would just
                         // be severed by that write.
                         Accessible.name: i18n("Parent profile")
+                        onActivated: chosenParentId = currentValue !== undefined ? currentValue : ""
+                        onModelChanged: {
+                            if (chosenParentId === "")
+                                return;
+                            const idx = indexOfValue(chosenParentId);
+                            currentIndex = idx >= 0 ? idx : 0;
+                        }
                     }
 
                     Button {

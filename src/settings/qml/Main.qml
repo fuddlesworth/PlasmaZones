@@ -524,10 +524,14 @@ PhosphorUi.SettingsAppWindow {
     /// True while the global search dropdown is open — suppresses page-step
     /// shortcuts so ↑/↓/Enter drive the results list, not page navigation.
     property bool _searchOpen: false
+    /// True while the sidebar profile switcher's dropdown is open. Mirrored
+    /// out of the header Component (whose ids are not reachable from this
+    /// scope) by a Binding next to the combo.
+    property bool _profilePopupOpen: false
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen && !window._profilePopupOpen
 
     Shortcut {
         sequence: "Ctrl+PgUp"
@@ -1019,6 +1023,15 @@ PhosphorUi.SettingsAppWindow {
                         const row = profileHeader.profileRows[index];
                         if (row && profileHeader.profilesBridge)
                             profileHeader.profilesBridge.activateProfile(row.id);
+                    }
+
+                    // Suppress Ctrl+PgUp/PgDown page-stepping while the
+                    // dropdown is open, like every other window-scoped popup
+                    // folded into _navShortcutsEnabled.
+                    Binding {
+                        target: window
+                        property: "_profilePopupOpen"
+                        value: profileCombo.popup.visible
                     }
                 }
             }

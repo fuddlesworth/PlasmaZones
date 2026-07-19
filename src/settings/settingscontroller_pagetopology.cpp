@@ -220,7 +220,9 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // Scope: KConfig-backed settings pages. The Rules page (separate rule store),
     // the Profiles page (its own file store; the staged active pointer reverts
     // through ProfilePageController's StagingDomain, and the config a profile
-    // stages is owned key-by-key by the pages listed here),
+    // stages reverts through whichever surface owns each key — the manifest
+    // pages here, or their own staged machinery for the animation, decoration
+    // and ordering keys),
     // the layouts page (separate-store), the controller-mediated ordering/shortcuts
     // pages, the Animations tree, and the Decoration pages (whose three leaves
     // SHARE the one DecorationProfileTree key — the one-owner invariant above

@@ -106,25 +106,28 @@ function _factorSuffixes(node) {
             };
             order.push(key);
         }
-        groups[key].members.push(node.children[c]);
+        // Members are recorded by INDEX, not by label: two siblings can share
+        // a label (distinct treeKeys) and a label-keyed claim would collapse
+        // them into whichever group claimed the label last.
+        groups[key].members.push(c);
     }
 
     // Only a tail shared by at least two siblings is worth a node of its own.
     const rebuilt = [];
-    const claimed = Object.create(null);
+    const claimed = Object.create(null); // child index -> group key
     for (let o = 0; o < order.length; ++o) {
         const group = groups[order[o]];
         if (group.members.length < 2) {
             continue;
         }
         for (let m = 0; m < group.members.length; ++m) {
-            claimed[group.members[m].label] = order[o];
+            claimed[group.members[m]] = order[o];
         }
     }
     const emitted = Object.create(null);
     for (let k = 0; k < node.children.length; ++k) {
         const child = node.children[k];
-        const key = claimed[child.label];
+        const key = claimed[k];
         if (key === undefined) {
             rebuilt.push(child);
             continue;
@@ -133,7 +136,7 @@ function _factorSuffixes(node) {
             const group = groups[key];
             const holder = _node(group.tail.join(" › "));
             for (let m = 0; m < group.members.length; ++m) {
-                const member = group.members[m];
+                const member = node.children[group.members[m]];
                 const leaf = _node(member.label);
                 const sole = _soleLeaf(member);
                 leaf.entries = sole.entries;

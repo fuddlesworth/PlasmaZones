@@ -969,6 +969,12 @@ private Q_SLOTS:
             }
         }
         QCOMPARE(renamed.value(QStringLiteral("name")).toString(), QStringLiteral("Work (2)"));
+
+        // A rename to the current name and description is a successful no-op:
+        // no file rewrite, no profilesChanged churn.
+        QSignalSpy changes(m_store, &ProfileStore::profilesChanged);
+        QVERIFY(m_store->renameProfile(id, QStringLiteral("Work (2)"), QString()));
+        QCOMPARE(changes.count(), 0);
     }
 
     /// duplicateProfile mints a fresh id with a derived unique name, and the

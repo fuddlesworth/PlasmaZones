@@ -131,8 +131,27 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
     case QMetaType::Bool:
         return QVariant(g.readBool(key, defaultValue.toBool()));
     case QMetaType::Int:
-    case QMetaType::UInt:
         return QVariant(g.readInt(key, defaultValue.toInt()));
+    case QMetaType::UInt: {
+        // writeVariantTo routes UInt through writeUint64, which persists a
+        // value above INT_MAX as a STRING — without this branch readInt would
+        // parse-fail and silently return the default, dropping the stored
+        // value (the same write/read asymmetry the LongLong and ULongLong
+        // branches below guard against).
+        if (!g.hasKey(key)) {
+            return QVariant(defaultValue.toUInt());
+        }
+        const QString raw = g.readString(key);
+        if (!raw.isEmpty()) {
+            bool ok = false;
+            const uint parsed = raw.toUInt(&ok);
+            if (ok) {
+                return QVariant(parsed);
+            }
+        }
+        const int asInt = g.readInt(key, defaultValue.toInt());
+        return QVariant(asInt < 0 ? 0U : static_cast<uint>(asInt));
+    }
     case QMetaType::LongLong: {
         // writeVariantTo persists out-of-range int64 values as strings (see
         // writeInt64 below) so readInt(...) would parse-fail and silently

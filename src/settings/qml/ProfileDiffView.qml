@@ -171,6 +171,17 @@ ColumnLayout {
                     target: entryDelegate
                 }
 
+                // onPaint reads contentRow.height for the children-connector
+                // start point, so a late relayout (wrapping label) must
+                // repaint too or the connector top sits at the stale height.
+                Connections {
+                    function onHeightChanged() {
+                        treeCanvas.requestPaint();
+                    }
+
+                    target: contentRow
+                }
+
                 // onPaint samples the theme-derived guide colour. Every
                 // PlatformTheme colour shares the one `colorsChanged` notify
                 // signal, so this one handler repaints on any palette change.

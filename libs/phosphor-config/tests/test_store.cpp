@@ -105,6 +105,36 @@ private Q_SLOTS:
         QCOMPARE(store.read<bool>(QStringLiteral("Window"), QStringLiteral("Maximized")), false);
     }
 
+    void resetGroupEmitsOncePerStoredKeyOnly()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+
+        // Three of the four declared Window keys carry a stored value; Title
+        // stays absent.
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
+        store.write(QStringLiteral("Window"), QStringLiteral("Height"), 768);
+        store.write(QStringLiteral("Window"), QStringLiteral("Maximized"), true);
+
+        QSignalSpy spy(&store, &Store::changed);
+        store.resetGroup(QStringLiteral("Window"));
+
+        // One changed() per key that was actually reset, in declaration
+        // order; the absent Title key is skipped (no default stamped, no
+        // signal). The emissions land AFTER every write (the group handle is
+        // released first), so a re-entrant slot never trips the backend's
+        // single-active-group guard.
+        QCOMPARE(spy.count(), 3);
+        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("Width"));
+        QCOMPARE(spy.at(1).at(1).toString(), QStringLiteral("Height"));
+        QCOMPARE(spy.at(2).at(1).toString(), QStringLiteral("Maximized"));
+
+        // A group with nothing stored resets nothing and stays silent.
+        spy.clear();
+        store.resetGroup(QStringLiteral("Appearance"));
+        QCOMPARE(spy.count(), 0);
+    }
+
     void exportToJsonIncludesEveryDeclaredKey()
     {
         JsonBackend backend(m_path);
@@ -518,8 +548,16 @@ private Q_SLOTS:
         store.write(QStringLiteral("G"), QStringLiteral("Big"), QVariant::fromValue(big));
 
         // Stored as a string — raw readString picks up the canonical form.
-        auto g = store.backend()->group(QStringLiteral("G"));
-        QCOMPARE(g->readString(QStringLiteral("Big")), QString::number(big));
+        {
+            auto g = store.backend()->group(QStringLiteral("G"));
+            QCOMPARE(g->readString(QStringLiteral("Big")), QString::number(big));
+        }
+
+        // And the Store API round-trips it: the UInt read path must parse the
+        // string fallback back (like LongLong/ULongLong do) instead of
+        // parse-failing in readInt and silently returning the default.
+        const QVariant got = store.readVariant(QStringLiteral("G"), QStringLiteral("Big"));
+        QCOMPARE(got.toUInt(), big);
     }
 
     void read_int64RoundTripsThroughStringFallback()
