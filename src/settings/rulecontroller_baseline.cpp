@@ -66,10 +66,14 @@ void RuleController::stageUserRules(const QList<PhosphorRules::Rule>& userRules)
     for (const PhosphorRules::Rule& r : userRules) {
         // Same threat surface as the managed-id collision below: a hand-edited
         // profile file can carry rules the CRUD path (addRule) would refuse.
-        // A null id breaks the model's valid-unique-id invariant; enforce the
-        // same boundary here.
-        if (r.id.isNull()) {
-            qCWarning(lcConfig) << "stageUserRules: dropping a profile rule with a null id";
+        // Rule::fromJson is laxer than Rule::isValid — it accepts a rule whose
+        // match or action parses but fails semantic validation — and one such
+        // rule in the model poisons the eventual Save whole: RuleSet::setRules
+        // drops it, accepted < size, and the entire push is rejected with a
+        // generic validation error the user cannot trace. Enforce the full
+        // addRule boundary here instead.
+        if (!r.isValid()) {
+            qCWarning(lcConfig) << "stageUserRules: dropping an invalid profile rule" << r.id;
             continue;
         }
         // A hand-edited profile file could carry a rule whose id collides with

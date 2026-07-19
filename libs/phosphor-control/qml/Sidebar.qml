@@ -544,10 +544,13 @@ ColumnLayout {
     }
 
     // Divides the header slot from what follows, so the slot reads as its
-    // own band rather than running into the list.
+    // own band rather than running into the list. Also gated on the slot
+    // actually having content: a consumer that collapses to zero height (the
+    // profile switcher with no profiles saved) must not leave a stray divider
+    // line above the search field.
     Kirigami.Separator {
         Layout.fillWidth: true
-        visible: headerLoader.visible
+        visible: headerLoader.visible && headerLoader.item !== null && headerLoader.item.implicitHeight > 0
     }
 
     // ── Sticky search field at the top ──────────────────────────────
