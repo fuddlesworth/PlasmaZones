@@ -399,6 +399,44 @@ private Q_SLOTS:
     }
 
     /**
+     * The context-lock toggle is a read-modify-write over the whole
+     * lockedScreens list (the daemon and the settings app are concurrent
+     * writers, guarded by refreshCleanBackendFromDisk at the top of
+     * setContextLocked). Pin the round-trip, the same-state no-op, and the
+     * loud refusal of the unrepresentable (screen, 0, activity) shape —
+     * silently composing a whole-screen lock there would be data loss.
+     */
+    void testContextLock_roundTripNoOpAndInvalidShape()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QSignalSpy lockSpy(&settings, &Settings::lockedScreensChanged);
+
+        settings.setContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work"), true);
+        QVERIFY(settings.isContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work")));
+        QCOMPARE(settings.lockedScreens(), QStringList{QStringLiteral("DP-1:2:work")});
+        QCOMPARE(lockSpy.count(), 1);
+
+        // Locking an already-locked context is a no-op: no write, no signal.
+        settings.setContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work"), true);
+        QCOMPARE(lockSpy.count(), 1);
+
+        // (screen, 0, activity) has no representable form — refused loudly,
+        // nothing written, instead of degrading to a whole-screen lock.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("activity supplied without")));
+        settings.setContextLocked(QStringLiteral("DP-2"), 0, QStringLiteral("work"), true);
+        QCOMPARE(settings.lockedScreens(), QStringList{QStringLiteral("DP-1:2:work")});
+        QCOMPARE(lockSpy.count(), 1);
+
+        // Unlock round-trips back to empty.
+        settings.setContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work"), false);
+        QVERIFY(!settings.isContextLocked(QStringLiteral("DP-1"), 2, QStringLiteral("work")));
+        QVERIFY(settings.lockedScreens().isEmpty());
+        QCOMPARE(lockSpy.count(), 2);
+    }
+
+    /**
      * REGRESSION GUARD (PR #331 review).
      *
      * load() must emit per-property NOTIFY signals when the on-disk value

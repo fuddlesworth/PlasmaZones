@@ -358,6 +358,9 @@ Item {
             z: 1
             Accessible.role: Accessible.Button
             Accessible.name: i18n("Reset to defaults")
+            // Mouse clicks land on clickArea (z:10), whose region test calls
+            // clearAll — this handler is the KEYBOARD and assistive-tech
+            // activation path, which invokes the button directly. Not dead.
             onClicked: root.clearAll()
             QQC2.ToolTip.visible: hovered && root.tooltipEnabled
             QQC2.ToolTip.text: i18n("Reset to defaults")

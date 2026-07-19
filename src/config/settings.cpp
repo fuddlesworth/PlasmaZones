@@ -3214,11 +3214,11 @@ QStringList Settings::lockedScreens() const
 }
 void Settings::setLockedScreens(const QStringList& screens)
 {
-    // setContextLocked routes here after a read-modify-write over the whole
-    // list, and the daemon's lock toggle and the settings app's D-Bus writes
-    // are concurrent writers — refresh a clean backend first so a stale cache
-    // cannot silently drop an externally-added screen from the merge (same
-    // guard every composite RMW setter carries).
+    // Whole-replace writers (the settings app pushing a full list) still
+    // deserve a fresh no-op compare, so refresh here too. The read-modify-
+    // write path is guarded at the TOP of setContextLocked — a refresh only
+    // here would run AFTER that path's stale read (see the composite-setter
+    // ordering note above patchProfileField).
     refreshCleanBackendFromDisk();
     // Post-write compare — see writeDisableEntries for the canonicalisation
     // rationale.
@@ -3270,6 +3270,14 @@ bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop
 
 void Settings::setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity, bool locked)
 {
+    // Read-modify-write over the whole lockedScreens list, and the daemon's
+    // lock toggle and the settings app's D-Bus writes are concurrent writers.
+    // Refresh a clean backend BEFORE the lockedScreens() read below — a
+    // refresh inside setLockedScreens would run after the merge was already
+    // built from a stale cache and persist a list missing any entry another
+    // process committed in the meantime.
+    refreshCleanBackendFromDisk();
+
     // Composite-key format mirrors isContextLocked():
     //   name                          → per-screen lock
     //   name:<desktop>                → per-(screen,desktop) lock

@@ -807,6 +807,10 @@ SettingsController::SettingsController(QObject* parent)
     connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::activitiesChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::layoutsChanged, this, refreshRuleLabels);
+    // The virtual-desktop resolver reads m_virtualDesktopNames live — refresh
+    // on renames too, like its screen/activity/layout siblings, or a rule's
+    // "Desktop: Work" label stays stale until an unrelated refresh fires.
+    connect(this, &SettingsController::virtualDesktopsChanged, this, refreshRuleLabels);
     // A shader-pack rescan (user drops in a new effect, or one is removed)
     // can change an id→name mapping; refresh so resolved Shader labels track it.
     connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
@@ -829,6 +833,15 @@ SettingsController::SettingsController(QObject* parent)
     // tears it down BEFORE the borrowed layout registry. It does take a QObject
     // parent as well; see its construction below for what that is for.
     m_overlayShaderRegistry = new PlasmaZones::ShaderRegistry(this);
+    // Overlay-pack rescans change id→name mappings the OverrideOverlayShader
+    // rule labels resolve live — refresh them like the animation and surface
+    // registries above (connected here because the registry is built after
+    // that block).
+    connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this, [this]() {
+        if (m_rulesPage && m_rulesPage->model()) {
+            m_rulesPage->model()->refreshLabels();
+        }
+    });
 
     // Shared live-preview feed (T3.1): backed by the local overlay registry +
     // settings (audio-visualizer config). Owned here (unique_ptr, no QObject
