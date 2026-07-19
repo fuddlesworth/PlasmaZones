@@ -16,7 +16,10 @@
 .pragma library
 
 /// Group @p rows into a tree by shared path prefix, then flatten depth-first.
-/// Each result row is `{ label, depth, ancestors, entries, hasChildren }`.
+/// Each result row is `{ label, depth, ancestors, entries, hasChildren,
+/// source }` — `source` is the input row a leaf came from (null on grouping
+/// nodes), carried through so a per-row action can hand the original row back
+/// to the store.
 function buildRows(rows) {
     const rootNode = _node("");
 
@@ -35,6 +38,7 @@ function buildRows(rows) {
             node = child;
         }
         node.entries = source.entries;
+        node.source = source;
     }
 
     _factorSuffixes(rootNode);
@@ -50,7 +54,8 @@ function _node(label) {
         "label": label,
         "children": [],
         "byLabel": ({}),
-        "entries": null
+        "entries": null,
+        "source": null
     };
 }
 
@@ -124,7 +129,9 @@ function _factorSuffixes(node) {
             for (let m = 0; m < group.members.length; ++m) {
                 const member = group.members[m];
                 const leaf = _node(member.label);
-                leaf.entries = _soleLeafEntries(member);
+                const sole = _soleLeaf(member);
+                leaf.entries = sole.entries;
+                leaf.source = sole.source;
                 holder.children.push(leaf);
             }
             emitted[key] = true;
@@ -151,13 +158,13 @@ function _soleLeafPath(node) {
     }
 }
 
-/// The entries of the single leaf under @p node (see _soleLeafPath).
-function _soleLeafEntries(node) {
+/// The single leaf node under @p node (see _soleLeafPath).
+function _soleLeaf(node) {
     let current = node;
     while (current.entries === null && current.children.length === 1) {
         current = current.children[0];
     }
-    return current.entries;
+    return current;
 }
 
 /// Fold a node that only ever leads to one child into that child ("Rendering"
@@ -188,7 +195,8 @@ function _flatten(node, ancestors, out) {
             "depth": path.length,
             "ancestors": path,
             "entries": child.entries || [],
-            "hasChildren": child.children.length > 0
+            "hasChildren": child.children.length > 0,
+            "source": child.source
         });
         _flatten(child, path, out);
     }

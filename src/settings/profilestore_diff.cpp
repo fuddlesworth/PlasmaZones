@@ -89,8 +89,8 @@ QStringList ProfileStore::humanizeGroupSegments(const QString& group)
 }
 
 void ProfileStore::appendLeafRows(const QString& rawGroup, const QString& rawKey, const QStringList& segments,
-                                  const QJsonValue& before, const QJsonValue& after, int depth, QVariantList& rows,
-                                  const QString& identityKey)
+                                  const QVariantList& rawPath, const QJsonValue& before, const QJsonValue& after,
+                                  int depth, QVariantList& rows, const QString& identityKey)
 {
     // An unchanged subtree contributes nothing, which is what keeps the row
     // count proportional to the actual change rather than to the tree's size.
@@ -120,8 +120,10 @@ void ProfileStore::appendLeafRows(const QString& rawGroup, const QString& rawKey
             if (key == identityKey) {
                 continue;
             }
-            appendLeafRows(rawGroup, rawKey, segments + QStringList{humanizeKey(key)}, before.toObject().value(key),
-                           after.toObject().value(key), depth + 1, rows);
+            QVariantMap step;
+            step.insert(QStringLiteral("key"), key);
+            appendLeafRows(rawGroup, rawKey, segments + QStringList{humanizeKey(key)}, rawPath + QVariantList{step},
+                           before.toObject().value(key), after.toObject().value(key), depth + 1, rows);
         }
         return;
     }
@@ -135,8 +137,18 @@ void ProfileStore::appendLeafRows(const QString& rawGroup, const QString& rawKey
             const QJsonValue afterItem = i < afterItems.size() ? afterItems.at(i) : QJsonValue();
             QString identity;
             const QString segment = arraySegmentLabel(afterItem.isUndefined() ? beforeItem : afterItem, i, &identity);
-            appendLeafRows(rawGroup, rawKey, segments + QStringList{segment}, beforeItem, afterItem, depth + 1, rows,
-                           identity);
+            // Address the element by its identifying field when it has one —
+            // positions shift as siblings come and go, the identity does not.
+            QVariantMap step;
+            if (!identity.isEmpty()) {
+                step.insert(QStringLiteral("identityKey"), identity);
+                step.insert(QStringLiteral("identityValue"),
+                            (afterItem.isUndefined() ? beforeItem : afterItem).toObject().value(identity).toVariant());
+            } else {
+                step.insert(QStringLiteral("index"), i);
+            }
+            appendLeafRows(rawGroup, rawKey, segments + QStringList{segment}, rawPath + QVariantList{step}, beforeItem,
+                           afterItem, depth + 1, rows, identity);
         }
         return;
     }
@@ -145,6 +157,11 @@ void ProfileStore::appendLeafRows(const QString& rawGroup, const QString& rawKey
     row.insert(QStringLiteral("segments"), segments);
     row.insert(QStringLiteral("before"), before.toVariant());
     row.insert(QStringLiteral("after"), after.toVariant());
+    // Machine address of this leaf inside the profile's delta, so the view's
+    // per-row Revert can hand the row straight back to revertConfigChange.
+    row.insert(QStringLiteral("rawGroup"), rawGroup);
+    row.insert(QStringLiteral("rawKey"), rawKey);
+    row.insert(QStringLiteral("rawPath"), rawPath);
     // How to present this value. `kind` tells the view which values it must
     // resolve itself against live state (a layout id, a connected monitor);
     // the *Text fields carry what this side could already resolve — an enum's
@@ -179,7 +196,7 @@ QVariantList ProfileStore::configChanges(const QString& id) const
         const QJsonObject baseGroup = parentResolved.value(git.key()).toObject();
         for (auto kit = group.constBegin(); kit != group.constEnd(); ++kit) {
             appendLeafRows(git.key(), kit.key(), humanizeGroupSegments(git.key()) + QStringList{humanizeKey(kit.key())},
-                           baseGroup.value(kit.key()), kit.value(), 0, rows);
+                           QVariantList(), baseGroup.value(kit.key()), kit.value(), 0, rows);
         }
     }
     return rows;
@@ -204,6 +221,7 @@ QVariantList ProfileStore::ruleChanges(const QString& id) const
     QVariantList rows;
     for (const PhosphorRules::Rule& rule : rec.ruleUpserts) {
         QVariantMap row;
+        row.insert(QStringLiteral("id"), rule.id.toString());
         row.insert(QStringLiteral("name"), rule.name);
         row.insert(QStringLiteral("change"),
                    parentById.contains(rule.id) ? QStringLiteral("changed") : QStringLiteral("added"));
@@ -211,6 +229,7 @@ QVariantList ProfileStore::ruleChanges(const QString& id) const
     }
     for (const QUuid& removed : rec.ruleRemovedIds) {
         QVariantMap row;
+        row.insert(QStringLiteral("id"), removed.toString());
         // Name the rule as the PARENT knows it — this profile no longer carries it.
         row.insert(QStringLiteral("name"),
                    parentById.contains(removed) ? parentById.value(removed).name : removed.toString());

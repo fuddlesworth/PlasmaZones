@@ -27,6 +27,8 @@ import org.kde.kirigami as Kirigami
  *   bool    activateProfile(id)
  *   bool    exportProfile(id, localPath)
  *   QString importProfile(pathOrUrl)
+ *   bool    revertConfigChange(id, changeRow)
+ *   bool    revertRuleChange(id, ruleId)
  *   void    openProfilesDirectory()
  *   signal  profilesChanged()
  *   signal  toastRequested(text)

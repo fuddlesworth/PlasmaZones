@@ -120,16 +120,32 @@ public:
     Q_INVOKABLE QVariantList availableProfiles() const;
 
     /// What @p id overrides relative to its parent, one row per changed LEAF:
-    /// `{ segments, before, after }`. `segments` is the humanized path to the
-    /// leaf (group segments first, then the key path), which the view nests as a
-    /// tree. `before`/`after` are the raw values so QML formats them in the
-    /// user's locale. Empty when the profile overrides nothing.
+    /// `{ segments, before, after, rawGroup, rawKey, rawPath }`. `segments` is
+    /// the humanized path to the leaf (group segments first, then the key
+    /// path), which the view nests as a tree. `before`/`after` are the raw
+    /// values so QML formats them in the user's locale. `rawGroup`/`rawKey`/
+    /// `rawPath` are the machine address of the leaf inside the delta, which
+    /// revertConfigChange consumes. Empty when the profile overrides nothing.
     Q_INVOKABLE QVariantList configChanges(const QString& id) const;
 
     /// The rule differences @p id introduces relative to its parent, one row
-    /// per rule: `{ name, change }` where change is "added", "changed", or
-    /// "removed".
+    /// per rule: `{ id, name, change }` where change is "added", "changed", or
+    /// "removed" and `id` is what revertRuleChange consumes.
     Q_INVOKABLE QVariantList ruleChanges(const QString& id) const;
+
+    /// Revert ONE configChanges() row: restore the parent's value at the row's
+    /// `rawGroup`/`rawKey`/`rawPath` address inside @p id's stored delta,
+    /// dropping the key (and group) entirely when nothing else in it still
+    /// differs. A leaf inside a branch the profile removed outright restores
+    /// the parent's whole branch. Mutates only the profile FILE; if the profile
+    /// is active, the live settings are untouched and its row reads Modified.
+    Q_INVOKABLE bool revertConfigChange(const QString& id, const QVariantMap& change);
+
+    /// Revert ONE ruleChanges() row for rule @p ruleId: drop the upsert (an
+    /// added or changed rule falls back to the parent's version, if any) or
+    /// un-drop a removed parent rule. Same file-only scope as
+    /// revertConfigChange.
+    Q_INVOKABLE bool revertRuleChange(const QString& id, const QString& ruleId);
 
     /// Rewrite @p id's delta to capture the CURRENT live settings and rules
     /// (recomputed against its parent). Used by "Update profile from current
@@ -283,9 +299,20 @@ private:
     /// leaf nested inside a structured key inherits that key's presentation,
     /// which is what lets a pack id buried in the shader profile tree resolve
     /// to a pack name.
+    /// @p rawPath is the machine address of the leaf below the key's value —
+    /// one step per level: `{key}` for an object member, `{identityKey,
+    /// identityValue}` for an array element with an identifying field, `{index}`
+    /// otherwise — carried onto the row for revertConfigChange.
     static void appendLeafRows(const QString& rawGroup, const QString& rawKey, const QStringList& segments,
-                               const QJsonValue& before, const QJsonValue& after, int depth, QVariantList& rows,
-                               const QString& identityKey = QString());
+                               const QVariantList& rawPath, const QJsonValue& before, const QJsonValue& after,
+                               int depth, QVariantList& rows, const QString& identityKey = QString());
+
+    /// Rebuild @p current with the leaf at @p path (from @p index on) restored
+    /// to @p parentValue's value there. Returns Undefined when the result
+    /// equals "absent" (the parent has no value either). A branch missing from
+    /// @p current is restored whole from the parent rather than partially.
+    static QJsonValue revertValueAtPath(const QJsonValue& current, const QJsonValue& parentValue,
+                                        const QVariantList& path, int index);
 
     /// Stable hex digest of @p id's fully-resolved config + user rules. Keyed on
     /// the whole cascade, so a child that overrides nothing hashes identically

@@ -38,6 +38,13 @@ ColumnLayout {
     /// text shown on the pill's tooltip.
     required property var rows
 
+    /// When true, every leaf row grows a trailing Revert button that emits
+    /// revertRequested with the row's original `source` map — the host decides
+    /// what reverting means (the profile store drops that override).
+    property bool revertable: false
+
+    signal revertRequested(var source)
+
     /// Fixed COLUMN widths — the pills inside them still hug their content, the
     /// way the rule preview's value pills do.
     ///
@@ -317,6 +324,19 @@ ColumnLayout {
 
                 Item {
                     Layout.fillWidth: true
+                }
+
+                // Per-leaf revert: drop this one override so the value falls
+                // back to the parent's. Only on rows that carry an actual
+                // change (grouping rows have nothing to revert).
+                ToolButton {
+                    visible: root.revertable && entryDelegate.entries.length > 0 && entryDelegate.modelData.source !== null && entryDelegate.modelData.source !== undefined
+                    Layout.alignment: Qt.AlignVCenter
+                    icon.name: "edit-undo"
+                    ToolTip.text: i18n("Revert this change")
+                    ToolTip.visible: hovered
+                    Accessible.name: i18n("Revert this change")
+                    onClicked: root.revertRequested(entryDelegate.modelData.source)
                 }
             }
         }

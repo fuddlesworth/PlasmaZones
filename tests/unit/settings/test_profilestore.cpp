@@ -765,6 +765,135 @@ private Q_SLOTS:
         QCOMPARE(m_store->availableProfiles().size(), 0);
         QVERIFY(m_store->importProfile(path).isEmpty());
     }
+
+    /// Reverting a scalar override drops it from the delta entirely: the diff
+    /// reads empty and the profile resolves back to the parent's value.
+    void revertScalarConfigChange()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] =
+            QJsonObject{{QStringLiteral("k1"), 2}, {QStringLiteral("k2"), QStringLiteral("x")}};
+        const QString id = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        const QVariantList rows = m_store->configChanges(id);
+        QCOMPARE(rows.size(), 1);
+        QVERIFY(m_store->revertConfigChange(id, rows.first().toMap()));
+
+        QCOMPARE(m_store->configChanges(id).size(), 0);
+        QVERIFY(storedConfig(id).isEmpty());
+        // Resolved config falls back to the schema default.
+        m_staged.clear();
+        QVERIFY(m_store->activateProfile(id));
+        QCOMPARE(groupAInt(m_lastApplied, QStringLiteral("k1")), 1);
+    }
+
+    /// Reverting one leaf inside a structured value is surgical: the sibling
+    /// leaf's override survives, and the reverted leaf reads as the parent's.
+    void revertNestedLeafKeepsSiblings()
+    {
+        m_current = baseDefaults();
+        m_current[QStringLiteral("GroupA")] = QJsonObject{
+            {QStringLiteral("k1"), 1},
+            {QStringLiteral("k2"), QStringLiteral("x")},
+            {QStringLiteral("tree"),
+             QJsonObject{{QStringLiteral("overrides"),
+                          QJsonArray{QJsonObject{{QStringLiteral("path"), QStringLiteral("window.move")},
+                                                 {QStringLiteral("duration"), 250}},
+                                     QJsonObject{{QStringLiteral("path"), QStringLiteral("desktop")},
+                                                 {QStringLiteral("duration"), 400}}}}}},
+        };
+        const QString id = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        // Two leaves: one per override entry's duration.
+        QVariantList rows = m_store->configChanges(id);
+        QCOMPARE(rows.size(), 2);
+        int moveRow = -1;
+        for (int i = 0; i < rows.size(); ++i) {
+            if (rows.at(i)
+                    .toMap()
+                    .value(QStringLiteral("segments"))
+                    .toStringList()
+                    .contains(QStringLiteral("window.move"))) {
+                moveRow = i;
+            }
+        }
+        QVERIFY(moveRow >= 0);
+        QVERIFY(m_store->revertConfigChange(id, rows.at(moveRow).toMap()));
+
+        // The desktop override survives; the window.move entry is gone (its
+        // parent value was "absent", so reverting removes the element).
+        rows = m_store->configChanges(id);
+        QCOMPARE(rows.size(), 1);
+        QVERIFY(
+            rows.first().toMap().value(QStringLiteral("segments")).toStringList().contains(QStringLiteral("desktop")));
+        const QJsonArray overrides = storedConfig(id)
+                                         .value(QStringLiteral("GroupA"))
+                                         .toObject()
+                                         .value(QStringLiteral("tree"))
+                                         .toObject()
+                                         .value(QStringLiteral("overrides"))
+                                         .toArray();
+        QCOMPARE(overrides.size(), 1);
+        QCOMPARE(overrides.first().toObject().value(QStringLiteral("path")).toString(), QStringLiteral("desktop"));
+    }
+
+    /// Reverting an ADDED rule drops the upsert and its dead order slot; the
+    /// diff reads empty again.
+    void revertAddedRule()
+    {
+        const Rule r1 = makeRule(QStringLiteral("a"), QStringLiteral("a.desktop"));
+        m_currentRules = {r1};
+        const QString id = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+        QCOMPARE(m_store->ruleChanges(id).size(), 1);
+
+        QVERIFY(m_store->revertRuleChange(id, r1.id.toString()));
+        QCOMPARE(m_store->ruleChanges(id).size(), 0);
+        QCOMPARE(storedRules(id).value(QStringLiteral("upserts")).toArray().size(), 0);
+        QCOMPARE(storedRules(id).value(QStringLiteral("order")).toArray().size(), 0);
+    }
+
+    /// Reverting a REMOVED parent rule restores it: the child resolves the
+    /// parent's rule again.
+    void revertRemovedRule()
+    {
+        const Rule r1 = makeRule(QStringLiteral("a"), QStringLiteral("a.desktop"));
+        m_currentRules = {r1};
+        const QString root = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        m_currentRules = {};
+        const QString child = m_store->createProfile(QStringLiteral("C"), QString(), root);
+        QCOMPARE(m_store->ruleChanges(child).size(), 1);
+
+        QVERIFY(m_store->revertRuleChange(child, r1.id.toString()));
+        QCOMPARE(m_store->ruleChanges(child).size(), 0);
+        m_staged.clear();
+        QVERIFY(m_store->activateProfile(child));
+        QCOMPARE(ruleIds(m_lastAppliedRules), (QList<QUuid>{r1.id}));
+    }
+
+    /// Reverting a CHANGED rule falls back to the parent's version, keeping the
+    /// rule itself.
+    void revertChangedRule()
+    {
+        const Rule r1 = makeRule(QStringLiteral("original"), QStringLiteral("a.desktop"));
+        m_currentRules = {r1};
+        const QString root = m_store->createProfile(QStringLiteral("R"), QString(), QString());
+
+        Rule renamed = r1;
+        renamed.name = QStringLiteral("renamed");
+        m_currentRules = {renamed};
+        const QString child = m_store->createProfile(QStringLiteral("C"), QString(), root);
+        QCOMPARE(m_store->ruleChanges(child).size(), 1);
+        QCOMPARE(m_store->ruleChanges(child).first().toMap().value(QStringLiteral("change")).toString(),
+                 QStringLiteral("changed"));
+
+        QVERIFY(m_store->revertRuleChange(child, r1.id.toString()));
+        QCOMPARE(m_store->ruleChanges(child).size(), 0);
+        m_staged.clear();
+        QVERIFY(m_store->activateProfile(child));
+        QCOMPARE(m_lastAppliedRules.size(), 1);
+        QCOMPARE(m_lastAppliedRules.first().name, QStringLiteral("original"));
+    }
 };
 
 QTEST_MAIN(TestProfileStore)

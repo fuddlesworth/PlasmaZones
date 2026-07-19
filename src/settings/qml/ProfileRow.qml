@@ -16,9 +16,10 @@ import "SearchAnchorHelpers.js" as SearchAnchors
  * (activate, update-when-modified, rename, duplicate, set parent, export,
  * delete). Every action stays on the row — no overflow menu.
  *
- * Expanded (the rule row's pattern): a read-only diff of what this profile
- * overrides relative to its parent, split into SETTINGS and RULES sections
- * under the shared SectionHeaderPill capsules.
+ * Expanded (the rule row's pattern): a diff of what this profile overrides
+ * relative to its parent, split into SETTINGS and RULES sections under the
+ * shared SectionHeaderPill capsules. Each leaf row carries a Revert button
+ * that drops that one override from the profile's stored delta.
  */
 ExpandableRowDelegate {
     id: row
@@ -222,8 +223,20 @@ ExpandableRowDelegate {
         ColumnLayout {
             id: diffColumn
 
-            readonly property var configRows: row.bridge ? row.bridge.configChanges(row.profileId) : []
-            readonly property var ruleRows: row.bridge ? row.bridge.ruleChanges(row.profileId) : []
+            property var configRows: row.bridge ? row.bridge.configChanges(row.profileId) : []
+            property var ruleRows: row.bridge ? row.bridge.ruleChanges(row.profileId) : []
+
+            // Q_INVOKABLE results are not reactive: a per-row revert mutates
+            // the profile file and announces it, so re-pull the diff while the
+            // row stays expanded.
+            Connections {
+                function onProfilesChanged() {
+                    diffColumn.configRows = row.bridge ? row.bridge.configChanges(row.profileId) : [];
+                    diffColumn.ruleRows = row.bridge ? row.bridge.ruleChanges(row.profileId) : [];
+                }
+
+                target: row.bridge
+            }
 
             /// Display text for one side of a change.
             ///
@@ -368,6 +381,7 @@ ExpandableRowDelegate {
                     const change = configRows[i];
                     out.push({
                         "segments": change.segments,
+                        "source": change,
                         "entries": [
                             {
                                 "caption": i18nc("@label the value a setting had before this profile", "From"),
@@ -401,6 +415,7 @@ ExpandableRowDelegate {
                     }
                     out.push({
                         "label": change.name,
+                        "source": change,
                         "entries": [
                             {
                                 "caption": i18nc("@label how a rule differs from the parent profile", "Change"),
@@ -433,6 +448,8 @@ ExpandableRowDelegate {
                 Layout.fillWidth: true
                 visible: diffColumn.settingsRows.length > 0
                 rows: diffColumn.settingsRows
+                revertable: row.bridge !== null
+                onRevertRequested: source => row.bridge.revertConfigChange(row.profileId, source)
             }
 
             SectionHeaderPill {
@@ -446,6 +463,8 @@ ExpandableRowDelegate {
                 Layout.fillWidth: true
                 visible: diffColumn.rulesRows.length > 0
                 rows: diffColumn.rulesRows
+                revertable: row.bridge !== null
+                onRevertRequested: source => row.bridge.revertRuleChange(row.profileId, source.id)
             }
         }
     }
