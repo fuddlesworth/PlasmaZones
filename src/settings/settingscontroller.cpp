@@ -836,12 +836,8 @@ SettingsController::SettingsController(QObject* parent)
     // Overlay-pack rescans change id→name mappings the OverrideOverlayShader
     // rule labels resolve live — refresh them like the animation and surface
     // registries above (connected here because the registry is built after
-    // that block).
-    connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this, [this]() {
-        if (m_rulesPage && m_rulesPage->model()) {
-            m_rulesPage->model()->refreshLabels();
-        }
-    });
+    // that block; the refreshRuleLabels lambda is still in scope).
+    connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this, refreshRuleLabels);
 
     // Shared live-preview feed (T3.1): backed by the local overlay registry +
     // settings (audio-visualizer config). Owned here (unique_ptr, no QObject
