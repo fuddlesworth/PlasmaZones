@@ -61,6 +61,15 @@ std::optional<WindowMetadata> WindowRegistry::metadata(const QString& instanceId
     return it.value();
 }
 
+std::optional<WindowRegistry::WindowContext> WindowRegistry::windowContext(const QString& instanceId) const
+{
+    auto it = m_records.constFind(instanceId);
+    if (it == m_records.constEnd()) {
+        return std::nullopt;
+    }
+    return WindowContext{it.value().virtualDesktop, it.value().activity};
+}
+
 QString WindowRegistry::appIdFor(const QString& instanceId) const
 {
     auto it = m_records.constFind(instanceId);

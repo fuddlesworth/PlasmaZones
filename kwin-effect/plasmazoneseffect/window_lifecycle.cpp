@@ -467,15 +467,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
 
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
         updateWindowStickyState(window);
-        // Keep the registry's virtualDesktop fresh: the daemon's per-engine
-        // float resolver picks the owning engine by the mode at the WINDOW's
-        // own desktop, and metadata is otherwise pushed only at window-add /
-        // class rename. Without this, a window moved across desktops keeps
-        // resolving through its stale desktop's mode. Low-frequency signal
-        // (explicit desktop moves), and the daemon upsert is idempotent.
-        if (window && !window->isDeleted()) {
-            pushWindowMetadata(window);
-        }
+        // No metadata push here: the daemon's float resolver reads the
+        // window's own desktop/activity from the registry, but that is kept
+        // fresh by the KWin::Window::desktopsChanged → pushLatest connection
+        // below (this signal is KWin's EffectWindow relay of the same event,
+        // so a push here would build and marshal the extended snapshot twice
+        // per desktop move).
 
         // When a window is moved to a different desktop (e.g., "Move to Desktop 2"),
         // treat it as removed from the current desktop's tiling. The normal desktop-

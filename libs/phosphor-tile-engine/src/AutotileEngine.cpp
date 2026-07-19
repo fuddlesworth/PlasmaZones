@@ -2003,7 +2003,10 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     }
 
     // Already tracked on the destination screen — nothing to adopt; the float
-    // toggle path is what the caller probably wants instead.
+    // toggle path is what the caller probably wants instead. No float
+    // announcement needed on this return: the float bit is untouched (we
+    // return before setFloating), so what subscribers last heard remains
+    // accurate.
     const auto destKey = currentKeyForScreen(ctx.toScreenId);
     const auto trackedKeyIt = m_states.windowKeys().constFind(windowId);
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() == destKey
@@ -2052,8 +2055,10 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     m_states.setKeyForWindow(windowId, destKey);
 
     // Announce the received float bit on the passive channel (the snap twin
-    // emits from its handoffReceive too; this engine previously set the bit
-    // silently). A cross-mode move/swap of a floating window arrives with
+    // announces its float re-homes via windowFloatingChanged from its
+    // handoffReceive; this passive signal is autotile's position-preserving
+    // analogue — this engine previously set the bit silently). A cross-mode
+    // move/swap of a floating window arrives with
     // wasFloating=false after the source engine's handoffRelease cleared its
     // bit without emitting — without this, subscribers that last heard
     // "floating" (the effect's FloatingCache) stay stale until a daemon

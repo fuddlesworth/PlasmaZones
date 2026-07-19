@@ -93,6 +93,16 @@ public:
     void remove(const QString& instanceId);
 
     std::optional<WindowMetadata> metadata(const QString& instanceId) const;
+    /// The window's own context for per-window mode resolution: its virtual
+    /// desktop (0 = all/unknown) and activity (empty = all/unknown), read
+    /// without copying the full ~30-field metadata record — this sits on the
+    /// per-query float-resolver path. nullopt when the instance is unknown.
+    struct WindowContext
+    {
+        int virtualDesktop = 0;
+        QString activity;
+    };
+    std::optional<WindowContext> windowContext(const QString& instanceId) const;
     Q_INVOKABLE QString appIdFor(const QString& instanceId) const override;
     QStringList instancesWithAppId(const QString& appId) const;
     bool contains(const QString& instanceId) const;

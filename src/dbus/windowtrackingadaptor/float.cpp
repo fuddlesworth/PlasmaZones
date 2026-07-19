@@ -110,17 +110,16 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     // value — the old `floating == wasFloating` gate then suppressed every
     // autotile float broadcast, leaving subscribers (the effect's float cache,
     // which the autotile FFM float-pause depends on) permanently stale.
-    // Tracking the last-broadcast value detects the real edge regardless of when
-    // the engine updated its bit, and still honours "only emit when changed".
-    if (m_broadcastFloating.value(windowId, false) == floating) {
+    // The gate itself lives in relayWindowFloatingChanged (the single owner of
+    // the last-broadcast contract); the unified state change and placement
+    // capture below ride the same edge.
+    // Use the window's tracked screen if available, otherwise fall back to last
+    // active screen.
+    const QString screen = m_service->screenForWindow(windowId, m_lastActiveScreenId);
+    if (!relayWindowFloatingChanged(windowId, floating, screen)) {
         return;
     }
-    m_broadcastFloating[windowId] = floating;
     qCInfo(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
-    // Notify effect so it can update its local cache (use full windowId for per-instance tracking).
-    // Use the window's tracked screen if available, otherwise fall back to last active screen.
-    QString screen = m_service->screenForWindow(windowId, m_lastActiveScreenId);
-    Q_EMIT windowFloatingChanged(windowId, floating, screen);
 
     // Emit unified state change
     Q_EMIT windowStateChanged(windowId,
@@ -165,17 +164,18 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
 // windowFloatingClearedForSnap, which this adaptor relays to its own
 // windowFloatingChanged D-Bus signal in the constructor wiring.
 
-void WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, bool floating, const QString& screenId)
+bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, bool floating, const QString& screenId)
 {
-    // Same dedup key as the setWindowFloating gate — see the header doc:
-    // every emission channel must keep m_broadcastFloating equal to what
+    // The single owner of the last-broadcast dedup contract — see the header
+    // doc: every emission channel must keep m_broadcastFloating equal to what
     // subscribers last heard, or the gate turns from a dedup into a
-    // suppressor of genuine changes.
+    // suppressor of genuine changes. setWindowFloating delegates here too.
     if (m_broadcastFloating.value(windowId, false) == floating) {
-        return;
+        return false;
     }
     m_broadcastFloating[windowId] = floating;
     Q_EMIT windowFloatingChanged(windowId, floating, screenId);
+    return true;
 }
 
 void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating)
@@ -204,17 +204,29 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     // dialog is a valid target — fromEngineId stays empty when neither side
     // tracks it, so receive-side reasoning that depends on the source mode
     // correctly degrades).
-    // Unfloat: adopt ONLY a window the OTHER engine still tracks. Without
-    // this, the unfloat dead-ends: setWindowFloat below targets the
+    // Unfloat of a window whose float bit lives in the OTHER engine: without
+    // handling, the unfloat dead-ends — setWindowFloat below targets the
     // destination engine, which doesn't track the window and early-returns,
-    // while the source engine's float bit stays set with no broadcast — the
-    // window reads floating through its own context's mode lens forever. The
-    // handoff releases the source (clearing its bit) and the receive tiles
-    // the arrival (wasFloating=false) and announces the new state on the
-    // passive sync channel.
+    // while the source engine's float bit stays set with no broadcast, so
+    // the window reads floating through its own context's mode lens forever.
+    // The two destinations need DIFFERENT handling:
+    //   - Autotile dest: adopt via the handoff (release source, receive with
+    //     wasFloating=false tiles the arrival and announces it on the
+    //     passive sync channel); the trailing relay dedups against that.
+    //   - Snap dest: NO adoption. Snap's handoffReceive floats an arrival
+    //     with no sourceZoneIds unconditionally (ignoring wasFloating) and
+    //     emits floating=true, and the setWindowFloat(false) below fails
+    //     open when no rule/pre-float zone resolves ("keeping floating") —
+    //     together that strands the snap store floating against a false
+    //     broadcast. Instead just release the source's bit and broadcast
+    //     the unfloat; the setWindowFloat below still gives snap its
+    //     rule/pre-float re-snap chance, and a window it cannot re-snap
+    //     stays a free (unmanaged) window, which is what unfloating a
+    //     window snap never tracked means.
     if (dest && !dest->isWindowTracked(windowId)) {
         const bool sourceTracked = source && source->isWindowTracked(windowId);
-        if (floating || sourceTracked) {
+        const bool destIsAutotile = m_autotileEngine && dest == m_autotileEngine.data();
+        if (floating || (sourceTracked && destIsAutotile)) {
             PhosphorEngine::IPlacementEngine::HandoffContext ctx;
             ctx.windowId = windowId;
             ctx.toScreenId = screenId;
@@ -226,14 +238,11 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
             }
             dest->handoffReceive(ctx);
             if (!floating) {
-                // The source's float bit was released silently and only the
-                // autotile receive announces a non-floating arrival on the
-                // passive channel (snap's handoffReceive announces float
-                // re-homes only) — relay the unfloat here so BOTH adoption
-                // directions broadcast it. The chokepoint dedups when the
-                // autotile passive sync already did.
                 relayWindowFloatingChanged(windowId, false, screenId);
             }
+        } else if (sourceTracked) {
+            source->handoffRelease(windowId);
+            relayWindowFloatingChanged(windowId, false, screenId);
         }
     }
 

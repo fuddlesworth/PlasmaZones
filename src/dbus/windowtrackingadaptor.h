@@ -946,9 +946,11 @@ public:
      * never a bare Q_EMIT): a direct emission leaves m_broadcastFloating
      * stale, and the setWindowFloating gate then suppresses the next genuine
      * change on the engine-sync channel (e.g. a cross-mode handoff's
-     * float-cleared sync after a snap-side float).
+     * float-cleared sync after a snap-side float). Returns whether a
+     * broadcast was actually emitted, so setWindowFloating (which delegates
+     * its gate here) can ride its extra side emissions on the same edge.
      */
-    void relayWindowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
+    bool relayWindowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
     /**
      * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats).
      * Gets validated geometry, emits applyGeometryRequested if found, clears stored geometry.

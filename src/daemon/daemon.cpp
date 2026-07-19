@@ -1639,19 +1639,21 @@ bool Daemon::init()
     // window's CURRENT screen mode. This replaces the old single shared
     // m_floatingWindows + m_snapState bit that both engines read/wrote.
     //
-    // Mode resolution: the window's tracked screen (WTS screenForWindow, with
-    // the autotile engine's own tracked screen as the fallback for windows snap
-    // never saw) → LayoutRegistry::modeForScreen → the owning engine.
+    // Mode resolution: the window's tracked screen (WTS screenForWindow; for
+    // windows snap never saw, the no-screen fallback below resolves a MODE
+    // directly — Autotile when that engine tracks the window, else Snapping)
+    // → LayoutRegistry::modeForScreen → the owning engine.
     //
-    // Resolved at the WINDOW's OWN desktop (registry metadata), not the
-    // screen's current one. The window's desktop is per-window data, never
-    // the context key: reading through the screen's CURRENT desktop made the
-    // effective float answer flip when a per-output desktop switch crossed a
-    // snap↔autotile mode boundary — with no windowFloatingChanged broadcast,
-    // stranding every flat float mirror (the effect's FloatingCache) until a
-    // daemon reconnect. A window on the screen's current desktop (and the
-    // sticky / unknown-desktop case, virtualDesktop 0) resolves exactly as
-    // before via the fallback.
+    // Resolved at the WINDOW's OWN desktop and activity (registry context),
+    // not the screen's current ones. Those are per-window data, never the
+    // context key: reading through the screen's CURRENT desktop/activity
+    // made the effective float answer flip when a per-output desktop switch
+    // (or an activity switch) crossed a snap↔autotile mode boundary — with
+    // no windowFloatingChanged broadcast, stranding every flat float mirror
+    // (the effect's FloatingCache) until a daemon reconnect. A window on the
+    // screen's current desktop/activity (and the sticky / unknown cases:
+    // virtualDesktop 0, empty activity) resolves exactly as before via the
+    // fallbacks.
     {
         auto screenModeForWindow = [this, autotilePtr = QPointer(autotileEngine)](
                                        const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
@@ -1663,14 +1665,18 @@ bool Daemon::init()
             }
             if (!screenId.isEmpty() && m_layoutManager) {
                 int desktop = currentDesktopForScreen(screenId);
+                QString activity = currentActivity();
                 if (wts && wts->windowRegistry()) {
-                    const std::optional<PhosphorEngine::WindowMetadata> meta =
-                        wts->windowRegistry()->metadata(::PhosphorIdentity::WindowId::extractInstanceId(windowId));
-                    if (meta && meta->virtualDesktop > 0) {
-                        desktop = meta->virtualDesktop;
+                    const auto ctx =
+                        wts->windowRegistry()->windowContext(::PhosphorIdentity::WindowId::extractInstanceId(windowId));
+                    if (ctx && ctx->virtualDesktop > 0) {
+                        desktop = ctx->virtualDesktop;
+                    }
+                    if (ctx && !ctx->activity.isEmpty()) {
+                        activity = ctx->activity;
                     }
                 }
-                return m_layoutManager->modeForScreen(screenId, desktop, currentActivity());
+                return m_layoutManager->modeForScreen(screenId, desktop, activity);
             }
             // No tracked screen in WTS (e.g. a window snap never saw): if the
             // autotile engine tracks it, its current mode is Autotile. Otherwise
