@@ -88,12 +88,13 @@ public:
      * unbind() — those are applied immediately at the call site. Matches
      * the backend's queue-then-flush model for register / update.
      *
-     * ready() fires after EVERY flush, including no-op flushes where no
-     * entry actually changed. This matches the backend contract (each
-     * IBackend::flush() emits ready) and lets consumers gate UI on "any
-     * flush has settled" without per-entry bookkeeping. If you need
-     * "only fire when something actually changed", track that on the
-     * caller side.
+     * ready() fires after flushes settle, including no-op flushes where no
+     * entry actually changed, so consumers can gate UI on "any flush has
+     * settled" without per-entry bookkeeping. Do NOT assume a 1:1
+     * flush→ready count: during asynchronous backend bring-up
+     * (PortalBackend before its session handle lands) multiple queued
+     * flushes coalesce into a single ready(). If you need "only fire when
+     * something actually changed", track that on the caller side.
      */
     void flush();
 

@@ -320,45 +320,9 @@ PhosphorUi.SettingsAppWindow {
                 text: i18n("Page actions")
                 Accessible.name: i18n("Page actions")
 
-                onClicked: pageActionsMenu.popup()
-
-                Menu {
-                    id: pageActionsMenu
-
-                    // Mirror open-state to the window scope for the
-                    // page-step shortcut guard — see _pageActionsMenuOpen.
-                    onVisibleChanged: window._pageActionsMenuOpen = visible
-
-                    MenuItem {
-                        text: i18n("Reset page to defaults")
-                        Accessible.name: text
-                        icon.name: "document-revert"
-                        visible: settingsController.pageSupportsReset(settingsController.activePage)
-                        // Disabled while a global Save/Discard batch is in flight: a
-                        // per-page reset mid-batch could race the async revert (e.g.
-                        // the animation controller's async file restore) and leave a
-                        // partial reset.
-                        enabled: !settingsController.app.applying && !settingsController.app.discarding
-                        onTriggered: resetPageConfirmDialog.open()
-                    }
-
-                    MenuItem {
-                        text: i18n("Discard changes on this page")
-                        Accessible.name: text
-                        icon.name: "edit-undo"
-                        visible: settingsController.pageSupportsDiscard(settingsController.activePage)
-                        // Enabled only when the page carries unsaved edits and no
-                        // global Save/Discard batch is in flight. `dirtyPages` is
-                        // referenced purely to re-run this binding on
-                        // dirtyPagesChanged (isPageDirty itself is a function call
-                        // whose only QML dependency would otherwise be activePage).
-                        enabled: {
-                            void settingsController.dirtyPages;
-                            return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activePage);
-                        }
-                        onTriggered: discardPageConfirmDialog.open()
-                    }
-                }
+                // The Menu lives at window root (beside layoutContextMenu),
+                // NOT inside this delegate — see the note on it.
+                onClicked: pageActionsMenu.popup(pageActionsButton)
             }
         }
     }
@@ -558,16 +522,10 @@ PhosphorUi.SettingsAppWindow {
     /// out of the header Component (whose ids are not reachable from this
     /// scope) by a Binding next to the combo.
     property bool _profilePopupOpen: false
-    /// True while the per-page kebab menu (breadcrumbTrailing Component) is
-    /// open. Same mirror pattern as _profilePopupOpen: the menu's id is not
-    /// reachable from this scope, so the menu writes the flag on
-    /// open/close. Guards the page-step shortcuts from switching the page
-    /// underneath an open menu, matching the layoutContextMenu guard.
-    property bool _pageActionsMenuOpen: false
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen && !window._profilePopupOpen && !window._pageActionsMenuOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen && !window._profilePopupOpen && !pageActionsMenu.visible
 
     Shortcut {
         sequence: "Ctrl+PgUp"
@@ -624,6 +582,47 @@ PhosphorUi.SettingsAppWindow {
         settingsController: settingsController
         appSettings: appSettings
         aspectRatioLabels: window.aspectRatioLabels
+    }
+
+    // ── Per-page kebab menu (Reset / Discard this page). Lives HERE at
+    // window root — not inside the breadcrumbTrailing delegate whose
+    // button opens it — for the same reason as layoutContextMenu: a Menu
+    // destroyed with its delegate risks the Qt6 SIGSEGV, and an open menu
+    // dying with the delegate would strand the _navShortcutsEnabled guard
+    // (visibleChanged never fires during destruction). Root placement
+    // also lets the guard read `pageActionsMenu.visible` directly. ──
+    Menu {
+        id: pageActionsMenu
+
+        MenuItem {
+            text: i18n("Reset page to defaults")
+            Accessible.name: text
+            icon.name: "document-revert"
+            visible: settingsController.pageSupportsReset(settingsController.activePage)
+            // Disabled while a global Save/Discard batch is in flight: a
+            // per-page reset mid-batch could race the async revert (e.g.
+            // the animation controller's async file restore) and leave a
+            // partial reset.
+            enabled: !settingsController.app.applying && !settingsController.app.discarding
+            onTriggered: resetPageConfirmDialog.open()
+        }
+
+        MenuItem {
+            text: i18n("Discard changes on this page")
+            Accessible.name: text
+            icon.name: "edit-undo"
+            visible: settingsController.pageSupportsDiscard(settingsController.activePage)
+            // Enabled only when the page carries unsaved edits and no
+            // global Save/Discard batch is in flight. `dirtyPages` is
+            // referenced purely to re-run this binding on
+            // dirtyPagesChanged (isPageDirty itself is a function call
+            // whose only QML dependency would otherwise be activePage).
+            enabled: {
+                void settingsController.dirtyPages;
+                return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activePage);
+            }
+            onTriggered: discardPageConfirmDialog.open()
+        }
     }
     Kirigami.PromptDialog {
         id: defaultsConfirmDialog
