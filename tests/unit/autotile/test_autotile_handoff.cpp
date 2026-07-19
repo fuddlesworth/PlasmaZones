@@ -256,7 +256,10 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         // Idempotent receive: floating disposition shouldn't overwrite the
-        // existing tiled state.
+        // existing tiled state. Spy armed AFTER the seeding open so it only
+        // observes the no-op receive.
+        QSignalSpy floatSyncSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingStateSynced);
+        QVERIFY(floatSyncSpy.isValid());
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
         ctx.toScreenId = screen;
@@ -267,6 +270,10 @@ private Q_SLOTS:
         QVERIFY(state);
         QVERIFY(state->containsWindow(windowId));
         QVERIFY(!state->isFloating(windowId));
+        // The early return must also stay SILENT on the passive float
+        // channel: the bit is untouched, so an announcement here would tell
+        // subscribers "floating" for a window that remains tiled.
+        QCOMPARE(floatSyncSpy.count(), 0);
     }
 
     void testHandoffReceive_crossScreenReleasesPreviousState()

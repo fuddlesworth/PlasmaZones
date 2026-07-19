@@ -1653,7 +1653,10 @@ bool Daemon::init()
     // (the effect's FloatingCache) until a daemon reconnect. A window on the
     // screen's current desktop/activity (and the sticky / unknown cases:
     // virtualDesktop 0, empty activity) resolves exactly as before via the
-    // fallbacks.
+    // fallbacks. The shared lambda serves the float WRITER and the
+    // autotile-mode predicate too, so those routing decisions shift to the
+    // window's own context along with the reader — deliberate: all three
+    // answer "which engine owns this window", and that has one answer.
     {
         auto screenModeForWindow = [this, autotilePtr = QPointer(autotileEngine)](
                                        const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {

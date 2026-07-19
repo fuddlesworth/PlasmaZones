@@ -1069,11 +1069,14 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
         // the next genuine unfloat broadcast hit false==false in the gate and
         // was suppressed — stranding the effect's float cache exactly like
         // the silent flips this contract exists to prevent. The relay's
-        // windowFloatingChanged emission is redundant for the effect (it
-        // already processed the float from the windowsTileRequested batch;
-        // the cache write is idempotent) and overflow floats are rare, so
-        // the spare signal is the price of keeping the last-broadcast
-        // contract single-owner and universal.
+        // windowFloatingChanged emission is redundant for the effect: its
+        // float-cache write no-ops (already floating from the
+        // windowsTileRequested batch) and the rest of its handler is
+        // convergent (coalesced rule reconcile re-resolving to the same
+        // state, idempotent snap-tracking clears, a raise of the already-
+        // floated window at most). Overflow floats are rare, so the spare
+        // signal is the price of keeping the last-broadcast contract
+        // single-owner and universal.
         wts->setWindowFloating(windowId, true);
         m_windowTrackingAdaptor->relayWindowFloatingChanged(windowId, true, screenId);
         m_autotileEngine->markModeSpecificFloated(windowId);

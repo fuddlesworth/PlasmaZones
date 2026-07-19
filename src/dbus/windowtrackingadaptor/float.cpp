@@ -257,13 +257,19 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         dest->setWindowFloat(windowId, floating, screenId);
     }
     if (recaptureAfterFloatWrite) {
-        // Snap-dest unfloat: when unfloatToZone above re-snapped the window,
-        // the commitSnap wiring already refreshed the live placement record —
-        // this recapture is then an idempotent repeat. When it FAILED OPEN
-        // (no rule/pre-float zone) nothing else refreshes the record, and it
-        // would keep its prior floating slot while the broadcast above said
-        // not-floating; capture after the write so the persisted record
-        // matches what subscribers were told.
+        // Snap-dest unfloat: re-anchor the live placement record after the
+        // float write. When unfloatToZone above re-snapped the window this is
+        // an idempotent repeat of the commitSnap-wired capture, kept so the
+        // record refresh doesn't silently depend on that wiring's ordering.
+        // When unfloatToZone FAILED OPEN (no rule/pre-float zone) the window
+        // is tracked by NEITHER engine, so this capture deliberately writes
+        // nothing and the persisted record keeps its floating-at-position
+        // slot from the source engine's float. That is the accepted outcome:
+        // a later restore of "floating at its position" and of "free window
+        // at its position" land the window identically, and the only writer
+        // that could record the free state has no engine placement to read.
+        // Live subscribers are unaffected either way — the broadcast above
+        // already told them not-floating.
         captureWindowPlacement(windowId);
     }
 }
