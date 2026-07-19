@@ -338,6 +338,27 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             const QSet<QString> untiled = previous - newSet;
             for (const QString& wid : untiled) {
                 KWin::EffectWindow* win = m_effect->findWindowById(wid);
+                // Exact-id re-check: findWindowById's appId fuzzy fallback can
+                // resolve a same-app SIBLING for a gone id, and the desktop
+                // gate below must read the REAL window's desktop (a vanished
+                // window still falls through and clears).
+                if (win && m_effect->getWindowId(win) != wid) {
+                    win = nullptr;
+                }
+                // A retile batch describes ONE (screen, desktop) TilingState —
+                // the screen's CURRENT desktop. A tracked window sitting on
+                // another desktop is absent from `newSet` because it belongs
+                // to a sibling desktop's state, not because it was untiled,
+                // and this batch has no jurisdiction over it. Clearing it
+                // anyway flipped IsTiled, dropped the tiled appearance scope,
+                // and restored the title bar on the outgoing desktop's
+                // windows for the whole desktop-switch animation (#808). Its
+                // own desktop's retile decides its fate; genuine untiles
+                // while off-desktop (float, close) flow through funnels that
+                // clear all screens regardless.
+                if (win && !win->isOnCurrentDesktop()) {
+                    continue;
+                }
                 // Every untiled window drops its per-screen tiled tracking,
                 // minimized/unresolvable or not — hoisted so the branch below
                 // reads as what it actually gates: the centering-target
@@ -349,9 +370,9 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     continue;
                 }
                 // A daemon-initiated untile that is not a float/fullscreen/
-                // close/desktop-switch (e.g. a rule change dropping the
-                // window from the layout) must not leave a stale centering
-                // target that teleport-centers the window on its next
+                // close (e.g. a rule change dropping the window from the
+                // layout) must not leave a stale centering target that
+                // teleport-centers the window on its next
                 // frameGeometryChanged. Cross-screen transfers are safe: the
                 // apply lambda wrote a fresh entry only for windows in
                 // toApply, which are never in `untiled` for their new screen.
