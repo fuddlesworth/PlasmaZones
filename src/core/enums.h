@@ -89,6 +89,7 @@ enum class OverlayDisplayMode {
 };
 
 using AutotileDragBehavior = PhosphorTiles::AutotileDragBehavior;
+using AutotileInsertPosition = PhosphorTiles::AutotileInsertPosition;
 using AutotileOverflowBehavior = PhosphorTiles::AutotileOverflowBehavior;
 
 } // namespace PlasmaZones

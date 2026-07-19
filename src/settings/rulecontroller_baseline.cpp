@@ -12,11 +12,14 @@
 
 #include "rulecontroller.h"
 
+#include "../core/logging.h"
+
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorRules/Rule.h>
 
 #include <QList>
+#include <QSet>
 #include <QString>
 
 namespace PlasmaZones {
@@ -44,6 +47,59 @@ void RuleController::captureSavedSnapshot()
 bool RuleController::userRulesDirty() const
 {
     return userSubset(m_model.rules()) != userSubset(m_savedRules);
+}
+
+void RuleController::stageUserRules(const QList<PhosphorRules::Rule>& userRules)
+{
+    // Replace the user subset with the profile's resolved rules, keeping any
+    // managed rules the store owns. The incoming list already carries the
+    // desired order; renormalizePriorities re-stamps priority from list order
+    // (and pins managed rules to lowest precedence), exactly as the CRUD path.
+    QSet<QUuid> managedIds;
+    for (const PhosphorRules::Rule& r : m_model.rules()) {
+        if (r.managed)
+            managedIds.insert(r.id);
+    }
+
+    QList<PhosphorRules::Rule> next;
+    next.reserve(userRules.size() + m_model.rules().size());
+    for (const PhosphorRules::Rule& r : userRules) {
+        // Boundary defense for this PUBLIC entry point, mirroring addRule:
+        // one invalid rule in the model poisons the eventual Save whole
+        // (RuleSet::setRules drops it, accepted < size, and the entire push
+        // is rejected with a generic error the user cannot trace). Today's
+        // sole producer (ProfileStore::resolveRules) cannot deliver one —
+        // Rule::fromJson validates every clause isValid() checks — so this
+        // guards direct and future callers, not a loader gap.
+        if (!r.isValid()) {
+            qCWarning(lcConfig) << "stageUserRules: dropping an invalid profile rule" << r.id;
+            continue;
+        }
+        // A hand-edited profile file could carry a rule whose id collides with
+        // a managed rule; appending it would put two rules with the same UUID
+        // in the set. Managed rules are daemon-owned, so the managed one wins.
+        if (managedIds.contains(r.id)) {
+            qCWarning(lcConfig) << "stageUserRules: dropping profile rule" << r.id
+                                << "— its id collides with a managed rule";
+            continue;
+        }
+        PhosphorRules::Rule copy = r;
+        copy.managed = false; // defensive: a profile only ever carries user rules
+        next.append(copy);
+    }
+    for (const PhosphorRules::Rule& r : m_model.rules()) {
+        if (r.managed)
+            next.append(r);
+    }
+    m_model.setRules(next);
+    renormalizePriorities();
+
+    // Deliberately NOT captureSavedSnapshot(): the staged rules must read dirty
+    // so the Rules page badges and the global Save commits them. setRules fires
+    // modelReset, which SettingsController does NOT wire to the dirty reconcile
+    // (see the comment there), so emit dirtyChanged to drive
+    // reconcileRuleBackedDirty and update the footer.
+    Q_EMIT dirtyChanged();
 }
 
 void RuleController::resetManagedDefaults()

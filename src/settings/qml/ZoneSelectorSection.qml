@@ -242,20 +242,7 @@ ColumnLayout {
                         Accessible.name: i18n("Arrangement")
                         textRole: "text"
                         valueRole: "value"
-                        model: [
-                            {
-                                "text": i18n("Grid"),
-                                "value": 0
-                            },
-                            {
-                                "text": i18n("Horizontal"),
-                                "value": 1
-                            },
-                            {
-                                "text": i18n("Vertical"),
-                                "value": 2
-                            }
-                        ]
+                        model: settingsController.valueOptions("Snapping.ZoneSelector", "LayoutMode")
                         currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
                         onActivated: root.writeSetting("LayoutMode", currentValue, function (v) {
                             appSettings.zoneSelectorLayoutMode = v;

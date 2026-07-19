@@ -69,6 +69,7 @@ class RegistryShaderPreviewBackend;
 #include "editorpagecontroller.h"
 #include "externaleditscope.h"
 #include "generalpagecontroller.h"
+#include "profilepagecontroller.h"
 #include "snappingzonescontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
@@ -138,6 +139,10 @@ class SettingsController : public QObject
     // RuleModel and talks to the daemon's org.plasmazones.Rules
     // adaptor; QML reads `settingsController.rulesPage.model`.
     Q_PROPERTY(RuleController* rulesPage READ rulesPage CONSTANT)
+
+    // Profiles page — settings-profile CRUD + inheritance. QML reads the store
+    // via `settingsController.profilesPage.bridge`.
+    Q_PROPERTY(ProfilePageController* profilesPage READ profilesPage CONSTANT)
 
     // PhosphorControl ApplicationController hosting the PageRegistry that
     // SettingsAppWindow's sidebar / breadcrumbs / footer consume. Constructed
@@ -297,6 +302,14 @@ public:
         return m_layouts;
     }
 
+    /// The options an enum-valued setting's picker should offer, as
+    /// `[{ text, value }, ...]` in declaration order — a WideComboBox model
+    /// with textRole "text" / valueRole "value". Values come from the config
+    /// schema's choices (filtered by SettingsValueLabels::uiChoiceSubset) and
+    /// words from the label table, so a picker cannot drift from the key.
+    /// Empty list + warning for a key with no declared choices.
+    Q_INVOKABLE QVariantList valueOptions(const QString& group, const QString& key) const;
+
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
     // Loads the on-disk layouts via an in-process LayoutRegistry +
     // ZonesLayoutSource so QML preview paths render even when the daemon
@@ -442,6 +455,10 @@ public:
     RuleController* rulesPage() const
     {
         return m_rulesPage;
+    }
+    ProfilePageController* profilesPage() const
+    {
+        return m_profilesPage;
     }
 
     PhosphorControl::ApplicationController* app() const
@@ -777,6 +794,10 @@ private:
     /// RuleModel internally. Constructed after m_animationsPage so its
     /// dirty-tracking connection is wired in the same ctor block.
     RuleController* m_rulesPage = nullptr;
+    /// Profiles page sub-controller. Parented to `this`; owns its ProfileStore
+    /// internally. Registered via regPage so its active-pointer staging
+    /// participates in the framework's Save/Discard.
+    ProfilePageController* m_profilesPage = nullptr;
     /// Settings-side mirror of the daemon's overlay-shader registry —
     /// drives the read-only Snapping → Shaders browser. Same parent /
     /// construction-order situation as `m_animationShaderRegistry` above.

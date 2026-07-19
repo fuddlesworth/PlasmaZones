@@ -339,6 +339,13 @@ p_add_test(test_configbackend_json config/test_configbackend_json.cpp)
 
 p_add_test(test_configmigration config/test_configmigration.cpp)
 
+# Binds the schema's declared choices to their user-facing labels.
+add_executable(test_settingsvaluelabels config/test_settingsvaluelabels.cpp)
+target_link_libraries(test_settingsvaluelabels
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+target_compile_definitions(test_settingsvaluelabels PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_settingsvaluelabels COMMAND test_settingsvaluelabels)
+
 # v3 → v4 window-rule consolidation migration.
 add_executable(test_migration_v3_to_v4 config/test_migration_v3_to_v4.cpp)
 target_link_libraries(test_migration_v3_to_v4
@@ -1073,6 +1080,25 @@ target_link_libraries(test_decoration_sets_validation
         plasmazones_core
 )
 add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_validation)
+
+# Settings profiles: the ProfileStore delta / inheritance-resolution engine
+# behind ProfilePageController::bridge. Driven with stub config closures, so it
+# links only the store itself (no PhosphorConfig::Store needed).
+add_executable(test_profilestore
+    settings/test_profilestore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/profilestore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/profilestore_diff.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/profilestore_revert.cpp
+)
+target_link_libraries(test_profilestore
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        plasmazones_core
+        PhosphorRules::PhosphorRules
+)
+add_test(NAME test_profilestore COMMAND test_profilestore)
 
 # Rules page (Phase 4 of the window-rule refactor): RuleModel
 # derives SectionRole / summaries from a rule's shape; RuleController

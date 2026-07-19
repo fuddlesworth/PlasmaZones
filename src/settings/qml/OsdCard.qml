@@ -39,15 +39,13 @@ Item {
                 SettingsSwitch {
                     checked: osdRoot.appSettings.showOsdOnLayoutSwitch
                     accessibleName: i18n("Show OSD on layout switch")
-                    onToggled: function(newValue) {
+                    onToggled: function (newValue) {
                         osdRoot.appSettings.showOsdOnLayoutSwitch = newValue;
                     }
                 }
-
             }
 
-            SettingsSeparator {
-            }
+            SettingsSeparator {}
 
             SettingsRow {
                 title: i18n("Desktop switch OSD")
@@ -56,15 +54,13 @@ Item {
                 SettingsSwitch {
                     checked: osdRoot.appSettings.showOsdOnDesktopSwitch
                     accessibleName: i18n("Show OSD on desktop switch")
-                    onToggled: function(newValue) {
+                    onToggled: function (newValue) {
                         osdRoot.appSettings.showOsdOnDesktopSwitch = newValue;
                     }
                 }
-
             }
 
-            SettingsSeparator {
-            }
+            SettingsSeparator {}
 
             SettingsRow {
                 title: i18n("Keyboard navigation OSD")
@@ -73,15 +69,13 @@ Item {
                 SettingsSwitch {
                     checked: osdRoot.appSettings.showNavigationOsd
                     accessibleName: i18n("Show keyboard navigation OSD")
-                    onToggled: function(newValue) {
+                    onToggled: function (newValue) {
                         osdRoot.appSettings.showNavigationOsd = newValue;
                     }
                 }
-
             }
 
-            SettingsSeparator {
-            }
+            SettingsSeparator {}
 
             SettingsRow {
                 title: i18n("OSD style")
@@ -90,24 +84,21 @@ Item {
                 WideComboBox {
                     id: osdStyleCombo
 
-                    readonly property int osdStyleNone: 0
-                    readonly property int osdStyleText: 1
-                    readonly property int osdStylePreview: 2
                     readonly property bool anyOsdEnabled: osdRoot.appSettings.showOsdOnLayoutSwitch || osdRoot.appSettings.showOsdOnDesktopSwitch || osdRoot.appSettings.showNavigationOsd
 
                     Accessible.name: i18n("OSD style")
                     enabled: osdStyleCombo.anyOsdEnabled
-                    currentIndex: Math.max(0, Math.min(osdRoot.appSettings.osdStyle, 2))
-                    model: [i18n("None"), i18n("Text only"), i18n("Visual preview")]
-                    onActivated: (index) => {
-                        osdRoot.appSettings.osdStyle = index;
-                    }
+                    textRole: "text"
+                    valueRole: "value"
+                    // Value-keyed rather than index-keyed: the stored enum no
+                    // longer has to match this list's ordering.
+                    currentIndex: Math.max(0, indexOfValue(osdRoot.appSettings.osdStyle))
+                    model: settingsController.valueOptions("Snapping.Effects", "OsdStyle")
+                    onActivated: osdRoot.appSettings.osdStyle = currentValue
                 }
-
             }
 
-            SettingsSeparator {
-            }
+            SettingsSeparator {}
 
             SettingsRow {
                 title: i18n("Overlay style")
@@ -115,17 +106,13 @@ Item {
 
                 WideComboBox {
                     Accessible.name: i18n("Overlay style")
-                    currentIndex: Math.max(0, Math.min(osdRoot.appSettings.overlayDisplayMode, 1))
-                    model: [i18n("Full zone highlight"), i18n("Compact preview")]
-                    onActivated: (index) => {
-                        osdRoot.appSettings.overlayDisplayMode = index;
-                    }
+                    textRole: "text"
+                    valueRole: "value"
+                    currentIndex: Math.max(0, indexOfValue(osdRoot.appSettings.overlayDisplayMode))
+                    model: settingsController.valueOptions("Snapping.Effects", "OverlayDisplayMode")
+                    onActivated: osdRoot.appSettings.overlayDisplayMode = currentValue
                 }
-
             }
-
         }
-
     }
-
 }

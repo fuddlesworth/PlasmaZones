@@ -716,6 +716,56 @@ bool Settings::exportTo(const QString& filePath)
     return PhosphorConfig::JsonBackend::writeJsonAtomically(filePath, exportRoot);
 }
 
+// ── Settings-profiles support ────────────────────────────────────────────────
+
+QJsonObject Settings::exportConfigToJson() const
+{
+    return m_store->exportToJson();
+}
+
+QJsonObject Settings::defaultConfigJson() const
+{
+    // Store::defaultsToJson mirrors exportToJson's shape and version stamp;
+    // delegating keeps the two snapshots field-for-field comparable, which the
+    // profiles delta engine depends on. A local re-implementation here could
+    // drift from exportToJson's serialization without anything noticing.
+    return m_store->defaultsToJson();
+}
+
+bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
+{
+    // Same snapshot / re-emit contract as load(), minus the disk round-trip:
+    // snapshot the NOTIFY-able properties BEFORE mutating the store, overwrite
+    // the declared keys in memory (no commit/sync), then fire the NOTIFY for
+    // every property whose value actually changed. Deliberately NO
+    // captureBaseline() — the store must diverge from the committed baseline so
+    // the settings app reports the staged keys as unsaved edits.
+    //
+    // Also deliberately no applySystemColorScheme() re-derivation: a profile
+    // captures the zone colours it was saved with, and activation stages those
+    // captured values even when UseSystemColors is on. The live palette is
+    // re-derived on the next load() or palette-change event (app restart, a
+    // Discard-triggered reload, or a theme switch) — save() itself only
+    // commits, it does not re-run the palette derivation.
+    const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
+
+    // importFromJson is additive/overwriting over declared keys; a
+    // fully-resolved profile blob carries every declared key (defaults included)
+    // so keys the profile leaves at default are written back to default too.
+    // It REFUSES a blob stamped with a different schema version, writing
+    // nothing — surface that instead of silently staging a no-op.
+    if (!m_store->importFromJson(fullConfigBlob)) {
+        qCWarning(lcConfig) << "applyConfigOverlayStaged: store rejected the blob (schema version mismatch?)"
+                            << "— nothing was staged";
+        return false;
+    }
+
+    const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
+    if (anyChanged)
+        Q_EMIT settingsChanged();
+    return true;
+}
+
 // ── Per-page reset / discard support ────────────────────────────────────────
 
 QVector<QVariant> Settings::snapshotNotifyProperties() const
@@ -3164,6 +3214,19 @@ QStringList Settings::lockedScreens() const
 }
 void Settings::setLockedScreens(const QStringList& screens)
 {
+    // Whole-replace writers (the settings app pushing a full list) still
+    // deserve a fresh no-op compare, so refresh here. The composite path
+    // (setContextLocked) refreshed before ITS read and calls
+    // writeLockedScreens below instead — refreshing again here would reopen
+    // the read-to-write window that its top-of-function refresh closed, by
+    // pulling in a concurrent writer's commit AFTER the merged list was built
+    // and then overwriting it.
+    refreshCleanBackendFromDisk();
+    writeLockedScreens(screens);
+}
+
+void Settings::writeLockedScreens(const QStringList& screens)
+{
     // Post-write compare — see writeDisableEntries for the canonicalisation
     // rationale.
     const QString before =
@@ -3214,6 +3277,14 @@ bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop
 
 void Settings::setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity, bool locked)
 {
+    // Read-modify-write over the whole lockedScreens list, and the daemon's
+    // lock toggle and the settings app's D-Bus writes are concurrent writers.
+    // Refresh a clean backend BEFORE the lockedScreens() read below — a
+    // refresh inside setLockedScreens would run after the merge was already
+    // built from a stale cache and persist a list missing any entry another
+    // process committed in the meantime.
+    refreshCleanBackendFromDisk();
+
     // Composite-key format mirrors isContextLocked():
     //   name                          → per-screen lock
     //   name:<desktop>                → per-(screen,desktop) lock
@@ -3241,9 +3312,9 @@ void Settings::setContextLocked(const QString& screenIdOrName, int virtualDeskto
     QStringList current = lockedScreens();
     if (locked && !current.contains(key)) {
         current.append(key);
-        setLockedScreens(current);
+        writeLockedScreens(current);
     } else if (!locked && current.removeAll(key) > 0) {
-        setLockedScreens(current);
+        writeLockedScreens(current);
     }
 }
 

@@ -13,6 +13,8 @@
 #include "phosphor_qml_i18n.h"
 #include "searchcatalog.h"
 #include "searchproviders.h"
+#include "profilepagecontroller.h"
+#include "profilestore.h"
 #include "rulecontroller.h"
 #include "rulemodel.h"
 
@@ -211,13 +213,15 @@ int main(int argc, char* argv[])
     auto* searchController = new PhosphorControl::SearchController(controller.app(), &controller);
     PlasmaZones::seedSearchCatalog(searchController);
 
-    // Dynamic content providers (layouts, rules). unique_ptr locals
+    // Dynamic content providers (layouts, rules, profiles). unique_ptr locals
     // declared before the engine so they outlive it; SearchController holds them
     // non-owning (ISearchProvider is not a QObject, so no parent applies).
     auto layoutsProvider = std::make_unique<PlasmaZones::LayoutsSearchProvider>(&controller);
     auto rulesProvider = std::make_unique<PlasmaZones::RulesSearchProvider>(&controller);
+    auto profilesProvider = std::make_unique<PlasmaZones::ProfilesSearchProvider>(&controller);
     searchController->registerProvider(layoutsProvider.get());
     searchController->registerProvider(rulesProvider.get());
+    searchController->registerProvider(profilesProvider.get());
     QObject::connect(&controller, &PlasmaZones::SettingsController::layoutsChanged, searchController,
                      &PhosphorControl::SearchController::invalidate);
     if (controller.rulesPage() != nullptr && controller.rulesPage()->model() != nullptr) {
@@ -228,6 +232,13 @@ int main(int argc, char* argv[])
                          &PhosphorControl::SearchController::invalidate);
         QObject::connect(controller.rulesPage()->model(), &PlasmaZones::RuleModel::dataChanged, searchController,
                          &PhosphorControl::SearchController::invalidate);
+    }
+
+    if (controller.profilesPage() != nullptr && controller.profilesPage()->bridge() != nullptr) {
+        // One signal covers the lot: profilesChanged fires on create, rename,
+        // duplicate, delete, import, reparent, and activation.
+        QObject::connect(controller.profilesPage()->bridge(), &PlasmaZones::ProfileStore::profilesChanged,
+                         searchController, &PhosphorControl::SearchController::invalidate);
     }
 
     QQmlApplicationEngine engine;
