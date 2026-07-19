@@ -40,6 +40,19 @@ void addSection(PhosphorControl::SearchController* search, const QString& pageId
     search->addEntry(e);
 }
 
+void addAction(PhosphorControl::SearchController* search, const QString& actionId, const QString& title,
+               const QString& subtitle, const QString& icon, const QStringList& keywords)
+{
+    SearchEntry e;
+    e.kind = SearchEntry::Kind::Action;
+    e.actionId = actionId;
+    e.title = title;
+    e.subtitle = subtitle;
+    e.icon = icon;
+    e.keywords = keywords;
+    search->addEntry(e);
+}
+
 } // namespace
 
 void seedSearchCatalog(PhosphorControl::SearchController* search)
@@ -47,6 +60,15 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     if (search == nullptr) {
         return;
     }
+
+    // ── App actions ──────────────────────────────────────────────────────
+    // Commands, not destinations. Dispatched by id in Main.qml's
+    // onActionTriggered — keep the two sides' id vocabulary in sync.
+    addAction(search, QStringLiteral("show-shortcut-overlay"), PhosphorI18n::tr("Keyboard Shortcuts"),
+              PhosphorI18n::tr("Show the shortcut reference for this window"), QStringLiteral("input-keyboard"),
+              {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("shortcuts"), PhosphorI18n::tr("hotkey"),
+               PhosphorI18n::tr("keybinding"), PhosphorI18n::tr("keys"), PhosphorI18n::tr("cheatsheet"),
+               PhosphorI18n::tr("help")});
 
     // ── Per-page synonyms ────────────────────────────────────────────────
     // Page entries are auto-derived from the registry; these add search terms a

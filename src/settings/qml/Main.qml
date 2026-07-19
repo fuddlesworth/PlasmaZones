@@ -203,6 +203,13 @@ PhosphorUi.SettingsAppWindow {
             // Declared inline in Main.qml, so it can reach `window` to feed the
             // page-step shortcut guard while the results dropdown is open.
             onSearchOpenChanged: window._searchOpen = searchOpen
+            // App-level action results. Ids come from seedSearchCatalog
+            // (searchcatalog.cpp); dispatch lives here because actions act
+            // on window chrome the library knows nothing about.
+            onActionTriggered: actionId => {
+                if (actionId === "show-shortcut-overlay")
+                    window._showShortcuts = true;
+            }
         }
     }
 

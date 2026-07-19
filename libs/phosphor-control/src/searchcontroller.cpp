@@ -29,6 +29,7 @@ QVariantMap toVariant(const SearchEntry& e)
     m.insert(QStringLiteral("pageId"), e.pageId);
     m.insert(QStringLiteral("anchor"), e.anchor);
     m.insert(QStringLiteral("address"), e.address());
+    m.insert(QStringLiteral("actionId"), e.actionId);
     return m;
 }
 
