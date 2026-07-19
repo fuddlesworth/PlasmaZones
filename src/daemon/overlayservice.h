@@ -886,6 +886,12 @@ private:
     /// onLayoutPickerSlotHideCompleted.
     void onCheatsheetSlotHideCompleted(const QString& effectiveId);
 
+    /// Reset the modal singleton state (snap assist / layout picker /
+    /// cheatsheet) and emit the dismissed signals when the screen that
+    /// owns them is destroyed. Called from BOTH teardown paths — see the
+    /// definition in overlayservice/screens.cpp.
+    void resetModalSingletonsForDestroyedId(const QString& id);
+
     /// Animator-driven slot-hide completion for zone-selector.
     void onZoneSelectorSlotHideCompleted(const QString& effectiveId);
 

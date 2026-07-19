@@ -1182,7 +1182,7 @@ public:
     static ::PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree()
     {
         // One shared card decoration for every PopupFrame surface — the OSD and
-        // both popups read as the same surface family. PopupFrame squares its
+        // the three popups read as the same surface family. PopupFrame squares its
         // body off when decorated (radius 0), so the packs are the sole owners
         // of the corner rounding. The corner radius is NOT set here: each popup
         // slot publishes its own card radius (cardCornerRadius) and

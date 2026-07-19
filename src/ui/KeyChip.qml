@@ -14,6 +14,12 @@ Rectangle {
 
     /// The key token to display.
     property alias text: keyLabel.text
+    /// User font settings, forwarded by the host so the caps track the
+    /// row labels (same family, same scale) instead of diverging from
+    /// them. The 0.9 factor keeps caps slightly compact relative to the
+    /// labels at every scale.
+    property string fontFamily: ""
+    property real fontSizeScale: 1
 
     implicitWidth: Math.max(keyLabel.implicitWidth + Kirigami.Units.smallSpacing * 2, implicitHeight)
     implicitHeight: keyLabel.implicitHeight + Kirigami.Units.smallSpacing
@@ -26,7 +32,8 @@ Rectangle {
         id: keyLabel
 
         anchors.centerIn: parent
-        font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 0.9)
+        font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
+        font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 0.9 * root.fontSizeScale)
         color: Kirigami.Theme.textColor
     }
 }

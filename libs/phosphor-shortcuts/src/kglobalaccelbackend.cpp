@@ -95,8 +95,8 @@ KGlobalAccelBackend::KGlobalAccelBackend(QObject* parent)
                     return;
                 }
                 const QList<QKeySequence> seqs = KGlobalAccel::self()->shortcut(action);
-                if (m_impl->lastReportedTriggers.constFind(id) != m_impl->lastReportedTriggers.constEnd()
-                    && m_impl->lastReportedTriggers.value(id) == seqs) {
+                const auto lastIt = m_impl->lastReportedTriggers.constFind(id);
+                if (lastIt != m_impl->lastReportedTriggers.constEnd() && *lastIt == seqs) {
                     return;
                 }
                 m_impl->lastReportedTriggers.insert(id, seqs);
@@ -215,6 +215,16 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
         KGlobalAccel::self()->setShortcut(entry.action, {currentSeq});
         entry.lastCurrent = currentSeq;
     }
+    // Seed the dedup gate with the post-set effective value so
+    // kglobalaccel's echo of OUR OWN setShortcut doesn't fire
+    // triggersChanged (the signal's contract is out-of-band changes only,
+    // and an unseeded first echo fans a bulk registration into N consumer
+    // rebuilds). Read back rather than assume currentSeq: with the
+    // autoloading flag a persisted user override wins over what we just
+    // pushed, and seeding the wrong value would suppress-or-emit
+    // inconsistently. A genuinely external change still reports, because
+    // it differs from this seed.
+    m_impl->lastReportedTriggers.insert(id, KGlobalAccel::self()->shortcut(entry.action));
 }
 
 void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& /*defaultSeq*/,
@@ -236,6 +246,8 @@ void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& 
     }
     KGlobalAccel::self()->setShortcut(it->action, {newTrigger});
     it->lastCurrent = newTrigger;
+    // Same self-echo seeding as registerShortcut — see the note there.
+    m_impl->lastReportedTriggers.insert(id, KGlobalAccel::self()->shortcut(it->action));
 }
 
 void KGlobalAccelBackend::unregisterShortcut(const QString& id)
@@ -246,6 +258,11 @@ void KGlobalAccelBackend::unregisterShortcut(const QString& id)
     }
     QAction* action = it->action;
     m_impl->entries.erase(it);
+    // Drop the dedup seed with the entry: a stale value would suppress the
+    // first legitimate triggersChanged after a later re-register of the
+    // same id (the transient drag-cancel Escape registers per drag), and
+    // ids never re-registered would accumulate dead map entries.
+    m_impl->lastReportedTriggers.remove(id);
     if (action) {
         // Explicit unregister IS the one path where we want to clear the
         // persistent binding — the consumer has asked to drop the shortcut

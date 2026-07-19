@@ -167,7 +167,8 @@ void seedShellAnimationFamilies(PhosphorAnimation::PhosphorProfileRegistry& regi
     constexpr std::array<FamilySeed, 29> seeds{{
         // ── Popups ────────────────────────────────────────────────
         // Family parent — leaves (popup.layoutPicker.*,
-        // popup.zoneSelector.*, popup.snapAssist.*) inherit from this.
+        // popup.zoneSelector.*, popup.snapAssist.*, popup.cheatsheet.*)
+        // inherit from this.
         {QLatin1StringView{"popup"}, QLatin1StringView{"widget-out"}, 150.0},
 
         // ── Panels ────────────────────────────────────────────────

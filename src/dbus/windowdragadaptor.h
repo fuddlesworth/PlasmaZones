@@ -279,6 +279,20 @@ public:
      */
     void handleWindowClosed(const QString& windowId);
 
+    /**
+     * True while a compositor drag session is in flight (between beginDrag
+     * and endDrag/clear). Plain public member (NOT a Q_SLOT) for the same
+     * reason as handleWindowClosed: it has no remote caller and must not
+     * surface on the bus. The daemon's cheatsheet toggle consults it —
+     * during a drag the shared cancel-overlay Escape grab owns the Escape
+     * key, so a cheatsheet shown mid-drag could not bind its own dismiss
+     * grab (KGlobalAccel routes one action per key).
+     */
+    bool isDragInFlight() const
+    {
+        return !m_draggedWindowId.isEmpty();
+    }
+
 Q_SIGNALS:
     /**
      * Emitted when the zone geometry under the cursor changes during drag.

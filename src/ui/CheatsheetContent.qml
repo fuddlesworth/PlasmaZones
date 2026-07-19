@@ -174,6 +174,21 @@ Item {
             text: i18n("Keyboard Shortcuts")
         }
 
+        // Empty-state fallback: every catalog row mode-filtered out. The
+        // General group is mode-independent so this is unreachable with the
+        // shipped taxonomy, but a data-driven guarantee is not a structural
+        // one — degrade to a legible line instead of a bare title.
+        Label {
+            id: emptyStateLabel
+
+            anchors.top: titleLabel.bottom
+            anchors.topMargin: metrics.paddingSide
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: i18n("No shortcuts apply in the current mode.")
+            color: Kirigami.Theme.disabledTextColor
+            visible: root.groups.length === 0
+        }
+
         Flickable {
             id: scroller
 
@@ -181,7 +196,7 @@ Item {
             anchors.topMargin: metrics.paddingSide
             anchors.horizontalCenter: parent.horizontalCenter
             width: metrics.contentWidth
-            height: Math.min(bucketsRow.implicitHeight, metrics.maxContentHeight)
+            height: root.groups.length === 0 ? emptyStateLabel.height : Math.min(bucketsRow.implicitHeight, metrics.maxContentHeight)
             contentWidth: width
             contentHeight: bucketsRow.implicitHeight
             clip: true
@@ -272,6 +287,8 @@ Item {
                                                     required property var modelData
 
                                                     text: modelData
+                                                    fontFamily: root.fontFamily
+                                                    fontSizeScale: root.fontSizeScale
                                                 }
                                             }
                                         }

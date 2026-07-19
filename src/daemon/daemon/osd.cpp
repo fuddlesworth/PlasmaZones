@@ -721,6 +721,16 @@ bool Daemon::showCheatsheetOnCursorScreen()
         qCDebug(lcDaemon) << "Cheatsheet: disabled in settings";
         return false;
     }
+    // No cheatsheet during an interactive drag: the drag's shared
+    // cancel-overlay grab owns the Escape key, so our dismiss grab below
+    // would silently no-op (KGlobalAccel routes one action per key) and
+    // the sheet would also overlap the live drag surfaces. The user can
+    // re-press after dropping the window.
+    if (m_windowDragAdaptor && m_windowDragAdaptor->isDragInFlight()) {
+        qCDebug(lcDaemon) << "Cheatsheet: suppressed during interactive drag";
+        return false;
+    }
+
     // Screen-targeted like the picker and the mode toggle: the user's
     // intent is "the screen I am looking at", so resolve cursor-first.
     const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
