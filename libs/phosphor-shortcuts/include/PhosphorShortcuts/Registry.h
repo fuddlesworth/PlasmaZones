@@ -69,8 +69,9 @@ public:
     /**
      * Change the active binding for an already-registered id. Takes effect
      * after flush(). Unknown ids are logged and ignored. Passing an empty
-     * QKeySequence routes through unbind() — releasing the grab cleanly
-     * rather than leaving an empty sequence registered.
+     * QKeySequence releases the backend grab immediately (never leaves an
+     * empty sequence registered) but KEEPS the entry, so a later rebind()
+     * to a non-empty sequence re-registers it without a fresh bind().
      */
     void rebind(const QString& id, const QKeySequence& seq);
 
