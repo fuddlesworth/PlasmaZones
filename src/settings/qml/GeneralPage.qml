@@ -45,21 +45,14 @@ SettingsFlickable {
         // =====================================================================
         // SHORTCUT CHEATSHEET CARD
         // =====================================================================
-        Item {
+        SettingsCard {
             Layout.fillWidth: true
-            implicitHeight: cheatsheetCard.implicitHeight
-
-            SettingsCard {
-                id: cheatsheetCard
-
-                anchors.fill: parent
-                headerText: i18n("Shortcut Cheatsheet")
-                searchAnchor: "cheatsheet"
-                showToggle: true
-                toggleChecked: root.settingsBridge.cheatsheetEnabled
-                onToggleClicked: checked => {
-                    return root.settingsBridge.cheatsheetEnabled = checked;
-                }
+            headerText: i18n("Shortcut Cheatsheet")
+            searchAnchor: "cheatsheet"
+            showToggle: true
+            toggleChecked: root.settingsBridge.cheatsheetEnabled
+            onToggleClicked: checked => {
+                return root.settingsBridge.cheatsheetEnabled = checked;
             }
         }
 

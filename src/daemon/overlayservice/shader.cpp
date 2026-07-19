@@ -237,7 +237,8 @@ QList<QQuickItem*> OverlayService::visibleAudioDecorationSlots() const
     QList<QQuickItem*> out;
     for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
         const PerScreenOverlayState& st = it.value();
-        for (QQuickItem* slot : {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot()}) {
+        for (QQuickItem* slot :
+             {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot(), st.cheatsheetSlot()}) {
             if (slot && slot->isVisible()
                 && slot->property(OverlayQmlPropertyNames::WantsAudioDecoration.data()).toBool()) {
                 out.append(slot);

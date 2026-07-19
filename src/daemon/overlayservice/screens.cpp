@@ -136,11 +136,15 @@ void OverlayService::handleScreenAdded(QScreen* screen)
         }
     }
 
-    // Restore m_visible if the caller wasn't already in a visible state and
-    // no overlay windows were actually created (transport unavailable, etc.).
-    if (!wasVisible && !m_visible) {
-        qCDebug(lcOverlay) << "handleScreenAdded: no overlay windows created for" << physScreenId
-                           << "- transport may be unavailable";
+    // Restore m_visible: this path only prewarms windows for a hot-plugged
+    // screen so the next showAtPosition finds them ready — it never
+    // logically SHOWS the overlay. The transient m_visible=true set above
+    // (needed so the create path builds windows) must not leak, or
+    // isOverlayDisplaying() reports a resting daemon as displaying and a
+    // later settings-driven syncCavaState spins up the CAVA capture on a
+    // blanked overlay.
+    if (!wasVisible) {
+        m_visible = false;
     }
 }
 
