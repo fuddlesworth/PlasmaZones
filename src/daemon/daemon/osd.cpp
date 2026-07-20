@@ -722,11 +722,11 @@ void Daemon::showCheatsheetOnCursorScreen()
         qCDebug(lcDaemon) << "Cheatsheet: disabled in settings";
         return;
     }
-    // No cheatsheet during an interactive drag: the drag's shared
-    // cancel-overlay grab owns the Escape key, so our dismiss grab below
-    // would silently no-op (KGlobalAccel routes one action per key) and
-    // the sheet would also overlap the live drag surfaces. The user can
-    // re-press after dropping the window.
+    // No cheatsheet during an interactive drag: the kwin-effect holds a
+    // keyboard grab for the drag's lifetime and routes Escape to cancelSnap
+    // itself (see windowdragadaptor/drag.cpp), so the dismiss grab bound
+    // below would never fire, and the sheet would also overlap the live
+    // drag surfaces. The user can re-press after dropping the window.
     if (m_windowDragAdaptor && m_windowDragAdaptor->isDragInFlight()) {
         qCDebug(lcDaemon) << "Cheatsheet: suppressed during interactive drag";
         return;

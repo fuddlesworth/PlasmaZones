@@ -251,6 +251,12 @@ Item {
                                 Label {
                                     text: groupColumn.modelData.name
                                     color: Kirigami.Theme.disabledTextColor
+                                    // Constrain to the column and wrap: a
+                                    // long translated category name grows a
+                                    // second line instead of overflowing
+                                    // into the neighbouring column.
+                                    width: groupColumn.width
+                                    wrapMode: Text.Wrap
                                     font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
                                     font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 1.1 * root.fontSizeScale)
                                 }
