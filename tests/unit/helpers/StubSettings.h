@@ -1984,18 +1984,6 @@ public:
         Q_EMIT fillOnDropModifierChanged();
         Q_EMIT settingsChanged();
     }
-    bool cheatsheetEnabled() const override
-    {
-        return m_cheatsheetEnabled;
-    }
-    void setCheatsheetEnabled(bool e) override
-    {
-        if (m_cheatsheetEnabled == e)
-            return;
-        m_cheatsheetEnabled = e;
-        Q_EMIT cheatsheetEnabledChanged();
-        Q_EMIT settingsChanged();
-    }
     QStringList lockedScreens() const override
     {
         return m_lockedScreens;
@@ -2319,7 +2307,6 @@ private:
     int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
     bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
     int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
-    bool m_cheatsheetEnabled = ConfigDefaults::cheatsheetEnabled();
     // Gaps — config-backed defaults routed through ConfigDefaults.
     int m_innerGap = ConfigDefaults::innerGap();
     int m_outerGap = ConfigDefaults::outerGap();

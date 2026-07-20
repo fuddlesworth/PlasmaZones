@@ -410,11 +410,6 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("snapAssistTriggers")] = QStringLiteral("stringlist");
 
-    // Shortcut cheatsheet overlay. The toggle shortcut string registers in
-    // the concrete-Settings global-shortcut block below, alongside its
-    // openEditor/quickLayout siblings.
-    REGISTER_BOOL_SETTING("cheatsheetEnabled", cheatsheetEnabled, setCheatsheetEnabled)
-
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
 

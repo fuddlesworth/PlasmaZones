@@ -712,10 +712,6 @@ void Daemon::showCheatsheetOnCursorScreen()
     if (!m_overlayService || !m_shortcutManager) {
         return;
     }
-    if (m_settings && !m_settings->cheatsheetEnabled()) {
-        qCDebug(lcDaemon) << "Cheatsheet: disabled in settings";
-        return;
-    }
     // No cheatsheet during an interactive drag: the kwin-effect holds a
     // keyboard grab for the drag's lifetime and routes Escape to cancelSnap
     // itself (see windowdragadaptor/drag.cpp), so the dismiss grab bound

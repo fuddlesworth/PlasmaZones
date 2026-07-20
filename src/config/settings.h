@@ -421,7 +421,6 @@ public:
                    openSettingsShortcutChanged)
     Q_PROPERTY(QString toggleCheatsheetShortcut READ toggleCheatsheetShortcut WRITE setToggleCheatsheetShortcut NOTIFY
                    toggleCheatsheetShortcutChanged)
-    Q_PROPERTY(bool cheatsheetEnabled READ cheatsheetEnabled WRITE setCheatsheetEnabled NOTIFY cheatsheetEnabledChanged)
     Q_PROPERTY(QString previousLayoutShortcut READ previousLayoutShortcut WRITE setPreviousLayoutShortcut NOTIFY
                    previousLayoutShortcutChanged)
     Q_PROPERTY(
@@ -1146,8 +1145,6 @@ public:
     void setOpenSettingsShortcut(const QString& shortcut);
     QString toggleCheatsheetShortcut() const;
     void setToggleCheatsheetShortcut(const QString& shortcut);
-    bool cheatsheetEnabled() const override;
-    void setCheatsheetEnabled(bool enabled) override;
     QString previousLayoutShortcut() const;
     void setPreviousLayoutShortcut(const QString& shortcut);
     QString nextLayoutShortcut() const;
