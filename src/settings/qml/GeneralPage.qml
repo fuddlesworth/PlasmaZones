@@ -61,8 +61,7 @@ SettingsFlickable {
                 Label {
                     Layout.fillWidth: true
                     wrapMode: Text.Wrap
-                    color: Kirigami.Theme.disabledTextColor
-                    text: i18n("Shows an overlay listing every PlasmaZones shortcut with the keys currently bound to it. Open it with the toggle shortcut on the Shortcuts page and dismiss it with Escape or a click outside the card.")
+                    text: i18n("Shows an overlay listing every PlasmaZones shortcut with the keys currently bound to it. Open it with its global shortcut, Meta+Alt+/ by default, and dismiss it with Escape or a click outside the card.")
                 }
             }
         }

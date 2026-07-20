@@ -55,8 +55,8 @@ inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud().withScopePre
 
 /// Passive overlay shell - single per-screen wlr-layer-shell host that
 /// groups every kbd-None overlay (OSD, zone-selector, main zone overlay,
-/// and post-migration snap-assist + layout picker + cheatsheet) onto one wl_surface
-/// per screen. FullscreenOverlay primitive (AnchorAll, no keyboard,
+/// and post-migration snap-assist + layout picker + cheatsheet) onto one
+/// wl_surface per screen. FullscreenOverlay primitive (AnchorAll, no keyboard,
 /// click-through). Permanently mapped after first show - keepMappedOnHide
 /// is moot since per-content slots toggle visibility within the shared
 /// scene graph rather than the wl_surface itself unmapping.

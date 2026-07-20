@@ -319,19 +319,17 @@ std::optional<QStringList> KGlobalAccelBackend::currentTriggers(const QString& i
     // engaged-but-empty result is AUTHORITATIVE: the user cleared the
     // binding, and falling back to the stored sequence would display a key
     // that no longer works.
-    QList<QKeySequence> seqs;
     const auto cached = m_impl->lastReportedTriggers.constFind(id);
-    if (cached != m_impl->lastReportedTriggers.constEnd()) {
-        seqs = *cached;
-    } else {
-        // Unreached in practice (registerShortcut always seeds), but a live
-        // fallback keeps the answer correct if the seeding contract ever
-        // changes. Cache the result so repeat queries stay free.
-        seqs = KGlobalAccel::self()->shortcut(it->action);
-        m_impl->lastReportedTriggers.insert(id, seqs);
+    if (cached == m_impl->lastReportedTriggers.constEnd()) {
+        // Unreached in practice: registerShortcut always seeds the cache for
+        // every registered id. If the seeding contract ever breaks, report
+        // "cannot report" (nullopt) so the caller falls back to its own
+        // stored sequence — safer than surprising a const query path with a
+        // blocking D-Bus round-trip.
+        return std::nullopt;
     }
     QStringList out;
-    for (const QKeySequence& seq : seqs) {
+    for (const QKeySequence& seq : *cached) {
         if (!seq.isEmpty()) {
             out.append(seq.toString(QKeySequence::PortableText));
         }

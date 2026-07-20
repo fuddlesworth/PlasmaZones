@@ -14,8 +14,9 @@ namespace PlasmaZones {
 /// .snapped/.floating), "osd", or "popup" (+ .snapAssist/.zoneSelector/
 /// .layoutPicker/.cheatsheet) — so per-page Reset/Discard/dirty must be
 /// scoped to that root or one surface's revert clobbers the others (the bug
-/// this mapping fixes). The roots mirror the surfacePath prefixes the QML pages bind
-/// (DecorationWindowsPage etc.) and the DecorationSupportedPaths taxonomy.
+/// this mapping fixes). The roots mirror the surfacePath prefixes the QML
+/// pages bind (DecorationWindowsPage etc.) and the DecorationSupportedPaths
+/// taxonomy.
 /// Returns an empty string for the non-surface decoration leaves — the sets
 /// library and the read-only shaders browser — whose Reset/Discard/dirty act
 /// on the whole editable tree (every root at once).

@@ -24,7 +24,6 @@
 
 #include <QCoreApplication>
 #include <QKeySequence>
-#include <QSignalSpy>
 #include <QTest>
 
 #include <optional>
