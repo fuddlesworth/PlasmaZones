@@ -654,6 +654,20 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
         // orchestrator fills freeGeometryByScreen from the live frame; a contentless
         // capture (no frame) is dropped by hasRestorableContent() so geometry-less
         // floated residue never floods the per-app FIFO.
+        //
+        // But a window this engine does not track AT ALL is a different case: snap
+        // has NO knowledge of it — typically because a cross-engine handoffRelease
+        // just handed it to autotile, leaving the record's snap slot as the FROZEN
+        // per-mode memory that windowsReleased restores from on return to snapping.
+        // Fabricating a floated slot here overwrote that frozen memory (a window
+        // snapped in snap mode, mode-toggled through autotile, came back "floating"
+        // — the phantom snap-float restore). Return nullopt instead: the capture
+        // orchestrator's no-engine contract leaves the existing record intact, and
+        // a genuinely untracked window's close still persists via the
+        // recordFloatingClose fallback.
+        if (!isWindowTracked(windowId)) {
+            return std::nullopt;
+        }
         slot.state = WindowPlacement::stateFloating();
         p.screenId = screenForTrackedWindow(windowId);
     }

@@ -1595,17 +1595,28 @@ private Q_SLOTS:
     // Two-state model: snapping has only `snapped` / `floated` — no `free`.
     // =========================================================================
 
-    // capturePlacement of an unmanaged window (neither snapped nor floating in the
-    // runtime SnapState) records a FLOATING slot — the retired `free` state. An
-    // untracked window has no effective screen, so capturePlacement's snap-mode gate
-    // is bypassed and it reaches the state if/else.
-    void testCapturePlacement_unmanagedWindowRecordsFloating()
+    // capturePlacement of a window that the snap engine does not track at all
+    // captures NOTHING.
+    // It previously fabricated a FLOATING slot (the untracked window has no
+    // effective screen, so the snap-mode gate was bypassed and it reached the
+    // state if/else) — and that fabrication overwrote the record's frozen
+    // snap-mode memory whenever a capture ran after a cross-engine
+    // handoffRelease (autotile adoption), which windowsReleased then read back
+    // and "restored" as a phantom float on return to snapping. A TRACKED
+    // window that is floating still captures a FLOATING slot — never the
+    // retired `free` state.
+    void testCapturePlacement_untrackedCapturesNothing_trackedFloatsAsFloating()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        const auto p = engine.capturePlacement(QStringLiteral("app|unmanaged"));
+        QVERIFY2(!engine.capturePlacement(QStringLiteral("app|unmanaged")).has_value(),
+                 "an untracked window must capture nothing — fabricating a slot clobbers frozen per-mode memory");
+
+        const QString tracked = QStringLiteral("app|floaty");
+        engine.snapState()->setFloatingOnScreen(tracked, QStringLiteral("DP-1"), 0);
+        const auto p = engine.capturePlacement(tracked);
         QVERIFY(p.has_value());
         const PhosphorEngine::EngineSlot slot = p->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
         QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
