@@ -461,37 +461,13 @@ ColumnLayout {
         }
 
         // Stock-animation conflict chip — a per-window shader on the minimize
-        // or maximize event cannot suppress KDE's own effect for that event
-        // (unloading it is global, so the runtime only does that for packs
-        // assigned in the animation tree, never for rules). Both animations
-        // play for matched windows unless the user disables the stock effect
-        // themselves. Same chip-plus-tooltip shape as the incompatibility
-        // warning above. Gated on a non-empty effectId: an empty override is
-        // the "no shader" sentinel and removes the conflict instead.
-        Kirigami.Icon {
-            readonly property bool _stockAnimationConflict: {
-                if (row.action.type !== "overrideAnimationShader")
-                    return false;
-
-                if ((row.action.effectId || "") === "")
-                    return false;
-
-                return row.action.event === "window.appearance.minimize" || row.action.event === "window.movement.maximize";
-            }
-
-            visible: _stockAnimationConflict
-            Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: Kirigami.Units.iconSizes.small
-            Layout.preferredHeight: Kirigami.Units.iconSizes.small
-            source: "dialog-information"
-            Accessible.name: i18n("May run alongside the KDE animation for this event")
-            ToolTip.visible: stockConflictHover.hovered
-            ToolTip.delay: Kirigami.Units.toolTipDelay
-            ToolTip.text: row.action.event === "window.movement.maximize" ? i18n("A rule cannot turn off the KDE maximize animation for matched windows. If it is enabled in System Settings → Desktop Effects, both animations will play together.") : i18n("A rule cannot turn off the KDE minimize animation (Magic Lamp or Squash) for matched windows. If one is enabled in System Settings → Desktop Effects, both animations will play together.")
-
-            HoverHandler {
-                id: stockConflictHover
-            }
+        // or maximize event cannot suppress KDE's own effect for that event.
+        // Predicate, tooltip, and the tree-suppression hide condition all
+        // live in the shared component (also used by the read-only rule
+        // summary, ActionListView).
+        StockAnimationConflictChip {
+            action: row.action
+            animationsController: row.appSettings ? row.appSettings.animationsController : null
         }
 
         // One editor per parameter — the shape comes from the param `kind`,

@@ -1249,20 +1249,30 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
     // apply re-loads scripts from kwinrc behind our back while the predicate
     // still holds, and this loop re-unloads them (the contains() check keeps
     // the record entry unique).
+    // Snapshot the minimize pair's loaded state BEFORE the unload loop: the
+    // sibling eviction below must judge "was the sibling genuinely loaded
+    // this sync?" against pre-unload reality, not against a state this very
+    // loop already mutated (processing magiclamp first would otherwise make
+    // squash's check see the sibling as unloaded and evict a live record).
+    const bool magiclampWasLoaded = KWin::effects->isEffectLoaded(QStringLiteral("magiclamp"));
+    const bool squashWasLoaded = KWin::effects->isEffectLoaded(QStringLiteral("squash"));
     for (const QString& name : std::as_const(wanted)) {
         if (KWin::effects->isEffectLoaded(name)) {
             if (!m_suppressedStockEffects.contains(name)) {
                 m_suppressedStockEffects.append(name);
             }
-            // magiclamp/squash are an exclusive KCM group: seeing one loaded
-            // means the user's pick is THIS one, so a sibling recorded by an
-            // earlier sync (user switched picks while suppressed — KWin's
-            // reconcile loaded the new pick behind our back) is stale. Drop
-            // it, or the restore path would force-load BOTH minimize
-            // animations, including the one the user just switched away from.
-            if (name == QLatin1String("magiclamp")) {
+            // magiclamp/squash form the Desktop Effects KCM's exclusive
+            // minimize group: recording one while its sibling is NOT loaded
+            // means any sibling record is stale — the user switched picks
+            // while suppressed (KWin's reconcile loaded the new pick behind
+            // our back) and the old pick is now disabled in kwinrc. Drop it,
+            // or the restore path would force-load BOTH minimize animations.
+            // A sibling that IS loaded this sync (a hand-edited kwinrc
+            // enabling both) keeps its record: both are genuinely owed
+            // restoring, exactly as configured.
+            if (name == QLatin1String("magiclamp") && !squashWasLoaded) {
                 m_suppressedStockEffects.removeAll(QStringLiteral("squash"));
-            } else if (name == QLatin1String("squash")) {
+            } else if (name == QLatin1String("squash") && !magiclampWasLoaded) {
                 m_suppressedStockEffects.removeAll(QStringLiteral("magiclamp"));
             }
             KWin::effects->unloadEffect(name);

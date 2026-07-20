@@ -71,44 +71,20 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
 
 void AutotileHandler::cancelPendingMinimizeFloat(const QString& windowId)
 {
-    auto it = m_pendingMinimizeFloat.find(windowId);
-    if (it == m_pendingMinimizeFloat.end()) {
-        return;
-    }
-    if (QTimer* pending = it.value()) {
-        pending->stop();
-        pending->deleteLater();
-    }
-    m_pendingMinimizeFloat.erase(it);
+    m_pendingMinimizeFloat.cancel(windowId);
 }
 
 void AutotileHandler::cancelPendingUnminimizeUnfloat(const QString& windowId)
 {
-    auto it = m_pendingUnminimizeUnfloat.find(windowId);
-    if (it == m_pendingUnminimizeUnfloat.end()) {
-        return;
-    }
-    if (QTimer* pending = it.value()) {
-        pending->stop();
-        pending->deleteLater();
-    }
-    m_pendingUnminimizeUnfloat.erase(it);
+    m_pendingUnminimizeUnfloat.cancel(windowId);
 }
 
 void AutotileHandler::clearAllPendingMinimizeFloats()
 {
-    // Delegate per-entry so the cancel semantics (stop + deleteLater + erase)
-    // live in exactly one place. keys() snapshot: the delegate erases.
-    const QStringList ids = m_pendingMinimizeFloat.keys();
-    for (const QString& windowId : ids) {
-        cancelPendingMinimizeFloat(windowId);
-    }
+    m_pendingMinimizeFloat.cancelAll();
     // The restore-side timers must not fire against a disabled engine or a
     // torn-down handler either.
-    const QStringList unfloatIds = m_pendingUnminimizeUnfloat.keys();
-    for (const QString& windowId : unfloatIds) {
-        cancelPendingUnminimizeUnfloat(windowId);
-    }
+    m_pendingUnminimizeUnfloat.cancelAll();
 }
 
 void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
@@ -710,23 +686,7 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         // "100%" flash on every notification. By deferring we give the
         // unminimize path a chance to cancel the float entirely.
         QPointer<KWin::EffectWindow> wPtr(w);
-        auto* timer = new QTimer(this);
-        timer->setSingleShot(true);
-        timer->setInterval(kMinimizeFloatDebounceMs);
-        connect(timer, &QTimer::timeout, this, [this, windowId, screenId, wPtr]() {
-            // Consume the hash entry first. We take the timer out by value
-            // so we own its deleteLater regardless of which early-return
-            // branch we take below.
-            auto it = m_pendingMinimizeFloat.find(windowId);
-            if (it == m_pendingMinimizeFloat.end()) {
-                return; // Already cancelled by cancelPendingMinimizeFloat.
-            }
-            QPointer<QTimer> owned = it.value();
-            m_pendingMinimizeFloat.erase(it);
-            if (owned) {
-                owned->deleteLater();
-            }
-
+        m_pendingMinimizeFloat.schedule(windowId, kMinimizeFloatDebounceMs, [this, windowId, screenId, wPtr]() {
             // Re-validate the full entry predicate: the window may have been
             // destroyed, unminimized, moved, or had autotile disabled on its
             // screen during the debounce window. Mirrors the checks at entry
@@ -770,8 +730,6 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
                     QStringLiteral("setWindowFloatingForScreen"));
             }
         });
-        m_pendingMinimizeFloat.insert(windowId, timer);
-        timer->start();
         return;
     }
 
@@ -820,22 +778,7 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // exactly as it was.
     const int graceMs = int(KWin::Effect::animationTime(std::chrono::milliseconds(400)).count());
     QPointer<KWin::EffectWindow> wPtr(w);
-    auto* timer = new QTimer(this);
-    timer->setSingleShot(true);
-    timer->setInterval(graceMs);
-    connect(timer, &QTimer::timeout, this, [this, windowId, wPtr]() {
-        // Consume the hash entry first; we own the timer's deleteLater
-        // regardless of which early-return branch we take below.
-        auto it = m_pendingUnminimizeUnfloat.find(windowId);
-        if (it == m_pendingUnminimizeUnfloat.end()) {
-            return; // Already cancelled by cancelPendingUnminimizeUnfloat.
-        }
-        QPointer<QTimer> owned = it.value();
-        m_pendingUnminimizeUnfloat.erase(it);
-        if (owned) {
-            owned->deleteLater();
-        }
-
+    m_pendingUnminimizeUnfloat.schedule(windowId, graceMs, [this, windowId, wPtr]() {
         // Re-validate the entry predicate at commit time: the window may
         // have died, re-minimized (belt — the minimize path also cancels),
         // moved off an autotiled screen, or become unhandleable during the
@@ -875,8 +818,6 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
 
         notifyWindowAdded(fw);
     });
-    m_pendingUnminimizeUnfloat.insert(windowId, timer);
-    timer->start();
 }
 
 void AutotileHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool horizontal, bool vertical)

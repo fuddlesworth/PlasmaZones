@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "deferredwindowcommits.h"
+
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
@@ -187,15 +189,7 @@ public:
     /// removeMinimizeFloated (window closed).
     void cancelPendingUnminimizeUnfloat(const QString& windowId)
     {
-        auto it = m_pendingUnminimizeUnfloat.find(windowId);
-        if (it == m_pendingUnminimizeUnfloat.end()) {
-            return;
-        }
-        if (QTimer* pending = it.value()) {
-            pending->stop();
-            pending->deleteLater();
-        }
-        m_pendingUnminimizeUnfloat.erase(it);
+        m_pendingUnminimizeUnfloat.cancel(windowId);
     }
 
     // ── Tiled-membership accessor — delegates to shared AutotileStateHelpers ──
@@ -263,8 +257,10 @@ private:
     // zone geometry), and a moveResize landing mid-flight cancels KWin's own
     // unminimize animation (discussion #816). Deferred by an
     // Effect::animationTime-scaled grace and revalidated at fire time; a
-    // re-minimize during the grace cancels it.
-    QHash<QString, QPointer<QTimer>> m_pendingUnminimizeUnfloat;
+    // re-minimize during the grace cancels it, and an authoritative external
+    // unfloat (the daemon's windowFloatingChanged echo) cancels it via
+    // removeMinimizeFloated.
+    DeferredWindowCommits m_pendingUnminimizeUnfloat{this};
 };
 
 } // namespace PlasmaZones

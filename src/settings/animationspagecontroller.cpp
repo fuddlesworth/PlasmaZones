@@ -173,6 +173,10 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     if (m_shaderRegistry) {
         connect(m_shaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
                 &AnimationsPageController::shaderEffectsChanged);
+        // A registry rescan can flip a pack's validity / contract class,
+        // which is one of the stock-suppression gate's inputs.
+        connect(m_shaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
+                &AnimationsPageController::stockSuppressedEventsChanged);
     }
     if (m_settings) {
         // Sole emitter of pendingChangesChanged for shader-tree edits: EVERY
@@ -195,11 +199,19 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                 // can't tell which path moved without diffing. QML pages refresh
                 // every visible event card on this signal which is cheap enough.
                 Q_EMIT shaderProfileChanged(QString());
+                // Tree assignment is the primary input of the stock-suppression
+                // gate (see stockSuppressedEvents).
+                Q_EMIT stockSuppressedEventsChanged();
                 if (m_asyncRevertInFlight)
                     return;
                 Q_EMIT pendingChangesChanged();
             },
             Qt::DirectConnection);
+        // The animations master toggle gates the whole suppression predicate:
+        // with animations off no pack owns any event and every stock effect
+        // is (re)loaded, so the conflict chip must come back.
+        connect(m_settings, &ISettings::animationsEnabledChanged, this,
+                &AnimationsPageController::stockSuppressedEventsChanged);
     }
 }
 

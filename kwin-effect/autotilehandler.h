@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "deferredwindowcommits.h"
+
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 
@@ -108,6 +110,17 @@ public:
     /// daemon windowClosed call) and the cross-mode-move marker path (where the
     /// daemon already relinquished the window via handoffRelease).
     void cleanupAutotileTracking(const QString& windowId, const QString& screenId);
+    /// Drop @p windowId from the minimize-float set and cancel any deferred
+    /// unminimize→unfloat commit (mirrors SnapHandler::removeMinimizeFloated).
+    /// Returns true if the window was tracked. Called from the effect's
+    /// windowFloatingChanged handler: an authoritative external unfloat moots
+    /// the deferred commit — the daemon already unfloated the window, so a
+    /// later commit would re-send a redundant unfloat.
+    bool removeMinimizeFloated(const QString& windowId)
+    {
+        cancelPendingUnminimizeUnfloat(windowId);
+        return m_minimizeFloatedWindows.remove(windowId);
+    }
     /// Drop a destroyed window's desktop-move geometry stash. Separate from
     /// onWindowClosed because the desktop-MOVE path calls onWindowClosed
     /// right after creating the stash (the window must look "closed" to this
@@ -419,7 +432,7 @@ private:
     /// cancelled and no D-Bus float is issued. This absorbs spurious
     /// minimize/unminimize cycles that KWin emits on tiled windows when
     /// plasmashell notification popups transiently change stacking.
-    QHash<QString, QPointer<QTimer>> m_pendingMinimizeFloat;
+    DeferredWindowCommits m_pendingMinimizeFloat{this};
     /// Pending deferred unminimize→unfloat commits, keyed by windowId — the
     /// restore-side mirror of m_pendingMinimizeFloat, with a different reason:
     /// the unfloat triggers a retile whose applyWindowGeometry moveResize,
@@ -429,7 +442,7 @@ private:
     /// is deferred past the stock animation (Effect::animationTime-scaled
     /// grace) and revalidated at fire time; a re-minimize during the grace
     /// cancels it, leaving the window minimize-floated as before.
-    QHash<QString, QPointer<QTimer>> m_pendingUnminimizeUnfloat;
+    DeferredWindowCommits m_pendingUnminimizeUnfloat{this};
     /// Global stagger epoch, bumped on a desktop/screen switch (slotScreensChanged)
     /// to cancel EVERY in-flight staggered apply — geometry computed for the old
     /// context must never land in the new one.

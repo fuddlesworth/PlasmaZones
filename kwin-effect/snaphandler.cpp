@@ -363,21 +363,7 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
         // window minimize-floated exactly as it was.
         const int graceMs = int(KWin::Effect::animationTime(std::chrono::milliseconds(400)).count());
         QPointer<KWin::EffectWindow> wPtr(window);
-        auto* timer = new QTimer(this);
-        timer->setSingleShot(true);
-        timer->setInterval(graceMs);
-        connect(timer, &QTimer::timeout, this, [this, windowId, wPtr]() {
-            // Consume the hash entry first; we own the timer's deleteLater
-            // regardless of which early-return branch we take below.
-            auto it = m_pendingUnminimizeUnfloat.find(windowId);
-            if (it == m_pendingUnminimizeUnfloat.end()) {
-                return; // Already cancelled by cancelPendingUnminimizeUnfloat.
-            }
-            QPointer<QTimer> owned = it.value();
-            m_pendingUnminimizeUnfloat.erase(it);
-            if (owned) {
-                owned->deleteLater();
-            }
+        m_pendingUnminimizeUnfloat.schedule(windowId, graceMs, [this, windowId, wPtr]() {
             // Re-validate at commit time. Every bail leaves the window
             // minimize-floated, which the next unminimize edge picks up.
             if (!wPtr) {
@@ -413,8 +399,6 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             }
             commitUnminimizeUnfloat(fw, windowId, currentScreenId);
         });
-        m_pendingUnminimizeUnfloat.insert(windowId, timer);
-        timer->start();
         return;
     }
 
