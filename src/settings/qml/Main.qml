@@ -63,6 +63,29 @@ PhosphorUi.SettingsAppWindow {
             "super-ultrawide": aspectRatioLabelsObject.superUltrawide,
             "portrait": aspectRatioLabelsObject.portrait
         })
+    // Name of the profile a pending (staged, unsaved) switch would apply,
+    // refreshed from the bridge on profilesChanged — every staged-active
+    // mutation announces itself through that signal. Empty when no profile
+    // switch is pending or the switch clears the active profile.
+    property string _pendingProfileName
+
+    // Make the Save footer say what Save will actually do when the batch
+    // includes a profile switch: a plain "Unsaved changes" hides that the
+    // staged edits ARE the selected profile's settings.
+    unsavedChangesMessage: settingsController.profilesPage && settingsController.profilesPage.dirty && window._pendingProfileName.length > 0 ? i18n("Unsaved changes. Saving applies the profile “%1”.", window._pendingProfileName) : ""
+
+    function _refreshPendingProfileName() {
+        const page = settingsController.profilesPage;
+        const rows = page && page.bridge ? page.bridge.availableProfiles() : [];
+        for (let i = 0; i < rows.length; ++i) {
+            if (rows[i].active) {
+                window._pendingProfileName = rows[i].name;
+                return;
+            }
+        }
+        window._pendingProfileName = "";
+    }
+
     // Keyboard-shortcut overlay state.
     property bool _showShortcuts: false
 
@@ -133,6 +156,22 @@ PhosphorUi.SettingsAppWindow {
         }
     }
 
+    // The profile store's refusals also cross pages: the sticky sidebar
+    // switcher can activate a profile from anywhere, so a schema-mismatch
+    // toast raised on, say, the Snapping page must still surface. The same
+    // scope applies to the staged-active name the footer message shows.
+    Connections {
+        target: settingsController.profilesPage ? settingsController.profilesPage.bridge : null
+
+        function onToastRequested(text) {
+            window.showToast(text);
+        }
+
+        function onProfilesChanged() {
+            window._refreshPendingProfileName();
+        }
+    }
+
     controller: settingsController.app
     title: i18n("PlasmaZones Settings")
     // Sized in Kirigami grid units so the window scales with the
@@ -165,6 +204,13 @@ PhosphorUi.SettingsAppWindow {
             // Declared inline in Main.qml, so it can reach `window` to feed the
             // page-step shortcut guard while the results dropdown is open.
             onSearchOpenChanged: window._searchOpen = searchOpen
+            // App-level action results. Ids come from seedSearchCatalog
+            // (searchcatalog.cpp); dispatch lives here because actions act
+            // on window chrome the library knows nothing about.
+            onActionTriggered: actionId => {
+                if (actionId === "show-shortcut-overlay")
+                    window._showShortcuts = true;
+            }
         }
     }
 
@@ -274,51 +320,38 @@ PhosphorUi.SettingsAppWindow {
     // Discard; today every resettable page is also discardable, so the two
     // predicates match. Both route through a window-scoped confirm.
     breadcrumbTrailing: Component {
-        ToolButton {
-            id: pageActionsButton
+        Row {
+            spacing: 0
 
-            // Re-evaluates on activePageChanged (activePage is referenced), so
-            // the button appears/disappears as the user moves between pages.
-            visible: settingsController.pageSupportsReset(settingsController.activePage) || settingsController.pageSupportsDiscard(settingsController.activePage)
-            icon.name: "overflow-menu"
-            display: AbstractButton.IconOnly
-            text: i18n("Page actions")
-            Accessible.name: i18n("Page actions")
+            // Discoverability affordance for the help overlay: the "?"
+            // shortcut is invisible until you already know it, so give it a
+            // permanent button in the chrome. Sits before the per-page
+            // kebab, always visible.
+            ToolButton {
+                icon.name: "input-keyboard"
+                display: AbstractButton.IconOnly
+                text: i18n("Keyboard shortcuts")
+                Accessible.name: i18n("Keyboard shortcuts")
+                ToolTip.visible: hovered
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+                ToolTip.text: i18nc("@info:tooltip, ? is the keyboard shortcut", "Keyboard shortcuts (?)")
+                onClicked: window._showShortcuts = !window._showShortcuts
+            }
 
-            onClicked: pageActionsMenu.popup()
+            ToolButton {
+                id: pageActionsButton
 
-            Menu {
-                id: pageActionsMenu
+                // Re-evaluates on activePageChanged (activePage is referenced), so
+                // the button appears/disappears as the user moves between pages.
+                visible: settingsController.pageSupportsReset(settingsController.activePage) || settingsController.pageSupportsDiscard(settingsController.activePage)
+                icon.name: "overflow-menu"
+                display: AbstractButton.IconOnly
+                text: i18n("Page actions")
+                Accessible.name: i18n("Page actions")
 
-                MenuItem {
-                    text: i18n("Reset page to defaults")
-                    Accessible.name: text
-                    icon.name: "document-revert"
-                    visible: settingsController.pageSupportsReset(settingsController.activePage)
-                    // Disabled while a global Save/Discard batch is in flight: a
-                    // per-page reset mid-batch could race the async revert (e.g.
-                    // the animation controller's async file restore) and leave a
-                    // partial reset.
-                    enabled: !settingsController.app.applying && !settingsController.app.discarding
-                    onTriggered: resetPageConfirmDialog.open()
-                }
-
-                MenuItem {
-                    text: i18n("Discard changes on this page")
-                    Accessible.name: text
-                    icon.name: "edit-undo"
-                    visible: settingsController.pageSupportsDiscard(settingsController.activePage)
-                    // Enabled only when the page carries unsaved edits and no
-                    // global Save/Discard batch is in flight. `dirtyPages` is
-                    // referenced purely to re-run this binding on
-                    // dirtyPagesChanged (isPageDirty itself is a function call
-                    // whose only QML dependency would otherwise be activePage).
-                    enabled: {
-                        void settingsController.dirtyPages;
-                        return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activePage);
-                    }
-                    onTriggered: discardPageConfirmDialog.open()
-                }
+                // The Menu lives at window root (beside layoutContextMenu),
+                // NOT inside this delegate — see the note on it.
+                onClicked: pageActionsMenu.popup(pageActionsButton)
             }
         }
     }
@@ -532,10 +565,14 @@ PhosphorUi.SettingsAppWindow {
     /// True while the global search dropdown is open — suppresses page-step
     /// shortcuts so ↑/↓/Enter drive the results list, not page navigation.
     property bool _searchOpen: false
+    /// True while the sidebar profile switcher's dropdown is open. Mirrored
+    /// out of the header Component (whose ids are not reachable from this
+    /// scope) by a Binding next to the combo.
+    property bool _profilePopupOpen: false
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !defaultsConfirmDialog.visible && !resetPageConfirmDialog.visible && !discardPageConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !daemonStopConfirm.visible && !layoutContextMenu.visible && !window._showShortcuts && !window._pageOwnedModalOpen && !window._searchOpen && !window._profilePopupOpen && !pageActionsMenu.visible
 
     Shortcut {
         sequence: "Ctrl+PgUp"
@@ -592,6 +629,47 @@ PhosphorUi.SettingsAppWindow {
         settingsController: settingsController
         appSettings: appSettings
         aspectRatioLabels: window.aspectRatioLabels
+    }
+
+    // ── Per-page kebab menu (Reset / Discard this page). Lives HERE at
+    // window root — not inside the breadcrumbTrailing delegate whose
+    // button opens it — for the same reason as layoutContextMenu: a Menu
+    // destroyed with its delegate risks the Qt6 SIGSEGV, and an open menu
+    // dying with the delegate would strand the _navShortcutsEnabled guard
+    // (visibleChanged never fires during destruction). Root placement
+    // also lets the guard read `pageActionsMenu.visible` directly. ──
+    Menu {
+        id: pageActionsMenu
+
+        MenuItem {
+            text: i18n("Reset page to defaults")
+            Accessible.name: text
+            icon.name: "document-revert"
+            visible: settingsController.pageSupportsReset(settingsController.activePage)
+            // Disabled while a global Save/Discard batch is in flight: a
+            // per-page reset mid-batch could race the async revert (e.g.
+            // the animation controller's async file restore) and leave a
+            // partial reset.
+            enabled: !settingsController.app.applying && !settingsController.app.discarding
+            onTriggered: resetPageConfirmDialog.open()
+        }
+
+        MenuItem {
+            text: i18n("Discard changes on this page")
+            Accessible.name: text
+            icon.name: "edit-undo"
+            visible: settingsController.pageSupportsDiscard(settingsController.activePage)
+            // Enabled only when the page carries unsaved edits and no
+            // global Save/Discard batch is in flight. `dirtyPages` is
+            // referenced purely to re-run this binding on
+            // dirtyPagesChanged (isPageDirty itself is a function call
+            // whose only QML dependency would otherwise be activePage).
+            enabled: {
+                void settingsController.dirtyPages;
+                return !settingsController.app.applying && !settingsController.app.discarding && settingsController.isPageDirty(settingsController.activePage);
+            }
+            onTriggered: discardPageConfirmDialog.open()
+        }
     }
     Kirigami.PromptDialog {
         id: defaultsConfirmDialog
@@ -881,6 +959,21 @@ PhosphorUi.SettingsAppWindow {
                     settingsController.endExternalEdit();
                 }
             }
+        }
+    }
+
+    // Sticky sidebar-header profile switcher — activate a settings profile from
+    // anywhere, mirroring the per-row Activate on the Profiles page. Selecting
+    // one STAGES it into the Save footer (applies on Save, reverts on Discard).
+    // Collapses to nothing until at least one profile exists; in the narrow
+    // compact rail the combo hides and only the identicon mark remains.
+    sidebar.headerContent: Component {
+        ProfileSwitcherHeader {
+            // Suppress Ctrl+PgUp/PgDown page-stepping while the dropdown is
+            // open, like every other window-scoped popup folded into
+            // _navShortcutsEnabled. Wired here because the extracted widget
+            // cannot resolve the window id across files.
+            onPopupOpenChanged: window._profilePopupOpen = popupOpen
         }
     }
 }

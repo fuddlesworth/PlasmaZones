@@ -31,6 +31,7 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorEngine SHARED
     include/PhosphorEngine/PlacementEngineBase.h
+    include/PhosphorEngine/GapResolution.h
     include/PhosphorEngine/PerScreenStates.h
     include/PhosphorEngine/ScreenContextTracker.h
     include/PhosphorEngine/WindowPlacement.h
@@ -62,6 +63,7 @@ target_link_libraries(PhosphorEngine
     PUBLIC
         Qt6::Core
         PhosphorGeometry::PhosphorGeometry
+        PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::Types
     PRIVATE
         PhosphorIdentity::PhosphorIdentity

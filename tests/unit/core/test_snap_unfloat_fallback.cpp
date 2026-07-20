@@ -60,6 +60,22 @@ private:
         return layout;
     }
 
+    // Seed a placement record whose snap slot has @p state + @p zoneIds, as a
+    // prior daemon session's capture would have persisted it.
+    void seedSnapSlotRecord(SnapEngine& engine, const QString& windowId, const QString& state,
+                            const QStringList& zoneIds, const QString& screenId = QStringLiteral("DP-1"))
+    {
+        PhosphorEngine::WindowPlacement p;
+        p.windowId = windowId;
+        p.appId = m_wts->currentAppIdFor(windowId);
+        p.screenId = screenId;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = state;
+        slot.zoneIds = zoneIds;
+        p.engines.insert(engine.engineId(), slot);
+        QVERIFY(m_wts->placementStore().record(p));
+    }
+
 private Q_SLOTS:
     void init()
     {
@@ -401,6 +417,160 @@ private Q_SLOTS:
             engine.resolveWindowRestore(QStringLiteral("nomatch|win"), QStringLiteral("DP-1"), /*sticky*/ false);
 
         QVERIFY2(!result.shouldSnap, "no matching rule → the placement rule must not snap the window");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // resolveUnfloatGeometry: placement-record fallback (daemon-restart path)
+    //
+    // The in-memory pre-float capture dies with the daemon. The persisted
+    // placement record's snap slot survives: a floating capture carries the
+    // pre-float zones, a stale snapped capture (daemon died before the float
+    // persisted) carries the zones the window occupied before it floated.
+    // Without the fallback, unfloating after a restart dead-ends ("no
+    // pre-float zone, keeping floating") with no way out.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testResolveUnfloat_noLiveCapture_fallsBackToRecordFloatingSlot()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|restarted");
+
+        // Live state after a daemon restart: the window is floating, but the
+        // in-memory pre-float capture is gone.
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        QVERIFY(m_wts->preFloatZones(w).isEmpty());
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateFloating()), {homeZone});
+
+        const PhosphorEngine::UnfloatResult r = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
+        QVERIFY2(r.found, "record's floating slot carries the pre-float zones — unfloat must find them");
+        QCOMPARE(r.zoneIds, QStringList{homeZone});
+        QVERIFY(r.geometry.isValid());
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveUnfloat_noLiveCapture_fallsBackToRecordSnappedSlot()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().last()->id().toString();
+        const QString w = QStringLiteral("app|stalerec");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone});
+
+        const PhosphorEngine::UnfloatResult r = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
+        QVERIFY2(r.found, "a stale snapped slot still names the window's home zone — unfloat must use it");
+        QCOMPARE(r.zoneIds, QStringList{homeZone});
+        QVERIFY(r.geometry.isValid());
+        m_wts->setSnapState(nullptr);
+    }
+
+    // The record's screenId is only a HINT: when it names a screen that no
+    // longer exists (monitor unplugged since the record was captured),
+    // resolveUnfloatScreen must reject it and degrade to the caller's live
+    // fallback screen — the restore still succeeds, on the fallback screen,
+    // instead of resolving against the missing monitor or failing outright.
+    void testResolveUnfloat_recordScreenGone_degradesToFallbackScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|unplugged");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        QVERIFY(m_wts->preFloatZones(w).isEmpty());
+        // Record captured on a screen no environment can have (a plausible
+        // name like DP-2 would resolve as a REAL monitor when the test binary
+        // is run directly on a developer's session instead of under ctest's
+        // offscreen QPA).
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                           QStringLiteral("PZTEST-UNPLUGGED-1"));
+
+        const PhosphorEngine::UnfloatResult r = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
+        QVERIFY2(r.found, "a record naming a missing screen must still restore via the fallback screen");
+        QCOMPARE(r.zoneIds, QStringList{homeZone});
+        QCOMPARE(r.screenId, QStringLiteral("DP-1"));
+        QVERIFY(r.geometry.isValid());
+        m_wts->setSnapState(nullptr);
+    }
+
+    // Composed end-to-end join of the two resolvers through the public toggle:
+    // no live capture, no record, fallback setting ON → toggleWindowFloat's
+    // unfloat path falls from resolveUnfloatGeometry (not-found) through to
+    // resolveFallbackUnfloatGeometry and actually snaps the window into the
+    // fallback zone. Pins the caller-side chaining that the per-resolver unit
+    // tests above cover only in isolation.
+    void testToggleUnfloat_noCaptureNoRecord_snapsToFallbackZone()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString firstZone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|composed");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        m_settings->setSnapUnfloatFallbackToZone(true);
+
+        engine.toggleWindowFloat(w, QStringLiteral("DP-1"));
+
+        QVERIFY2(!engine.snapState()->isFloating(w),
+                 "with the fallback setting on, the unfloat toggle must leave the floating state");
+        QCOMPARE(engine.snapState()->zoneForWindow(w), firstZone);
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveUnfloat_noLiveCapture_noRecord_staysNotFound()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        installLayout(2);
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|norec"), QStringLiteral("DP-1"), 0);
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveUnfloatGeometry(QStringLiteral("app|norec"), QStringLiteral("DP-1"));
+        QVERIFY2(!r.found, "no live capture and no record → not-found (caller falls to the fallback-zone path)");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // The record fallback consumes EXACT-windowId records only. A same-app
+    // SIBLING's record (different instance, same appId FIFO bucket) must never
+    // supply the unfloat target — without the accept predicate, peek's
+    // appId-FIFO branch would hand this record-less window the sibling's home
+    // zone and unfloat-snap it there (cross-window zone bleed).
+    void testResolveUnfloat_noLiveCaptureNoOwnRecord_ignoresAppIdSibling()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString siblingZone = layout->zones().first()->id().toString();
+
+        // The sibling instance persisted a snapped record; the window under
+        // test is floating with NO record of its own and no live capture.
+        seedSnapSlotRecord(engine, QStringLiteral("app|sibling"),
+                           QString(PhosphorEngine::WindowPlacement::stateSnapped()), {siblingZone});
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|recordless"), QStringLiteral("DP-1"), 0);
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveUnfloatGeometry(QStringLiteral("app|recordless"), QStringLiteral("DP-1"));
+        QVERIFY2(!r.found, "a same-app sibling's record must not supply the unfloat target");
         m_wts->setSnapState(nullptr);
     }
 };

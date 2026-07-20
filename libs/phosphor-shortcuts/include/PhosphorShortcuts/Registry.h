@@ -69,8 +69,9 @@ public:
     /**
      * Change the active binding for an already-registered id. Takes effect
      * after flush(). Unknown ids are logged and ignored. Passing an empty
-     * QKeySequence routes through unbind() — releasing the grab cleanly
-     * rather than leaving an empty sequence registered.
+     * QKeySequence releases the backend grab immediately (never leaves an
+     * empty sequence registered) but KEEPS the entry, so a later rebind()
+     * to a non-empty sequence re-registers it without a fresh bind().
      */
     void rebind(const QString& id, const QKeySequence& seq);
 
@@ -88,16 +89,34 @@ public:
      * unbind() — those are applied immediately at the call site. Matches
      * the backend's queue-then-flush model for register / update.
      *
-     * ready() fires after EVERY flush, including no-op flushes where no
-     * entry actually changed. This matches the backend contract (each
-     * IBackend::flush() emits ready) and lets consumers gate UI on "any
-     * flush has settled" without per-entry bookkeeping. If you need
-     * "only fire when something actually changed", track that on the
-     * caller side.
+     * ready() fires after flushes settle, including no-op flushes where no
+     * entry actually changed, so consumers can gate UI on "any flush has
+     * settled" without per-entry bookkeeping. Do NOT assume a 1:1
+     * flush→ready count: during asynchronous backend bring-up
+     * (PortalBackend before its session handle lands) multiple queued
+     * flushes coalesce into a single ready(). If you need "only fire when
+     * something actually changed", track that on the caller side.
      */
     void flush();
 
     QKeySequence shortcut(const QString& id) const;
+
+    /**
+     * Display strings for the key(s) the user EFFECTIVELY has to press for
+     * an id right now. Prefers the backend's read-back
+     * (IBackend::currentTriggers — which sees out-of-process overrides like
+     * System Settings rebinds, INCLUDING a cleared binding, which reports
+     * engaged-empty and is honored as unbound); falls back to the
+     * registry's own current sequence only when the backend cannot report
+     * at all. Empty means the id is genuinely unbound (or unknown).
+     *
+     * The strings are DISPLAY-ONLY and not format-stable across backends
+     * (see IBackend::currentTriggers): KGlobalAccel yields PortableText
+     * while Portal relays the compositor's localized description. Don't
+     * string-compare results across backends or parse them back into
+     * QKeySequence.
+     */
+    QStringList effectiveTriggers(const QString& id) const;
 
     /**
      * Enumerate registered bindings, sorted by id for deterministic output.
@@ -124,6 +143,13 @@ Q_SIGNALS:
      * Forwarded from IBackend::ready().
      */
     void ready();
+
+    /**
+     * Forwarded from IBackend::triggersChanged for ids this registry owns —
+     * the effective binding changed outside the bind/rebind flow (external
+     * rebind, compositor assignment). Re-query effectiveTriggers() on it.
+     */
+    void triggersChanged(QString id);
 
 private Q_SLOTS:
     void onBackendActivated(QString id);

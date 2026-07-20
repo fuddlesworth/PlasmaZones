@@ -67,6 +67,7 @@ private Q_SLOTS:
     void defaultPayloadForSeedsParams();
     void asyncCommitAndRevertAreInvokable();
     void curveLabelResolverBridgesQmlNaming();
+    void stageUserRulesEnforcesTheAddRuleBoundary();
 };
 
 void TestRuleController::newEmptyRuleShapesBySubject()
@@ -1473,5 +1474,45 @@ void TestRuleController::curveLabelResolverBridgesQmlNaming()
 }
 
 QTEST_MAIN(TestRuleController)
+
+/// stageUserRules is the profile-activation staging path — a public entry
+/// that bypasses addRule. It must enforce the same boundary: an invalid rule
+/// (constructed directly; Rule::fromJson cannot produce one) is dropped
+/// rather than staged, because one invalid rule in the model poisons the
+/// eventual Save whole. The valid rule replaces the previous user subset.
+void TestRuleController::stageUserRulesEnforcesTheAddRuleBoundary()
+{
+    RuleController controller;
+
+    // Seed one user rule through the normal CRUD path.
+    QVariantMap seeded = controller.newEmptyRule(QStringLiteral("application"));
+    seeded[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
+    QVERIFY(!controller.addRuleFromJson(seeded).isEmpty());
+    QCOMPARE(controller.model()->rowCount(), 1);
+
+    // A rule isValid() rejects (zero actions) but with an otherwise sound
+    // id + match — only constructible programmatically.
+    Rule bad;
+    bad.id = QUuid::createUuid();
+    bad.name = QStringLiteral("invalid");
+    bad.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("x"));
+
+    Rule good;
+    good.id = QUuid::createUuid();
+    good.name = QStringLiteral("valid");
+    good.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("y"));
+    RuleAction floatAction;
+    floatAction.type = QString(ActionType::Float);
+    good.actions = {floatAction};
+    QVERIFY(!bad.isValid());
+    QVERIFY(good.isValid());
+
+    controller.stageUserRules({bad, good});
+
+    // The invalid rule was dropped at the boundary; the valid one replaced
+    // the seeded user subset wholesale.
+    QCOMPARE(controller.model()->rowCount(), 1);
+    QCOMPARE(controller.model()->rules().first().id, good.id);
+}
 
 #include "test_rule_controller.moc"

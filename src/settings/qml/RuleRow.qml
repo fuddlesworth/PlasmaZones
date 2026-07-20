@@ -8,8 +8,6 @@ import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.plasmazones.settings
 
-import "FontUtils.js" as FontUtils
-
 /**
  * @brief One rule row in the flat RulesPage priority list.
  *
@@ -90,35 +88,8 @@ ExpandableRowDelegate {
     // `enabled` in any handler that relies on implicit-argument scope.
     signal toggleRequested(bool ruleEnabled)
 
-    // Section-header pill shared by the WHEN and THEN halves of the expanded
-    // preview. Both headers use one capsule style — highlightColor family,
-    // 0.4 fill + 0.9 border — so the two sections read as one design and line
-    // up on the same left edge. Mirrors the fill/border recipe of the
-    // ALL/ANY/NONE group pills in MatchExpressionView.
-    component SectionHeaderPill: Rectangle {
-        property alias text: pillLabel.text
-
-        implicitWidth: pillLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
-        implicitHeight: pillLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
-        radius: implicitHeight / 2
-        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
-        border.width: 1
-        border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.9)
-
-        Label {
-            id: pillLabel
-
-            anchors.centerIn: parent
-            // One binding: a font.<sub> sibling next to a whole-group `font:` is an
-            // illegal duplicate binding that fails the whole document. FontUtils
-            // passes only the size dimension the theme font actually carries.
-            font: FontUtils.withProps(Kirigami.Theme.smallFont, {
-                bold: true,
-                capitalization: Font.AllUppercase
-            })
-            color: Kirigami.Theme.textColor
-        }
-    }
+    // The WHEN / THEN capsules come from the shared SectionHeaderPill
+    // component, which the profile row's diff expansion uses too.
 
     // Instantiated inside a Repeater/ColumnLayout — `Layout.fillWidth: true`
     // (set by the delegate's parent) drives the width. The hover highlight,

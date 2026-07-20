@@ -46,6 +46,16 @@ AnimationEventCardList {
             "eventPath": "popup.snapAssist.hide",
             "eventLabel": i18n("Snap Assist Hidden"),
             "isParentNode": false
+        },
+        {
+            "eventPath": "popup.cheatsheet.show",
+            "eventLabel": i18n("Shortcut Cheatsheet Shown"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "popup.cheatsheet.hide",
+            "eventLabel": i18n("Shortcut Cheatsheet Hidden"),
+            "isParentNode": false
         }
     ]
 }

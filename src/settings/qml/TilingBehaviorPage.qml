@@ -115,20 +115,7 @@ SettingsFlickable {
                         Accessible.name: i18n("New window placement")
                         textRole: "text"
                         valueRole: "value"
-                        model: [
-                            {
-                                "text": i18n("After existing"),
-                                "value": 0
-                            },
-                            {
-                                "text": i18n("After focused"),
-                                "value": 1
-                            },
-                            {
-                                "text": i18n("As main window"),
-                                "value": 2
-                            }
-                        ]
+                        model: settingsController.valueOptions("Tiling.Behavior", "InsertPosition")
                         currentIndex: Math.max(0, indexOfValue(appSettings.autotileInsertPosition))
                         onActivated: appSettings.autotileInsertPosition = currentValue
                     }
@@ -196,20 +183,7 @@ SettingsFlickable {
                         Accessible.name: i18n("Sticky windows")
                         textRole: "text"
                         valueRole: "value"
-                        model: [
-                            {
-                                "text": i18n("Treat as normal"),
-                                "value": 0
-                            },
-                            {
-                                "text": i18n("Restore only"),
-                                "value": 1
-                            },
-                            {
-                                "text": i18n("Ignore all"),
-                                "value": 2
-                            }
-                        ]
+                        model: settingsController.valueOptions("Tiling.Behavior", "StickyWindowHandling")
                         currentIndex: Math.max(0, indexOfValue(appSettings.autotileStickyWindowHandling))
                         onActivated: appSettings.autotileStickyWindowHandling = currentValue
                     }
@@ -227,16 +201,7 @@ SettingsFlickable {
                         Accessible.description: i18n("Selects how dragging a tiled window on an autotile screen behaves: Float converts it to free-floating, Reorder keeps it tiled and swaps it into the drop slot.")
                         textRole: "text"
                         valueRole: "value"
-                        model: [
-                            {
-                                "text": i18n("Float on drag"),
-                                "value": 0
-                            },
-                            {
-                                "text": i18n("Reorder on drag"),
-                                "value": 1
-                            }
-                        ]
+                        model: settingsController.valueOptions("Tiling.Behavior", "DragBehavior")
                         currentIndex: Math.max(0, indexOfValue(appSettings.autotileDragBehavior))
                         onActivated: appSettings.autotileDragBehavior = currentValue
                     }
@@ -254,16 +219,7 @@ SettingsFlickable {
                         Accessible.description: i18n("Selects how windows beyond the max-windows cap are handled: Float excess windows, or Unlimited to tile every window regardless of count.")
                         textRole: "text"
                         valueRole: "value"
-                        model: [
-                            {
-                                "text": i18n("Float excess"),
-                                "value": 0
-                            },
-                            {
-                                "text": i18n("Unlimited"),
-                                "value": 1
-                            }
-                        ]
+                        model: settingsController.valueOptions("Tiling.Behavior", "OverflowBehavior")
                         currentIndex: Math.max(0, indexOfValue(appSettings.autotileOverflowBehavior))
                         onActivated: appSettings.autotileOverflowBehavior = currentValue
                     }

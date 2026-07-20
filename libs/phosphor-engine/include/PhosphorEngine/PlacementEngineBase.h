@@ -36,6 +36,22 @@ public:
     /// engines override and add their own pruning (then call the base).
     virtual int pruneStaleWindows(const QSet<QString>& aliveWindowIds);
 
+    /// The exact rect this engine last APPLIED to @p windowId while managing it
+    /// (its tile rect), remembered PAST the window's transition out of the
+    /// managed state. On a float toggle the engine flips its managed bit before
+    /// the compositor repositions the window, so state predicates
+    /// (isWindowTiled et al.) already answer "not managed" while the live frame
+    /// still IS the managed rect — the capture orchestrator compares against
+    /// this to refuse adopting such a frame as free/float geometry. Invalid
+    /// when the engine never applied a rect (the base default: engines whose
+    /// managed rects are resolvable from persisted state, like snap's zone
+    /// geometry, don't need it).
+    virtual QRect lastManagedRect(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return {};
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings — universal pattern for all engines
     //

@@ -5,8 +5,16 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 
+#include <memory>
+
+#include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../helpers/AutotileTestHelpers.h"
+#include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
+#include "../helpers/StubZoneDetector.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
@@ -561,6 +569,159 @@ private Q_SLOTS:
 
         QVERIFY(tilingSpy.count() >= 1);
         QCOMPARE(tilingSpy.last().first().toString(), screenName);
+    }
+
+    // =========================================================================
+    // lastManagedRect: the tile rect applyTiling last emitted for a window,
+    // remembered PAST the float flip. performToggleFloat clears the tiled bit
+    // before the compositor repositions the window, so the capture orchestrator
+    // needs this rect to recognise the still-tiled live frame and refuse it as
+    // float-back geometry (the "float restores onto its own tile" regression).
+    // =========================================================================
+
+    void testLastManagedRect_survivesFloatToggleAndClose()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screenName});
+
+        engine.windowOpened(QStringLiteral("win-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-2"), screenName);
+        QCoreApplication::processEvents();
+
+        // Force zones directly — unit tests have no real screen geometry, so
+        // recalculateLayout() bails and applyTiling consumes what we set.
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        const QRect zoneA(10, 10, 950, 1060);
+        const QRect zoneB(960, 10, 950, 1060);
+        state->setCalculatedZones({zoneA, zoneB});
+        engine.retile(screenName);
+
+        const QStringList tiled = state->tiledWindows();
+        QCOMPARE(tiled.size(), 2);
+        // Assert per window id, not per tiling order: each tiled window owns
+        // exactly one of the two zone rects, and they differ.
+        const QRect rect0 = engine.lastManagedRect(tiled.at(0));
+        const QRect rect1 = engine.lastManagedRect(tiled.at(1));
+        QVERIFY(rect0 == zoneA || rect0 == zoneB);
+        QVERIFY(rect1 == zoneA || rect1 == zoneB);
+        QVERIFY(rect0 != rect1);
+        QVERIFY(!engine.lastManagedRect(QStringLiteral("never-seen")).isValid());
+
+        // The regression pin: after the float toggle the tiled bit is gone,
+        // but the last-applied rect must still answer with the SAME rect the
+        // window was tiled at.
+        const QString floated = tiled.at(0);
+        engine.toggleWindowFloat(floated, screenName);
+        QVERIFY(state->isFloating(floated));
+        QCOMPARE(engine.lastManagedRect(floated), rect0);
+
+        // Close is NOT a clearing site: the effect notifies autotile of a
+        // close before WindowTracking, so the orchestrator's close capture
+        // (and its tile-rect guard) runs after this teardown and still needs
+        // the memory. pruneStaleWindows is the reclaim path.
+        engine.windowClosed(floated);
+        QCOMPARE(engine.lastManagedRect(floated), rect0);
+        engine.pruneStaleWindows({tiled.at(1)});
+        QVERIFY(!engine.lastManagedRect(floated).isValid());
+        QVERIFY(engine.lastManagedRect(tiled.at(1)).isValid());
+    }
+
+    void testLastManagedRect_prunedWithStaleWindows()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screenName});
+
+        engine.windowOpened(QStringLiteral("win-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-2"), screenName);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(10, 10, 950, 1060), QRect(960, 10, 950, 1060)});
+        engine.retile(screenName);
+        QVERIFY(engine.lastManagedRect(QStringLiteral("win-1")).isValid());
+
+        engine.pruneStaleWindows({QStringLiteral("win-2")});
+        QVERIFY(!engine.lastManagedRect(QStringLiteral("win-1")).isValid());
+        QVERIFY(engine.lastManagedRect(QStringLiteral("win-2")).isValid());
+    }
+
+    // A genuine cross-screen focus move OFF the autotile screens is full
+    // departure: windowFocused drops the window's tracking, including its
+    // last-applied tile rect. The window left the engine's world entirely, so
+    // its tile-rect memory must not linger (the sibling stays untouched).
+    void testLastManagedRect_clearedOnCrossScreenFocusMove()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screenName});
+
+        engine.windowOpened(QStringLiteral("win-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-2"), screenName);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(10, 10, 950, 1060), QRect(960, 10, 950, 1060)});
+        engine.retile(screenName);
+        QVERIFY(engine.lastManagedRect(QStringLiteral("win-1")).isValid());
+
+        // Focus reports win-1 on a non-autotile screen → tracking removed.
+        engine.windowFocused(QStringLiteral("win-1"), QStringLiteral("HDMI-1"));
+        QVERIFY(!engine.lastManagedRect(QStringLiteral("win-1")).isValid());
+        QVERIFY(engine.lastManagedRect(QStringLiteral("win-2")).isValid());
+    }
+
+    // =========================================================================
+    // Pending-order seed float restore: EXACT record only. Pending orders are
+    // built from live-session ids, so a same-app SIBLING's floating record
+    // must never float a record-less seeded window (relogin restores go
+    // through insertWindow's take(), not this path). The window's own exact
+    // floating record still restores its float.
+    // =========================================================================
+
+    void testPendingOrderSeed_floatRestoreIsExactRecordOnly()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PlasmaZones::StubZoneDetector zoneDetector;
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+
+        AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("DP-1");
+
+        using PhosphorEngine::WindowPlacement;
+        PhosphorEngine::EngineSlot floatSlot;
+        floatSlot.state = QString(WindowPlacement::stateFloating());
+
+        // Sibling instance's durable floating record (same appId, other uuid).
+        WindowPlacement sib;
+        sib.windowId = QStringLiteral("app|sibling");
+        sib.appId = QStringLiteral("app");
+        sib.engines.insert(engine.engineId(), floatSlot);
+        QVERIFY(wts.placementStore().record(sib));
+
+        // The second seeded window's OWN exact floating record.
+        WindowPlacement own;
+        own.windowId = QStringLiteral("app|own");
+        own.appId = QStringLiteral("app");
+        own.engines.insert(engine.engineId(), floatSlot);
+        QVERIFY(wts.placementStore().record(own));
+
+        engine.setInitialWindowOrder(screenName, {QStringLiteral("app|fresh"), QStringLiteral("app|own")});
+        engine.setAutotileScreens({screenName});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        QVERIFY(state->containsWindow(QStringLiteral("app|fresh")));
+        QVERIFY2(!state->isFloating(QStringLiteral("app|fresh")),
+                 "a same-app sibling's floating record must not float a record-less seeded window");
+        QVERIFY2(state->isFloating(QStringLiteral("app|own")),
+                 "the window's own exact floating record still restores its float");
     }
 };
 

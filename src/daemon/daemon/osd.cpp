@@ -4,7 +4,6 @@
 #include "../daemon.h"
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
-#include "../modetracker.h"
 #include "../../core/screenmoderouter.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -27,6 +26,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
+#include <QKeySequence>
 #include <QScreen>
 #include <QTimer>
 #include "phosphor_i18n.h"
@@ -498,11 +498,6 @@ void Daemon::syncModeFromAssignments()
                 }
             }
         }
-
-        // Update ModeTracker context to reflect this desktop
-        if (m_modeTracker && !focusedScreenId.isEmpty()) {
-            m_modeTracker->setContext(focusedScreenId, desktop, activity);
-        }
     }
 
     updateLayoutFilter();
@@ -667,6 +662,135 @@ bool Daemon::isCurrentContextLockedForMode(const QString& screenId, PhosphorZone
         return false;
     }
     return m_contextResolver->isLocked(m_contextResolver->handleForMode(screenId, mode));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Shortcut cheatsheet overlay
+// ═══════════════════════════════════════════════════════════════════════════════
+
+namespace {
+
+// Dedicated Escape ad-hoc grab id — deliberately NOT the shared
+// kCancelOverlayId: reusing that would drag the cheatsheet into the
+// cancelSnap precedence chain and its cross-consumer release guard.
+// KGlobalAccel routes one action per key, so the daemon keeps at most one
+// Escape consumer active by dismissing sibling modals around show.
+const QLatin1String kCheatsheetDismissId("cheatsheet_dismiss");
+
+// String form of the per-screen tiling mode as CheatsheetContent consumes
+// it. Scrolling has no engine yet but is a real router state; the sheet
+// shows the mode-independent groups there.
+QString cheatsheetModeString(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return QStringLiteral("autotile");
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        return QStringLiteral("scrolling");
+    case PhosphorZones::AssignmentEntry::Snapping:
+        break;
+    }
+    return QStringLiteral("snapping");
+}
+
+} // namespace
+
+void Daemon::toggleCheatsheet()
+{
+    if (!m_overlayService || !m_shortcutManager) {
+        return;
+    }
+    if (m_overlayService->isCheatsheetVisible()) {
+        m_overlayService->hideCheatsheet();
+        return;
+    }
+    showCheatsheetOnCursorScreen();
+}
+
+void Daemon::showCheatsheetOnCursorScreen()
+{
+    if (!m_overlayService || !m_shortcutManager) {
+        return;
+    }
+    if (m_settings && !m_settings->cheatsheetEnabled()) {
+        qCDebug(lcDaemon) << "Cheatsheet: disabled in settings";
+        return;
+    }
+    // No cheatsheet during an interactive drag: the kwin-effect holds a
+    // keyboard grab for the drag's lifetime and routes Escape to cancelSnap
+    // itself (see windowdragadaptor/drag.cpp), so the dismiss grab bound
+    // below would never fire, and the sheet would also overlap the live
+    // drag surfaces. The user can re-press after dropping the window.
+    if (m_windowDragAdaptor && m_windowDragAdaptor->isDragInFlight()) {
+        qCDebug(lcDaemon) << "Cheatsheet: suppressed during interactive drag";
+        return;
+    }
+
+    // Screen-targeted like the picker and the mode toggle: the user's
+    // intent is "the screen I am looking at", so resolve cursor-first.
+    const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
+        qCDebug(lcDaemon) << "Cheatsheet: no screen info";
+        return;
+    }
+
+    // At most one Escape-consuming modal at a time (see kCheatsheetDismissId
+    // note): dismiss the picker / snap assist first. Their dismissed signals
+    // release the shared cancel-overlay Escape grab synchronously, so the
+    // cheatsheet's own Escape registration below cannot be silently no-op'd
+    // by a key-level conflict.
+    if (m_overlayService->isLayoutPickerVisible()) {
+        m_overlayService->hideLayoutPicker();
+    }
+    if (m_overlayService->isSnapAssistVisible()) {
+        m_overlayService->hideSnapAssist();
+    }
+
+    const auto mode = currentModeFor(screenId);
+    const bool autotileAvailable = m_settings && m_settings->autotileEnabled();
+    m_overlayService->showCheatsheet(screenId, m_shortcutManager->cheatsheetModel(), cheatsheetModeString(mode),
+                                     autotileAvailable);
+
+    // Bind Escape only if the sheet actually became visible — showCheatsheet
+    // bails on missing screen/shell/catalog, and the only releaser is
+    // cheatsheetDismissed, which never fires for an invisible sheet. Binding
+    // on a failed show would leak the Escape grab system-wide (same hazard
+    // the picker guards against).
+    if (m_overlayService->isCheatsheetVisible()) {
+        m_shortcutManager->registerAdhocShortcut(kCheatsheetDismissId, QKeySequence(Qt::Key_Escape),
+                                                 PhosphorI18n::tr("Dismiss Shortcut Cheatsheet"), [this] {
+                                                     if (m_overlayService) {
+                                                         m_overlayService->hideCheatsheet();
+                                                     }
+                                                 });
+    }
+}
+
+void Daemon::refreshCheatsheetIfVisible()
+{
+    if (!m_overlayService || !m_shortcutManager || !m_overlayService->isCheatsheetVisible()) {
+        return;
+    }
+    // Re-resolve for the screen the sheet is BOUND to — never retarget to
+    // the cursor's current screen; only mode changes on the bound screen
+    // refilter (the sheet stays put like the picker does).
+    const QString screenId = m_overlayService->cheatsheetScreenId();
+    if (screenId.isEmpty()) {
+        return;
+    }
+    const auto mode = currentModeFor(screenId);
+    const bool autotileAvailable = m_settings && m_settings->autotileEnabled();
+    m_overlayService->refreshCheatsheet(m_shortcutManager->cheatsheetModel(), cheatsheetModeString(mode),
+                                        autotileAvailable);
+}
+
+void Daemon::onCheatsheetDismissed()
+{
+    // Fires on EVERY dismissal path (toggle re-press, Escape, backdrop,
+    // teardown) — the right place to release the Escape grab.
+    if (m_shortcutManager) {
+        m_shortcutManager->unregisterAdhocShortcut(kCheatsheetDismissId);
+    }
 }
 
 } // namespace PlasmaZones

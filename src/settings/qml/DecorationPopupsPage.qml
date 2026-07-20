@@ -36,6 +36,12 @@ DecorationSurfaceCardList {
             "cardLabel": i18n("Layout Picker"),
             "alwaysEnabled": false,
             "isParentNode": false
+        },
+        {
+            "surfacePath": "popup.cheatsheet",
+            "cardLabel": i18n("Shortcut Cheatsheet"),
+            "alwaysEnabled": false,
+            "isParentNode": false
         }
     ]
 }

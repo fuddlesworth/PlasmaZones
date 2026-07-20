@@ -41,6 +41,11 @@ p_add_test(test_session_persistence core/test_session_persistence.cpp)
 p_add_test(test_session_persistence_layout core/test_session_persistence_layout.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ - QML i18n Context Substitution Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+p_add_test(test_localized_context_substitution core/test_localized_context_substitution.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Window Tracking Service Tests (lifecycle, session, queries)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wts_lifecycle core/test_wts_lifecycle.cpp)
@@ -333,6 +338,13 @@ p_add_test(test_configdefaults config/test_configdefaults.cpp)
 p_add_test(test_configbackend_json config/test_configbackend_json.cpp)
 
 p_add_test(test_configmigration config/test_configmigration.cpp)
+
+# Binds the schema's declared choices to their user-facing labels.
+add_executable(test_settingsvaluelabels config/test_settingsvaluelabels.cpp)
+target_link_libraries(test_settingsvaluelabels
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+target_compile_definitions(test_settingsvaluelabels PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_settingsvaluelabels COMMAND test_settingsvaluelabels)
 
 # v3 → v4 window-rule consolidation migration.
 add_executable(test_migration_v3_to_v4 config/test_migration_v3_to_v4.cpp)
@@ -734,6 +746,12 @@ target_include_directories(test_wta_convenience PRIVATE ${CMAKE_SOURCE_DIR}/libs
 target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
 
+add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wta_capture_guards PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_capture_guards PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_capture_guards COMMAND test_wta_capture_guards)
+
 add_executable(test_wta_reactive_metadata dbus/test_wta_reactive_metadata.cpp)
 target_link_libraries(test_wta_reactive_metadata PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)
@@ -899,6 +917,15 @@ add_executable(test_window_appearance_controller
 target_link_libraries(test_window_appearance_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
     PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
 add_test(NAME test_window_appearance_controller COMMAND test_window_appearance_controller)
+
+add_executable(test_tiling_algorithm_controller
+    settings/test_tiling_algorithm_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/tilingalgorithmcontroller.cpp
+)
+target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
+target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
 
 # Animations-controller sources shared by the four test executables below
 # (page controller / motion sets / presets / shader overrides). One list so a
@@ -1069,6 +1096,25 @@ target_link_libraries(test_decoration_sets_validation
 )
 add_test(NAME test_decoration_sets_validation COMMAND test_decoration_sets_validation)
 
+# Settings profiles: the ProfileStore delta / inheritance-resolution engine
+# behind ProfilePageController::bridge. Driven with stub config closures, so it
+# links only the store itself (no PhosphorConfig::Store needed).
+add_executable(test_profilestore
+    settings/test_profilestore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/profilestore.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/profilestore_diff.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/profilestore_revert.cpp
+)
+target_link_libraries(test_profilestore
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        plasmazones_core
+        PhosphorRules::PhosphorRules
+)
+add_test(NAME test_profilestore COMMAND test_profilestore)
+
 # Rules page (Phase 4 of the window-rule refactor): RuleModel
 # derives SectionRole / summaries from a rule's shape; RuleController
 # stages CRUD by UUID and builds the monitor overview. Compiles the model /
@@ -1201,19 +1247,69 @@ add_test(NAME test_zone_zorder COMMAND test_zone_zorder)
 # ReplyMessage, which EditorController::saveLayout then treats as a landed write
 # (clean undo stack, no unsaved-changes prompt, work lost on close). The client
 # hard-binds the daemon's bus name, so the stub registry has to claim it — the
-# test skips itself when a real daemon already owns the name, hence the
-# dbus-run-session wrapper. DBusLayoutService lives in the editor executable
-# rather than a library, so its TU is compiled into the test directly.
-# ILayoutService.h declares its Q_OBJECT base entirely in the header, so it is
-# listed explicitly: AUTOMOC has to see it to emit the base's metaobject.
+# shared TEST_LAUNCHER's private bus (see the D-Bus isolation block at the
+# bottom) guarantees the name is unowned; when the launcher is unavailable the
+# test skips itself if a real daemon already owns the name. DBusLayoutService
+# lives in the editor executable rather than a library, so its TU is compiled
+# into the test directly. ILayoutService.h declares its Q_OBJECT base entirely
+# in the header, so it is listed explicitly: AUTOMOC has to see it to emit the
+# base's metaobject.
 add_executable(test_dbus_layout_service_replies editor/test_dbus_layout_service_replies.cpp
                ${CMAKE_SOURCE_DIR}/src/editor/services/DBusLayoutService.cpp
                ${CMAKE_SOURCE_DIR}/src/editor/services/ILayoutService.h)
 target_link_libraries(test_dbus_layout_service_replies
                       PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                               PhosphorProtocol::PhosphorProtocol)
-add_test(NAME test_dbus_layout_service_replies
-         COMMAND dbus-run-session -- $<TARGET_FILE:test_dbus_layout_service_replies>)
+add_test(NAME test_dbus_layout_service_replies COMMAND test_dbus_layout_service_replies)
+
+# Decoration page→root scoping helpers (decorationpagescope.{h,cpp}): the pure
+# dispatch/prefix/diff logic behind SettingsController's per-page decoration
+# Reset/Discard/dirty branches, compiled directly (it lives in the
+# plasmazones-settings executable). Pure QString + DecorationProfileTree — no
+# controller construction needed.
+add_executable(test_decoration_page_scope
+    settings/test_decoration_page_scope.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/decorationpagescope.cpp
+)
+target_include_directories(test_decoration_page_scope PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_decoration_page_scope
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorSurface::PhosphorSurface
+)
+add_test(NAME test_decoration_page_scope COMMAND test_decoration_page_scope)
+
+# GPU-gated orientation guard for the per-render-target NDC Y-flip: renders a
+# two-stage surface-decoration chain (border + shadow via ShaderEffectSource
+# taps, mirroring SurfaceDecoration.qml) on a forced OpenGL scene graph and
+# asserts the sampled card content is upright. OPT-IN: it only runs with
+# PLASMAZONES_GPU_TESTS=1 in the environment, because it must present on the
+# LIVE session (its custom main drops the forced offscreen QPA — an offscreen
+# GL grab returns a uniform placeholder and proves nothing) and mapping a real
+# window D-Bus-activates the installed plasmazonesd via the KWin effect on a
+# developer machine, while CI containers pass the display/GL gates yet never
+# get a ready shader pipeline. Without the opt-in it exits as Skipped.
+add_executable(test_surface_decoration_orientation
+    rendering/test_surface_decoration_orientation.cpp
+)
+target_compile_definitions(test_surface_decoration_orientation PRIVATE
+    PLASMAZONES_SOURCE_ROOT="${CMAKE_SOURCE_DIR}")
+target_link_libraries(test_surface_decoration_orientation
+    PRIVATE
+        Qt6::Test
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+        plasmazones_rendering
+        PhosphorSurface::PhosphorSurface
+)
+add_test(NAME test_surface_decoration_orientation COMMAND test_surface_decoration_orientation)
+# Non-opted-in and headless runs exit with 77 from the test's custom main,
+# which ctest reports as SKIPPED rather than Passed — honest status for the
+# GPU gate. In-test QSKIPs still exit 0 via qExec (green, Qt's contract).
+set_tests_properties(test_surface_decoration_orientation PROPERTIES SKIP_RETURN_CODE 77)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation
@@ -1241,4 +1337,37 @@ file(MAKE_DIRECTORY
 get_property(_all_tests DIRECTORY . PROPERTY TESTS)
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT
     "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${_pz_test_home}/config;XDG_DATA_HOME=${_pz_test_home}/data;XDG_STATE_HOME=${_pz_test_home}/state;XDG_CACHE_HOME=${_pz_test_home}/cache")
+
+# D-Bus isolation: run every test on its own PRIVATE session bus. Several
+# tests compile client sources whose async calls target the daemon's real
+# well-known name (org.plasmazones) with QDBus's default auto-start flag —
+# on a developer machine the installed org.plasmazones.service activation
+# file turns each such call into a spawn of the installed plasmazonesd,
+# left running after ctest exits. The custom bus config is essential: a
+# stock dbus-run-session bus still reads /usr/share/dbus-1/services, so the
+# installed daemon would be activated on the private bus too (as a child of
+# the private dbus-daemon — it then leaks into the session AND holds the
+# test's stdout pipe open, hanging ctest after the test passes). The config
+# declares no service directories, so activation is impossible and daemon
+# calls fail fast with ServiceUnknown; tests that register their own bus
+# names (adaptor routing, layout-service replies) get a clean bus where the
+# name is never already owned. Uses the TEST_LAUNCHER target property
+# (CMake 3.29+); when dbus-run-session or the CMake version is missing,
+# tests run directly on whatever bus the environment provides — the
+# pre-isolation status quo.
+find_program(_pz_dbus_run_session dbus-run-session)
+if(_pz_dbus_run_session AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
+    foreach(_pz_test IN LISTS _all_tests)
+        # Every add_test in this directory uses NAME == target; the guard
+        # keeps a future non-target test entry from breaking the configure.
+        if(TARGET ${_pz_test})
+            set_target_properties(${_pz_test} PROPERTIES
+                TEST_LAUNCHER
+                "${_pz_dbus_run_session};--config-file=${CMAKE_CURRENT_SOURCE_DIR}/test-session-bus.conf;--")
+        endif()
+    endforeach()
+else()
+    message(STATUS "PlasmaZones: dbus-run-session or CMake >= 3.29 unavailable — "
+                   "tests will use the ambient session bus")
+endif()
 # ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───

@@ -28,6 +28,7 @@ private Q_SLOTS:
     void overlappingStack_stepsOneZoneBothDirections();
     void tie_isDeterministicByOrder();
     void requireOverlap_diagonalOnly_returnsMinusOne();
+    void requireOverlap_sideOutputForVerticalMove_returnsMinusOne();
     void requireOverlap_nearestGapAmongOverlapping_wins();
     void requireOverlap_tie_isDeterministicByOrder();
     void emptyCandidates_returnsMinusOne();
@@ -185,6 +186,29 @@ void TestDirectionalNeighbor::requireOverlap_diagonalOnly_returnsMinusOne()
     // ...but a genuine perpendicular-overlapping neighbour still resolves:
     // "left" from bottom-right finds bottom-left (shared y-band), overlap or not.
     QCOMPARE(directionalNeighbor(bottomRight, candidates, Direction::Left, /*requireOverlap=*/true), 2);
+}
+
+void TestDirectionalNeighbor::requireOverlap_sideOutputForVerticalMove_returnsMinusOne()
+{
+    // Discussion #795: cross-output resolution. A short ultrawide sits beside a
+    // taller monitor; the side monitor's centre lies below the ultrawide's
+    // centre but the two share NO horizontal overlap. "Move window down" at the
+    // bottom-most zone must NOT resolve the side monitor as the "down" output.
+    const QRectF ultrawide(0, 0, 4096, 1152); // focus output, centre y=576
+    const QRectF sideTaller(4096, 0, 3072, 1728); // beside it, centre y=864
+    const QList<QRectF> sideOnly{sideTaller};
+
+    // Default (fallback) mode reproduces the reported hop.
+    QCOMPARE(directionalNeighbor(ultrawide, sideOnly, Direction::Down), 0);
+    // Output-picking passes requireOverlap=true → no "down" neighbour, and the
+    // same rejection holds for "up" from the taller monitor's perspective.
+    QCOMPARE(directionalNeighbor(ultrawide, sideOnly, Direction::Down, /*requireOverlap=*/true), -1);
+    QCOMPARE(directionalNeighbor(sideTaller, {ultrawide}, Direction::Up, /*requireOverlap=*/true), -1);
+    // The side monitor still resolves for the direction it really occupies...
+    QCOMPARE(directionalNeighbor(ultrawide, sideOnly, Direction::Right, /*requireOverlap=*/true), 0);
+    // ...and a genuinely stacked output (horizontal overlap) still resolves.
+    const QRectF below(500, 1152, 2560, 1440);
+    QCOMPARE(directionalNeighbor(ultrawide, {sideTaller, below}, Direction::Down, /*requireOverlap=*/true), 1);
 }
 
 void TestDirectionalNeighbor::requireOverlap_nearestGapAmongOverlapping_wins()

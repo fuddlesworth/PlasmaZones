@@ -10,7 +10,7 @@
 namespace PlasmaZones {
 
 namespace {
-namespace PSK = PhosphorEngine::PerScreenSnappingKey;
+namespace PSK = PhosphorEngine::PerScreenKeys;
 
 // The global-scope value of a gap key, read from the matching ISettings getter.
 QVariant globalGapValue(const ISettings* s, const QString& key)

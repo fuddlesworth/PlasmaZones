@@ -1,7 +1,7 @@
 {
     "id": "fadecolor",
     "name": "Fade Color",
-    "description": "A phased fade where visibility ramps up from 40% progress onward with smoothstep.",
+    "description": "A phased fade where visibility ramps up with smoothstep. The Color Phase dial delays the start of the fade and matches the niri original at 0.4.",
     "author": "PlasmaZones (ported from liixini/shaders, https://github.com/liixini/shaders)",
     "version": "1.0",
     "category": "Fade",
@@ -11,7 +11,7 @@
             "id": "colorPhase",
             "name": "Color Phase",
             "type": "float",
-            "default": 0.4,
+            "default": 0.0,
             "min": 0.0,
             "max": 0.95
         }

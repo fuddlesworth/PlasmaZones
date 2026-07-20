@@ -10,12 +10,12 @@
 #include "../core/geometryutils.h"
 #include "../core/logging.h"
 #include "../core/spatialadjacency.h"
+#include <PhosphorGeometry/DirectionalNeighbor.h>
 #include "../core/utils.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <limits>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorScreens/Swapper.h> // PhosphorScreens::Direction
 
 namespace PlasmaZones {
 
@@ -264,55 +264,23 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
         return QString();
     }
 
-    PhosphorZones::Zone* bestZone = nullptr;
-    qreal bestValue = 0;
-    bool initialized = false;
-
-    for (auto* zone : layout->zones()) {
-        QRectF geom = zone->normalizedGeometry(refGeom);
-        qreal value = 0;
-
-        if (direction == PhosphorScreens::Direction::Left) {
-            // Find leftmost zone (smallest x)
-            value = geom.x();
-            if (!initialized || value < bestValue) {
-                bestValue = value;
-                bestZone = zone;
-                initialized = true;
-            }
-        } else if (direction == PhosphorScreens::Direction::Right) {
-            // Find rightmost zone (largest x + width, i.e., right edge)
-            value = geom.x() + geom.width();
-            if (!initialized || value > bestValue) {
-                bestValue = value;
-                bestZone = zone;
-                initialized = true;
-            }
-        } else if (direction == PhosphorScreens::Direction::Up) {
-            // Find topmost zone (smallest y)
-            value = geom.y();
-            if (!initialized || value < bestValue) {
-                bestValue = value;
-                bestZone = zone;
-                initialized = true;
-            }
-        } else if (direction == PhosphorScreens::Direction::Down) {
-            // Find bottommost zone (largest y + height, i.e., bottom edge)
-            value = geom.y() + geom.height();
-            if (!initialized || value > bestValue) {
-                bestValue = value;
-                bestZone = zone;
-                initialized = true;
-            }
-        } else {
-            qCWarning(lcDbus) << "Invalid direction:" << direction;
-            return QString();
-        }
+    const auto edge = PhosphorGeometry::directionFromString(direction);
+    if (!edge.has_value()) {
+        qCWarning(lcDbus) << "Invalid direction:" << direction;
+        return QString();
     }
 
-    if (bestZone) {
-        qCDebug(lcDbus) << "First zone in direction" << direction << "is" << bestZone->id().toString();
-        return bestZone->id().toString();
+    const auto zones = layout->zones();
+    QList<QRectF> candidateGeoms;
+    candidateGeoms.reserve(zones.size());
+    for (auto* zone : zones) {
+        candidateGeoms.append(zone->normalizedGeometry(refGeom));
+    }
+
+    const int best = PhosphorGeometry::edgeMostRect(candidateGeoms, *edge);
+    if (best >= 0) {
+        qCDebug(lcDbus) << "First zone in direction" << direction << "is" << zones.at(best)->id().toString();
+        return zones.at(best)->id().toString();
     }
 
     return QString();

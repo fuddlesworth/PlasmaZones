@@ -29,6 +29,7 @@ QVariantMap toVariant(const SearchEntry& e)
     m.insert(QStringLiteral("pageId"), e.pageId);
     m.insert(QStringLiteral("anchor"), e.anchor);
     m.insert(QStringLiteral("address"), e.address());
+    m.insert(QStringLiteral("actionId"), e.actionId);
     return m;
 }
 
@@ -179,9 +180,11 @@ QVector<SearchEntry> SearchController::buildIndex() const
     // Static + provider entries: auto-fill the breadcrumb from the page
     // hierarchy when the producer didn't set one, so section/setting/entity
     // results read consistently with page results. A producer-supplied subtitle
-    // (e.g. a rule's match summary) is respected.
+    // (e.g. a rule's match summary) is respected. Actions are excluded: they
+    // are commands, not page-resident targets, so a page breadcrumb would
+    // mislabel them (their pageId is empty anyway).
     for (SearchEntry e : m_staticEntries) {
-        if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page) {
+        if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page && e.kind != SearchEntry::Kind::Action) {
             e.subtitle = breadcrumbFor(e.pageId, true);
         }
         entries.push_back(e);
@@ -193,7 +196,7 @@ QVector<SearchEntry> SearchController::buildIndex() const
         }
         const QVector<SearchEntry> provided = provider->searchEntries();
         for (SearchEntry e : provided) {
-            if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page) {
+            if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page && e.kind != SearchEntry::Kind::Action) {
                 e.subtitle = breadcrumbFor(e.pageId, true);
             }
             entries.push_back(e);

@@ -19,6 +19,31 @@ namespace PhosphorConfig {
 
 class IGroupPathResolver;
 
+/// One legal value of an enum-style key: the value as stored, plus a stable
+/// token naming it.
+///
+/// The token is deliberately NOT user-facing text. A key's legal values are
+/// semantics and belong with the key; the words for them are presentation and
+/// belong to the consumer, which knows its own locale and audience. Keeping
+/// them apart is what lets this library stay free of any i18n dependency while
+/// still telling a caller that a setting takes one of three values.
+///
+/// Without this, enum-ness is only expressible inside @c KeyDef::validator as a
+/// range clamp, which no caller can read back: a consumer building a settings
+/// UI or a config diff has no way to learn that 2 is a legal value, let alone
+/// what distinguishes it from 1.
+struct PHOSPHORCONFIG_EXPORT ChoiceDef
+{
+    /// The value as persisted — an int for a C++ enum, a string for a
+    /// token-valued key.
+    QVariant value;
+
+    /// Stable identifier for this choice, e.g. "vertical". Never translated,
+    /// never shown to a user, and never renamed once shipped: consumers key
+    /// their label tables off it.
+    QString token;
+};
+
 /// Declaration for a single configuration key.
 ///
 /// A consumer describes each key it persists once, and PhosphorConfig handles
@@ -65,6 +90,19 @@ struct PHOSPHORCONFIG_EXPORT KeyDef
     ///
     /// @c description above documents why the = {} default matters here too.
     std::function<QVariant(const QVariant& value)> validator = {};
+
+    /// The legal values, for a key that takes one of a closed set. Empty for an
+    /// open-valued key (a width, a colour, free text).
+    ///
+    /// Declaring these does NOT enforce them — @c validator remains the single
+    /// coercion path, so a key with choices should still clamp or normalize
+    /// there. What this adds is READABILITY: a caller can enumerate what a key
+    /// accepts, which a validator lambda cannot answer.
+    ///
+    /// Trailing position with an NSDMI is load-bearing for the same reason
+    /// @c description documents above — aggregate initializers across consumers
+    /// omit this field.
+    QVector<ChoiceDef> choices = {};
 };
 
 /// One step in a schema version migration chain. Transforms the root JSON
@@ -124,6 +162,10 @@ struct PHOSPHORCONFIG_EXPORT Schema
     /// Convenience: default value for a declared key, or @c QVariant() if
     /// the key is undeclared.
     QVariant defaultFor(const QString& group, const QString& key) const;
+
+    /// The legal values of a declared key. Empty both for an undeclared key and
+    /// for one that takes an open value, since neither can be enumerated.
+    QVector<ChoiceDef> choicesFor(const QString& group, const QString& key) const;
 };
 
 } // namespace PhosphorConfig

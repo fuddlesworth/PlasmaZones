@@ -67,9 +67,25 @@ public:
         Q_EMIT activated(id);
     }
 
+    std::optional<QStringList> currentTriggers(const QString& id) const override
+    {
+        const auto it = reportedTriggers.constFind(id);
+        if (it == reportedTriggers.constEnd()) {
+            return std::nullopt;
+        }
+        return *it;
+    }
+
+    void reportTriggers(const QString& id, const QStringList& triggers)
+    {
+        reportedTriggers.insert(id, triggers);
+        Q_EMIT triggersChanged(id);
+    }
+
     QVector<RegisterCall> registers;
     QVector<UpdateCall> updates;
     QVector<QString> unregisters;
+    QHash<QString, QStringList> reportedTriggers;
     int flushes = 0;
 };
 
@@ -224,7 +240,7 @@ private Q_SLOTS:
         QCOMPARE(backend.updates.size(), 0);
     }
 
-    void rebindEmptySequence_routesThroughUnbind()
+    void rebindEmptySequence_releasesGrabButKeepsEntry()
     {
         FakeBackend backend;
         Registry registry(&backend);
@@ -235,14 +251,71 @@ private Q_SLOTS:
         backend.updates.clear();
 
         // Rebind to an empty sequence should NOT leave the grab registered
-        // with an empty key (the pre-library stale-grab hazard). Route
-        // through unbind so the backend drops it cleanly.
+        // with an empty key (the pre-library stale-grab hazard) — the
+        // backend drops it immediately. But the entry must survive so a
+        // later rebind can re-enable the shortcut (discussion #809).
         registry.rebind(QStringLiteral("pz.a"), QKeySequence());
 
         QCOMPARE(backend.unregisters.size(), 1);
         QCOMPARE(backend.unregisters[0], QStringLiteral("pz.a"));
         QCOMPARE(backend.updates.size(), 0);
-        QCOMPARE(registry.bindings().size(), 0);
+        QCOMPARE(registry.bindings().size(), 1);
+        QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence());
+    }
+
+    void rebindEmptySequence_whenNeverRegistered_skipsBackend()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        // bind + immediate clear BEFORE any flush — the backend never heard
+        // about this id, so clearing must not send it a spurious unregister
+        // (KGlobalAccel's unregister purges the persistent on-disk record).
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence());
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 0);
+        QCOMPARE(backend.unregisters.size(), 0);
+        QCOMPARE(registry.bindings().size(), 1);
+    }
+
+    void rebindAfterClear_reRegistersWithBackend()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"));
+        registry.flush();
+
+        // Clear, then re-assign in the same session — the exact sequence a
+        // settings UI produces when the user empties a shortcut field and
+        // later types a new combo. Pre-fix the entry evaporated on clear and
+        // the re-assign was a warning no-op until process restart.
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence());
+        registry.flush();
+
+        backend.registers.clear();
+        backend.updates.clear();
+
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")));
+        registry.flush();
+
+        // Fresh registerShortcut (not update) — the backend forgot the id on
+        // unregister, so it needs default + current + description again.
+        QCOMPARE(backend.registers.size(), 1);
+        QCOMPARE(backend.registers[0].id, QStringLiteral("pz.a"));
+        QCOMPARE(backend.registers[0].defaultSeq, QKeySequence(QStringLiteral("Meta+1")));
+        QCOMPARE(backend.registers[0].currentSeq, QKeySequence(QStringLiteral("Meta+2")));
+        QCOMPARE(backend.updates.size(), 0);
+
+        // The re-registered shortcut still activates.
+        int fired = 0;
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"), [&] {
+            ++fired;
+        });
+        backend.activate(QStringLiteral("pz.a"));
+        QCOMPARE(fired, 1);
     }
 
     void rebindUnknownId_isIgnored()
@@ -674,6 +747,84 @@ private Q_SLOTS:
 
         QCOMPARE(registry.bindings().size(), 1);
         QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence(QStringLiteral("Meta+2")));
+    }
+
+    void effectiveTriggers_prefersBackendReadback()
+    {
+        // The backend's read-back wins over the registry's own stored value:
+        // it sees out-of-process overrides (System Settings rebind on
+        // KGlobalAccel, compositor-assigned trigger on Portal) that the
+        // registry's currentSeq cannot.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        // No read-back yet → fall back to the registry's current sequence.
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.a")),
+                 QStringList{QKeySequence(QStringLiteral("Meta+1")).toString(QKeySequence::PortableText)});
+
+        // Backend now reports an external override.
+        backend.reportTriggers(QStringLiteral("pz.a"), {QStringLiteral("Meta+F9")});
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.a")), QStringList{QStringLiteral("Meta+F9")});
+
+        // Unknown id → empty, not a fallback.
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.ghost")), QStringList());
+    }
+
+    void effectiveTriggers_afterBackendDestroyed_fallsBackToStored()
+    {
+        // Pins the null-backend branch: a destroyed backend (teardown
+        // ordering, same scenario as flushAfterBackendDestroyed) must not
+        // crash and must fall back to the registry's own stored current
+        // sequence.
+        auto backend = std::make_unique<FakeBackend>();
+        Registry registry(backend.get());
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        backend.reset(); // QPointer in Registry::m_backend goes null
+
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.a")),
+                 QStringList{QKeySequence(QStringLiteral("Meta+1")).toString(QKeySequence::PortableText)});
+    }
+
+    void effectiveTriggers_backendEmptyIsAuthoritativeUnbound()
+    {
+        // A backend that CAN report and reports an empty list means the
+        // user cleared the binding out-of-process (System Settings). The
+        // registry must NOT fall back to its stored sequence — that would
+        // display a key that no longer fires (the stale-assigned bug).
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        backend.reportTriggers(QStringLiteral("pz.a"), {});
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.a")), QStringList());
+    }
+
+    void triggersChanged_forwardsOnlyOwnedIds()
+    {
+        // A shared backend may carry other consumers' ids; the registry must
+        // forward triggersChanged only for ids it owns so consumers don't
+        // re-query bindings they never made.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.mine"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        QSignalSpy spy(&registry, &Registry::triggersChanged);
+
+        backend.reportTriggers(QStringLiteral("pz.mine"), {QStringLiteral("Meta+2")});
+        backend.reportTriggers(QStringLiteral("pz.other-consumer"), {QStringLiteral("Meta+3")});
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("pz.mine"));
     }
 
     void descriptionChange_isLocalOnly()

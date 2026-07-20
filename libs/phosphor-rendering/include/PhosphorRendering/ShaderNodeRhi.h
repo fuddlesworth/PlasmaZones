@@ -29,6 +29,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 #include <rhi/qrhi.h>
 
@@ -342,6 +343,12 @@ private:
     /// installed UBO profile's fill(). @p rhi supplies the NDC Y-orientation
     /// the profile folds into qt_Matrix.
     void syncBaseUniforms(QRhi* rhi);
+    /// True when this node's current render target is a texture render target
+    /// (a ShaderEffectSource layer capture) rather than the window. Null-safe;
+    /// the single predicate behind both the qt_Matrix flip decision
+    /// (syncBaseUniforms) and prepare()'s retarget detection, so the two can
+    /// never disagree within a frame.
+    bool renderingIntoTexture() const;
     void uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb);
     /**
      * Append the extension region to a resource update batch.
@@ -497,6 +504,12 @@ private:
     bool m_sceneDataDirty = true; ///< Scene header (resolution, mouse, date, params) changed
     bool m_appFieldsDirty = false; ///< Only appField0/appField1 changed (8-byte upload, not full scene header)
     bool m_didFullUploadOnce = false;
+    /// Whether the last prepared frame rendered into a texture render target
+    /// (a ShaderEffectSource layer) rather than the window. The qt_Matrix NDC
+    /// Y-flip is per-render-target; prepare() forces a full UBO re-upload when
+    /// this flips (hideSource capture attach/detach retargets the same node).
+    /// Unset until the first prepare().
+    std::optional<bool> m_lastTargetWasTexture;
 
     // ── UBO Profile (pluggable uniform buffer concern) ─────────────────
     /// Owns the concrete UBO struct, its byte size, per-frame fill, and the

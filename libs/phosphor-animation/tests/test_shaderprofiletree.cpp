@@ -273,6 +273,8 @@ private Q_SLOTS:
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupLayoutPickerHide), QStringLiteral("fade"));
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupSnapAssistShow), QStringLiteral("fade"));
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupSnapAssistHide), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupCheatsheetShow), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupCheatsheetHide), QStringLiteral("fade"));
         // The category roots and the OSD "pop" event carry no built-in default.
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::Osd).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::Popup).isEmpty());

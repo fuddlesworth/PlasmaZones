@@ -74,6 +74,14 @@ class AnimationsPageController : public PhosphorControl::PageController
     /// The motion-set store, bound by AnimationsMotionSetsPage as its `bridge`.
     Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
 
+    /// Animation event paths whose stock KWin effect the compositor
+    /// suppresses session-wide because a tree-assigned pack owns the event
+    /// (the settings-side mirror of the effect's syncStockEffectSuppression
+    /// gate). The rule editor's stock-animation conflict chip hides for
+    /// these events: with the stock effect unloaded there is no
+    /// double-animation for a rule shader to conflict with.
+    Q_PROPERTY(QStringList stockSuppressedEvents READ stockSuppressedEvents NOTIFY stockSuppressedEventsChanged)
+
 public:
     /// @param shaderRegistry Optional — when null, all `*ShaderEffects()` /
     ///        `*ShaderProfile()` Q_INVOKABLEs return empty results so unit
@@ -186,6 +194,27 @@ public:
     /// files could not be removed (a partial reset). The page toasts the reason
     /// in both cases. A caller must not treat -1 as "nothing to clear".
     int clearAllOverrides();
+
+    /// Scoped sibling of clearAllOverrides for the per-page kebab: clear only the
+    /// override files at @p eventPaths (one settings page's own event-path
+    /// subtree), leaving every other page's overrides untouched. Same snapshot /
+    /// return-code contract as clearAllOverrides (-1 = refused or partial). @p
+    /// eventPaths must be built-in event paths; non-built-in entries are skipped.
+    int clearOverridesUnder(const QStringList& eventPaths);
+
+    /// Scoped sibling of revertPending: restore ONLY the snapshotted override
+    /// files at @p eventPaths from their pre-edit content, leaving every other
+    /// page's staged file edits (and any preset / motion-set snapshots) pending.
+    /// Refuses (returns false) while an async discard owns the snapshot map. The
+    /// caller reverts the shader tree for the same paths separately (the tree is
+    /// Settings-owned; see the revertPending() caller contract). @return true
+    /// when every in-scope snapshot restored (or there were none).
+    bool revertPendingUnder(const QStringList& eventPaths);
+
+    /// True iff any of @p eventPaths carries a staged (snapshotted) override-file
+    /// edit — the file half of a per-page dirty check. The shader-tree half is a
+    /// value comparison the caller runs against committedShaderProfileTree().
+    bool hasScopedPendingFiles(const QStringList& eventPaths) const;
 
     /// Library of user-saved Profile presets. Each entry is a Profile JSON
     /// (`curve`, `duration`, `name`, …) sitting in the same `profiles/`
@@ -340,6 +369,13 @@ public:
     /// overrides count, mirroring the existing tree-walk semantics.
     Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
+    /// See the stockSuppressedEvents Q_PROPERTY. Evaluates the effect's
+    /// per-event ownership gate (animations enabled, tree-resolved effectId
+    /// non-empty, pack applies to the event's contract class) for the
+    /// minimize and maximize events — the two whose stock KWin effects the
+    /// compositor unloads while a tree pack owns them.
+    QStringList stockSuppressedEvents() const;
+
     /// Test hook: redirect file I/O to @p dir instead of the XDG default.
     /// Pass an empty string to restore the default. Not Q_INVOKABLE — QML
     /// callers must not redirect persistence.
@@ -363,6 +399,11 @@ Q_SIGNALS:
     /// Re-emit of `AnimationShaderRegistry::effectsChanged` so QML can
     /// rebind without poking at the registry directly.
     void shaderEffectsChanged();
+
+    /// Emitted whenever stockSuppressedEvents may have changed: on any
+    /// shader-tree change, registry rescan, or a flip of the animations
+    /// master toggle — the three inputs of the ownership gate.
+    void stockSuppressedEventsChanged();
 
     /// Emitted whenever `hasPendingChanges()` may have flipped. The
     /// SettingsController's slot calls `setNeedsSave(true)` when there
@@ -393,6 +434,14 @@ public:
     /// apply(); SettingsController::save() deliberately does NOT call it (that
     /// would double-dispatch, see settingscontroller_lifecycle.cpp).
     void commitPending();
+
+    /// Re-evaluate the value-based dirty state after an external commit point the
+    /// controller cannot observe on its own — chiefly Settings::save()'s
+    /// captureBaseline, which advances committedShaderProfileTree() without moving
+    /// the live tree (so no shaderProfileTreeChanged fires). SettingsController::
+    /// save() calls this right after m_settings.save(); the dirtyChanged forwarder
+    /// gates on an actual flip so a no-op refresh is free.
+    void refreshDirtyState();
 
     /// Restore every file in the snapshot to its pre-edit state and
     /// clear the snapshot. Called from `SettingsController::load()`
@@ -484,7 +533,6 @@ private:
     /// reflect GUI-thread state. Never alias them by reference —
     /// merging is done by key set in the worker's finished handler.
     QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
-    bool m_shaderTreeDirty = false;
     /// In-flight guard for asyncRevertPending — set true on dispatch
     /// and cleared in the QFutureWatcher::finished handler. A second
     /// asyncRevertPending invocation while a worker is running would
@@ -499,14 +547,6 @@ private:
     /// forward on this cached state keeps the framework's dirty
     /// Q_PROPERTY NOTIFY contract honest.
     bool m_lastHadPendingChanges = false;
-    /// Set to true while a controller-owned setter is mutating the
-    /// shader profile tree on m_settings. The shaderProfileTreeChanged
-    /// handler checks `m_mutatingShaderTree > 0` to distinguish our own
-    /// writes (which keep m_shaderTreeDirty true) from external reloads
-    /// (which should clear it). Counter, not bool: a nested re-entrant
-    /// write inside the same setShaderProfileTree call chain must not
-    /// prematurely clear the outer scope's protection.
-    int m_mutatingShaderTree = 0;
     /// Memoised eventSections() result — taxonomy is static for the
     /// process lifetime so subsequent QML rebinds reuse the same list.
     /// Populated lazily on first call. NOTE: if `ProfilePaths::

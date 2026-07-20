@@ -27,8 +27,8 @@
             "id": "frontSpeed",
             "name": "Front Speed",
             "type": "float",
-            "default": 1.5,
-            "min": 0.7,
+            "default": 1.0,
+            "min": 1.0,
             "max": 3.0
         },
         {

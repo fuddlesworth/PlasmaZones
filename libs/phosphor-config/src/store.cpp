@@ -99,6 +99,12 @@ void writeVariantTo(IGroup& g, const QString& key, const QVariant& value)
         // backed storage falls back to the stringified default impl.
         g.writeJson(key, QJsonArray::fromVariantList(value.toList()));
         break;
+    case QMetaType::QStringList:
+        // Same native-array shape as QVariantList — without this case a
+        // QStringList fell to the string fallback (a joined scalar), which
+        // the array-expecting read path then rejected back to the default.
+        g.writeJson(key, QJsonArray::fromStringList(value.toStringList()));
+        break;
     case QMetaType::QVariantMap:
         g.writeJson(key, QJsonObject::fromVariantMap(value.toMap()));
         break;
@@ -125,8 +131,27 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
     case QMetaType::Bool:
         return QVariant(g.readBool(key, defaultValue.toBool()));
     case QMetaType::Int:
-    case QMetaType::UInt:
         return QVariant(g.readInt(key, defaultValue.toInt()));
+    case QMetaType::UInt: {
+        // writeVariantTo routes UInt through writeUint64, which persists a
+        // value above INT_MAX as a STRING — without this branch readInt would
+        // parse-fail and silently return the default, dropping the stored
+        // value (the same write/read asymmetry the LongLong and ULongLong
+        // branches below guard against).
+        if (!g.hasKey(key)) {
+            return QVariant(defaultValue.toUInt());
+        }
+        const QString raw = g.readString(key);
+        if (!raw.isEmpty()) {
+            bool ok = false;
+            const uint parsed = raw.toUInt(&ok);
+            if (ok) {
+                return QVariant(parsed);
+            }
+        }
+        const int asInt = g.readInt(key, defaultValue.toInt());
+        return QVariant(asInt < 0 ? 0U : static_cast<uint>(asInt));
+    }
     case QMetaType::LongLong: {
         // writeVariantTo persists out-of-range int64 values as strings (see
         // writeInt64 below) so readInt(...) would parse-fail and silently
@@ -192,6 +217,26 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
         // needs.
         return defaultValue;
     }
+    case QMetaType::QStringList: {
+        // Same native-JSON-array shape as QVariantList; without this case a
+        // QStringList-typed key would fall to the string branch and a stored
+        // list would read back as a single coerced string.
+        const QJsonValue v = g.readJson(key);
+        if (v.isArray()) {
+            QStringList out;
+            const QJsonArray arr = v.toArray();
+            out.reserve(arr.size());
+            for (const QJsonValue& item : arr) {
+                out.append(item.toString());
+            }
+            return QVariant(out);
+        }
+        // No legacy-string fallback here (unlike QVariantList above): before
+        // this branch existed, a QStringList write fell to the string branch
+        // and stored an empty string, so there is no parseable legacy data to
+        // recover.
+        return defaultValue;
+    }
     case QMetaType::QVariantMap: {
         const QJsonValue v = g.readJson(key);
         if (v.isObject()) {
@@ -223,25 +268,36 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
 {
     Q_ASSERT_X(backend != nullptr, "PhosphorConfig::Store", "backend must not be null");
 
-#ifndef QT_NO_DEBUG
-    // Debug-only schema invariant: when a KeyDef declares both
-    // `expectedType` AND a non-Invalid `defaultValue`, the default's
-    // typeId must match `expectedType`. A mismatch silently routes
-    // reads through the wrong branch of `readVariantAs`'s switch,
-    // producing surprising effective values; the assertion turns the
-    // latent bug into a fail-fast at Store construction.
-    for (auto groupIt = d->schema.groups.constBegin(); groupIt != d->schema.groups.constEnd(); ++groupIt) {
-        for (const auto& def : groupIt.value()) {
-            if (def.expectedType == QMetaType::UnknownType || !def.defaultValue.isValid())
+    // Schema invariant: when a KeyDef declares both `expectedType` AND a
+    // non-Invalid `defaultValue`, the default's typeId must match
+    // `expectedType`. A mismatch silently routes reads through the wrong
+    // branch of `readVariantAs`'s switch, producing surprising effective
+    // values. Debug builds fail fast at Store construction; release builds
+    // convert the stored default to the declared type in place, so every
+    // downstream consumer — notably the exportToJson/defaultsToJson snapshot
+    // pair — sees one consistent type either way.
+    for (auto groupIt = d->schema.groups.begin(); groupIt != d->schema.groups.end(); ++groupIt) {
+        for (auto& def : groupIt.value()) {
+            if (def.expectedType == QMetaType::UnknownType || !def.defaultValue.isValid()
+                || def.defaultValue.typeId() == int(def.expectedType)) {
                 continue;
-            Q_ASSERT_X(def.defaultValue.typeId() == int(def.expectedType), "PhosphorConfig::Store",
+            }
+            Q_ASSERT_X(false, "PhosphorConfig::Store",
                        qPrintable(QStringLiteral("Schema KeyDef [%1.%2]: defaultValue typeId %3 != expectedType %4")
                                       .arg(groupIt.key(), def.key)
                                       .arg(def.defaultValue.typeId())
                                       .arg(int(def.expectedType))));
+            QVariant converted = def.defaultValue;
+            if (converted.convert(QMetaType(def.expectedType))) {
+                def.defaultValue = converted;
+            } else {
+                qWarning(
+                    "PhosphorConfig::Store: schema KeyDef [%s.%s]: defaultValue typeId %d does not match "
+                    "expectedType %d and cannot be converted — reads will fall back to the mismatched default.",
+                    qPrintable(groupIt.key()), qPrintable(def.key), def.defaultValue.typeId(), int(def.expectedType));
+            }
         }
     }
-#endif
 
     // Path resolver: install via the backend's polymorphic hook. Backends
     // without a resolver concept inherit the no-op default, so the call is
@@ -378,14 +434,19 @@ void Store::reset(const QString& group, const QString& key)
     if (!def) {
         return;
     }
-    auto g = d->backend->group(group);
-    if (!g->hasKey(key)) {
-        // Key isn't on disk, so the read path already returns the default.
-        // Skipping the write avoids stamping a default-valued key and dirtying
-        // the backend on otherwise-idempotent reset() calls.
-        return;
+    // Scope the group handle like write() does: a changed() slot that writes
+    // re-entrantly would otherwise hit the backend's single-active-group guard
+    // while this handle is still alive.
+    {
+        auto g = d->backend->group(group);
+        if (!g->hasKey(key)) {
+            // Key isn't on disk, so the read path already returns the default.
+            // Skipping the write avoids stamping a default-valued key and
+            // dirtying the backend on otherwise-idempotent reset() calls.
+            return;
+        }
+        writeVariantTo(*g, key, def->defaultValue);
     }
-    writeVariantTo(*g, key, def->defaultValue);
     Q_EMIT changed(group, key);
 }
 
@@ -396,17 +457,25 @@ void Store::resetGroup(const QString& group)
         return;
     }
     // Hold a single IGroup for the whole group so we don't pay the
-    // resolver/path-walk cost once per declared key.
-    auto g = d->backend->group(group);
-    for (const KeyDef& def : *it) {
-        // Skip absent keys for the same reason as reset() — otherwise
-        // resetGroup() on a pristine install stamps every default to disk
-        // with no observable behavior change but a full file rewrite.
-        if (!g->hasKey(def.key)) {
-            continue;
+    // resolver/path-walk cost once per declared key — but release it before
+    // emitting, like write(), so a changed() slot that writes re-entrantly
+    // doesn't hit the backend's single-active-group guard.
+    QStringList resetKeys;
+    {
+        auto g = d->backend->group(group);
+        for (const KeyDef& def : *it) {
+            // Skip absent keys for the same reason as reset() — otherwise
+            // resetGroup() on a pristine install stamps every default to disk
+            // with no observable behavior change but a full file rewrite.
+            if (!g->hasKey(def.key)) {
+                continue;
+            }
+            writeVariantTo(*g, def.key, def.defaultValue);
+            resetKeys.append(def.key);
         }
-        writeVariantTo(*g, def.key, def.defaultValue);
-        Q_EMIT changed(group, def.key);
+    }
+    for (const QString& key : resetKeys) {
+        Q_EMIT changed(group, key);
     }
 }
 
@@ -426,6 +495,69 @@ QJsonObject Store::exportToJson() const
         for (const KeyDef& def : git.value()) {
             const QVariant value = readVariantAs(*g, def.key, def.defaultValue, def.expectedType);
             groupObj[def.key] = QJsonValue::fromVariant(value);
+        }
+        out[git.key()] = groupObj;
+    }
+    if (!d->schema.versionKey.isEmpty()) {
+        out[d->schema.versionKey] = d->schema.version;
+    }
+    return out;
+}
+
+QJsonObject Store::defaultsToJson() const
+{
+    // Deliberately the same shape, version stamp, AND type coercion as
+    // exportToJson: consumers diff the two snapshots key-for-key, so they must
+    // never drift apart. exportToJson routes every value through
+    // readVariantAs, which coerces to expectedType — for an absent key that
+    // means the DEFAULT arrives coerced. Mirror that here, or a KeyDef whose
+    // default's typeId differs from its expectedType in a JSON-visible way
+    // (a string-typed key defaulting to an int: "2" vs 2) would silently diff
+    // at default. The Store constructor enforces that the two typeIds agree
+    // (debug assert; release builds convert the default in place), so the
+    // scalar mirror below is belt-and-braces for defaults the constructor
+    // could not convert.
+    const auto coerced = [](const KeyDef& def) -> QVariant {
+        switch (def.expectedType != QMetaType::UnknownType ? static_cast<int>(def.expectedType)
+                                                           : def.defaultValue.typeId()) {
+        case QMetaType::Bool:
+            return def.defaultValue.toBool();
+        case QMetaType::Int:
+            return def.defaultValue.toInt();
+        case QMetaType::UInt:
+            // Own case, like readVariantAs's UInt branch: toInt() would fold
+            // an above-INT_MAX default to 0 and diff against exportToJson.
+            return def.defaultValue.toUInt();
+        case QMetaType::LongLong:
+            return def.defaultValue.toLongLong();
+        case QMetaType::ULongLong:
+            return def.defaultValue.toULongLong();
+        case QMetaType::Double:
+        case QMetaType::Float:
+            return def.defaultValue.toDouble();
+        case QMetaType::QString:
+            return def.defaultValue.toString();
+        case QMetaType::QColor:
+        case QMetaType::QVariantList:
+        case QMetaType::QVariantMap:
+        case QMetaType::QStringList:
+            // readVariantAs returns the raw default for these when the key is
+            // absent, so raw passthrough IS the mirror.
+            return def.defaultValue;
+        default:
+            // Any other type falls into readVariantAs's string branch on the
+            // export side, so stringify here too — a raw passthrough would
+            // serialize an exotic default (QDateTime, QByteArray, …)
+            // differently from exportToJson and phantom-diff at default.
+            return def.defaultValue.toString();
+        }
+    };
+
+    QJsonObject out;
+    for (auto git = d->schema.groups.constBegin(); git != d->schema.groups.constEnd(); ++git) {
+        QJsonObject groupObj;
+        for (const KeyDef& def : git.value()) {
+            groupObj[def.key] = QJsonValue::fromVariant(coerced(def));
         }
         out[git.key()] = groupObj;
     }
@@ -487,6 +619,12 @@ bool Store::importFromJson(const QJsonObject& snapshot)
                     value = converted;
                 }
             }
+            // Deliberately no pre-compare here: write() itself reads back and
+            // short-circuits an unchanged existing value, so a compare at this
+            // level would just duplicate that work. A genuinely changed value
+            // marks the backend dirty, which staging relies on — a later
+            // composite setter's refreshCleanBackendFromDisk sees the dirty
+            // flag and will not clobber staged values with a disk reparse.
             write(git.key(), def.key, value);
         }
     }

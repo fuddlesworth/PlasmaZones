@@ -8,10 +8,11 @@
 //
 // Niri's voronoi-shatter ships symmetric close.glsl/open.glsl.
 // PlasmaZones' runtime flips iTime on reverse legs (1→0 on close, 0→1
-// on open), so we use the niri OPEN body verbatim with
-// `niri_clamped_progress` translated to `clamp(iTime, 0.0, 1.0)` and
-// the runtime flip auto-mirrors the visual on close — no iIsReversed
-// branch needed.
+// on open), so we use the niri OPEN body with `niri_clamped_progress`
+// translated to `clamp(iTime, 0.0, 1.0)` and the runtime flip
+// auto-mirrors the visual on close — no iIsReversed branch needed. One
+// timeline deviation from the verbatim body: see the reveal-band
+// comment below.
 //
 // niri's `niri_geo_to_tex` is the identity mat3 in PlasmaZones (geometry
 // == texture coords here), so the matrix multiply is dropped and
@@ -49,8 +50,22 @@ vec4 pTransition(vec2 uv, float t) {
         }
     }
     float seed = vs_hash2(cell).x;
-    float shard_p = smoothstep(seed * 0.5, seed * 0.5 + p_revealSpread, p);
-    float reveal = smoothstep(0.0, p_shardSoftness, shard_p);
+    // Deviation from the verbatim niri body. Niri layers two smoothsteps:
+    // shard_p = smoothstep(seed*0.5, seed*0.5 + spread, p), then
+    // reveal = smoothstep(0, softness, shard_p). The outer one saturates
+    // once shard_p reaches `softness` — the MIDDLE of the shard's band at
+    // the 0.5/0.5 defaults — so the last shard (seed → 1) was fully
+    // revealed at p = 0.75 and the final quarter of the leg was a static
+    // frame (the phosphor-peek dead-domain bug; flipped, a dead head on
+    // close). Collapse to one band per shard: `w` is the effective fade
+    // width the old composition produced at the defaults
+    // (spread × softness = 0.25), and seeding the thresholds over
+    // [0, 1 - w] tiles the bands so their union spans exactly [0, 1] for
+    // ANY dial values — the first shards start at p ≈ 0 and the last
+    // completes at exactly p = 1.
+    float w = clamp(p_revealSpread * p_shardSoftness, 1.0e-3, 1.0);
+    float thr = seed * (1.0 - w);
+    float reveal = smoothstep(thr, thr + w, p);
 
     return win * reveal;
 }

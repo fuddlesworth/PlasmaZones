@@ -467,6 +467,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
 
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
         updateWindowStickyState(window);
+        // No metadata push here: the daemon's float resolver reads the
+        // window's own desktop/activity from the registry, but that is kept
+        // fresh by the KWin::Window::desktopsChanged → pushLatest connection
+        // below (this signal is KWin's EffectWindow relay of the same event,
+        // so a push here would build and marshal the extended snapshot twice
+        // per desktop move).
 
         // When a window is moved to a different desktop (e.g., "Move to Desktop 2"),
         // treat it as removed from the current desktop's tiling. The normal desktop-
@@ -1141,29 +1147,39 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     && it->targetGeometry.isValid() && safeW->frameGeometry() != it->spawnGeometry) {
                     endRestoreSuppression(safeW.data());
                 }
-                // Body 2 — debounced daemon shadow
-                if (!shouldHandleWindow(safeW)) {
-                    return;
-                }
+                // Body 2 — debounced daemon shadow. Per tick this stashes the
+                // latest geometry and runs ONLY the cheap decoration resync:
+                // the shouldHandleWindow exclusion gate (an uncached rule
+                // resolve over a freshly built ruleQuery) moved into
+                // flushPendingFrameGeometry, so it runs once per 50ms flush
+                // per window instead of on every geometry tick — animated
+                // geometry (retiles, morphs, interactive resize) fired it
+                // hundreds of times per second (discussion #816).
                 const QString windowId = getWindowId(safeW);
                 if (windowId.isEmpty()) {
                     return;
                 }
-                // Self-heal a noBorder reset KWin issues asynchronously after a
-                // cross-OUTPUT move. For a rule-owned (title-bar-hidden) window
-                // the manager already believes it hidden, so the synchronous
-                // resync in updateAllDecorations bails ("still suppressed") when it
-                // runs before KWin re-evaluates the decoration. KWin grows the
-                // frame by the title-bar height when it re-decorates, firing this
-                // very signal: resyncWindow re-hides exactly the windows the
-                // manager owns and believes hidden whose decoration drifted back,
-                // and is a self-guarding no-op otherwise.
+                // Self-heal a noBorder reset KWin issues asynchronously after
+                // a cross-OUTPUT move. For a rule-owned (title-bar-hidden)
+                // window the manager already believes it hidden, so the
+                // synchronous resync in updateAllDecorations bails ("still
+                // suppressed") when it runs before KWin re-evaluates the
+                // decoration. KWin grows the frame by the title-bar height
+                // when it re-decorates, firing this very signal: resyncWindow
+                // re-hides exactly the windows the manager owns and believes
+                // hidden whose decoration drifted back, and is a self-guarding
+                // no-op otherwise. Kept PER TICK, not behind the flush: it is
+                // a hash lookup plus two flag checks for the untracked common
+                // case, and deferring it to the flush let the re-decorated
+                // title bar flash for up to the 50ms throttle window. No
+                // shouldHandleWindow gate needed — the manager only ever owns
+                // windows that passed it.
                 m_decorationManager->resyncWindow(windowId);
                 const QRect geo = safeW->frameGeometry().toRect();
                 if (geo.width() <= 0 || geo.height() <= 0) {
                     return;
                 }
-                m_pendingFrameGeometry[windowId] = geo;
+                m_pendingFrameGeometry[windowId] = {geo, safeW};
                 if (!m_frameGeometryFlushTimer->isActive()) {
                     m_frameGeometryFlushTimer->start();
                 }
@@ -1350,6 +1366,26 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 
     QString windowId = getWindowId(w);
     QString screenId = getWindowScreenId(w);
+
+    // Push the output's current desktop BEFORE the activation notifies. On a
+    // virtual-desktop switch KWin activates the destination desktop's
+    // last-focused window before EffectsHandler::desktopChanged fires, so the
+    // daemon would otherwise process this focus event while its per-screen
+    // desktop context still points at the desktop the user just left — the
+    // autotile engine then sees a same-screen context mismatch and migrates
+    // the activated window into the WRONG desktop's tiling state (discussion
+    // #728: cross-desktop tile leak on rapid switching). By the time KWin
+    // activates the window its current desktop is already updated, and
+    // fire-and-forget calls share one ordered D-Bus connection, so reporting
+    // here guarantees the daemon switches context first. reportScreenDesktop
+    // dedups, so outside a desktop switch this is a no-op. windowOutput
+    // resolves by window position (Discussion #724: w->screen() can disagree
+    // with the daemon on identical-model outputs).
+    if (KWin::LogicalOutput* output = windowOutput(w)) {
+        if (auto* vd = KWin::effects->currentDesktop(output)) {
+            reportScreenDesktop(outputScreenId(output), static_cast<int>(vd->x11DesktopNumber()));
+        }
+    }
 
     qCDebug(lcEffect) << "Notifying daemon: windowActivated" << windowId << "on screen" << screenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,

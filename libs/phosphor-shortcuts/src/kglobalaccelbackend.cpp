@@ -49,6 +49,10 @@ public:
         bool persistent = true;
     };
     QHash<QString, Entry> entries;
+    // Last KGlobalAccel::shortcut() value reported via triggersChanged, per
+    // id. Gates the globalShortcutChanged fan-out so self-originated echoes
+    // and repeats don't trigger redundant consumer rebuilds.
+    QHash<QString, QList<QKeySequence>> lastReportedTriggers;
 };
 
 KGlobalAccelBackend::KGlobalAccelBackend(QObject* parent)
@@ -70,6 +74,34 @@ KGlobalAccelBackend::KGlobalAccelBackend(QObject* parent)
     }
     qCInfo(lcPhosphorShortcuts) << "KGlobalAccelBackend: active (component:" << QCoreApplication::applicationName()
                                 << ")";
+
+    // Surface external rebinds (the user editing our component in System
+    // Settings) as triggersChanged so consumers displaying bindings can
+    // re-query currentTriggers(). The signal passes the QAction; it is ours
+    // iff its objectName matches a registered id (registerShortcut()
+    // objectNames every action to its id). Deduped against the last
+    // reported value: kglobalaccel may echo changes we originated
+    // ourselves (setShortcut during registration/rebind), and consumers
+    // rebuild their whole display model per emission — without the gate a
+    // bulk registration fans out into dozens of identical rebuilds.
+    connect(KGlobalAccel::self(), &KGlobalAccel::globalShortcutChanged, this,
+            [this](QAction* action, const QKeySequence& /*seq*/) {
+                if (!action) {
+                    return;
+                }
+                const QString id = action->objectName();
+                const auto it = m_impl->entries.constFind(id);
+                if (it == m_impl->entries.constEnd() || it->action != action) {
+                    return;
+                }
+                const QList<QKeySequence> seqs = KGlobalAccel::self()->shortcut(action);
+                const auto lastIt = m_impl->lastReportedTriggers.constFind(id);
+                if (lastIt != m_impl->lastReportedTriggers.constEnd() && *lastIt == seqs) {
+                    return;
+                }
+                m_impl->lastReportedTriggers.insert(id, seqs);
+                Q_EMIT triggersChanged(id);
+            });
 }
 
 KGlobalAccelBackend::~KGlobalAccelBackend()
@@ -111,6 +143,12 @@ KGlobalAccelBackend::~KGlobalAccelBackend()
     // thread, but possible across D-Bus dispatch), the lambda would emit
     // activated() on a mid-destruction QObject. Severing the connection
     // first makes the race unreachable.
+    //
+    // Same reasoning for the ctor's globalShortcutChanged lambda: it derefs
+    // m_impl, which this destructor destroys before ~QObject would sever the
+    // connection, so cut it up front rather than leave a window where a
+    // nested dispatch touches a dead Impl.
+    disconnect(KGlobalAccel::self(), nullptr, this, nullptr);
     for (auto& entry : m_impl->entries) {
         if (entry.action) {
             entry.action->disconnect();
@@ -172,9 +210,11 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
     // factory default. Skip the call when the compiled-in default hasn't
     // changed since the last send — each call otherwise costs a D-Bus
     // round-trip and a kglobalshortcutsrc write.
+    bool pushed = false;
     if (entry.lastDefault != defaultSeq) {
         KGlobalAccel::self()->setDefaultShortcut(entry.action, {defaultSeq});
         entry.lastDefault = defaultSeq;
+        pushed = true;
     }
     // setShortcut actually grabs the key. Uses the default autoloading flag
     // so any user override persisted in kglobalshortcutsrc wins over the
@@ -182,6 +222,30 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
     if (entry.lastCurrent != currentSeq) {
         KGlobalAccel::self()->setShortcut(entry.action, {currentSeq});
         entry.lastCurrent = currentSeq;
+        pushed = true;
+    }
+    // Seed the dedup gate with the post-set effective value so
+    // kglobalaccel's echo of OUR OWN setShortcut doesn't fire
+    // triggersChanged (the signal's contract is out-of-band changes only,
+    // and an unseeded first echo fans a bulk registration into N consumer
+    // rebuilds). Read back rather than assume currentSeq: with the
+    // autoloading flag a persisted user override wins over what we just
+    // pushed, and seeding the wrong value would suppress-or-emit
+    // inconsistently. A genuinely external change still reports, because
+    // it differs from this seed. Known boundary: if an external rebind
+    // has landed in kglobalaccel's table but its change echo is still
+    // queued when a re-register interleaves, this seed absorbs that echo
+    // and one display refresh is lost — the grab itself stays correct
+    // (autoload), so the cost is a stale label until the next report.
+    //
+    // Gated on `pushed`: a re-register that changed neither sequence (e.g.
+    // Registry::flush re-registering to flip only the persistent flag) sent
+    // nothing to kglobalaccel, so the existing seed is still current and
+    // the read-back would be a wasted blocking D-Bus round-trip. First
+    // registration always seeds (an absent cache entry means currentTriggers
+    // has nothing to serve from).
+    if (pushed || !m_impl->lastReportedTriggers.contains(id)) {
+        m_impl->lastReportedTriggers.insert(id, KGlobalAccel::self()->shortcut(entry.action));
     }
 }
 
@@ -202,8 +266,21 @@ void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& 
     if (it->lastCurrent == newTrigger) {
         return;
     }
-    KGlobalAccel::self()->setShortcut(it->action, {newTrigger});
+    // NoAutoloading, unlike registerShortcut: registration already SAVED a
+    // binding to kglobalshortcutsrc, so with the default autoloading flag
+    // this call would load that saved value back and silently ignore
+    // newTrigger — making every programmatic rebind a no-op (verified
+    // against a live daemon by test_kglobalaccel_backend). updateShortcut
+    // only fires when the consumer's own config value actually changed
+    // (Registry short-circuits same-sequence rebinds), i.e. an explicit
+    // rebind that must win; NoAutoloading applies it AND persists it, so
+    // System Settings stays in sync. Startup adoption of a System
+    // Settings override still works — that path is registerShortcut's
+    // autoloading setShortcut, not this one.
+    KGlobalAccel::self()->setShortcut(it->action, {newTrigger}, KGlobalAccel::NoAutoloading);
     it->lastCurrent = newTrigger;
+    // Same self-echo seeding as registerShortcut — see the note there.
+    m_impl->lastReportedTriggers.insert(id, KGlobalAccel::self()->shortcut(it->action));
 }
 
 void KGlobalAccelBackend::unregisterShortcut(const QString& id)
@@ -214,6 +291,11 @@ void KGlobalAccelBackend::unregisterShortcut(const QString& id)
     }
     QAction* action = it->action;
     m_impl->entries.erase(it);
+    // Drop the dedup seed with the entry: a stale value would suppress the
+    // first legitimate triggersChanged after a later re-register of the
+    // same id (the transient drag-cancel Escape registers per drag), and
+    // ids never re-registered would accumulate dead map entries.
+    m_impl->lastReportedTriggers.remove(id);
     if (action) {
         // Explicit unregister IS the one path where we want to clear the
         // persistent binding — the consumer has asked to drop the shortcut
@@ -223,6 +305,42 @@ void KGlobalAccelBackend::unregisterShortcut(const QString& id)
         KGlobalAccel::self()->removeAllShortcuts(action);
         action->deleteLater();
     }
+}
+
+std::optional<QStringList> KGlobalAccelBackend::currentTriggers(const QString& id) const
+{
+    const auto it = m_impl->entries.constFind(id);
+    if (it == m_impl->entries.constEnd() || !it->action) {
+        // Unknown id — nothing to report; the caller's own value stands.
+        return std::nullopt;
+    }
+    // Serve from lastReportedTriggers instead of a live
+    // KGlobalAccel::shortcut() call: every registered id is seeded at
+    // register/update time with the post-set effective value (which includes
+    // any kglobalshortcutsrc user override thanks to setShortcut's
+    // autoloading), and globalShortcutChanged keeps the cache current on
+    // external rebinds. A live query here would cost one blocking D-Bus
+    // round-trip to kglobalacceld per call — consumers like the shortcut
+    // cheatsheet query every id in one burst on the GUI thread. An
+    // engaged-but-empty result is AUTHORITATIVE: the user cleared the
+    // binding, and falling back to the stored sequence would display a key
+    // that no longer works.
+    const auto cached = m_impl->lastReportedTriggers.constFind(id);
+    if (cached == m_impl->lastReportedTriggers.constEnd()) {
+        // Unreached in practice: registerShortcut always seeds the cache for
+        // every registered id. If the seeding contract ever breaks, report
+        // "cannot report" (nullopt) so the caller falls back to its own
+        // stored sequence — safer than surprising a const query path with a
+        // blocking D-Bus round-trip.
+        return std::nullopt;
+    }
+    QStringList out;
+    for (const QKeySequence& seq : *cached) {
+        if (!seq.isEmpty()) {
+            out.append(seq.toString(QKeySequence::PortableText));
+        }
+    }
+    return out;
 }
 
 void KGlobalAccelBackend::flush()

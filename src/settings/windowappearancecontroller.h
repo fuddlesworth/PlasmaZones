@@ -79,17 +79,10 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
     Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
 
-    // ── "Apply to" scope tokens (single source: PhosphorCompositor::WindowAppearanceScope) ──
-    // The QML "Apply to" pickers pair each token with an i18n label; exposing the
-    // tokens here keeps them in lockstep with the schema validator and the effect.
-    Q_PROPERTY(QString scopeTokenTiled READ scopeTokenTiled CONSTANT)
-    Q_PROPERTY(QString scopeTokenNormal READ scopeTokenNormal CONSTANT)
-    Q_PROPERTY(QString scopeTokenAll READ scopeTokenAll CONSTANT)
-
     // ── Border colour sentinel + fallback (single source: ConfigDefaults) ──
     // The "follow the system accent" sentinel and the concrete colour the page
     // seeds when the user leaves accent mode. Exposed here so QML never hardcodes
-    // either literal, mirroring the scope-token treatment above.
+    // either literal.
     Q_PROPERTY(QString accentColorToken READ accentColorToken CONSTANT)
     Q_PROPERTY(QString defaultBorderColorHex READ defaultBorderColorHex CONSTANT)
 
@@ -178,7 +171,7 @@ public:
     void setOuterGapRight(int gap);
 
     // Scope-aware gap read/write for the Gaps card's monitor scope chip. @p key is
-    // one of the PerScreenSnappingKey gap names (InnerGap / OuterGap /
+    // one of the PerScreenKeys gap names (InnerGap / OuterGap /
     // UsePerSideOuterGap / OuterGap{Top,Bottom,Left,Right}). When @p screenName is
     // empty the GLOBAL config value is read/written; otherwise the per-monitor
     // config override is read (falling back to the global value when the monitor
@@ -187,19 +180,6 @@ public:
     // tracking rides; these invokables are the per-monitor-aware path.
     Q_INVOKABLE QVariant gapValue(const QString& screenName, const QString& key) const;
     Q_INVOKABLE void writeGap(const QString& screenName, const QString& key, const QVariant& value);
-
-    QString scopeTokenTiled() const
-    {
-        return QString(::PhosphorCompositor::WindowAppearanceScope::Tiled);
-    }
-    QString scopeTokenNormal() const
-    {
-        return QString(::PhosphorCompositor::WindowAppearanceScope::Normal);
-    }
-    QString scopeTokenAll() const
-    {
-        return QString(::PhosphorCompositor::WindowAppearanceScope::All);
-    }
 
     QString accentColorToken() const
     {

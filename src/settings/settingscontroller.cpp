@@ -17,6 +17,8 @@
 #include "virtualscreenutils.h"
 #include "../config/configbackends.h"
 #include "../config/configdefaults.h"
+#include "../config/settingsschema.h"
+#include "../config/settingsvaluelabels.h"
 #include "../config/configmigration.h"
 #include "../common/layoutpreviewserialize.h"
 #include "../common/screenidresolver.h"
@@ -87,6 +89,41 @@
 
 namespace PlasmaZones {
 
+QVariantList SettingsController::valueOptions(const QString& group, const QString& key) const
+{
+    QVariantList out;
+    const QVector<PhosphorConfig::ChoiceDef> choices = cachedSettingsSchema().choicesFor(group, key);
+    if (choices.isEmpty()) {
+        qCWarning(lcConfig) << "valueOptions: no declared choices for" << group << key
+                            << "— the picker will be empty. Check the (group, key) pair against the schema.";
+        return out;
+    }
+
+    // A key can accept more values than its picker offers (legal set vs UI
+    // set); an empty subset means offer everything.
+    const QStringList offered = SettingsValueLabels::uiChoiceSubset(group, key);
+
+    for (const PhosphorConfig::ChoiceDef& choice : choices) {
+        if (!offered.isEmpty() && !offered.contains(choice.token)) {
+            continue;
+        }
+        const QString label = SettingsValueLabels::enumLabel(group, key, choice.token);
+        out.append(QVariantMap{
+            {QStringLiteral("value"), choice.value},
+            // A token with no word still shows something the user can report.
+            {QStringLiteral("text"), label.isEmpty() ? choice.token : label},
+        });
+    }
+    if (out.isEmpty()) {
+        // A non-empty UI subset whose tokens match none of the declared
+        // choices filters everything out — the same silent-empty-picker
+        // failure the no-choices branch above warns about.
+        qCWarning(lcConfig) << "valueOptions: the UI subset for" << group << key
+                            << "matches none of the schema's choice tokens — the picker will be empty.";
+    }
+    return out;
+}
+
 namespace {
 
 // Materialise + register the XDG search dirs for a settings-side shader-pack
@@ -133,6 +170,15 @@ void SettingsController::sortMergedLayoutList(QVariantList& list)
 
 SettingsController::~SettingsController()
 {
+    // The ProfilePageController's ProfileStore holds closures over m_rulesPage
+    // (a RuleController&). Both are children of `this`, and ~QObject deletes
+    // children in construction order — m_rulesPage first — which would leave
+    // the store holding a dangling reference for the remainder of teardown.
+    // Delete the profiles page up front so the reference holder is gone while
+    // the RuleController is still alive.
+    delete m_profilesPage;
+    m_profilesPage = nullptr;
+
     // Tear down the RuleController's label lookups while the
     // captured member containers (m_layouts, m_activities, m_screens,
     // etc.) are still alive. Members destruct in reverse declaration
@@ -150,7 +196,9 @@ SettingsController::~SettingsController()
         m_rulesPage->setSnappingLayoutLookup({});
         m_rulesPage->setTilingAlgorithmLookup({});
         // The shader resolver captures `this` and reaches m_animationShaderRegistry;
-        // clear it too so the cleared set stays symmetric with what's installed.
+        // clear it too so the cleared set covers every lookup THIS controller
+        // installs (the curve resolver is QML-installed and captures only
+        // RuleController-owned state, so it is deliberately left alone).
         m_rulesPage->setShaderEffectLookup({});
         // The overlay-shader resolver reaches m_overlayShaderRegistry — clear it
         // too for the same symmetry.
@@ -592,6 +640,14 @@ SettingsController::SettingsController(QObject* parent)
         connect(ruleModel, &QAbstractItemModel::rowsMoved, this, reattributeRuleDirty);
     }
 
+    // Profiles page — settings-profile CRUD + inheritance. Its ProfileStore is
+    // owned internally. The controller stages only the active-profile pointer
+    // into the Save footer; the applied config changes ride the normal Settings
+    // staging path (owning pages badge value-based). Registered via regPage in
+    // buildApplicationController(), which trackDomain()s it so its isDirty /
+    // apply / discard participate in the framework's Save/Discard.
+    m_profilesPage = new ProfilePageController(m_settings, *m_rulesPage, this);
+
     // Wire screen / activity / layout label resolvers so the rule model and
     // monitor-overview render friendly names instead of raw connector strings,
     // activity UUIDs and layout UUIDs.
@@ -747,9 +803,14 @@ SettingsController::SettingsController(QObject* parent)
             m_rulesPage->model()->refreshLabels();
         }
     };
+    connect(this, &SettingsController::dirtyPagesChanged, this, &SettingsController::maybeDrainPendingExternalReload);
     connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::activitiesChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::layoutsChanged, this, refreshRuleLabels);
+    // The virtual-desktop resolver reads m_virtualDesktopNames live — refresh
+    // on renames too, like its screen/activity/layout siblings, or a rule's
+    // "Desktop: Work" label stays stale until an unrelated refresh fires.
+    connect(this, &SettingsController::virtualDesktopsChanged, this, refreshRuleLabels);
     // A shader-pack rescan (user drops in a new effect, or one is removed)
     // can change an id→name mapping; refresh so resolved Shader labels track it.
     connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
@@ -772,6 +833,11 @@ SettingsController::SettingsController(QObject* parent)
     // tears it down BEFORE the borrowed layout registry. It does take a QObject
     // parent as well; see its construction below for what that is for.
     m_overlayShaderRegistry = new PlasmaZones::ShaderRegistry(this);
+    // Overlay-pack rescans change id→name mappings the OverrideOverlayShader
+    // rule labels resolve live — refresh them like the animation and surface
+    // registries above (connected here because the registry is built after
+    // that block; the refreshRuleLabels lambda is still in scope).
+    connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this, refreshRuleLabels);
 
     // Shared live-preview feed (T3.1): backed by the local overlay registry +
     // settings (audio-visualizer config). Owned here (unique_ptr, no QObject

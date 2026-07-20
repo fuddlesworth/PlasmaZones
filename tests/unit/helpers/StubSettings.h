@@ -1984,6 +1984,18 @@ public:
         Q_EMIT fillOnDropModifierChanged();
         Q_EMIT settingsChanged();
     }
+    bool cheatsheetEnabled() const override
+    {
+        return m_cheatsheetEnabled;
+    }
+    void setCheatsheetEnabled(bool e) override
+    {
+        if (m_cheatsheetEnabled == e)
+            return;
+        m_cheatsheetEnabled = e;
+        Q_EMIT cheatsheetEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
     QStringList lockedScreens() const override
     {
         return m_lockedScreens;
@@ -2132,7 +2144,7 @@ public:
         return gaps;
     }
 
-    // This set must mirror the 7 PerScreenSnappingKey gap dimensions and
+    // This set must mirror the 7 PerScreenKeys gap dimensions and
     // stay in sync with the production predicate isPerScreenGapDimensionKey
     // (file-local in settings/perscreen.cpp, so not shareable here). A key
     // added on one side but not the other silently drops (or leaks) a gap
@@ -2307,6 +2319,7 @@ private:
     int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
     bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
     int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
+    bool m_cheatsheetEnabled = ConfigDefaults::cheatsheetEnabled();
     // Gaps — config-backed defaults routed through ConfigDefaults.
     int m_innerGap = ConfigDefaults::innerGap();
     int m_outerGap = ConfigDefaults::outerGap();

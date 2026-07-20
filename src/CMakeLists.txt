@@ -101,6 +101,9 @@ set(plasmazones_core_SRCS
     config/perscreenresolver.cpp
     config/settingsschema.h
     config/settingsschema.cpp
+    config/settingsschemachoices.h
+    config/settingsvaluelabels.cpp
+    config/settingsvaluelabels.h
     config/configmigration.h
     config/configmigration.cpp
     config/colorimporter.cpp
@@ -474,6 +477,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/osd.cpp
     daemon/overlayservice/priming.cpp
     daemon/overlayservice/rekey.cpp
+    daemon/overlayservice/cheatsheet.cpp
     daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
     daemon/overlayservice/shellhost_bridge.cpp
@@ -500,8 +504,6 @@ set(plasmazones_daemon_SRCS
     daemon/zoneselectorcontroller.cpp
     daemon/zoneselectorcontroller.h
     # Mode tracking and smart toggle (Unified Layout Model)
-    daemon/modetracker.cpp
-    daemon/modetracker.h
     daemon/unifiedlayoutcontroller.cpp
     daemon/unifiedlayoutcontroller.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering

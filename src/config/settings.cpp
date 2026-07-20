@@ -439,6 +439,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::renderingGroup(), // "Rendering"
         ConfigDefaults::shadersGroup(), // "Shaders"
         ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling
+        ConfigDefaults::cheatsheetGroup(), // "Cheatsheet"
         ConfigDefaults::animationsGroup(), // "Animations"
         ConfigDefaults::animationsWindowFilteringGroup(), // "Animations.WindowFiltering"
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
@@ -714,6 +715,56 @@ bool Settings::exportTo(const QString& filePath)
     // commit pending edits to the live config, and must not move the baseline
     // that per-page Discard reverts to.
     return PhosphorConfig::JsonBackend::writeJsonAtomically(filePath, exportRoot);
+}
+
+// ── Settings-profiles support ────────────────────────────────────────────────
+
+QJsonObject Settings::exportConfigToJson() const
+{
+    return m_store->exportToJson();
+}
+
+QJsonObject Settings::defaultConfigJson() const
+{
+    // Store::defaultsToJson mirrors exportToJson's shape and version stamp;
+    // delegating keeps the two snapshots field-for-field comparable, which the
+    // profiles delta engine depends on. A local re-implementation here could
+    // drift from exportToJson's serialization without anything noticing.
+    return m_store->defaultsToJson();
+}
+
+bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
+{
+    // Same snapshot / re-emit contract as load(), minus the disk round-trip:
+    // snapshot the NOTIFY-able properties BEFORE mutating the store, overwrite
+    // the declared keys in memory (no commit/sync), then fire the NOTIFY for
+    // every property whose value actually changed. Deliberately NO
+    // captureBaseline() — the store must diverge from the committed baseline so
+    // the settings app reports the staged keys as unsaved edits.
+    //
+    // Also deliberately no applySystemColorScheme() re-derivation: a profile
+    // captures the zone colours it was saved with, and activation stages those
+    // captured values even when UseSystemColors is on. The live palette is
+    // re-derived on the next load() or palette-change event (app restart, a
+    // Discard-triggered reload, or a theme switch) — save() itself only
+    // commits, it does not re-run the palette derivation.
+    const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
+
+    // importFromJson is additive/overwriting over declared keys; a
+    // fully-resolved profile blob carries every declared key (defaults included)
+    // so keys the profile leaves at default are written back to default too.
+    // It REFUSES a blob stamped with a different schema version, writing
+    // nothing — surface that instead of silently staging a no-op.
+    if (!m_store->importFromJson(fullConfigBlob)) {
+        qCWarning(lcConfig) << "applyConfigOverlayStaged: store rejected the blob (schema version mismatch?)"
+                            << "— nothing was staged";
+        return false;
+    }
+
+    const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
+    if (anyChanged)
+        Q_EMIT settingsChanged();
+    return true;
 }
 
 // ── Per-page reset / discard support ────────────────────────────────────────
@@ -1167,6 +1218,7 @@ PhosphorAnimation::Profile Settings::animationProfile() const
 
 void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 {
+    refreshCleanBackendFromDisk();
     // Change detection compares the merged QJsonObject against the
     // current stored blob via QJsonObject::operator==, NOT through a
     // semantic `Profile::operator==` check. The semantic comparison hits
@@ -1311,6 +1363,50 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 // (clamp for numerics, registry resolution for the curve string). The
 // helper is defined in this TU because it is consumed exclusively here;
 // keeping it private to settings.cpp keeps the .h surface compact.
+// Cross-process coherence for COMPOSITE values (multi-field JSON blobs stored
+// under one key: the animation Profile, the shader/decoration profile trees,
+// the per-algorithm autotile map, the snapping and tiling trigger lists
+// including the zoneSpan pair). Scalar keys are written atomically and
+// last-writer-wins per key is acceptable; composites are not, in two ways.
+// Read-modify-write setters (the animation Profile field patches) merge into
+// the WHOLE blob, so a stale cached document resurrects old sibling fields
+// over a value the other process just committed — proven live: a daemon-side
+// sequenceMode write landing between the settings app's save and the daemon's
+// reload permanently reverted a just-saved duration (#795). Whole-replace
+// setters (the trees, the per-algo map) compare against the cached blob for
+// their no-op guard, so a stale cache can wrongly swallow a write the disk
+// actually needs. Every composite setter therefore refreshes first.
+// Refreshing is only legal on a CLEAN backend: with local writes pending the
+// in-memory document is the freshest truth and a reparse would drop them.
+// The dirty flag makes this self-limiting on the slider hot path — the first
+// write of an edit burst marks the backend dirty, so later ticks skip the
+// reparse until the next save.
+// The refresh adopts external sibling values into the live store and the
+// baseline WITHOUT per-property NOTIFY emissions — deliberately, unlike
+// load(): this is a per-write guard, and the UI adopts external state
+// through the controller's reload path (onExternalSettingsChanged), not
+// here. Until that reload runs, a binding on an externally-changed sibling
+// may read stale; it self-heals on the next load().
+// The call sits at the TOP of each setter (not inside patchProfileField)
+// because the per-field setters evaluate their currentValue argument at the
+// call site: a refresh inside the helper would run AFTER that read, and the
+// no-op guard would compare against the stale value — swallowing exactly the
+// healing write the refresh exists to enable.
+void Settings::refreshCleanBackendFromDisk()
+{
+    if (!m_configBackend || m_configBackend->isDirty()) {
+        return;
+    }
+    m_configBackend->reparseConfiguration();
+    // A clean backend means no local uncommitted writes, so before the
+    // reparse the live store matched m_baseline. The reparse may adopt
+    // externally-committed changes to ANY key; without advancing the
+    // baseline those would be attributed to the local user as unsaved
+    // edits (phantom per-page dirty markers, and a per-page Discard would
+    // revert the external change to the stale session baseline).
+    captureBaseline();
+}
+
 template<typename T>
 void Settings::patchProfileField(const char* jsonFieldName, const T& currentValue, const T& newValue,
                                  void (Settings::*fieldChangedSignal)())
@@ -1336,6 +1432,7 @@ int Settings::animationDuration() const
 
 void Settings::setAnimationDuration(int duration)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationDurationMin(), duration, ConfigDefaults::animationDurationMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldDuration, animationDuration(), clamped,
@@ -1379,6 +1476,7 @@ void Settings::setAnimationEasingCurve(const QString& curve)
 
     // Compare against the raw-stored wire string (same shape the getter
     // returns) so no-op assignments short-circuit before any write.
+    refreshCleanBackendFromDisk();
     if (animationEasingCurve() == curve) {
         return;
     }
@@ -1424,6 +1522,7 @@ int Settings::animationMinDistance() const
 
 void Settings::setAnimationMinDistance(int distance)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationMinDistanceMin(), distance, ConfigDefaults::animationMinDistanceMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldMinDistance, animationMinDistance(), clamped,
@@ -1437,6 +1536,7 @@ int Settings::animationSequenceMode() const
 
 void Settings::setAnimationSequenceMode(int mode)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationSequenceModeMin(), mode, ConfigDefaults::animationSequenceModeMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldSequenceMode, animationSequenceMode(), clamped,
@@ -1450,6 +1550,7 @@ int Settings::animationStaggerInterval() const
 
 void Settings::setAnimationStaggerInterval(int ms)
 {
+    refreshCleanBackendFromDisk();
     const int clamped =
         qBound(ConfigDefaults::animationStaggerIntervalMin(), ms, ConfigDefaults::animationStaggerIntervalMax());
     patchProfileField<int>(PhosphorAnimation::Profile::JsonFieldStaggerInterval, animationStaggerInterval(), clamped,
@@ -1472,8 +1573,21 @@ PhosphorAnimationShaders::ShaderProfileTree Settings::shaderProfileTree() const
         PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(map)));
 }
 
+PhosphorAnimationShaders::ShaderProfileTree Settings::committedShaderProfileTree() const
+{
+    // Baseline snapshot, not the live store — mirrors isKeyModified()'s
+    // m_baseline lookup and the shaderProfileTree() prune so the two trees
+    // compare prune-for-prune. No empty→ConfigDefaults fallback: the shader
+    // tree's schema default IS the empty tree (unlike the decoration tree).
+    const QVariantMap map =
+        m_baseline.value(ConfigDefaults::animationsGroup()).value(ConfigDefaults::shaderProfileTreeKey()).toMap();
+    return pruneShaderProfileTreeToSupportedPaths(
+        PhosphorAnimationShaders::ShaderProfileTree::fromJson(QJsonObject::fromVariantMap(map)));
+}
+
 void Settings::setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree)
 {
+    refreshCleanBackendFromDisk();
     // Prune incoming tree at the persistence boundary — same rationale
     // as the read-side prune in shaderProfileTree(). Belt-and-braces:
     // the QML UI gates the picker via supportsShaderLeg(), but a
@@ -1522,28 +1636,41 @@ void Settings::setShaderProfileTreeJson(const QString& json)
 // ── Decorations tree (PhosphorConfig::Store-backed) ─────────────────────────
 // Persisted as one nested JSON entry under Decorations/DecorationProfileTree,
 // mirroring how the animation shaderProfileTree persists under
-// Animations/ShaderProfileTree. The read-side falls back to the
-// ConfigDefaults tree (EMPTY / neutral: no baseline chain, no overrides —
-// border and titlebar visuals are owned by the window rules, see
-// ConfigDefaults::decorationProfileTree) when the store holds no entry, so a
-// fresh config starts with no shader-pack decoration.
+// Animations/ShaderProfileTree. The STORE holds only user edits (schema
+// default: the empty tree); the built-in card chrome for the OSD and the
+// PopupFrame popups (ConfigDefaults::decorationProfileTree) is overlaid as a
+// lowest-precedence seed layer on every read — the same model as the
+// animation seeds (PhosphorProfileRegistry's low-precedence owner tag), so
+// shipped default improvements reach users who never customized those
+// surfaces, and a user config that predates (or was written without) the
+// defaults still renders them. A user edit at a seeded path becomes a real
+// override and wins; an engaged-but-empty chain keeps a surface explicitly
+// undecorated (see DecorationProfileTree::withSeedDefaults).
 
 PhosphorSurfaceShaders::DecorationProfileTree Settings::decorationProfileTree() const
 {
     const QVariantMap map =
         m_store->read<QVariantMap>(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey());
-    // The Decorations schema registers a NON-empty default for this key (the
-    // serialized ConfigDefaults::decorationProfileTree), so a store built with
-    // the schema never returns empty here. The guard covers a store constructed
-    // WITHOUT the schema default (e.g. a bare test stub): fall back to the same
-    // canonical default rather than to an empty tree.
-    if (map.isEmpty())
-        return ConfigDefaults::decorationProfileTree();
-    return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map));
+    return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map))
+        .withSeedDefaults(ConfigDefaults::decorationProfileTree());
+}
+
+PhosphorSurfaceShaders::DecorationProfileTree Settings::committedDecorationProfileTree() const
+{
+    // Read the baseline snapshot, not the live store — mirrors isKeyModified()'s
+    // m_baseline.value(group).value(key) lookup so the two stay in lockstep. The
+    // same seed overlay as decorationProfileTree() so a never-modified key
+    // compares equal to the live tree (both canonicalise to the same merged
+    // view) instead of spuriously reporting a diff.
+    const QVariantMap map =
+        m_baseline.value(ConfigDefaults::decorationsGroup()).value(ConfigDefaults::decorationProfileTreeKey()).toMap();
+    return PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(map))
+        .withSeedDefaults(ConfigDefaults::decorationProfileTree());
 }
 
 void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree)
 {
+    refreshCleanBackendFromDisk();
     // Prune the incoming tree at the persistence boundary — same
     // belt-and-braces rationale as setShaderProfileTree. fromJson is the
     // tree's canonical unsupported-path filter (setOverride itself does not
@@ -1551,12 +1678,83 @@ void Settings::setDecorationProfileTree(const PhosphorSurfaceShaders::Decoration
     // write from scripting/tests cannot stamp unsupported-path entries onto
     // disk. The read side (decorationProfileTree) passes through the same
     // filter, so the comparison below is pruned-vs-pruned.
-    const auto pruned = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(tree.toJson());
-    // Value-equality compare so a same-tree write doesn't fire a spurious
-    // changed signal. Compare against the effective current tree (the
-    // ConfigDefaults default when the store is empty) so writing the default
-    // back over an empty store is correctly a no-op.
-    if (pruned == decorationProfileTree())
+    auto pruned = PhosphorSurfaceShaders::DecorationProfileTree::fromJson(tree.toJson());
+    // Strip the parts of an override the read-side seed overlay regenerates:
+    // callers read the MERGED tree (seed defaults injected), mutate, and write
+    // the whole tree back, so without this the injected card chrome would
+    // freeze into the stored blob on the first unrelated edit — and a later
+    // shipped default improvement would never reach this config. The strip is
+    // PER FIELD, not per override: a parameters-only retune of a seeded
+    // surface arrives as {chain: seed chain, parameters: user map}, and
+    // storing only the parameters keeps the chain seed-owned so shipped chain
+    // improvements still flow. Each strip is validated by regenerating the
+    // candidate through withSeedDefaults and requiring the WHOLE merged view
+    // back unchanged — not just this path's override. The whole-view check
+    // honours the overlay's injection gates everywhere: a field that merely
+    // LOOKS like a seed but whose removal would change the resolved result
+    // (a chain-only override whose parameters would then inject, a map
+    // shadowed by an engaged ancestor, or a stripped chain re-opening the
+    // master gate for a descendant seed path) is left alone.
+    const auto seeds = ConfigDefaults::decorationProfileTree();
+    // Order-insensitive merged-view equality: the tree's operator== also
+    // compares insertion order, and a strip-then-reinject legitimately moves
+    // the reinjected path to the end, while resolve() ignores order entirely.
+    const auto mergedEquivalent = [](const PhosphorSurfaceShaders::DecorationProfileTree& a,
+                                     const PhosphorSurfaceShaders::DecorationProfileTree& b) {
+        if (!(a.baseline() == b.baseline()))
+            return false;
+        const QStringList aPaths = a.overriddenPaths();
+        QSet<QString> paths(aPaths.cbegin(), aPaths.cend());
+        const QStringList bPaths = b.overriddenPaths();
+        for (const QString& p : bPaths)
+            paths.insert(p);
+        for (const QString& p : paths) {
+            if (a.hasOverride(p) != b.hasOverride(p))
+                return false;
+            if (a.hasOverride(p) && !(a.directOverride(p) == b.directOverride(p)))
+                return false;
+        }
+        return true;
+    };
+    for (const QString& path : seeds.overriddenPaths()) {
+        if (!pruned.hasOverride(path))
+            continue;
+        PhosphorSurfaceShaders::DecorationProfileTree without = pruned;
+        without.clearOverride(path);
+        const auto regenerated = without.withSeedDefaults(seeds);
+        if (!regenerated.hasOverride(path))
+            continue;
+        const auto seedView = regenerated.directOverride(path);
+        auto candidate = pruned.directOverride(path);
+        bool strippedAny = false;
+        const auto stripField = [&](auto member) {
+            auto& slot = candidate.*member;
+            const auto& regen = seedView.*member;
+            if (slot.has_value() && regen.has_value() && *slot == *regen) {
+                slot.reset();
+                strippedAny = true;
+            }
+        };
+        stripField(&PhosphorSurfaceShaders::DecorationProfile::chain);
+        stripField(&PhosphorSurfaceShaders::DecorationProfile::parameters);
+        stripField(&PhosphorSurfaceShaders::DecorationProfile::disabledPacks);
+        if (!strippedAny)
+            continue;
+        PhosphorSurfaceShaders::DecorationProfileTree candidateTree = pruned;
+        if (!candidate.chain && !candidate.parameters && !candidate.disabledPacks)
+            candidateTree.clearOverride(path);
+        else
+            candidateTree.setOverride(path, candidate);
+        if (mergedEquivalent(candidateTree.withSeedDefaults(seeds), pruned.withSeedDefaults(seeds)))
+            pruned = candidateTree;
+    }
+    // Value-equality compare against the STORED (raw, pre-overlay) tree so a
+    // same-tree write doesn't fire a spurious changed signal — writing the
+    // merged default view back over an empty store normalises to empty and is
+    // correctly a no-op.
+    const QVariantMap storedMap =
+        m_store->read<QVariantMap>(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey());
+    if (pruned == PhosphorSurfaceShaders::DecorationProfileTree::fromJson(QJsonObject::fromVariantMap(storedMap)))
         return;
     m_store->write(ConfigDefaults::decorationsGroup(), ConfigDefaults::decorationProfileTreeKey(),
                    pruned.toJson().toVariantMap());
@@ -1573,11 +1771,12 @@ void Settings::setDecorationProfileTreeJson(const QString& json)
 {
     if (json.isEmpty()) {
         // Empty string = reset to the canonical default, exactly like the
-        // animation shaderProfileTree facade. That default is the EMPTY /
-        // neutral tree (ConfigDefaults::decorationProfileTree — border and
-        // titlebar visuals are rule-owned, the tree carries only opt-in
-        // shader-pack decoration), so clearing restores "no decoration".
-        setDecorationProfileTree(ConfigDefaults::decorationProfileTree());
+        // animation shaderProfileTree facade: drop every user edit (store the
+        // empty tree). The read side re-injects the built-in seed defaults
+        // (ConfigDefaults::decorationProfileTree card chrome for the OSD and
+        // PopupFrame popups); everything else returns to "no decoration"
+        // (border and titlebar visuals are rule-owned).
+        setDecorationProfileTree(PhosphorSurfaceShaders::DecorationProfileTree{});
         return;
     }
     const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
@@ -2509,6 +2708,11 @@ P_STORE_SET_BOOL(setZoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleAct
 void Settings::writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                                 TriggerListSignalFn specificSignal)
 {
+    // Trigger lists are whole-replace composites reachable over D-Bus from
+    // both processes, so the stale-guard refresh applies: a `before` read
+    // from a stale cache could equal the incoming value and swallow a write
+    // the disk actually needs.
+    refreshCleanBackendFromDisk();
     const QVariantList before = m_store->readVariant(group, key).toList();
     m_store->write(group, key, triggers.mid(0, MaxTriggersPerAction));
     const QVariantList after = m_store->readVariant(group, key).toList();
@@ -2543,6 +2747,10 @@ int Settings::zoneSpanModifierInt() const
 }
 void Settings::setZoneSpanModifier(DragModifier modifier)
 {
+    // Same composite stale-guard as writeTriggerList: the modifier synthesis
+    // below read-modify-writes the whole zoneSpan trigger list, so a stale
+    // cache would bake stale sibling trigger entries into the rewrite.
+    refreshCleanBackendFromDisk();
     // Write-then-compare so the schema's validIntOr validator gets the first
     // word on whether the request is valid. A pre-write equality check like
     // `before == static_cast<int>(modifier)` would let an invalid modifier
@@ -2629,6 +2837,9 @@ QVariantList Settings::zoneSpanTriggers() const
 }
 void Settings::setZoneSpanTriggers(const QVariantList& triggers)
 {
+    // Same composite stale-guard as writeTriggerList (zoneSpan keeps its own
+    // setter for the legacy-modifier sync, not to skip the refresh).
+    refreshCleanBackendFromDisk();
     // Post-write compare — see setDragActivationTriggers for the
     // canonicalisation rationale. Snapshot both triggers AND the legacy
     // modifier up front so we only emit the NOTIFY signals whose value
@@ -2828,6 +3039,10 @@ QVariantMap Settings::autotilePerAlgorithmSettings() const
 }
 void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
 {
+    // Dual-writer composite: the daemon's autotile engine persists this map
+    // and the settings app edits it, so the stale-guard refresh matters here
+    // as much as for the animation profile blob.
+    refreshCleanBackendFromDisk();
     // Pre-sanitize so the equality check compares against the canonicalised
     // form (the schema validator would canonicalise on both sides anyway,
     // but avoiding the redundant write keeps the settingsChanged signal
@@ -3000,6 +3215,19 @@ QStringList Settings::lockedScreens() const
 }
 void Settings::setLockedScreens(const QStringList& screens)
 {
+    // Whole-replace writers (the settings app pushing a full list) still
+    // deserve a fresh no-op compare, so refresh here. The composite path
+    // (setContextLocked) refreshed before ITS read and calls
+    // writeLockedScreens below instead — refreshing again here would reopen
+    // the read-to-write window that its top-of-function refresh closed, by
+    // pulling in a concurrent writer's commit AFTER the merged list was built
+    // and then overwriting it.
+    refreshCleanBackendFromDisk();
+    writeLockedScreens(screens);
+}
+
+void Settings::writeLockedScreens(const QStringList& screens)
+{
     // Post-write compare — see writeDisableEntries for the canonicalisation
     // rationale.
     const QString before =
@@ -3050,6 +3278,14 @@ bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop
 
 void Settings::setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity, bool locked)
 {
+    // Read-modify-write over the whole lockedScreens list, and the daemon's
+    // lock toggle and the settings app's D-Bus writes are concurrent writers.
+    // Refresh a clean backend BEFORE the lockedScreens() read below — a
+    // refresh inside setLockedScreens would run after the merge was already
+    // built from a stale cache and persist a list missing any entry another
+    // process committed in the meantime.
+    refreshCleanBackendFromDisk();
+
     // Composite-key format mirrors isContextLocked():
     //   name                          → per-screen lock
     //   name:<desktop>                → per-(screen,desktop) lock
@@ -3077,9 +3313,9 @@ void Settings::setContextLocked(const QString& screenIdOrName, int virtualDeskto
     QStringList current = lockedScreens();
     if (locked && !current.contains(key)) {
         current.append(key);
-        setLockedScreens(current);
+        writeLockedScreens(current);
     } else if (!locked && current.removeAll(key) > 0) {
-        setLockedScreens(current);
+        writeLockedScreens(current);
     }
 }
 
@@ -3241,6 +3477,11 @@ void Settings::reset()
 // layout rotation, virtual-screen swap/rotate.
 P_STORE_GET(QString, openEditorShortcut, shortcutsGlobalGroup, openEditorKey, QString)
 P_STORE_SET_STRING(setOpenEditorShortcut, shortcutsGlobalGroup, openEditorKey, openEditorShortcutChanged)
+P_STORE_GET(QString, toggleCheatsheetShortcut, shortcutsGlobalGroup, toggleCheatsheetKey, QString)
+P_STORE_SET_STRING(setToggleCheatsheetShortcut, shortcutsGlobalGroup, toggleCheatsheetKey,
+                   toggleCheatsheetShortcutChanged)
+P_STORE_GET(bool, cheatsheetEnabled, cheatsheetGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setCheatsheetEnabled, cheatsheetGroup, enabledKey, cheatsheetEnabledChanged)
 P_STORE_GET(QString, openSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, QString)
 P_STORE_SET_STRING(setOpenSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, openSettingsShortcutChanged)
 P_STORE_GET(QString, previousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, QString)

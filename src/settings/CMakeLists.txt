@@ -45,6 +45,11 @@ set(plasmazones_settings_SRCS
     settingscontroller_dbuswire.cpp
     # Active-page navigation + per-page dirty tracking + external-edit envelope.
     settingscontroller_pagestate.cpp
+    # Pure decoration page→root scoping helpers (root dispatch, prefix match,
+    # root-scoped tree diff), split from pagestate so they unit-test without
+    # the whole settings-app object graph.
+    decorationpagescope.h
+    decorationpagescope.cpp
     # RAII begin/endExternalEdit wrapper, extracted from settingscontroller.h.
     externaleditscope.h
     externaleditscope.cpp
@@ -83,6 +88,13 @@ set(plasmazones_settings_SRCS
     motionsetdomain.cpp
     animationfileutils.h
     animationfileutils.cpp
+    # Settings profiles: persistence/CRUD/inheritance store + its page controller.
+    profilestore.h
+    profilestore.cpp
+    profilestore_diff.cpp
+    profilestore_revert.cpp
+    profilepagecontroller.h
+    profilepagecontroller.cpp
     editorpagecontroller.h
     editorpagecontroller.cpp
     generalpagecontroller.h
@@ -231,6 +243,9 @@ target_include_directories(plasmazones-settings PRIVATE
 # MUST come before qt_add_qml_module — the function reads the property
 # at registration time, not at link time.
 set_source_files_properties(qml/CurvePresets.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+# TriggerLabels is a singleton for the same reason: the trigger bit tables are
+# shared between the trigger editor and the profile diff.
+set_source_files_properties(qml/TriggerLabels.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(plasmazones-settings
     URI org.plasmazones.settings
@@ -280,6 +295,16 @@ qt_add_qml_module(plasmazones-settings
         # assignment / app-rule surfaces. Every component (including the
         # recursively-instantiated MatchExpressionEditor) MUST be listed.
         qml/RulesPage.qml
+        # Settings profiles: tree list page, expandable row, new-profile dialog.
+        qml/ProfilesPage.qml
+        qml/ProfileRow.qml
+        qml/ProfileComboBox.qml
+        qml/ProfileSwitcherHeader.qml
+        qml/SectionHeaderPill.qml
+        qml/ProfileDiffView.qml
+        qml/ProfileDiffTree.js
+        qml/ProfileSignature.qml
+        qml/NewProfileDialog.qml
         qml/MonitorOverview.qml
         qml/MonitorOverviewTile.qml
         qml/ExpandableRowDelegate.qml
@@ -300,6 +325,7 @@ qt_add_qml_module(plasmazones-settings
         qml/MatchLeafEditor.qml
         qml/ActionListEditor.qml
         qml/ActionRow.qml
+        qml/StockAnimationConflictChip.qml
         qml/AboutPage.qml
         qml/WhatsNewPage.qml
         qml/MonitorStatePage.qml
@@ -396,6 +422,7 @@ qt_add_qml_module(plasmazones-settings
         qml/ShaderBrowserDetailDialog.qml
         qml/CurveEditorDialog.qml
         qml/CurvePresets.qml
+        qml/TriggerLabels.qml
         qml/CurveThumbnail.qml
         qml/SpringPreview.qml
         qml/EasingCurve.js

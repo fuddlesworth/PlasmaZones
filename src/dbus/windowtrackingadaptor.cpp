@@ -369,7 +369,21 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
                         // user's next move while floating captures the real free spot.
                         const bool stillOnSnapRect =
                             !slot.zoneIds.isEmpty() && m_service->resolveZoneGeometry(slot.zoneIds, screenKey) == frame;
-                        if (!stillOnSnapRect) {
+                        // Tiled analogue of the same poison guard (see the
+                        // helper doc). The isWindowAutotileTiled gate above
+                        // cannot catch the float-toggle edge:
+                        // AutotileEngine::performToggleFloat clears the tiled
+                        // bit BEFORE the daemon's sync slot reaches this
+                        // capture, while the live frame is still the tile rect
+                        // (KWin has not applied the float-back yet —
+                        // applyGeometryForFloat runs AFTER this capture and
+                        // reads what it writes). Recording that frame
+                        // overwrote the genuine float-back with the tile rect,
+                        // so every float "restored" the window onto its own
+                        // tile. Skip until the frame moves off it — the next
+                        // move while floating captures the real free spot,
+                        // exactly like the snap case.
+                        if (!stillOnSnapRect && !isFrameStillOnTileRect(windowId, frame)) {
                             p->screenId = screenKey;
                             p->freeGeometryByScreen.insert(screenKey, frame);
                         }
@@ -433,10 +447,31 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // above and returned) is never second-guessed.
     if (!authoritativeScreen.isEmpty() && m_service && !m_service->isWindowAutotileTiled(windowId)) {
         const QRect frame = m_frameGeometry.value(windowId);
-        if (frame.isValid()) {
+        // Same tile-rect poison guard as the primary capture path (see the
+        // helper doc): a window tiled by autotile, handed off, and closed
+        // before ever being repositioned still sits on its tile rect —
+        // recording that as the reopen float-back would restore it onto the
+        // tile, not a free spot. The same holds for a tiled close on the
+        // autotile screen itself: the effect's autotile-close relay has
+        // already untracked the window by the time this capture runs (relay
+        // before WindowTracking, in-order), so it lands here with its frame
+        // still the tile rect — only the engine's retained memory (kept
+        // through its windowClosed exactly for this read) lets the guard
+        // refuse it. Skipping deliberately forfeits this close's
+        // OTHER effects too (the screen adoption and pure-float sibling
+        // collapse recordFloatingClose bundles): the record keeps its prior
+        // screen and geometry, which is strictly better than adopting a
+        // poisoned one — recordFloatingClose has no geometry-less mode, and
+        // a genuine free frame at the next close records normally.
+        if (frame.isValid() && !isFrameStillOnTileRect(windowId, frame)) {
             m_service->recordFloatingClose(windowId, authoritativeScreen, frame);
         }
     }
+}
+
+bool WindowTrackingAdaptor::isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const
+{
+    return m_autotileEngine && m_autotileEngine->lastManagedRect(windowId) == frame;
 }
 
 void WindowTrackingAdaptor::refreshOpenWindowPlacements()
@@ -444,8 +479,9 @@ void WindowTrackingAdaptor::refreshOpenWindowPlacements()
     // Re-capture EVERY open window into the unified store at save time. This is the
     // generic, engine-agnostic snapshot: captureWindowPlacement asks each engine's
     // capturePlacement() for the window's current state (snapped float-back, floated
-    // live geometry, autotiled position) and records it — or clears the record if no
-    // engine manages it. Saves are debounced and shutdown is guaranteed to run, so
+    // live geometry, autotiled position) and records it; when no engine manages a
+    // window its existing record is left intact — never cleared there (see the
+    // declaration doc). Saves are debounced and shutdown is guaranteed to run, so
     // this is the single point that makes open-window state (floating drag geometry,
     // autotile tile order) survive a daemon restart without any per-window capture
     // hook in the engines. m_frameGeometry holds every window the effect has
@@ -828,6 +864,7 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             meta.positionX = existing->positionX;
             meta.positionY = existing->positionY;
             meta.captionNormal = existing->captionNormal;
+            meta.virtualDesktops = existing->virtualDesktops;
         }
     } else {
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
@@ -865,6 +902,19 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         meta.positionX = optInt(Key::PositionX);
         meta.positionY = optInt(Key::PositionY);
         meta.captionNormal = optString(Key::CaptionNormal);
+        // Multi-desktop span list (absent for single-desktop / sticky windows,
+        // so an absent key correctly clears a previous span). Same lenient
+        // QVariant conversion policy as the fields above.
+        if (const auto it = extended.constFind(QString(Key::VirtualDesktops)); it != extended.constEnd()) {
+            const QVariantList list = it.value().toList();
+            meta.virtualDesktops.reserve(list.size());
+            for (const QVariant& v : list) {
+                const int d = v.toInt();
+                if (d > 0) {
+                    meta.virtualDesktops.append(d);
+                }
+            }
+        }
     }
 
     // Universal canonical seed. setWindowMetadata is the per-window choke point —

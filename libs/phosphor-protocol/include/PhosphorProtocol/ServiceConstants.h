@@ -80,6 +80,10 @@ inline constexpr QLatin1String Height("height");
 inline constexpr QLatin1String PositionX("positionX");
 inline constexpr QLatin1String PositionY("positionY");
 inline constexpr QLatin1String CaptionNormal("captionNormal");
+/// Full 1-based desktop-number list for a window on SEVERAL (but not all)
+/// virtual desktops. Sent only when the window spans more than one desktop;
+/// the positional virtualDesktop arg stays the first entry for compatibility.
+inline constexpr QLatin1String VirtualDesktops("virtualDesktops");
 }
 
 /// Single-instance app identities. Each Phosphor sub-process (settings,

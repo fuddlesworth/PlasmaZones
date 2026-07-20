@@ -278,7 +278,11 @@ ComboBox {
     }
 
     function clearSelection() {
-        currentIndex = 0;
+        // Row 0 is only "no selection" when the None/Default entry exists;
+        // with showNoneOption off, row 0 is a real layout and selecting it
+        // would silently commit the first entry (same invariant as
+        // updateSelection's empty-id case).
+        currentIndex = showNoneOption ? 0 : -1;
     }
 
     Accessible.name: i18n("Layout selection")
@@ -410,6 +414,12 @@ ComboBox {
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
         padding: 1
+        // The Desktop style's field background reads `popup.exit.running`
+        // (its ComboBox.qml:128). A bare Popup leaves enter/exit null, so that
+        // binding throws "Cannot read property 'running' of null" the moment
+        // the control is pressed. Empty transitions give it something non-null.
+        enter: Transition {}
+        exit: Transition {}
         onClosed: {
             if (root._rebuildPending) {
                 root._rebuildPending = false;
@@ -586,9 +596,9 @@ ComboBox {
                             return i18n("No default configured");
                         } else if (isDefaultOption) {
                             let layoutName = (modelData.layout && modelData.layout.displayName) || "";
-                            return i18np("→ %2 (%1 zone)", "→ %2 (%1 zones)", (modelData.layout && modelData.layout.zoneCount) || 0, layoutName);
+                            return i18n("→ %1 (%2)", layoutName, i18np("%n zone", "%n zones", (modelData.layout && modelData.layout.zoneCount) || 0));
                         } else {
-                            return i18np("%1 zone", "%1 zones", (modelData.layout && modelData.layout.zoneCount) || 0);
+                            return i18np("%n zone", "%n zones", (modelData.layout && modelData.layout.zoneCount) || 0);
                         }
                     }
                     font: Kirigami.Theme.smallFont

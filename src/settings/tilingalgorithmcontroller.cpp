@@ -312,6 +312,31 @@ QVariantMap TilingAlgorithmController::algorithmSettingsFor(const QString& algor
     return result;
 }
 
+bool TilingAlgorithmController::fieldMatchesAlgorithmDefault(const QString& algorithmId, QLatin1String key,
+                                                             const QVariant& value) const
+{
+    // Mirror the default derivation in algorithmSettingsFor() exactly (clamped
+    // algorithm defaults, DefaultMasterCount for master count) so "reset to
+    // default" here means the same value the page would show when no slot exists.
+    PhosphorTiles::TilingAlgorithm* algo = m_registry->algorithm(algorithmId);
+    if (key == PhosphorTiles::AutotileJsonKeys::MaxWindows) {
+        const int def = algo ? std::clamp(algo->defaultMaxWindows(), ConfigDefaults::autotileMaxWindowsMin(),
+                                          ConfigDefaults::autotileMaxWindowsMax())
+                             : PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
+        return value.toInt() == def;
+    }
+    if (key == PhosphorTiles::AutotileJsonKeys::MasterCount) {
+        return value.toInt() == PhosphorTiles::AutotileDefaults::DefaultMasterCount;
+    }
+    if (key == PhosphorTiles::AutotileJsonKeys::SplitRatio) {
+        const qreal def = algo ? std::clamp(algo->defaultSplitRatio(), ConfigDefaults::autotileSplitRatioMin(),
+                                            ConfigDefaults::autotileSplitRatioMax())
+                               : PhosphorTiles::AutotileDefaults::DefaultSplitRatio;
+        return qFuzzyCompare(1.0 + value.toDouble(), 1.0 + def);
+    }
+    return false;
+}
+
 bool TilingAlgorithmController::writeAlgorithmField(const QString& algorithmId, QLatin1String key,
                                                     const QVariant& value)
 {
@@ -319,10 +344,26 @@ bool TilingAlgorithmController::writeAlgorithmField(const QString& algorithmId, 
         return false;
     QVariantMap perAlgo = m_settings->autotilePerAlgorithmSettings();
     QVariantMap entry = perAlgo.value(algorithmId).toMap();
-    if (entry.contains(key) && entry.value(key) == value)
-        return false;
-    entry[key] = value;
-    perAlgo[algorithmId] = entry;
+
+    if (fieldMatchesAlgorithmDefault(algorithmId, key, value)) {
+        // Setting a field back to the algorithm's own default is not a
+        // customization: persisting it would leave a slot the profile diff
+        // reports as a change the user never made. Drop the field instead, and
+        // prune the whole entry when nothing customized (including customParams)
+        // remains. A field that was never stored means there is nothing to undo.
+        if (!entry.contains(key))
+            return false;
+        entry.remove(key);
+    } else {
+        if (entry.contains(key) && entry.value(key) == value)
+            return false;
+        entry[key] = value;
+    }
+
+    if (entry.isEmpty())
+        perAlgo.remove(algorithmId);
+    else
+        perAlgo[algorithmId] = entry;
     m_settings->setAutotilePerAlgorithmSettings(perAlgo);
     return true;
 }

@@ -865,6 +865,14 @@ public:
     // sole writer.
     PLASMAZONES_EXPORT static QString rulesFilePath();
 
+    // Returns the absolute path to the settings-profiles directory
+    // (~/.config/plasmazones/profiles). Each profile is a single <uuid>.json
+    // file holding a sparse config delta (and user-rule subset) relative to its
+    // parent profile, plus an index.json sidecar tracking the active profile and
+    // display order. Sits under the config dir (not the data dir) so it never
+    // collides with the data-dir animation profiles subdir.
+    PLASMAZONES_EXPORT static QString profilesDir();
+
     // Window appearance (border / title bar / gap) defaults live in the config
     // store now (the Windows.* / Gaps.* groups), NOT in managed baseline rules.
     // These three ids no longer identify seeded rules — they exist only so the
@@ -954,60 +962,24 @@ public:
         return QStringLiteral("auto");
     }
 
-    struct RenderingBackendEntry
-    {
-        QString key;
-        QString displayName;
-    };
-
-    // Single source of truth for backend keys and display names.
-    // Order here determines ComboBox order in the settings UI.
-    // When adding entries, also add the display name to the translation catalog.
-    static const QList<RenderingBackendEntry>& renderingBackendEntries()
-    {
-        // QT_TRANSLATE_NOOP marks the display names for lupdate
-        // extraction under the project's "plasmazones" context while
-        // keeping the literal as the runtime value — GeneralPageController
-        // resolves the translated form via PhosphorI18n::tr() at display time.
-        // Without the macro, lupdate wouldn't see the source strings
-        // and the .ts catalog would never carry the translations.
-        static const QList<RenderingBackendEntry> entries = {
-            {QStringLiteral("auto"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "Automatic"))},
-            {QStringLiteral("vulkan"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "Vulkan"))},
-            {QStringLiteral("opengl"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "OpenGL"))},
-        };
-        return entries;
-    }
-
+    // Single source of truth for the legal backend tokens. Order here is the
+    // schema's declaration order, which is the order pickers offer. The
+    // user-facing words for these tokens live in settingsvaluelabels.cpp, the
+    // app-side label table every enum key resolves through.
     static const QStringList& renderingBackendOptions()
     {
-        static const QStringList keys = [] {
-            QStringList k;
-            for (const auto& e : renderingBackendEntries())
-                k.append(e.key);
-            return k;
-        }();
+        static const QStringList keys = {
+            QStringLiteral("auto"),
+            QStringLiteral("vulkan"),
+            QStringLiteral("opengl"),
+        };
         return keys;
-    }
-
-    // Untranslated display names — use for translation source only.
-    // GeneralPageController translates these via PhosphorI18n::tr() at runtime.
-    static QStringList renderingBackendDisplayNames()
-    {
-        QStringList names;
-        for (const auto& e : renderingBackendEntries())
-            names.append(e.displayName);
-        return names;
     }
 
     static QString normalizeRenderingBackend(const QString& raw)
     {
         const QString normalized = raw.toLower().trimmed();
-        for (const auto& e : renderingBackendEntries()) {
-            if (e.key == normalized)
-                return normalized;
-        }
-        return renderingBackend();
+        return renderingBackendOptions().contains(normalized) ? normalized : renderingBackend();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1176,9 +1148,15 @@ public:
     // every other group: ConfigDefaults derives from ConfigKeys).
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Default DecorationProfileTree — the fallback the typed
-    /// `Settings::decorationProfileTree()` returns when the Decorations group
-    /// holds no `DecorationProfileTree` entry.
+    /// Built-in DecorationProfileTree seed layer. NOT persisted and NOT the
+    /// schema default (that is the empty tree — the stored blob holds only
+    /// user edits): `Settings::decorationProfileTree()` overlays this tree at
+    /// LOWEST precedence on every read via
+    /// `DecorationProfileTree::withSeedDefaults`, the same seed model as the
+    /// animation motion defaults (PhosphorProfileRegistry's low-precedence
+    /// owner tag). A user edit at a seeded path becomes a real override and
+    /// wins; clearing that override (per-page Reset) reveals the seed again;
+    /// an engaged-but-empty chain keeps the surface explicitly undecorated.
     ///
     /// The decoration tree is the user-applied surface-shader pack stack. Window
     /// border and title-bar appearance are owned by the window rules, not by this
@@ -1186,14 +1164,15 @@ public:
     /// pack (e.g. glow) from the Decoration pages.
     ///
     /// The PopupFrame-based card surfaces are the exception: the OSD ("osd") and
-    /// the two PopupFrame popups ("popup.layoutPicker", "popup.zoneSelector")
-    /// ship a default chain that chromes their cards through the
+    /// the three PopupFrame popups ("popup.layoutPicker", "popup.zoneSelector",
+    /// "popup.cheatsheet") ship a default chain that chromes their cards through the
     /// surface-decoration pipeline rather than PopupFrame's built-in MultiEffect
     /// — a crisp neutral frame-contrast border plus a real, theme-tinted drop
     /// shadow. (Snap-assist is left undecorated: it carries its own anchor, not
-    /// PopupFrame, so it has no equivalent card chrome to replace.) These land
-    /// here (not as a daemon-only fallback) so they flow through the same tree
-    /// the Decoration pages edit and a user can retune or clear them. The border
+    /// PopupFrame, so it has no equivalent card chrome to replace.) These flow
+    /// through the same merged tree the Decoration pages edit, so a user can
+    /// retune them (a parameters-only retune keeps the seed chain) or clear
+    /// them (remove every pack, which persists an explicit empty chain). The border
     /// colour resolves from the theme in OverlayService::applyDecoration
     /// (useThemeNeutral, at frameContrast 0.2) so it tracks light and dark;
     /// edgeSoftness 0.5 keeps the 1px border a crisp hairline. The shadow pack is
@@ -1203,7 +1182,7 @@ public:
     static ::PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree()
     {
         // One shared card decoration for every PopupFrame surface — the OSD and
-        // both popups read as the same surface family. PopupFrame squares its
+        // the three popups read as the same surface family. PopupFrame squares its
         // body off when decorated (radius 0), so the packs are the sole owners
         // of the corner rounding. The corner radius is NOT set here: each popup
         // slot publishes its own card radius (cardCornerRadius) and
@@ -1235,6 +1214,7 @@ public:
         tree.setOverride(QStringLiteral("osd"), card);
         tree.setOverride(QStringLiteral("popup.layoutPicker"), card);
         tree.setOverride(QStringLiteral("popup.zoneSelector"), card);
+        tree.setOverride(QStringLiteral("popup.cheatsheet"), card);
         return tree;
     }
 
@@ -1487,6 +1467,9 @@ public:
     }
 
     // ── Virtual Screen Defaults ───────────────────────────────────────
+    /// Deliberately untranslated: this catalogue takes no i18n dependency
+    /// (matching the layering note on defaultLayoutVisibilitySettings), and
+    /// the name doubles as the stored fallback, which must not vary by locale.
     static QString defaultVirtualScreenName(int index)
     {
         return QStringLiteral("Screen %1").arg(index + 1);
@@ -1579,6 +1562,15 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Shortcut Cheatsheet Overlay
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool cheatsheetEnabled()
+    {
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Global Shortcuts
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1589,6 +1581,16 @@ public:
     static QString openSettingsShortcut()
     {
         return QStringLiteral("Meta+Shift+P");
+    }
+    static QString toggleCheatsheetShortcut()
+    {
+        // Meta+Alt+<key> matches the layouts family (Meta+Alt+[ ] Space).
+        // "/" carries the help idiom without involving Shift — which
+        // matters: a Shift+symbol chord like Meta+Shift+/ can NEVER fire
+        // on Wayland because KWin strips Shift as a consumed modifier when
+        // the keysym translation uses it (delivers Meta+Question). Any
+        // future default here must avoid Shift+symbol spellings.
+        return QStringLiteral("Meta+Alt+/");
     }
     static QString previousLayoutShortcut()
     {

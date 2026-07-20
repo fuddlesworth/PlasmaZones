@@ -620,6 +620,13 @@ private:
     /// only fires when the daemon service is registered.
     void reportScreenDesktop(const QString& screenId, int desktop);
     QString getWindowScreenId(KWin::EffectWindow* w) const;
+    /// Resolve the KWin output a window sits on by POSITION (the output whose
+    /// geometry contains the window centre), falling back to w->screen() only
+    /// when no output contains the centre. Never trust w->screen() first: KWin
+    /// can assign a window the wrong one of two identical-model outputs
+    /// (Discussion #724). Shared by getWindowScreenId and the activation-time
+    /// desktop report in notifyWindowActivated.
+    KWin::LogicalOutput* windowOutput(KWin::EffectWindow* w) const;
     AutotileHandler* autotileHandler() const
     {
         return m_autotileHandler.get();
@@ -920,7 +927,22 @@ private:
     // WindowTracking::setFrameGeometry. Populates the daemon's frame-geometry
     // shadow used by daemon-local shortcut handlers (float toggle, etc.) so they
     // can read fresh geometry without a round-trip.
-    QHash<QString, QRect> m_pendingFrameGeometry;
+    //
+    // The window pointer rides along so the debounced flush can run the
+    // shouldHandleWindow exclusion gate ONCE per flush instead of on every
+    // geometry tick — during animated geometry (retiles, morphs, interactive
+    // resize) the per-tick gate was an uncached rule resolve plus a full
+    // ruleQuery build, hundreds of times per second (discussion #816). The
+    // decoration resync deliberately stays PER TICK in the stash lambda (see
+    // window_lifecycle.cpp): it is cheap, and deferring it let a re-decorated
+    // title bar flash for the throttle window. QPointer auto-nulls if the
+    // window dies before the flush; the flush skips those entries.
+    struct PendingFrameGeometry
+    {
+        QRect geometry;
+        QPointer<KWin::EffectWindow> window;
+    };
+    QHash<QString, PendingFrameGeometry> m_pendingFrameGeometry;
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 
@@ -947,6 +969,32 @@ private:
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
 
     void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
+
+    /// Poll-defer a decorated, minimized window's teardown while an animation
+    /// still paints it. A minimized window is only isVisible() while some
+    /// effect holds an EffectWindowVisibleRef on it — KWin's magic lamp /
+    /// squash minimize animations, or our own minimize transition. Tearing
+    /// the decoration down at that moment (updateWindowDecoration's
+    /// isMinimized() gate) yanks the OffscreenEffect redirect and its GL
+    /// working set out from under the in-flight animation: the mid-lamp
+    /// freeze and unbound-sampler black smears of discussion #816. The poll
+    /// re-enters updateWindowDecoration; once the animation drops its ref the
+    /// window stops being visible and the normal undecorate proceeds (or, if
+    /// the window unminimized meanwhile, the normal refresh path re-resolves).
+    /// The deferral's lifetime is bounded by WHOEVER holds a visible ref, not
+    /// only minimize animations: a thumbnail / overview effect keeping a
+    /// minimized window visible extends the poll (and the kept decoration)
+    /// for the ref's whole lifetime, which is the correct trade — the window
+    /// is being painted, so its decoration staying live is consistent, and
+    /// each poll tick is a lookup plus an early return. Keyed set prevents
+    /// timer pileup when decoration sweeps re-enter while a poll is already
+    /// armed; stale entries self-drain (the timer removes its own entry, and
+    /// a re-entry against a since-cleared decoration map is a no-op that does
+    /// not re-arm), so bulk teardown paths need no explicit clear. Defined in
+    /// decorations.cpp.
+    void deferDecorationTeardownWhileAnimated(const QString& windowId);
+    QSet<QString> m_animatedDecoTeardownPending;
+
     /// windowHint: the EffectWindow when the caller still holds it and the
     /// window is already deleted (close / delete paths) — findWindowById
     /// cannot resolve a deleted id, and without the pointer the GL release
@@ -1406,8 +1454,10 @@ private:
     bool m_enableAudioVisualizer = false;
     PhosphorAudio::SpectrumOptions m_audioOptions;
 
-    /// KWin show-desktop script effects syncShowDesktopEffectSuppression
-    /// unloaded because a `desktop.peek` pack is assigned. Only names WE
+    /// KWin stock effects syncStockEffectSuppression unloaded because one of
+    /// OUR packs owns the event they animate: windowaperture/eyeonscreen for
+    /// a `desktop.peek` pack, magiclamp/squash for a window.minimize pack,
+    /// maximize for a window.maximize pack. Only names WE
     /// unloaded are recorded, so clearing the pack (or unloading this effect)
     /// loads back exactly what the user had — never an effect KWin left
     /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop
@@ -1417,7 +1467,7 @@ private:
     /// session honours kwinrc, which the suppression never writes. Querying
     /// kwinrc from the effect to close this would add a config dependency the
     /// plugin doesn't otherwise need.
-    QStringList m_suppressedShowDesktopEffects;
+    QStringList m_suppressedStockEffects;
     /// Set by the aboutToQuit latch (constructor): distinguishes a runtime
     /// unload of this effect from compositor shutdown in the destructor's
     /// suppressed-effect restore. See ~PlasmaZonesEffect.
@@ -1450,22 +1500,27 @@ private:
     /// the compositor thread never blocks on cava stop()+respawn mid-refresh.
     void scheduleEffectAudioSync();
 
-    /// Unload KWin's show-desktop script effects (windowaperture / eyeonscreen)
-    /// while the peek would actually run — a `desktop.peek` pack is assigned,
-    /// installed, desktop-contract, AND animations are enabled — and load back
-    /// exactly the ones WE unloaded when any of that stops holding. Unloading
-    /// is the only suppression that works: they never consult
-    /// activeFullScreenEffect() (and the peek deliberately takes no fullscreen
-    /// claim anyway, see DesktopTransitionManager) — left loaded they would
-    /// animate invisibly under our blend AND leak their transforms into the
-    /// peek captures (the capture paths continue down the effect chain).
+    /// Unload the KWin stock effects whose event one of OUR packs owns, and
+    /// load back exactly the ones WE unloaded when that stops holding. Three
+    /// groups share one predicate shape (pack assigned in the tree, installed,
+    /// event-contract match, animations enabled):
+    ///   desktop.peek       → windowaperture / eyeonscreen
+    ///   window.minimize    → magiclamp / squash
+    ///   window.maximize    → maximize
+    /// Unloading is the only suppression that works for all three: the
+    /// show-desktop scripts never consult activeFullScreenEffect() (and the
+    /// peek deliberately takes no fullscreen claim anyway, see
+    /// DesktopTransitionManager), and the minimize/maximize stock effects
+    /// honor no per-window grab role the way the open/close builtins honor
+    /// WindowAddedGrabRole / WindowClosedGrabRole — left loaded they animate
+    /// the same surface concurrently with our shader (discussion #816).
     /// Idempotent; re-asserted from every path that can change the predicate
     /// or the loaded-effects list: the shader-profile-tree load, the animation
     /// registry commit (bringup + pack install/uninstall), the animationsEnabled
     /// setting, and reconfigure() (a Desktop Effects KCM apply re-loads the
     /// scripts from kwinrc). The destructor restores them on a runtime unload
     /// but skips during compositor shutdown (m_compositorShuttingDown).
-    void syncShowDesktopEffectSuppression();
+    void syncStockEffectSuppression();
 
     /// True when any decorated window's resolved chain carries an audio-reactive
     /// pack (SurfaceShaderEffect::audio). Read from pack METADATA (no compile

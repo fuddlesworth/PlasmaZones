@@ -118,6 +118,12 @@ public:
     /// backing store are emitted with their schema default.
     QJsonObject exportToJson() const;
 
+    /// Produce a JSON snapshot of every declared key's SCHEMA DEFAULT,
+    /// independent of current values. Stamped with the same version key as
+    /// @c exportToJson, so the two snapshots are field-for-field comparable —
+    /// which is what a "diff my settings against the defaults" feature needs.
+    QJsonObject defaultsToJson() const;
+
     /// Overwrite declared keys from @p snapshot. Unknown groups/keys in
     /// @p snapshot are ignored (silently — no adaptive migration).
     /// Use @c MigrationRunner first if @p snapshot came from an older schema.

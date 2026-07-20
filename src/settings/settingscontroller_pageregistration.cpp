@@ -66,9 +66,10 @@ void SettingsController::buildApplicationController()
     };
 
     // Top-level entries. The rail reads top → bottom as three blocks split by
-    // two dividers: (1) top/global — Overview (status dashboard) + General
-    // (global settings); (2) per-feature configuration — Display, Placement,
-    // Animations, Rules; (3) tools & meta — Editor, About.
+    // two dividers: (1) top/global — Overview (status dashboard), Profiles
+    // (which frames everything below it) + General (global settings);
+    // (2) per-feature configuration — Display, Placement, Animations, Rules;
+    // (3) tools & meta — Editor, About.
     // `divider` flags mark only those two seams (after General, after Window
     // Rules) plus one inside the feature block (after Placement, to set the
     // placement categories apart from Animations/Rules).
@@ -76,6 +77,13 @@ void SettingsController::buildApplicationController()
     // ── Block 1: top / global ──
     regVirtual(QStringLiteral("overview"), QString(), PhosphorI18n::tr("Overview"),
                QStringLiteral("MonitorStatePage.qml"), QStringLiteral("monitor"));
+    // Profiles sits in the top/global block, directly under the switcher in the
+    // sidebar header: the active profile frames every page below it, so it
+    // belongs here rather than among the tools. regPage trackDomain()s the
+    // controller so its staged active-profile pointer joins the Save/Discard
+    // transaction; the applied config rides the Settings staging path.
+    regPage(m_profilesPage, QString(), PhosphorI18n::tr("Profiles"), QStringLiteral("ProfilesPage.qml"),
+            QStringLiteral("bookmarks"));
     // General leads near the top (mirrors the Animations section leading with
     // its own "General" child). Divider after it closes the top/global block.
     regPage(m_generalPage, QString(), PhosphorI18n::tr("General"), QStringLiteral("GeneralPage.qml"),

@@ -23,6 +23,11 @@ namespace PlasmaZones {
 /// and handed to Store; add new groups here as they're migrated.
 PLASMAZONES_EXPORT PhosphorConfig::Schema buildSettingsSchema();
 
+/// Shared immortal schema for READ-ONLY consumers (choice lookups, value
+/// resolution). Built once on first use. Settings must NOT use this — it
+/// hands its Schema to a Store, which owns a copy per instance.
+PLASMAZONES_EXPORT const PhosphorConfig::Schema& cachedSettingsSchema();
+
 // ─── Group helpers ──────────────────────────────────────────────────────────
 // Each helper appends one group's KeyDefs to the schema. Kept as free
 // functions so the migration can add them one at a time without touching
@@ -36,6 +41,7 @@ void appendRenderingSchema(PhosphorConfig::Schema& schema);
 void appendPerformanceSchema(PhosphorConfig::Schema& schema);
 void appendZoneGeometrySchema(PhosphorConfig::Schema& schema);
 void appendShortcutsSchema(PhosphorConfig::Schema& schema);
+void appendCheatsheetSchema(PhosphorConfig::Schema& schema);
 void appendEditorSchema(PhosphorConfig::Schema& schema);
 void appendExclusionsSchema(PhosphorConfig::Schema& schema);
 void appendDisplaySchema(PhosphorConfig::Schema& schema);

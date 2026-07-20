@@ -43,6 +43,30 @@ SettingsFlickable {
         }
 
         // =====================================================================
+        // SHORTCUT CHEATSHEET CARD
+        // =====================================================================
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Shortcut Cheatsheet")
+            searchAnchor: "cheatsheet"
+            showToggle: true
+            toggleChecked: root.settingsBridge.cheatsheetEnabled
+            onToggleClicked: checked => {
+                root.settingsBridge.cheatsheetEnabled = checked;
+            }
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    text: i18n("Shows an overlay listing every PlasmaZones shortcut with the keys currently bound to it. Open it with its global shortcut, Meta+Alt+/ by default, and dismiss it with Escape or a click outside the card.")
+                }
+            }
+        }
+
+        // =====================================================================
         // RENDERING CARD
         // =====================================================================
         SettingsCard {
@@ -72,12 +96,13 @@ SettingsFlickable {
                         // and then be the only thing keeping the combo in sync.
                         enabled: !settingsController.daemonRunning
                         Accessible.name: i18n("Rendering backend")
-                        model: settingsController.generalPage.renderingBackendDisplayNames
-                        currentIndex: Math.max(0, settingsController.generalPage.renderingBackendOptions.indexOf(appSettings.renderingBackend))
-                        onActivated: index => {
-                            if (index >= 0 && index < settingsController.generalPage.renderingBackendOptions.length)
-                                appSettings.renderingBackend = settingsController.generalPage.renderingBackendOptions[index];
-                        }
+                        // One list of {text, value} pairs rather than two
+                        // parallel arrays that have to stay index-aligned.
+                        textRole: "text"
+                        valueRole: "value"
+                        model: settingsController.valueOptions("Rendering", "Backend")
+                        currentIndex: Math.max(0, indexOfValue(appSettings.renderingBackend))
+                        onActivated: appSettings.renderingBackend = currentValue
                     }
                 }
 
@@ -327,24 +352,7 @@ SettingsFlickable {
                             Accessible.name: i18n("Channels")
                             textRole: "text"
                             valueRole: "value"
-                            model: [
-                                {
-                                    "text": i18n("Stereo"),
-                                    "value": "stereo"
-                                },
-                                {
-                                    "text": i18n("Mono (average)"),
-                                    "value": "mono-average"
-                                },
-                                {
-                                    "text": i18n("Mono (left)"),
-                                    "value": "mono-left"
-                                },
-                                {
-                                    "text": i18n("Mono (right)"),
-                                    "value": "mono-right"
-                                }
-                            ]
+                            model: settingsController.valueOptions("Shaders.Audio", "ChannelMode")
                             // A binding, not a JS assignment: see
                             // renderingBackendCombo above.
                             currentIndex: Math.max(0, indexOfValue(appSettings.audioChannelMode))
@@ -407,20 +415,7 @@ SettingsFlickable {
                             Accessible.name: i18n("Audio backend")
                             textRole: "text"
                             valueRole: "value"
-                            model: [
-                                {
-                                    "text": i18n("Automatic"),
-                                    "value": "auto"
-                                },
-                                {
-                                    "text": i18n("PipeWire"),
-                                    "value": "pipewire"
-                                },
-                                {
-                                    "text": i18n("PulseAudio"),
-                                    "value": "pulse"
-                                }
-                            ]
+                            model: settingsController.valueOptions("Shaders.Audio", "InputMethod")
                             // A binding, not a JS assignment: see
                             // renderingBackendCombo above.
                             currentIndex: Math.max(0, indexOfValue(appSettings.audioInputMethod))

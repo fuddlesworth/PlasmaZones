@@ -38,6 +38,14 @@ QVariant Schema::defaultFor(const QString& group, const QString& key) const
     return {};
 }
 
+QVector<ChoiceDef> Schema::choicesFor(const QString& group, const QString& key) const
+{
+    if (const KeyDef* def = findKey(group, key)) {
+        return def->choices;
+    }
+    return {};
+}
+
 // ─── MigrationRunner ─────────────────────────────────────────────────────────
 
 MigrationRunner::MigrationRunner(const Schema& schema)
@@ -64,7 +72,9 @@ MigrationRunner::MigrationRunner(const Schema& schema)
     // Sort once at construction so registration order doesn't matter and
     // runInMemory doesn't pay the sort cost on every call. Stable sort
     // preserves the relative order of any (illegal but possible) duplicate
-    // fromVersion entries — the runner aborts on the second one anyway.
+    // fromVersion entries — the runner skips the second one anyway (after the
+    // first bumps the version, the duplicate's fromVersion no longer matches,
+    // or the target-reached break fires first when the bump hit the target).
     // Short-circuit on 0/1 steps (the common case: single-version or
     // freshly-introduced schema) to avoid spinning up a comparator.
     if (m_orderedSteps.size() > 1) {

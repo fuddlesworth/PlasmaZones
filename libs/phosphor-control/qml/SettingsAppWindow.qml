@@ -27,6 +27,11 @@ Kirigami.ApplicationWindow {
     //* Optional content pinned to the RIGHT of the header-extras row (e.g. a
     //  status toggle), sharing the row with the centered headerExtras.
     property alias headerTrailing: headerTrailingLoader.sourceComponent
+    //* Optional label for the unsaved-changes footer bar, replacing its plain
+    //  "Unsaved changes" when the app can say what Save will actually do
+    //  (e.g. name the profile a pending switch applies). Empty keeps the
+    //  default.
+    property string unsavedChangesMessage
     //* Optional content pinned to the RIGHT of the per-page breadcrumb row
     //  (e.g. a page-scoped overflow/kebab menu). Sits on the same line as the
     //  breadcrumbs, right-aligned; the row already reserves the leading space
@@ -605,6 +610,7 @@ Kirigami.ApplicationWindow {
                     UnsavedChangesFooter {
                         Layout.fillWidth: true
                         controller: root.controller
+                        message: root.unsavedChangesMessage
                     }
                 }
             }

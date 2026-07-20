@@ -98,7 +98,6 @@ class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class WindowDragAdaptor;
 class RuleAdaptor;
-class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
@@ -244,7 +243,27 @@ public:
     /// no OSD.
     void showNotAssignedOsd(const QString& screenId);
 
+    // Shortcut cheatsheet overlay (impls in daemon/osd.cpp).
+    /// Toggle the cheatsheet on the cursor's screen. Show path resolves the
+    /// screen's tiling mode + the shortcut catalog and pushes both into the
+    /// overlay (daemon-mediated push), dismisses any other Escape-consuming
+    /// modal first (picker / snap assist — at most one Escape grab consumer
+    /// at a time), then binds the sheet's dedicated Escape ad-hoc grab.
+    void toggleCheatsheet();
+    /// Re-push catalog + mode into a visible cheatsheet — live refilter on
+    /// mode switches, rebinds, and the autotile feature gate. No-op when
+    /// hidden. Mode is re-resolved for the screen the sheet is BOUND to
+    /// (not the cursor's current screen).
+    void refreshCheatsheetIfVisible();
+    /// Release the cheatsheet's Escape ad-hoc grab. Connected to
+    /// OverlayService::cheatsheetDismissed in start.cpp.
+    void onCheatsheetDismissed();
+
 private:
+    /// Show path for the toggle shortcut: resolve cursor screen, catalog,
+    /// per-screen mode; dismiss sibling Escape-consuming modals; show and
+    /// bind the Escape grab. Only called from toggleCheatsheet().
+    void showCheatsheetOnCursorScreen();
     /**
      * @brief Show layout OSD for an autotile algorithm (visual zone preview)
      *
@@ -626,11 +645,12 @@ private:
     void updateLayoutFilterForScreen(const QString& focusedScreenId);
 
     /**
-     * @brief Sync ModeTracker and UnifiedLayoutController from per-desktop assignments
+     * @brief Sync UnifiedLayoutController from per-desktop assignments
      *
-     * Derives the tiling mode (Manual vs Autotile) and current layout from the
-     * actual per-desktop assignment for the focused screen. Must be called on
-     * every desktop/activity switch so global state reflects the new context.
+     * Syncs the current layout, the global active layout, and the layout
+     * filter from the actual per-desktop assignment for the focused screen.
+     * Must be called on every desktop/activity switch so global state
+     * reflects the new context.
      */
     void syncModeFromAssignments();
 
@@ -844,9 +864,6 @@ private:
     // Parented to `this`; holds only plain state, so it needs no detach().
     CompositorBridgeAdaptor* m_compositorBridge = nullptr;
 
-    // Mode tracking
-    std::unique_ptr<ModeTracker> m_modeTracker;
-
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
@@ -936,6 +953,10 @@ private:
     /// desktops, #648), falling back to the global currentDesktop().
     int currentDesktopForScreen(const QString& screenId) const;
     QString currentActivity() const;
+    /// True when any effective screen's current-context assignment is an
+    /// autotile layout. Reads the per-screen desktop (per-output virtual
+    /// desktops, #648) and current activity fresh on every call.
+    bool isAnyScreenAutotile() const;
     bool isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
     /**

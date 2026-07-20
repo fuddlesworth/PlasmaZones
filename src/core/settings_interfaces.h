@@ -95,21 +95,12 @@ inline constexpr const char AnimationDuration[] = "AnimationDuration";
 inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
 } // namespace PerScreenAutotileKey
 
-namespace PerScreenSnappingKey {
-
-using PhosphorEngine::PerScreenSnappingKey::InnerGap;
-using PhosphorEngine::PerScreenSnappingKey::OuterGap;
-using PhosphorEngine::PerScreenSnappingKey::OuterGapBottom;
-using PhosphorEngine::PerScreenSnappingKey::OuterGapLeft;
-using PhosphorEngine::PerScreenSnappingKey::OuterGapRight;
-using PhosphorEngine::PerScreenSnappingKey::OuterGapTop;
-using PhosphorEngine::PerScreenSnappingKey::UsePerSideOuterGap;
-
-// Only the gap keys above are per-screen. Snap-assist and the zone-selector
-// enable switch are global-only (ISettings::setSnapAssistEnabled /
-// setZoneSelectorEnabled); the per-screen zone-selector config lives in its own
-// map/group keyed by ZoneSelectorConfigKey (see kPerScreenKeys in perscreen.cpp).
-} // namespace PerScreenSnappingKey
+// Per-screen snapping overrides carry only the gap keys, spelled by the shared
+// PhosphorEngine::PerScreenKeys namespace (InnerGap / OuterGap / per-side).
+// Snap-assist and the zone-selector enable switch are global-only
+// (ISettings::setSnapAssistEnabled / setZoneSelectorEnabled); the per-screen
+// zone-selector config lives in its own map/group keyed by ZoneSelectorConfigKey
+// (see kPerScreenKeys in perscreen.cpp).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces
@@ -506,6 +497,18 @@ public:
     virtual void setAnimationStaggerInterval(int ms) = 0;
     virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
     virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
+
+    /// The committed-baseline shader tree — the last-persisted value the
+    /// per-surface animation dirty check and per-page Discard compare the live
+    /// tree against. The default returns the live tree, so a stub with no
+    /// baseline notion reports "never diverged"; the concrete Settings overrides
+    /// it to read its committed baseline. Implementations MUST apply the same
+    /// supported-path prune as shaderProfileTree() so live-vs-committed compares
+    /// prune-for-prune.
+    virtual PhosphorAnimationShaders::ShaderProfileTree committedShaderProfileTree() const
+    {
+        return shaderProfileTree();
+    }
 
     // Animation window filtering — gates animations BEFORE the app-rule
     // cascade. A class-pattern rule whose pattern matches the window's class

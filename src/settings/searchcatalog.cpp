@@ -40,6 +40,19 @@ void addSection(PhosphorControl::SearchController* search, const QString& pageId
     search->addEntry(e);
 }
 
+void addAction(PhosphorControl::SearchController* search, const QString& actionId, const QString& title,
+               const QString& subtitle, const QString& icon, const QStringList& keywords)
+{
+    SearchEntry e;
+    e.kind = SearchEntry::Kind::Action;
+    e.actionId = actionId;
+    e.title = title;
+    e.subtitle = subtitle;
+    e.icon = icon;
+    e.keywords = keywords;
+    search->addEntry(e);
+}
+
 } // namespace
 
 void seedSearchCatalog(PhosphorControl::SearchController* search)
@@ -47,6 +60,15 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     if (search == nullptr) {
         return;
     }
+
+    // ── App actions ──────────────────────────────────────────────────────
+    // Commands, not destinations. Dispatched by id in Main.qml's
+    // onActionTriggered — keep the two sides' id vocabulary in sync.
+    addAction(search, QStringLiteral("show-shortcut-overlay"), PhosphorI18n::tr("Keyboard Shortcuts"),
+              PhosphorI18n::tr("Show the shortcut reference for this window"), QStringLiteral("input-keyboard"),
+              {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("shortcuts"), PhosphorI18n::tr("hotkey"),
+               PhosphorI18n::tr("keybinding"), PhosphorI18n::tr("keys"), PhosphorI18n::tr("cheatsheet"),
+               PhosphorI18n::tr("help")});
 
     // ── Per-page synonyms ────────────────────────────────────────────────
     // Page entries are auto-derived from the registry; these add search terms a
@@ -168,6 +190,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("rules"),
                             {PhosphorI18n::tr("rule"), PhosphorI18n::tr("exclude"), PhosphorI18n::tr("float"),
                              PhosphorI18n::tr("monitor"), PhosphorI18n::tr("priority"), PhosphorI18n::tr("activity")});
+    search->setPageKeywords(QStringLiteral("profiles"),
+                            {PhosphorI18n::tr("profile"), PhosphorI18n::tr("profiles"), PhosphorI18n::tr("preset"),
+                             PhosphorI18n::tr("switch"), PhosphorI18n::tr("import"), PhosphorI18n::tr("export"),
+                             PhosphorI18n::tr("inherit"), PhosphorI18n::tr("create"), PhosphorI18n::tr("save")});
     search->setPageKeywords(QStringLiteral("editor"),
                             {PhosphorI18n::tr("editor"), PhosphorI18n::tr("layout"), PhosphorI18n::tr("design"),
                              PhosphorI18n::tr("zones")});
@@ -650,6 +676,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Snap Assist Shown"));
     addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.snapAssist.hide"),
                PhosphorI18n::tr("Snap Assist Hidden"));
+    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.cheatsheet.show"),
+               PhosphorI18n::tr("Shortcut Cheatsheet Shown"));
+    addSetting(search, QStringLiteral("animations-overlays"), QStringLiteral("popup.cheatsheet.hide"),
+               PhosphorI18n::tr("Shortcut Cheatsheet Hidden"));
     // Desktop page.
     addSetting(search, QStringLiteral("animations-desktops"), QStringLiteral("desktop.switch"),
                PhosphorI18n::tr("Desktop Switched"));
@@ -713,6 +743,12 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Snap Out of Zone"));
     addSetting(search, QStringLiteral("animations-editor"), QStringLiteral("editor.snapResize"),
                PhosphorI18n::tr("Snap Resize (Drag Preview)"));
+
+    addSection(search, QStringLiteral("profiles"), QStringLiteral("saveCurrent"),
+               PhosphorI18n::tr("Save current settings"));
+    addSection(search, QStringLiteral("profiles"), QStringLiteral("importProfile"),
+               PhosphorI18n::tr("Import a profile"));
+    addSection(search, QStringLiteral("profiles"), QStringLiteral("profilesList"), PhosphorI18n::tr("Profiles"));
 }
 
 } // namespace PlasmaZones

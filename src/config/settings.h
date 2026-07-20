@@ -419,6 +419,9 @@ public:
         QString openEditorShortcut READ openEditorShortcut WRITE setOpenEditorShortcut NOTIFY openEditorShortcutChanged)
     Q_PROPERTY(QString openSettingsShortcut READ openSettingsShortcut WRITE setOpenSettingsShortcut NOTIFY
                    openSettingsShortcutChanged)
+    Q_PROPERTY(QString toggleCheatsheetShortcut READ toggleCheatsheetShortcut WRITE setToggleCheatsheetShortcut NOTIFY
+                   toggleCheatsheetShortcutChanged)
+    Q_PROPERTY(bool cheatsheetEnabled READ cheatsheetEnabled WRITE setCheatsheetEnabled NOTIFY cheatsheetEnabledChanged)
     Q_PROPERTY(QString previousLayoutShortcut READ previousLayoutShortcut WRITE setPreviousLayoutShortcut NOTIFY
                    previousLayoutShortcutChanged)
     Q_PROPERTY(
@@ -995,6 +998,13 @@ public:
     PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const override;
     void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) override;
 
+    /// The committed-baseline shader tree. Reads the ShaderProfileTree key from
+    /// the same committed baseline `isKeyModified()` uses, and applies the
+    /// identical supported-path prune as `shaderProfileTree()` so a
+    /// per-surface Discard/dirty check compares live-vs-committed on equal
+    /// footing. See `committedDecorationProfileTree()` for the sibling rationale.
+    PhosphorAnimationShaders::ShaderProfileTree committedShaderProfileTree() const override;
+
     /// String facade for the shaderProfileTreeJson Q_PROPERTY. Routes
     /// through the existing tree accessors so persistence is identical;
     /// the Q_PROPERTY entry is purely so the meta-object dirty-tracking
@@ -1010,6 +1020,16 @@ public:
     void setDecorationProfileTree(const PhosphorSurfaceShaders::DecorationProfileTree& tree) override;
     QString decorationProfileTreeJson() const override;
     void setDecorationProfileTreeJson(const QString& json) override;
+
+    /// The committed-baseline decoration tree — the last-persisted value that
+    /// per-page Discard reverts to and the per-surface decoration dirty check
+    /// compares against. Reads the DecorationProfileTree key from the same
+    /// committed baseline `isKeyModified()` uses, with the identical
+    /// empty→ConfigDefaults fallback as `decorationProfileTree()`, so a
+    /// subtree-scoped Discard sees baseline-vs-current on equal footing. Not on
+    /// ISettings: the committed baseline is a Settings-internal dirty-tracking
+    /// concept, and only SettingsController's per-page kebab consumes it.
+    PhosphorSurfaceShaders::DecorationProfileTree committedDecorationProfileTree() const;
 
     // Decorations.Performance — PhosphorConfig::Store-backed.
     bool decorationAnimateFocusedOnly() const override;
@@ -1042,6 +1062,16 @@ public:
     void setAutotileOverflowBehaviorInt(int behavior);
     QStringList lockedScreens() const override;
     void setLockedScreens(const QStringList& screens) override;
+
+private:
+    /// The write half of setLockedScreens, without the pre-write disk refresh.
+    /// The composite read-modify-write path (setContextLocked) refreshes once
+    /// before its read and must NOT refresh again between read and write, or a
+    /// concurrent writer's commit lands in the store only to be overwritten by
+    /// the already-merged list.
+    void writeLockedScreens(const QStringList& screens);
+
+public:
     bool isScreenLocked(const QString& screenIdOrName) const override;
     void setScreenLocked(const QString& screenIdOrName, bool locked) override;
     bool isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const override;
@@ -1114,6 +1144,10 @@ public:
     void setOpenEditorShortcut(const QString& shortcut);
     QString openSettingsShortcut() const;
     void setOpenSettingsShortcut(const QString& shortcut);
+    QString toggleCheatsheetShortcut() const;
+    void setToggleCheatsheetShortcut(const QString& shortcut);
+    bool cheatsheetEnabled() const override;
+    void setCheatsheetEnabled(bool enabled) override;
     QString previousLayoutShortcut() const;
     void setPreviousLayoutShortcut(const QString& shortcut);
     QString nextLayoutShortcut() const;
@@ -1306,6 +1340,35 @@ public:
     /// discardKeys().
     void resetKeys(const ConfigKeyList& keys);
 
+    // ── Settings-profiles support (settings app) ────────────────────────────
+    /// The complete current config as one JSON blob — every schema-declared
+    /// key at its current in-memory value (schema default for never-written
+    /// keys), stamped with `_version`. Thin pass-through to Store::exportToJson.
+    /// Used by the profiles feature to diff the live config against a parent
+    /// profile's resolved blob when saving "current settings as a profile".
+    QJsonObject exportConfigToJson() const;
+
+    /// The schema-defaults config as one JSON blob — every declared key at its
+    /// schema default, stamped with `_version`. This is the root of a profile
+    /// inheritance chain (a profile with no parent stores its delta against
+    /// this). Independent of the current in-memory values.
+    QJsonObject defaultConfigJson() const;
+
+    /// Stage a fully-resolved config blob into memory WITHOUT committing to
+    /// disk. Writes every declared key present in @p fullConfigBlob through the
+    /// store (no sync/commit), then re-emits the Q_PROPERTY NOTIFY signals for
+    /// whatever actually changed — exactly the load() machinery, minus the
+    /// reparse/commit/captureBaseline. The store therefore diverges from the
+    /// committed baseline, so isKeyModified() reports the changed keys as
+    /// unsaved and the settings app's Save footer lights up; the user's Save
+    /// commits them normally. Used to activate a settings profile.
+    ///
+    /// SCOPE: Q_PROPERTY-backed keys only (per Phase 1). Per-screen maps,
+    /// virtual-screen configs, and per-mode disable lists are NOT staged here.
+    /// @return false when the store refused the blob (schema version mismatch)
+    /// — in that case nothing was staged and no signal fired.
+    bool applyConfigOverlayStaged(const QJsonObject& fullConfigBlob);
+
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     /// Derives the four zone-color keys from the current application palette.
@@ -1444,6 +1507,14 @@ private:
     static void deletePerScreenGroups(PhosphorConfig::IBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
+
+    /// Reparse the backend from disk IF it holds no pending writes.
+    /// Called by every composite-value setter (animation Profile blob,
+    /// shader/decoration profile trees, autotile per-algorithm map,
+    /// snapping and tiling trigger lists including the zoneSpan pair)
+    /// before its stale-sensitive read; see the definition for the
+    /// cross-process coherence rationale.
+    void refreshCleanBackendFromDisk();
 
     // Patch one field of the Profile JSON blob and emit the canonical
     // signal trio (per-field NOTIFY + animationProfileChanged + settingsChanged).

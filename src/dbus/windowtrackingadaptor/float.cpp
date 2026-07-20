@@ -110,17 +110,16 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     // value — the old `floating == wasFloating` gate then suppressed every
     // autotile float broadcast, leaving subscribers (the effect's float cache,
     // which the autotile FFM float-pause depends on) permanently stale.
-    // Tracking the last-broadcast value detects the real edge regardless of when
-    // the engine updated its bit, and still honours "only emit when changed".
-    if (m_broadcastFloating.value(windowId, false) == floating) {
+    // The gate itself lives in relayWindowFloatingChanged (the single owner of
+    // the last-broadcast contract); the unified state change and placement
+    // capture below ride the same edge.
+    // Use the window's tracked screen if available, otherwise fall back to last
+    // active screen.
+    const QString screen = m_service->screenForWindow(windowId, m_lastActiveScreenId);
+    if (!relayWindowFloatingChanged(windowId, floating, screen)) {
         return;
     }
-    m_broadcastFloating[windowId] = floating;
     qCInfo(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
-    // Notify effect so it can update its local cache (use full windowId for per-instance tracking).
-    // Use the window's tracked screen if available, otherwise fall back to last active screen.
-    QString screen = m_service->screenForWindow(windowId, m_lastActiveScreenId);
-    Q_EMIT windowFloatingChanged(windowId, floating, screen);
 
     // Emit unified state change
     Q_EMIT windowStateChanged(windowId,
@@ -165,6 +164,20 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
 // windowFloatingClearedForSnap, which this adaptor relays to its own
 // windowFloatingChanged D-Bus signal in the constructor wiring.
 
+bool WindowTrackingAdaptor::relayWindowFloatingChanged(const QString& windowId, bool floating, const QString& screenId)
+{
+    // The single owner of the last-broadcast dedup contract — see the header
+    // doc: every emission channel must keep m_broadcastFloating equal to what
+    // subscribers last heard, or the gate turns from a dedup into a
+    // suppressor of genuine changes. setWindowFloating delegates here too.
+    if (m_broadcastFloating.value(windowId, false) == floating) {
+        return false;
+    }
+    m_broadcastFloating[windowId] = floating;
+    Q_EMIT windowFloatingChanged(windowId, floating, screenId);
+    return true;
+}
+
 void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating)
 {
     if (!validateWindowId(windowId, QStringLiteral("set float for screen"))) {
@@ -187,21 +200,52 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         source = m_autotileEngine.data();
     }
 
-    if (dest && floating && !dest->isWindowTracked(windowId)) {
-        // Build the HandoffContext from whichever engine actually claims the
-        // window — fromEngineId stays empty when neither side tracks it (e.g.
-        // a brand-new floating dialog), so receive-side reasoning that depends
-        // on the source mode correctly degrades.
-        PhosphorEngine::IPlacementEngine::HandoffContext ctx;
-        ctx.windowId = windowId;
-        ctx.toScreenId = screenId;
-        ctx.wasFloating = true;
-        if (source && source->isWindowTracked(windowId)) {
-            ctx.fromEngineId = source->engineId();
-            ctx.sourceGeometry = m_frameGeometry.value(windowId);
+    // Float: adopt an untracked window unconditionally (a brand-new floating
+    // dialog is a valid target — fromEngineId stays empty when neither side
+    // tracks it, so receive-side reasoning that depends on the source mode
+    // correctly degrades).
+    // Unfloat of a window whose float bit lives in the OTHER engine: without
+    // handling, the unfloat dead-ends — setWindowFloat below targets the
+    // destination engine, which doesn't track the window and early-returns,
+    // while the source engine's float bit stays set with no broadcast, so
+    // the window reads floating through its own context's mode lens forever.
+    // The two destinations need DIFFERENT handling:
+    //   - Autotile dest: adopt via the handoff (release source, receive with
+    //     wasFloating=false tiles the arrival and announces it on the
+    //     passive sync channel); the trailing relay dedups against that.
+    //   - Snap dest: NO adoption. Snap's handoffReceive floats an arrival
+    //     with no sourceZoneIds unconditionally (ignoring wasFloating) and
+    //     emits floating=true, and the setWindowFloat(false) below fails
+    //     open when no rule/pre-float zone resolves ("keeping floating") —
+    //     together that strands the snap store floating against a false
+    //     broadcast. Instead just release the source's bit and broadcast
+    //     the unfloat; the setWindowFloat below still gives snap its
+    //     rule/pre-float re-snap chance, and a window it cannot re-snap
+    //     stays a free (unmanaged) window, which is what unfloating a
+    //     window snap never tracked means.
+    bool recaptureAfterFloatWrite = false;
+    if (dest && !dest->isWindowTracked(windowId)) {
+        const bool sourceTracked = source && source->isWindowTracked(windowId);
+        const bool destIsAutotile = m_autotileEngine && dest == m_autotileEngine.data();
+        if (floating || (sourceTracked && destIsAutotile)) {
+            PhosphorEngine::IPlacementEngine::HandoffContext ctx;
+            ctx.windowId = windowId;
+            ctx.toScreenId = screenId;
+            ctx.wasFloating = floating;
+            if (sourceTracked) {
+                ctx.fromEngineId = source->engineId();
+                ctx.sourceGeometry = m_frameGeometry.value(windowId);
+                source->handoffRelease(windowId);
+            }
+            dest->handoffReceive(ctx);
+            if (!floating) {
+                relayWindowFloatingChanged(windowId, false, screenId);
+            }
+        } else if (sourceTracked) {
             source->handoffRelease(windowId);
+            relayWindowFloatingChanged(windowId, false, screenId);
+            recaptureAfterFloatWrite = true;
         }
-        dest->handoffReceive(ctx);
     }
 
     if (dest) {
@@ -211,6 +255,22 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         // that drifted to another monitor while floating non-deterministically
         // teleports it back to its source-monitor zone (Discussion #724).
         dest->setWindowFloat(windowId, floating, screenId);
+    }
+    if (recaptureAfterFloatWrite) {
+        // Snap-dest unfloat: re-anchor the live placement record after the
+        // float write. When unfloatToZone above re-snapped the window this is
+        // an idempotent repeat of the commitSnap-wired capture, kept so the
+        // record refresh doesn't silently depend on that wiring's ordering.
+        // When unfloatToZone FAILED OPEN (no rule/pre-float zone) the window
+        // is tracked by NEITHER engine, so this capture deliberately writes
+        // nothing and the persisted record keeps its floating-at-position
+        // slot from the source engine's float. That is the accepted outcome:
+        // a later restore of "floating at its position" and of "free window
+        // at its position" land the window identically, and the only writer
+        // that could record the free state has no engine placement to read.
+        // Live subscribers are unaffected either way — the broadcast above
+        // already told them not-floating.
+        captureWindowPlacement(windowId);
     }
 }
 

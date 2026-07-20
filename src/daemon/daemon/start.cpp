@@ -638,6 +638,11 @@ void Daemon::connectShortcutSignals()
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
             return;
         }
+        // At most one Escape-consuming modal at a time — the cheatsheet's
+        // dedicated Escape grab would key-conflict with the picker's shared
+        // cancel-overlay grab (KGlobalAccel routes one action per key).
+        // Dismissing first releases the cheatsheet grab synchronously.
+        m_overlayService->hideCheatsheet();
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         updateLayoutFilterForScreen(screenId);
         m_overlayService->showLayoutPicker(screenId);
@@ -680,10 +685,63 @@ void Daemon::connectShortcutSignals()
     connect(m_overlayService.get(), &IOverlayService::snapAssistShown, this,
             [this](const QString&, const PhosphorProtocol::EmptyZoneList&,
                    const PhosphorProtocol::SnapAssistCandidateList&) {
+                // Same one-Escape-consumer contract as the picker path: the
+                // cheatsheet's dedicated grab must be gone before the shared
+                // cancel-overlay grab registers, or Escape stays routed to a
+                // dismissed sheet.
+                m_overlayService->hideCheatsheet();
                 if (m_windowDragAdaptor) {
                     m_windowDragAdaptor->ensureCancelOverlayShortcutRegistered();
                 }
             });
+
+    // Shortcut cheatsheet: toggle on the cursor screen; Escape grab is
+    // bound inside toggleCheatsheet (only on a successful show) and
+    // released on ANY dismissal path via cheatsheetDismissed.
+    connect(m_shortcutManager.get(), &ShortcutManager::toggleCheatsheetRequested, this, [this]() {
+        toggleCheatsheet();
+    });
+    connect(m_overlayService.get(), &OverlayService::cheatsheetDismissed, this, [this]() {
+        onCheatsheetDismissed();
+    });
+    // Live refilter while the sheet is open: catalog changes (rebinds,
+    // external System Settings edits), per-screen mode switches, and the
+    // global autotile feature gate all re-push into the visible slot.
+    // Each refresh re-resolves the mode for the sheet's BOUND screen, so
+    // over-triggering is safe and cheap (no-op when hidden).
+    connect(m_shortcutManager.get(), &ShortcutManager::cheatsheetModelChanged, this, [this]() {
+        refreshCheatsheetIfVisible();
+    });
+    if (m_unifiedLayoutController) {
+        // Mode authority is ScreenModeRouter + AssignmentEntry::Mode, and the
+        // router is a plain query class with no change signal. A mode switch
+        // always lands as an applied layout (the toggle-autotile handler routes
+        // through applyLayoutById), so these two are the mode-change edge the
+        // sheet can observe. refreshCheatsheetIfVisible re-resolves the mode for
+        // the sheet's BOUND screen, so an apply on some other screen is a
+        // harmless no-op re-push.
+        connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this,
+                [this](PhosphorZones::Layout*) {
+                    refreshCheatsheetIfVisible();
+                });
+        connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this,
+                [this](const QString&, int) {
+                    refreshCheatsheetIfVisible();
+                });
+    }
+    if (m_settings) {
+        connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
+            refreshCheatsheetIfVisible();
+        });
+        // Turning the feature off closes an open sheet. The show path gates
+        // on cheatsheetEnabled(), so without this a sheet opened before the
+        // toggle would outlive the setting until a manual dismiss.
+        connect(m_settings.get(), &Settings::cheatsheetEnabledChanged, this, [this]() {
+            if (m_settings && !m_settings->cheatsheetEnabled() && m_overlayService) {
+                m_overlayService->hideCheatsheet();
+            }
+        });
+    }
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
         // Release the shared Escape grab only when no other consumer (snap
         // assist) still needs it — releaseCancelOverlayShortcutIfIdle() is the

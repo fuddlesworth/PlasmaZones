@@ -1,6 +1,61 @@
 {
     "releases": [
         {
+            "version": "3.3.0",
+            "date": "2026-07-20",
+            "highlights": [
+                "New: a shortcut cheatsheet overlay that shows your global shortcuts with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ and it only lists the shortcuts that apply in the current tiling mode (#810)"
+            ]
+        },
+        {
+            "version": "3.2.6",
+            "date": "2026-07-20",
+            "highlights": [
+                "Fixed: on autotiled windows, KDE's magic lamp minimize animation could stall partway with black streaks, and the restore animation could be cut off. PlasmaZones now waits for the compositor's animation to finish before it repositions the window (#819)",
+                "Fixed: with a PlasmaZones pack assigned to minimize or maximize, KDE's own effect for that event played at the same time. The stock effect now stands down while your pack owns the event (#819)",
+                "Fixed: with hidden title bars and a desktop-switch animation, the outgoing desktop's tiled windows showed their title bars for the whole animation (#813)",
+                "Fixed: clearing a keyboard shortcut meant assigning it a new key did nothing until the daemon restarted (#812)",
+                "Fixed: floating a tiled window recorded its tile as its free position, so it floated back onto its own tile and its real free position was lost (#818)",
+                "Fixed: unfloating a window that was floated before a daemon restart did nothing, and a window could come back floating on its own after toggling between tiling and snapping (#818)",
+                "Fixed: a floating window on a screen that switched between a snapping desktop and a tiling desktop could quietly stop counting as floating, so rules matching floating windows stopped applying (#814)",
+                "Support reports now capture your global shortcut bindings as KDE has them, with home paths redacted (#812)"
+            ]
+        },
+        {
+            "version": "3.2.5",
+            "date": "2026-07-19",
+            "highlights": [
+                "Fixed: switching between virtual desktops that each have their own tiled windows could pull a window into the wrong desktop's tiling, leaving ghost tiles behind and windows overlapping. Each desktop now keeps its own layout intact (#806)"
+            ]
+        },
+        {
+            "version": "3.2.4",
+            "date": "2026-07-18",
+            "highlights": [
+                "Fixed: pressing a move-window shortcut again while the previous move was still animating made the window visibly jump back to where the sequence started. Redirecting a move mid-flight now continues smoothly from the window's current position (#803)"
+            ]
+        },
+        {
+            "version": "3.2.3",
+            "date": "2026-07-18",
+            "highlights": [
+                "Fixed: seven animation packs (Fade, Fade Color, Broken Glass, Voronoi Shatter, Ink Splash, Inkwell Drop, and Desktop Phosphor) finished their visible motion early or started it late, so part of the transition looked frozen. Each pack now animates across its whole duration (#800)",
+                "Fixed: a few plural strings in the settings app, such as the zone count in the layout picker, showed a literal placeholder instead of the number. The counts substitute correctly again (#801)"
+            ]
+        },
+        {
+            "version": "3.2.2",
+            "date": "2026-07-18",
+            "highlights": [
+                "Fixed: window animations ignored the global Duration and Curve settings since 3.2.0 and always played at a fixed 200 ms. They follow your global settings again, and a per-event override still wins where you set one (#797)",
+                "Fixed: moving a window down or up to another monitor could jump to a monitor beside the current one when your monitors have different heights. The move now only targets a monitor that actually lines up in that direction (#797)",
+                "Fixed: resetting or discarding a single Decoration or Animations settings page could also revert its sibling pages. Each page now only touches its own settings (#794)",
+                "Fixed: resetting the Decoration OSDs or Popups page to defaults removed the built-in card border and shadow instead of restoring them. The built-in look now sits underneath your edits, so reset brings it back, and setups that had already lost it heal on their own (#798)",
+                "Fixed: window decorations could render upside down on the OpenGL backend when two or more decoration packs were combined or while a window was appearing or disappearing (#798)",
+                "Support reports now include your rules, quick layouts, layout settings, and settings profiles, with home paths redacted (#797)"
+            ]
+        },
+        {
             "version": "3.2.1",
             "date": "2026-07-17",
             "highlights": [

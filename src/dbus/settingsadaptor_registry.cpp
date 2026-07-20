@@ -410,6 +410,11 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("snapAssistTriggers")] = QStringLiteral("stringlist");
 
+    // Shortcut cheatsheet overlay. The toggle shortcut string registers in
+    // the concrete-Settings global-shortcut block below, alongside its
+    // openEditor/quickLayout siblings.
+    REGISTER_BOOL_SETTING("cheatsheetEnabled", cheatsheetEnabled, setCheatsheetEnabled)
+
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
 
@@ -556,7 +561,13 @@ void SettingsAdaptor::initializeRegistry()
     if (m_profileRegistry) {
         auto* registry = m_profileRegistry;
         m_getters[QString(PhosphorProtocol::Service::SettingProperty::MotionProfileTree)] = [registry]() {
-            const QHash<QString, PhosphorAnimation::Profile> profiles = registry->snapshot();
+            // Seed-owned family defaults must NOT ship: every non-Global entry
+            // below becomes a tree OVERRIDE, and an override's engaged fields
+            // beat the effect's animator baseline in overlayChainOnto — a
+            // `window` seed would pin all window legs to its duration/curve and
+            // turn the global animation settings into a no-op (#795). Only
+            // user-authored per-event profiles may outrank the baseline.
+            const QHash<QString, PhosphorAnimation::Profile> profiles = registry->snapshotExcludingLowPrecedence();
             PhosphorAnimation::ProfileTree tree;
             for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
                 if (it.key() == PhosphorAnimation::ProfilePaths::Global) {
@@ -751,6 +762,7 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("quickLayout7Shortcut", quickLayout7Shortcut, setQuickLayout7Shortcut)
         REGISTER_CONCRETE_STRING("quickLayout8Shortcut", quickLayout8Shortcut, setQuickLayout8Shortcut)
         REGISTER_CONCRETE_STRING("quickLayout9Shortcut", quickLayout9Shortcut, setQuickLayout9Shortcut)
+        REGISTER_CONCRETE_STRING("toggleCheatsheetShortcut", toggleCheatsheetShortcut, setToggleCheatsheetShortcut)
 
         // Navigation shortcuts
         REGISTER_CONCRETE_STRING("moveWindowLeftShortcut", moveWindowLeftShortcut, setMoveWindowLeftShortcut)

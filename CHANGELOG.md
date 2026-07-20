@@ -5,6 +5,65 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-07-20
+
+### Added
+
+- **Shortcut cheatsheet overlay**: a new overlay that lists every PlasmaZones global shortcut with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ (rebindable in System Settings) and dismiss it with Escape, a backdrop click, or the shortcut again. The sheet is mode aware. Shortcuts that do nothing in the current tiling mode are hidden, and it updates live when you switch modes or rebind a key. Shortcuts you have unbound stay listed as unassigned so you can discover them ([#810](https://github.com/fuddlesworth/PlasmaZones/pull/810)).
+
+## [3.2.6] - 2026-07-20
+
+### Added
+
+- **Support reports include your global shortcut bindings**: shortcuts are registered with KDE's global shortcut service, so the binding that actually gets grabbed lives outside PlasmaZones' own configuration and the two can disagree. The report archive now captures that state, with home paths redacted ([#812](https://github.com/fuddlesworth/PlasmaZones/pull/812)).
+- **A note when a rule assigns a minimize or maximize animation**: the rule editor now explains that KDE's own minimize or maximize effect keeps running alongside your pack unless you turn it off in System Settings ([#819](https://github.com/fuddlesworth/PlasmaZones/pull/819)).
+
+### Fixed
+
+- **Minimize and restore animations no longer freeze or smear**: on autotiled windows, KDE's magic lamp animation could stall partway with black streaks across the window, and the restore animation could be cut off partway through. PlasmaZones now waits for the compositor's animation to finish before it repositions the window ([#819](https://github.com/fuddlesworth/PlasmaZones/pull/819)).
+- **PlasmaZones animation packs no longer play on top of KDE's**: with a pack assigned to minimize or maximize, KDE's stock effect for that event ran at the same time. The stock effect is now stood down while your pack owns the event, and restored when it no longer does ([#819](https://github.com/fuddlesworth/PlasmaZones/pull/819)).
+- **Title bars no longer flash during a desktop switch**: with hidden title bars and a desktop-switch animation enabled, the outgoing desktop's tiled windows showed their title bars for the whole animation. Windows on other desktops are now left alone when a desktop retiles ([#813](https://github.com/fuddlesworth/PlasmaZones/pull/813)).
+- **A cleared shortcut can be assigned again**: clearing a keyboard shortcut dropped it from the daemon's registry, so assigning it a new key did nothing until the daemon restarted ([#812](https://github.com/fuddlesworth/PlasmaZones/pull/812)).
+- **Floating windows stay floating across desktop switches**: a floating window on a screen that switched between a snapping desktop and a tiling desktop could quietly stop counting as floating, so rules that match floating windows stopped applying to it ([#814](https://github.com/fuddlesworth/PlasmaZones/pull/814)).
+- **Floating a tiled window returns it to its real position**: floating a tiled window recorded the tile it was sitting in as its free position, so it floated back onto its own tile and its genuine free position was lost ([#818](https://github.com/fuddlesworth/PlasmaZones/pull/818)).
+- **Unfloating works after a restart**: a window floated before the daemon restarted had nowhere to go back to, so unfloating it did nothing. The saved placement record is now used as the fallback ([#818](https://github.com/fuddlesworth/PlasmaZones/pull/818)).
+- **Windows no longer come back floating on their own**: unfloating a window and then toggling between tiling and snapping could bring it back floating, because a window the snapping engine never tracked was recorded as floating ([#818](https://github.com/fuddlesworth/PlasmaZones/pull/818)).
+- **Less compositor work while windows move**: every geometry change re-evaluated your rules and refreshed the window's decoration before the usual delay, which added hundreds of rule evaluations per second on the compositor thread during animations. Both now run once per batch ([#819](https://github.com/fuddlesworth/PlasmaZones/pull/819)).
+
+## [3.2.5] - 2026-07-19
+
+### Fixed
+
+- **Tiled windows no longer scramble when switching virtual desktops**: switching between desktops that each have their own tiled windows could pull a window into the wrong desktop's tiling, leaving ghost tiles on one desktop and overlapping or floating windows on the other. The tiling state now switches to the new desktop before any window focus is processed, so each desktop keeps its own layout intact ([#806](https://github.com/fuddlesworth/PlasmaZones/pull/806)).
+
+## [3.2.4] - 2026-07-18
+
+### Fixed
+
+- **Rapid move shortcuts no longer jump back**: pressing a move-window shortcut again while the previous move was still animating made the window visibly jump back to where the sequence started and replay the animation from there. Redirecting a move mid-flight now continues smoothly from the window's current position ([#803](https://github.com/fuddlesworth/PlasmaZones/pull/803)).
+
+## [3.2.3] - 2026-07-18
+
+### Fixed
+
+- **Animations no longer freeze partway through**: seven animation packs (Fade, Fade Color, Broken Glass, Voronoi Shatter, Ink Splash, Inkwell Drop, and Desktop Phosphor) finished their visible motion early or started it late, so part of the transition looked frozen. Each pack now animates across its whole duration, in both directions ([#800](https://github.com/fuddlesworth/PlasmaZones/pull/800)).
+- **Counts show up in plural text again**: a few plural strings in the settings app, such as the zone count in the layout picker, displayed a literal placeholder instead of the number. The counts substitute correctly again ([#801](https://github.com/fuddlesworth/PlasmaZones/pull/801)).
+
+## [3.2.2] - 2026-07-18
+
+### Added
+
+- **Fuller support reports**: the support report archive now includes your rules, quick layouts, layout settings, and settings profiles, with home paths redacted, and the daemon's report gains a Rules section. Earlier reports were missing these files, which made several bug reports slow to diagnose ([#797](https://github.com/fuddlesworth/PlasmaZones/pull/797)).
+
+### Fixed
+
+- **Global animation settings work again**: since 3.2.0, window animations ignored the global Duration and Curve settings and always played at a fixed 200 ms. Windows follow the global settings again, and a per-event override still wins where you set one ([#797](https://github.com/fuddlesworth/PlasmaZones/pull/797)).
+- **Cross-monitor moves no longer hop sideways**: moving a window down or up to another monitor could jump to a monitor beside the current one when your monitors have different heights. The move now only targets a monitor that actually lines up in the direction of the move ([#797](https://github.com/fuddlesworth/PlasmaZones/pull/797)).
+- **Settings survive concurrent writers**: when the settings app and the daemon wrote the configuration at the same time, a stale in-memory copy could resurrect old values over a just-saved change, and an external change notification could silently drop unsaved edits. Both paths now stay coherent ([#797](https://github.com/fuddlesworth/PlasmaZones/pull/797)).
+- **Per-page Reset and Discard stay on their page**: on the Decoration and Animations settings families, resetting or discarding one page could also revert its sibling pages. Each page now only touches its own settings ([#794](https://github.com/fuddlesworth/PlasmaZones/pull/794)).
+- **Resetting OSD and Popup decorations restores the built-in look**: resetting the Decoration → OSDs or Decoration → Popups page removed the built-in card border and shadow instead of restoring them. The built-in chrome is now a default layer underneath your edits, so reset brings it back, and setups that had already lost it heal on their own ([#798](https://github.com/fuddlesworth/PlasmaZones/pull/798)).
+- **Upside-down decorations on OpenGL**: window decorations could render flipped vertically on the OpenGL backend when two or more decoration packs were combined, and during show or hide transitions. The Vulkan backend was unaffected ([#798](https://github.com/fuddlesworth/PlasmaZones/pull/798)).
+
 ## [3.2.1] - 2026-07-17
 
 ### Added

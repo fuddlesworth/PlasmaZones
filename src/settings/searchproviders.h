@@ -54,4 +54,27 @@ private:
     SettingsController* m_controller = nullptr;
 };
 
+/**
+ * @brief ISearchProvider feeding saved profiles into the global search index.
+ *
+ * Snapshots `ProfileStore::availableProfiles()` (name + what it inherits from);
+ * results navigate to the Profiles page and reveal the individual row, which
+ * registers a "profile:<id>" anchor. Re-snapshot is driven by the store's
+ * `profilesChanged` signal wired to SearchController::invalidate in main.cpp,
+ * so a rename, import, or delete is reflected without a restart.
+ */
+class ProfilesSearchProvider : public PhosphorControl::ISearchProvider
+{
+public:
+    explicit ProfilesSearchProvider(SettingsController* controller)
+        : m_controller(controller)
+    {
+    }
+
+    QVector<PhosphorControl::SearchEntry> searchEntries() const override;
+
+private:
+    SettingsController* m_controller = nullptr;
+};
+
 } // namespace PlasmaZones

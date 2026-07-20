@@ -5,7 +5,6 @@
 #include "helpers.h"
 #include "macros.h"
 #include "../overlayservice.h"
-#include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
 #include <PhosphorRules/ExclusionRules.h>
@@ -41,9 +40,6 @@ namespace PlasmaZones {
 
 void Daemon::initializeAutotile()
 {
-    // Initialize mode tracker (thin delegate to LayoutManager's per-context PhosphorZones::AssignmentEntry)
-    m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), m_layoutManager.get(), m_screenManager.get(), this);
-
     // Connect autotile engine signals
     if (m_autotileEngine) {
         // Autotile engine signals → OSD (use display name, not algorithm ID)
@@ -62,8 +58,8 @@ void Daemon::initializeAutotile()
                     // Also gate on isAnyScreenAutotile() — loadState() may emit even
                     // when no screen is in autotile mode, and a runtime algorithm
                     // change is irrelevant in that case.
-                    if (m_running && m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
-                        && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
+                    if (m_running && isAnyScreenAutotile() && m_settings && m_settings->showOsdOnLayoutSwitch()
+                        && m_overlayService) {
                         auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algorithmId) : nullptr;
                         QString displayName = algo ? algo->name() : algorithmId;
                         QString screenId;
@@ -140,7 +136,9 @@ void Daemon::initializeAutotile()
                             // last left snapping. No parallel saved-float set. Float state is set
                             // immediately; geometry restore is deferred to the batched resnap
                             // signal to avoid individual D-Bus signals queuing behind the resnap.
-                            const auto rec = wts->placementStore().peek(windowId, wts->currentAppIdFor(windowId));
+                            // Exact record only: this is a LIVE mid-session window (uuids stable),
+                            // so a same-app sibling's record must not float/zone-restore it.
+                            const auto rec = wts->placementStore().peekExact(windowId);
                             const PhosphorEngine::EngineSlot snapSlot = rec
                                 ? rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId())
                                 : PhosphorEngine::EngineSlot{};
@@ -251,11 +249,6 @@ void Daemon::initializeAutotile()
             if (why != DisabledReason::NotDisabled) {
                 showContextDisabledOsd(screenId, desktop, activity, why);
                 return;
-            }
-
-            // Set context so ModeTracker reads from the correct per-desktop entry
-            if (m_modeTracker) {
-                m_modeTracker->setContext(screenId, desktop, activity);
             }
 
             // Set the screen context so applyEntry knows which screen to assign
@@ -1061,11 +1054,24 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     for (const QString& windowId : windowIds) {
-        // Update WTS state directly — don't call setWindowFloating()
-        // on the adaptor since that emits a D-Bus windowFloatingChanged
-        // signal which the effect doesn't need (it already processed
-        // the float from the windowsTileRequested batch).
+        // Update WTS state directly (not adaptor setWindowFloating: its extra
+        // windowStateChanged/placement-capture side emissions are wrong for a
+        // batch the effect already applied), but DO route the broadcast
+        // bookkeeping through the relay chokepoint. Skipping it left
+        // m_broadcastFloating at not-floating for a batch-floated window, so
+        // the next genuine unfloat broadcast hit false==false in the gate and
+        // was suppressed — stranding the effect's float cache exactly like
+        // the silent flips this contract exists to prevent. The relay's
+        // windowFloatingChanged emission is redundant for the effect: its
+        // float-cache write no-ops (already floating from the
+        // windowsTileRequested batch) and the rest of its handler is
+        // convergent (coalesced rule reconcile re-resolving to the same
+        // state, idempotent snap-tracking clears, a raise of the already-
+        // floated window at most). Overflow floats are rare, so the spare
+        // signal is the price of keeping the last-broadcast contract
+        // single-owner and universal.
         wts->setWindowFloating(windowId, true);
+        m_windowTrackingAdaptor->relayWindowFloatingChanged(windowId, true, screenId);
         m_autotileEngine->markModeSpecificFloated(windowId);
         // Same cross-VS preservation logic as the single-window handler
         const QString preFloatScreen = wts->preFloatScreen(windowId);

@@ -6,9 +6,11 @@
 #include <PhosphorConfig/Store.h>
 
 #include <QColor>
+#include <QDateTime>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimeZone>
 
 #include <limits>
 #include <memory>
@@ -33,6 +35,13 @@ private:
         s.groups[QStringLiteral("Appearance")] = {
             {QStringLiteral("Accent"), QColor(Qt::blue), QMetaType::QColor},
             {QStringLiteral("FontSize"), 12.0, QMetaType::Double},
+            {QStringLiteral("Tags"), QVariant(QStringList{QStringLiteral("a"), QStringLiteral("b")}),
+             QMetaType::QStringList},
+            // An exotic type outside the explicit dispatch cases: both
+            // writeVariantTo and the two JSON serializers stringify it, so this
+            // key pins the fallthrough branches against drifting apart.
+            {QStringLiteral("Stamp"), QDateTime::fromSecsSinceEpoch(1752600000, QTimeZone::utc()),
+             QMetaType::QDateTime},
         };
         return s;
     }
@@ -103,6 +112,36 @@ private Q_SLOTS:
         QCOMPARE(store.read<bool>(QStringLiteral("Window"), QStringLiteral("Maximized")), false);
     }
 
+    void resetGroupEmitsOncePerStoredKeyOnly()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+
+        // Three of the four declared Window keys carry a stored value; Title
+        // stays absent.
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
+        store.write(QStringLiteral("Window"), QStringLiteral("Height"), 768);
+        store.write(QStringLiteral("Window"), QStringLiteral("Maximized"), true);
+
+        QSignalSpy spy(&store, &Store::changed);
+        store.resetGroup(QStringLiteral("Window"));
+
+        // One changed() per key that was actually reset, in declaration
+        // order; the absent Title key is skipped (no default stamped, no
+        // signal). The emissions land AFTER every write (the group handle is
+        // released first), so a re-entrant slot never trips the backend's
+        // single-active-group guard.
+        QCOMPARE(spy.count(), 3);
+        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("Width"));
+        QCOMPARE(spy.at(1).at(1).toString(), QStringLiteral("Height"));
+        QCOMPARE(spy.at(2).at(1).toString(), QStringLiteral("Maximized"));
+
+        // A group with nothing stored resets nothing and stays silent.
+        spy.clear();
+        store.resetGroup(QStringLiteral("Appearance"));
+        QCOMPARE(spy.count(), 0);
+    }
+
     void exportToJsonIncludesEveryDeclaredKey()
     {
         JsonBackend backend(m_path);
@@ -119,6 +158,33 @@ private Q_SLOTS:
         QCOMPARE(window.value(QStringLiteral("Width")).toInt(), 1024);
         // Untouched keys come out as the schema default.
         QCOMPARE(window.value(QStringLiteral("Height")).toInt(), 600);
+    }
+
+    /// A fresh store's export must be VALUE-identical to the defaults
+    /// snapshot: both walk the same schema, and exportToJson's absent-key path
+    /// returns the coerced default. Any divergence — a coercion handled by one
+    /// serializer and not the other (the QStringList case history) — fails
+    /// here rather than surfacing as a phantom diff in a consumer.
+    void defaultsToJsonMatchesFreshExport()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+        QCOMPARE(store.defaultsToJson(), store.exportToJson());
+    }
+
+    /// A stored QStringList round-trips as a JSON array instead of collapsing
+    /// through the string branch.
+    void stringListRoundTripsAsArray()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+        const QStringList written{QStringLiteral("x"), QStringLiteral("y"), QStringLiteral("z")};
+        store.write(QStringLiteral("Appearance"), QStringLiteral("Tags"), written);
+        QCOMPARE(store.readVariant(QStringLiteral("Appearance"), QStringLiteral("Tags")).toStringList(), written);
+        const QJsonValue exported =
+            store.exportToJson().value(QStringLiteral("Appearance")).toObject().value(QStringLiteral("Tags"));
+        QVERIFY(exported.isArray());
+        QCOMPARE(exported.toArray().size(), 3);
     }
 
     void importFromJsonOverwritesDeclaredKeysOnly()
@@ -489,8 +555,16 @@ private Q_SLOTS:
         store.write(QStringLiteral("G"), QStringLiteral("Big"), QVariant::fromValue(big));
 
         // Stored as a string — raw readString picks up the canonical form.
-        auto g = store.backend()->group(QStringLiteral("G"));
-        QCOMPARE(g->readString(QStringLiteral("Big")), QString::number(big));
+        {
+            auto g = store.backend()->group(QStringLiteral("G"));
+            QCOMPARE(g->readString(QStringLiteral("Big")), QString::number(big));
+        }
+
+        // And the Store API round-trips it: the UInt read path must parse the
+        // string fallback back (like LongLong/ULongLong do) instead of
+        // parse-failing in readInt and silently returning the default.
+        const QVariant got = store.readVariant(QStringLiteral("G"), QStringLiteral("Big"));
+        QCOMPARE(got.toUInt(), big);
     }
 
     void read_int64RoundTripsThroughStringFallback()
