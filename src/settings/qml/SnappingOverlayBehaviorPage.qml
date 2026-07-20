@@ -116,17 +116,10 @@ SettingsFlickable {
         // ZONE SPAN
         // =================================================================
         // Shared card — also hosted on SnappingSimplePage.
-        Item {
+        SnappingZoneSpanCard {
             Layout.fillWidth: true
-            implicitHeight: zoneSpanCard.implicitHeight
-
-            SnappingZoneSpanCard {
-                id: zoneSpanCard
-
-                anchors.fill: parent
-                settingsBridge: root.settingsBridge
-                sliderPreferredWidth: root.sliderPreferredWidth
-            }
+            settingsBridge: root.settingsBridge
+            sliderPreferredWidth: root.sliderPreferredWidth
         }
 
         // =================================================================

@@ -91,29 +91,15 @@ SettingsFlickable {
         // =================================================================
         // WINDOW HANDLING (shared card — also hosted on SnappingSimplePage)
         // =================================================================
-        Item {
+        SnappingWindowHandlingCard {
             Layout.fillWidth: true
-            implicitHeight: windowHandlingCard.implicitHeight
-
-            SnappingWindowHandlingCard {
-                id: windowHandlingCard
-
-                anchors.fill: parent
-            }
         }
 
         // =================================================================
         // FOCUS (shared card — also hosted on SnappingSimplePage)
         // =================================================================
-        Item {
+        SnappingFocusCard {
             Layout.fillWidth: true
-            implicitHeight: focusCard.implicitHeight
-
-            SnappingFocusCard {
-                id: focusCard
-
-                anchors.fill: parent
-            }
         }
     }
 }

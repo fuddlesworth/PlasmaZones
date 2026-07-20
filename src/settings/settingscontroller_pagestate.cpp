@@ -270,12 +270,14 @@ void SettingsController::navigateTo(const QString& address)
 
     setActivePage(page);
 
-    // Key the anchor to the resolved leaf (mirroring setActivePage's redirect),
-    // and only when the page is valid — otherwise a bogus address would latch the
-    // anchor onto whatever page happened to be active.
+    // Key the anchor to the resolved leaf, and only when that leaf is what
+    // setActivePage actually landed on — the mode gate may have redirected a
+    // hidden target to its counterpart (or Overview), where this anchor's
+    // content does not exist; stashing it there would leave a stale pending
+    // reveal for the next visit. A bogus address is rejected the same way.
     if (!anchor.isEmpty() && app() != nullptr) {
         const QString resolved = resolveToLeaf(page);
-        if (validPageNames().contains(resolved)) {
+        if (validPageNames().contains(resolved) && m_activePage == resolved) {
             app()->setPendingAnchor(resolved, anchor);
         }
     }
@@ -591,6 +593,24 @@ bool SettingsController::isPageDirty(const QString& page) const
         return false;
     }
 
+    // Condensed SimpleOnly pages own no keys — their dirty state is the
+    // value-based union of their backing advanced pages, so a revert through
+    // either surface (this page's kebab, the backing page's kebab, or a
+    // global Discard) reads the same truth. Checked BEFORE the m_dirtyPages
+    // heuristic so a stale active-page entry cannot keep a clean simple page
+    // reporting dirty.
+    {
+        const auto& backing = simplePageBackingPages();
+        const auto backingIt = backing.constFind(page);
+        if (backingIt != backing.constEnd()) {
+            for (const QString& backingPage : *backingIt) {
+                if (isPageDirty(backingPage))
+                    return true;
+            }
+            return false;
+        }
+    }
+
     if (m_dirtyPages.contains(page))
         return true;
     // Parent / virtual-parent category: dirty if any child leaf in
@@ -622,8 +642,9 @@ bool SettingsController::pageSupportsReset(const QString& page) const
     // per-event override and reset the animation config keys; decoration surface
     // pages clear their own root subtree of the DecorationProfileTree (the
     // sets/shaders leaves the whole key).
-    return pageOwnedConfigKeys().contains(page) || isOrderingPage(page) || isShortcutsPage(page)
-        || page == QLatin1String("virtualscreens") || isAnimationPage(page) || isDecorationPage(page);
+    return pageOwnedConfigKeys().contains(page) || simplePageBackingPages().contains(page) || isOrderingPage(page)
+        || isShortcutsPage(page) || page == QLatin1String("virtualscreens") || isAnimationPage(page)
+        || isDecorationPage(page);
 }
 
 bool SettingsController::pageSupportsDiscard(const QString& page) const
@@ -660,14 +681,30 @@ void SettingsController::reconcilePagesDirty(const QSet<QString>& pages)
 
 void SettingsController::reconcilePageDirty(const QString& page)
 {
-    // Match m_dirtyPages to the value-based truth for this manifest page.
-    const bool dirty = isPageDirty(page);
-    const bool had = m_dirtyPages.contains(page);
-    if (dirty && !had) {
-        m_dirtyPages.insert(page);
-        Q_EMIT dirtyPagesChanged();
-    } else if (!dirty && had) {
-        m_dirtyPages.remove(page);
+    // Match m_dirtyPages to the value-based truth for this manifest page,
+    // then cascade to any condensed simple page backed by it: a revert on
+    // snapping-overlay-behavior must also clear a stale snapping-simple
+    // entry (the simple leaf is where setNeedsSave attributed the edit while
+    // the user was in simple mode). Batched into one NOTIFY.
+    bool changed = false;
+    const auto sync = [this, &changed](const QString& p) {
+        const bool dirty = isPageDirty(p);
+        const bool had = m_dirtyPages.contains(p);
+        if (dirty && !had) {
+            m_dirtyPages.insert(p);
+            changed = true;
+        } else if (!dirty && had) {
+            m_dirtyPages.remove(p);
+            changed = true;
+        }
+    };
+    sync(page);
+    const auto& backing = simplePageBackingPages();
+    for (auto it = backing.constBegin(); it != backing.constEnd(); ++it) {
+        if (it.value().contains(page))
+            sync(it.key());
+    }
+    if (changed) {
         Q_EMIT dirtyPagesChanged();
     }
 }
@@ -719,6 +756,19 @@ void SettingsController::resetPage(const QString& page)
                 m_settings.resetKeys(*ownedIt);
             }
             reconcilePageDirty(page);
+            return;
+        }
+    }
+
+    // Condensed SimpleOnly pages own no keys — Reset delegates to each
+    // backing advanced page in turn (each recursion reconciles itself, and
+    // reconcilePageDirty cascades back to this page).
+    {
+        const auto& backing = simplePageBackingPages();
+        const auto backingIt = backing.constFind(page);
+        if (backingIt != backing.constEnd()) {
+            for (const QString& backingPage : *backingIt)
+                resetPage(backingPage);
             return;
         }
     }
@@ -893,6 +943,19 @@ void SettingsController::discardPage(const QString& page)
         // Every owned key is back at the committed baseline, so the page is clean.
         reconcilePageDirty(page);
         return;
+    }
+
+    // Condensed SimpleOnly pages own no keys — Discard delegates to each
+    // backing advanced page (mirrors resetPage; reconcilePageDirty cascades
+    // back to this page).
+    {
+        const auto& backing = simplePageBackingPages();
+        const auto backingIt = backing.constFind(page);
+        if (backingIt != backing.constEnd()) {
+            for (const QString& backingPage : *backingIt)
+                discardPage(backingPage);
+            return;
+        }
     }
 
     // Ordering pages: drop the staged custom order so the effective order falls

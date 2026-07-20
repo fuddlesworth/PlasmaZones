@@ -263,6 +263,134 @@ private Q_SLOTS:
         QCOMPARE(leaf.value(QStringLiteral("hasDividerAfter")).toBool(), true);
         QCOMPARE(leaf.value(QStringLiteral("hasQmlSource")).toBool(), true);
     }
+
+    // ── Simple/advanced visibility surface ─────────────────────────────
+    // Registers one Always leaf, one AdvancedOnly leaf, one SimpleOnly leaf
+    // (counterpart pair), and a virtual category whose only leaf is
+    // AdvancedOnly — the fixture for the tier filter, the empty-category
+    // auto-hide, pageAllowedInCurrentMode, and firstVisibleLeafId.
+    static void buildTieredRegistry(PageRegistry& reg)
+    {
+        using PV = PageRegistry::PageVisibility;
+        auto* always = new StubPage(QStringLiteral("home"), &reg);
+        reg.registerPage(
+            {QStringLiteral("home"), {}, QStringLiteral("Home"), {}, QUrl(QStringLiteral("qrc:/Home.qml")), always});
+
+        auto* simple = new StubPage(QStringLiteral("easy"), &reg);
+        PageRegistry::Entry simpleEntry{
+            QStringLiteral("easy"), {}, QStringLiteral("Easy"), {}, QUrl(QStringLiteral("qrc:/Easy.qml")), simple};
+        simpleEntry.visibility = PV::SimpleOnly;
+        simpleEntry.counterpartId = QStringLiteral("full");
+        reg.registerPage(std::move(simpleEntry));
+
+        auto* full = new StubPage(QStringLiteral("full"), &reg);
+        PageRegistry::Entry fullEntry{
+            QStringLiteral("full"), {}, QStringLiteral("Full"), {}, QUrl(QStringLiteral("qrc:/Full.qml")), full};
+        fullEntry.visibility = PV::AdvancedOnly;
+        fullEntry.counterpartId = QStringLiteral("easy");
+        reg.registerPage(std::move(fullEntry));
+
+        auto* cat = new StubPage(QStringLiteral("cat"), &reg);
+        reg.registerPage({QStringLiteral("cat"), {}, QStringLiteral("Category"), {}, QUrl(), cat});
+        auto* deep = new StubPage(QStringLiteral("cat.deep"), &reg);
+        PageRegistry::Entry deepEntry{QStringLiteral("cat.deep"),
+                                      QStringLiteral("cat"),
+                                      QStringLiteral("Deep"),
+                                      {},
+                                      QUrl(QStringLiteral("qrc:/Deep.qml")),
+                                      deep};
+        deepEntry.visibility = PV::AdvancedOnly;
+        reg.registerPage(std::move(deepEntry));
+    }
+
+    void tierFilterFollowsShowAdvanced()
+    {
+        PageRegistry reg;
+        buildTieredRegistry(reg);
+
+        // Registry default is show-everything-advanced: SimpleOnly hidden.
+        QVERIFY(reg.showAdvanced());
+        auto ids = [](const QVariantList& rows) {
+            QStringList out;
+            for (const auto& row : rows)
+                out << row.toMap().value(QStringLiteral("id")).toString();
+            return out;
+        };
+        QCOMPARE(ids(reg.topLevelPagesData()),
+                 (QStringList{QStringLiteral("home"), QStringLiteral("full"), QStringLiteral("cat")}));
+
+        QSignalSpy spy(&reg, &PageRegistry::showAdvancedChanged);
+        reg.setShowAdvanced(false);
+        QCOMPARE(spy.count(), 1);
+        // Simple mode: AdvancedOnly leaves drop out, the SimpleOnly leaf
+        // appears, and the category auto-hides because its only leaf is
+        // filtered (empty-virtual-category rule).
+        QCOMPARE(ids(reg.topLevelPagesData()), (QStringList{QStringLiteral("home"), QStringLiteral("easy")}));
+        QVERIFY(reg.childPagesData(QStringLiteral("cat")).isEmpty());
+        // Unchanged value must not re-emit.
+        reg.setShowAdvanced(false);
+        QCOMPARE(spy.count(), 1);
+        // The unfiltered accessors keep resolving hidden pages (a shown or
+        // dirty page must always resolve).
+        QVERIFY(!reg.pageData(QStringLiteral("full")).isEmpty());
+        QVERIFY(reg.controller(QStringLiteral("full")) != nullptr);
+    }
+
+    void pageAllowedInCurrentModeIsATierFilterOnly()
+    {
+        PageRegistry reg;
+        buildTieredRegistry(reg);
+
+        reg.setShowAdvanced(false);
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("home")));
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("easy")));
+        QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("full")));
+        // Unknown ids express no opinion — existence is hasPage's job.
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("no-such-page")));
+
+        reg.setShowAdvanced(true);
+        QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("easy")));
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("full")));
+    }
+
+    void firstVisibleLeafFollowsMode()
+    {
+        PageRegistry reg;
+        buildTieredRegistry(reg);
+
+        // Root search skips whatever the mode hides, in registration order.
+        reg.setShowAdvanced(true);
+        QCOMPARE(reg.firstVisibleLeafId(QString()), QStringLiteral("home"));
+        QCOMPARE(reg.firstVisibleLeafId(QStringLiteral("cat")), QStringLiteral("cat.deep"));
+
+        reg.setShowAdvanced(false);
+        // The category's only leaf is advanced-only: nothing to land on.
+        QCOMPARE(reg.firstVisibleLeafId(QStringLiteral("cat")), QString());
+        QCOMPARE(reg.firstVisibleLeafId(QString()), QStringLiteral("home"));
+    }
+
+    void counterpartIdIsStoredVerbatim()
+    {
+        PageRegistry reg;
+        buildTieredRegistry(reg);
+        QCOMPARE(reg.entry(QStringLiteral("easy")).counterpartId, QStringLiteral("full"));
+        QCOMPARE(reg.entry(QStringLiteral("full")).counterpartId, QStringLiteral("easy"));
+        QCOMPARE(reg.entry(QStringLiteral("home")).counterpartId, QString());
+    }
+
+    void setPageVisibilityReclassifiesLate()
+    {
+        // Registration-time declaration is the canonical path; this pins the
+        // late-reclassification escape hatch the API keeps for dynamic apps.
+        PageRegistry reg;
+        buildTieredRegistry(reg);
+        reg.setShowAdvanced(false);
+        QVERIFY(!reg.pageAllowedInCurrentMode(QStringLiteral("full")));
+        reg.setPageVisibility(QStringLiteral("full"), PageRegistry::PageVisibility::Always);
+        QVERIFY(reg.pageAllowedInCurrentMode(QStringLiteral("full")));
+        // Unknown id: warn-and-ignore, no crash.
+        reg.setPageVisibility(QStringLiteral("no-such-page"), PageRegistry::PageVisibility::SimpleOnly);
+    }
 };
 
 QTEST_MAIN(TestPageRegistry)

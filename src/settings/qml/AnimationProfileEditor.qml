@@ -265,6 +265,21 @@ ColumnLayout {
             visible: root.timingMode === CurvePresets.timingModeEasing && !root.simpleTiming
         }
 
+        // Simple-mode spring stand-in: with the timing-mode machinery hidden
+        // and a spring profile active (set via the global defaults editor or
+        // in advanced mode), the Duration row below also hides — without this
+        // hint the timing section would render silently empty.
+        Label {
+            Layout.fillWidth: true
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+            visible: root.simpleTiming && root.timingMode === CurvePresets.timingModeSpring
+            text: i18n("Timing follows the spring curve set in the defaults above.")
+            font.italic: true
+            color: Kirigami.Theme.disabledTextColor
+            wrapMode: Text.WordWrap
+        }
+
         SettingsRow {
             visible: root.timingMode === CurvePresets.timingModeEasing
             title: i18n("Duration")

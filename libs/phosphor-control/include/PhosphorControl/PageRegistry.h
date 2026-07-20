@@ -178,9 +178,11 @@ public:
     QList<Entry> childPages(const QString& parentId) const;
     QList<Entry> allPages() const;
 
-    // QML-facing accessors. Return dicts with keys: id, parentId, title,
-    // iconSource, qmlSource. Used by Sidebar.qml + Breadcrumbs.qml to drive
-    // their Repeaters without needing a custom QAbstractListModel.
+    // QML-facing accessors. Return dicts whose canonical key set lives in
+    // entryToVariant() (pageregistry.cpp): id, parentId, title, iconSource,
+    // qmlSource, isCollapsible, hasDividerAfter, hasQmlSource. Used by
+    // Sidebar.qml + Breadcrumbs.qml to drive their Repeaters without
+    // needing a custom QAbstractListModel.
     Q_INVOKABLE QVariantList topLevelPagesData() const;
     Q_INVOKABLE QVariantList childPagesData(const QString& parentId) const;
     Q_INVOKABLE QVariantMap pageData(const QString& id) const;

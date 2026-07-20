@@ -63,10 +63,13 @@ RowLayout {
             const leaf = root.controller.registry.pageData(root.controller.currentPageId);
             if (!leaf || !leaf.id)
                 return [];
-            const overridden = root.flatTitleOverrides[leaf.id];
-            if (overridden)
+            // Own-property guard — the override map is a plain object
+            // literal, so an id colliding with an Object.prototype name
+            // would read an inherited builtin as a truthy title (see the
+            // prototype-less seen-map note below).
+            if (Object.prototype.hasOwnProperty.call(root.flatTitleOverrides, leaf.id))
                 return [Object.assign({}, leaf, {
-                        "title": overridden
+                        "title": root.flatTitleOverrides[leaf.id]
                     })];
             return [leaf];
         }

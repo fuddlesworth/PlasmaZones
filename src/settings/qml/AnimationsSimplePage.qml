@@ -47,9 +47,11 @@ AnimationEventCardList {
     // While this page is alive, any edit to the open leaf — timing or
     // shader, set or clear — is copied verbatim onto the close leaf, so
     // the single "Window opened & closed" card genuinely sets both.
-    // Mirror writes re-fire the change signals with the MIRROR path, which
-    // is not a group key, so recursion terminates; the guard is belt and
-    // braces against a future self-referencing group.
+    // Recursion termination differs per leg: overrideChanged carries the
+    // real path, and a mirror write re-fires it with the MIRROR path, which
+    // is not a group key; shaderProfileChanged is a PATH-AGNOSTIC broadcast
+    // (always an empty path — see the controller's emit site), so there the
+    // _mirroring flag is the sole terminator.
     readonly property var _mirrorGroups: ({
             "window.appearance.open": ["window.appearance.close"]
         })
@@ -71,20 +73,29 @@ AnimationEventCardList {
         simplePage._mirroring = false;
     }
 
-    function _mirrorShader(path) {
-        const mirrors = simplePage._mirrorGroups[path];
-        if (!mirrors || simplePage._mirroring)
+    // Re-mirror EVERY group's shader leg. shaderProfileChanged cannot say
+    // which path moved (it broadcasts with an empty path), so each signal
+    // re-syncs all groups from their source leaf's raw profile; the writes
+    // are no-ops when the mirror already matches, and _mirroring stops the
+    // re-entrant broadcast each setShaderOverride triggers.
+    function _mirrorAllShaderGroups() {
+        if (simplePage._mirroring)
             return;
         simplePage._mirroring = true;
-        const raw = simplePage.animController.rawShaderProfile(path);
-        // `effectId` present (possibly the "" engaged-empty sentinel) means
-        // a direct override exists; an empty map means none.
-        if (raw && typeof raw.effectId === "string") {
-            for (let i = 0; i < mirrors.length; ++i)
-                simplePage.animController.setShaderOverride(mirrors[i], raw.effectId, raw.parameters || ({}));
-        } else {
-            for (let i = 0; i < mirrors.length; ++i)
-                simplePage.animController.clearShaderOverride(mirrors[i]);
+        const sources = Object.keys(simplePage._mirrorGroups);
+        for (let s = 0; s < sources.length; ++s) {
+            const source = sources[s];
+            const mirrors = simplePage._mirrorGroups[source];
+            const raw = simplePage.animController.rawShaderProfile(source);
+            // `effectId` present (possibly the "" engaged-empty sentinel)
+            // means a direct override exists; an empty map means none.
+            if (raw && typeof raw.effectId === "string") {
+                for (let i = 0; i < mirrors.length; ++i)
+                    simplePage.animController.setShaderOverride(mirrors[i], raw.effectId, raw.parameters || ({}));
+            } else {
+                for (let i = 0; i < mirrors.length; ++i)
+                    simplePage.animController.clearShaderOverride(mirrors[i]);
+            }
         }
         simplePage._mirroring = false;
     }
@@ -95,7 +106,8 @@ AnimationEventCardList {
         }
 
         function onShaderProfileChanged(path) {
-            simplePage._mirrorShader(path);
+            void (path);
+            simplePage._mirrorAllShaderGroups();
         }
 
         target: simplePage.animController
@@ -103,7 +115,7 @@ AnimationEventCardList {
 
     Accessible.name: i18n("Animation essentials")
     simpleTiming: true
-    headerText: i18n("The essentials. Each card covers a whole group of events. Switch to Advanced in the header for per-event control, motion depth, and the shader library.")
+    headerText: i18n("Each card covers a whole group of events. Switch to Advanced in the sidebar for full per-event control and the shader library.")
     // The Global animation defaults card — the SAME AnimationProfileEditor ↔
     // Settings wiring as AnimationsGeneralPage (curve summary + Customize,
     // Easing/Spring, Duration), minus that page's sequencing / min-distance /

@@ -72,8 +72,26 @@ SettingsFlickable {
         root.previewCustomParams = m;
     }
 
+    // Set while this page's own sliders write a per-algorithm slot, so the
+    // resulting store NOTIFY does not re-seed mid-drag and fight the live
+    // handle (same pattern as the animation defaults editor's committing
+    // guard).
+    property bool _committingSlot: false
+
     onSelectedAlgorithmChanged: _seedFromAlgorithm()
     Component.onCompleted: _seedFromAlgorithm()
+
+    // External per-algorithm slot changes (a Discard, a profile switch, an
+    // edit on the advanced Algorithm page in the same session) move the
+    // saved tuning under us — follow them.
+    Connections {
+        function onAutotilePerAlgorithmSettingsChanged() {
+            if (!root._committingSlot)
+                root._seedFromAlgorithm();
+        }
+
+        target: root.appSettingsObj
+    }
 
     // External edits (a Discard, a profile switch, a rule apply) move the
     // persisted default under us — follow it.
@@ -137,7 +155,7 @@ SettingsFlickable {
                                 showLabel: false
                                 algorithmId: root.selectedAlgorithm
                                 algorithmName: root.algoCapabilities ? (root.algoCapabilities.name || "") : ""
-                                windowCount: root.algoSettings.maxWindows !== undefined ? root.algoSettings.maxWindows : appSettings.autotileMaxWindows
+                                windowCount: maxWindowsSlider.slider.value
                                 splitRatio: root.algoSupportsSplitRatio ? masterRatioSlider.slider.value : (root.algoCapabilities ? root.algoCapabilities.defaultSplitRatio : 0.6)
                                 masterCount: root.algoSettings.masterCount !== undefined ? root.algoSettings.masterCount : appSettings.autotileMasterCount
                                 customParams: root.previewCustomParams
@@ -214,7 +232,9 @@ SettingsFlickable {
                             let m = Object.assign({}, root.algoSettings);
                             m.splitRatio = value;
                             root.algoSettings = m;
+                            root._committingSlot = true;
                             root.settingsBridge.setAlgorithmSplitRatio(root.selectedAlgorithm, value);
+                            root._committingSlot = false;
                         }
                     }
                 }
@@ -241,7 +261,9 @@ SettingsFlickable {
                             let m = Object.assign({}, root.algoSettings);
                             m.maxWindows = Math.round(value);
                             root.algoSettings = m;
+                            root._committingSlot = true;
                             root.settingsBridge.setAlgorithmMaxWindows(root.selectedAlgorithm, Math.round(value));
+                            root._committingSlot = false;
                         }
                     }
                 }

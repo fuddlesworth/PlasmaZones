@@ -48,10 +48,6 @@ SettingsFlickable {
     /// Forwarded to every card: hide the timing-mode machinery, keeping
     /// duration + shader + parameters (the simple-mode card shape).
     property bool simpleTiming: false
-    /// Optional Component instantiated BELOW the event cards — the footer
-    /// counterpart of headerComponent (e.g. the simple-mode window
-    /// filtering card).
-    property Component footerComponent: null
 
     // Build-ahead margin above/below the visible viewport so a card is
     // built slightly before it scrolls into view — keeps a fast flick from
@@ -232,13 +228,6 @@ SettingsFlickable {
                     simpleTiming: page.simpleTiming
                 }
             }
-        }
-
-        Loader {
-            Layout.fillWidth: true
-            active: page.footerComponent !== null
-            visible: active
-            sourceComponent: page.footerComponent
         }
     }
 }

@@ -191,7 +191,11 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // revert through their own machinery (the special-case branches in
     // reset/discardPage), not because Reset/Discard is unsupported —
     // pageSupportsReset returns true for everything except the read/browse pages
-    // with no revertible config state. The Windows appearance page IS
+    // with no revertible config state. The condensed SimpleOnly pages
+    // (tiling-simple / snapping-simple) are also deliberately absent: they
+    // surface keys OWNED by their backing advanced pages, so listing them here
+    // would break the one-owner invariant — their dirty/Reset/Discard delegate
+    // through simplePageBackingPages() instead. The Windows appearance page IS
     // config-backed (Windows.* + Gaps.*), so it lists its owned keys here.
     using CD = ConfigDefaults;
     static const QHash<QString, Settings::ConfigKeyList> manifest{
@@ -383,6 +387,26 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
     };
     return manifest;
+}
+
+const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
+{
+    // The condensed SimpleOnly pages host cards whose config keys are owned
+    // by the advanced pages listed here (snapping-simple surfaces the drag
+    // triggers + zone span from Overlay → Behavior and Snap Assist + window
+    // handling + focus from Window → Behavior; tiling-simple surfaces the
+    // algorithm picker + per-algorithm slots from Algorithm and smart gaps +
+    // focus from Window). They deliberately have NO pageOwnedConfigKeys
+    // entry — the one-owner invariant there forbids listing a key twice —
+    // so dirtiness, Reset, and Discard delegate through this map instead.
+    // animations-simple is absent: it rides the shared animation staging
+    // domain like every other animation leaf.
+    static const QHash<QString, QStringList> backing{
+        {QStringLiteral("snapping-simple"),
+         {QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-window-behavior")}},
+        {QStringLiteral("tiling-simple"), {QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm")}},
+    };
+    return backing;
 }
 
 const QSet<QString>& SettingsController::validPageNames()

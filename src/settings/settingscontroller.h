@@ -191,10 +191,15 @@ public:
     /// (category parent, *-cat header) resolves to its first leaf visible
     /// under the CURRENT simple/advanced mode, falling back to its first
     /// leaf regardless of mode (the caller's mode gate then redirects) when
-    /// the whole subtree is hidden. Replaces the old static
-    /// parentPageRedirects table so redirects track the registry topology
-    /// and the active mode instead of a hand-synced list.
+    /// the whole subtree is hidden. Derived from the live registry topology
+    /// and the active mode instead of a hand-synced static table.
     QString resolveToLeaf(const QString& page) const;
+    /// Condensed SimpleOnly page id → the advanced pages whose config keys
+    /// it surfaces. These pages own no keys of their own, so their dirty
+    /// state, Reset, and Discard all delegate to the backing pages (see
+    /// isPageDirty / resetPage / discardPage), and a backing page's
+    /// reconcile cascades to them (reconcilePageDirty).
+    static const QHash<QString, QStringList>& simplePageBackingPages();
     /// Parent name → set of leaf child page names. Covers the top-level sidebar
     /// categories AND the mid-level virtual parents nested beneath them (among
     /// them snapping / tiling under placement, and the animations-* parents

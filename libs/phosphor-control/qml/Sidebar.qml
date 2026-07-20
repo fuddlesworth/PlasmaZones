@@ -116,8 +116,17 @@ ColumnLayout {
     property var flatTitleOverrides: ({})
 
     onFlattenTreeChanged: {
-        if (root.flattenTree)
+        if (root.flattenTree) {
+            // Cancel an in-flight drill cross-fade too: its ScriptAction
+            // would otherwise re-apply pendingParentId AFTER this reset,
+            // and the stale scope resurfaces on the flip back to the tree
+            // rail.
+            if (drillAnimation.running) {
+                drillAnimation.stop();
+                drillAnimation.pendingParentId = "";
+            }
             root.currentParentId = "";
+        }
         // Deferred: the initial binding assignment can fire during
         // component creation, before the list model object exists.
         Qt.callLater(root._refreshModel);
@@ -265,9 +274,16 @@ ColumnLayout {
                     seen.add(child.id);
                     const before = out.length;
                     if (child.hasQmlSource) {
+                        // Own-property guard: the override map is a plain
+                        // object literal from the app, so a page id colliding
+                        // with an Object.prototype name ("toString",
+                        // "constructor") would otherwise read the inherited
+                        // builtin as a truthy title. Same hazard class the
+                        // prototype-less maps above defend against.
+                        const hasOverride = Object.prototype.hasOwnProperty.call(root.flatTitleOverrides, child.id);
                         out.push({
                             "pageId": child.id,
-                            "title": root.flatTitleOverrides[child.id] || child.title,
+                            "title": hasOverride ? root.flatTitleOverrides[child.id] : child.title,
                             "iconSource": child.iconSource,
                             "hasQmlSource": true,
                             "_depth": 0,
