@@ -143,6 +143,12 @@ KGlobalAccelBackend::~KGlobalAccelBackend()
     // thread, but possible across D-Bus dispatch), the lambda would emit
     // activated() on a mid-destruction QObject. Severing the connection
     // first makes the race unreachable.
+    //
+    // Same reasoning for the ctor's globalShortcutChanged lambda: it derefs
+    // m_impl, which this destructor destroys before ~QObject would sever the
+    // connection, so cut it up front rather than leave a window where a
+    // nested dispatch touches a dead Impl.
+    disconnect(KGlobalAccel::self(), nullptr, this, nullptr);
     for (auto& entry : m_impl->entries) {
         if (entry.action) {
             entry.action->disconnect();

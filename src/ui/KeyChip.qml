@@ -35,5 +35,8 @@ Rectangle {
         font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
         font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 0.9 * root.fontSizeScale)
         color: Kirigami.Theme.textColor
+        // The hosting shortcut row announces a composed "action, keys" name;
+        // the per-token caps must not be announced a second time.
+        Accessible.ignored: true
     }
 }

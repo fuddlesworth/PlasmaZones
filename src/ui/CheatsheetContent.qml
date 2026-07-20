@@ -261,6 +261,12 @@ Item {
 
                                         Label {
                                             text: shortcutRow.modelData.label
+                                            // The row announces a composed
+                                            // "action, keys" Accessible.name;
+                                            // keep the visible children out of
+                                            // the a11y tree so screen readers
+                                            // don't announce them twice.
+                                            Accessible.ignored: true
                                             // Wrap, never elide: the model ships
                                             // group-contextual short labels sized
                                             // to fit, and a pathological case
@@ -308,6 +314,9 @@ Item {
                                             color: Kirigami.Theme.disabledTextColor
                                             font.italic: true
                                             visible: !shortcutRow.modelData.assigned
+                                            // Covered by the row's composed
+                                            // "%1, unassigned" Accessible.name.
+                                            Accessible.ignored: true
                                         }
                                     }
                                 }
