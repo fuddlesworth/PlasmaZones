@@ -24,6 +24,10 @@ struct WindowMetadata
     QString windowRole{}; ///< X11 WM_WINDOW_ROLE; empty for Wayland-native windows
     int pid = 0; ///< process id; 0 = unknown
     int virtualDesktop = 0; ///< 1-based x11 desktop number; 0 = all desktops / unknown
+    /// Full desktop list when the window spans SEVERAL (but not all) desktops;
+    /// empty for the common single-desktop / sticky / unknown cases. When
+    /// non-empty, virtualDesktop equals the first entry.
+    QList<int> virtualDesktops{};
     QString activity{}; ///< activity UUID; empty = all activities / unknown
     PhosphorProtocol::WindowType windowType = PhosphorProtocol::WindowType::Unknown;
 
@@ -65,9 +69,9 @@ struct WindowMetadata
     {
         return appId == other.appId && desktopFile == other.desktopFile && title == other.title
             && windowRole == other.windowRole && pid == other.pid && virtualDesktop == other.virtualDesktop
-            && activity == other.activity && windowType == other.windowType && isMinimized == other.isMinimized
-            && isFullscreen == other.isFullscreen && isSticky == other.isSticky && isMaximized == other.isMaximized
-            && isFocused == other.isFocused && isTransient == other.isTransient
+            && virtualDesktops == other.virtualDesktops && activity == other.activity && windowType == other.windowType
+            && isMinimized == other.isMinimized && isFullscreen == other.isFullscreen && isSticky == other.isSticky
+            && isMaximized == other.isMaximized && isFocused == other.isFocused && isTransient == other.isTransient
             && isNotification == other.isNotification && keepAbove == other.keepAbove && keepBelow == other.keepBelow
             && skipTaskbar == other.skipTaskbar && skipPager == other.skipPager && skipSwitcher == other.skipSwitcher
             && isModal == other.isModal && hasDecoration == other.hasDecoration && isResizable == other.isResizable
@@ -94,13 +98,42 @@ public:
 
     std::optional<WindowMetadata> metadata(const QString& instanceId) const;
     /// The window's own context for per-window mode resolution: its virtual
-    /// desktop (0 = all/unknown) and activity (empty = all/unknown), read
-    /// without copying the full ~30-field metadata record — this sits on the
+    /// desktop (0 = all/unknown), the full desktop list when it spans several
+    /// (empty otherwise), and activity (empty = all/unknown), read without
+    /// copying the full ~30-field metadata record — this sits on the
     /// per-query float-resolver path. nullopt when the instance is unknown.
     struct WindowContext
     {
         int virtualDesktop = 0;
+        QList<int> virtualDesktops;
         QString activity;
+
+        /// Effective desktop for per-window mode resolution: the window's own
+        /// desktop when known (virtualDesktop > 0), never the screen's current
+        /// one — reading through the screen's current desktop is what made the
+        /// effective float answer flip across per-output desktop switches.
+        /// EXCEPTION: a window spanning SEVERAL desktops resolves to
+        /// @p screenCurrentDesktop when that is one of them — the visible
+        /// spanned desktop is the live context governing the window, not the
+        /// arbitrary first entry virtualDesktop pins to. Sticky / unknown
+        /// (virtualDesktop 0) falls back to @p screenCurrentDesktop.
+        int effectiveDesktop(int screenCurrentDesktop) const
+        {
+            if (virtualDesktops.size() > 1 && virtualDesktops.contains(screenCurrentDesktop)) {
+                return screenCurrentDesktop;
+            }
+            return virtualDesktop > 0 ? virtualDesktop : screenCurrentDesktop;
+        }
+
+        /// Effective activity: the window's own when known, else
+        /// @p currentActivity. No span analogue to effectiveDesktop's
+        /// current-context preference exists here — the metadata carries only
+        /// the window's first activity, not a list, so there is nothing to
+        /// prefer against.
+        QString effectiveActivity(const QString& currentActivity) const
+        {
+            return activity.isEmpty() ? currentActivity : activity;
+        }
     };
     std::optional<WindowContext> windowContext(const QString& instanceId) const;
     Q_INVOKABLE QString appIdFor(const QString& instanceId) const override;

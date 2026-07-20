@@ -444,8 +444,9 @@ void WindowTrackingAdaptor::refreshOpenWindowPlacements()
     // Re-capture EVERY open window into the unified store at save time. This is the
     // generic, engine-agnostic snapshot: captureWindowPlacement asks each engine's
     // capturePlacement() for the window's current state (snapped float-back, floated
-    // live geometry, autotiled position) and records it — or clears the record if no
-    // engine manages it. Saves are debounced and shutdown is guaranteed to run, so
+    // live geometry, autotiled position) and records it; when no engine manages a
+    // window its existing record is left intact — never cleared there (see the
+    // declaration doc). Saves are debounced and shutdown is guaranteed to run, so
     // this is the single point that makes open-window state (floating drag geometry,
     // autotile tile order) survive a daemon restart without any per-window capture
     // hook in the engines. m_frameGeometry holds every window the effect has
@@ -828,6 +829,7 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             meta.positionX = existing->positionX;
             meta.positionY = existing->positionY;
             meta.captionNormal = existing->captionNormal;
+            meta.virtualDesktops = existing->virtualDesktops;
         }
     } else {
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
@@ -865,6 +867,19 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         meta.positionX = optInt(Key::PositionX);
         meta.positionY = optInt(Key::PositionY);
         meta.captionNormal = optString(Key::CaptionNormal);
+        // Multi-desktop span list (absent for single-desktop / sticky windows,
+        // so an absent key correctly clears a previous span). Same lenient
+        // QVariant conversion policy as the fields above.
+        if (const auto it = extended.constFind(QString(Key::VirtualDesktops)); it != extended.constEnd()) {
+            const QVariantList list = it.value().toList();
+            meta.virtualDesktops.reserve(list.size());
+            for (const QVariant& v : list) {
+                const int d = v.toInt();
+                if (d > 0) {
+                    meta.virtualDesktops.append(d);
+                }
+            }
+        }
     }
 
     // Universal canonical seed. setWindowMetadata is the per-window choke point —

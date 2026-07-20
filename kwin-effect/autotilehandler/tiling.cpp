@@ -337,7 +337,27 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             const QSet<QString> previous = AutotileStateHelpers::tiledOnScreen(m_border, screenId);
             const QSet<QString> untiled = previous - newSet;
             for (const QString& wid : untiled) {
-                KWin::EffectWindow* win = m_effect->findWindowById(wid);
+                // Exact resolve only: findWindowById's appId fuzzy fallback
+                // could hand back a same-app SIBLING for a gone id, and the
+                // jurisdiction gate below must read the REAL window's
+                // desktop/activity (a vanished window resolves null and still
+                // falls through and clears).
+                KWin::EffectWindow* win = m_effect->findWindowByIdExact(wid);
+                // A retile batch describes ONE (screen, desktop, activity)
+                // TilingState — the screen's CURRENT context. A tracked window
+                // sitting on another desktop or activity is absent from
+                // `newSet` because it belongs to a sibling context's state,
+                // not because it was untiled, and this batch has no
+                // jurisdiction over it. Clearing it anyway flipped IsTiled,
+                // dropped the tiled appearance scope, and restored the title
+                // bar on the outgoing desktop's windows for the whole
+                // desktop-switch animation (#808) — and identically for an
+                // activity switch. Its own context's retile decides its fate;
+                // genuine untiles while off-context (float, close) flow
+                // through funnels that clear all screens regardless.
+                if (win && (!win->isOnCurrentDesktop() || !win->isOnCurrentActivity())) {
+                    continue;
+                }
                 // Every untiled window drops its per-screen tiled tracking,
                 // minimized/unresolvable or not — hoisted so the branch below
                 // reads as what it actually gates: the centering-target
@@ -349,9 +369,9 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
                     continue;
                 }
                 // A daemon-initiated untile that is not a float/fullscreen/
-                // close/desktop-switch (e.g. a rule change dropping the
-                // window from the layout) must not leave a stale centering
-                // target that teleport-centers the window on its next
+                // close (e.g. a rule change dropping the window from the
+                // layout) must not leave a stale centering target that
+                // teleport-centers the window on its next
                 // frameGeometryChanged. Cross-screen transfers are safe: the
                 // apply lambda wrote a fresh entry only for windows in
                 // toApply, which are never in `untiled` for their new screen.

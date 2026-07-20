@@ -1652,7 +1652,10 @@ bool Daemon::init()
     // (the effect's FloatingCache) until a daemon reconnect. A window on the
     // screen's current desktop/activity (and the sticky / unknown cases:
     // virtualDesktop 0, empty activity) resolves exactly as before via the
-    // fallbacks.
+    // fallbacks. The shared lambda serves the float WRITER and the
+    // autotile-mode predicate too, so those routing decisions shift to the
+    // window's own context along with the reader — deliberate: all three
+    // answer "which engine owns this window", and that has one answer.
     {
         auto screenModeForWindow = [this, autotilePtr = QPointer(autotileEngine)](
                                        const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
@@ -1663,16 +1666,19 @@ bool Daemon::init()
                 screenId = wts->screenForWindow(windowId);
             }
             if (!screenId.isEmpty() && m_layoutManager) {
-                int desktop = currentDesktopForScreen(screenId);
+                const int screenCurrent = currentDesktopForScreen(screenId);
+                int desktop = screenCurrent;
                 QString activity = currentActivity();
                 if (wts && wts->windowRegistry()) {
                     const auto ctx =
                         wts->windowRegistry()->windowContext(::PhosphorIdentity::WindowId::extractInstanceId(windowId));
-                    if (ctx && ctx->virtualDesktop > 0) {
-                        desktop = ctx->virtualDesktop;
-                    }
-                    if (ctx && !ctx->activity.isEmpty()) {
-                        activity = ctx->activity;
+                    if (ctx) {
+                        // Own-desktop / multi-desktop-span / sticky policy
+                        // lives on WindowContext (see effectiveDesktop's doc);
+                        // this resolver just supplies the screen-current
+                        // fallbacks.
+                        desktop = ctx->effectiveDesktop(screenCurrent);
+                        activity = ctx->effectiveActivity(activity);
                     }
                 }
                 return m_layoutManager->modeForScreen(screenId, desktop, activity);

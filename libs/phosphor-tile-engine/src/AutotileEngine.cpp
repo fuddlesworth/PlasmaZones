@@ -730,6 +730,16 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                                 ts->setFloating(windowId, true);
                             }
                         }
+                        // Announce on the passive channel via the canonical
+                        // insert-time sync (both directions: restored-floating
+                        // OR seeded-tiled-over-a-stale-WTS-float-bit). The
+                        // later windowOpened for this already-present window
+                        // is a tracked no-op insert whose float sync is
+                        // skipped, so without this the seed's float state is
+                        // never broadcast — subscribers (and the adaptor's
+                        // last-broadcast gate) stay stale until a daemon
+                        // reconnect. The gate dedups when they already agree.
+                        emitInsertFloatStateSync(windowId, screenId);
                     }
                 }
             }
@@ -3104,7 +3114,8 @@ void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QSt
 {
     // Read-only lookup — must NOT lazily materialize a state. tilingStateForScreen
     // would create one for a known-but-stateless screen; this method only reads
-    // isFloating right after a successful insertWindow, so the state already exists.
+    // isFloating right after a window lands in an existing state (insertWindow,
+    // or the strict-initial-order seed in setAutotileScreens), so it already exists.
     PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
     if (!state) {
         return;

@@ -247,7 +247,8 @@ public Q_SLOTS:
      *                       values are clamped to WindowType::Unknown
      * @param extended       Extended window-property snapshot keyed by
      *                       PhosphorProtocol::Service::WindowMetadataKey (state flags,
-     *                       geometry, accessory flags, captionNormal). A key is
+     *                       geometry, accessory flags, captionNormal, multi-desktop
+     *                       span list). A key is
      *                       present only when the value is known; absent keys leave
      *                       the corresponding WindowMetadata optional disengaged so a
      *                       window-rule predicate over it stays inert. Lets the
@@ -633,7 +634,10 @@ public:
 
     /// Unified placement capture orchestrator: ask each engine for @p windowId's
     /// current placement, stamp it with the live frame geometry, and record it in
-    /// the WindowPlacementStore (or clear the record if no engine manages it).
+    /// the WindowPlacementStore. When NO engine manages the window, any existing
+    /// record is left intact (never cleared here — records are per-mode memory,
+    /// only merge-updated, consumed, or explicitly pruned); with an
+    /// @p authoritativeScreen it records a floating-close placement instead.
     /// Shadow-written in P1; the single funnel every state-change + close hook
     /// calls so the persisted record always reflects the window's live state.
     ///

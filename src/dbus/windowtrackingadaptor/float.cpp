@@ -223,6 +223,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
     //     rule/pre-float re-snap chance, and a window it cannot re-snap
     //     stays a free (unmanaged) window, which is what unfloating a
     //     window snap never tracked means.
+    bool recaptureAfterFloatWrite = false;
     if (dest && !dest->isWindowTracked(windowId)) {
         const bool sourceTracked = source && source->isWindowTracked(windowId);
         const bool destIsAutotile = m_autotileEngine && dest == m_autotileEngine.data();
@@ -243,6 +244,7 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         } else if (sourceTracked) {
             source->handoffRelease(windowId);
             relayWindowFloatingChanged(windowId, false, screenId);
+            recaptureAfterFloatWrite = true;
         }
     }
 
@@ -253,6 +255,22 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
         // that drifted to another monitor while floating non-deterministically
         // teleports it back to its source-monitor zone (Discussion #724).
         dest->setWindowFloat(windowId, floating, screenId);
+    }
+    if (recaptureAfterFloatWrite) {
+        // Snap-dest unfloat: re-anchor the live placement record after the
+        // float write. When unfloatToZone above re-snapped the window this is
+        // an idempotent repeat of the commitSnap-wired capture, kept so the
+        // record refresh doesn't silently depend on that wiring's ordering.
+        // When unfloatToZone FAILED OPEN (no rule/pre-float zone) the window
+        // is tracked by NEITHER engine, so this capture deliberately writes
+        // nothing and the persisted record keeps its floating-at-position
+        // slot from the source engine's float. That is the accepted outcome:
+        // a later restore of "floating at its position" and of "free window
+        // at its position" land the window identically, and the only writer
+        // that could record the free state has no engine placement to read.
+        // Live subscribers are unaffected either way — the broadcast above
+        // already told them not-floating.
+        captureWindowPlacement(windowId);
     }
 }
 

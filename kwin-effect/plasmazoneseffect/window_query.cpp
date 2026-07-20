@@ -223,15 +223,18 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     // Frame position — from the same frameGeometry() already read for the size.
     query.positionX = static_cast<int>(frame.x());
     query.positionY = static_cast<int>(frame.y());
-    // virtualDesktop: first desktop's 1-based x11 number (0 = all/unknown).
-    // activity: first activity UUID (empty = all/unknown). Both mirror the
-    // daemon-side setWindowMetadata derivation in window_identity.cpp so a
-    // window-domain rule pinning VirtualDesktop / Activity resolves the same
-    // way the context cascade does.
+    // virtualDesktop: first non-null desktop's 1-based x11 number (0 = all/
+    // unknown). activity: first activity UUID (empty = all/unknown). Both
+    // mirror the daemon-side setWindowMetadata derivation in
+    // window_identity.cpp so a window-domain rule pinning VirtualDesktop /
+    // Activity resolves the same way the context cascade does.
     if (kw) {
         const QList<KWin::VirtualDesktop*> desktops = kw->desktops();
-        if (!desktops.isEmpty() && desktops.first()) {
-            query.virtualDesktop = static_cast<int>(desktops.first()->x11DesktopNumber());
+        for (const KWin::VirtualDesktop* vd : desktops) {
+            if (vd) {
+                query.virtualDesktop = static_cast<int>(vd->x11DesktopNumber());
+                break;
+            }
         }
     }
     const QStringList activities = w->activities();
