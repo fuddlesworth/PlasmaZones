@@ -155,7 +155,8 @@ Item {
         // same vertical rhythm as LayoutPickerContent.
         height: titleLabel.height + scroller.height + metrics.paddingSide * 3
 
-        Accessible.name: i18n("Keyboard shortcuts")
+        // No container Accessible.name: the title label below is the single
+        // announcement, matching LayoutPickerContent's card.
 
         // Absorb clicks inside the card so they never reach the backdrop —
         // same sibling z-order contract as LayoutPickerContent.

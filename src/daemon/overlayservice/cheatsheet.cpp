@@ -160,6 +160,11 @@ void OverlayService::refreshCheatsheet(const QVariantList& model, const QString&
     if (!m_cheatsheetVisible) {
         return;
     }
+    // Same contract as showCheatsheet's empty-catalog refusal: never blank a
+    // visible sheet with an empty push; keep the last good content instead.
+    if (model.isEmpty()) {
+        return;
+    }
     auto it = m_screenStates.find(m_cheatsheetScreenId);
     if (it == m_screenStates.end() || !it->cheatsheetSlot()) {
         return;
