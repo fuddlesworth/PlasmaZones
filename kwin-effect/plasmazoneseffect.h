@@ -967,6 +967,23 @@ private:
     void notifyWindowResized(KWin::EffectWindow* w, const QRect& oldGeometry);
 
     void updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w);
+
+    /// Poll-defer a decorated, minimized window's teardown while an animation
+    /// still paints it. A minimized window is only isVisible() while some
+    /// effect holds an EffectWindowVisibleRef on it — KWin's magic lamp /
+    /// squash minimize animations, or our own minimize transition. Tearing
+    /// the decoration down at that moment (updateWindowDecoration's
+    /// isMinimized() gate) yanks the OffscreenEffect redirect and its GL
+    /// working set out from under the in-flight animation: the mid-lamp
+    /// freeze and unbound-sampler black smears of discussion #816. The poll
+    /// re-enters updateWindowDecoration; once the animation drops its ref the
+    /// window stops being visible and the normal undecorate proceeds (or, if
+    /// the window unminimized meanwhile, the normal refresh path re-resolves).
+    /// Keyed set prevents timer pileup when decoration sweeps re-enter while
+    /// a poll is already armed. Defined in decorations.cpp.
+    void deferDecorationTeardownWhileAnimated(const QString& windowId);
+    QSet<QString> m_animatedDecoTeardownPending;
+
     /// windowHint: the EffectWindow when the caller still holds it and the
     /// window is already deleted (close / delete paths) — findWindowById
     /// cannot resolve a deleted id, and without the pointer the GL release

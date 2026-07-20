@@ -11,6 +11,7 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorIdentity/WindowId.h>
 
+#include <effect/effect.h> // Effect::animationTime, the deferred-unfloat grace
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
@@ -25,6 +26,8 @@
 #include <QPointer>
 #include <QScopeGuard>
 #include <QTimer>
+
+#include <chrono> // std::chrono::milliseconds for Effect::animationTime
 
 namespace PlasmaZones {
 
@@ -79,6 +82,19 @@ void AutotileHandler::cancelPendingMinimizeFloat(const QString& windowId)
     m_pendingMinimizeFloat.erase(it);
 }
 
+void AutotileHandler::cancelPendingUnminimizeUnfloat(const QString& windowId)
+{
+    auto it = m_pendingUnminimizeUnfloat.find(windowId);
+    if (it == m_pendingUnminimizeUnfloat.end()) {
+        return;
+    }
+    if (QTimer* pending = it.value()) {
+        pending->stop();
+        pending->deleteLater();
+    }
+    m_pendingUnminimizeUnfloat.erase(it);
+}
+
 void AutotileHandler::clearAllPendingMinimizeFloats()
 {
     // Delegate per-entry so the cancel semantics (stop + deleteLater + erase)
@@ -86,6 +102,12 @@ void AutotileHandler::clearAllPendingMinimizeFloats()
     const QStringList ids = m_pendingMinimizeFloat.keys();
     for (const QString& windowId : ids) {
         cancelPendingMinimizeFloat(windowId);
+    }
+    // The restore-side timers must not fire against a disabled engine or a
+    // torn-down handler either.
+    const QStringList unfloatIds = m_pendingUnminimizeUnfloat.keys();
+    for (const QString& windowId : unfloatIds) {
+        cancelPendingUnminimizeUnfloat(windowId);
     }
 }
 
@@ -667,6 +689,10 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     const bool minimized = w->isMinimized();
 
     if (minimized) {
+        // A re-minimize during the deferred unfloat grace cancels the pending
+        // commit: the window never unfloated, so it is still minimize-floated
+        // and the isWindowFloating skip below covers the rest.
+        cancelPendingUnminimizeUnfloat(windowId);
         if (m_effect->isWindowFloating(windowId)) {
             qCDebug(lcEffect) << "Autotile: minimized already-floating window, skipping floatWindow:" << windowId;
             return;
@@ -761,10 +787,14 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         return;
     }
 
-    if (!m_minimizeFloatedWindows.remove(windowId)) {
+    if (!m_minimizeFloatedWindows.contains(windowId)) {
         qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:"
                           << windowId;
         notifyWindowAdded(w);
+        return;
+    }
+    // A commit is already scheduled for this window — nothing new to do.
+    if (m_pendingUnminimizeUnfloat.contains(windowId)) {
         return;
     }
     // No pre-autotile geometry capture here: a minimize-floated window cannot
@@ -773,16 +803,80 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     // entry (snap→autotile transitions), and a genuine entry already exists
     // from the original capture.
 
-    qCInfo(lcEffect) << "Autotile: window unminimized, unfloating:" << windowId << "on" << screenId;
+    // Defer the unfloat commit past KWin's unminimize animation. Committing
+    // immediately retiles the screen, and the retile's applyWindowGeometry
+    // moveResize lands mid-flight and CANCELS the stock animation (magic
+    // lamp / squash; kwin's maximize script likewise self-cancels on a
+    // mid-flight resize) — the discussion #816 restore stutter. There is no
+    // cross-effect API to observe the animation, so the grace is
+    // animationTime(400ms): stock minimize animations are 250ms base scaled
+    // by the user's global animation-speed factor, and animationTime applies
+    // that same factor, so the deferral tracks the user's actual animation
+    // length with margin. The window sits at its tiled rect meanwhile (it
+    // could not move while minimized), so the deferral only shifts the
+    // retile timing. All state mutation (m_minimizeFloatedWindows removal,
+    // D-Bus, notifyWindowAdded) happens at COMMIT, mirroring the minimize
+    // debounce, so a cancelled commit leaves the window minimize-floated
+    // exactly as it was.
+    const int graceMs = int(KWin::Effect::animationTime(std::chrono::milliseconds(400)).count());
+    QPointer<KWin::EffectWindow> wPtr(w);
+    auto* timer = new QTimer(this);
+    timer->setSingleShot(true);
+    timer->setInterval(graceMs);
+    connect(timer, &QTimer::timeout, this, [this, windowId, wPtr]() {
+        // Consume the hash entry first; we own the timer's deleteLater
+        // regardless of which early-return branch we take below.
+        auto it = m_pendingUnminimizeUnfloat.find(windowId);
+        if (it == m_pendingUnminimizeUnfloat.end()) {
+            return; // Already cancelled by cancelPendingUnminimizeUnfloat.
+        }
+        QPointer<QTimer> owned = it.value();
+        m_pendingUnminimizeUnfloat.erase(it);
+        if (owned) {
+            owned->deleteLater();
+        }
 
-    if (m_effect->m_daemonServiceRegistered) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                       QStringLiteral("setWindowFloatingForScreen"),
-                                                       {windowId, screenId, false},
-                                                       QStringLiteral("setWindowFloatingForScreen"));
-    }
+        // Re-validate the entry predicate at commit time: the window may
+        // have died, re-minimized (belt — the minimize path also cancels),
+        // moved off an autotiled screen, or become unhandleable during the
+        // grace. Every bail leaves the window minimize-floated, which the
+        // next unminimize edge picks up again.
+        if (!wPtr) {
+            qCDebug(lcEffect) << "Autotile: deferred unfloat window destroyed, skipping:" << windowId;
+            return;
+        }
+        KWin::EffectWindow* fw = wPtr.data();
+        if (fw->isMinimized()) {
+            qCDebug(lcEffect) << "Autotile: deferred unfloat window re-minimized, skipping:" << windowId;
+            return;
+        }
+        if (!m_effect->shouldHandleWindow(fw) || !m_effect->isTileableWindow(fw)) {
+            qCDebug(lcEffect) << "Autotile: deferred unfloat no longer handleable, skipping:" << windowId;
+            return;
+        }
+        const QString currentScreenId = m_effect->getWindowScreenId(fw);
+        if (!m_autotileScreens.contains(currentScreenId)) {
+            qCDebug(lcEffect) << "Autotile: deferred unfloat screen no longer autotiled, skipping:" << windowId;
+            return;
+        }
+        if (!m_minimizeFloatedWindows.remove(windowId)) {
+            return; // State moved under us (e.g. bulk cleanup); nothing to commit.
+        }
 
-    notifyWindowAdded(w);
+        qCInfo(lcEffect) << "Autotile: window unminimized, unfloating (after animation grace):" << windowId << "on"
+                         << currentScreenId;
+
+        if (m_effect->m_daemonServiceRegistered) {
+            PhosphorProtocol::ClientHelpers::fireAndForget(
+                m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                QStringLiteral("setWindowFloatingForScreen"), {windowId, currentScreenId, false},
+                QStringLiteral("setWindowFloatingForScreen"));
+        }
+
+        notifyWindowAdded(fw);
+    });
+    m_pendingUnminimizeUnfloat.insert(windowId, timer);
+    timer->start();
 }
 
 void AutotileHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool horizontal, bool vertical)

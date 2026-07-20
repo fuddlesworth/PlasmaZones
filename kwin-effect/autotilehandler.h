@@ -274,6 +274,16 @@ private:
     void cancelPendingMinimizeFloat(const QString& windowId);
 
     /**
+     * @brief Cancel a pending deferred unminimize→unfloat commit.
+     *
+     * No-op if no timer is pending for the window. Called from the minimize
+     * path (a re-minimize during the grace must leave the window
+     * minimize-floated), from cleanupAutotileTracking (window closed), and
+     * from clearAllPendingMinimizeFloats (bulk teardown / engine disable).
+     */
+    void cancelPendingUnminimizeUnfloat(const QString& windowId);
+
+    /**
      * @brief Cancel every pending debounced minimize→float commit.
      *
      * Called when autotile is disabled — in-flight timers should not
@@ -410,6 +420,16 @@ private:
     /// minimize/unminimize cycles that KWin emits on tiled windows when
     /// plasmashell notification popups transiently change stacking.
     QHash<QString, QPointer<QTimer>> m_pendingMinimizeFloat;
+    /// Pending deferred unminimize→unfloat commits, keyed by windowId — the
+    /// restore-side mirror of m_pendingMinimizeFloat, with a different reason:
+    /// the unfloat triggers a retile whose applyWindowGeometry moveResize,
+    /// landing mid-flight, CANCELS KWin's own unminimize animation (magic
+    /// lamp / squash; kwin's maximize script likewise self-cancels on a
+    /// mid-flight resize) — the discussion #816 restore stutter. The commit
+    /// is deferred past the stock animation (Effect::animationTime-scaled
+    /// grace) and revalidated at fire time; a re-minimize during the grace
+    /// cancels it, leaving the window minimize-floated as before.
+    QHash<QString, QPointer<QTimer>> m_pendingUnminimizeUnfloat;
     /// Global stagger epoch, bumped on a desktop/screen switch (slotScreensChanged)
     /// to cancel EVERY in-flight staggered apply — geometry computed for the old
     /// context must never land in the new one.

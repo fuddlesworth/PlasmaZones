@@ -608,6 +608,7 @@ void AutotileHandler::cleanupAutotileTracking(const QString& windowId, const QSt
         m_centeredWaylandZones, m_monocleMaximizedWindows, m_preAutotileGeometries};
     AutotileStateHelpers::cleanupClosedWindowState(windowId, m_border, windowState);
     cancelPendingMinimizeFloat(windowId);
+    cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreAutotileForDesktopMove is NOT cleared
     // here — the desktop-move path stashes it immediately before close (consume
     // site / clearDesktopMoveStash cover it). Also drop the unconsumed output-move
