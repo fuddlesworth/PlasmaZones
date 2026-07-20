@@ -1443,8 +1443,10 @@ private:
     bool m_enableAudioVisualizer = false;
     PhosphorAudio::SpectrumOptions m_audioOptions;
 
-    /// KWin show-desktop script effects syncShowDesktopEffectSuppression
-    /// unloaded because a `desktop.peek` pack is assigned. Only names WE
+    /// KWin stock effects syncStockEffectSuppression unloaded because one of
+    /// OUR packs owns the event they animate: windowaperture/eyeonscreen for
+    /// a `desktop.peek` pack, magiclamp/squash for a window.minimize pack,
+    /// maximize for a window.maximize pack. Only names WE
     /// unloaded are recorded, so clearing the pack (or unloading this effect)
     /// loads back exactly what the user had — never an effect KWin left
     /// disabled in kwinrc. Accepted edge: disabling a builtin in the Desktop
@@ -1454,7 +1456,7 @@ private:
     /// session honours kwinrc, which the suppression never writes. Querying
     /// kwinrc from the effect to close this would add a config dependency the
     /// plugin doesn't otherwise need.
-    QStringList m_suppressedShowDesktopEffects;
+    QStringList m_suppressedStockEffects;
     /// Set by the aboutToQuit latch (constructor): distinguishes a runtime
     /// unload of this effect from compositor shutdown in the destructor's
     /// suppressed-effect restore. See ~PlasmaZonesEffect.
@@ -1487,22 +1489,27 @@ private:
     /// the compositor thread never blocks on cava stop()+respawn mid-refresh.
     void scheduleEffectAudioSync();
 
-    /// Unload KWin's show-desktop script effects (windowaperture / eyeonscreen)
-    /// while the peek would actually run — a `desktop.peek` pack is assigned,
-    /// installed, desktop-contract, AND animations are enabled — and load back
-    /// exactly the ones WE unloaded when any of that stops holding. Unloading
-    /// is the only suppression that works: they never consult
-    /// activeFullScreenEffect() (and the peek deliberately takes no fullscreen
-    /// claim anyway, see DesktopTransitionManager) — left loaded they would
-    /// animate invisibly under our blend AND leak their transforms into the
-    /// peek captures (the capture paths continue down the effect chain).
+    /// Unload the KWin stock effects whose event one of OUR packs owns, and
+    /// load back exactly the ones WE unloaded when that stops holding. Three
+    /// groups share one predicate shape (pack assigned in the tree, installed,
+    /// event-contract match, animations enabled):
+    ///   desktop.peek       → windowaperture / eyeonscreen
+    ///   window.minimize    → magiclamp / squash
+    ///   window.maximize    → maximize
+    /// Unloading is the only suppression that works for all three: the
+    /// show-desktop scripts never consult activeFullScreenEffect() (and the
+    /// peek deliberately takes no fullscreen claim anyway, see
+    /// DesktopTransitionManager), and the minimize/maximize stock effects
+    /// honor no per-window grab role the way the open/close builtins honor
+    /// WindowAddedGrabRole / WindowClosedGrabRole — left loaded they animate
+    /// the same surface concurrently with our shader (discussion #816).
     /// Idempotent; re-asserted from every path that can change the predicate
     /// or the loaded-effects list: the shader-profile-tree load, the animation
     /// registry commit (bringup + pack install/uninstall), the animationsEnabled
     /// setting, and reconfigure() (a Desktop Effects KCM apply re-loads the
     /// scripts from kwinrc). The destructor restores them on a runtime unload
     /// but skips during compositor shutdown (m_compositorShuttingDown).
-    void syncShowDesktopEffectSuppression();
+    void syncStockEffectSuppression();
 
     /// True when any decorated window's resolved chain carries an audio-reactive
     /// pack (SurfaceShaderEffect::audio). Read from pack METADATA (no compile

@@ -78,7 +78,7 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
     // close it, but that handler runs inside KWin's own emission over its
     // effects list, which is the one place an unload must not happen.
     QTimer::singleShot(0, this, [this]() {
-        syncShowDesktopEffectSuppression();
+        syncStockEffectSuppression();
     });
 }
 

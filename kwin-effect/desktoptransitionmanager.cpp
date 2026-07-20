@@ -516,7 +516,7 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
     // still-visible windows. Releasing at settle would fire it a second time.
     // This is also why windowaperture/eyeonscreen never pass fullScreen: true.
     // Nothing is lost by not claiming: the show-desktop script effects ignore
-    // the claim anyway (syncShowDesktopEffectSuppression unloads them), and
+    // the claim anyway (syncStockEffectSuppression unloads them), and
     // contention with Overview/Cube is handled by the bow-out check at the top.
     KWin::effects->addRepaintFull();
 }

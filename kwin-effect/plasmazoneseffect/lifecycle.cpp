@@ -247,7 +247,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // at all. Re-run the suppression sync here so KWin's
                 // show-desktop effects are unloaded exactly when the peek pack
                 // becomes runnable and restored the moment it stops being.
-                syncShowDesktopEffectSuppression();
+                syncStockEffectSuppression();
             });
 
     // Surface shader pack hot-reload: when a data/surface pack changes on disk,
@@ -683,7 +683,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // resolve is a no-op, so KWin's default show-desktop behaviour proceeds
     // untouched.
     // While a pack IS assigned, KWin's windowaperture / eyeonscreen script
-    // effects are unloaded (syncShowDesktopEffectSuppression) — they ignore
+    // effects are unloaded (syncStockEffectSuppression) — they ignore
     // the fullscreen claim, and left loaded they would leak their transforms
     // into the peek captures.
     connect(KWin::effects, &KWin::EffectsHandler::showingDesktopChanged, this, [this](bool showing) {
@@ -1171,83 +1171,118 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
                                                 QStringLiteral("hideOverlay"));
 }
 
-void PlasmaZonesEffect::syncShowDesktopEffectSuppression()
+void PlasmaZonesEffect::syncStockEffectSuppression()
 {
     if (!KWin::effects) {
         return;
     }
-    // Our peek owns the show-desktop animation only when the resolved pack
-    // would actually RUN: animations enabled, installed, AND a desktop-contract
-    // pack. Mirrors the whole peek path's runnability gates, not just the
-    // showingDesktopChanged handler's: the handler itself only checks the
-    // animations toggle and a non-empty id, while the isValid/appliesTo pair
-    // lives downstream in DesktopTransitionManager::prepareTransitionPrototype.
-    // This has to be the stricter of the two — a stale or inherited non-desktop
-    // override (or a pack assigned while the animations master toggle is off)
-    // must not unload KWin's effects and then bail at the signal, leaving the
-    // user with no show-desktop animation at all.
+    // A pack owns an event only when it would actually RUN: animations
+    // enabled, a pack resolved for the event's path (built-in defaults
+    // included), installed, AND applying to the event's contract class.
+    // For the peek this mirrors the whole peek path's runnability gates, not
+    // just the showingDesktopChanged handler's: the handler itself only
+    // checks the animations toggle and a non-empty id, while the
+    // isValid/appliesTo pair lives downstream in
+    // DesktopTransitionManager::prepareTransitionPrototype. The gate has to
+    // be the stricter of the two — a stale or inherited wrong-contract
+    // override (or a pack assigned while the animations master toggle is
+    // off) must not unload KWin's effects and then bail at the signal,
+    // leaving the user with no animation at all.
     //
     // The gate covers ASSIGNMENT and CONTRACT, not COMPILE. Compilation happens
     // on the GL thread at paint time, so a pack whose metadata is valid but
     // whose .frag fails to compile still unloads the builtins here and then
     // draws nothing (compiledShader's null sentinel abandons the leg). That
-    // leaves no show-desktop animation for as long as the pack stays assigned.
+    // leaves no animation for the event for as long as the pack stays assigned.
     // Accepted rather than plumbed: routing a paint-thread compile result back
     // into this predicate would make the suppression depend on frame timing,
     // and a bundled pack that fails to compile is a build-time bug the shader
     // validator catches, not a runtime state to design around.
-    bool wantOurs = false;
-    const PhosphorAnimationShaders::ShaderProfile profile = PhosphorAnimationShaders::resolveShaderWithDefault(
-        m_shaderManager.profileTree(), PhosphorAnimation::ProfilePaths::DesktopPeek);
-    const QString effectId = profile.effectiveEffectId();
-    if (!effectId.isEmpty() && m_windowAnimator->isEnabled()) {
-        const PhosphorAnimationShaders::AnimationShaderEffect eff = m_shaderManager.shaderRegistry().effect(effectId);
-        wantOurs = eff.isValid()
-            && PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff,
-                                                                        PhosphorAnimation::ProfilePaths::DesktopPeek);
-    }
-    static const QString kBuiltinShowDesktopEffects[] = {QStringLiteral("windowaperture"),
-                                                         QStringLiteral("eyeonscreen")};
-    if (wantOurs) {
-        for (const QString& name : kBuiltinShowDesktopEffects) {
-            // Record then unload only what is actually loaded, so the restore
-            // path re-loads exactly the user's own configuration and never
-            // force-loads an effect they had disabled.
-            if (KWin::effects->isEffectLoaded(name)) {
-                if (!m_suppressedShowDesktopEffects.contains(name)) {
-                    m_suppressedShowDesktopEffects.append(name);
-                }
-                KWin::effects->unloadEffect(name);
-            }
+    const auto packOwnsEvent = [this](const QString& path) {
+        const PhosphorAnimationShaders::ShaderProfile profile =
+            PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), path);
+        const QString effectId = profile.effectiveEffectId();
+        if (effectId.isEmpty() || !m_windowAnimator->isEnabled()) {
+            return false;
         }
-        return;
+        const PhosphorAnimationShaders::AnimationShaderEffect eff = m_shaderManager.shaderRegistry().effect(effectId);
+        return eff.isValid() && PhosphorAnimationShaders::shaderEffectAppliesToEventPath(eff, path);
+    };
+
+    // Suppression groups — each KWin stock effect is owed unloading exactly
+    // while OUR pack owns the event it animates (discussion #816: with both
+    // running, two effects animate the same surface concurrently — stutter,
+    // ghost trails, or a cancelled stock leg). The minimize/maximize stock
+    // effects honor no grab role (unlike the open/close builtins, which the
+    // WindowAddedGrabRole / WindowClosedGrabRole path already handles
+    // per-window), so unloading is the only suppression that works — the same
+    // conclusion the peek reached for windowaperture/eyeonscreen.
+    //
+    // TREE-resolved assignment only, deliberately: a per-app animation RULE
+    // carrying a minimize/maximize shader cannot drive a global unload — it
+    // would strip the stock animation from every other window for one app's
+    // override. A rule-scoped pack therefore still double-animates its
+    // matches; the tree (the global assignment surface) is the opt-in that
+    // makes the exchange whole-session coherent.
+    QStringList wanted;
+    if (packOwnsEvent(PhosphorAnimation::ProfilePaths::DesktopPeek)) {
+        wanted << QStringLiteral("windowaperture") << QStringLiteral("eyeonscreen");
     }
-    // Keep names whose re-load failed: the wantOurs=false branch re-runs on
-    // every later sync (see the four trigger sites on the header decl), so a
-    // transient loader failure gets a free retry instead of permanently
+    if (packOwnsEvent(PhosphorAnimation::ProfilePaths::WindowMinimize)) {
+        // Both stock minimize animations: KWin loads whichever the user
+        // picked in the exclusive minimize-animations group, and unloading
+        // the one that is not loaded is a recorded no-op.
+        wanted << QStringLiteral("magiclamp") << QStringLiteral("squash");
+    }
+    if (packOwnsEvent(PhosphorAnimation::ProfilePaths::WindowMaximize)) {
+        wanted << QStringLiteral("maximize");
+    }
+
+    // Record then unload only what is actually loaded, so the restore path
+    // re-loads exactly the user's own configuration and never force-loads an
+    // effect they had disabled. Re-asserted every sync: a Desktop Effects KCM
+    // apply re-loads scripts from kwinrc behind our back while the predicate
+    // still holds, and this loop re-unloads them (the contains() check keeps
+    // the record entry unique).
+    for (const QString& name : std::as_const(wanted)) {
+        if (KWin::effects->isEffectLoaded(name)) {
+            if (!m_suppressedStockEffects.contains(name)) {
+                m_suppressedStockEffects.append(name);
+            }
+            KWin::effects->unloadEffect(name);
+        }
+    }
+    // Restore recorded names whose group predicate stopped holding. Keep
+    // names whose re-load failed: the sync re-runs from every trigger site,
+    // so a transient loader failure gets a free retry instead of permanently
     // dropping the restore obligation for the session. Already-loaded names
     // are satisfied as-is (a KCM reconcile can re-load them behind our back,
     // and loadEffect returns false for a loaded effect — treating that as a
     // failure would pin the name in the retry list forever, warning on every
     // sync for an effect that is in fact running).
-    QStringList failed;
-    for (const QString& name : std::as_const(m_suppressedShowDesktopEffects)) {
+    QStringList keep;
+    for (const QString& name : std::as_const(m_suppressedStockEffects)) {
+        if (wanted.contains(name)) {
+            keep.append(name); // still suppressed; restore is owed later
+            continue;
+        }
         if (KWin::effects->isEffectLoaded(name)) {
             continue;
         }
         if (!KWin::effects->loadEffect(name)) {
-            qCWarning(lcEffect) << "failed to restore show-desktop effect" << name << "— will retry on next sync";
-            failed.append(name);
+            qCWarning(lcEffect) << "failed to restore stock effect" << name << "— will retry on next sync";
+            keep.append(name);
         }
     }
-    m_suppressedShowDesktopEffects = failed;
+    m_suppressedStockEffects = keep;
 }
 
 PlasmaZonesEffect::~PlasmaZonesEffect()
 {
-    // Give KWin back the show-desktop script effects the peek suppression
-    // unloaded — a runtime unload of THIS effect (KCM toggle) must not leave
-    // the user with no show-desktop animation. First, while everything is
+    // Give KWin back the stock effects the suppression unloaded (show-desktop
+    // scripts for the peek, magiclamp/squash/maximize for window packs) — a
+    // runtime unload of THIS effect (KCM toggle) must not leave
+    // the user with no minimize/maximize/show-desktop animation. First, while everything is
     // still alive. Skipped during compositor shutdown (the aboutToQuit latch):
     // there the destructor runs from EffectsHandler's own unload-everything
     // sequence, and loadEffect would re-instantiate a script effect into the
@@ -1268,7 +1303,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // originated from a KCM-apply reconcile iterating the loaded-effects
         // list, a synchronous loadEffect here would mutate the container
         // mid-iteration — the same hazard reconfigure() defers around.
-        const QStringList toRestore = m_suppressedShowDesktopEffects;
+        const QStringList toRestore = m_suppressedStockEffects;
         QTimer::singleShot(0, [toRestore]() {
             if (!KWin::effects) {
                 return;
@@ -1288,11 +1323,11 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
                 // Already loaded (a KCM reconcile beat us to it) is satisfied,
                 // not a failure — loadEffect returns false for a loaded effect.
                 if (!KWin::effects->isEffectLoaded(name) && !KWin::effects->loadEffect(name)) {
-                    qCWarning(lcEffect) << "failed to restore show-desktop effect" << name;
+                    qCWarning(lcEffect) << "failed to restore stock effect" << name;
                 }
             }
         });
-        m_suppressedShowDesktopEffects.clear();
+        m_suppressedStockEffects.clear();
     }
 
     // Sever the registry's `effectsChanged` connection BEFORE any shader or

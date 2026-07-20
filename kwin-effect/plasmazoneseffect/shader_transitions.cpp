@@ -2116,7 +2116,7 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
                                     // It can also assign or clear the `desktop.peek` pack;
                                     // keep KWin's own show-desktop effects unloaded exactly
                                     // while ours owns that animation.
-                                    syncShowDesktopEffectSuppression();
+                                    syncStockEffectSuppression();
                                 },
                                 /*arraySink=*/{});
         });

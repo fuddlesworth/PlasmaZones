@@ -939,7 +939,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         // with animations off the peek never runs, so KWin's own show-desktop
         // effects must come back rather than leave the user with no
         // show-desktop animation at all.
-        syncShowDesktopEffectSuppression();
+        syncStockEffectSuppression();
     });
     loadSettingAsync(QStringLiteral("animationDuration"), [this](const QVariant& v) {
         // Clamp against the canonical settings-UI bounds. The earlier
