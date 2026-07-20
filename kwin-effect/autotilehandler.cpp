@@ -756,9 +756,9 @@ void AutotileHandler::onDaemonReady()
     // setWindowFloatingForScreen against state the new daemon never had, and
     // a stale record would mis-route the next unminimize. Pending
     // cross-screen size-restore connections are likewise per-session.
-    // Pending deferred unminimize→unfloat commits need no explicit cancel
-    // here: their timeout bails when m_minimizeFloatedWindows.remove()
-    // misses, which the clear below guarantees.
+    // clearAllPendingMinimizeFloats() also cancels the pending deferred
+    // unminimize→unfloat timers; an escapee's timeout would bail anyway when
+    // m_minimizeFloatedWindows.remove() misses after the clear below.
     clearAllPendingMinimizeFloats();
     m_minimizeFloatedWindows.clear();
     for (auto connIt = m_pendingCrossScreenRestore.begin(); connIt != m_pendingCrossScreenRestore.end(); ++connIt) {
