@@ -33,6 +33,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendPerformanceSchema(s);
     appendZoneGeometrySchema(s);
     appendShortcutsSchema(s);
+    appendCheatsheetSchema(s);
     appendEditorSchema(s);
     appendExclusionsSchema(s);
     appendDisplaySchema(s);
@@ -445,9 +446,7 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 // snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation),
 // Tiling (autotile master/ratio/count controls + retile toggle), Editor
 // (zone editor shortcuts — duplicate, split, fill). All QString keys, no
-// validators needed — plus the trailing Cheatsheet group, whose Enabled
-// key is the one Bool in this function (shortcut-adjacent surface, see
-// the inline note at its definition).
+// validators needed.
 
 namespace {
 // Helper: append a string KeyDef with no validator. Cuts the noise in the
@@ -526,10 +525,15 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::decMasterCountKey(), CD::autotileDecMasterCountShortcut(), QMetaType::QString},
         {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString},
     };
+}
 
-    // Cheatsheet overlay knobs live here rather than in their own append
-    // function — the group exists for the cheatsheet's toggle trigger,
-    // which is shortcut-adjacent surface.
+// ─── Cheatsheet ─────────────────────────────────────────────────────────────
+// The shortcut cheatsheet overlay's own group (the toggle shortcut string
+// lives in Shortcuts.Global with its siblings, registered above).
+
+void appendCheatsheetSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
     schema.groups[CD::cheatsheetGroup()] = {
         {CD::enabledKey(), CD::cheatsheetEnabled(), QMetaType::Bool},
     };

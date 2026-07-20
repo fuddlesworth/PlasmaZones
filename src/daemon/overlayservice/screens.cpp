@@ -318,6 +318,14 @@ void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
         destroyOverlayWindow(physicalScreenId);
         destroyZoneSelectorWindow(physicalScreenId);
         destroyPassiveShell(physicalScreenId);
+        // Drop the now-dead bare-physId entry on both sides, mirroring the
+        // physical-removal branch above. destroyPassiveShell only zeroes
+        // the ShellState fields; without the removals the stale entry
+        // survives until the monitor is physically removed (bounded but
+        // pointless, and destroyAllWindowsForPhysicalScreen skips it
+        // because every field it matches on was just zeroed).
+        m_shellHost->removeState(physicalScreenId);
+        m_screenStates.remove(physicalScreenId);
         // A modal open on the pre-split bare-physId shell just lost its
         // slot. The later destroyAllWindowsForPhysicalScreen loop CANNOT
         // reset it: destroyShell's PreDestroy hook already zeroed every

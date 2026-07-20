@@ -248,7 +248,18 @@ void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& 
     if (it->lastCurrent == newTrigger) {
         return;
     }
-    KGlobalAccel::self()->setShortcut(it->action, {newTrigger});
+    // NoAutoloading, unlike registerShortcut: registration already SAVED a
+    // binding to kglobalshortcutsrc, so with the default autoloading flag
+    // this call would load that saved value back and silently ignore
+    // newTrigger — making every programmatic rebind a no-op (verified
+    // against a live daemon by test_kglobalaccel_backend). updateShortcut
+    // only fires when the consumer's own config value actually changed
+    // (Registry short-circuits same-sequence rebinds), i.e. an explicit
+    // rebind that must win; NoAutoloading applies it AND persists it, so
+    // System Settings stays in sync. Startup adoption of a System
+    // Settings override still works — that path is registerShortcut's
+    // autoloading setShortcut, not this one.
+    KGlobalAccel::self()->setShortcut(it->action, {newTrigger}, KGlobalAccel::NoAutoloading);
     it->lastCurrent = newTrigger;
     // Same self-echo seeding as registerShortcut — see the note there.
     m_impl->lastReportedTriggers.insert(id, KGlobalAccel::self()->shortcut(it->action));
