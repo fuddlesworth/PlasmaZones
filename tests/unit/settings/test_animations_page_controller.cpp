@@ -29,10 +29,15 @@
 
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ShaderProfile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 
+#include "../helpers/IsolatedConfigGuard.h"
+#include "config/settings.h"
 #include "settings/animationspagecontroller.h"
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 
@@ -625,6 +630,63 @@ private Q_SLOTS:
         // Empty path / nonsense path.
         QVERIFY(!c.supportsShaderLeg(QString()));
         QVERIFY(!c.supportsShaderLeg(QStringLiteral("../etc/passwd")));
+    }
+
+    // ─── Stock-animation suppression mirror ───────────────────────────────
+
+    /// `stockSuppressedEvents` is the settings-side mirror of the
+    /// compositor's syncStockEffectSuppression ownership gate; the rule
+    /// editor's stock-animation conflict chip hides for listed events. Pin
+    /// the gate's three inputs: tree assignment (a tree-resolved effectId
+    /// on the minimize/maximize path lists the event; with a null registry
+    /// the unknown id gets the warm-up grace and counts as owned), the
+    /// animations master toggle (off collapses the list to empty), and the
+    /// NOTIFY wiring (both inputs fire stockSuppressedEventsChanged so the
+    /// chip bindings re-evaluate).
+    void stockSuppressedEvents_reflectsTreeAndMasterToggle()
+    {
+        IsolatedConfigGuard guard;
+        Settings s;
+        s.setAnimationsEnabled(true);
+        AnimationsPageController c(nullptr, &s);
+
+        // No tree assignment: nothing suppressed, no conflict-free events.
+        QVERIFY(c.stockSuppressedEvents().isEmpty());
+
+        QSignalSpy spy(&c, &AnimationsPageController::stockSuppressedEventsChanged);
+
+        // Tree-assign a minimize pack. The controller was built with a null
+        // registry, so the effectId is unknown and the warm-up grace counts
+        // it as owned (mirroring resolvedShaderProfile's grace).
+        PhosphorAnimationShaders::ShaderProfileTree tree;
+        PhosphorAnimationShaders::ShaderProfile profile;
+        profile.effectId = QStringLiteral("genie");
+        tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMinimize, profile);
+        s.setShaderProfileTree(tree);
+
+        QVERIFY2(spy.count() >= 1, "tree change must notify the chip bindings");
+        // Minimize is owned; maximize (unassigned) is not.
+        QCOMPARE(c.stockSuppressedEvents(), QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize});
+
+        // Assigning the maximize path too lists both events.
+        tree.setOverride(PhosphorAnimation::ProfilePaths::WindowMaximize, profile);
+        s.setShaderProfileTree(tree);
+        QCOMPARE(c.stockSuppressedEvents(),
+                 (QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize,
+                              PhosphorAnimation::ProfilePaths::WindowMaximize}));
+
+        // Master toggle off gates the whole predicate: nothing is owned and
+        // the change is notified, so every chip comes back.
+        const int beforeToggle = spy.count();
+        s.setAnimationsEnabled(false);
+        QVERIFY2(spy.count() > beforeToggle, "master-toggle flip must notify the chip bindings");
+        QVERIFY(c.stockSuppressedEvents().isEmpty());
+
+        // Toggle back on: ownership returns.
+        s.setAnimationsEnabled(true);
+        QCOMPARE(c.stockSuppressedEvents(),
+                 (QStringList{PhosphorAnimation::ProfilePaths::WindowMinimize,
+                              PhosphorAnimation::ProfilePaths::WindowMaximize}));
     }
 };
 
