@@ -229,9 +229,11 @@ QStringList AnimationsPageController::stockSuppressedEvents() const
         if (effectId.isEmpty()) {
             return false;
         }
-        if (m_shaderRegistry && m_shaderRegistry->hasEffect(effectId)
-            && !shaderEffectAppliesToEventPath(m_shaderRegistry->effect(effectId), path)) {
-            return false;
+        if (m_shaderRegistry && m_shaderRegistry->hasEffect(effectId)) {
+            const AnimationShaderEffect eff = m_shaderRegistry->effect(effectId);
+            if (!eff.isValid() || !shaderEffectAppliesToEventPath(eff, path)) {
+                return false;
+            }
         }
         return true;
     };
