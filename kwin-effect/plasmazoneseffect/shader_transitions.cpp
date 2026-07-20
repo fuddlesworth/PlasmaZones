@@ -2113,9 +2113,10 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
                                     // animation pack; re-evaluate the cava run gate so the
                                     // provider is warm before the first transition needs it.
                                     scheduleEffectAudioSync();
-                                    // It can also assign or clear the `desktop.peek` pack;
-                                    // keep KWin's own show-desktop effects unloaded exactly
-                                    // while ours owns that animation.
+                                    // It can also assign or clear any suppression-owning pack
+                                    // (`desktop.peek`, `window.minimize`, `window.maximize`);
+                                    // keep KWin's own stock effects unloaded exactly while
+                                    // ours owns the event.
                                     syncStockEffectSuppression();
                                 },
                                 /*arraySink=*/{});

@@ -479,7 +479,7 @@ ColumnLayout {
             Accessible.name: i18n("May run alongside the KDE animation for this event")
             ToolTip.visible: stockConflictHover.hovered
             ToolTip.delay: Kirigami.Units.toolTipDelay
-            ToolTip.text: row.action.event === "window.movement.maximize" ? i18n("A rule cannot turn off the KDE Maximize animation for matched windows. If it is enabled in System Settings → Desktop Effects, both animations will play together.") : i18n("A rule cannot turn off the KDE minimize animation (Magic Lamp or Squash) for matched windows. If one is enabled in System Settings → Desktop Effects, both animations will play together.")
+            ToolTip.text: row.action.event === "window.movement.maximize" ? i18n("A rule cannot turn off the KDE maximize animation for matched windows. If it is enabled in System Settings → Desktop Effects, both animations will play together.") : i18n("A rule cannot turn off the KDE minimize animation (Magic Lamp or Squash) for matched windows. If one is enabled in System Settings → Desktop Effects, both animations will play together.")
 
             HoverHandler {
                 id: stockConflictHover

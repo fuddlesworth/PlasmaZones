@@ -935,10 +935,10 @@ void PlasmaZonesEffect::loadCachedSettings()
             return;
         }
         m_windowAnimator->setEnabled(v.toBool());
-        // The animations master toggle is part of the suppression predicate:
-        // with animations off the peek never runs, so KWin's own show-desktop
-        // effects must come back rather than leave the user with no
-        // show-desktop animation at all.
+        // The animations master toggle is part of the suppression predicate
+        // for every group: with animations off none of our packs run, so
+        // KWin's own minimize / maximize / show-desktop effects must come
+        // back rather than leave the user with no animation at all.
         syncStockEffectSuppression();
     });
     loadSettingAsync(QStringLiteral("animationDuration"), [this](const QVariant& v) {

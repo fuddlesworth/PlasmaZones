@@ -1177,8 +1177,12 @@ void PlasmaZonesEffect::syncStockEffectSuppression()
         return;
     }
     // A pack owns an event only when it would actually RUN: animations
-    // enabled, a pack resolved for the event's path (built-in defaults
-    // included), installed, AND applying to the event's contract class.
+    // enabled, a pack resolved for the event's path, installed, AND applying
+    // to the event's contract class. Resolution goes through
+    // resolveShaderWithDefault, so a built-in per-event default would count
+    // as ownership too — though none of the three current event paths
+    // carries one (defaultShaderEffectIdForPath covers only the snap /
+    // layout-switch geometry legs and the daemon overlay surfaces).
     // For the peek this mirrors the whole peek path's runnability gates, not
     // just the showingDesktopChanged handler's: the handler itself only
     // checks the animations toggle and a non-empty id, while the
@@ -1281,9 +1285,10 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
 {
     // Give KWin back the stock effects the suppression unloaded (show-desktop
     // scripts for the peek, magiclamp/squash/maximize for window packs) — a
-    // runtime unload of THIS effect (KCM toggle) must not leave
-    // the user with no minimize/maximize/show-desktop animation. First, while everything is
-    // still alive. Skipped during compositor shutdown (the aboutToQuit latch):
+    // runtime unload of THIS effect (KCM toggle) must not leave the user
+    // with no minimize/maximize/show-desktop animation. First, while
+    // everything is still alive.
+    // Skipped during compositor shutdown (the aboutToQuit latch):
     // there the destructor runs from EffectsHandler's own unload-everything
     // sequence, and loadEffect would re-instantiate a script effect into the
     // list KWin is tearing down mid-iteration. Nothing is lost by skipping —

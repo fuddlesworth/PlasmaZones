@@ -264,27 +264,19 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
     // disturb the iteration.
     const auto batch = std::exchange(m_pendingFrameGeometry, {});
     for (auto it = batch.constBegin(); it != batch.constEnd(); ++it) {
-        // The exclusion gate and the decoration resync run HERE, once per
-        // debounced flush, rather than on every windowFrameGeometryChanged
-        // tick — the gate is an uncached rule resolve over a freshly built
-        // ruleQuery, and animated geometry fired it hundreds of times per
-        // second (discussion #816). QPointer nulls if the window died since
-        // the stash; a dead or excluded window contributes no daemon push.
+        // The shouldHandleWindow exclusion gate runs HERE, once per debounced
+        // flush, rather than on every windowFrameGeometryChanged tick — it is
+        // an uncached rule resolve over a freshly built ruleQuery, and
+        // animated geometry fired it hundreds of times per second
+        // (discussion #816). The decoration resync deliberately stayed per
+        // tick in the stash lambda (window_lifecycle.cpp): it is cheap and
+        // deferring it let a re-decorated title bar flash for the throttle
+        // window. QPointer nulls if the window died since the stash; a dead
+        // or excluded window contributes no daemon push.
         KWin::EffectWindow* w = it.value().window.data();
         if (!w || w->isDeleted() || !shouldHandleWindow(w)) {
             continue;
         }
-        // Self-heal a noBorder reset KWin issues asynchronously after a
-        // cross-OUTPUT move. For a rule-owned (title-bar-hidden) window
-        // the manager already believes it hidden, so the synchronous
-        // resync in updateAllDecorations bails ("still suppressed") when it
-        // runs before KWin re-evaluates the decoration. KWin grows the
-        // frame by the title-bar height when it re-decorates, firing the
-        // frame-geometry signal that stashed this entry: resyncWindow
-        // re-hides exactly the windows the manager owns and believes hidden
-        // whose decoration drifted back, and is a self-guarding no-op
-        // otherwise.
-        m_decorationManager->resyncWindow(it.key());
         const QRect& geo = it.value().geometry;
         PhosphorProtocol::ClientHelpers::fireAndForget(
             this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setFrameGeometry"),

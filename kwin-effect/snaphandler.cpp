@@ -393,10 +393,16 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             if (m_effect->autotileHandler()->isAutotileScreen(currentScreenId)) {
                 // The screen flipped to autotile during the grace; that
                 // engine's own minimize-float machine owns the window now.
+                // The m_minimizeFloatedWindows entry is deliberately LEFT in
+                // place (mirroring the autotile twin's symmetric bail): the
+                // window is still floating daemon-side, and the entry drains
+                // on close via removeMinimizeFloated.
                 qCDebug(lcEffect) << "Snap: deferred unfloat screen became autotile, skipping:" << windowId;
                 return;
             }
-            m_minimizeFloatedWindows.remove(windowId);
+            if (!m_minimizeFloatedWindows.remove(windowId)) {
+                return; // State moved under us (e.g. bulk cleanup); nothing to commit.
+            }
             commitUnminimizeUnfloat(fw, windowId, currentScreenId);
         });
         m_pendingUnminimizeUnfloat.insert(windowId, timer);

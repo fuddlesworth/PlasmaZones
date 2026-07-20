@@ -979,8 +979,17 @@ private:
     /// re-enters updateWindowDecoration; once the animation drops its ref the
     /// window stops being visible and the normal undecorate proceeds (or, if
     /// the window unminimized meanwhile, the normal refresh path re-resolves).
-    /// Keyed set prevents timer pileup when decoration sweeps re-enter while
-    /// a poll is already armed. Defined in decorations.cpp.
+    /// The deferral's lifetime is bounded by WHOEVER holds a visible ref, not
+    /// only minimize animations: a thumbnail / overview effect keeping a
+    /// minimized window visible extends the poll (and the kept decoration)
+    /// for the ref's whole lifetime, which is the correct trade — the window
+    /// is being painted, so its decoration staying live is consistent, and
+    /// each poll tick is a lookup plus an early return. Keyed set prevents
+    /// timer pileup when decoration sweeps re-enter while a poll is already
+    /// armed; stale entries self-drain (the timer removes its own entry, and
+    /// a re-entry against a since-cleared decoration map is a no-op that does
+    /// not re-arm), so bulk teardown paths need no explicit clear. Defined in
+    /// decorations.cpp.
     void deferDecorationTeardownWhileAnimated(const QString& windowId);
     QSet<QString> m_animatedDecoTeardownPending;
 
