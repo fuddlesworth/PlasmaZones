@@ -205,11 +205,12 @@ private:
     // is per-(screen, desktop, activity). It stays correct ONLY because every
     // mutation is per-window (mark/clear at commit funnels) — there is no
     // batch diff. Never add an "untile whatever is absent from this batch"
-    // cleanup here without gating on isOnCurrentDesktop: a window absent from
-    // the current desktop's batch is usually snapped in a SIBLING desktop's
-    // state, and clearing it flips the tiled appearance scope and restores
-    // its title bar mid-desktop-switch (the autotile #808 bug; see the gated
-    // diff in autotilehandler/tiling.cpp onComplete).
+    // cleanup here without gating on isOnCurrentDesktop AND
+    // isOnCurrentActivity: a window absent from the current context's batch
+    // is usually snapped in a SIBLING desktop's or activity's state, and
+    // clearing it flips the tiled appearance scope and restores its title
+    // bar mid-switch (the autotile #808 bug; see the gated diff in
+    // autotilehandler/tiling.cpp onComplete).
     BorderState m_border;
     // Single-shot instant-restore latency cache (appId → saved zone geometry +
     // screen), populated on daemon-ready and consumed on window-open.

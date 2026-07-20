@@ -337,26 +337,25 @@ void AutotileHandler::slotWindowsTileRequested(const PhosphorProtocol::TileReque
             const QSet<QString> previous = AutotileStateHelpers::tiledOnScreen(m_border, screenId);
             const QSet<QString> untiled = previous - newSet;
             for (const QString& wid : untiled) {
-                KWin::EffectWindow* win = m_effect->findWindowById(wid);
-                // Exact-id re-check: findWindowById's appId fuzzy fallback can
-                // resolve a same-app SIBLING for a gone id, and the desktop
-                // gate below must read the REAL window's desktop (a vanished
-                // window still falls through and clears).
-                if (win && m_effect->getWindowId(win) != wid) {
-                    win = nullptr;
-                }
-                // A retile batch describes ONE (screen, desktop) TilingState —
-                // the screen's CURRENT desktop. A tracked window sitting on
-                // another desktop is absent from `newSet` because it belongs
-                // to a sibling desktop's state, not because it was untiled,
-                // and this batch has no jurisdiction over it. Clearing it
-                // anyway flipped IsTiled, dropped the tiled appearance scope,
-                // and restored the title bar on the outgoing desktop's
-                // windows for the whole desktop-switch animation (#808). Its
-                // own desktop's retile decides its fate; genuine untiles
-                // while off-desktop (float, close) flow through funnels that
-                // clear all screens regardless.
-                if (win && !win->isOnCurrentDesktop()) {
+                // Exact resolve only: findWindowById's appId fuzzy fallback
+                // could hand back a same-app SIBLING for a gone id, and the
+                // jurisdiction gate below must read the REAL window's
+                // desktop/activity (a vanished window resolves null and still
+                // falls through and clears).
+                KWin::EffectWindow* win = m_effect->findWindowByIdExact(wid);
+                // A retile batch describes ONE (screen, desktop, activity)
+                // TilingState — the screen's CURRENT context. A tracked window
+                // sitting on another desktop or activity is absent from
+                // `newSet` because it belongs to a sibling context's state,
+                // not because it was untiled, and this batch has no
+                // jurisdiction over it. Clearing it anyway flipped IsTiled,
+                // dropped the tiled appearance scope, and restored the title
+                // bar on the outgoing desktop's windows for the whole
+                // desktop-switch animation (#808) — and identically for an
+                // activity switch. Its own context's retile decides its fate;
+                // genuine untiles while off-context (float, close) flow
+                // through funnels that clear all screens regardless.
+                if (win && (!win->isOnCurrentDesktop() || !win->isOnCurrentActivity())) {
                     continue;
                 }
                 // Every untiled window drops its per-screen tiled tracking,
