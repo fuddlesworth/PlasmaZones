@@ -124,19 +124,18 @@ private Q_SLOTS:
         QCOMPARE(engine.config()->masterCount, 3);
     }
 
-    // An algorithm switch must not author the global Tiling.Algorithm/MaxWindows
-    // key. It used to write the incoming algorithm's defaultMaxWindows there,
-    // which made a plain switch look like a user edit and surfaced as a spurious
-    // "Max windows FROM 5 TO 9" row in the profile diff. maxWindows is
-    // per-algorithm data and belongs only in savedAlgorithmSettings.
-    void testAlgorithmSwitch_doesNotWriteGlobalMaxWindows()
+    // Switching algorithms with no user customization must not author ANY config
+    // delta — not the global Tiling.Algorithm/MaxWindows key, and not a
+    // default-valued per-algorithm slot. Both would surface as a spurious "you
+    // changed this" row in the config profile diff. grid is the algorithm from the
+    // original report: its defaultMaxWindows of 9 differs from the global default,
+    // so a leak shows up as "FROM 5 TO 9".
+    void testAlgorithmSwitch_untouchedSwitchWritesNoSpuriousDelta()
     {
         Settings settings;
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setEngineSettings(&settings);
 
-        // grid is the algorithm from the original report: its defaultMaxWindows
-        // of 9 is what leaked into the global key and showed as "FROM 5 TO 9".
         auto* gridAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("grid"));
         QVERIFY(gridAlgo);
 
@@ -145,16 +144,56 @@ private Q_SLOTS:
 
         engine.setAlgorithm(QLatin1String("grid"));
 
-        // The switch took effect in the engine's live config...
+        // The switch took effect in the engine's live config: grid runs at its own
+        // default cap, not the global one.
         QCOMPARE(engine.config()->maxWindows, gridAlgo->defaultMaxWindows());
-        // ...and was recorded in the per-algorithm slot, so it survives a restart.
-        const auto saved = engine.config()->savedAlgorithmSettings.constFind(QStringLiteral("grid"));
-        QVERIFY(saved != engine.config()->savedAlgorithmSettings.constEnd());
-        QCOMPARE(saved->maxWindows, gridAlgo->defaultMaxWindows());
-        // ...but the global key is untouched. Guard against a vacuous pass: this
-        // assertion is only meaningful if grid's default differs from the global.
+        // Guard against a vacuous pass: the assertions below are only meaningful if
+        // grid's default differs from the global.
         QVERIFY(gridAlgo->defaultMaxWindows() != globalBefore);
+        // The global key is untouched...
         QCOMPARE(settings.autotileMaxWindows(), globalBefore);
+        // ...and no default-valued per-algorithm slot was persisted. A slot that
+        // merely echoes the algorithm's defaults would be a diff row for a change
+        // the user never made. Neither the switched-to (grid) nor the switched-from
+        // (master-stack) algorithm was customized, so neither may appear on disk.
+        const QVariantMap persisted = settings.autotilePerAlgorithmSettings();
+        QVERIFY2(!persisted.contains(QStringLiteral("grid")),
+                 "default-valued grid slot leaked into persisted per-algorithm settings");
+        QVERIFY2(!persisted.contains(QStringLiteral("master-stack")),
+                 "default-valued master-stack slot leaked into persisted per-algorithm settings");
+    }
+
+    // A routine settings refresh (algorithm unchanged) must not clobber the current
+    // algorithm's per-algorithm maxWindows back to the global key. Because
+    // default-valued slots are no longer persisted, the current algorithm has no
+    // slot to restore from, so the refresh path must fall back to the algorithm's
+    // own default rather than the global value SYNC_FIELD reads.
+    void testRefresh_unchangedAlgorithm_keepsPerAlgoMaxWindows()
+    {
+        Settings settings;
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setEngineSettings(&settings);
+
+        auto* gridAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("grid"));
+        QVERIFY(gridAlgo);
+        QVERIFY(gridAlgo->defaultMaxWindows() != settings.autotileMaxWindows());
+
+        // Make grid the default algorithm and land on it.
+        settings.setDefaultAutotileAlgorithm(QLatin1String("grid"));
+        engine.setAlgorithm(QLatin1String("grid"));
+        QCOMPARE(engine.config()->maxWindows, gridAlgo->defaultMaxWindows());
+
+        // The switch arms the write-back guard timer (single-shot, 500ms), which
+        // suppresses the maxWindows re-read. The clobber only bites on a LATER
+        // refresh once that guard has lapsed, so wait it out — otherwise the test
+        // passes for the wrong reason and never exercises the fallback.
+        QTest::qWait(600);
+
+        // A refresh with the algorithm unchanged (grid stays the default) must not
+        // pull maxWindows down to the global key. The global still holds its schema
+        // default, so grid's own default is authoritative.
+        engine.refreshConfigFromSettings();
+        QCOMPARE(engine.config()->maxWindows, gridAlgo->defaultMaxWindows());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
