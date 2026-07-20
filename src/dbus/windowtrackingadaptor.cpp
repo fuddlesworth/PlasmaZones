@@ -444,8 +444,9 @@ void WindowTrackingAdaptor::refreshOpenWindowPlacements()
     // Re-capture EVERY open window into the unified store at save time. This is the
     // generic, engine-agnostic snapshot: captureWindowPlacement asks each engine's
     // capturePlacement() for the window's current state (snapped float-back, floated
-    // live geometry, autotiled position) and records it — or clears the record if no
-    // engine manages it. Saves are debounced and shutdown is guaranteed to run, so
+    // live geometry, autotiled position) and records it; when no engine manages a
+    // window its existing record is left intact — never cleared there (see the
+    // declaration doc). Saves are debounced and shutdown is guaranteed to run, so
     // this is the single point that makes open-window state (floating drag geometry,
     // autotile tile order) survive a daemon restart without any per-window capture
     // hook in the engines. m_frameGeometry holds every window the effect has
