@@ -1177,7 +1177,7 @@ void ActionRegistry::registerBuiltins()
     // ── per-context gap slots (domain Context) ──
     // Resolved daemon-side at zone-geometry time (DaemonGeometryResolver) as
     // the highest-precedence gap layer. Per-property to mirror the
-    // PerScreenSnappingKey set; the resolver maps these slots into a
+    // PerScreenKeys gap set; the resolver maps these slots into a
     // per-screen-shaped override map and reuses the existing per-side logic.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetInnerGap),

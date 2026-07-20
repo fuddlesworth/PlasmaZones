@@ -5,7 +5,6 @@
 #include "helpers.h"
 #include "macros.h"
 #include "../overlayservice.h"
-#include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
 #include <PhosphorRules/ExclusionRules.h>
@@ -41,9 +40,6 @@ namespace PlasmaZones {
 
 void Daemon::initializeAutotile()
 {
-    // Initialize mode tracker (thin delegate to LayoutManager's per-context PhosphorZones::AssignmentEntry)
-    m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), m_layoutManager.get(), m_screenManager.get(), this);
-
     // Connect autotile engine signals
     if (m_autotileEngine) {
         // Autotile engine signals → OSD (use display name, not algorithm ID)
@@ -62,8 +58,8 @@ void Daemon::initializeAutotile()
                     // Also gate on isAnyScreenAutotile() — loadState() may emit even
                     // when no screen is in autotile mode, and a runtime algorithm
                     // change is irrelevant in that case.
-                    if (m_running && m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
-                        && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
+                    if (m_running && isAnyScreenAutotile() && m_settings && m_settings->showOsdOnLayoutSwitch()
+                        && m_overlayService) {
                         auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algorithmId) : nullptr;
                         QString displayName = algo ? algo->name() : algorithmId;
                         QString screenId;
@@ -251,11 +247,6 @@ void Daemon::initializeAutotile()
             if (why != DisabledReason::NotDisabled) {
                 showContextDisabledOsd(screenId, desktop, activity, why);
                 return;
-            }
-
-            // Set context so ModeTracker reads from the correct per-desktop entry
-            if (m_modeTracker) {
-                m_modeTracker->setContext(screenId, desktop, activity);
             }
 
             // Set the screen context so applyEntry knows which screen to assign

@@ -2248,21 +2248,17 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
         && !m_states.hasWindow(windowId)) {
         const QString appId = currentAppIdFor(windowId);
         if (!appId.isEmpty() && appId != windowId) {
+            // Shared predicate with snap's reciprocal gate
+            // (SnapEngine::resolveWindowRestore) — both engines run
+            // PhosphorEngine::pendingCrossScreenSnapRestore over the same record
+            // fields, so a window is never both deferred-and-claimed or
+            // both-skipped.
             const auto snapCrossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
-                if (p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state
-                    != PhosphorEngine::WindowPlacement::stateSnapped()) {
-                    return false;
-                }
-                // Resolve the recorded screen's mode in the RECORD'S OWN (desktop,
-                // activity) context — the same fields snap's reciprocal gate
-                // (SnapEngine::recordedSnapScreenIsSnapping) reads off the same record.
-                // Keying both engines on the record (not on each engine's live current
-                // desktop, which can differ under per-screen virtual-desktop overrides)
-                // guarantees they reach an identical verdict, so a window is never both
-                // deferred-and-claimed or both-skipped.
-                const QString recScreen = p.screenId.isEmpty() ? screenId : p.screenId;
-                return m_layoutManager->modeForScreen(recScreen, p.virtualDesktop, p.activity)
-                    == PhosphorZones::AssignmentEntry::Mode::Snapping;
+                return PhosphorEngine::pendingCrossScreenSnapRestore(
+                    p, screenId, [&](const QString& rec, int desktop, const QString& activity) {
+                        return m_layoutManager->modeForScreen(rec, desktop, activity)
+                            == PhosphorZones::AssignmentEntry::Mode::Snapping;
+                    });
             };
             if (m_windowTracker->placementStore().peek(windowId, appId, snapCrossRestorePending).has_value()) {
                 qCInfo(PhosphorTileEngine::lcTileEngine)

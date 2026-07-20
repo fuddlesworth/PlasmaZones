@@ -95,21 +95,12 @@ inline constexpr const char AnimationDuration[] = "AnimationDuration";
 inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
 } // namespace PerScreenAutotileKey
 
-namespace PerScreenSnappingKey {
-
-using PhosphorEngine::PerScreenSnappingKey::InnerGap;
-using PhosphorEngine::PerScreenSnappingKey::OuterGap;
-using PhosphorEngine::PerScreenSnappingKey::OuterGapBottom;
-using PhosphorEngine::PerScreenSnappingKey::OuterGapLeft;
-using PhosphorEngine::PerScreenSnappingKey::OuterGapRight;
-using PhosphorEngine::PerScreenSnappingKey::OuterGapTop;
-using PhosphorEngine::PerScreenSnappingKey::UsePerSideOuterGap;
-
-// Only the gap keys above are per-screen. Snap-assist and the zone-selector
-// enable switch are global-only (ISettings::setSnapAssistEnabled /
-// setZoneSelectorEnabled); the per-screen zone-selector config lives in its own
-// map/group keyed by ZoneSelectorConfigKey (see kPerScreenKeys in perscreen.cpp).
-} // namespace PerScreenSnappingKey
+// Per-screen snapping overrides carry only the gap keys, spelled by the shared
+// PhosphorEngine::PerScreenKeys namespace (InnerGap / OuterGap / per-side).
+// Snap-assist and the zone-selector enable switch are global-only
+// (ISettings::setSnapAssistEnabled / setZoneSelectorEnabled); the per-screen
+// zone-selector config lives in its own map/group keyed by ZoneSelectorConfigKey
+// (see kPerScreenKeys in perscreen.cpp).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces

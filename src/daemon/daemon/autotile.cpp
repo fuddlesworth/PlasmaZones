@@ -3,7 +3,6 @@
 
 #include "../daemon.h"
 #include "../overlayservice.h"
-#include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
@@ -40,6 +39,23 @@ constexpr int DELAYED_PANEL_REQUERY_MS = 400;
 // Reapply requested on next event loop (0); daemon state is already updated when we start the timer.
 constexpr int REAPPLY_DELAY_MS = 0;
 } // anonymous namespace
+
+bool Daemon::isAnyScreenAutotile() const
+{
+    if (!m_layoutManager || !m_screenManager) {
+        return false;
+    }
+    const QString activity = currentActivity();
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : effectiveIds) {
+        const QString assignmentId =
+            m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 void Daemon::updateAutotileScreens()
 {

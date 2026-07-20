@@ -42,7 +42,6 @@
 
 #include "overlayservice.h"
 #include "unifiedlayoutcontroller.h"
-#include "modetracker.h"
 #include "shortcutmanager.h"
 #include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneentryscaffold.h"
@@ -2459,8 +2458,6 @@ void Daemon::stop()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->saveStateOnShutdown();
     }
-
-    // ModeTracker delegates to LayoutManager's KConfig — no separate save needed
 
     m_reapplyGeometriesTimer.stop();
 

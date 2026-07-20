@@ -3344,9 +3344,11 @@ constexpr QLatin1String kV4KeyRight{"Right"};
 // ONE value per monitor, stored in the per-screen autotile group (which the
 // config store still reads via "AutotileScreen:<id>" → PerScreen/Autotile/<id>).
 // These frozen literals mirror the v4 container/category spellings and the v4
-// gap-key spellings (snapping used the bare PerScreenSnappingKey names, autotile
-// the "Autotile"-prefixed PerScreenAutotileKey names) so the consume step is
-// decoupled from the live accessors. v4 and v5 share the same PerScreen/Autotile
+// gap-key spellings — snapping used bare key names (with the inner-gap
+// dimension under its legacy "ZonePadding" spelling), autotile the
+// "Autotile"-prefixed PerScreenAutotileKey names — so the consume step is
+// decoupled from the live accessors (today's shared spellings live in
+// PhosphorEngine::PerScreenKeys). v4 and v5 share the same PerScreen/Autotile
 // mapping, so the unified values written here are read back by the current store.
 constexpr QLatin1String kV4PerScreenContainer{"PerScreen"};
 constexpr QLatin1String kV4PerScreenSnappingCat{"Snapping"};
