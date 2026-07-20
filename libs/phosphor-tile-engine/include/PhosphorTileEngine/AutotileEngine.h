@@ -1495,7 +1495,8 @@ private:
     // Canonical windowId → tile rect last emitted for it by applyTiling.
     // Backs lastManagedRect(): deliberately NOT cleared when the window
     // leaves the tiled state (that survival is the point — see the base
-    // doc), only on close and stale-window pruning. Used solely for an
+    // doc), only on full departure: close, a genuine cross-screen move off
+    // an autotile screen, and stale-window pruning. Used solely for an
     // exact frame comparison, so a stale rect is harmless.
     QHash<QString, QRect> m_lastAppliedTileRect;
 

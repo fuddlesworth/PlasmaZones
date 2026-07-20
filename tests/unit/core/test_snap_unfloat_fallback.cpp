@@ -487,6 +487,32 @@ private Q_SLOTS:
         QVERIFY2(!r.found, "no live capture and no record → not-found (caller falls to the fallback-zone path)");
         m_wts->setSnapState(nullptr);
     }
+
+    // The record fallback consumes EXACT-windowId records only. A same-app
+    // SIBLING's record (different instance, same appId FIFO bucket) must never
+    // supply the unfloat target — without the accept predicate, peek's
+    // appId-FIFO branch would hand this record-less window the sibling's home
+    // zone and unfloat-snap it there (cross-window zone bleed).
+    void testResolveUnfloat_noLiveCaptureNoOwnRecord_ignoresAppIdSibling()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString siblingZone = layout->zones().first()->id().toString();
+
+        // The sibling instance persisted a snapped record; the window under
+        // test is floating with NO record of its own and no live capture.
+        seedSnapSlotRecord(engine, QStringLiteral("app|sibling"),
+                           QString(PhosphorEngine::WindowPlacement::stateSnapped()), {siblingZone});
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|recordless"), QStringLiteral("DP-1"), 0);
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveUnfloatGeometry(QStringLiteral("app|recordless"), QStringLiteral("DP-1"));
+        QVERIFY2(!r.found, "a same-app sibling's record must not supply the unfloat target");
+        m_wts->setSnapState(nullptr);
+    }
 };
 
 QTEST_MAIN(TestSnapUnfloatFallback)
