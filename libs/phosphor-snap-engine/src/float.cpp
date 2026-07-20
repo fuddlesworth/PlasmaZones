@@ -274,11 +274,27 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         // out short of re-snapping by hand.
         using PhosphorEngine::WindowPlacement;
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
-        if (const auto rec = m_windowTracker->placementStore().peek(windowId, appId)) {
+        // Exact-windowId records ONLY: a daemon restart keeps KWin uuids, so the
+        // window's own record always exact-matches. Without the accept predicate,
+        // peek's appId-FIFO fallback would hand a record-less floating window a
+        // SIBLING's home zone (same app, different instance) and unfloat-snap it
+        // there — cross-window zone bleed. Logout/login (new uuids) restores
+        // through resolveWindowRestore's take(), never this path.
+        if (const auto rec = m_windowTracker->placementStore().peek(windowId, appId, [&](const WindowPlacement& p) {
+                return p.windowId == windowId;
+            })) {
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
             if (!slot.zoneIds.isEmpty()
                 && (slot.state == WindowPlacement::stateFloating() || slot.state == WindowPlacement::stateSnapped())) {
                 zoneIds = slot.zoneIds;
+                // Home-screen hint. Exact for a stale SNAPPED slot (captured as the
+                // snap screen); an approximation for a FLOATING slot, whose record
+                // screen is the screen the window was floating on at capture time —
+                // after a cross-monitor drift while floating that is the drift
+                // monitor, not the pre-float home. resolveUnfloatScreen validates it
+                // and falls back to the caller's live screen, and cross-monitor
+                // unfloat-to-home is allowed anyway (#724), so the approximation is
+                // bounded.
                 preFloatScreenId = rec->screenId;
                 qCInfo(PhosphorSnapEngine::lcSnapEngine)
                     << "resolveUnfloatGeometry:" << windowId << "no live pre-float capture — using placement record's"

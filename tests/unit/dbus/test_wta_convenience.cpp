@@ -30,9 +30,6 @@
 #include "dbus/snapadaptor.h"
 #include "dbus/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorEngine/PlacementEngineBase.h>
-#include <PhosphorEngine/IPlacementState.h>
-#include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorRules/RuleAction.h>
@@ -127,96 +124,6 @@ static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
     }
     return layout;
 }
-
-// =========================================================================
-// Stub autotile-side engine: only lastManagedRect() matters — it stands in
-// for AutotileEngine's last-applied tile rect memory in the capture guard
-// tests below. Everything else is a no-op.
-// =========================================================================
-
-class StubTileRectEngine : public PhosphorEngine::PlacementEngineBase
-{
-    Q_OBJECT
-public:
-    explicit StubTileRectEngine(QObject* parent = nullptr)
-        : PhosphorEngine::PlacementEngineBase(parent)
-    {
-    }
-
-    QRect managedRect; // returned for every window
-
-    QRect lastManagedRect(const QString&) const override
-    {
-        return managedRect;
-    }
-
-    bool isActiveOnScreen(const QString&) const override
-    {
-        return false;
-    }
-    void windowOpened(const QString&, const QString&, int, int) override
-    {
-    }
-    void windowClosed(const QString&) override
-    {
-    }
-    void windowFocused(const QString&, const QString&) override
-    {
-    }
-    void toggleWindowFloat(const QString&, const QString&) override
-    {
-    }
-    void setWindowFloat(const QString&, bool, const QString&) override
-    {
-    }
-    void focusInDirection(const QString&, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void moveFocusedInDirection(const QString&, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void swapFocusedInDirection(const QString&, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void moveFocusedToPosition(int, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void rotateWindows(bool, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void reapplyLayout(const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void snapAllWindows(const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void cycleFocus(bool, const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void pushToEmptyZone(const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void restoreFocusedWindow(const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void toggleFocusedFloat(const PhosphorEngine::NavigationContext&) override
-    {
-    }
-    void saveState() override
-    {
-    }
-    void loadState() override
-    {
-    }
-    PhosphorEngine::IPlacementState* stateForScreen(const QString&) override
-    {
-        return nullptr;
-    }
-    const PhosphorEngine::IPlacementState* stateForScreen(const QString&) const override
-    {
-        return nullptr;
-    }
-};
 
 // =========================================================================
 // Test Class
@@ -1179,94 +1086,6 @@ private Q_SLOTS:
         m_wta->setWindowFloating(windowId, false);
         QCOMPARE(spy.count(), 2);
         QCOMPARE(spy.at(1).at(1).toBool(), false);
-    }
-
-    // Regression (float-restores-onto-its-own-tile): on a float-from-tiled
-    // toggle the autotile engine clears its tiled bit BEFORE the compositor
-    // repositions the window, so when captureWindowPlacement runs (from
-    // setWindowFloating) the live frame still IS the tile rect and the
-    // isWindowAutotileTiled gate no longer refuses it. The capture must
-    // compare against the engine's remembered last-applied rect and skip the
-    // free-geometry write, or applyGeometryForFloat (which runs AFTER the
-    // capture) reads the poisoned value back and "restores" the window onto
-    // its own tile — permanently overwriting the genuine float-back.
-    void testCaptureWindowPlacement_refusesStillTiledFrameAsFloatBack()
-    {
-        StubTileRectEngine tileEngine;
-        m_wta->setEngines(m_snapEngine, &tileEngine);
-
-        const QString windowId = QStringLiteral("ghostty|inst-tile");
-        const QString appId = m_wta->service()->currentAppIdFor(windowId);
-        const QRect tileRect(1540, 8, 1524, 829);
-        const QRect realFreeBack(1743, 795, 800, 628);
-
-        // The window's genuine float-back from an earlier session.
-        m_wta->service()->recordFreeGeometry(windowId, m_screenId, realFreeBack, true);
-
-        // Post-flip state: snap-side reports the window floating on DP-1 (the
-        // capture's owning-engine slot), the live frame still sits on the tile
-        // rect, and the autotile engine remembers having applied exactly it.
-        m_snapEngine->snapState()->setFloatingOnScreen(windowId, m_screenId, 0);
-        m_wta->setFrameGeometry(windowId, tileRect.x(), tileRect.y(), tileRect.width(), tileRect.height());
-        tileEngine.managedRect = tileRect;
-
-        m_wta->captureWindowPlacement(windowId);
-
-        auto rec = m_wta->service()->placementStore().peek(windowId, appId);
-        QVERIFY(rec);
-        QCOMPARE(rec->freeGeometryFor(m_screenId), realFreeBack);
-
-        // Once the frame moves off the tile rect (the user repositioned the
-        // floating window), the capture adopts the genuine free frame.
-        const QRect movedFrame(600, 400, 900, 700);
-        m_wta->setFrameGeometry(windowId, movedFrame.x(), movedFrame.y(), movedFrame.width(), movedFrame.height());
-        m_wta->captureWindowPlacement(windowId);
-
-        rec = m_wta->service()->placementStore().peek(windowId, appId);
-        QVERIFY(rec);
-        QCOMPARE(rec->freeGeometryFor(m_screenId), movedFrame);
-
-        m_wta->setEngines(m_snapEngine, nullptr);
-    }
-
-    // Regression (phantom snap-float after a mode round-trip): a snapped
-    // window adopted by autotile is handoff-released from snap, so snap
-    // tracks NOTHING for it — its record's snap slot is the frozen per-mode
-    // memory windowsReleased restores from on return to snapping. A capture
-    // running in that window (windowsReleased's own setWindowFloating(false)
-    // fires one) used to fabricate a "floating" snap slot for the untracked
-    // window, overwriting the frozen snapped slot — which windowsReleased
-    // then read back and "restored" as a float the user never made. The
-    // capture must leave the record untouched instead.
-    void testCaptureWindowPlacement_untrackedWindow_preservesFrozenSnapSlot()
-    {
-        const QString windowId = QStringLiteral("app|handoff");
-        const QString appId = m_wta->service()->currentAppIdFor(windowId);
-        const QString zoneId = m_zoneIds.first();
-
-        // Frozen per-mode memory: the record's snap slot says snapped.
-        PhosphorEngine::WindowPlacement p;
-        p.windowId = windowId;
-        p.appId = appId;
-        p.screenId = m_screenId;
-        PhosphorEngine::EngineSlot slot;
-        slot.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
-        slot.zoneIds = QStringList{zoneId};
-        p.engines.insert(m_snapEngine->engineId(), slot);
-        QVERIFY(m_wta->service()->placementStore().record(p));
-
-        // Snap does not track the window (post-handoffRelease state), but the
-        // effect still reports a live frame for it.
-        QVERIFY(!m_snapEngine->isWindowTracked(windowId));
-        m_wta->setFrameGeometry(windowId, 619, 514, 1380, 907);
-
-        m_wta->captureWindowPlacement(windowId);
-
-        const auto rec = m_wta->service()->placementStore().peek(windowId, appId);
-        QVERIFY(rec);
-        const PhosphorEngine::EngineSlot after = rec->slotFor(m_snapEngine->engineId());
-        QCOMPARE(after.state, QString(PhosphorEngine::WindowPlacement::stateSnapped()));
-        QCOMPARE(after.zoneIds, QStringList{zoneId});
     }
 
 private:

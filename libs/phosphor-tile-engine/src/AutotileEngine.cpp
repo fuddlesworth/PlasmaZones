@@ -2507,6 +2507,7 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
             m_states.removeWindow(windowId);
             m_windowMinSizes.remove(windowId);
             m_autotileFloatedWindows.remove(windowId);
+            m_lastAppliedTileRect.remove(windowId);
             if (!oldScreen.isEmpty()) {
                 migrateWindowBetweenKeys(windowId, oldKey, screenId);
             }
