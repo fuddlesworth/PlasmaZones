@@ -238,14 +238,15 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // feeds the cava run gate via hasAudioReactiveAnimation().
                 scheduleEffectAudioSync();
                 // The registry commit is also the FIRST moment (bringup) and
-                // the ONLY moment (pack install/uninstall) the desktop.peek
-                // pack's validity can change without a tree edit: the profile
+                // the ONLY moment (pack install/uninstall) a suppression-owning
+                // pack's validity (peek / minimize / maximize) can change
+                // without a tree edit: the profile
                 // tree arrives on an EARLIER D-Bus reply than the registry
                 // scan, so the tree-load sync at loadShaderProfileFromDbus
                 // resolves against an empty registry on session start, and
                 // deleting the assigned pack from disk never touches the tree
-                // at all. Re-run the suppression sync here so KWin's
-                // show-desktop effects are unloaded exactly when the peek pack
+                // at all. Re-run the suppression sync here so KWin's stock
+                // effects are unloaded exactly when our pack
                 // becomes runnable and restored the moment it stops being.
                 syncStockEffectSuppression();
             });

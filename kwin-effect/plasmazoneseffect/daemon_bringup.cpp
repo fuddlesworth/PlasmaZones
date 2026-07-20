@@ -929,8 +929,8 @@ void PlasmaZonesEffect::loadCachedSettings()
         // fallback) coerces through toBool() to false, and m_enabled defaults
         // to TRUE (windowanimator.h) — so an unguarded read INVERTS the default
         // and silently disables every animation. It would drag the suppression
-        // sync below with it too, reloading KWin's show-desktop effects as a
-        // side effect of a malformed reply.
+        // sync below with it too, reloading KWin's stock minimize / maximize /
+        // show-desktop effects as a side effect of a malformed reply.
         if (v.typeId() != QMetaType::Bool) {
             return;
         }
