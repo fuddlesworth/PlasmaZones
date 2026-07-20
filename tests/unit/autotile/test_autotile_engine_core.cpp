@@ -600,16 +600,22 @@ private Q_SLOTS:
 
         const QStringList tiled = state->tiledWindows();
         QCOMPARE(tiled.size(), 2);
-        QCOMPARE(engine.lastManagedRect(tiled.at(0)), zoneA);
-        QCOMPARE(engine.lastManagedRect(tiled.at(1)), zoneB);
+        // Assert per window id, not per tiling order: each tiled window owns
+        // exactly one of the two zone rects, and they differ.
+        const QRect rect0 = engine.lastManagedRect(tiled.at(0));
+        const QRect rect1 = engine.lastManagedRect(tiled.at(1));
+        QVERIFY(rect0 == zoneA || rect0 == zoneB);
+        QVERIFY(rect1 == zoneA || rect1 == zoneB);
+        QVERIFY(rect0 != rect1);
         QVERIFY(!engine.lastManagedRect(QStringLiteral("never-seen")).isValid());
 
         // The regression pin: after the float toggle the tiled bit is gone,
-        // but the last-applied rect must still answer.
+        // but the last-applied rect must still answer with the SAME rect the
+        // window was tiled at.
         const QString floated = tiled.at(0);
         engine.toggleWindowFloat(floated, screenName);
         QVERIFY(state->isFloating(floated));
-        QCOMPARE(engine.lastManagedRect(floated), zoneA);
+        QCOMPARE(engine.lastManagedRect(floated), rect0);
 
         engine.windowClosed(floated);
         QVERIFY(!engine.lastManagedRect(floated).isValid());
@@ -632,6 +638,32 @@ private Q_SLOTS:
         QVERIFY(engine.lastManagedRect(QStringLiteral("win-1")).isValid());
 
         engine.pruneStaleWindows({QStringLiteral("win-2")});
+        QVERIFY(!engine.lastManagedRect(QStringLiteral("win-1")).isValid());
+        QVERIFY(engine.lastManagedRect(QStringLiteral("win-2")).isValid());
+    }
+
+    // A genuine cross-screen focus move OFF the autotile screens is full
+    // departure: windowFocused drops the window's tracking, including its
+    // last-applied tile rect. The window left the engine's world entirely, so
+    // its tile-rect memory must not linger (the sibling stays untouched).
+    void testLastManagedRect_clearedOnCrossScreenFocusMove()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screenName});
+
+        engine.windowOpened(QStringLiteral("win-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-2"), screenName);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(10, 10, 950, 1060), QRect(960, 10, 950, 1060)});
+        engine.retile(screenName);
+        QVERIFY(engine.lastManagedRect(QStringLiteral("win-1")).isValid());
+
+        // Focus reports win-1 on a non-autotile screen → tracking removed.
+        engine.windowFocused(QStringLiteral("win-1"), QStringLiteral("HDMI-1"));
         QVERIFY(!engine.lastManagedRect(QStringLiteral("win-1")).isValid());
         QVERIFY(engine.lastManagedRect(QStringLiteral("win-2")).isValid());
     }

@@ -1500,8 +1500,11 @@ private:
     // engine adoption) deliberately KEEPS the entry: the adopting engine's
     // capture runs right after the release, while the live frame can still
     // be the tile rect — exactly when the orchestrator's guard needs this
-    // memory. Used solely for an exact frame comparison, so a stale rect
-    // is harmless.
+    // memory. releaseScreenStateForTeardown (autotile toggled off on a
+    // screen / orphaned-context teardown) also leaves entries behind: its
+    // windows are still open, and the next stale-window prune reclaims any
+    // that go away. Used solely for an exact frame comparison, so a stale
+    // rect is harmless.
     QHash<QString, QRect> m_lastAppliedTileRect;
 
     // Instance id → first-seen canonical windowId.

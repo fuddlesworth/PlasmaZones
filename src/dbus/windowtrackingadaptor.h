@@ -1117,9 +1117,12 @@ private:
     /// window that closes ON an autotile screen has its entry erased by the
     /// effect's autotile-close relay first — but such a window is still
     /// autotile-tracked, so its capture takes the engine path and never
-    /// consults this guard. The guard therefore covers exactly the window it
-    /// exists for: tiled, handed off to a non-autotile screen, frame not yet
-    /// repositioned.
+    /// consults this guard. The guard therefore covers exactly the windows it
+    /// exists for: a float toggle in autotile mode (performToggleFloat clears
+    /// the tiled bit before this capture reaches it, window still on its
+    /// autotile screen — the primary regression), and a tiled window handed
+    /// off to a non-autotile screen and captured or closed there. In both,
+    /// the live frame has not yet moved off the tile rect.
     bool isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const;
 
     // ═══════════════════════════════════════════════════════════════════════════════

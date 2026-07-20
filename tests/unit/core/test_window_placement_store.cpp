@@ -147,10 +147,12 @@ private Q_SLOTS:
         QVERIFY(p2.has_value());
         QCOMPARE(p2->slotFor(WindowPlacement::snapEngineId()).state, QString(WindowPlacement::stateFloating()));
 
-        // Remaining is term|1.
+        // No exact match for the unknown uuid → the appId fallback hands out the
+        // sole remaining record (term|1 — with one record left, ordering is not
+        // exercised here, only the fallback itself).
         auto p1 = store.take(QStringLiteral("term|unknown-uuid"), QStringLiteral("term"));
         QVERIFY(p1.has_value());
-        QCOMPARE(p1->windowId, QStringLiteral("term|1")); // FIFO fallback
+        QCOMPARE(p1->windowId, QStringLiteral("term|1"));
     }
 
     void testAcceptPredicate_rejectsWrongScreen()
