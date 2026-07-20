@@ -22,7 +22,6 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include "../modetracker.h"
 #include <QScreen>
 
 namespace PlasmaZones {
