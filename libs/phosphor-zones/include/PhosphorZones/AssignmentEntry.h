@@ -181,7 +181,7 @@ struct AssignmentEntry
  * window-rule actions resolved per slot. Each field is set only when a
  * matching context rule fills the corresponding gap slot, so an unset field
  * falls through to the next precedence layer (per-screen → layout → global).
- * The daemon maps a populated override into a PerScreenSnappingKey-shaped map
+ * The daemon maps a populated override into a PerScreenKeys-shaped map
  * for @c GeometryUtils::getEffectiveOuterGaps / getEffectiveInnerGap.
  */
 struct ContextGapOverride

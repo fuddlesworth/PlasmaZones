@@ -47,7 +47,7 @@ public:
     int snapBorderInset() const override;
 
 private:
-    /// Build a PerScreenSnappingKey-shaped override map from the context rules
+    /// Build a PerScreenKeys-shaped override map from the context rules
     /// resolved for @p screenId in the current desktop/activity. Empty when no
     /// gap rule matches (so the geometry cascade falls through to per-screen).
     QVariantMap contextGapOverrideFor(const QString& screenId) const;

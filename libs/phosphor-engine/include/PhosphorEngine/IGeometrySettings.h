@@ -4,21 +4,13 @@
 #pragma once
 
 #include <phosphorengine_export.h>
-#include <QLatin1String>
 #include <QString>
 #include <QVariantMap>
 
 namespace PhosphorEngine {
 
-namespace PerScreenSnappingKey {
-inline constexpr QLatin1String InnerGap{"InnerGap"};
-inline constexpr QLatin1String OuterGap{"OuterGap"};
-inline constexpr QLatin1String UsePerSideOuterGap{"UsePerSideOuterGap"};
-inline constexpr QLatin1String OuterGapTop{"OuterGapTop"};
-inline constexpr QLatin1String OuterGapBottom{"OuterGapBottom"};
-inline constexpr QLatin1String OuterGapLeft{"OuterGapLeft"};
-inline constexpr QLatin1String OuterGapRight{"OuterGapRight"};
-} // namespace PerScreenSnappingKey
+// Gap-override maps are keyed by the shared PerScreenKeys namespace
+// (PhosphorEngine/PerScreenKeys.h) — both engines read the same key strings.
 
 namespace GeometryDefaults {
 inline constexpr int InnerGap = 8;

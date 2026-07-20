@@ -100,7 +100,7 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManag
  * @param settings Global settings (used if layout has no override)
  * @return Effective zone padding in pixels
  *
- * @param ruleGapOverride Optional PerScreenSnappingKey-shaped map of context-rule
+ * @param ruleGapOverride Optional PerScreenKeys-shaped map of context-rule
  *        gap overrides (built from the resolved context rules — per-screen,
  *        per-desktop, per-activity — by DaemonGeometryResolver on the commit path
  *        or by currentContextGapOverride on the preview/query path); takes
@@ -122,7 +122,7 @@ using ::PhosphorZones::GeometryUtils::snapToRect;
  * @param settings Global settings (used if layout has no override)
  * @return Effective per-side edge gaps
  *
- * @param ruleGapOverride Optional PerScreenSnappingKey-shaped map of context-rule
+ * @param ruleGapOverride Optional PerScreenKeys-shaped map of context-rule
  *        gap overrides (per-screen/desktop/activity rules); takes precedence over
  *        every other tier. Per-screen gaps are rules now, so they arrive through
  *        this override — there is no separate per-screen Settings tier.
@@ -134,7 +134,7 @@ PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZone
                                                                     const QVariantMap& ruleGapOverride = {});
 
 /**
- * @brief Convert a resolved ContextGapOverride into the PerScreenSnappingKey-shaped
+ * @brief Convert a resolved ContextGapOverride into the PerScreenKeys-shaped
  *        QVariantMap consumed by getEffectiveInnerGap / getEffectiveOuterGaps as
  *        the `ruleGapOverride` argument. Only the override's set (engaged) fields
  *        are written; an empty override yields an empty map.
@@ -163,7 +163,7 @@ PLASMAZONES_EXPORT QVariantMap mergeConfigPerScreenGaps(QVariantMap ruleOverride
 /**
  * @brief Resolve the context-rule gap override for @p screenId in @p reg's
  *        CURRENT desktop/activity, merged with the config per-monitor gap
- *        override, as the PerScreenSnappingKey-shaped map that getEffectiveInnerGap
+ *        override, as the PerScreenKeys-shaped map that getEffectiveInnerGap
  *        / getEffectiveOuterGaps consume as `ruleGapOverride`.
  *
  * Returns the config per-monitor gap (from @p settings) when there is no matching

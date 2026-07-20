@@ -8,6 +8,7 @@
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
+#include <PhosphorEngine/GapResolution.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include "tileenginelogging.h"
@@ -339,48 +340,20 @@ QVariantMap PerScreenConfigResolver::contextGapMap(const QString& screenId) cons
 
 std::optional<int> PerScreenConfigResolver::contextGapFromMap(const QVariantMap& ctx, QLatin1String key)
 {
-    const auto it = ctx.constFind(key);
-    if (it == ctx.constEnd()) {
-        return std::nullopt;
-    }
-    return clampGap(it->toInt());
+    return PhosphorEngine::GapResolution::gapFromOverrideMap(ctx, key, clampGap);
 }
 
 std::optional<::PhosphorLayout::EdgeGaps> PerScreenConfigResolver::contextOuterGapsFromMap(const QVariantMap& ctx) const
 {
     // Resolve the per-context (window-rule) outer-gap override as ONE atomic
-    // layer, mirroring the snapping pipeline (the daemon's
-    // GeometryUtils::resolveOuterGapsFromMap in src/core/geometryutils.cpp, not
-    // anything in PhosphorEngine): per-side values are honoured only when the rule
-    // set UsePerSideOuterGap, and if the layer yields any outer gap it wins
+    // layer via the shared PhosphorEngine::GapResolution (the snapping
+    // pipeline's resolveOuterGapsFromMap in src/core/geometryutils.cpp calls
+    // the same helper): per-side values are honoured only when the rule set
+    // UsePerSideOuterGap, and if the layer yields any outer gap it wins
     // wholesale — no per-key blending with the static per-screen layer below.
-    // An empty map means no provider is wired or the context carries no gaps.
-    if (ctx.isEmpty()) {
-        return std::nullopt;
-    }
-    const auto uniformIt = ctx.constFind(QString(PerScreenKeys::OuterGap));
-    const bool usePerSide = ctx.value(QString(PerScreenKeys::UsePerSideOuterGap), false).toBool();
-    if (usePerSide) {
-        const auto topIt = ctx.constFind(QString(PerScreenKeys::OuterGapTop));
-        const auto bottomIt = ctx.constFind(QString(PerScreenKeys::OuterGapBottom));
-        const auto leftIt = ctx.constFind(QString(PerScreenKeys::OuterGapLeft));
-        const auto rightIt = ctx.constFind(QString(PerScreenKeys::OuterGapRight));
-        if (topIt != ctx.constEnd() || bottomIt != ctx.constEnd() || leftIt != ctx.constEnd()
-            || rightIt != ctx.constEnd()) {
-            // Missing sides fall back to the layer's own uniform OuterGap, else
-            // the global config — matching resolveOuterGapsFromMap's base.
-            const int base =
-                (uniformIt != ctx.constEnd()) ? clampGap(uniformIt->toInt()) : m_engine->config()->outerGap;
-            return ::PhosphorLayout::EdgeGaps{(topIt != ctx.constEnd()) ? clampGap(topIt->toInt()) : base,
-                                              (bottomIt != ctx.constEnd()) ? clampGap(bottomIt->toInt()) : base,
-                                              (leftIt != ctx.constEnd()) ? clampGap(leftIt->toInt()) : base,
-                                              (rightIt != ctx.constEnd()) ? clampGap(rightIt->toInt()) : base};
-        }
-    }
-    if (uniformIt != ctx.constEnd()) {
-        return ::PhosphorLayout::EdgeGaps::uniform(clampGap(uniformIt->toInt()));
-    }
-    return std::nullopt;
+    // Autotile clamps every map-sourced value; missing sides fall back to the
+    // layer's own uniform OuterGap, else the global config.
+    return PhosphorEngine::GapResolution::outerGapsFromOverrideMap(ctx, m_engine->config()->outerGap, clampGap);
 }
 
 int PerScreenConfigResolver::effectiveInnerGap(const QString& screenId) const

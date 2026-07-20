@@ -9,7 +9,9 @@
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "interfaces.h"
 #include "constants.h"
+#include <PhosphorEngine/GapResolution.h>
 #include <PhosphorEngine/IGeometrySettings.h>
+#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/ZoneDefaults.h>
@@ -39,43 +41,19 @@ ScreenGeometries resolveScreenGeometries(PhosphorScreens::ScreenManager* mgr, co
     return {mgr->screenGeometry(screenId), mgr->screenAvailableGeometry(screenId)};
 }
 
-// Resolve outer gaps from a PerScreenSnappingKey-shaped override map (the
-// context-rule gap override). Returns nullopt when the map carries no outer-gap
-// info so the caller falls through to the next precedence layer. A partial
-// per-side map fills missing sides from the map's own uniform OuterGap or,
-// failing that, the global setting.
+// Resolve outer gaps from a PerScreenKeys-shaped override map (the
+// context-rule gap override) via the shared atomic-layer resolution in
+// PhosphorEngine::GapResolution. Snapping consumes raw map values (identity
+// normalize); missing sides in a partial per-side map fall back to the map's
+// own uniform OuterGap or, failing that, the global setting.
 std::optional<::PhosphorLayout::EdgeGaps> resolveOuterGapsFromMap(const QVariantMap& map,
                                                                   PhosphorEngine::IGeometrySettings* settings)
 {
-    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
     namespace GD = PhosphorEngine::GeometryDefaults;
-    if (map.isEmpty()) {
-        return std::nullopt;
-    }
-    auto usePerSideIt = map.constFind(PSK::UsePerSideOuterGap);
-    const bool usePerSide = (usePerSideIt != map.constEnd()) ? usePerSideIt->toBool() : false;
-    if (usePerSide) {
-        auto topIt = map.constFind(PSK::OuterGapTop);
-        auto bottomIt = map.constFind(PSK::OuterGapBottom);
-        auto leftIt = map.constFind(PSK::OuterGapLeft);
-        auto rightIt = map.constFind(PSK::OuterGapRight);
-        if (topIt != map.constEnd() || bottomIt != map.constEnd() || leftIt != map.constEnd()
-            || rightIt != map.constEnd()) {
-            auto uniformIt = map.constFind(PSK::OuterGap);
-            const int fallback = (uniformIt != map.constEnd()) ? uniformIt->toInt()
-                : settings                                     ? settings->outerGap()
-                                                               : GD::OuterGap;
-            return ::PhosphorLayout::EdgeGaps{(topIt != map.constEnd()) ? topIt->toInt() : fallback,
-                                              (bottomIt != map.constEnd()) ? bottomIt->toInt() : fallback,
-                                              (leftIt != map.constEnd()) ? leftIt->toInt() : fallback,
-                                              (rightIt != map.constEnd()) ? rightIt->toInt() : fallback};
-        }
-    }
-    auto uniformIt = map.constFind(PSK::OuterGap);
-    if (uniformIt != map.constEnd()) {
-        return ::PhosphorLayout::EdgeGaps::uniform(uniformIt->toInt());
-    }
-    return std::nullopt;
+    const int base = settings ? settings->outerGap() : GD::OuterGap;
+    return PhosphorEngine::GapResolution::outerGapsFromOverrideMap(map, base, [](int v) {
+        return v;
+    });
 }
 
 } // anonymous namespace
@@ -110,14 +88,10 @@ QVariantMap currentContextGapOverride(PhosphorZones::IZoneLayoutRegistry* reg, c
 
 QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps)
 {
-    // CONTRACT: this map is consumed by BOTH the snap engine (which reads
-    // PerScreenSnappingKey) and the autotile engine (which reads the separate
-    // PerScreenKeys namespace). Those two namespaces define byte-identical key
-    // strings ("InnerGap", "OuterGap", …); they MUST stay in lockstep or
-    // autotile context-gap rules silently become no-ops. Keep any key rename
-    // synchronized across both PhosphorEngine::PerScreenKeys and
-    // PhosphorEngine::PerScreenSnappingKey.
-    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
+    // This map is consumed by BOTH engines; both read the single shared
+    // PhosphorEngine::PerScreenKeys namespace, so the key strings agree by
+    // construction.
+    namespace PSK = PhosphorEngine::PerScreenKeys;
     QVariantMap map;
     if (gaps.isEmpty()) {
         return map;
@@ -148,7 +122,7 @@ QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps)
 
 int getEffectiveInnerGap(PhosphorZones::Layout* layout, ISettings* settings, const QVariantMap& ruleGapOverride)
 {
-    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
+    namespace PSK = PhosphorEngine::PerScreenKeys;
     // Tier 1 — a context-rule gap override (per-screen/desktop/activity rule).
     {
         auto it = ruleGapOverride.constFind(PSK::InnerGap);
