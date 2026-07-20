@@ -579,7 +579,7 @@ private Q_SLOTS:
     // float-back geometry (the "float restores onto its own tile" regression).
     // =========================================================================
 
-    void testLastManagedRect_survivesFloatToggle_clearedOnClose()
+    void testLastManagedRect_survivesFloatToggleAndClose()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("DP-1");
@@ -617,8 +617,15 @@ private Q_SLOTS:
         QVERIFY(state->isFloating(floated));
         QCOMPARE(engine.lastManagedRect(floated), rect0);
 
+        // Close is NOT a clearing site: the effect notifies autotile of a
+        // close before WindowTracking, so the orchestrator's close capture
+        // (and its tile-rect guard) runs after this teardown and still needs
+        // the memory. pruneStaleWindows is the reclaim path.
         engine.windowClosed(floated);
+        QCOMPARE(engine.lastManagedRect(floated), rect0);
+        engine.pruneStaleWindows({tiled.at(1)});
         QVERIFY(!engine.lastManagedRect(floated).isValid());
+        QVERIFY(engine.lastManagedRect(tiled.at(1)).isValid());
     }
 
     void testLastManagedRect_prunedWithStaleWindows()

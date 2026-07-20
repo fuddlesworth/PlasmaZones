@@ -451,7 +451,13 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         // helper doc): a window tiled by autotile, handed off, and closed
         // before ever being repositioned still sits on its tile rect —
         // recording that as the reopen float-back would restore it onto the
-        // tile, not a free spot. Skipping deliberately forfeits this close's
+        // tile, not a free spot. The same holds for a tiled close on the
+        // autotile screen itself: the effect's autotile-close relay has
+        // already untracked the window by the time this capture runs (relay
+        // before WindowTracking, in-order), so it lands here with its frame
+        // still the tile rect — only the engine's retained memory (kept
+        // through its windowClosed exactly for this read) lets the guard
+        // refuse it. Skipping deliberately forfeits this close's
         // OTHER effects too (the screen adoption and pure-float sibling
         // collapse recordFloatingClose bundles): the record keeps its prior
         // screen and geometry, which is strictly better than adopting a

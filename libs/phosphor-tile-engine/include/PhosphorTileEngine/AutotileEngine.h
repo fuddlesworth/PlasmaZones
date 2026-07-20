@@ -1495,16 +1495,19 @@ private:
     // Canonical windowId → tile rect last emitted for it by applyTiling.
     // Backs lastManagedRect(): deliberately NOT cleared when the window
     // leaves the tiled state (that survival is the point — see the base
-    // doc), only on full departure: close, a genuine cross-screen move off
-    // an autotile screen, and stale-window pruning. handoffRelease (cross-
-    // engine adoption) deliberately KEEPS the entry: the adopting engine's
-    // capture runs right after the release, while the live frame can still
-    // be the tile rect — exactly when the orchestrator's guard needs this
-    // memory. releaseScreenStateForTeardown (autotile toggled off on a
-    // screen / orphaned-context teardown) also leaves entries behind: its
-    // windows are still open, and the next stale-window prune reclaims any
-    // that go away. Used solely for an exact frame comparison, so a stale
-    // rect is harmless.
+    // doc). Cleared on exactly two events: a genuine cross-screen move off
+    // an autotile screen (the reposition has already moved the frame off
+    // the old tile rect) and stale-window pruning. Everything else KEEPS
+    // the entry — windowClosed (the effect notifies autotile before
+    // WindowTracking, so the orchestrator's close capture and its tile-rect
+    // guard run after this engine's teardown), handoffRelease (the adopting
+    // engine's capture runs right after the release), and
+    // releaseScreenStateForTeardown (windows still open) — because in each
+    // the live frame can still be the tile rect, exactly when the
+    // orchestrator's guard needs this memory. Closed windows' entries are
+    // reclaimed by pruneStaleWindows, whose sweep is independent of
+    // tracking. Used solely for an exact frame comparison, so a stale rect
+    // is harmless.
     QHash<QString, QRect> m_lastAppliedTileRect;
 
     // Instance id → first-seen canonical windowId.

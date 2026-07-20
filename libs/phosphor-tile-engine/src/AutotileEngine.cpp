@@ -2426,7 +2426,14 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     // (windowOpened only stores when minWidth/minHeight > 0), inflating
     // enforceMinSizes constraints with a stale value.
     m_windowMinSizes.remove(windowId);
-    m_lastAppliedTileRect.remove(windowId);
+    // m_lastAppliedTileRect is deliberately RETAINED here. The effect
+    // notifies autotile of a close BEFORE WindowTracking (two fire-and-forget
+    // calls on the same connection, delivered in order), so the orchestrator's
+    // captureWindowPlacement — and its close-path tile-rect guard — runs
+    // AFTER this teardown, on a live frame that is still the tile rect for a
+    // window that closed tiled. Erasing now would blind that guard and let
+    // the tile rect be recorded as the reopen float-back. pruneStaleWindows
+    // reclaims the entry (its sweep is independent of tracking).
 
     onWindowRemoved(windowId);
     // Release the canonical translation last — downstream cleanup above may
