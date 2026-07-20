@@ -888,8 +888,10 @@ private:
 
     /// Reset the modal singleton state (snap assist / layout picker /
     /// cheatsheet) and emit the dismissed signals when the screen that
-    /// owns them is destroyed. Called from every shell-teardown site — the
-    /// definition in overlayservice/screens.cpp keeps the current list.
+    /// owns them is destroyed. Called from every runtime shell-teardown site
+    /// (not the service destructor, where resetting members and emitting
+    /// dismissed signals is moot) — the definition in
+    /// overlayservice/screens.cpp keeps the current list.
     void resetModalSingletonsForDestroyedId(const QString& id);
 
     /// Animator-driven slot-hide completion for zone-selector.

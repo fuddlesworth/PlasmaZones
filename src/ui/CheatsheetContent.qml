@@ -244,6 +244,12 @@ Item {
                                     level: 4
                                     text: groupColumn.modelData.name
                                     color: Kirigami.Theme.disabledTextColor
+                                    // Track the user's overlay font like the
+                                    // rows and key caps do; 1.1 mirrors
+                                    // Kirigami's own level-4 factor over the
+                                    // default font.
+                                    font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
+                                    font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 1.1 * root.fontSizeScale)
                                 }
 
                                 Repeater {
