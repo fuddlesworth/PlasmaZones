@@ -224,7 +224,7 @@ private Q_SLOTS:
         QCOMPARE(backend.updates.size(), 0);
     }
 
-    void rebindEmptySequence_routesThroughUnbind()
+    void rebindEmptySequence_releasesGrabButKeepsEntry()
     {
         FakeBackend backend;
         Registry registry(&backend);
@@ -235,14 +235,71 @@ private Q_SLOTS:
         backend.updates.clear();
 
         // Rebind to an empty sequence should NOT leave the grab registered
-        // with an empty key (the pre-library stale-grab hazard). Route
-        // through unbind so the backend drops it cleanly.
+        // with an empty key (the pre-library stale-grab hazard) — the
+        // backend drops it immediately. But the entry must survive so a
+        // later rebind can re-enable the shortcut (discussion #809).
         registry.rebind(QStringLiteral("pz.a"), QKeySequence());
 
         QCOMPARE(backend.unregisters.size(), 1);
         QCOMPARE(backend.unregisters[0], QStringLiteral("pz.a"));
         QCOMPARE(backend.updates.size(), 0);
-        QCOMPARE(registry.bindings().size(), 0);
+        QCOMPARE(registry.bindings().size(), 1);
+        QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence());
+    }
+
+    void rebindEmptySequence_whenNeverRegistered_skipsBackend()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        // bind + immediate clear BEFORE any flush — the backend never heard
+        // about this id, so clearing must not send it a spurious unregister
+        // (KGlobalAccel's unregister purges the persistent on-disk record).
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence());
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 0);
+        QCOMPARE(backend.unregisters.size(), 0);
+        QCOMPARE(registry.bindings().size(), 1);
+    }
+
+    void rebindAfterClear_reRegistersWithBackend()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"));
+        registry.flush();
+
+        // Clear, then re-assign in the same session — the exact sequence a
+        // settings UI produces when the user empties a shortcut field and
+        // later types a new combo. Pre-fix the entry evaporated on clear and
+        // the re-assign was a warning no-op until process restart.
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence());
+        registry.flush();
+
+        backend.registers.clear();
+        backend.updates.clear();
+
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")));
+        registry.flush();
+
+        // Fresh registerShortcut (not update) — the backend forgot the id on
+        // unregister, so it needs default + current + description again.
+        QCOMPARE(backend.registers.size(), 1);
+        QCOMPARE(backend.registers[0].id, QStringLiteral("pz.a"));
+        QCOMPARE(backend.registers[0].defaultSeq, QKeySequence(QStringLiteral("Meta+1")));
+        QCOMPARE(backend.registers[0].currentSeq, QKeySequence(QStringLiteral("Meta+2")));
+        QCOMPARE(backend.updates.size(), 0);
+
+        // The re-registered shortcut still activates.
+        int fired = 0;
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"), [&] {
+            ++fired;
+        });
+        backend.activate(QStringLiteral("pz.a"));
+        QCOMPARE(fired, 1);
     }
 
     void rebindUnknownId_isIgnored()

@@ -367,9 +367,9 @@ void WindowDragAdaptor::unregisterCancelOverlayShortcut()
     // unregisterAdhocShortcut() drops both the Registry entry and the
     // compositor-level key grab. Prior IShortcutBackend-era bug (discussion
     // #155) where setting an empty QKeySequence left a stale Wayland grab is
-    // no longer expressible: rebind() with an empty sequence now routes
-    // through unbind() inside the Registry, and the cancel path always uses
-    // the explicit unregister call below.
+    // no longer expressible: rebind() with an empty sequence releases the
+    // backend grab inside the Registry (keeping only the inert entry), and
+    // the cancel path always uses the explicit unregister call below.
     m_shortcutRegistrar->unregisterAdhocShortcut(kCancelOverlayId);
 }
 
