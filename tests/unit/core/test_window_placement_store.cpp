@@ -603,7 +603,7 @@ private Q_SLOTS:
         store.record(make(QStringLiteral("dolphin|new"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
                           WindowPlacement::snapEngineId(), QStringLiteral("S1")));
 
-        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|new"));
+        QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|new")));
 
         // Exact-windowId checks (no appId): contains(id, appId) would pass on any
         // surviving bucket record, so it can't prove the RIGHT record was kept.
@@ -626,7 +626,7 @@ private Q_SLOTS:
         store.record(make(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
                           WindowPlacement::snapEngineId(), QStringLiteral("S1")));
 
-        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep"));
+        QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
 
         QVERIFY(store.contains(QStringLiteral("dolphin|keep"))); // exact survival
         QVERIFY(store.contains(QStringLiteral("dolphin|snapped"))); // managed — kept
@@ -643,7 +643,8 @@ private Q_SLOTS:
         store.record(make(QStringLiteral("dolphin|snapped"), QStringLiteral("dolphin"), WindowPlacement::stateSnapped(),
                           WindowPlacement::snapEngineId(), QStringLiteral("S1")));
 
-        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|snapped"));
+        // A managed keep is a no-op: nothing pruned, so the store is unchanged.
+        QVERIFY(!store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|snapped")));
 
         QVERIFY(store.contains(QStringLiteral("dolphin|float")));
         QVERIFY(store.contains(QStringLiteral("dolphin|snapped")));
