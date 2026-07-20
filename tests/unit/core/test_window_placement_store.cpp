@@ -147,10 +147,12 @@ private Q_SLOTS:
         QVERIFY(p2.has_value());
         QCOMPARE(p2->slotFor(WindowPlacement::snapEngineId()).state, QString(WindowPlacement::stateFloating()));
 
-        // Remaining is term|1.
+        // No exact match for the unknown uuid → the appId fallback hands out the
+        // sole remaining record (term|1 — with one record left, ordering is not
+        // exercised here, only the fallback itself).
         auto p1 = store.take(QStringLiteral("term|unknown-uuid"), QStringLiteral("term"));
         QVERIFY(p1.has_value());
-        QCOMPARE(p1->windowId, QStringLiteral("term|1")); // FIFO fallback
+        QCOMPARE(p1->windowId, QStringLiteral("term|1"));
     }
 
     void testAcceptPredicate_rejectsWrongScreen()
@@ -243,6 +245,24 @@ private Q_SLOTS:
         QCOMPARE(store.size(), 2); // peek is non-consuming
     }
 
+    void testPeekExact_neverFallsBackToAppIdSibling()
+    {
+        // peekExact is the per-window read for LIVE windows: the exact-uuid
+        // branch only, never the appId-FIFO fallback — a same-app sibling's
+        // record must not answer for a record-less window (the sibling zone /
+        // float-state bleed the live-state readers were exposed to).
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("term|sibling"), QStringLiteral("term"), WindowPlacement::stateSnapped(),
+                          WindowPlacement::snapEngineId()));
+
+        QVERIFY(store.peek(QStringLiteral("term|other"), QStringLiteral("term")).has_value()); // fallback would bleed
+        QVERIFY(!store.peekExact(QStringLiteral("term|other")).has_value()); // exact-only refuses
+        const auto own = store.peekExact(QStringLiteral("term|sibling"));
+        QVERIFY(own.has_value());
+        QCOMPARE(own->windowId, QStringLiteral("term|sibling"));
+        QCOMPARE(store.size(), 1); // non-consuming
+    }
+
     void testTake_acceptPredicatePassesOnFifoCandidate()
     {
         // The accepting (not just rejecting) path: an appId-FIFO candidate that
@@ -262,8 +282,8 @@ private Q_SLOTS:
     {
         // Regression: cross-screen snapped restore at login. A window snapped on
         // screen DP-1 reopens (new uuid) on screen DP-2 (KWin placed the session
-        // window on a different output). The appId bucket holds an OLDER contentless
-        // `free` record (empty screen) plus the NEWER `snapped` record on DP-1.
+        // window on a different output). The appId bucket holds an OLDER `free`
+        // record on an empty screen plus the NEWER `snapped` record on DP-1.
         // Without the `preferred` ranking, plain FIFO consumes the older free record
         // first and the window never returns to its zone. With it, the snapped
         // record wins even though it is newer AND on a different screen.
@@ -583,7 +603,7 @@ private Q_SLOTS:
         store.record(make(QStringLiteral("dolphin|new"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
                           WindowPlacement::snapEngineId(), QStringLiteral("S1")));
 
-        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|new"));
+        QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|new")));
 
         // Exact-windowId checks (no appId): contains(id, appId) would pass on any
         // surviving bucket record, so it can't prove the RIGHT record was kept.
@@ -606,7 +626,7 @@ private Q_SLOTS:
         store.record(make(QStringLiteral("dolphin|keep"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
                           WindowPlacement::snapEngineId(), QStringLiteral("S1")));
 
-        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep"));
+        QVERIFY(store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|keep")));
 
         QVERIFY(store.contains(QStringLiteral("dolphin|keep"))); // exact survival
         QVERIFY(store.contains(QStringLiteral("dolphin|snapped"))); // managed — kept
@@ -623,10 +643,41 @@ private Q_SLOTS:
         store.record(make(QStringLiteral("dolphin|snapped"), QStringLiteral("dolphin"), WindowPlacement::stateSnapped(),
                           WindowPlacement::snapEngineId(), QStringLiteral("S1")));
 
-        store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|snapped"));
+        // A managed keep is a no-op: nothing pruned, so the store is unchanged.
+        QVERIFY(!store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|snapped")));
 
         QVERIFY(store.contains(QStringLiteral("dolphin|float")));
         QVERIFY(store.contains(QStringLiteral("dolphin|snapped")));
+    }
+
+    void testCollapse_noopWhenKeptRecordHasNoGeometry()
+    {
+        // A pure-float keep with NO captured free position must not prune its
+        // siblings: with no shared-screen memory to converge on, collapsing
+        // would discard the sibling's only remembered spot. The managed-keep
+        // no-op above cannot pin this shape (a snapped keep trips the
+        // pure-float check first). The outcome is doubly enforced today (the
+        // empty-geometry early-out AND the geometry-keyed shares-screen scan);
+        // this pins the CONTRACT so it survives either check being refactored
+        // — e.g. a shares-screen scan that started counting the record's bare
+        // screenId as coverage would prune the sibling and fail here.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("dolphin|sib"), QStringLiteral("dolphin"), WindowPlacement::stateFloating(),
+                          WindowPlacement::snapEngineId(), QStringLiteral("S1")));
+        WindowPlacement bareKeep;
+        bareKeep.windowId = QStringLiteral("dolphin|bare");
+        bareKeep.appId = QStringLiteral("dolphin");
+        bareKeep.screenId = QStringLiteral("S1");
+        EngineSlot floatSlot;
+        floatSlot.state = WindowPlacement::stateFloating();
+        floatSlot.zoneIds = QStringList{QStringLiteral("z1")}; // restorable, but no free geometry
+        bareKeep.engines.insert(WindowPlacement::snapEngineId(), floatSlot);
+        QVERIFY(store.record(bareKeep));
+
+        QVERIFY(!store.collapsePureFloatSiblings(QStringLiteral("dolphin"), QStringLiteral("dolphin|bare")));
+
+        QVERIFY(store.contains(QStringLiteral("dolphin|sib")));
+        QVERIFY(store.contains(QStringLiteral("dolphin|bare")));
     }
 
     void testCollapse_absorbsPrunedSiblingOtherScreenGeometry()

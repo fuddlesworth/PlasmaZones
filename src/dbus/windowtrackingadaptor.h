@@ -1104,6 +1104,31 @@ private:
     // windowFloatingClearedForSnap which the adaptor relays to its own
     // windowFloatingChanged D-Bus signal).
 
+    /// Tile-rect poison guard, shared by captureWindowPlacement's primary
+    /// free-geometry write and its engine-miss close fallback: true when the
+    /// live @p frame still equals the tile rect the autotile engine last
+    /// applied to @p windowId (the engine remembers it PAST the tiled-bit
+    /// clear, past a cross-engine handoff, and past its own windowClosed
+    /// teardown — see AutotileEngine::lastManagedRect). Such a frame is a
+    /// managed rect, not a genuine free position, and must never become the
+    /// float-back. The autotile analogue of the snap-side stillOnSnapRect
+    /// zone comparison.
+    ///
+    /// The close ordering makes the engine's retention load-bearing: the
+    /// effect notifies autotile of a close BEFORE WindowTracking (same
+    /// connection, in-order delivery), so a window closing tiled on an
+    /// autotile screen reaches this capture already untracked — both
+    /// engines' capturePlacement decline and the isWindowAutotileTiled gate
+    /// reads false — and takes the close-path fallback with its live frame
+    /// still on the tile rect. Only the retained memory lets this guard
+    /// refuse that frame. The guard therefore covers: a float toggle in
+    /// autotile mode (performToggleFloat clears the tiled bit before this
+    /// capture reaches it — the primary regression), a tiled window handed
+    /// off to a non-autotile screen and captured or closed there, and a
+    /// tiled close on the autotile screen itself. In each, the live frame
+    /// has not yet moved off the tile rect.
+    bool isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const;
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // Screen tracking (from KWin effect's D-Bus calls)
     // ═══════════════════════════════════════════════════════════════════════════════

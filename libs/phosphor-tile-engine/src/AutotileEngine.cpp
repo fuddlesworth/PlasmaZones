@@ -163,6 +163,11 @@ bool AutotileEngine::isAutotileFloated(const QString& rawWindowId) const
     return m_autotileFloatedWindows.contains(canonicalizeForLookup(rawWindowId));
 }
 
+QRect AutotileEngine::lastManagedRect(const QString& rawWindowId) const
+{
+    return m_lastAppliedTileRect.value(canonicalizeForLookup(rawWindowId));
+}
+
 int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
@@ -209,6 +214,14 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     for (auto it = m_windowMinSizes.begin(); it != m_windowMinSizes.end();) {
         if (!aliveWindowIds.contains(it.key())) {
             it = m_windowMinSizes.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // Same independent keying for the last-applied tile rects.
+    for (auto it = m_lastAppliedTileRect.begin(); it != m_lastAppliedTileRect.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            it = m_lastAppliedTileRect.erase(it);
         } else {
             ++it;
         }
@@ -722,9 +735,11 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // of truth). Without this, windows added from pending orders lose
                         // their floating state because windowOpened's floating restore is
                         // skipped when the window already exists in the PhosphorTiles::TilingState.
+                        // Exact record only: pending orders are built from LIVE session
+                        // ids, so a same-app sibling's floating record must not float
+                        // this window (relogin restores go through insertWindow's take()).
                         if (m_windowTracker) {
-                            const auto rec = m_windowTracker->placementStore().peek(
-                                windowId, m_windowTracker->currentAppIdFor(windowId));
+                            const auto rec = m_windowTracker->placementStore().peekExact(windowId);
                             if (rec
                                 && rec->slotFor(engineId()).state == PhosphorEngine::WindowPlacement::stateFloating()) {
                                 ts->setFloating(windowId, true);
@@ -2411,6 +2426,14 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     // (windowOpened only stores when minWidth/minHeight > 0), inflating
     // enforceMinSizes constraints with a stale value.
     m_windowMinSizes.remove(windowId);
+    // m_lastAppliedTileRect is deliberately RETAINED here. The effect
+    // notifies autotile of a close BEFORE WindowTracking (two fire-and-forget
+    // calls on the same connection, delivered in order), so the orchestrator's
+    // captureWindowPlacement — and its close-path tile-rect guard — runs
+    // AFTER this teardown, on a live frame that is still the tile rect for a
+    // window that closed tiled. Erasing now would blind that guard and let
+    // the tile rect be recorded as the reopen float-back. pruneStaleWindows
+    // reclaims the entry (its sweep is independent of tracking).
 
     onWindowRemoved(windowId);
     // Release the canonical translation last — downstream cleanup above may
@@ -2493,6 +2516,7 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
             m_states.removeWindow(windowId);
             m_windowMinSizes.remove(windowId);
             m_autotileFloatedWindows.remove(windowId);
+            m_lastAppliedTileRect.remove(windowId);
             if (!oldScreen.isEmpty()) {
                 migrateWindowBetweenKeys(windowId, oldKey, screenId);
             }
@@ -4064,6 +4088,10 @@ void AutotileEngine::applyTiling(const QString& screenId)
         // (mirrors the snap side, DaemonGeometryResolver::snapBorderInset == 0).
         // Tile spacing comes from the zone gap/padding settings, not the border.
         const QRect& geo = zones[i];
+        // Remember the emitted rect for lastManagedRect(): the float-toggle
+        // capture path compares the live frame against it AFTER the tiled bit
+        // has already cleared (see the header doc on m_lastAppliedTileRect).
+        m_lastAppliedTileRect.insert(windows[i], geo);
         QJsonObject obj;
         obj[QLatin1String("windowId")] = windows[i];
         obj[QLatin1String("screenId")] = screenId;
