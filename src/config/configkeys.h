@@ -75,10 +75,6 @@ public:
     P_CONFIG_GROUP(orderingGroup, "Ordering")
     P_CONFIG_GROUP(updatesGroup, "Updates")
 
-    // Shortcut cheatsheet overlay. Mode-neutral top-level group — the sheet
-    // displays shortcuts for whichever mode the screen is in. (uses enabledKey)
-    P_CONFIG_GROUP(cheatsheetGroup, "Cheatsheet")
-
     // Window decoration appearance (tiled/snapped window border + title bar).
     // Mode-neutral top-level group — the values apply to both the snapping and
     // tiling engines, so it sits outside Snapping.* / Tiling.*.
