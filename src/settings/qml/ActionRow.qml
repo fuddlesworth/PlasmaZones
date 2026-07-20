@@ -460,6 +460,32 @@ ColumnLayout {
             }
         }
 
+        // Stock-animation conflict chip — a per-window shader on the minimize
+        // or maximize event cannot suppress KDE's own effect for that event
+        // (unloading it is global, so the runtime only does that for packs
+        // assigned in the animation tree, never for rules). Both animations
+        // play for matched windows unless the user disables the stock effect
+        // themselves. Same chip-plus-tooltip shape as the incompatibility
+        // warning above. Gated on a non-empty effectId: an empty override is
+        // the "no shader" sentinel and removes the conflict instead.
+        Kirigami.Icon {
+            readonly property bool _stockAnimationConflict: row.action.type === "overrideAnimationShader" && (row.action.effectId || "") !== "" && (row.action.event === "window.appearance.minimize" || row.action.event === "window.movement.maximize")
+
+            visible: _stockAnimationConflict
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            source: "dialog-information"
+            Accessible.name: i18n("May run alongside the KDE animation for this event")
+            ToolTip.visible: stockConflictHover.hovered
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+            ToolTip.text: row.action.event === "window.movement.maximize" ? i18n("A rule cannot turn off the KDE Maximize animation for matched windows. If it is enabled in System Settings → Desktop Effects, both animations will play together.") : i18n("A rule cannot turn off the KDE minimize animation (Magic Lamp or Squash) for matched windows. If one is enabled in System Settings → Desktop Effects, both animations will play together.")
+
+            HoverHandler {
+                id: stockConflictHover
+            }
+        }
+
         // One editor per parameter — the shape comes from the param `kind`,
         // never an action-type ladder. The param-editor Components are
         // declared as `property Component` on `row` (below) so the Loader
