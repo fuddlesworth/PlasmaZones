@@ -74,6 +74,14 @@ class AnimationsPageController : public PhosphorControl::PageController
     /// The motion-set store, bound by AnimationsMotionSetsPage as its `bridge`.
     Q_PROPERTY(PlasmaZones::ShaderSetStore* setsBridge READ setsBridge CONSTANT)
 
+    /// Animation event paths whose stock KWin effect the compositor
+    /// suppresses session-wide because a tree-assigned pack owns the event
+    /// (the settings-side mirror of the effect's syncStockEffectSuppression
+    /// gate). The rule editor's stock-animation conflict chip hides for
+    /// these events: with the stock effect unloaded there is no
+    /// double-animation for a rule shader to conflict with.
+    Q_PROPERTY(QStringList stockSuppressedEvents READ stockSuppressedEvents NOTIFY stockSuppressedEventsChanged)
+
 public:
     /// @param shaderRegistry Optional — when null, all `*ShaderEffects()` /
     ///        `*ShaderProfile()` Q_INVOKABLEs return empty results so unit
@@ -361,6 +369,13 @@ public:
     /// overrides count, mirroring the existing tree-walk semantics.
     Q_INVOKABLE QVariantList shaderEffectUsages(const QString& effectId) const;
 
+    /// See the stockSuppressedEvents Q_PROPERTY. Evaluates the effect's
+    /// per-event ownership gate (animations enabled, tree-resolved effectId
+    /// non-empty, pack applies to the event's contract class) for the
+    /// minimize and maximize events — the two whose stock KWin effects the
+    /// compositor unloads while a tree pack owns them.
+    QStringList stockSuppressedEvents() const;
+
     /// Test hook: redirect file I/O to @p dir instead of the XDG default.
     /// Pass an empty string to restore the default. Not Q_INVOKABLE — QML
     /// callers must not redirect persistence.
@@ -384,6 +399,11 @@ Q_SIGNALS:
     /// Re-emit of `AnimationShaderRegistry::effectsChanged` so QML can
     /// rebind without poking at the registry directly.
     void shaderEffectsChanged();
+
+    /// Emitted whenever stockSuppressedEvents may have changed: on any
+    /// shader-tree change, registry rescan, or a flip of the animations
+    /// master toggle — the three inputs of the ownership gate.
+    void stockSuppressedEventsChanged();
 
     /// Emitted whenever `hasPendingChanges()` may have flipped. The
     /// SettingsController's slot calls `setNeedsSave(true)` when there

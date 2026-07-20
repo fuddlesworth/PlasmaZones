@@ -26,6 +26,47 @@ enum class Direction {
 /// unknown input rather than silently defaulting to a cardinal direction.
 PHOSPHORGEOMETRY_EXPORT std::optional<Direction> directionFromString(QStringView token);
 
+/// The reverse of @p direction. A crossing travelling @p direction enters the
+/// target surface at its opposite edge (moving "right" lands on the
+/// neighbour's LEFT edge), so cross-output entry pickers pair this with
+/// edgeMostRect().
+constexpr Direction opposite(Direction direction)
+{
+    switch (direction) {
+    case Direction::Left:
+        return Direction::Right;
+    case Direction::Right:
+        return Direction::Left;
+    case Direction::Up:
+        return Direction::Down;
+    case Direction::Down:
+        return Direction::Up;
+    }
+    return direction;
+}
+
+/**
+ * @brief Index of the candidate whose @p edge-facing side is most extreme
+ *        toward that edge.
+ *
+ * Ranks by the EDGE coordinate, not the rect origin: Left → smallest left(),
+ * Right → largest right(), Up → smallest top(), Down → largest bottom(), so
+ * with unequal-sized candidates the rect actually touching (or reaching
+ * furthest toward) that side wins. Rects tying on the edge break by the FAR
+ * side nearest the edge — a tile confined to the edge beats one merely
+ * spanning to it (in a master-stack layout, an "up" crossing enters the
+ * bottom stack tile, not the full-height master that also touches the bottom
+ * edge). Remaining ties resolve to the lowest index. This is the shared
+ * cross-output "entry" pick — the first zone / entry tile on the edge a
+ * crossing arrives at. Both engines feed it the ENTRY edge: autotile flips
+ * the travel direction via opposite() at its call site, snap's caller flips
+ * one layer up (oppositeCrossingDirection) before the direction token
+ * reaches the zone adaptor.
+ *
+ * @return index into @p candidates, or -1 when the list is empty.
+ */
+PHOSPHORGEOMETRY_EXPORT int edgeMostRect(const QList<QRectF>& candidates, Direction edge);
+
 /**
  * @brief Pick the spatial neighbour of @p focus among @p candidates in @p direction.
  *

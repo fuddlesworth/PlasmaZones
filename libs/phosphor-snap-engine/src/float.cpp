@@ -185,6 +185,12 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
     // not silently dropped on load by the disabled-context gate when the user has
     // toggled snapping off/on. The legacy store is consulted only as a fallback
     // for windows with no record yet (pre-migration / first float of the session).
+    //
+    // The appId-FIFO fallback here is DELIBERATE (unlike the exact-only pre-float
+    // zone read in resolveUnfloatGeometry): a record-less instance floating for
+    // the first time restores to where its app last floated — the cross-instance
+    // float-back share that collapsePureFloatSiblings manages. A shared free
+    // position is a sensible default; a shared ZONE assignment is not.
     if (m_windowTracker) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
         auto rec = m_windowTracker->placementStore().peek(windowId, appId);
@@ -262,11 +268,46 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
     UnfloatResult result;
 
     QStringList zoneIds = m_windowTracker->preFloatZones(windowId);
+    QString preFloatScreenId = m_windowTracker->preFloatScreen(windowId);
+    if (zoneIds.isEmpty()) {
+        // The in-memory pre-float capture does not survive a daemon restart, but
+        // the persisted placement record's snap slot does: a floating capture
+        // carries the pre-float zones in slot.zoneIds, and a stale snapped
+        // capture (daemon died before the float toggle was persisted) carries
+        // the zones the window occupied before it floated. Either is the
+        // window's home zone — without this fallback, unfloating after a
+        // restart dead-ends ("no pre-float zone, keeping floating") with no way
+        // out short of re-snapping by hand.
+        using PhosphorEngine::WindowPlacement;
+        // Exact-windowId records ONLY: a daemon restart keeps KWin uuids, so the
+        // window's own record always exact-matches. The appId-FIFO fallback
+        // would hand a record-less floating window a SIBLING's home zone (same
+        // app, different instance) and unfloat-snap it there — cross-window
+        // zone bleed. Logout/login (new uuids) restores through
+        // resolveWindowRestore's take(), never this path.
+        if (const auto rec = m_windowTracker->placementStore().peekExact(windowId)) {
+            const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
+            if (!slot.zoneIds.isEmpty()
+                && (slot.state == WindowPlacement::stateFloating() || slot.state == WindowPlacement::stateSnapped())) {
+                zoneIds = slot.zoneIds;
+                // Home-screen hint. Exact for a stale SNAPPED slot (captured as the
+                // snap screen); an approximation for a FLOATING slot, whose record
+                // screen is the screen the window was floating on at capture time —
+                // after a cross-monitor drift while floating that is the drift
+                // monitor, not the pre-float home. resolveUnfloatScreen validates it
+                // and falls back to the caller's live screen, and cross-monitor
+                // unfloat-to-home is allowed anyway (#724), so the approximation is
+                // bounded.
+                preFloatScreenId = rec->screenId;
+                qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                    << "resolveUnfloatGeometry:" << windowId << "no live pre-float capture — using placement record's"
+                    << slot.state << "slot zones" << zoneIds << "on" << preFloatScreenId;
+            }
+        }
+    }
     if (zoneIds.isEmpty()) {
         return result;
     }
-
-    const QString preFloatScreenId = m_windowTracker->preFloatScreen(windowId);
 
     // Cross-monitor restore is ALLOWED (Discussion #724 follow-up): unfloat returns
     // the window to its remembered home zone regardless of which monitor it is

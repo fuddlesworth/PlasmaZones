@@ -470,6 +470,52 @@ private Q_SLOTS:
         QCOMPARE(rec2->freeGeometryFor(screen), QRect(30, 30, 500, 400)); // overwrite replaces
     }
 
+    void testRecordFreeGeometry_firstCaptureWins_isPerWindow()
+    {
+        // First-capture-wins is a PER-WINDOW contract: a same-app sibling's
+        // recorded free geometry must not suppress this window's own first
+        // capture (it would never persist its own position while the sibling's
+        // record lives).
+        const QString screen = QStringLiteral("DP-1");
+        m_service->recordFreeGeometry(QStringLiteral("firefox|sibling-geo"), screen, QRect(10, 10, 400, 300),
+                                      /*overwrite=*/false);
+        m_service->recordFreeGeometry(QStringLiteral("firefox|self-geo"), screen, QRect(50, 60, 700, 500),
+                                      /*overwrite=*/false);
+        const auto rec = m_service->placementStore().peekExact(QStringLiteral("firefox|self-geo"));
+        QVERIFY2(rec.has_value(), "a sibling's record must not block this window's first capture");
+        QCOMPARE(rec->freeGeometryFor(screen), QRect(50, 60, 700, 500));
+    }
+
+    void testRecordFloatingClose_neverInheritsSiblingEngineSlots()
+    {
+        // A record-less window closing floating must take recordFloatingClose's
+        // synthesized-floating branch — grafting a same-app sibling's SNAPPED
+        // slot under this windowId would make a reopen restore two windows into
+        // the sibling's zone and corrupt the per-app FIFO distribution.
+        PhosphorEngine::WindowPlacement sib;
+        sib.windowId = QStringLiteral("firefox|sibling-close");
+        sib.appId = QStringLiteral("firefox");
+        PhosphorEngine::EngineSlot snap;
+        snap.state = QString(PhosphorEngine::WindowPlacement::stateSnapped());
+        snap.zoneIds = QStringList{m_zoneIds[0]};
+        sib.engines.insert(PhosphorEngine::WindowPlacement::snapEngineId(), snap);
+        QVERIFY(m_service->placementStore().record(sib));
+
+        m_service->recordFloatingClose(QStringLiteral("firefox|self-close"), QStringLiteral("DP-1"),
+                                       QRect(30, 40, 600, 400));
+
+        const auto rec = m_service->placementStore().peekExact(QStringLiteral("firefox|self-close"));
+        QVERIFY(rec.has_value());
+        const PhosphorEngine::EngineSlot slot = rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
+        QVERIFY2(slot.zoneIds.isEmpty(), "the sibling's snapped slot must not be grafted under this windowId");
+        // The sibling's own record is untouched.
+        const auto sibRec = m_service->placementStore().peekExact(QStringLiteral("firefox|sibling-close"));
+        QVERIFY(sibRec.has_value());
+        QCOMPARE(sibRec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state,
+                 QString(PhosphorEngine::WindowPlacement::stateSnapped()));
+    }
+
     void testRecordedSnapZones_appIdFallbackAfterRelogin()
     {
         // After a relogin the window's uuid changes; the durable record stored under

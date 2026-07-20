@@ -1,6 +1,20 @@
 {
     "releases": [
         {
+            "version": "3.2.6",
+            "date": "2026-07-20",
+            "highlights": [
+                "Fixed: on autotiled windows, KDE's magic lamp minimize animation could stall partway with black streaks, and the restore animation could be cut off. PlasmaZones now waits for the compositor's animation to finish before it repositions the window (#819)",
+                "Fixed: with a PlasmaZones pack assigned to minimize or maximize, KDE's own effect for that event played at the same time. The stock effect now stands down while your pack owns the event (#819)",
+                "Fixed: with hidden title bars and a desktop-switch animation, the outgoing desktop's tiled windows showed their title bars for the whole animation (#813)",
+                "Fixed: clearing a keyboard shortcut meant assigning it a new key did nothing until the daemon restarted (#812)",
+                "Fixed: floating a tiled window recorded its tile as its free position, so it floated back onto its own tile and its real free position was lost (#818)",
+                "Fixed: unfloating a window that was floated before a daemon restart did nothing, and a window could come back floating on its own after toggling between tiling and snapping (#818)",
+                "Fixed: a floating window on a screen that switched between a snapping desktop and a tiling desktop could quietly stop counting as floating, so rules matching floating windows stopped applying (#814)",
+                "Support reports now capture your global shortcut bindings as KDE has them, with home paths redacted (#812)"
+            ]
+        },
+        {
             "version": "3.2.5",
             "date": "2026-07-19",
             "highlights": [

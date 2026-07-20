@@ -42,12 +42,12 @@
 
 #include "overlayservice.h"
 #include "unifiedlayoutcontroller.h"
-#include "modetracker.h"
 #include "shortcutmanager.h"
 #include "rendering/surfaceshaderitem.h"
 #include "rendering/zoneentryscaffold.h"
 #include "rendering/zoneshadernoderhi.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -1638,18 +1638,50 @@ bool Daemon::init()
     // window's CURRENT screen mode. This replaces the old single shared
     // m_floatingWindows + m_snapState bit that both engines read/wrote.
     //
-    // Mode resolution: the window's tracked screen (WTS screenForWindow, with
-    // the autotile engine's own tracked screen as the fallback for windows snap
-    // never saw) → LayoutRegistry::modeForScreen → the owning engine.
+    // Mode resolution: the window's tracked screen (WTS screenForWindow; for
+    // windows snap never saw, the no-screen fallback below resolves a MODE
+    // directly — Autotile when that engine tracks the window, else Snapping)
+    // → LayoutRegistry::modeForScreen → the owning engine.
+    //
+    // Resolved at the WINDOW's OWN desktop and activity (registry context),
+    // not the screen's current ones. Those are per-window data, never the
+    // context key: reading through the screen's CURRENT desktop/activity
+    // made the effective float answer flip when a per-output desktop switch
+    // (or an activity switch) crossed a snap↔autotile mode boundary — with
+    // no windowFloatingChanged broadcast, stranding every flat float mirror
+    // (the effect's FloatingCache) until a daemon reconnect. A window on the
+    // screen's current desktop/activity (and the sticky / unknown cases:
+    // virtualDesktop 0, empty activity) resolves exactly as before via the
+    // fallbacks. The shared lambda serves the float WRITER and the
+    // autotile-mode predicate too, so those routing decisions shift to the
+    // window's own context along with the reader — deliberate: all three
+    // answer "which engine owns this window", and that has one answer.
     {
         auto screenModeForWindow = [this, autotilePtr = QPointer(autotileEngine)](
                                        const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
             QString screenId;
+            const PhosphorPlacement::WindowTrackingService* wts = nullptr;
             if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
-                screenId = m_windowTrackingAdaptor->service()->screenForWindow(windowId);
+                wts = m_windowTrackingAdaptor->service();
+                screenId = wts->screenForWindow(windowId);
             }
             if (!screenId.isEmpty() && m_layoutManager) {
-                return m_layoutManager->modeForScreen(screenId, currentDesktopForScreen(screenId), currentActivity());
+                const int screenCurrent = currentDesktopForScreen(screenId);
+                int desktop = screenCurrent;
+                QString activity = currentActivity();
+                if (wts && wts->windowRegistry()) {
+                    const auto ctx =
+                        wts->windowRegistry()->windowContext(::PhosphorIdentity::WindowId::extractInstanceId(windowId));
+                    if (ctx) {
+                        // Own-desktop / multi-desktop-span / sticky policy
+                        // lives on WindowContext (see effectiveDesktop's doc);
+                        // this resolver just supplies the screen-current
+                        // fallbacks.
+                        desktop = ctx->effectiveDesktop(screenCurrent);
+                        activity = ctx->effectiveActivity(activity);
+                    }
+                }
+                return m_layoutManager->modeForScreen(screenId, desktop, activity);
             }
             // No tracked screen in WTS (e.g. a window snap never saw): if the
             // autotile engine tracks it, its current mode is Autotile. Otherwise
@@ -2426,8 +2458,6 @@ void Daemon::stop()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->saveStateOnShutdown();
     }
-
-    // ModeTracker delegates to LayoutManager's KConfig — no separate save needed
 
     m_reapplyGeometriesTimer.stop();
 

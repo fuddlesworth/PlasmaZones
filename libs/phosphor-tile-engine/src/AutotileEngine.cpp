@@ -163,6 +163,11 @@ bool AutotileEngine::isAutotileFloated(const QString& rawWindowId) const
     return m_autotileFloatedWindows.contains(canonicalizeForLookup(rawWindowId));
 }
 
+QRect AutotileEngine::lastManagedRect(const QString& rawWindowId) const
+{
+    return m_lastAppliedTileRect.value(canonicalizeForLookup(rawWindowId));
+}
+
 int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
@@ -209,6 +214,14 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     for (auto it = m_windowMinSizes.begin(); it != m_windowMinSizes.end();) {
         if (!aliveWindowIds.contains(it.key())) {
             it = m_windowMinSizes.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // Same independent keying for the last-applied tile rects.
+    for (auto it = m_lastAppliedTileRect.begin(); it != m_lastAppliedTileRect.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            it = m_lastAppliedTileRect.erase(it);
         } else {
             ++it;
         }
@@ -722,14 +735,26 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // of truth). Without this, windows added from pending orders lose
                         // their floating state because windowOpened's floating restore is
                         // skipped when the window already exists in the PhosphorTiles::TilingState.
+                        // Exact record only: pending orders are built from LIVE session
+                        // ids, so a same-app sibling's floating record must not float
+                        // this window (relogin restores go through insertWindow's take()).
                         if (m_windowTracker) {
-                            const auto rec = m_windowTracker->placementStore().peek(
-                                windowId, m_windowTracker->currentAppIdFor(windowId));
+                            const auto rec = m_windowTracker->placementStore().peekExact(windowId);
                             if (rec
                                 && rec->slotFor(engineId()).state == PhosphorEngine::WindowPlacement::stateFloating()) {
                                 ts->setFloating(windowId, true);
                             }
                         }
+                        // Announce on the passive channel via the canonical
+                        // insert-time sync (both directions: restored-floating
+                        // OR seeded-tiled-over-a-stale-WTS-float-bit). The
+                        // later windowOpened for this already-present window
+                        // is a tracked no-op insert whose float sync is
+                        // skipped, so without this the seed's float state is
+                        // never broadcast — subscribers (and the adaptor's
+                        // last-broadcast gate) stay stale until a daemon
+                        // reconnect. The gate dedups when they already agree.
+                        emitInsertFloatStateSync(windowId, screenId);
                     }
                 }
             }
@@ -2003,7 +2028,10 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     }
 
     // Already tracked on the destination screen — nothing to adopt; the float
-    // toggle path is what the caller probably wants instead.
+    // toggle path is what the caller probably wants instead. No float
+    // announcement needed on this return: the float bit is untouched (we
+    // return before setFloating), so what subscribers last heard remains
+    // accurate.
     const auto destKey = currentKeyForScreen(ctx.toScreenId);
     const auto trackedKeyIt = m_states.windowKeys().constFind(windowId);
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() == destKey
@@ -2050,6 +2078,22 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         }
     }
     m_states.setKeyForWindow(windowId, destKey);
+
+    // Announce the received float bit on the passive channel (the snap twin
+    // announces its float re-homes via windowFloatingChanged from its
+    // handoffReceive; this passive signal is autotile's position-preserving
+    // analogue — this engine previously set the bit silently). A cross-mode
+    // move/swap of a floating window arrives with
+    // wasFloating=false after the source engine's handoffRelease cleared its
+    // bit without emitting — without this, subscribers that last heard
+    // "floating" (the effect's FloatingCache) stay stale until a daemon
+    // reconnect. Deliberately UNCONDITIONAL, not divergence-gated against
+    // the WTS resolver: mid-handoff the resolver already reads the cleared
+    // source bit, so it cannot tell what subscribers last heard — the
+    // adaptor's last-broadcast gate owns that dedup. Passive signal, not
+    // windowFloatingChanged: the window already has a valid position and
+    // must not ride the pre-tile geometry restore.
+    Q_EMIT windowFloatingStateSynced(windowId, ctx.wasFloating, ctx.toScreenId);
 
     // Trigger a retile so a non-floating arrival actually lands in a tile;
     // floating arrivals retile too because their displacement may free a
@@ -2219,21 +2263,17 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
         && !m_states.hasWindow(windowId)) {
         const QString appId = currentAppIdFor(windowId);
         if (!appId.isEmpty() && appId != windowId) {
+            // Shared predicate with snap's reciprocal gate
+            // (SnapEngine::resolveWindowRestore) — both engines run
+            // PhosphorEngine::pendingCrossScreenSnapRestore over the same record
+            // fields, so a window is never both deferred-and-claimed or
+            // both-skipped.
             const auto snapCrossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
-                if (p.slotFor(PhosphorEngine::WindowPlacement::snapEngineId()).state
-                    != PhosphorEngine::WindowPlacement::stateSnapped()) {
-                    return false;
-                }
-                // Resolve the recorded screen's mode in the RECORD'S OWN (desktop,
-                // activity) context — the same fields snap's reciprocal gate
-                // (SnapEngine::recordedSnapScreenIsSnapping) reads off the same record.
-                // Keying both engines on the record (not on each engine's live current
-                // desktop, which can differ under per-screen virtual-desktop overrides)
-                // guarantees they reach an identical verdict, so a window is never both
-                // deferred-and-claimed or both-skipped.
-                const QString recScreen = p.screenId.isEmpty() ? screenId : p.screenId;
-                return m_layoutManager->modeForScreen(recScreen, p.virtualDesktop, p.activity)
-                    == PhosphorZones::AssignmentEntry::Mode::Snapping;
+                return PhosphorEngine::pendingCrossScreenSnapRestore(
+                    p, screenId, [&](const QString& rec, int desktop, const QString& activity) {
+                        return m_layoutManager->modeForScreen(rec, desktop, activity)
+                            == PhosphorZones::AssignmentEntry::Mode::Snapping;
+                    });
             };
             if (m_windowTracker->placementStore().peek(windowId, appId, snapCrossRestorePending).has_value()) {
                 qCInfo(PhosphorTileEngine::lcTileEngine)
@@ -2386,6 +2426,14 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     // (windowOpened only stores when minWidth/minHeight > 0), inflating
     // enforceMinSizes constraints with a stale value.
     m_windowMinSizes.remove(windowId);
+    // m_lastAppliedTileRect is deliberately RETAINED here. The effect
+    // notifies autotile of a close BEFORE WindowTracking (two fire-and-forget
+    // calls on the same connection, delivered in order), so the orchestrator's
+    // captureWindowPlacement — and its close-path tile-rect guard — runs
+    // AFTER this teardown, on a live frame that is still the tile rect for a
+    // window that closed tiled. Erasing now would blind that guard and let
+    // the tile rect be recorded as the reopen float-back. pruneStaleWindows
+    // reclaims the entry (its sweep is independent of tracking).
 
     onWindowRemoved(windowId);
     // Release the canonical translation last — downstream cleanup above may
@@ -2468,6 +2516,7 @@ void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& sc
             m_states.removeWindow(windowId);
             m_windowMinSizes.remove(windowId);
             m_autotileFloatedWindows.remove(windowId);
+            m_lastAppliedTileRect.remove(windowId);
             if (!oldScreen.isEmpty()) {
                 migrateWindowBetweenKeys(windowId, oldKey, screenId);
             }
@@ -3089,7 +3138,8 @@ void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QSt
 {
     // Read-only lookup — must NOT lazily materialize a state. tilingStateForScreen
     // would create one for a known-but-stateless screen; this method only reads
-    // isFloating right after a successful insertWindow, so the state already exists.
+    // isFloating right after a window lands in an existing state (insertWindow,
+    // or the strict-initial-order seed in setAutotileScreens), so it already exists.
     PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
     if (!state) {
         return;
@@ -4038,6 +4088,10 @@ void AutotileEngine::applyTiling(const QString& screenId)
         // (mirrors the snap side, DaemonGeometryResolver::snapBorderInset == 0).
         // Tile spacing comes from the zone gap/padding settings, not the border.
         const QRect& geo = zones[i];
+        // Remember the emitted rect for lastManagedRect(): the float-toggle
+        // capture path compares the live frame against it AFTER the tiled bit
+        // has already cleared (see the header doc on m_lastAppliedTileRect).
+        m_lastAppliedTileRect.insert(windows[i], geo);
         QJsonObject obj;
         obj[QLatin1String("windowId")] = windows[i];
         obj[QLatin1String("screenId")] = screenId;

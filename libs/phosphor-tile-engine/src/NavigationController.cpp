@@ -223,27 +223,20 @@ QString NavigationController::entryWindowOnScreen(const QString& screenId, const
     }
     // The entry edge faces back toward the source: a crossing moving "right"
     // enters the target's LEFT edge, "down" its TOP, etc. Pick the extreme tile
-    // on that edge. An unrecognised direction matches no arm below, which would
-    // leave `best` at 0 and silently pass off the first tile as an entry window —
-    // reject it instead of guessing.
-    if (!PhosphorGeometry::directionFromString(direction).has_value()) {
+    // on that edge via the shared primitive (edge-coordinate ranked, same pick
+    // snap's first-zone-in-direction uses). An unrecognised direction is
+    // rejected rather than guessed at.
+    const auto travel = PhosphorGeometry::directionFromString(direction);
+    if (!travel.has_value()) {
         return QString();
     }
-    int best = 0;
-    for (int i = 1; i < zones.size(); ++i) {
-        const QRect& r = zones.at(i);
-        const QRect& b = zones.at(best);
-        if (direction == QLatin1String("right") && r.x() < b.x()) {
-            best = i;
-        } else if (direction == QLatin1String("left") && r.x() > b.x()) {
-            best = i;
-        } else if (direction == QLatin1String("down") && r.y() < b.y()) {
-            best = i;
-        } else if (direction == QLatin1String("up") && r.y() > b.y()) {
-            best = i;
-        }
+    QList<QRectF> candidates;
+    candidates.reserve(zones.size());
+    for (const QRect& r : zones) {
+        candidates.append(QRectF(r));
     }
-    return windows.at(best);
+    const int best = PhosphorGeometry::edgeMostRect(candidates, PhosphorGeometry::opposite(*travel));
+    return best >= 0 ? windows.at(best) : QString();
 }
 
 int NavigationController::windowOrderIndexOnScreen(const QString& screenId, const QString& windowId) const

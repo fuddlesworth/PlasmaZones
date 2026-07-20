@@ -17,7 +17,7 @@ QVariantMap DaemonGeometryResolver::contextGapOverrideFor(const QString& screenI
     if (screenId.isEmpty()) {
         return {};
     }
-    // Translation to the PerScreenSnappingKey-shaped map is shared with the
+    // Translation to the PerScreenKeys-shaped map is shared with the
     // preview/query geometry helpers via GeometryUtils::contextGapOverrideMap.
     // This is the snap-commit geometry path, so resolve against the "snapping"
     // placement mode — a per-mode `Mode Equals "snapping"` gap rule applies here.

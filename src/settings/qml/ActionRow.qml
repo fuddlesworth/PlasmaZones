@@ -460,6 +460,16 @@ ColumnLayout {
             }
         }
 
+        // Stock-animation conflict chip — a per-window shader on the minimize
+        // or maximize event cannot suppress KDE's own effect for that event.
+        // Predicate, tooltip, and the tree-suppression hide condition all
+        // live in the shared component (also used by the read-only rule
+        // summary, ActionListView).
+        StockAnimationConflictChip {
+            action: row.action
+            animationsController: row.appSettings ? row.appSettings.animationsController : null
+        }
+
         // One editor per parameter — the shape comes from the param `kind`,
         // never an action-type ladder. The param-editor Components are
         // declared as `property Component` on `row` (below) so the Loader

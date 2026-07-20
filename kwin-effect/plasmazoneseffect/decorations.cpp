@@ -29,6 +29,7 @@
 #include <QGuiApplication>
 #include <QPalette>
 #include <QtMath> // qCeil, resolving the chain's outer padding
+#include <QTimer> // deferDecorationTeardownWhileAnimated poll
 #include <QVariantMap>
 
 #include <optional>
@@ -130,8 +131,62 @@ void PlasmaZonesEffect::reconcileDecorationOnPlacementFlip(const QString& window
     }
 }
 
+void PlasmaZonesEffect::deferDecorationTeardownWhileAnimated(const QString& windowId)
+{
+    // Poll cadence. Coarse on purpose: the poll only decides WHEN the
+    // teardown happens (the animation holds the visuals meanwhile), so the
+    // sole cost of a late tick is a border lingering a few extra frames on a
+    // window that just finished minimizing. Stock minimize animations run
+    // ~250ms scaled by the user's global animation speed, so a handful of
+    // ticks covers the common case.
+    constexpr int kAnimatedTeardownPollMs = 120;
+    if (m_animatedDecoTeardownPending.contains(windowId)) {
+        return; // a poll is already armed; decoration sweeps re-enter freely
+    }
+    m_animatedDecoTeardownPending.insert(windowId);
+    // `this` as context cancels the poll on effect teardown (clearAllDecorations
+    // handles the windows themselves there).
+    QTimer::singleShot(kAnimatedTeardownPollMs, this, [this, windowId] {
+        m_animatedDecoTeardownPending.remove(windowId);
+        // Exact-id re-check, same discipline as the windowDecorationRestored
+        // handler: findWindowById's fuzzy appId fallback must not resolve a
+        // same-app sibling and refresh IT under the dead window's id.
+        KWin::EffectWindow* w = findWindowById(windowId);
+        if (w && getWindowId(w) == windowId) {
+            // Re-resolve: still animation-held → defers again; fully
+            // minimized (ref dropped, no longer visible) → normal
+            // undecorate; unminimized meanwhile → normal refresh.
+            updateWindowDecoration(windowId, w);
+        } else {
+            // Window died during the deferral. The delete/close paths
+            // already released its GL with the corpse pointer in hand;
+            // this just drops any bookkeeping left under the id.
+            removeWindowDecoration(windowId);
+        }
+    });
+}
+
 void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::EffectWindow* w)
 {
+    // ANIMATION-HELD MINIMIZED WINDOW — defer, and defer BEFORE the remove-first
+    // below touches any state. A minimized window is only isVisible() while an
+    // effect holds an EffectWindowVisibleRef on it: KWin's magic lamp / squash
+    // minimize animation (or our own minimize transition) is mid-flight and
+    // still painting the window — through this very decoration's redirect. The
+    // isMinimized() gate further down would tear the redirect and GL working
+    // set out from under that animation (the discussion #816 mid-lamp freeze +
+    // unbound-sampler black), and a plain early-return AFTER the remove-first
+    // would orphan the kept redirect instead. So the decision is made here, at
+    // entry, while the decoration entry is still intact: keep it untouched and
+    // poll until the animation drops its ref (fully minimized → no longer
+    // visible → normal undecorate) or the window unminimizes (normal refresh).
+    // Gated on an existing decoration: with nothing to tear down there is
+    // nothing to defer.
+    if (w && w->isMinimized() && w->isVisible() && m_windowDecorations.contains(windowId)) {
+        deferDecorationTeardownWhileAnimated(windowId);
+        return;
+    }
+
     // Did this window already have a decoration? Read LIVE, and read BEFORE the
     // remove-first below, so the focus cross-fade can tell a genuine undecorated→decorated
     // transition (must SNAP to the current focus) from a plain refresh (focus change, snap

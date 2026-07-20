@@ -57,6 +57,7 @@ while [[ $# -gt 0 ]]; do
             echo "  data/            User data (layouts, algorithms, shaders, animation profiles, etc.)"
             echo "  journal.log      Recent plasmazonesd journal entries"
             echo "  kwin-effect.log  Recent PlasmaZones KWin effect journal entries"
+            echo "  kglobalaccel.txt Effective KGlobalAccel bindings for the plasmazonesd component"
             exit 0
             ;;
         *)
@@ -172,7 +173,7 @@ if [[ -d "$CONFIG_DIR" ]]; then
         # journal logs below) or claimed by the DATA_DIR tree; a config-dir
         # entry with the same name must not fight them for the slot.
         case "$rel" in
-            report.md|journal.log|kwin-effect.log|data|data/*)
+            report.md|journal.log|kwin-effect.log|kglobalaccel.txt|data|data/*)
                 echo "Warning: skipping config entry '$rel' (name reserved by the archive layout)" >&2
                 continue ;;
         esac
@@ -295,6 +296,33 @@ if command -v journalctl &>/dev/null; then
         [[ -s "$STAGING/kwin-effect.log" ]] || rm -f "$STAGING/kwin-effect.log"
     fi
 fi
+
+# 5. Global shortcut state (KGlobalAccel)
+# The daemon registers shortcuts through KGlobalAccel with autoloading, so
+# what actually gets grabbed is the binding stored in kglobalshortcutsrc —
+# NOT the value in config.json, and the two can diverge (conflict prompts,
+# System Settings edits). Without this capture, "shortcut is set but nothing
+# happens" reports are untriageable from the archive alone (discussion #809).
+# Only the plasmazonesd component is included; the full file lists every
+# app's shortcuts, which the reporter did not agree to share.
+{
+    KGLOBAL_RC="${XDG_CONFIG_HOME:-$HOME/.config}/kglobalshortcutsrc"
+    if [[ -f "$KGLOBAL_RC" ]]; then
+        echo "── kglobalshortcutsrc [plasmazonesd] ──"
+        awk '/^\[/{keep=($0=="[plasmazonesd]")} keep' "$KGLOBAL_RC"
+        echo ""
+    fi
+    # Live registration state, best-effort: shows what KGlobalAccel is
+    # actually grabbing right now, which catches divergence between the
+    # on-disk rc and the running session.
+    if command -v busctl &>/dev/null; then
+        echo "── org.kde.kglobalaccel allShortcutInfos ──"
+        busctl --user call org.kde.kglobalaccel /component/plasmazonesd \
+            org.kde.kglobalaccel.Component allShortcutInfos 2>&1 || true
+    fi
+} | redact_home > "$STAGING/kglobalaccel.txt" || true
+# Nothing captured (no rc section, no busctl) → drop the blank file.
+[[ -s "$STAGING/kglobalaccel.txt" ]] || rm -f "$STAGING/kglobalaccel.txt"
 
 # ─── Create archive ──────────────────────────────────────────────────────────
 

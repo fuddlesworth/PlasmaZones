@@ -444,6 +444,15 @@ ColumnLayout {
                     }
                 }
 
+                // Stock-animation conflict chip — same shared component (and
+                // therefore the same predicate and tree-suppression hide
+                // condition) as the rule editor's action row, so the saved-rule
+                // summary flags the conflict too, not just the editor.
+                StockAnimationConflictChip {
+                    action: actionDelegate._action
+                    animationsController: root.appSettings ? root.appSettings.animationsController : null
+                }
+
                 Item {
                     Layout.fillWidth: true
                 }

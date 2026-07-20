@@ -247,7 +247,8 @@ public Q_SLOTS:
      *                       values are clamped to WindowType::Unknown
      * @param extended       Extended window-property snapshot keyed by
      *                       PhosphorProtocol::Service::WindowMetadataKey (state flags,
-     *                       geometry, accessory flags, captionNormal). A key is
+     *                       geometry, accessory flags, captionNormal, multi-desktop
+     *                       span list). A key is
      *                       present only when the value is known; absent keys leave
      *                       the corresponding WindowMetadata optional disengaged so a
      *                       window-rule predicate over it stays inert. Lets the
@@ -633,7 +634,10 @@ public:
 
     /// Unified placement capture orchestrator: ask each engine for @p windowId's
     /// current placement, stamp it with the live frame geometry, and record it in
-    /// the WindowPlacementStore (or clear the record if no engine manages it).
+    /// the WindowPlacementStore. When NO engine manages the window, any existing
+    /// record is left intact (never cleared here — records are per-mode memory,
+    /// only merge-updated, consumed, or explicitly pruned); with an
+    /// @p authoritativeScreen it records a floating-close placement instead.
     /// Shadow-written in P1; the single funnel every state-change + close hook
     /// calls so the persisted record always reflects the window's live state.
     ///
@@ -938,6 +942,20 @@ public:
     // `pruneExcludedPendingRestores` / `requestReapplyWindowGeometries`
     // pair above.
     /**
+     * @brief Single broadcast chokepoint for engine-relayed float changes.
+     *
+     * Updates m_broadcastFloating and emits windowFloatingChanged, deduped
+     * against the last value actually broadcast. Engine signal relays MUST
+     * route through this (never signal-to-signal into windowFloatingChanged,
+     * never a bare Q_EMIT): a direct emission leaves m_broadcastFloating
+     * stale, and the setWindowFloating gate then suppresses the next genuine
+     * change on the engine-sync channel (e.g. a cross-mode handoff's
+     * float-cleared sync after a snap-side float). Returns whether a
+     * broadcast was actually emitted, so setWindowFloating (which delegates
+     * its gate here) can ride its extra side emissions on the same edge.
+     */
+    bool relayWindowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
+    /**
      * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats).
      * Gets validated geometry, emits applyGeometryRequested if found, clears stored geometry.
      * @return true if geometry was applied, false if none stored
@@ -1085,6 +1103,31 @@ private:
     // now handles floating-state clearing internally (and emits
     // windowFloatingClearedForSnap which the adaptor relays to its own
     // windowFloatingChanged D-Bus signal).
+
+    /// Tile-rect poison guard, shared by captureWindowPlacement's primary
+    /// free-geometry write and its engine-miss close fallback: true when the
+    /// live @p frame still equals the tile rect the autotile engine last
+    /// applied to @p windowId (the engine remembers it PAST the tiled-bit
+    /// clear, past a cross-engine handoff, and past its own windowClosed
+    /// teardown — see AutotileEngine::lastManagedRect). Such a frame is a
+    /// managed rect, not a genuine free position, and must never become the
+    /// float-back. The autotile analogue of the snap-side stillOnSnapRect
+    /// zone comparison.
+    ///
+    /// The close ordering makes the engine's retention load-bearing: the
+    /// effect notifies autotile of a close BEFORE WindowTracking (same
+    /// connection, in-order delivery), so a window closing tiled on an
+    /// autotile screen reaches this capture already untracked — both
+    /// engines' capturePlacement decline and the isWindowAutotileTiled gate
+    /// reads false — and takes the close-path fallback with its live frame
+    /// still on the tile rect. Only the retained memory lets this guard
+    /// refuse that frame. The guard therefore covers: a float toggle in
+    /// autotile mode (performToggleFloat clears the tiled bit before this
+    /// capture reaches it — the primary regression), a tiled window handed
+    /// off to a non-autotile screen and captured or closed there, and a
+    /// tiled close on the autotile screen itself. In each, the live frame
+    /// has not yet moved off the tile rect.
+    bool isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Screen tracking (from KWin effect's D-Bus calls)

@@ -213,7 +213,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::windowStateChanged);
         connect(snap, &PhosphorSnapEngine::SnapEngine::windowFloatingClearedForSnap, this,
                 [this](const QString& windowId, const QString& screenId) {
-                    Q_EMIT windowFloatingChanged(windowId, false, screenId);
+                    // Through the relay chokepoint so m_broadcastFloating
+                    // tracks this emission too (see relayWindowFloatingChanged).
+                    relayWindowFloatingChanged(windowId, false, screenId);
                 });
         // Unified model: keep the live placement record current on every snap
         // state change (commit / uncommit) so the persisted state always matches
@@ -929,6 +931,10 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         ctx.fromEngineId = sourceEngine->engineId();
         ctx.sourceZoneIds = landingZoneIds;
         ctx.wasFloating = false; // an explicit move always places, never floats
+        // An autotile target's handoffReceive also announces the arrival's
+        // tiled (non-floating) state on the passive float-sync channel —
+        // intended: the arrival IS tiled, and the relay's last-broadcast
+        // gate dedups when the bit already agrees.
         targetEngine->handoffReceive(ctx);
     }
 
@@ -1027,6 +1033,9 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     targetEngine->handoffRelease(partner);
 
     // ── Place the focused window on the target, in the partner's slot. ──
+    // (Both placements below: an autotile receiver's handoffReceive also
+    // announces the arrival's tiled state on the passive float-sync channel —
+    // intended; the relay's last-broadcast gate dedups an agreeing bit.)
     {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
