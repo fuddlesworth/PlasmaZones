@@ -185,6 +185,12 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
     // not silently dropped on load by the disabled-context gate when the user has
     // toggled snapping off/on. The legacy store is consulted only as a fallback
     // for windows with no record yet (pre-migration / first float of the session).
+    //
+    // The appId-FIFO fallback here is DELIBERATE (unlike the exact-only pre-float
+    // zone read in resolveUnfloatGeometry): a record-less instance floating for
+    // the first time restores to where its app last floated — the cross-instance
+    // float-back share that collapsePureFloatSiblings manages. A shared free
+    // position is a sensible default; a shared ZONE assignment is not.
     if (m_windowTracker) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
         auto rec = m_windowTracker->placementStore().peek(windowId, appId);
@@ -273,16 +279,13 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         // restart dead-ends ("no pre-float zone, keeping floating") with no way
         // out short of re-snapping by hand.
         using PhosphorEngine::WindowPlacement;
-        const QString appId = m_windowTracker->currentAppIdFor(windowId);
         // Exact-windowId records ONLY: a daemon restart keeps KWin uuids, so the
-        // window's own record always exact-matches. Without the accept predicate,
-        // peek's appId-FIFO fallback would hand a record-less floating window a
-        // SIBLING's home zone (same app, different instance) and unfloat-snap it
-        // there — cross-window zone bleed. Logout/login (new uuids) restores
-        // through resolveWindowRestore's take(), never this path.
-        if (const auto rec = m_windowTracker->placementStore().peek(windowId, appId, [&](const WindowPlacement& p) {
-                return p.windowId == windowId;
-            })) {
+        // window's own record always exact-matches. The appId-FIFO fallback
+        // would hand a record-less floating window a SIBLING's home zone (same
+        // app, different instance) and unfloat-snap it there — cross-window
+        // zone bleed. Logout/login (new uuids) restores through
+        // resolveWindowRestore's take(), never this path.
+        if (const auto rec = m_windowTracker->placementStore().peekExact(windowId)) {
             const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
             if (!slot.zoneIds.isEmpty()
                 && (slot.state == WindowPlacement::stateFloating() || slot.state == WindowPlacement::stateSnapped())) {

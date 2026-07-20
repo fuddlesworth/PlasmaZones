@@ -5,8 +5,16 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 
+#include <memory>
+
+#include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../helpers/AutotileTestHelpers.h"
+#include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
+#include "../helpers/StubZoneDetector.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
@@ -626,6 +634,55 @@ private Q_SLOTS:
         engine.pruneStaleWindows({QStringLiteral("win-2")});
         QVERIFY(!engine.lastManagedRect(QStringLiteral("win-1")).isValid());
         QVERIFY(engine.lastManagedRect(QStringLiteral("win-2")).isValid());
+    }
+
+    // =========================================================================
+    // Pending-order seed float restore: EXACT record only. Pending orders are
+    // built from live-session ids, so a same-app SIBLING's floating record
+    // must never float a record-less seeded window (relogin restores go
+    // through insertWindow's take(), not this path). The window's own exact
+    // floating record still restores its float.
+    // =========================================================================
+
+    void testPendingOrderSeed_floatRestoreIsExactRecordOnly()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PlasmaZones::StubZoneDetector zoneDetector;
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+
+        AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("DP-1");
+
+        using PhosphorEngine::WindowPlacement;
+        PhosphorEngine::EngineSlot floatSlot;
+        floatSlot.state = QString(WindowPlacement::stateFloating());
+
+        // Sibling instance's durable floating record (same appId, other uuid).
+        WindowPlacement sib;
+        sib.windowId = QStringLiteral("app|sibling");
+        sib.appId = QStringLiteral("app");
+        sib.engines.insert(engine.engineId(), floatSlot);
+        QVERIFY(wts.placementStore().record(sib));
+
+        // The second seeded window's OWN exact floating record.
+        WindowPlacement own;
+        own.windowId = QStringLiteral("app|own");
+        own.appId = QStringLiteral("app");
+        own.engines.insert(engine.engineId(), floatSlot);
+        QVERIFY(wts.placementStore().record(own));
+
+        engine.setInitialWindowOrder(screenName, {QStringLiteral("app|fresh"), QStringLiteral("app|own")});
+        engine.setAutotileScreens({screenName});
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        QVERIFY(state->containsWindow(QStringLiteral("app|fresh")));
+        QVERIFY2(!state->isFloating(QStringLiteral("app|fresh")),
+                 "a same-app sibling's floating record must not float a record-less seeded window");
+        QVERIFY2(state->isFloating(QStringLiteral("app|own")),
+                 "the window's own exact floating record still restores its float");
     }
 };
 

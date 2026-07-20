@@ -70,6 +70,17 @@ public:
     std::optional<WindowPlacement> peek(const QString& windowId, const QString& appId,
                                         const std::function<bool(const WindowPlacement&)>& accept = {}) const;
 
+    /// Exact-windowId peek: branch 1 of peek() only, never the appId-FIFO
+    /// fallback. For reads about a LIVE window mid-session (KWin uuids are
+    /// stable until logout), where a same-app sibling's record must not
+    /// answer for this window — the appId fallback exists for the relogin
+    /// re-bind paths (take()), not for live per-window state. An empty appId
+    /// disables peek's fallback branch structurally, so this cannot drift.
+    std::optional<WindowPlacement> peekExact(const QString& windowId) const
+    {
+        return peek(windowId, QString());
+    }
+
     /// True if a record exists for the exact windowId, or (if @p appId non-empty)
     /// any record in that appId bucket.
     bool contains(const QString& windowId, const QString& appId = QString()) const;

@@ -735,9 +735,11 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // of truth). Without this, windows added from pending orders lose
                         // their floating state because windowOpened's floating restore is
                         // skipped when the window already exists in the PhosphorTiles::TilingState.
+                        // Exact record only: pending orders are built from LIVE session
+                        // ids, so a same-app sibling's floating record must not float
+                        // this window (relogin restores go through insertWindow's take()).
                         if (m_windowTracker) {
-                            const auto rec = m_windowTracker->placementStore().peek(
-                                windowId, m_windowTracker->currentAppIdFor(windowId));
+                            const auto rec = m_windowTracker->placementStore().peekExact(windowId);
                             if (rec
                                 && rec->slotFor(engineId()).state == PhosphorEngine::WindowPlacement::stateFloating()) {
                                 ts->setFloating(windowId, true);

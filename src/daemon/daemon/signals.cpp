@@ -136,7 +136,9 @@ void Daemon::initializeAutotile()
                             // last left snapping. No parallel saved-float set. Float state is set
                             // immediately; geometry restore is deferred to the batched resnap
                             // signal to avoid individual D-Bus signals queuing behind the resnap.
-                            const auto rec = wts->placementStore().peek(windowId, wts->currentAppIdFor(windowId));
+                            // Exact record only: this is a LIVE mid-session window (uuids stable),
+                            // so a same-app sibling's record must not float/zone-restore it.
+                            const auto rec = wts->placementStore().peekExact(windowId);
                             const PhosphorEngine::EngineSlot snapSlot = rec
                                 ? rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId())
                                 : PhosphorEngine::EngineSlot{};

@@ -243,6 +243,24 @@ private Q_SLOTS:
         QCOMPARE(store.size(), 2); // peek is non-consuming
     }
 
+    void testPeekExact_neverFallsBackToAppIdSibling()
+    {
+        // peekExact is the per-window read for LIVE windows: the exact-uuid
+        // branch only, never the appId-FIFO fallback — a same-app sibling's
+        // record must not answer for a record-less window (the sibling zone /
+        // float-state bleed the live-state readers were exposed to).
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("term|sibling"), QStringLiteral("term"), WindowPlacement::stateSnapped(),
+                          WindowPlacement::snapEngineId()));
+
+        QVERIFY(store.peek(QStringLiteral("term|other"), QStringLiteral("term")).has_value()); // fallback would bleed
+        QVERIFY(!store.peekExact(QStringLiteral("term|other")).has_value()); // exact-only refuses
+        const auto own = store.peekExact(QStringLiteral("term|sibling"));
+        QVERIFY(own.has_value());
+        QCOMPARE(own->windowId, QStringLiteral("term|sibling"));
+        QCOMPARE(store.size(), 1); // non-consuming
+    }
+
     void testTake_acceptPredicatePassesOnFifoCandidate()
     {
         // The accepting (not just rejecting) path: an appId-FIFO candidate that
