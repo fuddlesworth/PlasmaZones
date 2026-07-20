@@ -4,7 +4,6 @@
 #include "../daemon.h"
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
-#include "../modetracker.h"
 #include "../../core/screenmoderouter.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/AssignmentEntry.h>
@@ -498,11 +497,6 @@ void Daemon::syncModeFromAssignments()
                     m_layoutManager->setActiveLayout(desktopLayout);
                 }
             }
-        }
-
-        // Update ModeTracker context to reflect this desktop
-        if (m_modeTracker && !focusedScreenId.isEmpty()) {
-            m_modeTracker->setContext(focusedScreenId, desktop, activity);
         }
     }
 

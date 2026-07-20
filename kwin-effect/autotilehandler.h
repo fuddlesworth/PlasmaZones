@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "deferredwindowcommits.h"
+
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 
@@ -108,6 +110,17 @@ public:
     /// daemon windowClosed call) and the cross-mode-move marker path (where the
     /// daemon already relinquished the window via handoffRelease).
     void cleanupAutotileTracking(const QString& windowId, const QString& screenId);
+    /// Drop @p windowId from the minimize-float set and cancel any deferred
+    /// unminimize→unfloat commit (mirrors SnapHandler::removeMinimizeFloated).
+    /// Returns true if the window was tracked. Called from the effect's
+    /// windowFloatingChanged handler: an authoritative external unfloat moots
+    /// the deferred commit — the daemon already unfloated the window, so a
+    /// later commit would re-send a redundant unfloat.
+    bool removeMinimizeFloated(const QString& windowId)
+    {
+        cancelPendingUnminimizeUnfloat(windowId);
+        return m_minimizeFloatedWindows.remove(windowId);
+    }
     /// Drop a destroyed window's desktop-move geometry stash. Separate from
     /// onWindowClosed because the desktop-MOVE path calls onWindowClosed
     /// right after creating the stash (the window must look "closed" to this
@@ -267,11 +280,24 @@ private:
      * @brief Cancel a pending debounced minimize→float commit.
      *
      * No-op if no timer is pending for the window. Called from the
-     * unminimize path (to coalesce spurious cycles), from onWindowClosed
-     * (so pending timers never fire against destroyed windows), and from
-     * clearAllPendingMinimizeFloats (bulk teardown).
+     * unminimize path (to coalesce spurious cycles) and from onWindowClosed
+     * (so pending timers never fire against destroyed windows); bulk
+     * teardown goes through the helper's cancelAll in
+     * clearAllPendingMinimizeFloats instead.
      */
     void cancelPendingMinimizeFloat(const QString& windowId);
+
+    /**
+     * @brief Cancel a pending deferred unminimize→unfloat commit.
+     *
+     * No-op if no timer is pending for the window. Called from the minimize
+     * path (a re-minimize during the grace must leave the window
+     * minimize-floated), from cleanupAutotileTracking (window closed), and
+     * from removeMinimizeFloated (authoritative external unfloat via the
+     * daemon's windowFloatingChanged echo); bulk teardown goes through the
+     * helper's cancelAll in clearAllPendingMinimizeFloats instead.
+     */
+    void cancelPendingUnminimizeUnfloat(const QString& windowId);
 
     /**
      * @brief Cancel every pending debounced minimize→float commit.
@@ -409,7 +435,17 @@ private:
     /// cancelled and no D-Bus float is issued. This absorbs spurious
     /// minimize/unminimize cycles that KWin emits on tiled windows when
     /// plasmashell notification popups transiently change stacking.
-    QHash<QString, QPointer<QTimer>> m_pendingMinimizeFloat;
+    DeferredWindowCommits m_pendingMinimizeFloat{this};
+    /// Pending deferred unminimize→unfloat commits, keyed by windowId — the
+    /// restore-side mirror of m_pendingMinimizeFloat, with a different reason:
+    /// the unfloat triggers a retile whose applyWindowGeometry moveResize,
+    /// landing mid-flight, CANCELS KWin's own unminimize animation (magic
+    /// lamp / squash; kwin's maximize script likewise self-cancels on a
+    /// mid-flight resize) — the discussion #816 restore stutter. The commit
+    /// is deferred past the stock animation (Effect::animationTime-scaled
+    /// grace) and revalidated at fire time; a re-minimize during the grace
+    /// cancels it, leaving the window minimize-floated as before.
+    DeferredWindowCommits m_pendingUnminimizeUnfloat{this};
     /// Global stagger epoch, bumped on a desktop/screen switch (slotScreensChanged)
     /// to cancel EVERY in-flight staggered apply — geometry computed for the old
     /// context must never land in the new one.

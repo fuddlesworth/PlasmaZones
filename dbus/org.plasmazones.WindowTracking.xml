@@ -384,7 +384,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="PhosphorProtocol::WindowType underlying value; out-of-range values are clamped to Unknown."/>
             </arg>
             <arg name="extended" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Extended window-property snapshot (state flags, geometry, accessory flags, captionNormal) keyed by PhosphorProtocol::Service::WindowMetadataKey. A key is present only when the value is known, so absent keys leave the derived window-rule field disengaged. Lets the daemon's Float/RestorePosition resolvers match the same KWin-property fields the effect path resolves live."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Extended window-property snapshot (state flags, geometry, accessory flags, captionNormal, multi-desktop span list) keyed by PhosphorProtocol::Service::WindowMetadataKey. A key is present only when the value is known, so absent keys leave the derived window-rule field disengaged. Lets the daemon's Float/RestorePosition resolvers match the same KWin-property fields the effect path resolves live."/>
             </arg>
         </method>
         <method name="windowClosed">

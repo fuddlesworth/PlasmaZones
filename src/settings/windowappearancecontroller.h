@@ -171,7 +171,7 @@ public:
     void setOuterGapRight(int gap);
 
     // Scope-aware gap read/write for the Gaps card's monitor scope chip. @p key is
-    // one of the PerScreenSnappingKey gap names (InnerGap / OuterGap /
+    // one of the PerScreenKeys gap names (InnerGap / OuterGap /
     // UsePerSideOuterGap / OuterGap{Top,Bottom,Left,Right}). When @p screenName is
     // empty the GLOBAL config value is read/written; otherwise the per-monitor
     // config override is read (falling back to the global value when the monitor

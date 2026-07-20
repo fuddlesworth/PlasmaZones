@@ -5,11 +5,30 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.3.0] - 2026-07-19
+## [3.3.0] - 2026-07-20
 
 ### Added
 
 - **Shortcut cheatsheet overlay**: a new overlay that lists every PlasmaZones global shortcut with the keys you actually have bound, grouped by category. Open it with Meta+Alt+/ (rebindable in System Settings) and dismiss it with Escape, a backdrop click, or the shortcut again. The sheet is mode aware. Shortcuts that do nothing in the current tiling mode are hidden, and it updates live when you switch modes or rebind a key. Shortcuts you have unbound stay listed as unassigned so you can discover them ([#810](https://github.com/fuddlesworth/PlasmaZones/pull/810)).
+
+## [3.2.6] - 2026-07-20
+
+### Added
+
+- **Support reports include your global shortcut bindings**: shortcuts are registered with KDE's global shortcut service, so the binding that actually gets grabbed lives outside PlasmaZones' own configuration and the two can disagree. The report archive now captures that state, with home paths redacted ([#812](https://github.com/fuddlesworth/PlasmaZones/pull/812)).
+- **A note when a rule assigns a minimize or maximize animation**: the rule editor now explains that KDE's own minimize or maximize effect keeps running alongside your pack unless you turn it off in System Settings ([#819](https://github.com/fuddlesworth/PlasmaZones/pull/819)).
+
+### Fixed
+
+- **Minimize and restore animations no longer freeze or smear**: on autotiled windows, KDE's magic lamp animation could stall partway with black streaks across the window, and the restore animation could be cut off partway through. PlasmaZones now waits for the compositor's animation to finish before it repositions the window ([#819](https://github.com/fuddlesworth/PlasmaZones/pull/819)).
+- **PlasmaZones animation packs no longer play on top of KDE's**: with a pack assigned to minimize or maximize, KDE's stock effect for that event ran at the same time. The stock effect is now stood down while your pack owns the event, and restored when it no longer does ([#819](https://github.com/fuddlesworth/PlasmaZones/pull/819)).
+- **Title bars no longer flash during a desktop switch**: with hidden title bars and a desktop-switch animation enabled, the outgoing desktop's tiled windows showed their title bars for the whole animation. Windows on other desktops are now left alone when a desktop retiles ([#813](https://github.com/fuddlesworth/PlasmaZones/pull/813)).
+- **A cleared shortcut can be assigned again**: clearing a keyboard shortcut dropped it from the daemon's registry, so assigning it a new key did nothing until the daemon restarted ([#812](https://github.com/fuddlesworth/PlasmaZones/pull/812)).
+- **Floating windows stay floating across desktop switches**: a floating window on a screen that switched between a snapping desktop and a tiling desktop could quietly stop counting as floating, so rules that match floating windows stopped applying to it ([#814](https://github.com/fuddlesworth/PlasmaZones/pull/814)).
+- **Floating a tiled window returns it to its real position**: floating a tiled window recorded the tile it was sitting in as its free position, so it floated back onto its own tile and its genuine free position was lost ([#818](https://github.com/fuddlesworth/PlasmaZones/pull/818)).
+- **Unfloating works after a restart**: a window floated before the daemon restarted had nowhere to go back to, so unfloating it did nothing. The saved placement record is now used as the fallback ([#818](https://github.com/fuddlesworth/PlasmaZones/pull/818)).
+- **Windows no longer come back floating on their own**: unfloating a window and then toggling between tiling and snapping could bring it back floating, because a window the snapping engine never tracked was recorded as floating ([#818](https://github.com/fuddlesworth/PlasmaZones/pull/818)).
+- **Less compositor work while windows move**: every geometry change re-evaluated your rules and refreshed the window's decoration before the usual delay, which added hundreds of rule evaluations per second on the compositor thread during animations. Both now run once per batch ([#819](https://github.com/fuddlesworth/PlasmaZones/pull/819)).
 
 ## [3.2.5] - 2026-07-19
 

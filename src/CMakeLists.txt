@@ -504,8 +504,6 @@ set(plasmazones_daemon_SRCS
     daemon/zoneselectorcontroller.cpp
     daemon/zoneselectorcontroller.h
     # Mode tracking and smart toggle (Unified Layout Model)
-    daemon/modetracker.cpp
-    daemon/modetracker.h
     daemon/unifiedlayoutcontroller.cpp
     daemon/unifiedlayoutcontroller.h
     # Shader rendering: ZoneShaderItem from plasmazones_rendering

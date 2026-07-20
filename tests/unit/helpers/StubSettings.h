@@ -2144,7 +2144,7 @@ public:
         return gaps;
     }
 
-    // This set must mirror the 7 PerScreenSnappingKey gap dimensions and
+    // This set must mirror the 7 PerScreenKeys gap dimensions and
     // stay in sync with the production predicate isPerScreenGapDimensionKey
     // (file-local in settings/perscreen.cpp, so not shareable here). A key
     // added on one side but not the other silently drops (or leaks) a gap

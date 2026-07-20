@@ -3,16 +3,20 @@
 
 #pragma once
 
+#include "deferredwindowcommits.h"
+
 #include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
 #include <QHash>
 #include <QObject>
 #include <QPointF>
+#include <QPointer>
 #include <QRect>
 #include <QRectF>
 #include <QSet>
 #include <QString>
+#include <QTimer>
 
 #include <functional>
 #include <optional>
@@ -163,13 +167,33 @@ public:
     /// the net inert and the plain unfloat re-snaps as before. Called from
     /// PlasmaZonesEffect::slotWindowMinimizedChanged after the shared minimize
     /// shader event.
+    /// The unfloat side does NOT commit synchronously: it is deferred by an
+    /// Effect::animationTime-scaled grace so the re-snap's geometry apply
+    /// cannot land mid-flight and cancel KWin's own unminimize animation
+    /// (discussion #816); see m_pendingUnminimizeUnfloat.
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
-    /// Drop @p windowId from the minimize-float set (window closed). Returns
-    /// true if it was present.
+
+    /// Drop @p windowId from the minimize-float set and cancel any deferred
+    /// unfloat commit. Returns true if it was present. Two callers, two
+    /// reasons (mirrors AutotileHandler::removeMinimizeFloated): the close
+    /// path (a grace timer must never fire against a destroyed window) and
+    /// the daemon's windowFloatingChanged(false) echo (an authoritative
+    /// external unfloat moots the deferred commit).
     bool removeMinimizeFloated(const QString& windowId)
     {
+        cancelPendingUnminimizeUnfloat(windowId);
         return m_minimizeFloatedWindows.remove(windowId);
+    }
+
+    /// Cancel a pending deferred unminimize→unfloat commit. No-op if no timer
+    /// is pending for the window. Called from the minimize edge (a re-minimize
+    /// during the grace must leave the window minimize-floated) and from
+    /// removeMinimizeFloated (window closed, or an authoritative external
+    /// unfloat via the daemon's windowFloatingChanged echo).
+    void cancelPendingUnminimizeUnfloat(const QString& windowId)
+    {
+        m_pendingUnminimizeUnfloat.cancel(windowId);
     }
 
     // ── Tiled-membership accessor — delegates to shared AutotileStateHelpers ──
@@ -192,6 +216,14 @@ public Q_SLOTS:
                              const PhosphorProtocol::EmptyZoneList& emptyZones);
 
 private:
+    /// Deferred-commit body of the unminimize→unfloat edge: the restore-net
+    /// queries (dispatched before the unfloat enters the same D-Bus send
+    /// queue, so the daemon answers against pre-unfloat state) plus the
+    /// unfloat itself. Called only from the grace timer in
+    /// handleMinimizeChanged after revalidation; @p window is alive,
+    /// unminimized, handleable, and on a snap-mode screen.
+    void commitUnminimizeUnfloat(KWin::EffectWindow* window, const QString& windowId, const QString& screenId);
+
     PlasmaZonesEffect* m_effect;
     // Snapping focus-follows-mouse (Snapping.Behavior.FocusFollowsMouse). When
     // on, moving the cursor over a snapped window activates it. Mirrors autotile
@@ -200,13 +232,39 @@ private:
     // Snapping's own managed-window border state, parallel to
     // AutotileHandler::m_border. Populated at snap commit, cleared on
     // float / unsnap / close.
+    //
+    // KEYING WARNING: this set is per-SCREEN, but the daemon's snap membership
+    // is per-(screen, desktop, activity). It stays correct ONLY because every
+    // mutation is per-window (mark/clear at commit funnels) — there is no
+    // batch diff. Never add an "untile whatever is absent from this batch"
+    // cleanup here without gating on isOnCurrentDesktop AND
+    // isOnCurrentActivity: a window absent from the current context's batch
+    // is usually snapped in a SIBLING desktop's or activity's state, and
+    // clearing it flips the tiled appearance scope and restores its title
+    // bar mid-switch (the autotile #808 bug; see the gated diff in
+    // autotilehandler/tiling.cpp onComplete).
     BorderState m_border;
     // Single-shot instant-restore latency cache (appId → saved zone geometry +
     // screen), populated on daemon-ready and consumed on window-open.
     QHash<QString, CachedSnapRestore> m_restoreCache;
     // Snap-mode windows floated because they were minimized (mirrors
     // AutotileHandler::m_minimizeFloatedWindows). Removed on unminimize / close.
+    // Deliberately NOT cleared on daemon restart, unlike the autotile twin
+    // (AutotileHandler::onDaemonReady): the restore net in
+    // commitUnminimizeUnfloat is snap's restart-recovery path, and it only
+    // fires for windows still in this set — clearing on daemon-ready would
+    // strand exactly the windows the net exists to recover.
     QSet<QString> m_minimizeFloatedWindows;
+    // Pending deferred unminimize→unfloat commits, keyed by windowId — the
+    // snap-mode mirror of AutotileHandler::m_pendingUnminimizeUnfloat, for the
+    // same reason: the unfloat re-snaps the window (the daemon applies its
+    // zone geometry), and a moveResize landing mid-flight cancels KWin's own
+    // unminimize animation (discussion #816). Deferred by an
+    // Effect::animationTime-scaled grace and revalidated at fire time; a
+    // re-minimize during the grace cancels it, and an authoritative external
+    // unfloat (the daemon's windowFloatingChanged echo) cancels it via
+    // removeMinimizeFloated.
+    DeferredWindowCommits m_pendingUnminimizeUnfloat{this};
 };
 
 } // namespace PlasmaZones

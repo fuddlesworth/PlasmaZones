@@ -138,6 +138,42 @@ int directionalNeighbor(const QRectF& focus, const QList<QRectF>& candidates, Di
     return bestIndex;
 }
 
+int edgeMostRect(const QList<QRectF>& candidates, Direction edge)
+{
+    // Rank by signed distance so every edge maximizes: negate the coordinates
+    // for the min-seeking edges (Left / Up). Primary key: the edge-facing side
+    // (the rect touching or reaching furthest toward @p edge). Secondary key,
+    // for rects tying on the edge: the FAR side nearest the edge — the tile
+    // confined to that edge beats one merely spanning to it (a full-height
+    // master column and a bottom stack tile both touch the bottom edge; the
+    // stack tile is the natural "up"-crossing entry). Remaining ties resolve
+    // to the lowest index.
+    const auto keys = [edge](const QRectF& r) -> std::pair<qreal, qreal> {
+        switch (edge) {
+        case Direction::Left:
+            return {-r.left(), -r.right()};
+        case Direction::Right:
+            return {r.right(), r.left()};
+        case Direction::Up:
+            return {-r.top(), -r.bottom()};
+        case Direction::Down:
+            return {r.bottom(), r.top()};
+        }
+        return {0, 0};
+    };
+
+    int best = -1;
+    std::pair<qreal, qreal> bestKeys{0, 0};
+    for (int i = 0; i < candidates.size(); ++i) {
+        const std::pair<qreal, qreal> k = keys(candidates.at(i));
+        if (best < 0 || k > bestKeys) {
+            best = i;
+            bestKeys = k;
+        }
+    }
+    return best;
+}
+
 int neighborDesktopInDirection(int currentDesktop, int desktopCount, int rows, Direction direction)
 {
     if (desktopCount < 1 || currentDesktop < 1 || currentDesktop > desktopCount) {

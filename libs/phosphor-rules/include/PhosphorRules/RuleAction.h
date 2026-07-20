@@ -461,7 +461,7 @@ inline constexpr QLatin1StringView SetTintColor{"setTintColor"};
 // ── Per-context gap overrides (domain Context) ──
 // Resolved daemon-side at zone-geometry time as the highest-precedence gap
 // layer (rule > per-screen > layout > global). Match on screen / desktop /
-// activity; per-property to mirror the PerScreenSnappingKey set.
+// activity; per-property to mirror the PerScreenKeys gap set.
 inline constexpr QLatin1StringView SetInnerGap{"setInnerGap"};
 inline constexpr QLatin1StringView SetOuterGap{"setOuterGap"};
 inline constexpr QLatin1StringView SetUsePerSideOuterGap{"setUsePerSideOuterGap"};
@@ -676,7 +676,7 @@ inline constexpr QLatin1StringView BorderColorInactive{"border-color-inactive"};
 inline constexpr QLatin1StringView OpacityTintVisible{"opacity-tint-visible"};
 inline constexpr QLatin1StringView TintStrength{"tint-strength"};
 inline constexpr QLatin1StringView TintColor{"tint-color"};
-// Per-context gap slots (mirror the PerScreenSnappingKey set).
+// Per-context gap slots (mirror the PerScreenKeys gap set).
 inline constexpr QLatin1StringView InnerGap{"inner-gap"};
 inline constexpr QLatin1StringView OuterGap{"outer-gap"};
 inline constexpr QLatin1StringView UsePerSideOuterGap{"use-per-side-outer-gap"};

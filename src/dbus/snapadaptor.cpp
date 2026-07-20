@@ -54,9 +54,11 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::navigationFeedback, adaptor,
                                  &WindowTrackingAdaptor::navigationFeedback));
 
-    // Float state changes
+    // Float state changes — through the relay chokepoint, never
+    // signal-to-signal: a direct emission bypasses m_broadcastFloating and
+    // desyncs the setWindowFloating dedup gate (see relayWindowFloatingChanged).
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::windowFloatingChanged, adaptor,
-                                 &WindowTrackingAdaptor::windowFloatingChanged));
+                                 &WindowTrackingAdaptor::relayWindowFloatingChanged));
 
     // Daemon-driven geometry application (used by autotile float restore via SnapEngine)
     m_connections.append(connect(m_engine, &PhosphorSnapEngine::SnapEngine::applyGeometryRequested, adaptor,

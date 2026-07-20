@@ -98,7 +98,6 @@ class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class WindowDragAdaptor;
 class RuleAdaptor;
-class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
@@ -646,11 +645,12 @@ private:
     void updateLayoutFilterForScreen(const QString& focusedScreenId);
 
     /**
-     * @brief Sync ModeTracker and UnifiedLayoutController from per-desktop assignments
+     * @brief Sync UnifiedLayoutController from per-desktop assignments
      *
-     * Derives the tiling mode (Manual vs Autotile) and current layout from the
-     * actual per-desktop assignment for the focused screen. Must be called on
-     * every desktop/activity switch so global state reflects the new context.
+     * Syncs the current layout, the global active layout, and the layout
+     * filter from the actual per-desktop assignment for the focused screen.
+     * Must be called on every desktop/activity switch so global state
+     * reflects the new context.
      */
     void syncModeFromAssignments();
 
@@ -864,9 +864,6 @@ private:
     // Parented to `this`; holds only plain state, so it needs no detach().
     CompositorBridgeAdaptor* m_compositorBridge = nullptr;
 
-    // Mode tracking
-    std::unique_ptr<ModeTracker> m_modeTracker;
-
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
@@ -956,6 +953,10 @@ private:
     /// desktops, #648), falling back to the global currentDesktop().
     int currentDesktopForScreen(const QString& screenId) const;
     QString currentActivity() const;
+    /// True when any effective screen's current-context assignment is an
+    /// autotile layout. Reads the per-screen desktop (per-output virtual
+    /// desktops, #648) and current activity fresh on every call.
+    bool isAnyScreenAutotile() const;
     bool isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
     /**

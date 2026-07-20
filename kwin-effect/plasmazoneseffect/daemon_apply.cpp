@@ -489,6 +489,17 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
     // because m_dragFloatedWindowIds still has the entry from the original drag.
     if (!isFloating) {
         m_dragFloatedWindowIds.remove(windowId);
+        // An authoritative external unfloat moots any deferred
+        // unminimize→unfloat commit in either engine: the daemon has already
+        // unfloated (and re-snapped/retiled) the window — a user float toggle
+        // or rule action landing inside the animation grace — so the pending
+        // commit's unfloat would be redundant and snap's restore net would
+        // misread the post-unfloat daemon state as an orphaned window. Both
+        // engines' own commits consume their pending entry and minimize-float
+        // tracking BEFORE dispatching the unfloat, so this can never cancel
+        // the commit whose echo delivered this signal.
+        m_autotileHandler->removeMinimizeFloated(windowId);
+        m_snapHandler->removeMinimizeFloated(windowId);
     } else {
         // Backstop: a window that becomes floating is no longer snap-managed.
         // Covers float paths that don't emit applyGeometryRequested with an

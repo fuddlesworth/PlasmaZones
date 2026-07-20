@@ -63,7 +63,7 @@ class PlasmaZonesEffect;
 /// windows don't hide" bug). beginPeek instead bows out if another effect
 /// already holds the screen. Suppressing KWin's show-desktop script effects
 /// doesn't need the claim either (windowaperture / eyeonscreen never consult
-/// it) — those are unloaded by syncShowDesktopEffectSuppression while a peek
+/// it) — those are unloaded by syncStockEffectSuppression while a peek
 /// pack is assigned, which also keeps the peek captures free of their
 /// transforms.
 class DesktopTransitionManager

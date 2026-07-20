@@ -386,6 +386,9 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
     // rect into float.) Free geometry is shared across modes, so snap and autotile
     // resolve the same value; prefer this screen's remembered spot, then any other
     // screen's (cross-screen validated).
+    // The non-exact default is DELIBERATE cross-instance float-back sharing
+    // (free positions only, never zone/tile slots — those reads are exact-only
+    // via peekExact); callers with a per-window contract pass exactOnly.
     const QString appId = exactOnly ? QString() : currentAppIdFor(windowId);
     const auto rec = m_placementStore.peek(windowId, appId);
     if (!rec) {
@@ -443,7 +446,11 @@ void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QS
         return;
     }
     if (!overwrite) {
-        const auto existing = m_placementStore.peek(windowId, appId);
+        // First-capture-wins is a PER-WINDOW contract: only this window's own
+        // record may suppress the write. A same-app sibling's free geometry
+        // must not block recording this window's first genuine spot (it would
+        // never persist its own position while the sibling's record lives).
+        const auto existing = m_placementStore.peekExact(windowId);
         if (existing && existing->freeGeometryFor(screenId).isValid()) {
             return; // first-capture-wins
         }
@@ -485,7 +492,12 @@ void WindowTrackingService::recordFloatingClose(const QString& windowId, const Q
     // non-empty engine map is what makes the store merge adopt the new screenId
     // (a geometry-only partial, like recordFreeGeometry, would leave the stale
     // managed screen in place — exactly the bug this fixes).
-    if (const auto existing = m_placementStore.peek(windowId, appId)) {
+    // Exact record only: inheriting a same-app SIBLING's engine slots would
+    // graft its snapped/tiled placement under THIS windowId — a reopen then
+    // restores two windows into the sibling's zone and corrupts the per-app
+    // FIFO distribution. A window with no record of its own takes the
+    // synthesized-floating-slot branch below, which exists for exactly that.
+    if (const auto existing = m_placementStore.peekExact(windowId)) {
         p.virtualDesktop = existing->virtualDesktop;
         p.activity = existing->activity;
         p.kind = existing->kind;
@@ -823,7 +835,13 @@ QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) co
     // Cold cache (post-restart, or after handoffRelease cleared the live map):
     // fall back to the DURABLE snap slot in the placement record. windowId is the
     // exact `appId|uuid`; KWin uuids are stable across a daemon restart, so peek's
-    // exact-id branch resolves the right window (the appId fallback is for relogin).
+    // exact-id branch resolves the right window. The appId fallback is DELIBERATE
+    // relogin support (pinned by testRecordedSnapZones_appIdFallbackAfterRelogin):
+    // a new-uuid window resolves its app's durable zone for the resnap /
+    // never-snapped consumers. Accepted tradeoff: a record-less LIVE window with
+    // no live zones reads the same app-level answer — indistinguishable from the
+    // relogin case at this layer, and a live-ASSIGNED sibling always resolves via
+    // its own live store first (see the sameAppInstancesEachKeepOwnZone test).
     const auto rec = m_placementStore.peek(windowId, currentAppIdFor(windowId));
     if (rec) {
         const PhosphorEngine::EngineSlot snapSlot = rec->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
