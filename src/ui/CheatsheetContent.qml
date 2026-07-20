@@ -240,14 +240,17 @@ Item {
                                 width: metrics.columnWidth
                                 spacing: Kirigami.Units.smallSpacing
 
-                                Kirigami.Heading {
-                                    level: 4
+                                // Plain styled Label rather than a
+                                // Kirigami.Heading: sibling overlay titles
+                                // all bind pixelSize on Labels, and a
+                                // Heading's level-driven pointSize would
+                                // fight an explicit pixelSize on the same
+                                // font. Sized 1.1x the row labels (the
+                                // level-4 heading factor), tracking the
+                                // user's overlay font like rows and caps.
+                                Label {
                                     text: groupColumn.modelData.name
                                     color: Kirigami.Theme.disabledTextColor
-                                    // Track the user's overlay font like the
-                                    // rows and key caps do; 1.1 mirrors
-                                    // Kirigami's own level-4 factor over the
-                                    // default font.
                                     font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
                                     font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 1.1 * root.fontSizeScale)
                                 }

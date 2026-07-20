@@ -27,6 +27,7 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
+#include <QKeySequence>
 #include <QScreen>
 #include <QTimer>
 #include "phosphor_i18n.h"
