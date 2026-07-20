@@ -292,6 +292,60 @@ private Q_SLOTS:
         wta->service()->setSnapEngine(nullptr);
         delete snap;
     }
+
+    // The engine-miss CLOSE fallback carries the same tile-rect poison guard
+    // as the primary capture path: a window tiled by autotile, handed off
+    // (the tiled bit clears; the engine's last-applied rect memory
+    // deliberately survives), and closed before ever being repositioned
+    // still sits on its tile rect — recording that via recordFloatingClose
+    // would restore the reopened window onto the tile, not a free spot. A
+    // close frame OFF the tile rect records normally.
+    void testClosePathRefusesStillTiledFrame()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 3072, 1728), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        // Same structural stub-before-parent ordering as the primary-path test.
+        StubTileRectEngine tileEngine;
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
+        wta->service()->setSnapState(snap->snapState());
+        wta->service()->setSnapEngine(snap);
+        wta->setEngines(snap, &tileEngine);
+
+        const QString windowId = QStringLiteral("app|closed-on-tile");
+        const QString screenId = QStringLiteral("DP-1");
+        const QString appId = wta->service()->currentAppIdFor(windowId);
+        const QRect tileRect(1540, 8, 1524, 829);
+
+        // Untracked by snap (no float/zone state) and the stub tile engine's
+        // capturePlacement default returns nullopt — the close capture takes
+        // the engine-miss fallback. The frame still equals the remembered
+        // tile rect, so the fallback must record NOTHING.
+        wta->setFrameGeometry(windowId, tileRect.x(), tileRect.y(), tileRect.width(), tileRect.height());
+        tileEngine.managedRect = tileRect;
+        wta->captureWindowPlacement(windowId, screenId);
+        QVERIFY2(!wta->service()->placementStore().peek(windowId, appId),
+                 "a close frame still on the tile rect must not become the reopen float-back");
+
+        // A close frame off the tile rect records the genuine free position.
+        const QRect freeFrame(600, 400, 900, 700);
+        wta->setFrameGeometry(windowId, freeFrame.x(), freeFrame.y(), freeFrame.width(), freeFrame.height());
+        wta->captureWindowPlacement(windowId, screenId);
+        const auto rec = wta->service()->placementStore().peek(windowId, appId);
+        QVERIFY(rec);
+        QCOMPARE(rec->freeGeometryFor(screenId), freeFrame);
+
+        wta->setEngines(snap, nullptr);
+        wta->service()->setSnapState(nullptr);
+        wta->service()->setSnapEngine(nullptr);
+        delete snap;
+    }
 };
 
 QTEST_MAIN(TestWtaCaptureGuards)

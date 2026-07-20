@@ -1104,6 +1104,24 @@ private:
     // windowFloatingClearedForSnap which the adaptor relays to its own
     // windowFloatingChanged D-Bus signal).
 
+    /// Tile-rect poison guard, shared by captureWindowPlacement's primary
+    /// free-geometry write and its engine-miss close fallback: true when the
+    /// live @p frame still equals the tile rect the autotile engine last
+    /// applied to @p windowId (the engine remembers it PAST the tiled-bit
+    /// clear and past a cross-engine handoff — see
+    /// AutotileEngine::lastManagedRect). Such a frame is a managed rect, not
+    /// a genuine free position, and must never become the float-back. The
+    /// autotile analogue of the snap-side stillOnSnapRect zone comparison.
+    ///
+    /// The memory this reads is conditional on the close/capture screen: a
+    /// window that closes ON an autotile screen has its entry erased by the
+    /// effect's autotile-close relay first — but such a window is still
+    /// autotile-tracked, so its capture takes the engine path and never
+    /// consults this guard. The guard therefore covers exactly the window it
+    /// exists for: tiled, handed off to a non-autotile screen, frame not yet
+    /// repositioned.
+    bool isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const;
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // Screen tracking (from KWin effect's D-Bus calls)
     // ═══════════════════════════════════════════════════════════════════════════════
