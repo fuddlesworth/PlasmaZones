@@ -115,12 +115,20 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
 
     // virtualDesktop: 0 = on all desktops / unknown; otherwise the 1-based x11
     // desktop number of the window's first desktop. A window spanning several
-    // (but not all) desktops reports its first — the registry stores one int.
+    // (but not all) desktops reports its first here and the FULL list via the
+    // VirtualDesktops extended key below, so the daemon's per-window mode
+    // resolution can prefer whichever spanned desktop the screen currently
+    // shows instead of pinning to the first. Null desktop entries are skipped
+    // on BOTH derivations, keeping the "virtualDesktop equals the span list's
+    // first entry" invariant even if KWin hands back a null pointer.
     int virtualDesktop = 0;
     if (window) {
         const QList<KWin::VirtualDesktop*> desktops = window->desktops();
-        if (!desktops.isEmpty() && desktops.first()) {
-            virtualDesktop = static_cast<int>(desktops.first()->x11DesktopNumber());
+        for (const KWin::VirtualDesktop* vd : desktops) {
+            if (vd) {
+                virtualDesktop = static_cast<int>(vd->x11DesktopNumber());
+                break;
+            }
         }
     }
 
@@ -217,6 +225,26 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         }
         if (props.captionNormal) {
             extended.insert(Key::CaptionNormal, *props.captionNormal);
+        }
+        // Multi-desktop span list. Collected here (not with virtualDesktop
+        // above) so a caption-only refresh skips the walk along with the rest
+        // of the extended build. Built as an explicit QVariantList — a
+        // QVariant wrapping QList<int> would not survive the daemon's
+        // .toList() readback.
+        if (window) {
+            const QList<KWin::VirtualDesktop*> desktops = window->desktops();
+            if (desktops.size() > 1) {
+                QVariantList desktopsList;
+                desktopsList.reserve(desktops.size());
+                for (const KWin::VirtualDesktop* vd : desktops) {
+                    if (vd) {
+                        desktopsList.append(static_cast<int>(vd->x11DesktopNumber()));
+                    }
+                }
+                if (!desktopsList.isEmpty()) {
+                    extended.insert(Key::VirtualDesktops, desktopsList);
+                }
+            }
         }
     }
 

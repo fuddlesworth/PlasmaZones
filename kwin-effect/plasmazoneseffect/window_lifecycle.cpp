@@ -467,6 +467,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
 
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
         updateWindowStickyState(window);
+        // No metadata push here: the daemon's float resolver reads the
+        // window's own desktop/activity from the registry, but that is kept
+        // fresh by the KWin::Window::desktopsChanged → pushLatest connection
+        // below (this signal is KWin's EffectWindow relay of the same event,
+        // so a push here would build and marshal the extended snapshot twice
+        // per desktop move).
 
         // When a window is moved to a different desktop (e.g., "Move to Desktop 2"),
         // treat it as removed from the current desktop's tiling. The normal desktop-

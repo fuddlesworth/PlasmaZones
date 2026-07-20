@@ -730,6 +730,16 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                                 ts->setFloating(windowId, true);
                             }
                         }
+                        // Announce on the passive channel via the canonical
+                        // insert-time sync (both directions: restored-floating
+                        // OR seeded-tiled-over-a-stale-WTS-float-bit). The
+                        // later windowOpened for this already-present window
+                        // is a tracked no-op insert whose float sync is
+                        // skipped, so without this the seed's float state is
+                        // never broadcast — subscribers (and the adaptor's
+                        // last-broadcast gate) stay stale until a daemon
+                        // reconnect. The gate dedups when they already agree.
+                        emitInsertFloatStateSync(windowId, screenId);
                     }
                 }
             }
@@ -2003,7 +2013,10 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     }
 
     // Already tracked on the destination screen — nothing to adopt; the float
-    // toggle path is what the caller probably wants instead.
+    // toggle path is what the caller probably wants instead. No float
+    // announcement needed on this return: the float bit is untouched (we
+    // return before setFloating), so what subscribers last heard remains
+    // accurate.
     const auto destKey = currentKeyForScreen(ctx.toScreenId);
     const auto trackedKeyIt = m_states.windowKeys().constFind(windowId);
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() == destKey
@@ -2050,6 +2063,22 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
         }
     }
     m_states.setKeyForWindow(windowId, destKey);
+
+    // Announce the received float bit on the passive channel (the snap twin
+    // announces its float re-homes via windowFloatingChanged from its
+    // handoffReceive; this passive signal is autotile's position-preserving
+    // analogue — this engine previously set the bit silently). A cross-mode
+    // move/swap of a floating window arrives with
+    // wasFloating=false after the source engine's handoffRelease cleared its
+    // bit without emitting — without this, subscribers that last heard
+    // "floating" (the effect's FloatingCache) stay stale until a daemon
+    // reconnect. Deliberately UNCONDITIONAL, not divergence-gated against
+    // the WTS resolver: mid-handoff the resolver already reads the cleared
+    // source bit, so it cannot tell what subscribers last heard — the
+    // adaptor's last-broadcast gate owns that dedup. Passive signal, not
+    // windowFloatingChanged: the window already has a valid position and
+    // must not ride the pre-tile geometry restore.
+    Q_EMIT windowFloatingStateSynced(windowId, ctx.wasFloating, ctx.toScreenId);
 
     // Trigger a retile so a non-floating arrival actually lands in a tile;
     // floating arrivals retile too because their displacement may free a
@@ -3089,7 +3118,8 @@ void AutotileEngine::emitInsertFloatStateSync(const QString& windowId, const QSt
 {
     // Read-only lookup — must NOT lazily materialize a state. tilingStateForScreen
     // would create one for a known-but-stateless screen; this method only reads
-    // isFloating right after a successful insertWindow, so the state already exists.
+    // isFloating right after a window lands in an existing state (insertWindow,
+    // or the strict-initial-order seed in setAutotileScreens), so it already exists.
     PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
     if (!state) {
         return;

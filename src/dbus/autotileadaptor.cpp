@@ -56,6 +56,15 @@ AutotileAdaptor::AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine,
             [this](const QStringList& windowIds, const QSet<QString>& /*releasedScreenIds*/) {
                 Q_EMIT windowsReleasedFromTiling(windowIds);
             });
+    // Signal-to-signal relay WITHOUT a last-broadcast gate — deliberate, and
+    // safe only under the current invariant: this interface has exactly ONE
+    // producer (the autotile engine) whose windowFloatingChanged emissions
+    // are edge-triggered by construction (performToggleFloat and the
+    // overflow-recovery unfloat, both genuine flips). The WindowTracking
+    // interface's relayWindowFloatingChanged gate exists because FIVE
+    // producers with divergent bookkeeping feed one signal there. If another
+    // producer is ever wired into this relay, it needs the same
+    // last-broadcast dedup treatment.
     connect(m_engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, this,
             &AutotileAdaptor::windowFloatingChanged);
     qCDebug(lcDbusAutotile) << "AutotileAdaptor initialized";
