@@ -1496,8 +1496,12 @@ private:
     // Backs lastManagedRect(): deliberately NOT cleared when the window
     // leaves the tiled state (that survival is the point — see the base
     // doc), only on full departure: close, a genuine cross-screen move off
-    // an autotile screen, and stale-window pruning. Used solely for an
-    // exact frame comparison, so a stale rect is harmless.
+    // an autotile screen, and stale-window pruning. handoffRelease (cross-
+    // engine adoption) deliberately KEEPS the entry: the adopting engine's
+    // capture runs right after the release, while the live frame can still
+    // be the tile rect — exactly when the orchestrator's guard needs this
+    // memory. Used solely for an exact frame comparison, so a stale rect
+    // is harmless.
     QHash<QString, QRect> m_lastAppliedTileRect;
 
     // Instance id → first-seen canonical windowId.

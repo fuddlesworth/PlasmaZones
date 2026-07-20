@@ -1595,7 +1595,8 @@ private Q_SLOTS:
     // Two-state model: snapping has only `snapped` / `floated` — no `free`.
     // =========================================================================
 
-    // capturePlacement of a window snap does not track AT ALL captures NOTHING.
+    // capturePlacement of a window that the snap engine does not track at all
+    // captures NOTHING.
     // It previously fabricated a FLOATING slot (the untracked window has no
     // effective screen, so the snap-mode gate was bypassed and it reached the
     // state if/else) — and that fabrication overwrote the record's frozen

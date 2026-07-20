@@ -179,13 +179,18 @@ private Q_SLOTS:
             PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
         screenMgr.start();
 
+        // Declared BEFORE parent (and therefore before wta) so the stub
+        // outlives the adaptor on EVERY exit path — an early QVERIFY failure
+        // skips the explicit setEngines detach below, and while the adaptor's
+        // engine ref is a self-nulling QPointer, outliving it makes the
+        // teardown safety structural rather than incidental.
+        StubTileRectEngine tileEngine;
         QObject parent;
         auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
                                               &parent);
         auto* snap = new SnapEngine(m_layoutManager, wta->service(), m_zoneDetector, nullptr, nullptr);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
-        StubTileRectEngine tileEngine;
         wta->setEngines(snap, &tileEngine);
 
         const QString windowId = QStringLiteral("ghostty|inst-tile");
