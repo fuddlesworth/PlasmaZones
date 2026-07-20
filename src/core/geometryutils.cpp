@@ -124,11 +124,12 @@ int getEffectiveInnerGap(PhosphorZones::Layout* layout, ISettings* settings, con
 {
     namespace PSK = PhosphorEngine::PerScreenKeys;
     // Tier 1 — a context-rule gap override (per-screen/desktop/activity rule).
-    {
-        auto it = ruleGapOverride.constFind(PSK::InnerGap);
-        if (it != ruleGapOverride.constEnd()) {
-            return it->toInt();
-        }
+    // Same shared helper the autotile resolver uses; snapping consumes the raw
+    // value (identity normalize).
+    if (auto v = PhosphorEngine::GapResolution::gapFromOverrideMap(ruleGapOverride, PSK::InnerGap, [](int g) {
+            return g;
+        })) {
+        return *v;
     }
     // Tier 2 — per-layout override.
     if (layout && layout->hasZonePaddingOverride()) {

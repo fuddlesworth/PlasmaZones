@@ -39,9 +39,11 @@ std::optional<int> gapFromOverrideMap(const QVariantMap& map, QLatin1String key,
 /// and if the layer yields any outer gap it wins wholesale — no per-key
 /// blending with lower-precedence layers. Missing sides in a partial
 /// per-side map fall back to the map's own uniform OuterGap or, failing
-/// that, @p missingSideBase (the caller's next-layer uniform value, passed
-/// pre-normalized). Returns nullopt when the map carries no outer-gap info
-/// so the caller falls through to the next precedence layer.
+/// that, @p missingSideBase (the caller's next-layer uniform value). Every
+/// consumed value — map-sourced or the missing-side base — goes through
+/// @p normalize, so a caller's clamp applies uniformly. Returns nullopt
+/// when the map carries no outer-gap info so the caller falls through to
+/// the next precedence layer.
 template<typename Normalize>
 std::optional<::PhosphorLayout::EdgeGaps> outerGapsFromOverrideMap(const QVariantMap& map, int missingSideBase,
                                                                    Normalize normalize)
@@ -58,7 +60,7 @@ std::optional<::PhosphorLayout::EdgeGaps> outerGapsFromOverrideMap(const QVarian
         const auto rightIt = map.constFind(QString(PerScreenKeys::OuterGapRight));
         if (topIt != map.constEnd() || bottomIt != map.constEnd() || leftIt != map.constEnd()
             || rightIt != map.constEnd()) {
-            const int base = (uniformIt != map.constEnd()) ? normalize(uniformIt->toInt()) : missingSideBase;
+            const int base = (uniformIt != map.constEnd()) ? normalize(uniformIt->toInt()) : normalize(missingSideBase);
             return ::PhosphorLayout::EdgeGaps{(topIt != map.constEnd()) ? normalize(topIt->toInt()) : base,
                                               (bottomIt != map.constEnd()) ? normalize(bottomIt->toInt()) : base,
                                               (leftIt != map.constEnd()) ? normalize(leftIt->toInt()) : base,

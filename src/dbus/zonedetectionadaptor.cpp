@@ -10,6 +10,7 @@
 #include "../core/geometryutils.h"
 #include "../core/logging.h"
 #include "../core/spatialadjacency.h"
+#include <PhosphorGeometry/DirectionalNeighbor.h>
 #include "../core/utils.h"
 #include <QGuiApplication>
 #include <QScreen>

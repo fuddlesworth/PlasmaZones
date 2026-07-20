@@ -58,8 +58,10 @@ constexpr Direction opposite(Direction direction)
  * bottom stack tile, not the full-height master that also touches the bottom
  * edge). Remaining ties resolve to the lowest index. This is the shared
  * cross-output "entry" pick — the first zone / entry tile on the edge a
- * crossing arrives at — used identically by snap zone navigation and autotile
- * window navigation.
+ * crossing arrives at. Both engines feed it the ENTRY edge: autotile flips
+ * the travel direction via opposite() at its call site, snap's caller flips
+ * one layer up (oppositeCrossingDirection) before the direction token
+ * reaches the zone adaptor.
  *
  * @return index into @p candidates, or -1 when the list is empty.
  */

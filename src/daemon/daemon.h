@@ -627,9 +627,10 @@ private:
     /**
      * @brief Sync UnifiedLayoutController from per-desktop assignments
      *
-     * Derives the tiling mode (Manual vs Autotile) and current layout from the
-     * actual per-desktop assignment for the focused screen. Must be called on
-     * every desktop/activity switch so global state reflects the new context.
+     * Syncs the current layout, the global active layout, and the layout
+     * filter from the actual per-desktop assignment for the focused screen.
+     * Must be called on every desktop/activity switch so global state
+     * reflects the new context.
      */
     void syncModeFromAssignments();
 
