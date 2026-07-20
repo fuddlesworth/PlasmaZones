@@ -395,10 +395,11 @@ void PortalBackend::sendBindShortcuts()
             shortcutOptions.insert(QStringLiteral("description"), it.value().description);
         }
         if (!it.value().preferred.isEmpty()) {
-            // PortableText, not the NativeText default: the string crosses a
-            // process boundary and NativeText is locale/platform-dependent —
-            // same convention as every other on-the-wire sequence string in
-            // this library.
+            // PortableText spelled explicitly (it is also toString()'s
+            // default): the string crosses a process boundary and must stay
+            // locale/platform-independent, unlike NativeText — same
+            // convention as every other on-the-wire sequence string in this
+            // library.
             shortcutOptions.insert(QStringLiteral("preferred_trigger"),
                                    it.value().preferred.toString(QKeySequence::PortableText));
         }
