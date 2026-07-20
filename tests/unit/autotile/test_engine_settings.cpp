@@ -11,6 +11,7 @@
 #include "../helpers/AutotileTestHelpers.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 #include "config/settings.h"
@@ -121,6 +122,39 @@ private Q_SLOTS:
         engine.setAlgorithm(QLatin1String("centered-master"));
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.35));
         QCOMPARE(engine.config()->masterCount, 3);
+    }
+
+    // An algorithm switch must not author the global Tiling.Algorithm/MaxWindows
+    // key. It used to write the incoming algorithm's defaultMaxWindows there,
+    // which made a plain switch look like a user edit and surfaced as a spurious
+    // "Max windows FROM 5 TO 9" row in the profile diff. maxWindows is
+    // per-algorithm data and belongs only in savedAlgorithmSettings.
+    void testAlgorithmSwitch_doesNotWriteGlobalMaxWindows()
+    {
+        Settings settings;
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        engine.setEngineSettings(&settings);
+
+        // grid is the algorithm from the original report: its defaultMaxWindows
+        // of 9 is what leaked into the global key and showed as "FROM 5 TO 9".
+        auto* gridAlgo = m_scriptSetup.registry()->algorithm(QLatin1String("grid"));
+        QVERIFY(gridAlgo);
+
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        const int globalBefore = settings.autotileMaxWindows();
+
+        engine.setAlgorithm(QLatin1String("grid"));
+
+        // The switch took effect in the engine's live config...
+        QCOMPARE(engine.config()->maxWindows, gridAlgo->defaultMaxWindows());
+        // ...and was recorded in the per-algorithm slot, so it survives a restart.
+        const auto saved = engine.config()->savedAlgorithmSettings.constFind(QStringLiteral("grid"));
+        QVERIFY(saved != engine.config()->savedAlgorithmSettings.constEnd());
+        QCOMPARE(saved->maxWindows, gridAlgo->defaultMaxWindows());
+        // ...but the global key is untouched. Guard against a vacuous pass: this
+        // assertion is only meaningful if grid's default differs from the global.
+        QVERIFY(gridAlgo->defaultMaxWindows() != globalBefore);
+        QCOMPARE(settings.autotileMaxWindows(), globalBefore);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

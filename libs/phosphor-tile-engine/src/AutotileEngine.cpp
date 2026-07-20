@@ -930,17 +930,26 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // Restore per-algorithm split ratio, master count, and max windows from
     // saved settings, falling back to the algorithm's defaults when no saved
     // entry exists. Each algorithm keeps its own tuning across switches.
-    auto restorePerAlgoSettings = [this](PhosphorTiles::TilingAlgorithm* algo,
+    auto restorePerAlgoSettings = [this](const QString& algoId, PhosphorTiles::TilingAlgorithm* algo,
                                          QHash<QString, AlgorithmSettings>::const_iterator it) {
         if (it != m_config->savedAlgorithmSettings.constEnd()) {
             m_config->splitRatio = it->splitRatio;
             m_config->masterCount = it->masterCount;
             m_config->maxWindows = it->maxWindows;
-        } else {
-            m_config->splitRatio = algo->defaultSplitRatio();
-            m_config->masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
-            m_config->maxWindows = algo->defaultMaxWindows();
+            return;
         }
+        m_config->splitRatio = algo->defaultSplitRatio();
+        m_config->masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
+        m_config->maxWindows = algo->defaultMaxWindows();
+        // Seed the saved slot with the algorithm's own defaults. The per-algorithm
+        // map is the authoritative source for these three values, so the slot has
+        // to exist from the first switch onward — otherwise a later settings
+        // refresh finds no entry and falls back to the global key, dropping the
+        // algorithm's defaults. writeBackTuning() below persists this.
+        auto& seeded = m_config->savedAlgorithmSettings[algoId];
+        seeded.splitRatio = m_config->splitRatio;
+        seeded.masterCount = m_config->masterCount;
+        seeded.maxWindows = m_config->maxWindows;
     };
 
     if (newAlgo) {
@@ -948,7 +957,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         // no saved entry. Identical whether switching from another algorithm or
         // initializing on the first-ever call (oldAlgo null): the save block
         // above already persisted the outgoing algorithm's values when present.
-        restorePerAlgoSettings(newAlgo, savedIt);
+        restorePerAlgoSettings(newId, newAlgo, savedIt);
         // Re-seed the restored ratio/count onto current-context states. Mirrors
         // propagateGlobalSplitRatio()/propagateGlobalMasterCount() with one
         // extra skip: Algorithm-overridden screens keep their effective
@@ -1002,14 +1011,17 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // activity) entry; the engine's m_algorithmId tracks the runtime
     // ambient algorithm and resyncs from defaultAutotileAlgorithm on the
     // next session start, which is the intended behaviour.
+    //
+    // maxWindows is deliberately NOT written back to the global
+    // Tiling.Algorithm/MaxWindows key here. It is per-algorithm data, carried by
+    // savedAlgorithmSettings (seeded above and persisted by writeBackTuning).
+    // Writing the incoming algorithm's defaultMaxWindows to the global key made
+    // a plain algorithm switch look like a user edit of a setting the user never
+    // touched, which then showed up as a spurious profile diff row.
     {
         m_writeBackGuardTimer.start();
         const QSignalBlocker blocker(engineSettings());
         writeBackTuning();
-        if (auto* s = autotileSettings()) {
-            if (m_config->maxWindows != oldMaxWindows)
-                s->setAutotileMaxWindows(m_config->maxWindows);
-        }
     }
 
     // Clear stale per-algorithm state, but only on states whose effective
@@ -1346,9 +1358,10 @@ void AutotileEngine::refreshConfigFromSettings()
     SYNC_FIELD(focusFollowsMouse, autotileFocusFollowsMouse);
     SYNC_FIELD(respectMinimumSize, autotileRespectMinimumSize);
 
-    // maxWindows is engine-managed: the global is written back on algorithm
-    // switch (under the write-back guard) and the per-algorithm restore below
-    // is its authoritative source. Skip the global re-read while our own
+    // maxWindows is per-algorithm data. The global key is only a fallback for
+    // an algorithm with no saved slot yet (and the landing point for an explicit
+    // external write via the D-Bus settings property); the per-algorithm restore
+    // below overrides it whenever a slot exists. Skip the re-read while our own
     // write-back is in flight, matching the splitRatio/masterCount guards.
     if (!m_writeBackGuardTimer.isActive()) {
         SYNC_FIELD(maxWindows, autotileMaxWindows);
