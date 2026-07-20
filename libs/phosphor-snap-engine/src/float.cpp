@@ -262,11 +262,33 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
     UnfloatResult result;
 
     QStringList zoneIds = m_windowTracker->preFloatZones(windowId);
+    QString preFloatScreenId = m_windowTracker->preFloatScreen(windowId);
+    if (zoneIds.isEmpty()) {
+        // The in-memory pre-float capture does not survive a daemon restart, but
+        // the persisted placement record's snap slot does: a floating capture
+        // carries the pre-float zones in slot.zoneIds, and a stale snapped
+        // capture (daemon died before the float toggle was persisted) carries
+        // the zones the window occupied before it floated. Either is the
+        // window's home zone — without this fallback, unfloating after a
+        // restart dead-ends ("no pre-float zone, keeping floating") with no way
+        // out short of re-snapping by hand.
+        using PhosphorEngine::WindowPlacement;
+        const QString appId = m_windowTracker->currentAppIdFor(windowId);
+        if (const auto rec = m_windowTracker->placementStore().peek(windowId, appId)) {
+            const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
+            if (!slot.zoneIds.isEmpty()
+                && (slot.state == WindowPlacement::stateFloating() || slot.state == WindowPlacement::stateSnapped())) {
+                zoneIds = slot.zoneIds;
+                preFloatScreenId = rec->screenId;
+                qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                    << "resolveUnfloatGeometry:" << windowId << "no live pre-float capture — using placement record's"
+                    << slot.state << "slot zones" << zoneIds << "on" << preFloatScreenId;
+            }
+        }
+    }
     if (zoneIds.isEmpty()) {
         return result;
     }
-
-    const QString preFloatScreenId = m_windowTracker->preFloatScreen(windowId);
 
     // Cross-monitor restore is ALLOWED (Discussion #724 follow-up): unfloat returns
     // the window to its remembered home zone regardless of which monitor it is
