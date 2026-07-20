@@ -49,6 +49,31 @@ namespace {
 // m_pendingInitialOrders from leaking state indefinitely.
 constexpr int PendingOrderTimeoutMs = 10000;
 
+// Filter a per-algorithm settings map down to the entries worth persisting: those
+// that actually deviate from the algorithm's own defaults. A slot that merely
+// echoes the defaults carries no user intent, so writing it would surface as a
+// spurious "you changed this" row in the config profile diff. Both the
+// save-before-switch block and the no-slot fallback in setAlgorithm() can leave
+// such default-valued slots in the live map; filtering at write-back is the single
+// choke point that keeps them off disk. Entries whose algorithm is unknown to the
+// registry (e.g. an uninstalled scripted algorithm) are kept verbatim — they
+// cannot be compared to defaults, and dropping them would lose the user's tuning.
+QHash<QString, AlgorithmSettings> persistablePerAlgoSettings(const QHash<QString, AlgorithmSettings>& saved,
+                                                             PhosphorTiles::ITileAlgorithmRegistry* registry)
+{
+    QHash<QString, AlgorithmSettings> result;
+    for (auto it = saved.constBegin(); it != saved.constEnd(); ++it) {
+        auto* algo = registry ? registry->algorithm(it.key()) : nullptr;
+        const bool matchesDefaults = algo && qFuzzyCompare(1.0 + it->splitRatio, 1.0 + algo->defaultSplitRatio())
+            && it->masterCount == PhosphorTiles::AutotileDefaults::DefaultMasterCount
+            && it->maxWindows == algo->defaultMaxWindows() && it->customParams.isEmpty();
+        if (!matchesDefaults) {
+            result.insert(it.key(), it.value());
+        }
+    }
+    return result;
+}
+
 template<typename T>
 T* checkedCast(QObject* obj, const char* context)
 {
@@ -936,11 +961,17 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             m_config->splitRatio = it->splitRatio;
             m_config->masterCount = it->masterCount;
             m_config->maxWindows = it->maxWindows;
-        } else {
-            m_config->splitRatio = algo->defaultSplitRatio();
-            m_config->masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
-            m_config->maxWindows = algo->defaultMaxWindows();
+            return;
         }
+        // No saved slot: fall back to the algorithm's own defaults, but do NOT
+        // create a slot for them. A slot that merely echoes the defaults would be
+        // persisted by writeBackTuning() and then show up in the config profile
+        // diff as a change the user never made. The no-slot fallback is instead
+        // reapplied on demand — here on switch, and in refreshConfigFromSettings
+        // for the algorithm-unchanged path.
+        m_config->splitRatio = algo->defaultSplitRatio();
+        m_config->masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
+        m_config->maxWindows = algo->defaultMaxWindows();
     };
 
     if (newAlgo) {
@@ -1002,14 +1033,17 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // activity) entry; the engine's m_algorithmId tracks the runtime
     // ambient algorithm and resyncs from defaultAutotileAlgorithm on the
     // next session start, which is the intended behaviour.
+    //
+    // maxWindows is deliberately NOT written back to the global
+    // Tiling.Algorithm/MaxWindows key here. It is per-algorithm data, carried by
+    // savedAlgorithmSettings and persisted by writeBackTuning. Writing the
+    // incoming algorithm's defaultMaxWindows to the global key made a plain
+    // algorithm switch look like a user edit of a setting the user never touched,
+    // which then showed up as a spurious profile diff row.
     {
         m_writeBackGuardTimer.start();
         const QSignalBlocker blocker(engineSettings());
         writeBackTuning();
-        if (auto* s = autotileSettings()) {
-            if (m_config->maxWindows != oldMaxWindows)
-                s->setAutotileMaxWindows(m_config->maxWindows);
-        }
     }
 
     // Clear stale per-algorithm state, but only on states whose effective
@@ -1292,7 +1326,8 @@ void AutotileEngine::writeBackTuning()
     if (auto* s = autotileSettings()) {
         s->setAutotileSplitRatio(m_config->splitRatio);
         s->setAutotileMasterCount(m_config->masterCount);
-        s->setAutotilePerAlgorithmSettings(AutotileConfig::perAlgoToVariantMap(m_config->savedAlgorithmSettings));
+        s->setAutotilePerAlgorithmSettings(AutotileConfig::perAlgoToVariantMap(
+            persistablePerAlgoSettings(m_config->savedAlgorithmSettings, m_algorithmRegistry)));
     }
 }
 
@@ -1346,9 +1381,10 @@ void AutotileEngine::refreshConfigFromSettings()
     SYNC_FIELD(focusFollowsMouse, autotileFocusFollowsMouse);
     SYNC_FIELD(respectMinimumSize, autotileRespectMinimumSize);
 
-    // maxWindows is engine-managed: the global is written back on algorithm
-    // switch (under the write-back guard) and the per-algorithm restore below
-    // is its authoritative source. Skip the global re-read while our own
+    // maxWindows is per-algorithm data. The global key is only a fallback for
+    // an algorithm with no saved slot yet (and the landing point for an explicit
+    // external write via the D-Bus settings property); the per-algorithm restore
+    // below overrides it whenever a slot exists. Skip the re-read while our own
     // write-back is in flight, matching the splitRatio/masterCount guards.
     if (!m_writeBackGuardTimer.isActive()) {
         SYNC_FIELD(maxWindows, autotileMaxWindows);
@@ -1412,6 +1448,22 @@ void AutotileEngine::refreshConfigFromSettings()
             m_config->splitRatio = savedIt->splitRatio;
             m_config->masterCount = savedIt->masterCount;
             m_config->maxWindows = savedIt->maxWindows;
+        } else if (auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(m_algorithmId) : nullptr) {
+            // No saved slot for the current algorithm. The global maxWindows key
+            // overrides the algorithm's own default ONLY when it has been set to a
+            // non-default value (e.g. explicitly via D-Bus). While it still holds
+            // the schema default it is ambient, not an override, so the algorithm's
+            // own default is authoritative — otherwise switching to an algorithm
+            // whose default differs from the generic global (e.g. grid at 9) would
+            // silently clamp it to the global default on the next routine refresh.
+            // Default-valued slots are no longer persisted (see
+            // persistablePerAlgoSettings), so this on-demand fallback is what keeps
+            // an untouched algorithm at its intended cap. splitRatio/masterCount are
+            // left as the SYNC'd global values — those globals are real user
+            // settings, unlike the legacy per-algorithm maxWindows global.
+            if (s->autotileMaxWindows() == PhosphorTiles::AutotileDefaults::DefaultMaxWindows) {
+                m_config->maxWindows = algo->defaultMaxWindows();
+            }
         }
     }
 

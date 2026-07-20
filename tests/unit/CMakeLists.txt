@@ -918,6 +918,15 @@ target_link_libraries(test_window_appearance_controller PRIVATE Qt6::Test Qt6::C
     PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
 add_test(NAME test_window_appearance_controller COMMAND test_window_appearance_controller)
 
+add_executable(test_tiling_algorithm_controller
+    settings/test_tiling_algorithm_controller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/tilingalgorithmcontroller.cpp
+)
+target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
+target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
+
 # Animations-controller sources shared by the four test executables below
 # (page controller / motion sets / presets / shader overrides). One list so a
 # new controller source file can't silently miss one of the four.

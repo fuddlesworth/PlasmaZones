@@ -109,9 +109,15 @@ Q_SIGNALS:
 
 private:
     QVariantMap savedCustomParams(const QString& algorithmId) const;
+    /// True when @p value equals the algorithm's own default for @p key
+    /// (split ratio / master count / max windows), using the same clamped
+    /// defaults algorithmSettingsFor() seeds. Unknown keys are never defaults.
+    bool fieldMatchesAlgorithmDefault(const QString& algorithmId, QLatin1String key, const QVariant& value) const;
     /// Read-modify-write a single key in the per-algorithm settings entry,
-    /// preserving the other keys (incl. customParams). Returns false (no-op)
-    /// when the coerced value already matches what's stored.
+    /// preserving the other keys (incl. customParams). Writing a value equal to
+    /// the algorithm's default instead drops the key (and prunes the entry when
+    /// nothing customized remains) so a default never persists as a spurious
+    /// profile-diff row. Returns false (no-op) when nothing changed on disk.
     bool writeAlgorithmField(const QString& algorithmId, QLatin1String key, const QVariant& value);
 
     ISettings* m_settings = nullptr;
