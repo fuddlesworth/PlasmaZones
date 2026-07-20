@@ -36,6 +36,7 @@
 // struct" errors. The sibling animationspagecontroller.cpp picks the
 // same path.
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QDesktopServices>
 #include <QDir>
@@ -205,6 +206,44 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
         resolved.effectId.reset();
     }
     return shaderProfileToMap(resolved);
+}
+
+QStringList AnimationsPageController::stockSuppressedEvents() const
+{
+    using namespace PhosphorAnimationShaders;
+    QStringList owned;
+    if (!m_settings || !m_settings->animationsEnabled()) {
+        return owned;
+    }
+    const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    // Mirrors the compositor's packOwnsEvent gate (syncStockEffectSuppression
+    // in the kwin effect): tree-resolved effectId non-empty AND the pack
+    // applies to the event's contract class. One deliberate divergence: an
+    // effectId the registry does not know yet (a user pack still scanning at
+    // startup) counts as owned here — resolvedShaderProfile grants unknown
+    // ids the same warm-up grace, and flashing the conflict chip for a pack
+    // that will suppress once scanned would be a false alarm.
+    const auto packOwns = [this, &tree](const QString& path) {
+        const ShaderProfile resolved = resolveShaderWithDefault(tree, path);
+        const QString effectId = resolved.effectiveEffectId();
+        if (effectId.isEmpty()) {
+            return false;
+        }
+        if (m_shaderRegistry && m_shaderRegistry->hasEffect(effectId)) {
+            const AnimationShaderEffect eff = m_shaderRegistry->effect(effectId);
+            if (!eff.isValid() || !shaderEffectAppliesToEventPath(eff, path)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    for (const QString& path :
+         {PhosphorAnimation::ProfilePaths::WindowMinimize, PhosphorAnimation::ProfilePaths::WindowMaximize}) {
+        if (packOwns(path)) {
+            owned.append(path);
+        }
+    }
+    return owned;
 }
 
 bool AnimationsPageController::setShaderOverride(const QString& path, const QString& effectId,

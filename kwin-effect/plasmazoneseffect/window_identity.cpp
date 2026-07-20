@@ -264,7 +264,20 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
     // disturb the iteration.
     const auto batch = std::exchange(m_pendingFrameGeometry, {});
     for (auto it = batch.constBegin(); it != batch.constEnd(); ++it) {
-        const QRect& geo = it.value();
+        // The shouldHandleWindow exclusion gate runs HERE, once per debounced
+        // flush, rather than on every windowFrameGeometryChanged tick — it is
+        // an uncached rule resolve over a freshly built ruleQuery, and
+        // animated geometry fired it hundreds of times per second
+        // (discussion #816). The decoration resync deliberately stayed per
+        // tick in the stash lambda (window_lifecycle.cpp): it is cheap and
+        // deferring it let a re-decorated title bar flash for the throttle
+        // window. QPointer nulls if the window died since the stash; a dead
+        // or excluded window contributes no daemon push.
+        KWin::EffectWindow* w = it.value().window.data();
+        if (!w || w->isDeleted() || !shouldHandleWindow(w)) {
+            continue;
+        }
+        const QRect& geo = it.value().geometry;
         PhosphorProtocol::ClientHelpers::fireAndForget(
             this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setFrameGeometry"),
             {it.key(), geo.x(), geo.y(), geo.width(), geo.height()}, QStringLiteral("setFrameGeometry"));

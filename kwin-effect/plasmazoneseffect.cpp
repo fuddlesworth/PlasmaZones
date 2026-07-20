@@ -55,8 +55,9 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
     // Called when KWin wants effects to reload or when daemon notifies of settings change
     qCDebug(lcEffect) << "reconfigure() called";
     // A KWin effects reconfigure (any Desktop Effects KCM apply) reconciles
-    // the loaded-effects list against kwinrc, which RE-LOADS windowaperture /
-    // eyeonscreen — the suppression never writes kwinrc, so this is the one
+    // the loaded-effects list against kwinrc, which RE-LOADS every suppressed
+    // stock effect (windowaperture / eyeonscreen / magiclamp / squash /
+    // maximize) — the suppression never writes kwinrc, so this is the one
     // path that undoes the unload without any of the other sync triggers
     // (tree load, registry commit, animations toggle) firing. Re-assert on the
     // NEXT event-loop turn only, never synchronously: this reconfigure runs
@@ -66,19 +67,20 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
     // just coalesces to cheap no-ops. `this` as context cancels the callback if
     // we unload first.
     //
-    // Whether the deferred pass lands after the KCM's own re-load of
-    // windowaperture/eyeonscreen is NOT guaranteed here — it depends on
+    // Whether the deferred pass lands after the KCM's own re-load of the
+    // stock effects is NOT guaranteed here — it depends on
     // EffectsHandler's internal ordering between queueing those loads and
     // driving our reconfigure(). Lose the race and the sync sees them still
-    // unloaded, no-ops, and they come back live alongside an assigned peek
-    // pack. That is self-correcting rather than sticky: any later trigger (a
+    // unloaded, no-ops, and they come back live alongside an assigned pack.
+    // That is self-correcting rather than sticky: any later trigger (a
     // pack change, the animations toggle, the next reconfigure) re-asserts,
     // and the cost until then is that a peek capture can bake in their
-    // transform. Re-asserting from the showingDesktopChanged handler would
+    // transform, or a minimize/maximize double-animates alongside our
+    // shader. Re-asserting from the showingDesktopChanged handler would
     // close it, but that handler runs inside KWin's own emission over its
     // effects list, which is the one place an unload must not happen.
     QTimer::singleShot(0, this, [this]() {
-        syncShowDesktopEffectSuppression();
+        syncStockEffectSuppression();
     });
 }
 

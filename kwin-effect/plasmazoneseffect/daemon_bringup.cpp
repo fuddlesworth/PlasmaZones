@@ -929,17 +929,17 @@ void PlasmaZonesEffect::loadCachedSettings()
         // fallback) coerces through toBool() to false, and m_enabled defaults
         // to TRUE (windowanimator.h) — so an unguarded read INVERTS the default
         // and silently disables every animation. It would drag the suppression
-        // sync below with it too, reloading KWin's show-desktop effects as a
-        // side effect of a malformed reply.
+        // sync below with it too, reloading KWin's stock minimize / maximize /
+        // show-desktop effects as a side effect of a malformed reply.
         if (v.typeId() != QMetaType::Bool) {
             return;
         }
         m_windowAnimator->setEnabled(v.toBool());
-        // The animations master toggle is part of the suppression predicate:
-        // with animations off the peek never runs, so KWin's own show-desktop
-        // effects must come back rather than leave the user with no
-        // show-desktop animation at all.
-        syncShowDesktopEffectSuppression();
+        // The animations master toggle is part of the suppression predicate
+        // for every group: with animations off none of our packs run, so
+        // KWin's own minimize / maximize / show-desktop effects must come
+        // back rather than leave the user with no animation at all.
+        syncStockEffectSuppression();
     });
     loadSettingAsync(QStringLiteral("animationDuration"), [this](const QVariant& v) {
         // Clamp against the canonical settings-UI bounds. The earlier
