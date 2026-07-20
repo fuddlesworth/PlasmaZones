@@ -449,7 +449,14 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // above and returned) is never second-guessed.
     if (!authoritativeScreen.isEmpty() && m_service && !m_service->isWindowAutotileTiled(windowId)) {
         const QRect frame = m_frameGeometry.value(windowId);
-        if (frame.isValid()) {
+        // Same tile-rect poison guard as the primary capture path above: a
+        // window tiled by autotile, handed off, and closed before ever being
+        // repositioned still sits on its tile rect — recording that as the
+        // reopen float-back would restore it onto the tile, not a free spot.
+        // The engine's last-applied memory survives the handoff precisely for
+        // this comparison.
+        const bool stillOnTileRect = m_autotileEngine && m_autotileEngine->lastManagedRect(windowId) == frame;
+        if (frame.isValid() && !stillOnTileRect) {
             m_service->recordFloatingClose(windowId, authoritativeScreen, frame);
         }
     }
