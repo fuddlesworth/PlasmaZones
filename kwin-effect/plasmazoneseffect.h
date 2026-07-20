@@ -929,12 +929,14 @@ private:
     // can read fresh geometry without a round-trip.
     //
     // The window pointer rides along so the debounced flush can run the
-    // shouldHandleWindow exclusion gate and the decoration resync ONCE per
-    // flush instead of on every geometry tick — during animated geometry
-    // (retiles, morphs, interactive resize) the per-tick gate was an uncached
-    // rule resolve plus a full ruleQuery build, hundreds of times per second
-    // (discussion #816). QPointer auto-nulls if the window dies before the
-    // flush; the flush skips those entries.
+    // shouldHandleWindow exclusion gate ONCE per flush instead of on every
+    // geometry tick — during animated geometry (retiles, morphs, interactive
+    // resize) the per-tick gate was an uncached rule resolve plus a full
+    // ruleQuery build, hundreds of times per second (discussion #816). The
+    // decoration resync deliberately stays PER TICK in the stash lambda (see
+    // window_lifecycle.cpp): it is cheap, and deferring it let a re-decorated
+    // title bar flash for the throttle window. QPointer auto-nulls if the
+    // window dies before the flush; the flush skips those entries.
     struct PendingFrameGeometry
     {
         QRect geometry;

@@ -72,7 +72,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     PhosphorProtocol::registerWireTypes();
 
     // Latch compositor shutdown so the destructor can tell a runtime unload
-    // (KCM toggle — restore the suppressed show-desktop effects) from session
+    // (KCM toggle — restore the suppressed stock effects) from session
     // teardown (do NOT call loadEffect into the list KWin is unloading).
     // aboutToQuit fires when the event loop exits, before destructors run.
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [this]() {
@@ -1323,7 +1323,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
             // instance re-unloads during its daemon bringup (a few sequential
             // D-Bus round trips plus the registry rescan, sub-second in
             // practice; indefinitely if no daemon is running, in which case no
-            // peek pack resolves either), a window where both animations could
+            // pack resolves either), a window where both animations could
             // race.
             for (const QString& name : toRestore) {
                 // Already loaded (a KCM reconcile beat us to it) is satisfied,
