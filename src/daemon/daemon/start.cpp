@@ -733,14 +733,6 @@ void Daemon::connectShortcutSignals()
         connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
             refreshCheatsheetIfVisible();
         });
-        // Turning the feature off closes an open sheet. The show path gates
-        // on cheatsheetEnabled(), so without this a sheet opened before the
-        // toggle would outlive the setting until a manual dismiss.
-        connect(m_settings.get(), &Settings::cheatsheetEnabledChanged, this, [this]() {
-            if (m_settings && !m_settings->cheatsheetEnabled() && m_overlayService) {
-                m_overlayService->hideCheatsheet();
-            }
-        });
     }
     connect(m_overlayService.get(), &OverlayService::layoutPickerDismissed, this, [this]() {
         // Release the shared Escape grab only when no other consumer (snap

@@ -270,9 +270,6 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::exclusionsGroup(), CD::transientWindowsKey()},
              {CD::exclusionsGroup(), CD::minimumWindowWidthKey()},
              {CD::exclusionsGroup(), CD::minimumWindowHeightKey()},
-             // The Shortcut Cheatsheet card also lives on General; its enable
-             // toggle is this page's to revert.
-             {CD::cheatsheetGroup(), CD::enabledKey()},
          }},
         {QStringLiteral("snapping-overlay-behavior"),
          {

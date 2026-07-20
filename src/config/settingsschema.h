@@ -41,7 +41,6 @@ void appendRenderingSchema(PhosphorConfig::Schema& schema);
 void appendPerformanceSchema(PhosphorConfig::Schema& schema);
 void appendZoneGeometrySchema(PhosphorConfig::Schema& schema);
 void appendShortcutsSchema(PhosphorConfig::Schema& schema);
-void appendCheatsheetSchema(PhosphorConfig::Schema& schema);
 void appendEditorSchema(PhosphorConfig::Schema& schema);
 void appendExclusionsSchema(PhosphorConfig::Schema& schema);
 void appendDisplaySchema(PhosphorConfig::Schema& schema);
