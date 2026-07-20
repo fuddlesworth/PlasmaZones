@@ -280,9 +280,10 @@ private:
      * @brief Cancel a pending debounced minimize→float commit.
      *
      * No-op if no timer is pending for the window. Called from the
-     * unminimize path (to coalesce spurious cycles), from onWindowClosed
-     * (so pending timers never fire against destroyed windows), and from
-     * clearAllPendingMinimizeFloats (bulk teardown).
+     * unminimize path (to coalesce spurious cycles) and from onWindowClosed
+     * (so pending timers never fire against destroyed windows); bulk
+     * teardown goes through the helper's cancelAll in
+     * clearAllPendingMinimizeFloats instead.
      */
     void cancelPendingMinimizeFloat(const QString& windowId);
 
@@ -292,7 +293,9 @@ private:
      * No-op if no timer is pending for the window. Called from the minimize
      * path (a re-minimize during the grace must leave the window
      * minimize-floated), from cleanupAutotileTracking (window closed), and
-     * from clearAllPendingMinimizeFloats (bulk teardown / engine disable).
+     * from removeMinimizeFloated (authoritative external unfloat via the
+     * daemon's windowFloatingChanged echo); bulk teardown goes through the
+     * helper's cancelAll in clearAllPendingMinimizeFloats instead.
      */
     void cancelPendingUnminimizeUnfloat(const QString& windowId);
 

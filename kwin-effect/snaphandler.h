@@ -174,9 +174,12 @@ public:
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
 
-    /// Drop @p windowId from the minimize-float set (window closed). Returns
-    /// true if it was present. Also cancels any deferred unfloat commit so a
-    /// grace timer never fires against a destroyed window.
+    /// Drop @p windowId from the minimize-float set and cancel any deferred
+    /// unfloat commit. Returns true if it was present. Two callers, two
+    /// reasons (mirrors AutotileHandler::removeMinimizeFloated): the close
+    /// path (a grace timer must never fire against a destroyed window) and
+    /// the daemon's windowFloatingChanged(false) echo (an authoritative
+    /// external unfloat moots the deferred commit).
     bool removeMinimizeFloated(const QString& windowId)
     {
         cancelPendingUnminimizeUnfloat(windowId);
@@ -186,7 +189,8 @@ public:
     /// Cancel a pending deferred unminimize→unfloat commit. No-op if no timer
     /// is pending for the window. Called from the minimize edge (a re-minimize
     /// during the grace must leave the window minimize-floated) and from
-    /// removeMinimizeFloated (window closed).
+    /// removeMinimizeFloated (window closed, or an authoritative external
+    /// unfloat via the daemon's windowFloatingChanged echo).
     void cancelPendingUnminimizeUnfloat(const QString& windowId)
     {
         m_pendingUnminimizeUnfloat.cancel(windowId);
