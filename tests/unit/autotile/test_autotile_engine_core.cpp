@@ -562,6 +562,71 @@ private Q_SLOTS:
         QVERIFY(tilingSpy.count() >= 1);
         QCOMPARE(tilingSpy.last().first().toString(), screenName);
     }
+
+    // =========================================================================
+    // lastManagedRect: the tile rect applyTiling last emitted for a window,
+    // remembered PAST the float flip. performToggleFloat clears the tiled bit
+    // before the compositor repositions the window, so the capture orchestrator
+    // needs this rect to recognise the still-tiled live frame and refuse it as
+    // float-back geometry (the "float restores onto its own tile" regression).
+    // =========================================================================
+
+    void testLastManagedRect_survivesFloatToggle_clearedOnClose()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screenName});
+
+        engine.windowOpened(QStringLiteral("win-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-2"), screenName);
+        QCoreApplication::processEvents();
+
+        // Force zones directly — unit tests have no real screen geometry, so
+        // recalculateLayout() bails and applyTiling consumes what we set.
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        const QRect zoneA(10, 10, 950, 1060);
+        const QRect zoneB(960, 10, 950, 1060);
+        state->setCalculatedZones({zoneA, zoneB});
+        engine.retile(screenName);
+
+        const QStringList tiled = state->tiledWindows();
+        QCOMPARE(tiled.size(), 2);
+        QCOMPARE(engine.lastManagedRect(tiled.at(0)), zoneA);
+        QCOMPARE(engine.lastManagedRect(tiled.at(1)), zoneB);
+        QVERIFY(!engine.lastManagedRect(QStringLiteral("never-seen")).isValid());
+
+        // The regression pin: after the float toggle the tiled bit is gone,
+        // but the last-applied rect must still answer.
+        const QString floated = tiled.at(0);
+        engine.toggleWindowFloat(floated, screenName);
+        QVERIFY(state->isFloating(floated));
+        QCOMPARE(engine.lastManagedRect(floated), zoneA);
+
+        engine.windowClosed(floated);
+        QVERIFY(!engine.lastManagedRect(floated).isValid());
+    }
+
+    void testLastManagedRect_prunedWithStaleWindows()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screenName = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screenName});
+
+        engine.windowOpened(QStringLiteral("win-1"), screenName);
+        engine.windowOpened(QStringLiteral("win-2"), screenName);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screenName);
+        QVERIFY(state);
+        state->setCalculatedZones({QRect(10, 10, 950, 1060), QRect(960, 10, 950, 1060)});
+        engine.retile(screenName);
+        QVERIFY(engine.lastManagedRect(QStringLiteral("win-1")).isValid());
+
+        engine.pruneStaleWindows({QStringLiteral("win-2")});
+        QVERIFY(!engine.lastManagedRect(QStringLiteral("win-1")).isValid());
+        QVERIFY(engine.lastManagedRect(QStringLiteral("win-2")).isValid());
+    }
 };
 
 QTEST_MAIN(TestAutotileEngineCore)

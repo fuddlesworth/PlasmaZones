@@ -163,6 +163,11 @@ bool AutotileEngine::isAutotileFloated(const QString& rawWindowId) const
     return m_autotileFloatedWindows.contains(canonicalizeForLookup(rawWindowId));
 }
 
+QRect AutotileEngine::lastManagedRect(const QString& rawWindowId) const
+{
+    return m_lastAppliedTileRect.value(canonicalizeForLookup(rawWindowId));
+}
+
 int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
@@ -209,6 +214,14 @@ int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     for (auto it = m_windowMinSizes.begin(); it != m_windowMinSizes.end();) {
         if (!aliveWindowIds.contains(it.key())) {
             it = m_windowMinSizes.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // Same independent keying for the last-applied tile rects.
+    for (auto it = m_lastAppliedTileRect.begin(); it != m_lastAppliedTileRect.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            it = m_lastAppliedTileRect.erase(it);
         } else {
             ++it;
         }
@@ -2411,6 +2424,7 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     // (windowOpened only stores when minWidth/minHeight > 0), inflating
     // enforceMinSizes constraints with a stale value.
     m_windowMinSizes.remove(windowId);
+    m_lastAppliedTileRect.remove(windowId);
 
     onWindowRemoved(windowId);
     // Release the canonical translation last — downstream cleanup above may
@@ -4064,6 +4078,10 @@ void AutotileEngine::applyTiling(const QString& screenId)
         // (mirrors the snap side, DaemonGeometryResolver::snapBorderInset == 0).
         // Tile spacing comes from the zone gap/padding settings, not the border.
         const QRect& geo = zones[i];
+        // Remember the emitted rect for lastManagedRect(): the float-toggle
+        // capture path compares the live frame against it AFTER the tiled bit
+        // has already cleared (see the header doc on m_lastAppliedTileRect).
+        m_lastAppliedTileRect.insert(windows[i], geo);
         QJsonObject obj;
         obj[QLatin1String("windowId")] = windows[i];
         obj[QLatin1String("screenId")] = screenId;

@@ -1116,6 +1116,14 @@ public:
 
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
+    /// The tile rect this engine last emitted for @p rawWindowId via applyTiling,
+    /// remembered PAST the window's transition out of the tiled state (see the
+    /// base doc: on a float toggle the tiled bit clears before the compositor
+    /// repositions the window, and the capture orchestrator needs this rect to
+    /// recognise the still-tiled live frame). Invalid when the window was never
+    /// tiled here (or has closed).
+    QRect lastManagedRect(const QString& rawWindowId) const override;
+
 private Q_SLOTS:
     void onWindowZoneChanged(const QString& windowId, const QString& zoneId);
     void onWindowAdded(const QString& windowId);
@@ -1483,6 +1491,13 @@ private:
     QSet<PhosphorEngine::TilingStateKey> m_userTunedMasterCount;
 
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
+
+    // Canonical windowId → tile rect last emitted for it by applyTiling.
+    // Backs lastManagedRect(): deliberately NOT cleared when the window
+    // leaves the tiled state (that survival is the point — see the base
+    // doc), only on close and stale-window pruning. Used solely for an
+    // exact frame comparison, so a stale rect is harmless.
+    QHash<QString, QRect> m_lastAppliedTileRect;
 
     // Instance id → first-seen canonical windowId.
     //
