@@ -116,9 +116,18 @@ public:
      *  When `hasDividerAfter` is true the sidebar draws a horizontal
      *  divider line immediately after this row (suppressed while a
      *  search filter is active). Used for visual grouping of long
-     *  flat sections. */
+     *  flat sections.
+     *
+     *  `visibility` declares the page's simple/advanced tier at
+     *  registration — the canonical way to classify a page (see
+     *  PageRegistry::PageVisibility). `counterpartId` names the page's
+     *  other-mode equivalent for mode-flip redirects (see
+     *  PageRegistry::Entry::counterpartId); it may reference a page
+     *  registered later, so it is stored unvalidated. */
     void registerPage(PageController* page, const QString& parentId, const QString& title, const QUrl& qmlSource,
-                      const QString& iconSource = QString(), bool isCollapsible = false, bool hasDividerAfter = false);
+                      const QString& iconSource = QString(), bool isCollapsible = false, bool hasDividerAfter = false,
+                      PageRegistry::PageVisibility visibility = PageRegistry::PageVisibility::Always,
+                      const QString& counterpartId = QString());
 
     /** Register a headless staging domain (no sidebar entry).
      *  Used for cross-cutting state shared across multiple pages. */

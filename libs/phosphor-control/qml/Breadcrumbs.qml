@@ -31,6 +31,15 @@ RowLayout {
      *  middle ellipsis so both ends (parent context + leaf name) stay
      *  readable. Consumers can override for tighter or wider chrome. */
     property real maxSegmentWidth: Kirigami.Units.gridUnit * 20
+    /** Mirror of Sidebar.flattenTree: when the rail renders the page tree
+     *  as one flat list, a deep parent-chain crumb trail contradicts it
+     *  (the user never navigated through those levels). In flat mode the
+     *  trail is just the current page, using the same title override map
+     *  the flat rail applies. */
+    property bool flattenTree: false
+    /** Flat-mode display-title overrides, page id → title (see
+     *  Sidebar.flatTitleOverrides). Consulted only while flattenTree. */
+    property var flatTitleOverrides: ({})
     //  Cycle guard EXTENDS ApplicationController::parentChainFor's
     //  kMaxParentChainHops with a seen-set: the C++ guard catches an
     //  N-hop cycle after 32 hops + warns; the QML guard breaks on
@@ -50,6 +59,17 @@ RowLayout {
         // post-registration updates. The value isn't read meaningfully
         // — it's the change-notify that matters.
         void root._registryTick;
+        if (root.flattenTree) {
+            const leaf = root.controller.registry.pageData(root.controller.currentPageId);
+            if (!leaf || !leaf.id)
+                return [];
+            const overridden = root.flatTitleOverrides[leaf.id];
+            if (overridden)
+                return [Object.assign({}, leaf, {
+                        "title": overridden
+                    })];
+            return [leaf];
+        }
         const out = [];
         // Object.create(null) gives a prototype-less map, so page ids
         // matching built-in property names ("constructor", "toString",

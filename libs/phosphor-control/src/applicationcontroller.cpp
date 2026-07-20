@@ -109,7 +109,8 @@ QString ApplicationController::takePendingAnchor(const QString& pageId)
 
 void ApplicationController::registerPage(PageController* page, const QString& parentId, const QString& title,
                                          const QUrl& qmlSource, const QString& iconSource, bool isCollapsible,
-                                         bool hasDividerAfter)
+                                         bool hasDividerAfter, PageRegistry::PageVisibility visibility,
+                                         const QString& counterpartId)
 {
     if (!page) {
         qWarning() << "ApplicationController::registerPage: null page";
@@ -135,6 +136,8 @@ void ApplicationController::registerPage(PageController* page, const QString& pa
     entry.controller = page;
     entry.isCollapsible = isCollapsible;
     entry.hasDividerAfter = hasDividerAfter;
+    entry.visibility = visibility;
+    entry.counterpartId = counterpartId;
     // Reparent ONLY when registration is accepted — otherwise a
     // caller who built a null-parented page and held it on the
     // stack/heap would lose ownership to us on rejection (empty id,
@@ -302,6 +305,13 @@ NavigableState collectNavigable(const PageRegistry* registry, const QString& cur
     NavigableState out;
     for (const auto& e : registry->allPages()) {
         if (e.qmlSource.isEmpty()) {
+            continue;
+        }
+        // Keyboard next/prev must honour the same simple/advanced filter
+        // as the sidebar — otherwise it walks onto pages the rail hides.
+        // The current page is kept even if filtered (a transient state
+        // during a mode flip) so the cursor position stays meaningful.
+        if (!registry->pageAllowedInCurrentMode(e.id) && e.id != currentPageId) {
             continue;
         }
         if (e.id == currentPageId) {

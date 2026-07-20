@@ -123,6 +123,34 @@ bool PageRegistry::hasPage(const QString& id) const
     return m_indexById.contains(id);
 }
 
+bool PageRegistry::pageAllowedInCurrentMode(const QString& id) const
+{
+    const auto it = m_indexById.constFind(id);
+    if (it == m_indexById.constEnd()) {
+        // Tier filter only — unknown ids are not this method's concern
+        // (hasPage() is the existence check), so express no opinion.
+        return true;
+    }
+    return modeAllows(m_pages.at(it.value()).visibility);
+}
+
+QString PageRegistry::firstVisibleLeafId(const QString& parentId) const
+{
+    for (const Entry& e : m_pages) {
+        if (e.parentId != parentId || !isEntryVisible(e)) {
+            continue;
+        }
+        if (!e.qmlSource.isEmpty()) {
+            return e.id;
+        }
+        const QString leaf = firstVisibleLeafId(e.id);
+        if (!leaf.isEmpty()) {
+            return leaf;
+        }
+    }
+    return {};
+}
+
 PageController* PageRegistry::controller(const QString& id) const
 {
     const auto it = m_indexById.constFind(id);

@@ -98,6 +98,31 @@ ColumnLayout {
      *  stays visible in the icon-only rail and receives the live value;
      *  one that does not is hidden there. */
     property Component headerContent: null
+    /** When true the sidebar renders the visible page tree as ONE flat
+     *  list: every visible navigable page at depth 0 in registration
+     *  order, no category headers, no indentation, no drill-downs.
+     *  Section dividers still honour `hasDividerAfter` (an entry's flag
+     *  fires after its subtree's last emitted row). Intended for a
+     *  pared-down mode (e.g. an app's simple mode) where the filtered
+     *  tree is small enough that hierarchy is pure friction; the full
+     *  tree UI returns when the flag goes false. Drill state resets on
+     *  entry so a mode flip never strands the rail inside a scope. */
+    property bool flattenTree: false
+    /** Flat-mode display-title overrides, page id → title. Lets the app
+     *  rename a row whose registered (tree-context) title reads wrong
+     *  without its ancestors — e.g. a "General" leaf under a category
+     *  header that no longer shows. Consulted only while `flattenTree`
+     *  is true. */
+    property var flatTitleOverrides: ({})
+
+    onFlattenTreeChanged: {
+        if (root.flattenTree)
+            root.currentParentId = "";
+        // Deferred: the initial binding assignment can fire during
+        // component creation, before the list model object exists.
+        Qt.callLater(root._refreshModel);
+    }
+
     /** Suppress per-row add/remove animations while the whole list is
      *  cross-fading on drill-in/out. */
     property bool _suppressAccordion: false
@@ -161,6 +186,29 @@ ColumnLayout {
         return root.controller.registry.childPagesData(parentId).length > 0;
     }
 
+    // The single navigable page in a category's visible subtree, or null
+    // when the subtree holds zero or more than one. Used to FLATTEN
+    // pointless drill-downs: when visibility filtering (the simple/advanced
+    // mode) leaves a drill category with exactly one reachable page, the
+    // drill step is pure friction — the category row navigates straight to
+    // that page instead. Cap-guarded like every other registry walk here.
+    function _soleNavigableDescendant(parentId) {
+        const found = [];
+        const gather = function gather(pid, depth) {
+            if (depth > root._maxWalkDepth || found.length > 1)
+                return;
+            const kids = root._scopeChildren(pid);
+            for (let i = 0; i < kids.length && found.length <= 1; ++i) {
+                const child = kids[i];
+                if (child.hasQmlSource)
+                    found.push(child);
+                gather(child.id, depth + 1);
+            }
+        };
+        gather(parentId, 0);
+        return found.length === 1 ? found[0] : null;
+    }
+
     // Defence in depth against a misregistered page graph that
     // names itself as its own ancestor (parent ↔ self cycle, or a
     // longer ring). Without these caps a search keystroke would
@@ -196,6 +244,66 @@ ColumnLayout {
         //     must read them to render badges / active stripes
         //     correctly. Renaming any of these is a BREAKING change
         //     for downstream consumers (Phosphor Main.qml etc.).
+        if (root.flattenTree && root.searchText.length === 0) {
+            // Flat mode: one list of every visible navigable page, walked
+            // from the ROOT (drill scope is meaningless here), depth 0
+            // throughout, honouring registration order. An entry's
+            // hasDividerAfter fires after the last row its subtree emitted,
+            // so the tree's section seams survive flattening; consecutive
+            // and trailing dividers are collapsed since intervening rows
+            // may have been filtered out.
+            const out = [];
+            const seen = new Set([""]);
+            const emitLeaves = function emitLeaves(parentId, depth) {
+                if (depth > root._maxWalkDepth)
+                    return;
+                const kids = root._scopeChildren(parentId);
+                for (let i = 0; i < kids.length; ++i) {
+                    const child = kids[i];
+                    if (seen.has(child.id))
+                        continue;
+                    seen.add(child.id);
+                    const before = out.length;
+                    if (child.hasQmlSource) {
+                        out.push({
+                            "pageId": child.id,
+                            "title": root.flatTitleOverrides[child.id] || child.title,
+                            "iconSource": child.iconSource,
+                            "hasQmlSource": true,
+                            "_depth": 0,
+                            "_isCollapsibleHeader": false,
+                            "_isDrillParent": false,
+                            "_isExpanded": false,
+                            "_isDivider": false
+                        });
+                    }
+                    emitLeaves(child.id, depth + 1);
+                    // Only TOP-LEVEL entries contribute section seams in flat
+                    // mode. Leaf-level divider flags are tuned for the tree
+                    // rail's within-category rhythm; honouring them here puts
+                    // a divider after nearly every row.
+                    const emittedAny = out.length > before;
+                    const lastIsDivider = out.length > 0 && out[out.length - 1]._isDivider === true;
+                    if (depth === 0 && child.hasDividerAfter === true && emittedAny && !lastIsDivider) {
+                        out.push({
+                            "pageId": "__divider__flat/" + child.id,
+                            "title": "",
+                            "iconSource": "",
+                            "hasQmlSource": false,
+                            "_depth": 0,
+                            "_isCollapsibleHeader": false,
+                            "_isDrillParent": false,
+                            "_isExpanded": false,
+                            "_isDivider": true
+                        });
+                    }
+                }
+            };
+            emitLeaves("", 0);
+            while (out.length > 0 && out[out.length - 1]._isDivider === true)
+                out.pop();
+            return out;
+        }
         if (root.searchText.length === 0) {
             const out = [];
             // Flat seen-set tracks every visited page id (parent AND
@@ -234,14 +342,30 @@ ColumnLayout {
                     const childKids = root._scopeChildren(child.id);
                     const childHasChildren = childKids.length > 0;
                     const collapsible = child.isCollapsible === true && childHasChildren;
+                    // Flatten single-leaf drill-downs: a non-navigable drill
+                    // category whose visible subtree holds exactly one page
+                    // becomes a direct row for that page (keeping the
+                    // category's title/icon). See _soleNavigableDescendant.
+                    let rowPageId = child.id;
+                    let rowHasQml = child.hasQmlSource === true;
+                    let isDrill = !collapsible && childHasChildren;
+                    if (isDrill && !rowHasQml) {
+                        const sole = root._soleNavigableDescendant(child.id);
+                        if (sole) {
+                            rowPageId = sole.id;
+                            rowHasQml = true;
+                            isDrill = false;
+                            seen.add(sole.id);
+                        }
+                    }
                     out.push({
-                        "pageId": child.id,
+                        "pageId": rowPageId,
                         "title": child.title,
                         "iconSource": child.iconSource,
-                        "hasQmlSource": child.hasQmlSource === true,
+                        "hasQmlSource": rowHasQml,
                         "_depth": depth,
                         "_isCollapsibleHeader": collapsible,
-                        "_isDrillParent": !collapsible && childHasChildren,
+                        "_isDrillParent": isDrill,
                         "_isExpanded": collapsible && root._isExpanded(child.id),
                         "_isDivider": false
                     });

@@ -105,10 +105,21 @@ public:
         /// a category header. Suppressed while a search filter is active
         /// — dividers are navigation ornament, not match metadata.
         bool hasDividerAfter = false;
-        /// Simple/advanced tier for this page. Stamped after registration
-        /// via setPageVisibility(); defaults to Always so unclassified
-        /// pages show in both modes. See PageVisibility.
+        /// Simple/advanced tier for this page. Declared at registration
+        /// (set it on the Entry passed to registerPage); defaults to
+        /// Always so unclassified pages show in both modes. See
+        /// PageVisibility. setPageVisibility() remains for late
+        /// reclassification but registration-time declaration is the
+        /// canonical path.
         PageVisibility visibility = PageVisibility::Always;
+        /// Optional id of this page's other-mode counterpart. When a mode
+        /// flip (or a deep link) hides this page, the app's navigation
+        /// gate should land on the counterpart instead of a generic
+        /// fallback — e.g. a purpose-built SimpleOnly page and the
+        /// AdvancedOnly page it condenses point at each other. Empty
+        /// means "no counterpart; use the app fallback". The registry
+        /// stores the mapping; it does not act on it.
+        QString counterpartId;
     };
 
     explicit PageRegistry(QObject* parent = nullptr);
@@ -142,6 +153,20 @@ public:
     void setShowAdvanced(bool showAdvanced);
 
     Q_INVOKABLE bool hasPage(const QString& id) const;
+    /** True iff the page's visibility tier is allowed under the current
+     *  showAdvanced mode. Unknown ids return true — this is a tier
+     *  filter, not an existence check; validate with hasPage() first.
+     *  Unlike the tree accessors this does NOT apply the empty-category
+     *  descendant rule — it answers "may the user navigate here", which
+     *  for a navigable page is exactly the tier test. */
+    Q_INVOKABLE bool pageAllowedInCurrentMode(const QString& id) const;
+    /** Depth-first search (registration order) below `parentId` for the
+     *  first navigable page visible under the current mode; empty string
+     *  when nothing below the parent survives filtering. Pass an empty
+     *  parentId to search from the root. This is the mode-aware
+     *  replacement for a static "parent redirects to its first leaf"
+     *  table. */
+    Q_INVOKABLE QString firstVisibleLeafId(const QString& parentId) const;
     Q_INVOKABLE PhosphorControl::PageController* controller(const QString& id) const;
     /** Look up an Entry by id. Returns a default-constructed (empty) Entry
      *  when the id is unknown — callers that need to distinguish "no such
