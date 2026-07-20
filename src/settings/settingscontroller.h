@@ -186,13 +186,15 @@ public:
     Q_INVOKABLE void navigateTo(const QString& address);
 
     static const QSet<QString>& validPageNames();
-    /// The subset of validPageNames() that stays visible in simple mode.
-    /// Every leaf NOT in this set is stamped AdvancedOnly on the registry in
-    /// buildApplicationController(); virtual category parents are never
-    /// listed here (they auto-hide once all their leaves are filtered out).
-    /// Keep in sync with the classification pass in _pageregistration.cpp.
-    static const QSet<QString>& simpleModeAllowedPages();
-    static const QHash<QString, QString>& parentPageRedirects();
+    /// Resolve a page address to a navigable leaf id. Valid leaf names and
+    /// unregistered ids pass through untouched; a registered virtual node
+    /// (category parent, *-cat header) resolves to its first leaf visible
+    /// under the CURRENT simple/advanced mode, falling back to its first
+    /// leaf regardless of mode (the caller's mode gate then redirects) when
+    /// the whole subtree is hidden. Replaces the old static
+    /// parentPageRedirects table so redirects track the registry topology
+    /// and the active mode instead of a hand-synced list.
+    QString resolveToLeaf(const QString& page) const;
     /// Parent name → set of leaf child page names. Covers the top-level sidebar
     /// categories AND the mid-level virtual parents nested beneath them (among
     /// them snapping / tiling under placement, and the animations-* parents
@@ -842,9 +844,12 @@ private:
     QString m_lastSeenWhatsNewVersion;
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
-    /// Simple/advanced UI mode. Defaults false (simple) so a brand-new user
-    /// lands in the pared-down rail; the QML QtCore.Settings block restores
-    /// the remembered choice at startup for returning users.
+    /// Simple/advanced UI mode. THE single source of the default: false
+    /// (simple) so a brand-new user lands in the pared-down rail. The QML
+    /// QtCore.Settings block in Main.qml derives its no-stored-value default
+    /// from this at startup and restores the remembered choice for returning
+    /// users; buildApplicationController seeds the registry's showAdvanced
+    /// from it before the first sidebar build.
     bool m_advancedMode = false;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;

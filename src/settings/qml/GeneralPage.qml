@@ -49,10 +49,6 @@ SettingsFlickable {
             headerText: i18n("Rendering")
             collapsible: true
             searchAnchor: "rendering"
-            // Advanced-only: the graphics backend is a power/troubleshooting
-            // choice, not an everyday setting. Whole-card gate — a direct
-            // ColumnLayout child drops out of layout when hidden.
-            visible: settingsController.advancedMode
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -112,7 +108,7 @@ SettingsFlickable {
             collapsible: true
             // Advanced-only: shader frame-rate tuning is a fine-grained
             // performance knob most users never touch.
-            visible: settingsController.advancedMode
+            advancedOnly: true
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -143,13 +139,13 @@ SettingsFlickable {
         // below the enable switch is gated on the toggle + cava presence; the
         // values feed both runtimes (daemon overlays and the KWin effect) plus
         // the editor's shader preview.
+        // Simple mode keeps the enable toggle and the bar count; every other
+        // CAVA analysis knob (smoothing, gain, cutoffs, channels, filters,
+        // backend/source) is advanced depth.
         SettingsCard {
             headerText: i18n("Audio Spectrum")
             searchAnchor: "audioSpectrum"
             collapsible: true
-            // Advanced-only: the full CAVA audio-analysis parameter set is
-            // the deepest power-user surface on this page.
-            visible: settingsController.advancedMode
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -180,11 +176,12 @@ SettingsFlickable {
                     visible: !root.effectsBridge.cavaAvailable
                 }
 
-                // One gate for the whole knob stack: disabling this container
-                // propagates to every child, and SettingsRow/SettingsSeparator
-                // bind `visible: enabled`, so rows AND separators collapse
-                // together when the toggle is off (per-row gates left the
-                // separators behind as orphaned divider lines).
+                // One gate per knob stack: disabling a container propagates to
+                // every child, and SettingsRow/SettingsSeparator bind
+                // `visible: enabled`, so rows AND separators collapse together
+                // when the toggle is off (per-row gates left the separators
+                // behind as orphaned divider lines). This first stack is the
+                // simple-mode subset (bar count); the advanced stack follows.
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
@@ -209,6 +206,15 @@ SettingsFlickable {
                             }
                         }
                     }
+                }
+
+                // The advanced CAVA knob stack — same enabled gate as the
+                // container above, additionally hidden in simple mode.
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+                    enabled: audioVizSwitch.checked && root.effectsBridge.cavaAvailable
+                    visible: settingsController.advancedMode
 
                     SettingsSeparator {}
 

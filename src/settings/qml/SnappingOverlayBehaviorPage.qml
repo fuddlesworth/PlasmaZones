@@ -115,92 +115,17 @@ SettingsFlickable {
         // =================================================================
         // ZONE SPAN
         // =================================================================
+        // Shared card — also hosted on SnappingSimplePage.
         Item {
             Layout.fillWidth: true
             implicitHeight: zoneSpanCard.implicitHeight
-            // Advanced-only: multi-zone spanning is a power behaviour. Gate the
-            // wrapper so the reserved height collapses with the card.
-            visible: settingsController.advancedMode
 
-            SettingsCard {
+            SnappingZoneSpanCard {
                 id: zoneSpanCard
 
                 anchors.fill: parent
-                headerText: i18n("Zone Span")
-                searchAnchor: "zoneSpan"
-                showToggle: true
-                toggleChecked: appSettings.zoneSpanEnabled
-                collapsible: true
-                onToggleClicked: checked => {
-                    return appSettings.zoneSpanEnabled = checked;
-                }
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    SettingsRow {
-                        title: i18n("Span modifier")
-                        searchAnchor: "spanModifier"
-                        description: i18n("Hold a modifier or mouse button while dragging to paint across zones")
-
-                        ModifierAndMouseCheckBoxes {
-                            width: root.sliderPreferredWidth
-                            allowMultiple: true
-                            acceptMode: acceptModeAll
-                            triggers: root.settingsBridge.zoneSpanTriggers
-                            defaultTriggers: root.settingsBridge.defaultZoneSpanTriggers
-                            tooltipEnabled: false
-                            onTriggersModified: triggers => {
-                                root.settingsBridge.zoneSpanTriggers = triggers;
-                            }
-                        }
-                    }
-
-                    SettingsSeparator {}
-
-                    SettingsRow {
-                        title: i18n("Toggle mode")
-                        searchAnchor: "zoneSpanToggleMode"
-                        description: i18n("Tap the span modifier once to start spanning, tap again to stop, instead of holding it")
-
-                        SettingsSwitch {
-                            checked: appSettings.zoneSpanToggleMode
-                            accessibleName: i18n("Zone span toggle mode")
-                            onToggled: function (newValue) {
-                                appSettings.zoneSpanToggleMode = newValue;
-                            }
-                        }
-                    }
-
-                    SettingsSeparator {}
-
-                    SettingsRow {
-                        title: i18n("Edge threshold")
-                        searchAnchor: "edgeThreshold"
-                        description: i18n("Distance from zone edge for multi-zone selection")
-
-                        SettingsSpinBox {
-                            id: edgeThresholdSpin
-
-                            accessibleName: i18n("Edge threshold")
-                            from: root.settingsBridge.adjacentThresholdMin
-                            to: root.thresholdMax
-                            onValueModified: value => {
-                                return appSettings.adjacentThreshold = value;
-                            }
-                            // Feed value through a guarded Binding so a config change
-                            // keeps refreshing the control: a plain `value:` binding is
-                            // destroyed by SettingsSpinBox's own edit echo after the
-                            // first edit. RestoreNone + the focus gate keeps a live edit
-                            // from being clobbered.
-                            Binding on value {
-                                value: appSettings.adjacentThreshold
-                                when: !edgeThresholdSpin.editing
-                                restoreMode: Binding.RestoreNone
-                            }
-                        }
-                    }
-                }
+                settingsBridge: root.settingsBridge
+                sliderPreferredWidth: root.sliderPreferredWidth
             }
         }
 
@@ -210,8 +135,6 @@ SettingsFlickable {
         Item {
             Layout.fillWidth: true
             implicitHeight: displayCard.implicitHeight
-            // Advanced-only: multi-monitor / aspect-ratio display filtering.
-            visible: settingsController.advancedMode
 
             SettingsCard {
                 id: displayCard

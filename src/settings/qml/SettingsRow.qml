@@ -28,16 +28,23 @@ Item {
     /// Deep-link reveal anchor id for this row. Empty = not addressable.
     /// See SettingsFlickable.revealAnchor.
     property string searchAnchor: ""
+    /// When true this row belongs to advanced mode only: it collapses out of
+    /// the layout while the settings app is in simple mode. Declared here so
+    /// the gate composes with the enabled-collapse default below instead of
+    /// consumers replacing `visible:` by hand (which silently drops the
+    /// enabled gate). Pair with `enabled:` for rows that ALSO have an
+    /// applicability condition (e.g. only meaningful while borders are on).
+    property bool advancedOnly: false
     default property alias content: controlContainer.data
 
     // A disabled row is hidden rather than shown super-dimmed: when a setting
     // can't apply in the current state there's nothing actionable in it, so it
     // collapses out of the layout instead of leaving dead, greyed space. This
     // tracks `enabled` directly, so a row disabled by an ancestor (e.g. a
-    // card-level master toggle) hides too. Consumers that set their own
-    // `visible` binding override this default (those rows manage their own
-    // show/hide).
-    visible: enabled
+    // card-level master toggle) hides too. The advancedOnly tier folds in
+    // multiplicatively. Consumers that set their own `visible` binding
+    // override BOTH gates (those rows manage their own show/hide).
+    visible: enabled && (!advancedOnly || settingsController.advancedMode)
 
     Layout.fillWidth: true
     implicitWidth: rowLayout.implicitWidth

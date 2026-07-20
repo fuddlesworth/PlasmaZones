@@ -37,12 +37,11 @@ SettingsFlickable {
     // The title-bar scope row is only meaningful while title bars are hidden.
     readonly property bool hideTitleBarsOn: root.ctl.hideWindowTitleBars
 
-    // Simple/advanced gate. In simple mode this page keeps the everyday
+    // Simple/advanced split on this page: simple mode keeps the everyday
     // decoration controls (border on/off + width/radius/colour, hide title
-    // bars, gaps) and hides the power surfaces: the per-window "Apply to"
-    // scope pickers, focus-fade timing, opacity/tint, window filtering, and
-    // the performance card. Advanced mode shows everything.
-    readonly property bool advancedMode: settingsController.advancedMode
+    // bars, gaps); the power surfaces (the per-window "Apply to" scope
+    // pickers, focus-fade timing, opacity/tint, window filtering, the
+    // performance card) declare `advancedOnly: true` on their card/row.
 
     // "Apply to" scope options for the border / title-bar / opacity values, in
     // the order the schema declares them. The three keys share one token set,
@@ -174,7 +173,8 @@ SettingsFlickable {
                 }
 
                 SettingsRow {
-                    visible: root.borderVisible && root.advancedMode
+                    advancedOnly: true
+                    enabled: root.borderVisible
                     title: i18n("Apply to")
                     searchAnchor: "borderScope"
                     description: i18n("Which windows get a border")
@@ -191,7 +191,8 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: root.borderVisible && root.advancedMode
+                    advancedOnly: true
+                    enabled: root.borderVisible
                 }
 
                 SettingsRow {
@@ -342,8 +343,6 @@ SettingsFlickable {
             Layout.fillWidth: true
             headerText: i18n("Opacity and tint")
             searchAnchor: "opacityTint"
-            // Advanced-only: a niche visual layer most users leave off.
-            visible: root.advancedMode
             showToggle: true
             toggleChecked: root.ctl.showWindowOpacityTint
             onToggleClicked: checked => root.ctl.showWindowOpacityTint = checked
@@ -362,7 +361,10 @@ SettingsFlickable {
                 }
 
                 SettingsRow {
-                    visible: root.opacityTintVisible
+                    // Same treatment as the border / title-bar scope rows:
+                    // the per-window "Apply to" picker is advanced depth.
+                    advancedOnly: true
+                    enabled: root.opacityTintVisible
                     title: i18n("Apply to")
                     searchAnchor: "opacityTintScope"
                     description: i18n("Which windows are faded and tinted")
@@ -379,7 +381,10 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: root.opacityTintVisible
+                    // Pairs with the advanced "Apply to" row above: in simple
+                    // mode the card leads straight with the Opacity slider.
+                    advancedOnly: true
+                    enabled: root.opacityTintVisible
                 }
 
                 SettingsRow {
@@ -495,11 +500,13 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: root.hideTitleBarsOn && root.advancedMode
+                    advancedOnly: true
+                    enabled: root.hideTitleBarsOn
                 }
 
                 SettingsRow {
-                    visible: root.hideTitleBarsOn && root.advancedMode
+                    advancedOnly: true
+                    enabled: root.hideTitleBarsOn
                     title: i18n("Apply to")
                     searchAnchor: "hideTitleBarsScope"
                     description: i18n("Which windows lose their title bar")
@@ -516,11 +523,11 @@ SettingsFlickable {
                 }
 
                 SettingsSeparator {
-                    visible: root.advancedMode
+                    advancedOnly: true
                 }
 
                 SettingsRow {
-                    visible: root.advancedMode
+                    advancedOnly: true
                     title: i18n("Focus fade duration")
                     searchAnchor: "focusFadeDuration"
                     description: i18n("How long decorations take to fade between focused and unfocused. Zero switches instantly.")
@@ -552,7 +559,7 @@ SettingsFlickable {
         WindowFilterCard {
             Layout.fillWidth: true
             // Advanced-only: which windows get decorated is a power filter.
-            visible: root.advancedMode
+            advancedOnly: true
 
             excludeTransient: appSettings.decorationExcludeTransientWindows
             transientDescription: i18n("Skip borders for dialogs, popups, and menus")
@@ -642,7 +649,7 @@ SettingsFlickable {
             headerText: i18n("Performance")
             searchAnchor: "decorationPerformance"
             // Advanced-only: decoration animation power tuning.
-            visible: root.advancedMode
+            advancedOnly: true
             collapsible: true
 
             contentItem: ColumnLayout {

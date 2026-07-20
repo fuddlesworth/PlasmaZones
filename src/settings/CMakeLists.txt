@@ -281,6 +281,13 @@ qt_add_qml_module(plasmazones-settings
         qml/SnappingWindowBehaviorPage.qml
         qml/TilingBehaviorPage.qml
         qml/TilingAlgorithmPage.qml
+        qml/TilingSimplePage.qml
+        qml/SnappingSimplePage.qml
+        qml/SnappingWindowHandlingCard.qml
+        qml/SnappingFocusCard.qml
+        qml/SnappingZoneSpanCard.qml
+        qml/TilingWindowHandlingCard.qml
+        qml/TilingFocusCard.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which
         # also hosts the unified inner/outer gap controls.
         qml/WindowAppearancePage.qml

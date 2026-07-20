@@ -43,6 +43,9 @@ Item {
     property bool isParentNode: false
     property bool alwaysEnabled: false
     property bool collapsible: false
+    /// Simple-mode trim, forwarded to the embedded AnimationProfileEditor:
+    /// hides the timing-mode machinery, keeping duration + shader + params.
+    property bool simpleTiming: false
     /// The card's hosting SettingsCard. The virtualized card list re-registers
     /// its search anchor against this once the card builds, so a deep-link
     /// reveal can expand the card when it's collapsed.
@@ -479,6 +482,7 @@ Item {
                 eventLabel: root.eventLabel
                 shaderLegSupported: root._shaderLegSupported
                 showTimingSection: root.alwaysEnabled || root.overrideEnabled
+                simpleTiming: root.simpleTiming
                 registryRevision: root._shaderRegistryRev
                 enableLocking: true
                 enableRandomize: true

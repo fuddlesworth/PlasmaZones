@@ -35,6 +35,13 @@ Item {
     id: root
 
     // ── Public API ──────────────────────────────────────────────────────
+    /// When true this whole card belongs to advanced mode only: it collapses
+    /// out of the page while the settings app is in simple mode. Mirrors
+    /// SettingsRow.advancedOnly; a consumer's own `visible:` binding
+    /// overrides it.
+    property bool advancedOnly: false
+    visible: !advancedOnly || settingsController.advancedMode
+
     // Simple header: just provide a title string
     property string headerText: ""
     // Right-aligned hint shown after the heading (rule count, "N items", etc.).

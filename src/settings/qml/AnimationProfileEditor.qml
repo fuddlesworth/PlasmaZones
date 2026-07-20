@@ -72,6 +72,11 @@ ColumnLayout {
     /// Whether to render the timing section (curve / duration). The
     /// per-event card hides it when its master override toggle is off.
     property bool showTimingSection: true
+    /// Simple-mode trim: hide the timing-mode machinery (curve summary +
+    /// Customize dialog entry, Easing/Spring discriminator) and keep only
+    /// the Duration slider alongside the shader picker + parameters. The
+    /// stored profile keeps whatever curve/mode it already has.
+    property bool simpleTiming: false
     /// Bumped externally on `shaderEffectsChanged` so this editor's
     /// consumer-fed picker / schema bindings re-evaluate when a pack is
     /// dropped / removed mid-session.
@@ -184,6 +189,7 @@ ColumnLayout {
 
         // Curve summary row: thumbnail + description + Customize…
         RowLayout {
+            visible: !root.simpleTiming
             Layout.fillWidth: true
             // Inset the curve-summary row (thumbnail + description + Customize…)
             // to match the SettingsRows below, which self-inset by largeSpacing.
@@ -232,10 +238,13 @@ ColumnLayout {
             }
         }
 
-        SettingsSeparator {}
+        SettingsSeparator {
+            visible: !root.simpleTiming
+        }
 
         // Timing mode — Easing vs Spring discriminator.
         SettingsRow {
+            visible: !root.simpleTiming
             title: i18n("Timing mode")
 
             WideComboBox {
@@ -249,9 +258,11 @@ ColumnLayout {
             }
         }
 
-        // Duration (easing only — spring derives its own settle time).
+        // Duration (easing only — spring derives its own settle time). The
+        // separator leads the row, so it hides with the timing-mode chrome
+        // in simple mode — a section must not open with a divider.
         SettingsSeparator {
-            visible: root.timingMode === CurvePresets.timingModeEasing
+            visible: root.timingMode === CurvePresets.timingModeEasing && !root.simpleTiming
         }
 
         SettingsRow {

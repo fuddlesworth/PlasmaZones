@@ -274,17 +274,58 @@ void SettingsController::navigateTo(const QString& address)
     // and only when the page is valid — otherwise a bogus address would latch the
     // anchor onto whatever page happened to be active.
     if (!anchor.isEmpty() && app() != nullptr) {
-        const QString resolved = parentPageRedirects().value(page, page);
+        const QString resolved = resolveToLeaf(page);
         if (validPageNames().contains(resolved)) {
             app()->setPendingAnchor(resolved, anchor);
         }
     }
 }
 
+// First navigable leaf below `parentId` in registration order, IGNORING the
+// simple/advanced tier. Fallback for resolveToLeaf when a category's whole
+// subtree is hidden by the current mode — the resolved leaf then trips the
+// mode gate, which redirects to its counterpart or Overview.
+static QString firstLeafAnyMode(const PhosphorControl::PageRegistry* registry, const QString& parentId)
+{
+    const auto children = registry->childPages(parentId);
+    for (const auto& child : children) {
+        if (!child.qmlSource.isEmpty()) {
+            return child.id;
+        }
+        const QString leaf = firstLeafAnyMode(registry, child.id);
+        if (!leaf.isEmpty()) {
+            return leaf;
+        }
+    }
+    return {};
+}
+
+QString SettingsController::resolveToLeaf(const QString& page) const
+{
+    // Valid leaf names (and unknown ids — the caller's validPageNames check
+    // owns that rejection) pass through untouched; only registered virtual
+    // nodes need resolving. Before the registry exists there is nothing to
+    // resolve against.
+    if (validPageNames().contains(page) || !m_app || !m_app->registry() || !m_app->registry()->hasPage(page)) {
+        return page;
+    }
+    const auto* registry = m_app->registry();
+    // Mode-aware first: land on the first leaf the CURRENT rail can show,
+    // so e.g. --page=animations reaches animations-simple in simple mode
+    // and animations-general in advanced mode.
+    const QString visible = registry->firstVisibleLeafId(page);
+    if (!visible.isEmpty()) {
+        return visible;
+    }
+    const QString any = firstLeafAnyMode(registry, page);
+    return any.isEmpty() ? page : any;
+}
+
 void SettingsController::setActivePage(const QString& page)
 {
     // Resolve parent category names (e.g. "snapping" → "snapping-overlay-behavior")
-    const QString resolved = parentPageRedirects().value(page, page);
+    // against the live registry topology and the current mode.
+    const QString resolved = resolveToLeaf(page);
 
     if (!validPageNames().contains(resolved)) {
         // The page name arrives over D-Bus (SettingsAppAdaptor::setActivePage), so it is
@@ -301,24 +342,22 @@ void SettingsController::setActivePage(const QString& page)
     // may target a page the active mode hides. Redirect onto a page the rail
     // can actually show rather than stranding the user on a hidden one.
     // Internal rail clicks always name a visible page, so this only fires for
-    // out-of-band navigation and mode changes. Redirect targets are visible in
-    // their destination mode, so there is no recursion.
+    // out-of-band navigation and mode changes. Driven entirely by the
+    // registry's per-page tier + counterpart declarations: a hidden page goes
+    // to its declared other-mode counterpart when that is itself showable,
+    // else to Overview (which is Always-visible, so there is no recursion).
     QString target = resolved;
-    if (!m_advancedMode) {
-        // Simple mode: advanced-only pages fall back to Overview (in both modes).
-        if (!simpleModeAllowedPages().contains(target)) {
-            qCDebug(PlasmaZones::lcCore) << "Advanced-only page" << target
-                                         << "requested in simple mode; redirecting to overview";
+    if (m_app && m_app->registry() && !m_app->registry()->pageAllowedInCurrentMode(target)) {
+        const QString counterpart = m_app->registry()->entry(target).counterpartId;
+        if (!counterpart.isEmpty() && validPageNames().contains(counterpart)
+            && m_app->registry()->pageAllowedInCurrentMode(counterpart)) {
+            qCDebug(PlasmaZones::lcCore) << "Page" << target << "is hidden in the current mode; redirecting to its"
+                                         << "counterpart" << counterpart;
+            target = counterpart;
+        } else {
+            qCDebug(PlasmaZones::lcCore) << "Page" << target
+                                         << "is hidden in the current mode; redirecting to overview";
             target = QStringLiteral("overview");
-        }
-    } else {
-        // Advanced mode: SimpleOnly pages have no place — send the animations
-        // simple surface to its advanced equivalent (General). animations-simple
-        // is the only SimpleOnly page today; generalise to a set if more appear.
-        if (target == QStringLiteral("animations-simple")) {
-            qCDebug(PlasmaZones::lcCore) << "Simple-only page" << target
-                                         << "requested in advanced mode; redirecting to animations-general";
-            target = QStringLiteral("animations-general");
         }
     }
     // Reentrancy guard: a slot connected to activePageChanged that
@@ -414,11 +453,14 @@ void SettingsController::setNeedsSave(bool needs)
     if (needs) {
         const QString target = m_externalEditStack.isEmpty() ? m_activePage : m_externalEditStack.top();
         // The target must resolve to a concrete leaf page; a parent-category id
-        // would poison m_dirtyPages with a page the user never directly edits.
-        // Assert in debug, and in release skip the insert rather than dirtying a
+        // (registered in the page tree but not a navigable leaf) would poison
+        // m_dirtyPages with a page the user never directly edits. Assert in
+        // debug, and in release skip the insert rather than dirtying a
         // redirect target.
-        Q_ASSERT(!parentPageRedirects().contains(target));
-        if (parentPageRedirects().contains(target)) {
+        const bool isVirtualNode =
+            m_app && m_app->registry() && m_app->registry()->hasPage(target) && !validPageNames().contains(target);
+        Q_ASSERT(!isVirtualNode);
+        if (isVirtualNode) {
             return;
         }
         if (!m_dirtyPages.contains(target)) {
@@ -1035,7 +1077,7 @@ void SettingsController::beginExternalEdit(const QString& page)
 {
     // Resolve parent categories to their canonical leaf — same rules as
     // setActivePage — so the sidebar can pass "snapping" or "tiling".
-    const QString resolved = parentPageRedirects().value(page, page);
+    const QString resolved = resolveToLeaf(page);
     if (!validPageNames().contains(resolved)) {
         qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: unknown page" << page;
         return;

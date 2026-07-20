@@ -225,34 +225,6 @@ PhosphorUi.SettingsAppWindow {
             Kirigami.Theme.inherit: false
             spacing: Kirigami.Units.smallSpacing
 
-            // Simple/advanced rail toggle. Off = simple (pared-down rail);
-            // on = the full page tree. Fully controlled: `checked` reads the
-            // controller and the toggle writes both the controller (live) and
-            // the QtCore.Settings store (persisted).
-            Label {
-                text: i18n("Advanced")
-                opacity: 0.7
-                Layout.alignment: Qt.AlignVCenter
-            }
-
-            SettingsSwitch {
-                Layout.alignment: Qt.AlignVCenter
-                checked: settingsController.advancedMode
-                accessibleName: i18n("Toggle advanced settings")
-                onToggled: function (newValue) {
-                    settingsController.advancedMode = newValue;
-                    uiModeSettings.advancedMode = newValue;
-                }
-            }
-
-            Kirigami.Separator {
-                Layout.alignment: Qt.AlignVCenter
-                Layout.fillHeight: true
-                Layout.preferredHeight: Kirigami.Units.gridUnit
-                Layout.leftMargin: Kirigami.Units.smallSpacing
-                Layout.rightMargin: Kirigami.Units.smallSpacing
-            }
-
             Rectangle {
                 id: daemonDot
 
@@ -358,14 +330,16 @@ PhosphorUi.SettingsAppWindow {
 
     // Persisted simple/advanced UI mode. Uses the same QtCore.Settings
     // mechanism the filter/sort chrome uses (LayoutFilterBar, ShaderBrowserPage)
-    // rather than daemon config — it is settings-app-local UI state. Default
-    // false = a brand-new user starts in simple mode; the stored value is
-    // pushed into the controller at startup (Component.onCompleted below) and
-    // the header toggle writes user flips back here.
+    // rather than daemon config — it is settings-app-local UI state. The
+    // default (no stored value yet) reads the controller's own default at
+    // startup, so "what mode does a brand-new user get" is defined in ONE
+    // place: SettingsController::m_advancedMode. The stored value is pushed
+    // into the controller at startup (Component.onCompleted below) and the
+    // header toggle writes user flips back here.
     Settings {
         id: uiModeSettings
         category: "UiMode"
-        property bool advancedMode: false
+        property bool advancedMode: settingsController.advancedMode
     }
 
     Component.onCompleted: {
@@ -409,6 +383,10 @@ PhosphorUi.SettingsAppWindow {
     // changes externally (CLI --page, daemon broadcast, shortcut). DRY
     // the chain-walk so future tweaks happen in one place.
     function _drillIntoActivePage() {
+        // Flat simple-mode rail has no drill scopes — every page is a
+        // top-level row, so there is nothing to restore into.
+        if (window.sidebar.flattenTree)
+            return;
         const chain = settingsController.app.parentChainFor(settingsController.activePage);
         for (let i = chain.length - 1; i >= 0; --i) {
             const entry = settingsController.app.registry.pageData(chain[i]);
@@ -851,6 +829,60 @@ PhosphorUi.SettingsAppWindow {
     //      without having to drill in.
     //   2. Inline SettingsSwitch on the snapping / tiling rows so a
     //      whole feature can be disabled without drilling in.
+    // Simple mode gets a completely flat rail: every visible page as one
+    // top-level row, no category headers or drill-downs. Advanced mode
+    // keeps the full tree. The window-appearance leaf is registered as
+    // Decorations → "General"; standing alone it must read "Appearance".
+    sidebar.flattenTree: !settingsController.advancedMode
+    sidebar.flatTitleOverrides: ({
+            "window-appearance": i18n("Appearance")
+        })
+
+    // Simple/advanced mode toggle, pinned at the bottom of the sidebar — it
+    // lives with the navigation it reconfigures instead of floating in the
+    // header, using the rail's established label + switch row shape (the
+    // same layout as the Snapping/Tiling enable rows). Fully controlled:
+    // `checked` reads the controller and the toggle writes both the
+    // controller (live) and the QtCore.Settings store (persisted). Hidden
+    // in the compact icon-only rail (default footer contract for
+    // compact-unaware content).
+    sidebar.footerContent: Component {
+        Item {
+            implicitHeight: advancedModeRow.implicitHeight + Kirigami.Units.largeSpacing * 2
+
+            RowLayout {
+                id: advancedModeRow
+
+                anchors.fill: parent
+                // Match the rail rows' horizontal inset (SidebarRow pads by
+                // largeSpacing) and give the row breathing room above the
+                // window edge.
+                anchors.leftMargin: Kirigami.Units.largeSpacing
+                anchors.rightMargin: Kirigami.Units.largeSpacing
+                anchors.topMargin: Kirigami.Units.largeSpacing
+                anchors.bottomMargin: Kirigami.Units.largeSpacing
+                spacing: Kirigami.Units.smallSpacing
+
+                Label {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    text: i18n("Advanced")
+                    elide: Text.ElideRight
+                }
+
+                SettingsSwitch {
+                    Layout.alignment: Qt.AlignVCenter
+                    checked: settingsController.advancedMode
+                    accessibleName: i18n("Toggle advanced settings")
+                    onToggled: function (newValue) {
+                        settingsController.advancedMode = newValue;
+                        uiModeSettings.advancedMode = newValue;
+                    }
+                }
+            }
+        }
+    }
+
     sidebar.trailingDelegate: Component {
         RowLayout {
             id: trailingRow
@@ -863,8 +895,12 @@ PhosphorUi.SettingsAppWindow {
             // "id" to "pageId" (the prior name shadowed the QML id:
             // directive); read `entry.pageId` accordingly.
             readonly property var entry: parent ? parent.modelData : null
-            readonly property bool isSnapping: entry && entry.pageId === "snapping"
-            readonly property bool isTiling: entry && entry.pageId === "tiling"
+            // Match the drill-parent rows AND their simple-mode flattened
+            // forms: with the single-leaf drill flattening in Sidebar.qml,
+            // the "Snapping"/"Tiling" rows carry the simple leaf's pageId in
+            // simple mode, and the inline enable toggles must stay with them.
+            readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
+            readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0

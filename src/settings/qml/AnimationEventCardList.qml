@@ -40,6 +40,18 @@ SettingsFlickable {
     /// Pages with an "All" cascade parent use it for a short inheritance
     /// explainer, mirroring the decoration surface pages.
     property string headerText: ""
+    /// Optional Component instantiated above the event cards (below the
+    /// banner) — lets a consumer lead with page-level controls (e.g. the
+    /// simple-mode enable + speed card) while the event cards themselves
+    /// stay the shared per-event surface.
+    property Component headerComponent: null
+    /// Forwarded to every card: hide the timing-mode machinery, keeping
+    /// duration + shader + parameters (the simple-mode card shape).
+    property bool simpleTiming: false
+    /// Optional Component instantiated BELOW the event cards — the footer
+    /// counterpart of headerComponent (e.g. the simple-mode window
+    /// filtering card).
+    property Component footerComponent: null
 
     // Build-ahead margin above/below the visible viewport so a card is
     // built slightly before it scrolls into view — keeps a fast flick from
@@ -70,6 +82,13 @@ SettingsFlickable {
             type: Kirigami.MessageType.Information
             visible: page.headerText.length > 0
             text: page.headerText
+        }
+
+        Loader {
+            Layout.fillWidth: true
+            active: page.headerComponent !== null
+            visible: active
+            sourceComponent: page.headerComponent
         }
 
         Repeater {
@@ -210,8 +229,16 @@ SettingsFlickable {
                     eventLabel: cardLoader.modelData.eventLabel
                     isParentNode: cardLoader.modelData.isParentNode === true
                     collapsible: true
+                    simpleTiming: page.simpleTiming
                 }
             }
+        }
+
+        Loader {
+            Layout.fillWidth: true
+            active: page.footerComponent !== null
+            visible: active
+            sourceComponent: page.footerComponent
         }
     }
 }
