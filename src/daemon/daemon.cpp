@@ -1673,19 +1673,13 @@ bool Daemon::init()
                 if (wts && wts->windowRegistry()) {
                     const auto ctx =
                         wts->windowRegistry()->windowContext(::PhosphorIdentity::WindowId::extractInstanceId(windowId));
-                    if (ctx && ctx->virtualDesktop > 0) {
-                        desktop = ctx->virtualDesktop;
-                    }
-                    // A window spanning SEVERAL desktops carries the full
-                    // list; when the screen currently shows one of them, that
-                    // one is the live context governing the window — prefer
-                    // it over the arbitrary first entry virtualDesktop pins
-                    // to. Single-desktop and sticky windows carry no list.
-                    if (ctx && ctx->virtualDesktops.size() > 1 && ctx->virtualDesktops.contains(screenCurrent)) {
-                        desktop = screenCurrent;
-                    }
-                    if (ctx && !ctx->activity.isEmpty()) {
-                        activity = ctx->activity;
+                    if (ctx) {
+                        // Own-desktop / multi-desktop-span / sticky policy
+                        // lives on WindowContext (see effectiveDesktop's doc);
+                        // this resolver just supplies the screen-current
+                        // fallbacks.
+                        desktop = ctx->effectiveDesktop(screenCurrent);
+                        activity = ctx->effectiveActivity(activity);
                     }
                 }
                 return m_layoutManager->modeForScreen(screenId, desktop, activity);

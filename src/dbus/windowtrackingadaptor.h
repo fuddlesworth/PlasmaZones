@@ -247,7 +247,8 @@ public Q_SLOTS:
      *                       values are clamped to WindowType::Unknown
      * @param extended       Extended window-property snapshot keyed by
      *                       PhosphorProtocol::Service::WindowMetadataKey (state flags,
-     *                       geometry, accessory flags, captionNormal). A key is
+     *                       geometry, accessory flags, captionNormal, multi-desktop
+     *                       span list). A key is
      *                       present only when the value is known; absent keys leave
      *                       the corresponding WindowMetadata optional disengaged so a
      *                       window-rule predicate over it stays inert. Lets the

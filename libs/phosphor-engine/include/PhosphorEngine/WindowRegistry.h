@@ -107,6 +107,33 @@ public:
         int virtualDesktop = 0;
         QList<int> virtualDesktops;
         QString activity;
+
+        /// Effective desktop for per-window mode resolution: the window's own
+        /// desktop when known (virtualDesktop > 0), never the screen's current
+        /// one — reading through the screen's current desktop is what made the
+        /// effective float answer flip across per-output desktop switches.
+        /// EXCEPTION: a window spanning SEVERAL desktops resolves to
+        /// @p screenCurrentDesktop when that is one of them — the visible
+        /// spanned desktop is the live context governing the window, not the
+        /// arbitrary first entry virtualDesktop pins to. Sticky / unknown
+        /// (virtualDesktop 0) falls back to @p screenCurrentDesktop.
+        int effectiveDesktop(int screenCurrentDesktop) const
+        {
+            if (virtualDesktops.size() > 1 && virtualDesktops.contains(screenCurrentDesktop)) {
+                return screenCurrentDesktop;
+            }
+            return virtualDesktop > 0 ? virtualDesktop : screenCurrentDesktop;
+        }
+
+        /// Effective activity: the window's own when known, else
+        /// @p currentActivity. No span analogue to effectiveDesktop's
+        /// current-context preference exists here — the metadata carries only
+        /// the window's first activity, not a list, so there is nothing to
+        /// prefer against.
+        QString effectiveActivity(const QString& currentActivity) const
+        {
+            return activity.isEmpty() ? currentActivity : activity;
+        }
     };
     std::optional<WindowContext> windowContext(const QString& instanceId) const;
     Q_INVOKABLE QString appIdFor(const QString& instanceId) const override;

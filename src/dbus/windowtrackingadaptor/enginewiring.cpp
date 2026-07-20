@@ -931,6 +931,10 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
         ctx.fromEngineId = sourceEngine->engineId();
         ctx.sourceZoneIds = landingZoneIds;
         ctx.wasFloating = false; // an explicit move always places, never floats
+        // An autotile target's handoffReceive also announces the arrival's
+        // tiled (non-floating) state on the passive float-sync channel —
+        // intended: the arrival IS tiled, and the relay's last-broadcast
+        // gate dedups when the bit already agrees.
         targetEngine->handoffReceive(ctx);
     }
 
@@ -1029,6 +1033,9 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     targetEngine->handoffRelease(partner);
 
     // ── Place the focused window on the target, in the partner's slot. ──
+    // (Both placements below: an autotile receiver's handoffReceive also
+    // announces the arrival's tiled state on the passive float-sync channel —
+    // intended; the relay's last-broadcast gate dedups an agreeing bit.)
     {
         PhosphorEngine::IPlacementEngine::HandoffContext ctx;
         ctx.windowId = windowId;
