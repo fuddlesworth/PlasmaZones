@@ -439,6 +439,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::renderingGroup(), // "Rendering"
         ConfigDefaults::shadersGroup(), // "Shaders"
         ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling
+        ConfigDefaults::cheatsheetGroup(), // "Cheatsheet"
         ConfigDefaults::animationsGroup(), // "Animations"
         ConfigDefaults::animationsWindowFilteringGroup(), // "Animations.WindowFiltering"
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
@@ -3476,6 +3477,11 @@ void Settings::reset()
 // layout rotation, virtual-screen swap/rotate.
 P_STORE_GET(QString, openEditorShortcut, shortcutsGlobalGroup, openEditorKey, QString)
 P_STORE_SET_STRING(setOpenEditorShortcut, shortcutsGlobalGroup, openEditorKey, openEditorShortcutChanged)
+P_STORE_GET(QString, toggleCheatsheetShortcut, shortcutsGlobalGroup, toggleCheatsheetKey, QString)
+P_STORE_SET_STRING(setToggleCheatsheetShortcut, shortcutsGlobalGroup, toggleCheatsheetKey,
+                   toggleCheatsheetShortcutChanged)
+P_STORE_GET(bool, cheatsheetEnabled, cheatsheetGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setCheatsheetEnabled, cheatsheetGroup, enabledKey, cheatsheetEnabledChanged)
 P_STORE_GET(QString, openSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, QString)
 P_STORE_SET_STRING(setOpenSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, openSettingsShortcutChanged)
 P_STORE_GET(QString, previousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, QString)

@@ -43,6 +43,30 @@ SettingsFlickable {
         }
 
         // =====================================================================
+        // SHORTCUT CHEATSHEET CARD
+        // =====================================================================
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Shortcut Cheatsheet")
+            searchAnchor: "cheatsheet"
+            showToggle: true
+            toggleChecked: root.settingsBridge.cheatsheetEnabled
+            onToggleClicked: checked => {
+                root.settingsBridge.cheatsheetEnabled = checked;
+            }
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    text: i18n("Shows an overlay listing every PlasmaZones shortcut with the keys currently bound to it. Open it with its global shortcut, Meta+Alt+/ by default, and dismiss it with Escape or a click outside the card.")
+                }
+            }
+        }
+
+        // =====================================================================
         // RENDERING CARD
         // =====================================================================
         SettingsCard {

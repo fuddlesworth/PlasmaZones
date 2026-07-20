@@ -75,8 +75,9 @@ private Q_SLOTS:
     /// Settings::decorationProfileTree() must fall back to the canonical
     /// ConfigDefaults default. The baseline stays neutral (no global chain —
     /// window/popup border and titlebar visuals are owned by the window
-    /// rules), but the three PopupFrame card surfaces — "osd",
-    /// "popup.layoutPicker", "popup.zoneSelector" — each ship the same default
+    /// rules), but the PopupFrame card surfaces — "osd",
+    /// "popup.layoutPicker", "popup.zoneSelector", "popup.cheatsheet" —
+    /// each ship the same default
     /// decoration chain (a crisp neutral frame-contrast border + a real,
     /// theme-tinted drop shadow) that chromes their cards through the
     /// surface-decoration pipeline. Snap-assist carries its own anchor, not
@@ -91,11 +92,11 @@ private Q_SLOTS:
         QVERIFY2(!tree.baseline().chain.has_value(), "default baseline must carry no chain (fully neutral)");
         QCOMPARE(tree.overriddenPaths(),
                  (QStringList{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
-                              QStringLiteral("popup.zoneSelector")}));
+                              QStringLiteral("popup.zoneSelector"), QStringLiteral("popup.cheatsheet")}));
 
         // Every card surface resolves to the same border + theme-tinted shadow.
         const QStringList cardSurfaces{QStringLiteral("osd"), QStringLiteral("popup.layoutPicker"),
-                                       QStringLiteral("popup.zoneSelector")};
+                                       QStringLiteral("popup.zoneSelector"), QStringLiteral("popup.cheatsheet")};
         for (const QString& path : cardSurfaces) {
             const auto card = tree.resolve(path);
             QCOMPARE(card.enabledChain(), (QStringList{QStringLiteral("border"), QStringLiteral("shadow")}));

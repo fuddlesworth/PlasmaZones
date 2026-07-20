@@ -59,6 +59,10 @@ Rectangle {
             "action": i18n("Open Zone Editor")
         },
         {
+            "key": (root.appSettings?.toggleCheatsheetShortcut && root.appSettings.toggleCheatsheetShortcut.length > 0) ? root.appSettings.toggleCheatsheetShortcut : "Meta+Alt+/",
+            "action": i18n("Open Shortcut Cheatsheet")
+        },
+        {
             "key": "Ctrl+PgUp",
             "action": i18n("Previous page")
         },

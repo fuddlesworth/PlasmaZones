@@ -81,7 +81,8 @@ public:
     }
 
     /// Per-content slot entries keyed by slot name (e.g. "osd",
-    /// "snapAssist", "layoutPicker", "zoneSelector", "mainOverlay").
+    /// "snapAssist", "layoutPicker", "zoneSelector", "cheatsheet",
+    /// "mainOverlay").
     /// Each entry holds the slot's QQuickItem (borrowed; owned by the
     /// shell QQuickWindow's scene graph) plus the @c PhosphorLayer::Role
     /// the slot's SurfaceAnimator show/hide leg targets. Populated by

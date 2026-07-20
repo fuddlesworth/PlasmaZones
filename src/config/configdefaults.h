@@ -1164,8 +1164,8 @@ public:
     /// pack (e.g. glow) from the Decoration pages.
     ///
     /// The PopupFrame-based card surfaces are the exception: the OSD ("osd") and
-    /// the two PopupFrame popups ("popup.layoutPicker", "popup.zoneSelector")
-    /// ship a default chain that chromes their cards through the
+    /// the three PopupFrame popups ("popup.layoutPicker", "popup.zoneSelector",
+    /// "popup.cheatsheet") ship a default chain that chromes their cards through the
     /// surface-decoration pipeline rather than PopupFrame's built-in MultiEffect
     /// — a crisp neutral frame-contrast border plus a real, theme-tinted drop
     /// shadow. (Snap-assist is left undecorated: it carries its own anchor, not
@@ -1182,7 +1182,7 @@ public:
     static ::PhosphorSurfaceShaders::DecorationProfileTree decorationProfileTree()
     {
         // One shared card decoration for every PopupFrame surface — the OSD and
-        // both popups read as the same surface family. PopupFrame squares its
+        // the three popups read as the same surface family. PopupFrame squares its
         // body off when decorated (radius 0), so the packs are the sole owners
         // of the corner rounding. The corner radius is NOT set here: each popup
         // slot publishes its own card radius (cardCornerRadius) and
@@ -1214,6 +1214,7 @@ public:
         tree.setOverride(QStringLiteral("osd"), card);
         tree.setOverride(QStringLiteral("popup.layoutPicker"), card);
         tree.setOverride(QStringLiteral("popup.zoneSelector"), card);
+        tree.setOverride(QStringLiteral("popup.cheatsheet"), card);
         return tree;
     }
 
@@ -1561,6 +1562,15 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Shortcut Cheatsheet Overlay
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool cheatsheetEnabled()
+    {
+        return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Global Shortcuts
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1571,6 +1581,16 @@ public:
     static QString openSettingsShortcut()
     {
         return QStringLiteral("Meta+Shift+P");
+    }
+    static QString toggleCheatsheetShortcut()
+    {
+        // Meta+Alt+<key> matches the layouts family (Meta+Alt+[ ] Space).
+        // "/" carries the help idiom without involving Shift — which
+        // matters: a Shift+symbol chord like Meta+Shift+/ can NEVER fire
+        // on Wayland because KWin strips Shift as a consumed modifier when
+        // the keysym translation uses it (delivers Meta+Question). Any
+        // future default here must avoid Shift+symbol spellings.
+        return QStringLiteral("Meta+Alt+/");
     }
     static QString previousLayoutShortcut()
     {

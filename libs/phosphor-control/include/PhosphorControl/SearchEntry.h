@@ -27,12 +27,23 @@ struct SearchEntry
         Page, ///< A navigable settings page.
         Section, ///< A card / section within a page (anchor).
         Setting, ///< An individual setting row within a page (anchor).
-        Entity ///< A dynamic content item (rule, shader, layout, …).
+        Entity, ///< A dynamic content item (rule, shader, layout, …).
+        /// An app-level command rather than a destination (open an overlay,
+        /// start a wizard). Carries `actionId` instead of a page address;
+        /// the app's search UI dispatches it (GlobalSearchField emits
+        /// actionTriggered) instead of navigating. Appended last so the
+        /// integer values QML sees for the existing kinds are stable.
+        Action
     };
 
     Kind kind = Kind::Page;
-    /// Navigation target page id (must be a registered page).
+    /// Navigation target page id (must be a registered page). Empty for
+    /// Kind::Action entries.
     QString pageId;
+    /// App-defined command id for Kind::Action entries; empty otherwise.
+    /// The producer and the app's action dispatcher share this vocabulary —
+    /// the library never interprets it.
+    QString actionId;
     /// Optional reveal anchor within the page. Empty for a plain page target.
     QString anchor;
     /// Primary display label (translated).

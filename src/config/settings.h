@@ -419,6 +419,9 @@ public:
         QString openEditorShortcut READ openEditorShortcut WRITE setOpenEditorShortcut NOTIFY openEditorShortcutChanged)
     Q_PROPERTY(QString openSettingsShortcut READ openSettingsShortcut WRITE setOpenSettingsShortcut NOTIFY
                    openSettingsShortcutChanged)
+    Q_PROPERTY(QString toggleCheatsheetShortcut READ toggleCheatsheetShortcut WRITE setToggleCheatsheetShortcut NOTIFY
+                   toggleCheatsheetShortcutChanged)
+    Q_PROPERTY(bool cheatsheetEnabled READ cheatsheetEnabled WRITE setCheatsheetEnabled NOTIFY cheatsheetEnabledChanged)
     Q_PROPERTY(QString previousLayoutShortcut READ previousLayoutShortcut WRITE setPreviousLayoutShortcut NOTIFY
                    previousLayoutShortcutChanged)
     Q_PROPERTY(
@@ -1141,6 +1144,10 @@ public:
     void setOpenEditorShortcut(const QString& shortcut);
     QString openSettingsShortcut() const;
     void setOpenSettingsShortcut(const QString& shortcut);
+    QString toggleCheatsheetShortcut() const;
+    void setToggleCheatsheetShortcut(const QString& shortcut);
+    bool cheatsheetEnabled() const override;
+    void setCheatsheetEnabled(bool enabled) override;
     QString previousLayoutShortcut() const;
     void setPreviousLayoutShortcut(const QString& shortcut);
     QString nextLayoutShortcut() const;

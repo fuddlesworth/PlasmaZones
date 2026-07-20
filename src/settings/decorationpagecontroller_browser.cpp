@@ -54,6 +54,8 @@ QString surfacePathLabel(const QString& path)
             return PhosphorI18n::tr("Zone Selector");
         if (token == QLatin1String("layoutPicker"))
             return PhosphorI18n::tr("Layout Picker");
+        if (token == QLatin1String("cheatsheet"))
+            return PhosphorI18n::tr("Shortcut Cheatsheet");
         return token;
     };
     const QStringList tokens = path.split(QLatin1Char('.'), Qt::SkipEmptyParts);

@@ -33,6 +33,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendPerformanceSchema(s);
     appendZoneGeometrySchema(s);
     appendShortcutsSchema(s);
+    appendCheatsheetSchema(s);
     appendEditorSchema(s);
     appendExclusionsSchema(s);
     appendDisplaySchema(s);
@@ -463,6 +464,7 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     QVector<PhosphorConfig::KeyDef> globals;
     addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut());
     addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut());
+    addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut());
     addShortcut(globals, CD::previousLayoutKey(), CD::previousLayoutShortcut());
     addShortcut(globals, CD::nextLayoutKey(), CD::nextLayoutShortcut());
     const QString quickDefaults[9] = {
@@ -522,6 +524,18 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::incMasterCountKey(), CD::autotileIncMasterCountShortcut(), QMetaType::QString},
         {CD::decMasterCountKey(), CD::autotileDecMasterCountShortcut(), QMetaType::QString},
         {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString},
+    };
+}
+
+// ─── Cheatsheet ─────────────────────────────────────────────────────────────
+// The shortcut cheatsheet overlay's own group (the toggle shortcut string
+// lives in Shortcuts.Global with its siblings, registered above).
+
+void appendCheatsheetSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::cheatsheetGroup()] = {
+        {CD::enabledKey(), CD::cheatsheetEnabled(), QMetaType::Bool},
     };
 }
 

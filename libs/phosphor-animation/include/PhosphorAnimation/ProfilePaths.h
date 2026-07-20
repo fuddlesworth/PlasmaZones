@@ -96,6 +96,9 @@ PHOSPHORANIMATION_EXPORT extern const QString PopupLayoutPickerHide;
 PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssist;
 PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssistShow;
 PHOSPHORANIMATION_EXPORT extern const QString PopupSnapAssistHide;
+PHOSPHORANIMATION_EXPORT extern const QString PopupCheatsheet;
+PHOSPHORANIMATION_EXPORT extern const QString PopupCheatsheetShow;
+PHOSPHORANIMATION_EXPORT extern const QString PopupCheatsheetHide;
 
 // panel.* — persistent in-app side surfaces (settings nav rail, editor
 // property panel). Absorbs the former sidebar.* root — sidebars are panels.
@@ -217,7 +220,8 @@ PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 ///     cannot drive a held drag, and the move-class packs (wobble) stay
 ///     opt-in.
 ///   • Overlay show/hide leaves (osd.{show,hide},
-///     popup.{zoneSelector,layoutPicker,snapAssist}.{show,hide}) → "fade"
+///     popup.{zoneSelector,layoutPicker,snapAssist,cheatsheet}.{show,hide})
+///     → "fade"
 ///     (fade-and-scale), run by the daemon SurfaceAnimator instead of its C++
 ///     opacity/scale legs. The category roots (osd, popup, osd.pop) carry no
 ///     default.

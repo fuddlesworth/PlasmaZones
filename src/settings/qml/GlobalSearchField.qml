@@ -22,6 +22,10 @@ Item {
 
     readonly property bool searchOpen: resultsPopup.visible
 
+    /// An action-kind result was selected. The host (Main.qml) dispatches
+    /// the app-defined id — the search field never interprets it.
+    signal actionTriggered(string actionId)
+
     implicitWidth: Kirigami.Units.gridUnit * 22
     implicitHeight: field.implicitHeight
 
@@ -31,7 +35,16 @@ Item {
             return;
 
         const entry = list[index];
-        if (entry && entry.address) {
+        if (!entry)
+            return;
+
+        // Action entries carry a command id instead of a navigable address.
+        if (entry.actionId) {
+            root.actionTriggered(entry.actionId);
+            root.dismiss();
+            return;
+        }
+        if (entry.address) {
             settingsController.navigateTo(entry.address);
             root.dismiss();
         }

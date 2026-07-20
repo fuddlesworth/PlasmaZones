@@ -118,6 +118,8 @@ void OverlayService::setSettings(ISettings* settings)
                         applyDecoration(state.snapAssistSlot(), QStringLiteral("popup.snapAssist"));
                     if (m_layoutPickerVisible)
                         applyDecoration(state.layoutPickerSlot(), QStringLiteral("popup.layoutPicker"));
+                    if (m_cheatsheetVisible)
+                        applyDecoration(state.cheatsheetSlot(), QStringLiteral("popup.cheatsheet"));
                 }
             });
 
@@ -394,8 +396,8 @@ void OverlayService::syncCavaState()
                 // so an audio-reactive border must settle to silence too rather
                 // than freeze on the last pushed frame. Independent of the zone
                 // overlay, so cleared regardless of overlayPhysScreen.
-                for (QQuickItem* deco :
-                     {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(), st.zoneSelectorSlot()}) {
+                for (QQuickItem* deco : {st.osdSlot(), st.snapAssistSlot(), st.layoutPickerSlot(),
+                                         st.zoneSelectorSlot(), st.cheatsheetSlot()}) {
                     if (deco) {
                         writeQmlProperty(deco, QString(OverlayQmlPropertyNames::AudioSpectrum), QVariantList());
                     }

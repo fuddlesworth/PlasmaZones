@@ -12,7 +12,7 @@ namespace PhosphorSurfaceShaders {
 /// Leaf surface paths a per-surface decoration profile actually resolves
 /// against. Each names a concrete surface the shell decorates: the three
 /// window placement states (tiled / snapped / floating), the OSD, and the
-/// three transient popups. (The zone overlay is intentionally NOT a
+/// four transient popups. (The zone overlay is intentionally NOT a
 /// decoration target — it is a fullscreen, mostly-transparent zone canvas
 /// drawn by the separate overlay shader category, not a card to round/border.)
 /// When a future surface gains a decoration leg, append its leaf path here in
@@ -31,10 +31,11 @@ inline QStringList decorationLeafSurfacePaths()
         QStringLiteral("window.floating"),
         // osd — the notification surface.
         QStringLiteral("osd"),
-        // popup.* — transient overlays invoked by user action.
+        // popup.* — the four transient overlays invoked by user action.
         QStringLiteral("popup.snapAssist"),
         QStringLiteral("popup.zoneSelector"),
         QStringLiteral("popup.layoutPicker"),
+        QStringLiteral("popup.cheatsheet"),
     };
 }
 

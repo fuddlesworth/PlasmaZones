@@ -182,6 +182,63 @@ private Q_SLOTS:
                  QStringLiteral("Snapping › Appearance › Colors"));
     }
 
+    void actionEntrySurfacesActionIdWithoutAddress()
+    {
+        // Kind::Action carries an app command id instead of a navigable
+        // address: the result map must expose `actionId` (the QML dispatch
+        // key) and an EMPTY `address` (so the navigate branch can never
+        // swallow an action), and the producer's subtitle must survive the
+        // breadcrumb autofill despite the empty pageId.
+        SearchController sc(m_app);
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Action;
+        e.actionId = QStringLiteral("show-shortcut-overlay");
+        e.title = QStringLiteral("Keyboard Shortcuts");
+        e.subtitle = QStringLiteral("Show the shortcut reference");
+        e.keywords = {QStringLiteral("hotkey")};
+        sc.addEntry(e);
+
+        sc.setQuery(QStringLiteral("hotkey"));
+        bool found = false;
+        for (const QVariant& v : sc.results()) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("title")).toString() == QStringLiteral("Keyboard Shortcuts")) {
+                found = true;
+                QCOMPARE(m.value(QStringLiteral("actionId")).toString(), QStringLiteral("show-shortcut-overlay"));
+                QVERIFY(m.value(QStringLiteral("address")).toString().isEmpty());
+                QCOMPARE(m.value(QStringLiteral("kind")).toInt(), static_cast<int>(SearchEntry::Kind::Action));
+                QCOMPARE(m.value(QStringLiteral("subtitle")).toString(), QStringLiteral("Show the shortcut reference"));
+            }
+        }
+        QVERIFY(found);
+    }
+
+    void actionEntryWithEmptySubtitleSkipsBreadcrumbAutofill()
+    {
+        // An Action with no producer subtitle must stay subtitle-less:
+        // actions are commands, not page-resident targets, so the breadcrumb
+        // autofill (which would run breadcrumbFor on the empty pageId) is
+        // skipped for them entirely.
+        SearchController sc(m_app);
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Action;
+        e.actionId = QStringLiteral("some-command");
+        e.title = QStringLiteral("Bare Command");
+        e.keywords = {QStringLiteral("barecmd")};
+        sc.addEntry(e);
+
+        sc.setQuery(QStringLiteral("barecmd"));
+        bool found = false;
+        for (const QVariant& v : sc.results()) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("title")).toString() == QStringLiteral("Bare Command")) {
+                found = true;
+                QVERIFY(m.value(QStringLiteral("subtitle")).toString().isEmpty());
+            }
+        }
+        QVERIFY(found);
+    }
+
     void keywordEnablesSynonymSearch()
     {
         SearchController sc(m_app);

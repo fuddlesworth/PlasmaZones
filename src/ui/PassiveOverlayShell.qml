@@ -48,7 +48,8 @@ Window {
     // true` so vertex shaders bind to the visible OSD body rather than
     // the fullscreen slot Item.
     // Sibling slots below: snapAssistSlot (z=2), layoutPickerSlot (z=2),
-    // zoneSelectorSlot (z=1), mainOverlaySlot (z=0). The osdSlot's z is
+    // cheatsheetSlot (z=2), zoneSelectorSlot (z=1), mainOverlaySlot (z=0).
+    // The osdSlot's z is
     // dynamic (3 normally, 1.5 while a modal slot is visible — see the
     // binding on osdSlot). Each is a sibling Item with its own
     // properties + Loader, animated independently via the
@@ -80,6 +81,12 @@ Window {
     readonly property alias zoneSelectorSlotItem: zoneSelectorSlot
     /// Main zone overlay slot Item — displays zones during window drag.
     readonly property alias mainOverlaySlotItem: mainOverlaySlot
+    /// Cheatsheet slot Item — SurfaceAnimator target for the shortcut
+    /// cheatsheet's show/hide. Display-only modal card; Escape routes via
+    /// a dedicated KGlobalAccel ad-hoc grab made by start.cpp on the
+    /// matching show/dismiss signals — the shell is kbd-None so QML
+    /// Shortcuts can't fire here.
+    readonly property alias cheatsheetSlotItem: cheatsheetSlot
 
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — only the
@@ -96,6 +103,9 @@ Window {
     /// Forwarded from picker's `dismissRequested` (backdrop click /
     /// supplemental dismiss path; primary Escape goes via global accel).
     signal layoutPickerDismissRequested
+    /// Forwarded from the cheatsheet's `dismissRequested` (backdrop click;
+    /// primary Escape goes via the dedicated ad-hoc grab).
+    signal cheatsheetDismissRequested
 
     // Qt::WindowTransparentForInput is driven imperatively by C++ from
     // syncPassiveShellSurfaceState (via Surface::show()/hide();
@@ -241,7 +251,7 @@ Window {
         // hide animation completes (onSnapAssistSlotHideCompleted /
         // the picker equivalent), covering the modal's full on-screen
         // span; `loaded` blips false→true on every re-show.
-        z: (snapAssistSlot.visible || layoutPickerSlot.visible) ? 1.5 : 3
+        z: (snapAssistSlot.visible || layoutPickerSlot.visible || cheatsheetSlot.visible) ? 1.5 : 3
         // SurfaceAnimator drives this Item's opacity. Start at 0 so the
         // first paint pre-show doesn't flash the OSD at full opacity.
         opacity: 0
@@ -576,6 +586,86 @@ Window {
             decorationChain: layoutPickerSlot.decorationChain
             decorationOuterPadding: layoutPickerSlot.decorationOuterPadding
             audioSpectrum: layoutPickerSlot.audioSpectrum
+        }
+    }
+
+    Item {
+        id: cheatsheetSlot
+
+        // Cheatsheet data properties — C++ writes these before each show
+        // (and re-pushes on live mode/rebind refresh).
+        property var shortcuts: []
+        property string currentMode: "snapping"
+        property bool autotileAvailable: true
+        // Card corner radius the surface decoration rounds to (see osdSlot).
+        property real cardCornerRadius: Kirigami.Units.largeSpacing * 2
+        property string fontFamily: ""
+        property real fontSizeScale: 1
+        // Declared-but-unforwarded contract (same as zoneSelectorSlot):
+        // fontWeight/fontItalic/fontUnderline/fontStrikeout are written by
+        // C++ writeFontProperties but CheatsheetContent doesn't consume
+        // them — the sheet keeps the theme's row weight/decoration on
+        // purpose. The declarations MUST stay: deleting one silently
+        // demotes the C++ write to a dead dynamic property.
+        property int fontWeight: Font.Bold
+        property bool fontItalic: false
+        property bool fontUnderline: false
+        property bool fontStrikeout: false
+        // OSD-style content lifecycle gate. C++ toggles false→true around
+        // each show so CheatsheetContent is re-instantiated.
+        property bool loaded: false
+
+        // Surface-shader decoration (Stage d) — same declare-and-forward
+        // contract as the picker slot: C++ writes these with setProperty,
+        // an undeclared name silently becomes a dead dynamic property.
+        property var decorationChain: []
+        property real decorationOuterPadding: 0
+        property var audioSpectrum: []
+
+        anchors.fill: parent
+        // Popup tier — same z as snap-assist / picker (modals are mutually
+        // exclusive in practice; the osdSlot drops below any of them).
+        z: 2
+        opacity: 0
+        visible: false
+
+        Loader {
+            id: cheatsheetLoader
+
+            anchors.fill: parent
+            active: cheatsheetSlot.loaded
+            // SYNCHRONOUS by contract — see snapAssistLoader: beginShow
+            // resolves the shaderAnchor in the same tick as the `loaded`
+            // toggle; an async mount races the entrance animation.
+            sourceComponent: cheatsheetContentComp
+            onLoaded: {
+                if (cheatsheetLoader.item)
+                    cheatsheetLoader.item.dismissRequested.connect(root.cheatsheetDismissRequested);
+            }
+        }
+
+        Component {
+            id: cheatsheetContentComp
+
+            CheatsheetContent {
+                shortcuts: cheatsheetSlot.shortcuts
+                currentMode: cheatsheetSlot.currentMode
+                autotileAvailable: cheatsheetSlot.autotileAvailable
+                fontFamily: cheatsheetSlot.fontFamily
+                fontSizeScale: cheatsheetSlot.fontSizeScale
+            }
+        }
+
+        // Surface-shader decoration (Stage d). SIBLING of cheatsheetLoader.
+        // Captures the loaded content's PopupFrame shaderAnchor and
+        // re-renders it through the resolved "popup.cheatsheet" surface
+        // pack. Inert when the source is empty.
+        SurfaceDecoration {
+            anchors.fill: parent
+            contentItem: cheatsheetLoader.item
+            decorationChain: cheatsheetSlot.decorationChain
+            decorationOuterPadding: cheatsheetSlot.decorationOuterPadding
+            audioSpectrum: cheatsheetSlot.audioSpectrum
         }
     }
 
