@@ -139,23 +139,18 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
 
     // A snapped record's RECORDED screen (its own screenId, or the opening screen
     // when unscreened) is what governs whether it may snap-restore — not the screen
-    // the window happens to open on. True only when that recorded screen is in
-    // snapping mode, resolved in the RECORD'S OWN (desktop, activity) context.
-    // Keying on the record's context — not the live current desktop/activity — is
-    // load-bearing for cross-engine agreement: AutotileEngine::windowOpened runs the
-    // reciprocal gate over the SAME record fields, so both engines compute an
-    // identical verdict regardless of per-screen virtual-desktop overrides. (No
-    // layout manager → permissive, matching the unit-test path.)
+    // the window happens to open on. AutotileEngine::windowOpened runs the
+    // reciprocal gate through the SAME shared predicate
+    // (PhosphorEngine::pendingCrossScreenSnapRestore), so both engines compute an
+    // identical verdict from the same record fields. (No layout manager →
+    // permissive, matching the unit-test path.)
     const auto recordedSnapScreenIsSnapping = [&](const WindowPlacement& p) {
-        if (p.slotFor(engineId()).state != WindowPlacement::stateSnapped()) {
-            return false;
-        }
-        if (!m_layoutManager) {
-            return true;
-        }
-        const QString rec = p.screenId.isEmpty() ? screenId : p.screenId;
-        return m_layoutManager->modeForScreen(rec, p.virtualDesktop, p.activity)
-            == PhosphorZones::AssignmentEntry::Mode::Snapping;
+        return PhosphorEngine::pendingCrossScreenSnapRestore(
+            p, screenId, [&](const QString& rec, int desktop, const QString& activity) {
+                return !m_layoutManager
+                    || m_layoutManager->modeForScreen(rec, desktop, activity)
+                    == PhosphorZones::AssignmentEntry::Mode::Snapping;
+            });
     };
 
     // Screen-mode ownership gate (BEFORE the store branch). A window opening on an
