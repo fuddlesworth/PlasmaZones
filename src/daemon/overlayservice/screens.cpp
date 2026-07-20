@@ -86,7 +86,7 @@ void OverlayService::handleScreenAdded(QScreen* screen)
     // windows exist so the next showAtPosition call finds them ready.
     const bool wasVisible = m_visible;
     if (!wasVisible) {
-        m_visible = true; // transient - initializeOverlay may set it false again
+        m_visible = true; // transient - reset at the end of this function when the daemon was at rest
     }
 
     const QString physScreenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
