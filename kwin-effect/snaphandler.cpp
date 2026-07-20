@@ -389,6 +389,14 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 qCDebug(lcEffect) << "Snap: deferred unfloat window re-minimized, skipping:" << windowId;
                 return;
             }
+            // Mirror the caller-side gate (slotWindowMinimizedChanged only
+            // forwards handleable tileable windows) and the autotile twin's
+            // commit revalidation: the window may have become excluded or
+            // non-tileable during the grace.
+            if (!m_effect->shouldHandleWindow(fw) || !m_effect->isTileableWindow(fw)) {
+                qCDebug(lcEffect) << "Snap: deferred unfloat no longer handleable, skipping:" << windowId;
+                return;
+            }
             const QString currentScreenId = m_effect->getWindowScreenId(fw);
             if (m_effect->autotileHandler()->isAutotileScreen(currentScreenId)) {
                 // The screen flipped to autotile during the grace; that

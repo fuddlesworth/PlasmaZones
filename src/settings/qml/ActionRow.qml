@@ -469,7 +469,15 @@ ColumnLayout {
         // warning above. Gated on a non-empty effectId: an empty override is
         // the "no shader" sentinel and removes the conflict instead.
         Kirigami.Icon {
-            readonly property bool _stockAnimationConflict: row.action.type === "overrideAnimationShader" && (row.action.effectId || "") !== "" && (row.action.event === "window.appearance.minimize" || row.action.event === "window.movement.maximize")
+            readonly property bool _stockAnimationConflict: {
+                if (row.action.type !== "overrideAnimationShader")
+                    return false;
+
+                if ((row.action.effectId || "") === "")
+                    return false;
+
+                return row.action.event === "window.appearance.minimize" || row.action.event === "window.movement.maximize";
+            }
 
             visible: _stockAnimationConflict
             Layout.alignment: Qt.AlignVCenter

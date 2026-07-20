@@ -172,13 +172,6 @@ public:
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
 
-    /// Deferred-commit body of the unminimize→unfloat edge: the restore-net
-    /// queries (dispatched before the unfloat enters the same D-Bus send
-    /// queue, so the daemon answers against pre-unfloat state) plus the
-    /// unfloat itself. Called only from the grace timer in
-    /// handleMinimizeChanged after revalidation; @p window is alive,
-    /// unminimized, and on a snap-mode screen.
-    void commitUnminimizeUnfloat(KWin::EffectWindow* window, const QString& windowId, const QString& screenId);
     /// Drop @p windowId from the minimize-float set (window closed). Returns
     /// true if it was present. Also cancels any deferred unfloat commit so a
     /// grace timer never fires against a destroyed window.
@@ -225,6 +218,14 @@ public Q_SLOTS:
                              const PhosphorProtocol::EmptyZoneList& emptyZones);
 
 private:
+    /// Deferred-commit body of the unminimize→unfloat edge: the restore-net
+    /// queries (dispatched before the unfloat enters the same D-Bus send
+    /// queue, so the daemon answers against pre-unfloat state) plus the
+    /// unfloat itself. Called only from the grace timer in
+    /// handleMinimizeChanged after revalidation; @p window is alive,
+    /// unminimized, handleable, and on a snap-mode screen.
+    void commitUnminimizeUnfloat(KWin::EffectWindow* window, const QString& windowId, const QString& screenId);
+
     PlasmaZonesEffect* m_effect;
     // Snapping focus-follows-mouse (Snapping.Behavior.FocusFollowsMouse). When
     // on, moving the cursor over a snapped window activates it. Mirrors autotile
@@ -250,6 +251,11 @@ private:
     QHash<QString, CachedSnapRestore> m_restoreCache;
     // Snap-mode windows floated because they were minimized (mirrors
     // AutotileHandler::m_minimizeFloatedWindows). Removed on unminimize / close.
+    // Deliberately NOT cleared on daemon restart, unlike the autotile twin
+    // (AutotileHandler::onDaemonReady): the restore net in
+    // commitUnminimizeUnfloat is snap's restart-recovery path, and it only
+    // fires for windows still in this set — clearing on daemon-ready would
+    // strand exactly the windows the net exists to recover.
     QSet<QString> m_minimizeFloatedWindows;
     // Pending deferred unminimize→unfloat commits, keyed by windowId — the
     // snap-mode mirror of AutotileHandler::m_pendingUnminimizeUnfloat, for the
