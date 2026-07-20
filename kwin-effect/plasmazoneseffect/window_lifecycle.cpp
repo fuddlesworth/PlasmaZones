@@ -1147,29 +1147,23 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     && it->targetGeometry.isValid() && safeW->frameGeometry() != it->spawnGeometry) {
                     endRestoreSuppression(safeW.data());
                 }
-                // Body 2 — debounced daemon shadow
-                if (!shouldHandleWindow(safeW)) {
-                    return;
-                }
+                // Body 2 — debounced daemon shadow. Per tick this ONLY stashes
+                // the latest geometry: the shouldHandleWindow exclusion gate
+                // (an uncached rule resolve over a freshly built ruleQuery) and
+                // the decoration resync both moved into
+                // flushPendingFrameGeometry, so they run once per 50ms flush
+                // per window instead of on every geometry tick — animated
+                // geometry (retiles, morphs, interactive resize) fired them
+                // hundreds of times per second (discussion #816).
                 const QString windowId = getWindowId(safeW);
                 if (windowId.isEmpty()) {
                     return;
                 }
-                // Self-heal a noBorder reset KWin issues asynchronously after a
-                // cross-OUTPUT move. For a rule-owned (title-bar-hidden) window
-                // the manager already believes it hidden, so the synchronous
-                // resync in updateAllDecorations bails ("still suppressed") when it
-                // runs before KWin re-evaluates the decoration. KWin grows the
-                // frame by the title-bar height when it re-decorates, firing this
-                // very signal: resyncWindow re-hides exactly the windows the
-                // manager owns and believes hidden whose decoration drifted back,
-                // and is a self-guarding no-op otherwise.
-                m_decorationManager->resyncWindow(windowId);
                 const QRect geo = safeW->frameGeometry().toRect();
                 if (geo.width() <= 0 || geo.height() <= 0) {
                     return;
                 }
-                m_pendingFrameGeometry[windowId] = geo;
+                m_pendingFrameGeometry[windowId] = {geo, safeW};
                 if (!m_frameGeometryFlushTimer->isActive()) {
                     m_frameGeometryFlushTimer->start();
                 }

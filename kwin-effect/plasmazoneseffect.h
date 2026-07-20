@@ -927,7 +927,20 @@ private:
     // WindowTracking::setFrameGeometry. Populates the daemon's frame-geometry
     // shadow used by daemon-local shortcut handlers (float toggle, etc.) so they
     // can read fresh geometry without a round-trip.
-    QHash<QString, QRect> m_pendingFrameGeometry;
+    //
+    // The window pointer rides along so the debounced flush can run the
+    // shouldHandleWindow exclusion gate and the decoration resync ONCE per
+    // flush instead of on every geometry tick — during animated geometry
+    // (retiles, morphs, interactive resize) the per-tick gate was an uncached
+    // rule resolve plus a full ruleQuery build, hundreds of times per second
+    // (discussion #816). QPointer auto-nulls if the window dies before the
+    // flush; the flush skips those entries.
+    struct PendingFrameGeometry
+    {
+        QRect geometry;
+        QPointer<KWin::EffectWindow> window;
+    };
+    QHash<QString, PendingFrameGeometry> m_pendingFrameGeometry;
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 
