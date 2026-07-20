@@ -292,8 +292,8 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // to underlying windows. Post-shell every kbd-None overlay shares the
     // screen-sized shell surface - there's no per-slot input region the
     // daemon can hand to the compositor. The pragmatic split: only MODAL
-    // slots (snap-assist, layout picker) grab input. OSD / main overlay /
-    // zone-selector are purely visual:
+    // slots (snap-assist, layout picker, cheatsheet) grab input. OSD /
+    // main overlay / zone-selector are purely visual:
     //   - OSDs auto-dismiss on a timer; a click-to-dismiss MouseArea
     //     inside the OSD content is the accepted casualty - the
     //     alternative is the daemon eating every click on the screen

@@ -362,8 +362,8 @@ public:
     // Autotile group hides regardless of mode).
     void showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,
                         bool autotileAvailable);
-    void hideCheatsheet();
-    bool isCheatsheetVisible() const;
+    void hideCheatsheet() override;
+    bool isCheatsheetVisible() const override;
     /// Re-push model/mode into an already-visible cheatsheet (live refilter
     /// on mode switch or rebind). No-op when hidden — the next show
     /// re-resolves everything anyway.

@@ -204,9 +204,11 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
     // factory default. Skip the call when the compiled-in default hasn't
     // changed since the last send — each call otherwise costs a D-Bus
     // round-trip and a kglobalshortcutsrc write.
+    bool pushed = false;
     if (entry.lastDefault != defaultSeq) {
         KGlobalAccel::self()->setDefaultShortcut(entry.action, {defaultSeq});
         entry.lastDefault = defaultSeq;
+        pushed = true;
     }
     // setShortcut actually grabs the key. Uses the default autoloading flag
     // so any user override persisted in kglobalshortcutsrc wins over the
@@ -214,6 +216,7 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
     if (entry.lastCurrent != currentSeq) {
         KGlobalAccel::self()->setShortcut(entry.action, {currentSeq});
         entry.lastCurrent = currentSeq;
+        pushed = true;
     }
     // Seed the dedup gate with the post-set effective value so
     // kglobalaccel's echo of OUR OWN setShortcut doesn't fire
@@ -228,7 +231,16 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
     // queued when a re-register interleaves, this seed absorbs that echo
     // and one display refresh is lost — the grab itself stays correct
     // (autoload), so the cost is a stale label until the next report.
-    m_impl->lastReportedTriggers.insert(id, KGlobalAccel::self()->shortcut(entry.action));
+    //
+    // Gated on `pushed`: a re-register that changed neither sequence (e.g.
+    // Registry::flush re-registering to flip only the persistent flag) sent
+    // nothing to kglobalaccel, so the existing seed is still current and
+    // the read-back would be a wasted blocking D-Bus round-trip. First
+    // registration always seeds (an absent cache entry means currentTriggers
+    // has nothing to serve from).
+    if (pushed || !m_impl->lastReportedTriggers.contains(id)) {
+        m_impl->lastReportedTriggers.insert(id, KGlobalAccel::self()->shortcut(entry.action));
+    }
 }
 
 void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& /*defaultSeq*/,
@@ -296,15 +308,29 @@ std::optional<QStringList> KGlobalAccelBackend::currentTriggers(const QString& i
         // Unknown id — nothing to report; the caller's own value stands.
         return std::nullopt;
     }
-    // KGlobalAccel::shortcut returns the ACTIVE sequences — including a user
-    // override persisted in kglobalshortcutsrc, which setShortcut's
-    // autoloading behaviour lets win over whatever currentSeq we pushed.
-    // This is exactly the "what does the user really press" answer that our
-    // own bookkeeping (lastCurrent) cannot give. An engaged-but-empty
-    // result is AUTHORITATIVE: the user cleared the binding, and falling
-    // back to the stored sequence would display a key that no longer works.
+    // Serve from lastReportedTriggers instead of a live
+    // KGlobalAccel::shortcut() call: every registered id is seeded at
+    // register/update time with the post-set effective value (which includes
+    // any kglobalshortcutsrc user override thanks to setShortcut's
+    // autoloading), and globalShortcutChanged keeps the cache current on
+    // external rebinds. A live query here would cost one blocking D-Bus
+    // round-trip to kglobalacceld per call — consumers like the shortcut
+    // cheatsheet query every id in one burst on the GUI thread. An
+    // engaged-but-empty result is AUTHORITATIVE: the user cleared the
+    // binding, and falling back to the stored sequence would display a key
+    // that no longer works.
+    QList<QKeySequence> seqs;
+    const auto cached = m_impl->lastReportedTriggers.constFind(id);
+    if (cached != m_impl->lastReportedTriggers.constEnd()) {
+        seqs = *cached;
+    } else {
+        // Unreached in practice (registerShortcut always seeds), but a live
+        // fallback keeps the answer correct if the seeding contract ever
+        // changes. Cache the result so repeat queries stay free.
+        seqs = KGlobalAccel::self()->shortcut(it->action);
+        m_impl->lastReportedTriggers.insert(id, seqs);
+    }
     QStringList out;
-    const QList<QKeySequence> seqs = KGlobalAccel::self()->shortcut(it->action);
     for (const QKeySequence& seq : seqs) {
         if (!seq.isEmpty()) {
             out.append(seq.toString(QKeySequence::PortableText));

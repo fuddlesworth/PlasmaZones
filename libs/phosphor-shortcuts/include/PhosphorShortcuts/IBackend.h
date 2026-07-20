@@ -125,14 +125,22 @@ public:
      * Returned as display strings rather than QKeySequence because the XDG
      * Portal only reports a human-readable `trigger_description`; backends
      * that do have structured sequences (KGlobalAccel) return
-     * QKeySequence::toString(QKeySequence::PortableText) per sequence.
+     * QKeySequence::toString(QKeySequence::PortableText) per sequence. The
+     * strings are DISPLAY-ONLY and not format-stable across backends —
+     * Portal relays the compositor's localized description verbatim while
+     * KGlobalAccel yields PortableText — so callers must not string-compare
+     * results across backends or parse them back into sequences.
      *
      * Tri-state on purpose:
      *  - std::nullopt   → this backend cannot report for the id; callers
      *    fall back to their own stored current sequence.
-     *  - engaged, empty → the backend AUTHORITATIVELY reports the id as
-     *    unbound (e.g. the user cleared the key in System Settings).
-     *    Callers must NOT fall back — the stored sequence is stale.
+     *  - engaged, empty → the backend reports the id as unbound as far as
+     *    it can tell (e.g. the user cleared the key in System Settings).
+     *    Callers must NOT fall back — the stored sequence is stale. This is
+     *    a best-effort report, not a hard guarantee that the user cleared
+     *    the key: a momentarily unavailable binding service (kglobalacceld
+     *    down, grab not yet landed) can also read back empty, in which case
+     *    the display shows unbound until the next triggersChanged report.
      *  - engaged, non-empty → the effective trigger strings.
      * Folding the first two into one empty list made a cleared binding
      * display as its stale stored value.

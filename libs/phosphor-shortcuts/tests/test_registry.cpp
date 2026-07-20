@@ -716,6 +716,24 @@ private Q_SLOTS:
         QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.ghost")), QStringList());
     }
 
+    void effectiveTriggers_afterBackendDestroyed_fallsBackToStored()
+    {
+        // Pins the null-backend branch: a destroyed backend (teardown
+        // ordering, same scenario as flushAfterBackendDestroyed) must not
+        // crash and must fall back to the registry's own stored current
+        // sequence.
+        auto backend = std::make_unique<FakeBackend>();
+        Registry registry(backend.get());
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        backend.reset(); // QPointer in Registry::m_backend goes null
+
+        QCOMPARE(registry.effectiveTriggers(QStringLiteral("pz.a")),
+                 QStringList{QKeySequence(QStringLiteral("Meta+1")).toString(QKeySequence::PortableText)});
+    }
+
     void effectiveTriggers_backendEmptyIsAuthoritativeUnbound()
     {
         // A backend that CAN report and reports an empty list means the

@@ -120,7 +120,11 @@ Item {
         id: metrics
 
         readonly property int paddingSide: Kirigami.Units.gridUnit
-        readonly property int columnWidth: Kirigami.Units.gridUnit * 18
+        // Preferred width, shrunk to the available screen width when even a
+        // single column at the preferred size would push the card (content +
+        // side padding) past the screen edge — narrow screens get a
+        // narrower, still fully visible column instead of clipping.
+        readonly property int columnWidth: Math.min(Kirigami.Units.gridUnit * 18, Math.max(Kirigami.Units.gridUnit * 6, Math.floor(root.width * 0.9) - paddingSide * 2))
         readonly property int columnSpacing: Kirigami.Units.gridUnit * 2
         readonly property int maxColumns: 3
         readonly property int columns: {
@@ -129,7 +133,7 @@ Item {
             return Math.max(1, Math.min(maxColumns, Math.min(fit, root.groups.length)));
         }
         readonly property int contentWidth: columns * columnWidth + (columns - 1) * columnSpacing
-        readonly property int maxContentHeight: Math.round(root.height * 0.85) - paddingSide * 3 - Math.round(Kirigami.Theme.defaultFont.pixelSize * 1.4)
+        readonly property int maxContentHeight: Math.round(root.height * 0.85) - paddingSide * 3 - titleLabel.height
     }
 
     // Backdrop — click outside to dismiss, same bare click-only backdrop
@@ -200,6 +204,9 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             width: metrics.contentWidth
             height: root.groups.length === 0 ? emptyStateLabel.height : Math.min(bucketsRow.implicitHeight, metrics.maxContentHeight)
+            // Empty state: the fallback label occupies this rect instead —
+            // hide the (empty) scroller so exactly one item owns the slot.
+            visible: root.groups.length > 0
             contentWidth: width
             contentHeight: bucketsRow.implicitHeight
             clip: true

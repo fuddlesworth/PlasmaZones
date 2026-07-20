@@ -712,14 +712,14 @@ void Daemon::toggleCheatsheet()
     showCheatsheetOnCursorScreen();
 }
 
-bool Daemon::showCheatsheetOnCursorScreen()
+void Daemon::showCheatsheetOnCursorScreen()
 {
     if (!m_overlayService || !m_shortcutManager) {
-        return false;
+        return;
     }
     if (m_settings && !m_settings->cheatsheetEnabled()) {
         qCDebug(lcDaemon) << "Cheatsheet: disabled in settings";
-        return false;
+        return;
     }
     // No cheatsheet during an interactive drag: the drag's shared
     // cancel-overlay grab owns the Escape key, so our dismiss grab below
@@ -728,7 +728,7 @@ bool Daemon::showCheatsheetOnCursorScreen()
     // re-press after dropping the window.
     if (m_windowDragAdaptor && m_windowDragAdaptor->isDragInFlight()) {
         qCDebug(lcDaemon) << "Cheatsheet: suppressed during interactive drag";
-        return false;
+        return;
     }
 
     // Screen-targeted like the picker and the mode toggle: the user's
@@ -736,7 +736,7 @@ bool Daemon::showCheatsheetOnCursorScreen()
     const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "Cheatsheet: no screen info";
-        return false;
+        return;
     }
 
     // At most one Escape-consuming modal at a time (see kCheatsheetDismissId
@@ -769,7 +769,6 @@ bool Daemon::showCheatsheetOnCursorScreen()
                                                      }
                                                  });
     }
-    return m_overlayService->isCheatsheetVisible();
 }
 
 void Daemon::refreshCheatsheetIfVisible()

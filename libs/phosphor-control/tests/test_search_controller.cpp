@@ -213,6 +213,32 @@ private Q_SLOTS:
         QVERIFY(found);
     }
 
+    void actionEntryWithEmptySubtitleSkipsBreadcrumbAutofill()
+    {
+        // An Action with no producer subtitle must stay subtitle-less:
+        // actions are commands, not page-resident targets, so the breadcrumb
+        // autofill (which would run breadcrumbFor on the empty pageId) is
+        // skipped for them entirely.
+        SearchController sc(m_app);
+        SearchEntry e;
+        e.kind = SearchEntry::Kind::Action;
+        e.actionId = QStringLiteral("some-command");
+        e.title = QStringLiteral("Bare Command");
+        e.keywords = {QStringLiteral("barecmd")};
+        sc.addEntry(e);
+
+        sc.setQuery(QStringLiteral("barecmd"));
+        bool found = false;
+        for (const QVariant& v : sc.results()) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("title")).toString() == QStringLiteral("Bare Command")) {
+                found = true;
+                QVERIFY(m.value(QStringLiteral("subtitle")).toString().isEmpty());
+            }
+        }
+        QVERIFY(found);
+    }
+
     void keywordEnablesSynonymSearch()
     {
         SearchController sc(m_app);

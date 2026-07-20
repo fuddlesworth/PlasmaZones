@@ -259,12 +259,12 @@ public:
     /// Release the cheatsheet's Escape ad-hoc grab. Connected to
     /// OverlayService::cheatsheetDismissed in start.cpp.
     void onCheatsheetDismissed();
-    /// Show path for the toggle shortcut: resolve cursor screen, catalog,
-    /// per-screen mode; dismiss sibling Escape-consuming modals; show and
-    /// bind the Escape grab. Returns true when the sheet became visible.
-    bool showCheatsheetOnCursorScreen();
 
 private:
+    /// Show path for the toggle shortcut: resolve cursor screen, catalog,
+    /// per-screen mode; dismiss sibling Escape-consuming modals; show and
+    /// bind the Escape grab. Only called from toggleCheatsheet().
+    void showCheatsheetOnCursorScreen();
     /**
      * @brief Show layout OSD for an autotile algorithm (visual zone preview)
      *

@@ -144,6 +144,15 @@ public:
     virtual void hideLayoutPicker() = 0;
     virtual bool isLayoutPickerVisible() const = 0;
 
+    // Shortcut cheatsheet overlay (display-only shortcut reference card).
+    // Mirrors the layout-picker split: the interface carries the hide/query
+    // surface an interface holder needs to arbitrate Escape-consuming
+    // modals; the model-typed show/refresh calls stay on the concrete
+    // OverlayService (daemon-mediated push, like showLayoutPicker's data
+    // plumbing).
+    virtual void hideCheatsheet() = 0;
+    virtual bool isCheatsheetVisible() const = 0;
+
 Q_SIGNALS:
     void visibilityChanged(bool visible);
     void zoneActivated(PhosphorZones::Zone* zone);

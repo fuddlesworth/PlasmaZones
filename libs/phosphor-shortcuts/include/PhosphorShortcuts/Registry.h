@@ -108,6 +108,12 @@ public:
      * engaged-empty and is honored as unbound); falls back to the
      * registry's own current sequence only when the backend cannot report
      * at all. Empty means the id is genuinely unbound (or unknown).
+     *
+     * The strings are DISPLAY-ONLY and not format-stable across backends
+     * (see IBackend::currentTriggers): KGlobalAccel yields PortableText
+     * while Portal relays the compositor's localized description. Don't
+     * string-compare results across backends or parse them back into
+     * QKeySequence.
      */
     QStringList effectiveTriggers(const QString& id) const;
 
