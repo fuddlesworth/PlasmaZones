@@ -24,6 +24,10 @@ struct WindowMetadata
     QString windowRole{}; ///< X11 WM_WINDOW_ROLE; empty for Wayland-native windows
     int pid = 0; ///< process id; 0 = unknown
     int virtualDesktop = 0; ///< 1-based x11 desktop number; 0 = all desktops / unknown
+    /// Full desktop list when the window spans SEVERAL (but not all) desktops;
+    /// empty for the common single-desktop / sticky / unknown cases. When
+    /// non-empty, virtualDesktop equals the first entry.
+    QList<int> virtualDesktops{};
     QString activity{}; ///< activity UUID; empty = all activities / unknown
     PhosphorProtocol::WindowType windowType = PhosphorProtocol::WindowType::Unknown;
 
@@ -65,9 +69,9 @@ struct WindowMetadata
     {
         return appId == other.appId && desktopFile == other.desktopFile && title == other.title
             && windowRole == other.windowRole && pid == other.pid && virtualDesktop == other.virtualDesktop
-            && activity == other.activity && windowType == other.windowType && isMinimized == other.isMinimized
-            && isFullscreen == other.isFullscreen && isSticky == other.isSticky && isMaximized == other.isMaximized
-            && isFocused == other.isFocused && isTransient == other.isTransient
+            && virtualDesktops == other.virtualDesktops && activity == other.activity && windowType == other.windowType
+            && isMinimized == other.isMinimized && isFullscreen == other.isFullscreen && isSticky == other.isSticky
+            && isMaximized == other.isMaximized && isFocused == other.isFocused && isTransient == other.isTransient
             && isNotification == other.isNotification && keepAbove == other.keepAbove && keepBelow == other.keepBelow
             && skipTaskbar == other.skipTaskbar && skipPager == other.skipPager && skipSwitcher == other.skipSwitcher
             && isModal == other.isModal && hasDecoration == other.hasDecoration && isResizable == other.isResizable
@@ -94,12 +98,14 @@ public:
 
     std::optional<WindowMetadata> metadata(const QString& instanceId) const;
     /// The window's own context for per-window mode resolution: its virtual
-    /// desktop (0 = all/unknown) and activity (empty = all/unknown), read
-    /// without copying the full ~30-field metadata record — this sits on the
+    /// desktop (0 = all/unknown), the full desktop list when it spans several
+    /// (empty otherwise), and activity (empty = all/unknown), read without
+    /// copying the full ~30-field metadata record — this sits on the
     /// per-query float-resolver path. nullopt when the instance is unknown.
     struct WindowContext
     {
         int virtualDesktop = 0;
+        QList<int> virtualDesktops;
         QString activity;
     };
     std::optional<WindowContext> windowContext(const QString& instanceId) const;

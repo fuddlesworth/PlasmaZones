@@ -829,6 +829,7 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             meta.positionX = existing->positionX;
             meta.positionY = existing->positionY;
             meta.captionNormal = existing->captionNormal;
+            meta.virtualDesktops = existing->virtualDesktops;
         }
     } else {
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
@@ -866,6 +867,19 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         meta.positionX = optInt(Key::PositionX);
         meta.positionY = optInt(Key::PositionY);
         meta.captionNormal = optString(Key::CaptionNormal);
+        // Multi-desktop span list (absent for single-desktop / sticky windows,
+        // so an absent key correctly clears a previous span). Same lenient
+        // QVariant conversion policy as the fields above.
+        if (const auto it = extended.constFind(QString(Key::VirtualDesktops)); it != extended.constEnd()) {
+            const QVariantList list = it.value().toList();
+            meta.virtualDesktops.reserve(list.size());
+            for (const QVariant& v : list) {
+                const int d = v.toInt();
+                if (d > 0) {
+                    meta.virtualDesktops.append(d);
+                }
+            }
+        }
     }
 
     // Universal canonical seed. setWindowMetadata is the per-window choke point —

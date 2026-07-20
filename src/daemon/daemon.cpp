@@ -1667,13 +1667,22 @@ bool Daemon::init()
                 screenId = wts->screenForWindow(windowId);
             }
             if (!screenId.isEmpty() && m_layoutManager) {
-                int desktop = currentDesktopForScreen(screenId);
+                const int screenCurrent = currentDesktopForScreen(screenId);
+                int desktop = screenCurrent;
                 QString activity = currentActivity();
                 if (wts && wts->windowRegistry()) {
                     const auto ctx =
                         wts->windowRegistry()->windowContext(::PhosphorIdentity::WindowId::extractInstanceId(windowId));
                     if (ctx && ctx->virtualDesktop > 0) {
                         desktop = ctx->virtualDesktop;
+                    }
+                    // A window spanning SEVERAL desktops carries the full
+                    // list; when the screen currently shows one of them, that
+                    // one is the live context governing the window — prefer
+                    // it over the arbitrary first entry virtualDesktop pins
+                    // to. Single-desktop and sticky windows carry no list.
+                    if (ctx && ctx->virtualDesktops.size() > 1 && ctx->virtualDesktops.contains(screenCurrent)) {
+                        desktop = screenCurrent;
                     }
                     if (ctx && !ctx->activity.isEmpty()) {
                         activity = ctx->activity;

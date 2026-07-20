@@ -115,12 +115,24 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
 
     // virtualDesktop: 0 = on all desktops / unknown; otherwise the 1-based x11
     // desktop number of the window's first desktop. A window spanning several
-    // (but not all) desktops reports its first — the registry stores one int.
+    // (but not all) desktops reports its first here and the FULL list via the
+    // VirtualDesktops extended key below, so the daemon's per-window mode
+    // resolution can prefer whichever spanned desktop the screen currently
+    // shows instead of pinning to the first.
     int virtualDesktop = 0;
+    QList<int> spannedDesktops;
     if (window) {
         const QList<KWin::VirtualDesktop*> desktops = window->desktops();
         if (!desktops.isEmpty() && desktops.first()) {
             virtualDesktop = static_cast<int>(desktops.first()->x11DesktopNumber());
+        }
+        if (desktops.size() > 1) {
+            spannedDesktops.reserve(desktops.size());
+            for (const KWin::VirtualDesktop* vd : desktops) {
+                if (vd) {
+                    spannedDesktops.append(static_cast<int>(vd->x11DesktopNumber()));
+                }
+            }
         }
     }
 
@@ -217,6 +229,14 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         }
         if (props.captionNormal) {
             extended.insert(Key::CaptionNormal, *props.captionNormal);
+        }
+        if (!spannedDesktops.isEmpty()) {
+            QVariantList desktopsList;
+            desktopsList.reserve(spannedDesktops.size());
+            for (int d : std::as_const(spannedDesktops)) {
+                desktopsList.append(d);
+            }
+            extended.insert(Key::VirtualDesktops, desktopsList);
         }
     }
 
