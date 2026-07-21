@@ -386,25 +386,27 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
         // by its opposite is a valid source, and re-seeding costs nothing but a
         // shared_ptr copy.
         //
-        // Without this, fast toggling dead-ends on the THIRD leg: the show leg
-        // consumes the cache entry at its first paint, the hide leg that
-        // displaces it re-seeds only when IT paints, and a show leg arriving in
-        // that gap finds an empty cache and takes the skip below — killing the
-        // leg on screen and starting nothing. Re-seeding here keeps the chain
-        // fed no matter how fast the legs displace each other. A hide leg that
-        // does reach its own capture overwrites this with a fresh one.
+        // Without this, fast toggling dead-ends on the SECOND show leg (the
+        // fourth leg overall — a sequence can only start with a hide leg, since
+        // nothing else seeds the cache): the first show leg consumes the entry
+        // at its first paint, the hide leg that displaces it re-seeds only when
+        // IT paints, and a show leg arriving in that gap finds an empty cache
+        // and takes the skip below — killing the leg on screen and starting
+        // nothing. Re-seeding here keeps the chain fed no matter how fast the
+        // legs displace each other. A hide leg that does reach its own capture
+        // overwrites this with a fresh one.
         const auto live = m_active.find(screen);
-        if (live != m_active.end() && live->second.kind != Kind::Switch && live->second.kind != desiredKind
-            && live->second.captured && live->second.toTex
-            && m_peekDesktopCache.find(screen) == m_peekDesktopCache.end()) {
-            m_peekDesktopCache[screen] = live->second.toTex;
+        auto cached = m_peekDesktopCache.find(screen);
+        if (cached == m_peekDesktopCache.end() && live != m_active.end() && live->second.kind != Kind::Switch
+            && live->second.kind != desiredKind && live->second.captured && live->second.toTex) {
+            cached = m_peekDesktopCache.emplace(screen, live->second.toTex).first;
         }
         // The show leg blends FROM the bare desktop, which cannot be captured
         // once the windows are visible again — it replays the hide leg's cached
         // capture. No cache for this output (effect loaded mid-show-desktop, or
         // the hide leg was abandoned before its capture) → skip; the restored
         // windows appear instantly there, which is KWin's default behaviour.
-        if (!showing && m_peekDesktopCache.find(screen) == m_peekDesktopCache.end()) {
+        if (!showing && cached == m_peekDesktopCache.end()) {
             // Also drop any STALE hide-leg entry still mapped to this output
             // (a re-toggle before that leg's first paint is exactly how the
             // cache ends up unseeded). Left alive it would deferred-capture
@@ -440,7 +442,7 @@ void DesktopTransitionManager::beginPeek(bool showing, const QString& effectId, 
         // two kinds completely differently.
         // `live` is still valid here: the only erase above is followed by a
         // `continue`, and nothing between them touches m_active.
-        if (live != m_active.end() && live->second.kind != Kind::Switch && live->second.kind != tr.kind) {
+        if (live != m_active.end() && live->second.kind != Kind::Switch && live->second.kind != desiredKind) {
             const OutputTransition& old = live->second;
             // The split is on the NEW leg's curve, because that alone decides
             // how paintOutput reads t back out: easeProgress returns
