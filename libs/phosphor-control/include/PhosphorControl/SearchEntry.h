@@ -54,6 +54,12 @@ struct SearchEntry
     QString icon;
     /// Extra synonyms / search terms (translated). Not displayed.
     QStringList keywords;
+    /// True when the target row/card is only rendered in advanced mode, on a
+    /// page that itself shows in BOTH modes. The registry's page-level tier
+    /// cannot express this: the host page is visible, so without this flag a
+    /// simple-mode search offers a result that reveals nothing. Producers set
+    /// it to mirror the row's own advanced-only declaration.
+    bool advancedOnly = false;
 
     /// The navigable address consumed by SettingsController::navigateTo, which
     /// splits on the FIRST '#'. Page ids must therefore not contain '#' (they

@@ -129,6 +129,22 @@ Flickable {
         // This reveal wins over any anchor still awaiting registration.
         settingsFlickable._pendingRevealAnchor = "";
 
+        // An invisible target has no usable geometry: an advanced-only row in
+        // simple mode collapses to zero height, so scrolling to it lands on
+        // nothing and pulses the highlight over an empty strip. The search
+        // index filters these out by tier already (SearchEntry.advancedOnly),
+        // so reaching here means the two disagreed — fall back to the top of
+        // the page, which is at least a real destination. Checks `visible`
+        // (effective visibility) rather than the advancedOnly flag so any
+        // hiding condition is covered, not just the mode tier.
+        if (!entry.item.visible) {
+            settingsFlickable._revealPendingItem = null;
+            revealSettleTimer.stop();
+            revealScrollAnim.to = 0;
+            revealScrollAnim.restart();
+            return;
+        }
+
         var card = entry.card;
         if (card && card.collapsible === true && card.collapsed === true) {
             // Expand, then settle: drive the post-expand scroll off a one-shot

@@ -212,9 +212,18 @@ QVector<SearchEntry> SearchController::buildIndex() const
     // without this filter BOTH show up in either mode and one of them
     // navigates nowhere useful. Actions are dispatched by actionId rather
     // than by page address (and carry no pageId), so they are always kept.
+    // An entry may also be advanced-only WITHIN a page both modes show (a row
+    // or card the page hides in simple mode). The page-level check cannot see
+    // that, so AND in the entry's own tier: otherwise simple mode offers a
+    // result whose reveal target is collapsed to zero height.
     const auto tierAllows = [this](const SearchEntry& e) {
-        return e.kind == SearchEntry::Kind::Action || e.pageId.isEmpty()
-            || m_app->registry()->pageAllowedInCurrentMode(e.pageId);
+        if (e.kind == SearchEntry::Kind::Action || e.pageId.isEmpty()) {
+            return true;
+        }
+        if (!m_app->registry()->pageAllowedInCurrentMode(e.pageId)) {
+            return false;
+        }
+        return !e.advancedOnly || m_app->registry()->showAdvanced();
     };
 
     for (SearchEntry e : m_staticEntries) {

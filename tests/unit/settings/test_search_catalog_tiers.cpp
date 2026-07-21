@@ -1,0 +1,281 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_search_catalog_tiers.cpp
+ * @brief Keeps the search catalogue's advanced-only flags in step with the QML.
+ *
+ * A row's advanced-mode tier is declared in QML (`advancedOnly: true`, or a
+ * `visible:` binding gated on `advancedMode`). The global search index is built
+ * in C++ from searchcatalog.cpp before any page is instantiated, so it cannot
+ * read that declaration at runtime — the QML anchor registry is per-page and
+ * only populates once a page is built. The flag therefore has to be mirrored
+ * into the catalogue by hand, and a hand-mirrored fact drifts.
+ *
+ * This test removes the drift: it parses the QML for anchors that sit inside an
+ * advanced-gated block, parses the catalogue for the entries carrying
+ * `advancedOnly=`, and fails when the two disagree in either direction. Getting
+ * it wrong is user-visible both ways: a missing flag offers a simple-mode search
+ * result that reveals a collapsed row, and a spurious one hides a setting the
+ * user can actually reach.
+ *
+ * Scope limit, stated honestly: attribution is per FILE. An anchor declared
+ * inside a shared card component (WindowFilterCard's `windowFiltering`) whose
+ * tier is set by the HOST page is invisible to this parse, because the
+ * declaration and the anchor live in different files. Those pairs are listed in
+ * kCrossFileAdvanced below and asserted from that list instead. Adding a shared
+ * card with a host-set tier means adding it there too.
+ */
+
+#include <QTest>
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QRegularExpression>
+#include <QSet>
+#include <QString>
+#include <QTextStream>
+
+namespace {
+
+/// (pageId, anchor) pairs whose anchor is declared in a shared card component
+/// but whose advanced-only tier is set by the hosting page. See the file
+/// comment — the per-file parse cannot see these.
+const QSet<QString>& crossFileAdvanced()
+{
+    // window-appearance hosts WindowFilterCard with `advancedOnly: true`;
+    // general hosts the same card untiered, so only the former is listed.
+    static const QSet<QString> kSet{
+        QStringLiteral("window-appearance/windowFiltering"),
+        QStringLiteral("window-appearance/excludeTransient"),
+        QStringLiteral("window-appearance/minimumWindowWidth"),
+        QStringLiteral("window-appearance/minimumWindowHeight"),
+    };
+    return kSet;
+}
+
+QString readAll(const QString& path)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+    return QString::fromUtf8(f.readAll());
+}
+
+/// Strip line comments only. Block comments are deliberately KEPT: the
+/// catalogue marks the flag with an argument annotation (`/*advancedOnly=*/`),
+/// so removing block comments would erase the very marker this test reads.
+QString stripLineComments(const QString& src)
+{
+    QString out;
+    const QStringList lines = src.split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        const int idx = line.indexOf(QStringLiteral("//"));
+        out += (idx >= 0 ? line.left(idx) : line);
+        out += QLatin1Char('\n');
+    }
+    return out;
+}
+
+/// Line AND block comments — for the QML side, where a commented-out
+/// `advancedOnly:` must not count as a live declaration.
+QString stripComments(const QString& src)
+{
+    QString out = stripLineComments(src);
+    out.remove(QRegularExpression(QStringLiteral("/\\*.*?\\*/"), QRegularExpression::DotMatchesEverythingOption));
+    return out;
+}
+
+struct Block
+{
+    int start = 0;
+    int end = 0;
+    QList<int> childStarts;
+    QList<int> childEnds;
+};
+
+/// Every brace-delimited block, each carrying its direct children's spans so
+/// the caller can look at a block's OWN body. Without excluding nested blocks a
+/// parent inherits any `advancedOnly` its children declare, which would mark
+/// every anchor on the page.
+QList<Block> parseBlocks(const QString& src)
+{
+    QList<Block> all;
+    QList<Block> stack;
+    for (int i = 0; i < src.size(); ++i) {
+        const QChar ch = src.at(i);
+        if (ch == QLatin1Char('{')) {
+            Block b;
+            b.start = i;
+            stack.append(b);
+        } else if (ch == QLatin1Char('}') && !stack.isEmpty()) {
+            Block b = stack.takeLast();
+            b.end = i;
+            if (!stack.isEmpty()) {
+                stack.last().childStarts.append(b.start);
+                stack.last().childEnds.append(b.end);
+            }
+            all.append(b);
+        }
+    }
+    return all;
+}
+
+QString ownBody(const QString& src, const Block& b)
+{
+    QString out;
+    int prev = b.start;
+    for (int i = 0; i < b.childStarts.size(); ++i) {
+        out += src.mid(prev, b.childStarts.at(i) - prev);
+        prev = b.childEnds.at(i) + 1;
+    }
+    out += src.mid(prev, b.end - prev);
+    return out;
+}
+
+bool declaresAdvancedGate(const QString& body)
+{
+    static const QRegularExpression kProp(QStringLiteral("\\badvancedOnly\\s*:\\s*true"));
+    static const QRegularExpression kBinding(QStringLiteral("\\bvisible\\s*:[^\\n]*\\badvancedMode\\b"));
+    return body.contains(kProp) || body.contains(kBinding);
+}
+
+/// Anchors in @p qmlPath that sit inside an advanced-gated block.
+QSet<QString> advancedAnchorsIn(const QString& qmlPath)
+{
+    const QString src = stripComments(readAll(qmlPath));
+    const QList<Block> blocks = parseBlocks(src);
+
+    QList<QPair<int, int>> gated;
+    for (const Block& b : blocks) {
+        if (declaresAdvancedGate(ownBody(src, b))) {
+            gated.append({b.start, b.end});
+        }
+    }
+
+    QSet<QString> out;
+    static const QRegularExpression kAnchor(QStringLiteral("\\bsearchAnchor\\s*:\\s*\"([^\"]+)\""));
+    auto it = kAnchor.globalMatch(src);
+    while (it.hasNext()) {
+        const auto m = it.next();
+        const int pos = m.capturedStart();
+        for (const auto& g : gated) {
+            if (pos > g.first && pos < g.second) {
+                out.insert(m.captured(1));
+                break;
+            }
+        }
+    }
+    return out;
+}
+
+/// Map a QML file to the page id whose entries the catalogue registers for it.
+/// Only the pages that host advanced-gated anchors need an entry.
+const QHash<QString, QString>& qmlFileToPageId()
+{
+    static const QHash<QString, QString> kMap{
+        {QStringLiteral("GeneralPage.qml"), QStringLiteral("general")},
+        {QStringLiteral("WindowAppearancePage.qml"), QStringLiteral("window-appearance")},
+    };
+    return kMap;
+}
+
+} // namespace
+
+class TestSearchCatalogTiers : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void initTestCase()
+    {
+        m_qmlDir = QStringLiteral(P_SOURCE_DIR "/src/settings/qml");
+        m_catalog = QStringLiteral(P_SOURCE_DIR "/src/settings/searchcatalog.cpp");
+        QVERIFY2(QFileInfo::exists(m_catalog), qPrintable(m_catalog));
+        QVERIFY2(QDir(m_qmlDir).exists(), qPrintable(m_qmlDir));
+    }
+
+    /// The parser must actually find something. Without this a regex that
+    /// silently stops matching turns the whole test into a vacuous pass.
+    void theParserFindsAdvancedAnchors()
+    {
+        int total = 0;
+        for (auto it = qmlFileToPageId().cbegin(); it != qmlFileToPageId().cend(); ++it) {
+            total += advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + it.key()).size();
+        }
+        QVERIFY2(total >= 20, qPrintable(QStringLiteral("only %1 advanced anchors parsed").arg(total)));
+    }
+
+    void catalogueTiersMatchTheQml()
+    {
+        const QString catalogSrc = stripLineComments(readAll(m_catalog));
+
+        // Every (page, anchor) the catalogue marks advanced-only.
+        QSet<QString> flagged;
+        static const QRegularExpression kCall(
+            QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)\\s*,"
+                           "\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
+        auto it = kCall.globalMatch(catalogSrc);
+        while (it.hasNext()) {
+            const auto m = it.next();
+            // Scan to the end of this call and look for the flag.
+            int depth = 1;
+            int i = m.capturedEnd();
+            while (i < catalogSrc.size() && depth > 0) {
+                if (catalogSrc.at(i) == QLatin1Char('(')) {
+                    ++depth;
+                } else if (catalogSrc.at(i) == QLatin1Char(')')) {
+                    --depth;
+                }
+                ++i;
+            }
+            const QString body = catalogSrc.mid(m.capturedEnd(), i - m.capturedEnd());
+            if (body.contains(QStringLiteral("advancedOnly=*/true"))) {
+                flagged.insert(m.captured(1) + QLatin1Char('/') + m.captured(2));
+            }
+        }
+
+        // Every (page, anchor) the QML gates behind advanced mode.
+        QSet<QString> expected = crossFileAdvanced();
+        for (auto pit = qmlFileToPageId().cbegin(); pit != qmlFileToPageId().cend(); ++pit) {
+            const QSet<QString> anchors = advancedAnchorsIn(m_qmlDir + QLatin1Char('/') + pit.key());
+            for (const QString& a : anchors) {
+                expected.insert(pit.value() + QLatin1Char('/') + a);
+            }
+        }
+
+        // A catalogue entry may legitimately not exist for a given anchor, so
+        // only compare against anchors the catalogue actually registers.
+        QSet<QString> registered;
+        auto rit = kCall.globalMatch(catalogSrc);
+        while (rit.hasNext()) {
+            const auto m = rit.next();
+            registered.insert(m.captured(1) + QLatin1Char('/') + m.captured(2));
+        }
+        expected.intersect(registered);
+
+        const QSet<QString> missing = expected - flagged;
+        const QSet<QString> spurious = flagged - expected;
+
+        for (const QString& k : missing) {
+            qWarning() << "advanced in QML but NOT flagged in the catalogue:" << k;
+        }
+        for (const QString& k : spurious) {
+            qWarning() << "flagged in the catalogue but NOT advanced in QML:" << k;
+        }
+
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("%1 catalogue entries missing advancedOnly").arg(missing.size())));
+        QVERIFY2(spurious.isEmpty(),
+                 qPrintable(QStringLiteral("%1 catalogue entries flagged in error").arg(spurious.size())));
+    }
+
+private:
+    QString m_qmlDir;
+    QString m_catalog;
+};
+
+QTEST_MAIN(TestSearchCatalogTiers)
+#include "test_search_catalog_tiers.moc"

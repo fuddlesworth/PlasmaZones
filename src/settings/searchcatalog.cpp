@@ -17,8 +17,14 @@ namespace PlasmaZones {
 
 namespace {
 
+// `advancedOnly` mirrors the `advancedOnly:` declaration on the row or card
+// this anchor points at, for anchors whose HOST PAGE shows in both modes. The
+// registry's page tier cannot express a per-row tier, so without it a
+// simple-mode search offers a result that reveals a collapsed row. The two
+// declarations are cross-checked by tests/unit/settings/
+// test_search_catalog_tiers.cpp, so they cannot drift apart silently.
 void addSetting(PhosphorControl::SearchController* search, const QString& pageId, const QString& anchor,
-                const QString& title, const QStringList& keywords = {})
+                const QString& title, const QStringList& keywords = {}, bool advancedOnly = false)
 {
     SearchEntry e;
     e.kind = SearchEntry::Kind::Setting;
@@ -26,17 +32,19 @@ void addSetting(PhosphorControl::SearchController* search, const QString& pageId
     e.anchor = anchor;
     e.title = title;
     e.keywords = keywords;
+    e.advancedOnly = advancedOnly;
     search->addEntry(e);
 }
 
 void addSection(PhosphorControl::SearchController* search, const QString& pageId, const QString& anchor,
-                const QString& title)
+                const QString& title, bool advancedOnly = false)
 {
     SearchEntry e;
     e.kind = SearchEntry::Kind::Section;
     e.pageId = pageId;
     e.anchor = anchor;
     e.title = title;
+    e.advancedOnly = advancedOnly;
     search->addEntry(e);
 }
 
@@ -222,9 +230,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("general"), QStringLiteral("renderingBackend"),
                PhosphorI18n::tr("Rendering backend"),
                {PhosphorI18n::tr("opengl"), PhosphorI18n::tr("vulkan"), PhosphorI18n::tr("graphics")});
-    addSection(search, QStringLiteral("general"), QStringLiteral("shaderEffects"), PhosphorI18n::tr("Shader Effects"));
+    addSection(search, QStringLiteral("general"), QStringLiteral("shaderEffects"), PhosphorI18n::tr("Shader Effects"),
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("general"), QStringLiteral("frameRate"), PhosphorI18n::tr("Frame rate"),
-               {PhosphorI18n::tr("fps"), PhosphorI18n::tr("refresh"), PhosphorI18n::tr("animation")});
+               {PhosphorI18n::tr("fps"), PhosphorI18n::tr("refresh"), PhosphorI18n::tr("animation")},
+               /*advancedOnly=*/true);
     addSection(search, QStringLiteral("general"), QStringLiteral("audioSpectrum"), PhosphorI18n::tr("Audio Spectrum"));
     addSetting(search, QStringLiteral("general"), QStringLiteral("audioSpectrumEnabled"),
                PhosphorI18n::tr("Audio spectrum"),
@@ -232,40 +242,44 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 PhosphorI18n::tr("sound")});
     addSetting(search, QStringLiteral("general"), QStringLiteral("spectrumBars"), PhosphorI18n::tr("Spectrum bars"),
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("bands"), PhosphorI18n::tr("frequency")});
-    addSetting(search, QStringLiteral("general"), QStringLiteral("audioNoiseReduction"),
-               PhosphorI18n::tr("Noise reduction"),
-               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("smoothing"), PhosphorI18n::tr("smooth")});
-    addSetting(search, QStringLiteral("general"), QStringLiteral("audioExtraSmoothing"),
-               PhosphorI18n::tr("Extra smoothing"),
-               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("smoothing"), PhosphorI18n::tr("smooth")});
+    addSetting(
+        search, QStringLiteral("general"), QStringLiteral("audioNoiseReduction"), PhosphorI18n::tr("Noise reduction"),
+        {PhosphorI18n::tr("cava"), PhosphorI18n::tr("smoothing"), PhosphorI18n::tr("smooth")}, /*advancedOnly=*/true);
+    addSetting(
+        search, QStringLiteral("general"), QStringLiteral("audioExtraSmoothing"), PhosphorI18n::tr("Extra smoothing"),
+        {PhosphorI18n::tr("cava"), PhosphorI18n::tr("smoothing"), PhosphorI18n::tr("smooth")}, /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("general"), QStringLiteral("audioAutosens"), PhosphorI18n::tr("Automatic gain"),
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("autosens"), PhosphorI18n::tr("sensitivity"),
-                PhosphorI18n::tr("gain")});
+                PhosphorI18n::tr("gain")},
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("general"), QStringLiteral("audioSensitivity"), PhosphorI18n::tr("Sensitivity"),
-               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("gain")});
-    addSetting(search, QStringLiteral("general"), QStringLiteral("audioLowerCutoff"),
-               PhosphorI18n::tr("Lowest frequency"),
-               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("cutoff"), PhosphorI18n::tr("frequency"),
-                PhosphorI18n::tr("bass")});
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("gain")}, /*advancedOnly=*/true);
+    addSetting(
+        search, QStringLiteral("general"), QStringLiteral("audioLowerCutoff"), PhosphorI18n::tr("Lowest frequency"),
+        {PhosphorI18n::tr("cava"), PhosphorI18n::tr("cutoff"), PhosphorI18n::tr("frequency"), PhosphorI18n::tr("bass")},
+        /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("general"), QStringLiteral("audioHigherCutoff"),
                PhosphorI18n::tr("Highest frequency"),
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("cutoff"), PhosphorI18n::tr("frequency"),
-                PhosphorI18n::tr("treble")});
+                PhosphorI18n::tr("treble")},
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("general"), QStringLiteral("audioChannelMode"), PhosphorI18n::tr("Channels"),
-               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("stereo"), PhosphorI18n::tr("mono")});
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("stereo"), PhosphorI18n::tr("mono")}, /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("general"), QStringLiteral("audioReverse"), PhosphorI18n::tr("Reverse bar order"),
-               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("flip"), PhosphorI18n::tr("mirror")});
-    addSetting(search, QStringLiteral("general"), QStringLiteral("audioMonstercat"),
-               PhosphorI18n::tr("Monstercat filter"),
-               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("filter"), PhosphorI18n::tr("smooth")});
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("flip"), PhosphorI18n::tr("mirror")}, /*advancedOnly=*/true);
+    addSetting(
+        search, QStringLiteral("general"), QStringLiteral("audioMonstercat"), PhosphorI18n::tr("Monstercat filter"),
+        {PhosphorI18n::tr("cava"), PhosphorI18n::tr("filter"), PhosphorI18n::tr("smooth")}, /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("general"), QStringLiteral("audioWaves"), PhosphorI18n::tr("Wave filter"),
-               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("filter"), PhosphorI18n::tr("wave")});
+               {PhosphorI18n::tr("cava"), PhosphorI18n::tr("filter"), PhosphorI18n::tr("wave")}, /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("general"), QStringLiteral("audioInputMethod"), PhosphorI18n::tr("Audio backend"),
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("pipewire"), PhosphorI18n::tr("pulseaudio"),
-                PhosphorI18n::tr("capture")});
+                PhosphorI18n::tr("capture")},
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("general"), QStringLiteral("audioInputSource"), PhosphorI18n::tr("Audio source"),
                {PhosphorI18n::tr("cava"), PhosphorI18n::tr("device"), PhosphorI18n::tr("monitor"),
-                PhosphorI18n::tr("capture")});
+                PhosphorI18n::tr("capture")},
+               /*advancedOnly=*/true);
     addSection(search, QStringLiteral("general"), QStringLiteral("layoutAssignment"),
                PhosphorI18n::tr("Layout assignment"));
     addSetting(search, QStringLiteral("general"), QStringLiteral("suppressDefaultLayoutAssignment"),
@@ -365,7 +379,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Corner radius"), {PhosphorI18n::tr("rounding"), PhosphorI18n::tr("border")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("borderScope"),
                PhosphorI18n::tr("Apply borders to"),
-               {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("border")});
+               {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("border")},
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("useSystemAccentColor"),
                PhosphorI18n::tr("Use system accent color"),
                {PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("colour")});
@@ -379,7 +394,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Opacity and tint"));
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("opacityTintScope"),
                PhosphorI18n::tr("Apply opacity and tint to"),
-               {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("transparency")});
+               {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("transparency")},
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("windowOpacity"),
                PhosphorI18n::tr("Opacity"),
                {PhosphorI18n::tr("transparency"), PhosphorI18n::tr("translucent"), PhosphorI18n::tr("fade")});
@@ -396,45 +412,53 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("titlebar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("header")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("hideTitleBarsScope"),
                PhosphorI18n::tr("Hide title bars on"),
-               {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("titlebar")});
+               {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("titlebar")},
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("focusFadeDuration"),
                PhosphorI18n::tr("Focus fade duration"),
                {PhosphorI18n::tr("fade"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("dim"),
-                PhosphorI18n::tr("cross-fade")});
+                PhosphorI18n::tr("cross-fade")},
+               /*advancedOnly=*/true);
 
     // Decoration performance (Decorations.Performance) — the Performance card on
     // the same page. Keyworded for what someone actually types when their fans
     // spin up after engaging a pack: power, battery, gpu, heat.
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("decorationPerformance"),
-               PhosphorI18n::tr("Performance"));
+               PhosphorI18n::tr("Performance"), /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationAnimateFocusedOnly"),
                PhosphorI18n::tr("Animate only the active window"),
                {PhosphorI18n::tr("performance"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery"),
-                PhosphorI18n::tr("gpu"), PhosphorI18n::tr("heat"), PhosphorI18n::tr("focus")});
+                PhosphorI18n::tr("gpu"), PhosphorI18n::tr("heat"), PhosphorI18n::tr("focus")},
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationPauseWhenIdle"),
                PhosphorI18n::tr("Pause while you are away"),
                {PhosphorI18n::tr("performance"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery"),
-                PhosphorI18n::tr("gpu"), PhosphorI18n::tr("heat"), PhosphorI18n::tr("idle")});
-    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationIdleTimeout"),
-               PhosphorI18n::tr("Idle after"),
-               {PhosphorI18n::tr("idle"), PhosphorI18n::tr("timeout"), PhosphorI18n::tr("power"),
-                PhosphorI18n::tr("battery")});
+                PhosphorI18n::tr("gpu"), PhosphorI18n::tr("heat"), PhosphorI18n::tr("idle")},
+               /*advancedOnly=*/true);
+    addSetting(
+        search, QStringLiteral("window-appearance"), QStringLiteral("decorationIdleTimeout"),
+        PhosphorI18n::tr("Idle after"),
+        {PhosphorI18n::tr("idle"), PhosphorI18n::tr("timeout"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery")},
+        /*advancedOnly=*/true);
 
     // Window filtering (Decorations.WindowFiltering) — the shared WindowFilterCard
     // on the Window Appearance page. Same anchors the card emits, mirroring the
     // General and Animations filtering entries.
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("windowFiltering"),
-               PhosphorI18n::tr("Window filtering"));
+               PhosphorI18n::tr("Window filtering"), /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("excludeTransient"),
                PhosphorI18n::tr("Exclude transient windows"),
                {PhosphorI18n::tr("dialogs"), PhosphorI18n::tr("popups"), PhosphorI18n::tr("menus"),
-                PhosphorI18n::tr("border")});
+                PhosphorI18n::tr("border")},
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("minimumWindowWidth"),
                PhosphorI18n::tr("Minimum window width"),
-               {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("narrow"), PhosphorI18n::tr("size")});
+               {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("narrow"), PhosphorI18n::tr("size")},
+               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("minimumWindowHeight"),
                PhosphorI18n::tr("Minimum window height"),
-               {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("short"), PhosphorI18n::tr("size")});
+               {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("short"), PhosphorI18n::tr("size")},
+               /*advancedOnly=*/true);
 
     // Gaps (shared inner/outer gap model) — folded onto the Window Appearance
     // page, which edits the same config-backed model.
