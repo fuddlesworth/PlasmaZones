@@ -28,6 +28,7 @@
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
+#include <QJsonObject>
 
 #include "FakeScreenProvider.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"
@@ -161,6 +162,53 @@ private Q_SLOTS:
 
         // Different desktops produce different PhosphorTiles::TilingState instances
         QVERIFY(stateD1 != stateD2);
+    }
+
+    /// A stashed script-state bag dies with the virtual screen it belongs to.
+    /// Orphaned VS ids are never reused, so a bag rescued by an earlier
+    /// autotile toggle-off would otherwise sit in the stash for the session.
+    /// The screen has NO live state when the reconfiguration lands (the toggle
+    /// destroyed it), which is the case a cleanup driven off the surviving
+    /// states would miss.
+    void virtualScreensChanged_dropsStashedScriptStateForOrphanedIds()
+    {
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        PhosphorScreens::FakeScreenProvider provider;
+        provider.addScreen(physId, QRect(0, 0, 1920, 1080));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+        screenMgr.start();
+        QVERIFY(screenMgr.setVirtualScreenConfig(physId, makeSplitConfig(physId)));
+
+        AutotileEngine engine(nullptr, nullptr, &screenMgr, PlasmaZones::TestHelpers::testRegistry());
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        engine.setAutotileScreens({vs0});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        PhosphorTiles::TilingState* seeded = engine.tilingStateForScreen(vs0);
+        QVERIFY(seeded != nullptr);
+        QJsonObject bag;
+        bag[QLatin1String("cols")] = 2;
+        seeded->setScriptState(bag);
+
+        // Toggle off: the bag is rescued into the stash and the state destroyed.
+        engine.setAutotileScreens({});
+
+        // Drop the virtual-screen split, orphaning vs0.
+        screenMgr.refreshVirtualConfigs({});
+        Q_EMIT screenMgr.virtualScreensChanged(physId);
+        QCoreApplication::processEvents();
+
+        // Re-establish the same split so vs0 resolves to valid geometry again.
+        // Production never reuses an orphaned VS id, so recreating it here is
+        // what makes the drop observable at all: without it the id stays invalid,
+        // tilingStateForScreen returns nullptr, and the assertion below would
+        // hold whether or not anything was dropped.
+        QVERIFY(screenMgr.setVirtualScreenConfig(physId, makeSplitConfig(physId)));
+        engine.setAutotileScreens({vs0});
+        PhosphorTiles::TilingState* revived = engine.tilingStateForScreen(vs0);
+        QVERIFY(revived != nullptr);
+        QVERIFY(revived->scriptState().isEmpty());
     }
 
     void tilingStateForScreen_rejectsEmptyScreenId()

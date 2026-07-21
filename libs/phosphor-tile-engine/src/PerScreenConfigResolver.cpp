@@ -163,9 +163,8 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     // key, which is precisely the case setAlgorithm keeps up to date — so do
     // NOT replace it with a pre-switch snapshot threaded in from the caller:
     // that would report a change the screen's state had already been moved past.
-    wipeStateBagsOnEffectiveAlgorithmChange(
-        screenId, previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString(),
-        overrides.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString());
+    wipeStateBagsOnEffectiveAlgorithmChange(screenId, rememberedAlgorithmId(screenId, previous),
+                                            algorithmIdFromMap(overrides, m_engine->m_algorithmId));
 
     // The remaining overrides are NOT written to the state here — they are
     // resolved at retile time via effective*() helpers in recalculateLayout():
@@ -213,9 +212,8 @@ void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenId)
     // Removing an Algorithm override lands the screen back on the global
     // algorithm; if that differs from the overridden one, the old algorithm's
     // state bags are stale (same rationale as in applyPerScreenConfig).
-    wipeStateBagsOnEffectiveAlgorithmChange(
-        screenId, previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString(),
-        m_engine->m_algorithmId);
+    wipeStateBagsOnEffectiveAlgorithmChange(screenId, rememberedAlgorithmId(screenId, previous),
+                                            m_engine->m_algorithmId);
 
     // Schedule deferred retile (same rationale as applyPerScreenConfig)
     if (m_engine->isAutotileScreen(screenId)) {
@@ -245,7 +243,18 @@ void PerScreenConfigResolver::updatePerScreenOverride(const QString& screenId, c
             << "updatePerScreenOverride: no override map for screen" << screenId << "- cannot update key" << key;
         return;
     }
+    const QString oldEffective = algorithmIdFromMap(*it, m_engine->m_algorithmId);
     (*it)[key] = value;
+    // Every other mutator of this map routes an effective-algorithm change
+    // through the wipe, and the comments on that helper claim it sees them all.
+    // This one takes an arbitrary key, so it has to honour the same contract
+    // rather than rely on today's callers only ever passing SplitRatio and
+    // MasterCount. No-ops for every other key, and for an Algorithm write that
+    // does not move the effective id.
+    if (key == QString(PerScreenKeys::Algorithm)) {
+        wipeStateBagsOnEffectiveAlgorithmChange(screenId, oldEffective,
+                                                algorithmIdFromMap(*it, m_engine->m_algorithmId));
+    }
 }
 
 void PerScreenConfigResolver::removeOverridesForScreen(const QString& screenId)
@@ -268,9 +277,42 @@ void PerScreenConfigResolver::removeOverridesForScreen(const QString& screenId)
     // helper itself no-ops when the two ids match, so a screen whose override
     // named the global algorithm keeps its bags.
     const QVariantMap previous = m_perScreenOverrides.take(screenId);
-    wipeStateBagsOnEffectiveAlgorithmChange(
-        screenId, previous.value(QString(PerScreenKeys::Algorithm), m_engine->m_algorithmId).toString(),
-        m_engine->m_algorithmId);
+    // Remember, do NOT wipe. See the header: dropping the in-memory map is not a
+    // configuration change, and wiping on the override -> global reading it
+    // produces would destroy the bags of every context the caller's teardown
+    // left alive. The recorded id is what the next genuine change compares
+    // against.
+    m_rememberedAlgorithmId[screenId] = algorithmIdFromMap(previous, m_engine->m_algorithmId);
+}
+
+void PerScreenConfigResolver::forgetScreen(const QString& screenId)
+{
+    m_perScreenOverrides.remove(screenId);
+    m_rememberedAlgorithmId.remove(screenId);
+}
+
+void PerScreenConfigResolver::forgetRememberedAlgorithmForGlobalFollowers()
+{
+    m_rememberedAlgorithmId.removeIf([this](const auto& entry) {
+        return m_engine->isAutotileScreen(entry.key())
+            && !m_perScreenOverrides.value(entry.key()).contains(QString(PerScreenKeys::Algorithm));
+    });
+}
+
+QString PerScreenConfigResolver::algorithmIdFromMap(const QVariantMap& map, const QString& fallback)
+{
+    const QString id = map.value(QString(PerScreenKeys::Algorithm)).toString();
+    return id.isEmpty() ? fallback : id;
+}
+
+QString PerScreenConfigResolver::rememberedAlgorithmId(const QString& screenId,
+                                                       const QVariantMap& previousOverrides) const
+{
+    const auto it = m_rememberedAlgorithmId.constFind(screenId);
+    if (it != m_rememberedAlgorithmId.constEnd()) {
+        return *it;
+    }
+    return algorithmIdFromMap(previousOverrides, m_engine->m_algorithmId);
 }
 
 void PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange(const QString& screenId,
@@ -286,6 +328,10 @@ void PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange(const QStr
     // removed — are enforced here, on every (desktop, activity) state of the
     // screen (they all followed the old effective algorithm). The deferred
     // retile the callers schedule does NOT rebuild these bags; it reads them.
+    // Record what the screen resolves to now, whether or not anything moved, so
+    // the next change compares against the last id actually seen rather than
+    // re-deriving it from a map a teardown may since have dropped.
+    m_rememberedAlgorithmId[screenId] = newEffectiveId;
     if (oldEffectiveId == newEffectiveId) {
         return;
     }
@@ -302,27 +348,17 @@ void PerScreenConfigResolver::wipeStateBagsOnEffectiveAlgorithmChange(const QStr
         }
         it.value()->setScriptState({});
     }
-    // Stashed bags are deliberately NOT dropped here. Each carries its own
-    // algorithm tag, and AutotileEngine::restoreStashedScriptState checks it at
-    // the moment a state actually takes the bag. The gain is TIMING rather than
-    // precision — the tag is resolved per screen too — and timing is the whole
-    // problem here: this helper's old/new pair is not trustworthy at the moment
-    // it runs on the teardown path.
+    // Stashed bags for this screen go the same way as the live ones, minus any
+    // written under the INCOMING algorithm, which are still valid and are what a
+    // switch back to it should hand over.
     //
-    // A drop here broke the toggle-off rescue outright. That path harvests the
-    // bag and THEN calls removeOverridesForScreen, whose in-memory override
-    // teardown reaches this helper as override -> global. The ids differ, so the
-    // drop erased the bag one step after it was rescued, on exactly the screens
-    // pinned to their own algorithm. Nothing about the screen's configuration
-    // actually changed: the persisted per-screen settings survive that teardown
-    // and re-derive the same algorithm on re-enable, so a check deferred to
-    // restore time sees them agree and hands the bag back.
-    //
-    // The live-state wipe above fires on that same untrustworthy comparison, so
-    // it clears the bags of the screen's OTHER contexts on every toggle-off.
-    // That predates the stash and is left alone here; fixing it means giving the
-    // resolver a memory of the algorithm a torn-down screen was last on, which
-    // is a change to this helper's contract rather than to the stash.
+    // Dropping here is only correct because the old id now comes from the
+    // resolver's remembered value. An earlier revision derived it from the
+    // override map and so read a toggle-off as override -> global, and the drop
+    // erased the bag one step after the teardown rescued it, on exactly the
+    // screens pinned to their own algorithm. removeOverridesForScreen no longer
+    // reaches this function at all, so that reading cannot recur.
+    m_engine->dropStashedScriptStatesForAlgorithmChange(screenId, newEffectiveId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -542,13 +578,12 @@ QString PerScreenConfigResolver::effectiveAlgorithmId(const QString& screenId) c
     // An override storing an empty id names no algorithm — treat it as absent
     // rather than returning "", which reads as "differs from the global id" and
     // sends effectiveMaxWindows down its unknown-algorithm warning arm on every
-    // call for the same global fallback it would reach anyway.
-    if (auto v = perScreenOverride(screenId, QString(PerScreenKeys::Algorithm))) {
-        const QString id = v->toString();
-        if (!id.isEmpty())
-            return id;
-    }
-    return m_engine->m_algorithmId;
+    // call for the same global fallback it would reach anyway. Shared with the
+    // wipe's own resolution via algorithmIdFromMap so the two cannot disagree:
+    // when they did, an empty stored id made the wipe clear a live bag on a
+    // change no other reader could see, while the stash tag saw none and handed
+    // its bag straight back.
+    return algorithmIdFromMap(m_perScreenOverrides.value(screenId), m_engine->m_algorithmId);
 }
 
 PhosphorTiles::TilingAlgorithm* PerScreenConfigResolver::effectiveAlgorithm(const QString& screenId) const

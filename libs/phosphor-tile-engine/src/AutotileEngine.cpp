@@ -347,7 +347,10 @@ void AutotileEngine::connectSignals()
                             orphanedVsIds.insert(sid);
                             releaseScreenStateForTeardown(sid, state, releasedWindows,
                                                           /*drainOverflow=*/false);
-                            m_configResolver->removeOverridesForScreen(sid);
+                            // forgetScreen, not removeOverridesForScreen: this id
+                            // is never reused, so remembering the algorithm it
+                            // was on would strand a string for the session.
+                            m_configResolver->forgetScreen(sid);
                             m_userTunedSplitRatio.remove(key);
                             m_userTunedMasterCount.remove(key);
                         });
@@ -875,6 +878,16 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         m_context.removeScreen(screenId);
     }
 
+    // Drop stashed bags belonging to screens that are no longer connected. They
+    // can never be harvested or matched again, so without this a monitor
+    // unplugged for good leaves its bag behind for the session. Gated on
+    // isKnownScreen and deliberately NOT on autotile membership: a screen the
+    // user merely toggled OUT of autotile is still connected and keeping its bag
+    // is the entire point of the stash.
+    m_scriptStateStash.removeIf([this](const auto& entry) {
+        return !isKnownScreen(entry.key().screenId);
+    });
+
     // Clear any pending deferred retiles and retry state for removed screens
     for (auto pit = m_pendingRetileScreens.begin(); pit != m_pendingRetileScreens.end();) {
         if (!m_autotileScreens.contains(*pit)) {
@@ -1097,16 +1110,20 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             it.value()->clearSplitTree();
         }
         it.value()->setScriptState({});
+        // Stashed bags for this screen go the same way, minus any already
+        // written under the incoming algorithm. Inside the loop so it inherits
+        // the live-and-unoverridden gate above: a screen that is toggled OFF has
+        // no live state here and no in-memory override left, so it would read as
+        // following the global algorithm even when its persisted settings pin it
+        // elsewhere. Dropping on that reading would discard the bag of a screen
+        // whose effective algorithm never moved, which is the failure this whole
+        // area has produced twice already.
+        dropStashedScriptStatesForAlgorithmChange(it.key().screenId, m_algorithmId);
     }
-    // Stashed bags are deliberately left alone. They are adjudicated per key by
-    // the algorithm tag when a state picks one back up, and that is the only
-    // reading that survives a toggle-off: this gate asks hasAlgoOverride, but a
-    // toggle-off has already dropped the screen's IN-MEMORY override, so a screen
-    // pinned to its own algorithm by persisted settings reads here as following
-    // the global one. Dropping on that would throw away the bag of a screen whose
-    // effective algorithm never moved. The tag knows what the bag was written
-    // under and compares it against what the screen actually resolves to on the
-    // way back out, which is right in both cases.
+    // The screens that just followed the global switch are on a new algorithm
+    // now, so the resolver must stop reporting the old id as what their states
+    // were built under. Screens that are toggled off keep their remembered id.
+    m_configResolver->forgetRememberedAlgorithmForGlobalFollowers();
 
     Q_EMIT algorithmChanged(m_algorithmId);
 
@@ -1246,6 +1263,13 @@ void AutotileEngine::restoreStashedScriptState(const TilingStateKey& key, Phosph
     // state and then discards it (updateStickyScreenPins takes and deletes
     // exactly such a state) cannot consume the bag with the state nobody kept.
     state->setScriptState(it->scriptState);
+}
+
+void AutotileEngine::dropStashedScriptStatesForAlgorithmChange(const QString& screenId, const QString& newAlgorithmId)
+{
+    m_scriptStateStash.removeIf([&](const auto& entry) {
+        return entry.key().screenId == screenId && entry.value().algorithmId != newAlgorithmId;
+    });
 }
 
 PhosphorTiles::TilingState* AutotileEngine::stateForKey(const TilingStateKey& key)

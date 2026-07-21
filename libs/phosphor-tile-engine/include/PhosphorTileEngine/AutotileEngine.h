@@ -1558,6 +1558,15 @@ private:
     /// the resolver may not be authoritative yet, so it must not erase.
     void restoreStashedScriptState(const PhosphorEngine::TilingStateKey& key, PhosphorTiles::TilingState* state);
 
+    /// Drop @p screenId's stashed bags that were written under an algorithm other
+    /// than @p newAlgorithmId, because the screen has genuinely moved to it.
+    /// Tag-aware and therefore safe to call eagerly, unlike a blanket per-screen
+    /// drop: entries belonging to the incoming algorithm survive. Call ONLY where
+    /// the change is real — the resolver's remembered id is what establishes
+    /// that, and calling this on a teardown-window reading destroyed exactly the
+    /// bags this stash exists to keep.
+    void dropStashedScriptStatesForAlgorithmChange(const QString& screenId, const QString& newAlgorithmId);
+
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
 
     // Canonical windowId → tile rect last emitted for it by applyTiling.

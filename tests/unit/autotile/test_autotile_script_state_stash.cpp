@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -199,6 +200,36 @@ private Q_SLOTS:
         QCOMPARE(bagOn(engine, screen), sampleBag(0.4));
     }
 
+    /// Toggling off tears down only the CURRENT context, so the screen's other
+    /// desktops keep their states. Those states' bags must survive too. They used
+    /// not to: dropping the in-memory overrides read as override -> global, and
+    /// the wipe that fired on it cleared every other context of the screen, so a
+    /// toggle rescued one desktop's adjustments and destroyed the rest.
+    void testToggleOffKeepsOtherDesktopsLiveBags()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("bsp")));
+        QVERIFY(seedBag(engine, screen, sampleBag(0.7)));
+
+        engine.setCurrentDesktop(2);
+        QVERIFY(seedBag(engine, screen, sampleBag(0.4)));
+
+        // Toggle off with desktop 2 current: only that context is torn down.
+        engine.setAutotileScreens({});
+        engine.applyPerScreenConfig(screen, algorithmOverride(QStringLiteral("bsp")));
+        engine.setAutotileScreens({screen});
+
+        // Desktop 2 came back through the stash.
+        QCOMPARE(bagOn(engine, screen), sampleBag(0.4));
+        // Desktop 1 was never torn down and must simply still be there.
+        engine.setCurrentDesktop(1);
+        QCOMPARE(bagOn(engine, screen), sampleBag(0.7));
+    }
+
     /// The stash must not route around the "bags never cross algorithms"
     /// invariant: a switch while the state is torn down invalidates the bag.
     void testScriptStateDroppedWhenAlgorithmChangesWhileOff()
@@ -359,6 +390,47 @@ private Q_SLOTS:
 
         QCOMPARE(bagOn(engine, screen1), sampleBag(0.7));
         QCOMPARE(bagOn(engine, screen2), sampleBag(0.25));
+    }
+
+    /// Unpinning a sticky screen migrates its state to another desktop key. A
+    /// stashed bag belongs to that layout, so it has to move with it. Left
+    /// behind it would describe windows that now live under a different key,
+    /// and restore never consumes, so nothing would ever clear it.
+    void testStashMigratesWithStickyScreenUnpin()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("eDP-1");
+        const QString window = QStringLiteral("win-1");
+        engine.setCurrentDesktop(1);
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+        QVERIFY(seedBag(engine, screen, sampleBag()));
+
+        // Leave an entry at {screen, desktop 1}. Restore does not consume, so it
+        // is still there after the bag comes back.
+        engine.setAutotileScreens({});
+        engine.setAutotileScreens({screen});
+        QCOMPARE(bagOn(engine, screen), sampleBag());
+
+        // Give the screen an all-sticky window so it pins to desktop 1. The pin
+        // has to be established AFTER the toggle, which clears it.
+        engine.windowOpened(window, screen, 0, 0);
+        QCoreApplication::processEvents(); // windowOpened registers via a queued hop
+        engine.updateStickyScreenPins([](const QString&) {
+            return true;
+        });
+
+        // Move the context on and unpin: the state migrates to desktop 2.
+        engine.setCurrentDesktop(2);
+        engine.updateStickyScreenPins([](const QString&) {
+            return false;
+        });
+
+        // The entry must have moved with it. A fresh state back at desktop 1
+        // starts clean; without the migration it would be handed the bag that
+        // now belongs to the layout living on desktop 2.
+        engine.setCurrentDesktop(1);
+        QVERIFY(bagOn(engine, screen).isEmpty());
     }
 
     /// Desktop numbers are reused after a renumber, so a stashed bag for a
