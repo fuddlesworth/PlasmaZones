@@ -4,7 +4,6 @@
 #pragma once
 
 #include <phosphorengine_export.h>
-#include <QRect>
 #include <QString>
 #include <QStringList>
 

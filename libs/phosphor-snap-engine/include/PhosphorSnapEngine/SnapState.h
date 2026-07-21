@@ -9,7 +9,6 @@
 
 #include <QHash>
 #include <QObject>
-#include <QRect>
 #include <QSet>
 #include <QString>
 #include <QStringList>
