@@ -487,6 +487,18 @@ QString ApplicationController::goForward()
     return stepHistory(m_forwardHistory, m_backHistory);
 }
 
+QStringList ApplicationController::dirtyPageIds() const
+{
+    QStringList ids;
+    for (const PageRegistry::Entry& entry : m_registry->allPages()) {
+        const PageController* ctrl = m_registry->controller(entry.id);
+        if (ctrl != nullptr && ctrl->isDirty()) {
+            ids.append(entry.id);
+        }
+    }
+    return ids;
+}
+
 QStringList ApplicationController::parentChainFor(const QString& id) const
 {
     // Nesting-depth cap, shared with PageRegistry's reachability walk so the

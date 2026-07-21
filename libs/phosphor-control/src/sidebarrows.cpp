@@ -108,6 +108,45 @@ void SidebarRows::setRegistry(PageRegistry* registry)
     Q_EMIT registryChanged();
 }
 
+QList<PageRegistry::Entry> SidebarRows::firstTwoNavigableDescendants(const QString& parentId) const
+{
+    // Stops at TWO because both callers only need to distinguish
+    // zero / exactly-one / more-than-one:
+    //   0 -> the drill leads nowhere (a row whose only content would be a
+    //        Back button), so build() does not offer it and resolveDrillScope
+    //        evicts the rail out of it,
+    //   1 -> the drill step is pure friction, so build() flattens the row to
+    //        that descendant and it is NOT a drill target,
+    //   2+ -> a real drill target.
+    //
+    // ONE implementation on purpose. build() and resolveDrillScope have to
+    // agree about what "enterable" means, and the lib has no QML test harness,
+    // so two copies of this walk would ship green the moment they diverged —
+    // which is exactly what happened when resolveDrillScope was first written
+    // with its own copy that counted to one.
+    QList<PageRegistry::Entry> found;
+    if (!m_registry) {
+        return found;
+    }
+    const std::function<void(const QString&, int)> gather = [&](const QString& pid, int d) {
+        if (d > kMaxWalkDepth || found.size() > 1) {
+            return;
+        }
+        const QList<PageRegistry::Entry> sub = m_registry->visibleChildPages(pid);
+        for (const PageRegistry::Entry& g : sub) {
+            if (found.size() > 1) {
+                break;
+            }
+            if (!g.qmlSource.isEmpty()) {
+                found.append(g);
+            }
+            gather(g.id, d + 1);
+        }
+    };
+    gather(parentId, 0);
+    return found;
+}
+
 QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, const QString& currentParentId,
                                 const QVariantMap& expandedCategories, const QVariantMap& flatTitleOverrides) const
 {
@@ -211,23 +250,7 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
                         // would be a Back button), exactly one means the drill
                         // step is pure friction and the row should navigate
                         // straight there, keeping the category's title/icon.
-                        QList<PageRegistry::Entry> found;
-                        const std::function<void(const QString&, int)> gather = [&](const QString& pid, int d) {
-                            if (d > kMaxWalkDepth || found.size() > 1) {
-                                return;
-                            }
-                            const QList<PageRegistry::Entry> sub = m_registry->visibleChildPages(pid);
-                            for (const PageRegistry::Entry& g : sub) {
-                                if (found.size() > 1) {
-                                    break;
-                                }
-                                if (!g.qmlSource.isEmpty()) {
-                                    found.append(g);
-                                }
-                                gather(g.id, d + 1);
-                            }
-                        };
-                        gather(child.id, 0);
+                        const QList<PageRegistry::Entry> found = firstTwoNavigableDescendants(child.id);
 
                         if (found.isEmpty()) {
                             continue;
@@ -386,53 +409,32 @@ QString SidebarRows::resolveDrillScope(const QString& currentParentId) const
         return QString();
     }
 
-    // build() applies the descendant count ONLY under `isDrill && !rowHasQml`,
-    // so match its entry conditions before matching its walk, or this function
-    // answers a different question than the one it exists to agree with.
-    const PageRegistry::Entry scope = m_registry->entry(currentParentId);
-    if (!scope.qmlSource.isEmpty()) {
-        // A category with a page of its own is offered as a drill target
-        // unconditionally, whatever its descendant count.
-        return currentParentId;
-    }
-    if (scope.isCollapsible) {
-        // Collapsible categories render as accordion headers and are never
-        // drill targets, so the rail cannot be inside one to begin with.
+    // Mirror build()'s decision for this node EXACTLY, in build()'s own order.
+    // build() computes:
+    //     collapsible = isCollapsible && childHasChildren
+    //     isDrill     = !collapsible && childHasChildren
+    // and only then, under `isDrill && !rowHasQml`, runs the descendant count.
+    // Every one of those clauses matters here:
+    //   - childHasChildren FIRST, because a node with no visible children is a
+    //     plain leaf row, never a scope,
+    //   - collapsible BEFORE qmlSource, because build() gives it precedence: a
+    //     collapsible category renders as an accordion header and is never a
+    //     drill target, whatever qmlSource it carries,
+    //   - qmlSource next, because a category with a page of its own is offered
+    //     as a drill target without consulting its descendant count,
+    //   - the count last, where 0 or 1 both mean "not an enterable scope".
+    const bool childHasChildren = !m_registry->visibleChildPages(currentParentId).isEmpty();
+    if (!childHasChildren) {
         return QString();
     }
-
-    // Mirror build()'s drill rule EXACTLY, which counts to two:
-    //   0 navigable descendants -> the category is not offered at all,
-    //   1                       -> the row is flattened to that descendant and
-    //                              is NOT a drill target (the drill step would
-    //                              be pure friction),
-    //   2 or more               -> a real drill target.
-    // So anything below two means the rail must not be sitting inside this
-    // scope. Counting only to one would leave the rail drilled into a category
-    // that build() renders as a single direct row at the level above, which is
-    // the disagreement this function exists to prevent.
-    //
-    // Depth-capped like every other walk here, and the cap is fail-CLOSED: a
-    // tree deep enough to hit it falls back to the top level rather than
-    // stranding the rail in a scope we could not finish verifying.
-    int found = 0;
-    const std::function<void(const QString&, int)> gather = [&](const QString& pid, int d) {
-        if (found > 1 || d > kMaxWalkDepth) {
-            return;
-        }
-        const QList<PageRegistry::Entry> kids = m_registry->visibleChildPages(pid);
-        for (const PageRegistry::Entry& child : kids) {
-            if (found > 1) {
-                return;
-            }
-            if (!child.qmlSource.isEmpty()) {
-                ++found;
-            }
-            gather(child.id, d + 1);
-        }
-    };
-    gather(currentParentId, 0);
-    return found > 1 ? currentParentId : QString();
+    const PageRegistry::Entry scope = m_registry->entry(currentParentId);
+    if (scope.isCollapsible) {
+        return QString();
+    }
+    if (!scope.qmlSource.isEmpty()) {
+        return currentParentId;
+    }
+    return firstTwoNavigableDescendants(currentParentId).size() > 1 ? currentParentId : QString();
 }
 
 QVariantMap SidebarRows::flatPageData(const QString& pageId, const QVariantMap& flatTitleOverrides) const

@@ -325,7 +325,7 @@ ColumnLayout {
             // The cap is relative to SettingsRow's INNER layout, which is
             // inset by largeSpacing on each side — measuring the outer width
             // would still overhang by 0.45 * 2 * largeSpacing.
-            width: Math.min(Kirigami.Units.gridUnit * 16, (addPackRow.width - Kirigami.Units.largeSpacing * 2) * 0.45)
+            width: Math.min(Kirigami.Units.gridUnit * 16, Math.max(0, (addPackRow.width - Kirigami.Units.largeSpacing * 2) * 0.45))
             enabled: addPackRow._addable.length > 0
             items: addPackRow._addable
             currentId: ""

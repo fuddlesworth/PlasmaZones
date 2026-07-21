@@ -73,7 +73,7 @@ bool SettingsController::pageSupportsReset(const QString& page) const
     // virtual screens page unsplits every monitor; animation pages clear every
     // per-event override and reset the animation config keys; decoration surface
     // pages clear their own root subtree of the DecorationProfileTree (the
-    // presets / motion sets / shaders leaves the whole key).
+    // sets/shaders leaves the whole key).
     //
     // The condensed simple pages delegate to their backing advanced pages,
     // which resets those pages' FULL key sets — deliberately wider than the

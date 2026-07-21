@@ -206,9 +206,16 @@ SettingsFlickable {
                             let m = Object.assign({}, root.algoSettings);
                             m.splitRatio = value;
                             root.algoSettings = m;
+                            // try/finally: QML has no RAII, and a throw here
+                            // would latch the flag permanently, after which
+                            // this page silently stops following a Discard,
+                            // a profile switch or an advanced-page edit.
                             root._committingSlot = true;
-                            root.settingsBridge.setAlgorithmSplitRatio(root.selectedAlgorithm, value);
-                            root._committingSlot = false;
+                            try {
+                                root.settingsBridge.setAlgorithmSplitRatio(root.selectedAlgorithm, value);
+                            } finally {
+                                root._committingSlot = false;
+                            }
                         }
                     }
                 }
@@ -235,9 +242,16 @@ SettingsFlickable {
                             let m = Object.assign({}, root.algoSettings);
                             m.maxWindows = Math.round(value);
                             root.algoSettings = m;
+                            // try/finally: QML has no RAII, and a throw here
+                            // would latch the flag permanently, after which
+                            // this page silently stops following a Discard,
+                            // a profile switch or an advanced-page edit.
                             root._committingSlot = true;
-                            root.settingsBridge.setAlgorithmMaxWindows(root.selectedAlgorithm, Math.round(value));
-                            root._committingSlot = false;
+                            try {
+                                root.settingsBridge.setAlgorithmMaxWindows(root.selectedAlgorithm, Math.round(value));
+                            } finally {
+                                root._committingSlot = false;
+                            }
                         }
                     }
                 }

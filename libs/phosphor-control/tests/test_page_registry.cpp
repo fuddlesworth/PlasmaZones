@@ -289,9 +289,11 @@ private Q_SLOTS:
 
     void qmlAccessorsCoverEverything()
     {
-        // topLevelPagesData / childPagesData / pageData are the three
-        // Q_INVOKABLE accessors Sidebar.qml + Breadcrumbs.qml drive
-        // their Repeaters from. They must surface every entry field.
+        // The QML serialization contract for all three Q_INVOKABLE
+        // accessors. pageData is live (PageHost.qml); topLevelPagesData
+        // and childPagesData are retained API with no in-tree consumer
+        // (see the header), so this test is what keeps their key set
+        // from rotting. They must surface every entry field.
         PageRegistry reg;
         auto* p = new StubPage(QStringLiteral("p"), &reg);
         auto* c = new StubPage(QStringLiteral("p.c"), &reg);

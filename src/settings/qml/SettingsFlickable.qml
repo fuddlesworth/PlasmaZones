@@ -115,8 +115,10 @@ Flickable {
     /// scrolling away, and cancelling on them would silently kill the reveal.
     property real _armedContentY: 0
     /// Longest expand among the cards the pending reveal opened, read from the
-    /// cards themselves rather than assumed. Falls back to the raw Kirigami
-    /// duration when no card is expanding.
+    /// cards rather than assumed. Today every card overrides its expand to
+    /// Kirigami.Units.shortDuration so this always equals that, but reading it
+    /// means a card that sets its own durationOverride cannot outlast the
+    /// settle timer and get measured half-open.
     property int _pendingExpandDurationMs: Kirigami.Units.shortDuration
 
     function registerSearchAnchor(anchorId, item) {
@@ -226,7 +228,6 @@ Flickable {
             // the row disagreed — fall back to the top of the page, which is at
             // least a real destination. Tests effective `visible` rather than
             // the advancedOnly flag so every hiding condition is covered.
-            settingsFlickable._cancelRevealHighlight();
             revealScrollAnim.to = 0;
             revealScrollAnim.restart();
         } else {
@@ -234,15 +235,19 @@ Flickable {
         }
     }
 
-    /// Drops any pending expand-then-settle. Called at the top of every
-    /// revealAnchor so a superseded reveal can never fire against the old
-    /// target, whichever branch the new one takes.
     /// Re-collapse cards a reveal expanded speculatively. Every exit from a
     /// reveal that does not end in a successful scroll must call this, or the
     /// expansion leaks and the user is left with cards opened by a reveal that
     /// bought nothing. Per-element guard: a card destroyed between the expand
     /// and the exit leaves a null here, and an unguarded write would throw
     /// before the remaining cards were put back.
+    function _revertRevealCards(cards) {
+        for (var ri = 0; ri < cards.length; ++ri) {
+            if (cards[ri])
+                cards[ri].collapsed = true;
+        }
+    }
+
     /// Kill a highlight left over from a superseded or failed reveal. The
     /// pulse outlives both the settle window and the expiry, so without this
     /// the PREVIOUS target keeps a border painted at its old coordinates while
@@ -253,19 +258,15 @@ Flickable {
         revealHighlight.opacity = 0;
     }
 
-    function _revertRevealCards(cards) {
-        for (var ri = 0; ri < cards.length; ++ri) {
-            if (cards[ri])
-                cards[ri].collapsed = true;
-        }
-    }
-
+    /// Drops any pending expand-then-settle, reverts anything it opened, and
+    /// kills any highlight it left painted. Called at the top of every
+    /// revealAnchor so a superseded reveal can never fire against the old
+    /// target, whichever branch the new one takes.
     function _cancelPendingReveal() {
         // A superseded reveal by definition no longer needs its cards open.
-        // Read into a local and clear the property FIRST, so the revert can
-        // never see a list this call is also mutating — the same discipline
-        // the settle timer uses, and what makes the `var` (detached JS array)
-        // choice on _revealPendingCards correct for every consumer.
+        // Read into a local and clear the property first, matching the settle
+        // timer's discipline so both consumers of _revealPendingCards read the
+        // same way.
         const cards = settingsFlickable._revealPendingCards;
         settingsFlickable._revealPendingItem = null;
         settingsFlickable._revealPendingCards = [];
@@ -303,13 +304,14 @@ Flickable {
     Timer {
         id: revealSettleTimer
 
-        // Sized from the card's expand animation plus a frame of slack. The
-        // card drives that expand through PhosphorMotionAnimation, which can
-        // apply a global speed multiplier, so a settle hardcoded to raw
-        // Kirigami units can fire while _expandProgress is still below 1 and
-        // the reveal then measures a partly-open card. _scrollToReveal's
-        // single Qt.callLater is one frame, not a slower animation, so it
-        // cannot cover that gap on its own.
+        // Sized from the cards actually being expanded, plus a frame of slack.
+        // Equal to Kirigami.Units.shortDuration + veryShortDuration today,
+        // because every card overrides its expand duration to shortDuration and
+        // PhosphorMotionAnimation returns that override verbatim (Plasma's
+        // animation-speed factor is already inside the Kirigami unit). Reading
+        // it keeps the settle honest if a card ever picks its own duration:
+        // firing early measures a half-open card, and _scrollToReveal's single
+        // Qt.callLater is one frame, not a slower animation.
         interval: settingsFlickable._pendingExpandDurationMs + Kirigami.Units.veryShortDuration
         onTriggered: {
             var pending = settingsFlickable._revealPendingItem;

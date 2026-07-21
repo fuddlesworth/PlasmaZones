@@ -175,19 +175,33 @@ SettingsFlickable {
                 // check once layout has positioned this Loader, so the
                 // viewport test sees the real slot position. Later re-checks
                 // come from onYChanged / the page Connections below.
+
+                /// Exactly what was handed to registerSearchAnchor, so
+                /// Component.onDestruction unregisters the SAME object rather
+                /// than recomputing an identity that can diverge. A mismatch
+                /// fails the registry's identity check silently, leaking the
+                /// entry and blocking re-registration for the page's lifetime.
+                property Item _registeredAnchorItem: null
+
                 Component.onCompleted: {
                     Qt.callLater(cardLoader._checkInView);
                     // Defer registration like SettingsRow does: the parent
                     // chain up to the page only settles after construction.
-                    // Register the Loader itself (card arg null) so reveal
-                    // scrolls + pulses; the card builds as it scrolls in.
+                    // Register the Loader itself so a reveal can scroll + pulse
+                    // before the card exists; onLoaded re-registers the card.
                     Qt.callLater(function () {
-                        if (!cardLoader.searchable)
+                        // The delegate can be destroyed before this coalesced
+                        // call runs (fast page switching, eventModel
+                        // reassignment), leaving cardLoader null — the same
+                        // guard _checkInView carries for the same reason.
+                        if (!cardLoader || !cardLoader.searchable)
                             return;
 
                         var pg = SearchAnchors.pageFor(cardLoader);
-                        if (pg)
+                        if (pg) {
+                            cardLoader._registeredAnchorItem = cardLoader;
                             pg.registerSearchAnchor(cardLoader.searchAnchor, cardLoader);
+                        }
                     });
                 }
                 Component.onDestruction: {
@@ -196,7 +210,7 @@ SettingsFlickable {
 
                     var pg = SearchAnchors.pageFor(cardLoader);
                     if (pg)
-                        pg.unregisterSearchAnchor(cardLoader.searchAnchor, cardLoader.item ? cardLoader.item.settingsCard : cardLoader);
+                        pg.unregisterSearchAnchor(cardLoader.searchAnchor, cardLoader._registeredAnchorItem);
                 }
                 // Once the card is built, re-register the anchor against the
                 // card ITSELF rather than this Loader. revealAnchor expands a
@@ -217,8 +231,10 @@ SettingsFlickable {
 
                     var pg = SearchAnchors.pageFor(cardLoader);
                     var built = cardLoader.item as AnimationEventCard;
-                    if (pg && built && built.settingsCard)
+                    if (pg && built && built.settingsCard) {
+                        cardLoader._registeredAnchorItem = built.settingsCard;
                         pg.registerSearchAnchor(cardLoader.searchAnchor, built.settingsCard);
+                    }
                 }
 
                 Connections {

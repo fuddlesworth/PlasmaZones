@@ -377,14 +377,6 @@ ColumnLayout {
         }
     }
 
-    Connections {
-        function onCurrentPageIdChanged() {
-            root._refreshModel();
-        }
-
-        target: root.controller
-    }
-
     // Late-registered pages need to appear in the rail without a restart. The
     // registry's pageRegistered signal fires once per registerPage() call, and
     // startup makes ~55 of them back to back — each would otherwise walk the

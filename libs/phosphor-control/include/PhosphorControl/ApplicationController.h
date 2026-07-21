@@ -169,6 +169,17 @@ public:
      *  "snapping-behavior", produces ["snapping"]). */
     Q_INVOKABLE QStringList parentChainFor(const QString& id) const;
 
+    /** Ids of every registered page whose controller is still dirty.
+     *
+     *  Lives here rather than as a QML walk over allPagesData() +
+     *  controller(id): `isDirty()` is NOT Q_INVOKABLE (StagingDomain exposes it
+     *  only through the `dirty` Q_PROPERTY, deliberately, to avoid a duplicate
+     *  metaobject entry), so the QML form threw a TypeError on the first
+     *  non-null controller. The lib has no QML test harness, so that shipped
+     *  green and silently swallowed the apply-on-close failure path it fed.
+     *  In C++ the compiler checks it and a unit test covers it. */
+    Q_INVOKABLE QStringList dirtyPageIds() const;
+
 public Q_SLOTS:
     void applyAll();
     void discardAll();

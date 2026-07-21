@@ -95,7 +95,7 @@ Kirigami.ApplicationWindow {
      *  user understands the close-was-blocked path instead of being
      *  silently re-prompted with the same dialog on the next close
      *  attempt. Carries the unresolved page ids (best-effort: walks
-     *  the registry and collects each PageController whose isDirty()
+     *  the registry and collects each PageController whose `dirty`
      *  is still true) AND the per-domain error strings collected by
      *  the async batch — consumers can use either: page-id list for
      *  "still unsaved on X, Y" framing, errors list for "%1 said: %2"
@@ -113,21 +113,11 @@ Kirigami.ApplicationWindow {
     /// a consumer toast can name the page(s) that refused the commit
     /// instead of just saying "save failed".
     function collectDirtyPageIds() {
-        const ids = [];
-        if (!root.controller || !root.controller.registry)
-            return ids;
-
-        const entries = root.controller.registry.allPagesData();
-        for (let i = 0; i < entries.length; ++i) {
-            const id = entries[i].id;
-            if (!id)
-                continue;
-
-            const ctrl = root.controller.registry.controller(id);
-            if (ctrl && ctrl.isDirty())
-                ids.push(id);
-        }
-        return ids;
+        // Delegates to C++: isDirty() is not Q_INVOKABLE, so walking the
+        // registry here and calling it threw a TypeError on the first
+        // non-null controller, which killed the applyOnCloseFailed emit and
+        // left the window silently refusing to close.
+        return root.controller ? root.controller.dirtyPageIds() : [];
     }
 
     // Default geometry sized in gridUnits so HiDPI displays (gridUnit ~24-36)

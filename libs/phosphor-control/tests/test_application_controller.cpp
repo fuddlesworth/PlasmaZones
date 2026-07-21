@@ -179,6 +179,32 @@ class TestApplicationController : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void dirtyPageIdsListsOnlyDirtyControllers()
+    {
+        // The QML close flow reads this to name the pages that refused their
+        // commit. It used to be a QML walk calling ctrl.isDirty(), which is
+        // NOT Q_INVOKABLE (StagingDomain exposes it only via the `dirty`
+        // property), so it threw on the first controller and the
+        // applyOnCloseFailed emit never happened. The lib has no QML test
+        // harness, so nothing caught it — hence this test on the C++ side.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* b = new StubPage(QStringLiteral("b"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl(QStringLiteral("qrc:/A.qml")));
+        app.registerPage(b, {}, QStringLiteral("B"), QUrl(QStringLiteral("qrc:/B.qml")));
+
+        QVERIFY(app.dirtyPageIds().isEmpty());
+
+        b->setDirty(true);
+        QCOMPARE(app.dirtyPageIds(), QStringList{QStringLiteral("b")});
+
+        a->setDirty(true);
+        QCOMPARE(app.dirtyPageIds(), (QStringList{QStringLiteral("a"), QStringLiteral("b")}));
+
+        b->setDirty(false);
+        QCOMPARE(app.dirtyPageIds(), QStringList{QStringLiteral("a")});
+    }
+
     void startsClean()
     {
         ApplicationController app;

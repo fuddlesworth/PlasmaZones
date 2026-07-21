@@ -538,74 +538,72 @@ void Daemon::publishActiveAnimationProfile()
 
     const Profile settingsProfile = m_settings->animationProfile();
     for (const QString* path : kSettingsDrivenProfilePaths) {
-        if (m_profileLoader && m_profileLoader->hasPath(*path)) {
-            // A user JSON at this path OWNS it, but its unset fields must
-            // still fall back to the user's settings rather than to library
-            // defaults. Skipping wholesale meant a Global.json setting only
-            // `duration` left minDistance / sequenceMode / staggerInterval /
-            // curve animating at built-in defaults here while the settings app
-            // resolved them from ISettings and displayed the user's values.
-            // Per-field merge is what ProfileTree inheritance does everywhere
-            // else, so both sides answer the same way.
+        // OWNERSHIP, not existence. hasPath() asks the loader's own bookkeeping
+        // whether it parsed a file for this path. That stays true even when the
+        // registry entry is something else entirely — including this function's
+        // OWN untagged publish from a previous tick. Merging over that is
+        // self-poisoning: the settings profile has every field engaged, so
+        // nothing falls back, the entry freezes, and every later slider move is
+        // silently dropped until the daemon restarts.
+        //
+        // Two ways in, both previously live. A registry/loader disagreement,
+        // and — with no invariant violated at all — a user dropping a
+        // Global.json into a session that already published untagged, where
+        // reloadFromOwner's "direct owner always wins" rule makes the loader
+        // skip the path while still emitting profilesChanged.
+        //
+        // ownerOf() answers the question that actually matters: is this entry
+        // the loader's parsed JSON? Only then is it a valid merge base.
+        const bool loaderOwnsPath = m_profileLoader && reg.ownerOf(*path) == m_profileLoader->ownerTag();
+        if (loaderOwnsPath) {
+            // A user JSON owns this path, but its unset fields must still fall
+            // back to the user's settings rather than to library defaults.
+            // Skipping wholesale left a Global.json that set only `duration`
+            // animating minDistance / sequenceMode / staggerInterval / curve at
+            // built-in defaults, while the settings app resolved them from
+            // ISettings and showed the user's values.
             //
-            // Merge from a CACHED RAW snapshot, never from what we last
-            // registered. Reading the registry back would be self-poisoning:
-            // the merged entry has every field engaged, so on the next tick
-            // no field is disengaged, nothing merges, and the user's later
-            // slider moves are silently ignored until the next file rescan.
-            // The snapshot is taken once per loader reload and dropped in the
-            // profilesChanged handler.
+            // Merge from a cached RAW snapshot taken once per loader reload,
+            // never from the registry's current entry — that is the merged
+            // result of the previous tick, and reading it back is the freeze
+            // described above.
             auto rawIt = m_rawJsonProfiles.constFind(*path);
             if (rawIt == m_rawJsonProfiles.constEnd()) {
                 const auto owned = reg.resolve(*path);
-                if (owned.has_value()) {
-                    rawIt = m_rawJsonProfiles.insert(*path, *owned);
-                } else {
-                    // The loader claims this path but the registry has no
-                    // entry for it. That is an invariant violation, not a
-                    // normal state, and silently continuing would leave the
-                    // path with no profile at all.
-                    //
-                    // Fall through to the untagged publish at the bottom of
-                    // the loop, and cache NOTHING. Registering an untagged
-                    // profile from inside this branch would be self-poisoning
-                    // twice over: the loader's "direct owner always wins" rule
-                    // makes it skip the path forever, while hasPath() stays
-                    // true, so every later tick would re-enter here, snapshot
-                    // the all-engaged settings profile AS the raw base, then
-                    // compare equal and drop every subsequent user edit —
-                    // unrecoverable short of a daemon restart. Falling through
-                    // re-evaluates settingsProfile fresh on every tick instead.
-                    qCWarning(lcCore) << "animation profile publish: loader owns" << *path
-                                      << "but the registry has no entry — publishing settings defaults instead";
+                if (!owned.has_value()) {
+                    // ownerOf() named the loader, so the entry exists by
+                    // construction. Belt and braces.
+                    qCWarning(lcCore) << "animation profile publish: registry reports loader ownership of" << *path
+                                      << "but has no entry — publishing settings defaults instead";
+                    reg.registerProfile(*path, settingsProfile);
+                    continue;
                 }
+                rawIt = m_rawJsonProfiles.insert(*path, *owned);
             }
 
-            if (rawIt != m_rawJsonProfiles.constEnd()) {
-                Profile mergedProfile = rawIt.value();
-                if (!mergedProfile.duration.has_value())
-                    mergedProfile.duration = settingsProfile.duration;
-                if (!mergedProfile.curve)
-                    mergedProfile.curve = settingsProfile.curve;
-                if (!mergedProfile.minDistance.has_value())
-                    mergedProfile.minDistance = settingsProfile.minDistance;
-                if (!mergedProfile.sequenceMode.has_value())
-                    mergedProfile.sequenceMode = settingsProfile.sequenceMode;
-                if (!mergedProfile.staggerInterval.has_value())
-                    mergedProfile.staggerInterval = settingsProfile.staggerInterval;
-                if (!mergedProfile.presetName.has_value())
-                    mergedProfile.presetName = settingsProfile.presetName;
-                // Re-registered under the JSON's own owner tag so the loader's
-                // next reloadFromOwner still replaces it.
-                //
-                // No pre-check: registerProfile already compares BOTH value and
-                // owner before inserting or emitting, so a guard here would be
-                // dead, would cost two extra locked resolve() calls on a ~30 Hz
-                // path, and — comparing value only — would miss an owner-only
-                // difference that registerProfile does correct.
-                reg.registerProfile(*path, mergedProfile, reg.ownerOf(*path));
-                continue;
-            }
+            Profile mergedProfile = rawIt.value();
+            if (!mergedProfile.duration.has_value())
+                mergedProfile.duration = settingsProfile.duration;
+            if (!mergedProfile.curve)
+                mergedProfile.curve = settingsProfile.curve;
+            if (!mergedProfile.minDistance.has_value())
+                mergedProfile.minDistance = settingsProfile.minDistance;
+            if (!mergedProfile.sequenceMode.has_value())
+                mergedProfile.sequenceMode = settingsProfile.sequenceMode;
+            if (!mergedProfile.staggerInterval.has_value())
+                mergedProfile.staggerInterval = settingsProfile.staggerInterval;
+            if (!mergedProfile.presetName.has_value())
+                mergedProfile.presetName = settingsProfile.presetName;
+            // Under the JSON's own owner tag, so the loader's next
+            // reloadFromOwner still replaces it.
+            //
+            // No pre-check: registerProfile already compares BOTH value and
+            // owner before inserting or emitting, so a guard here would be
+            // dead, would cost two extra locked resolve() calls on a ~30 Hz
+            // path, and — comparing value only — would miss an owner-only
+            // difference that registerProfile does correct.
+            reg.registerProfile(*path, mergedProfile, reg.ownerOf(*path));
+            continue;
         }
         reg.registerProfile(*path, settingsProfile);
     }
@@ -2473,6 +2471,10 @@ void Daemon::stop()
         for (const QString* path : kSettingsDrivenProfilePaths) {
             profileRegistry.unregisterProfile(*path);
         }
+        // Symmetric with the unregister above: a stop/re-init cycle on the
+        // same instance (the pattern the tests use) would otherwise start from
+        // a snapshot of the previous session's files.
+        m_rawJsonProfiles.clear();
     }
 
     // Stop the publish coalescing trampoline before resetting the

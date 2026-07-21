@@ -43,14 +43,18 @@ class PHOSPHORCONTROL_EXPORT PageRegistry : public QObject
     QML_NAMED_ELEMENT(PageRegistry)
     QML_UNCREATABLE("PageRegistry is owned by ApplicationController.")
     /// Master toggle for the two-tier "simple vs advanced" sidebar. When
-    /// false, entries marked AdvancedOnly are filtered out of the QML tree
-    /// accessors (topLevelPagesData / childPagesData) and any virtual
+    /// false, entries marked AdvancedOnly are filtered out of the tree
+    /// accessors (visibleChildPages / firstVisibleLeafId /
+    /// topLevelPagesData / childPagesData) and any virtual
     /// category left with no visible descendant vanishes with them; when
     /// true, SimpleOnly entries are hidden instead. Defaults to true so an
     /// app that never marks a page keeps the classic "show everything"
     /// behaviour. The value is app UI state — the app drives it (persisted
     /// however the app likes); the registry only consumes it for filtering.
     Q_PROPERTY(bool showAdvanced READ showAdvanced WRITE setShowAdvanced NOTIFY showAdvancedChanged)
+    /// The upward-walk depth bound, readable from QML so a consumer running
+    /// its own parent walk cannot drift from the C++ cap. CONSTANT because
+    /// the getter returns a static constexpr.
     Q_PROPERTY(int maxParentChainHops READ maxParentChainHops CONSTANT)
 
 public:
@@ -152,8 +156,10 @@ public:
     ~PageRegistry() override;
 
     /** Register a page. Emits `pageRegistered(id)` and returns `true` on
-     *  success. Warns and returns `false` on any of: empty id, duplicate
-     *  id, unknown parentId, null controller. The intent is to surface
+     *  success. Warns and returns `false` on any of, in the order the code
+     *  checks them: empty id, duplicate id, unknown parentId, null
+     *  controller, or the same controller already registered under another
+     *  id. The intent is to surface
      *  programmer errors in the log without aborting startup; the
      *  PageRegistry's tree just won't contain the misconfigured
      *  entry — downstream Sidebar / Breadcrumbs / page-router lookups
@@ -255,7 +261,8 @@ public:
     // here, inside the tree accessors, so QML never needs to re-derive it, and
     // the counterpart is navigation policy the app owns.
     //
-    // topLevelPagesData / childPagesData have NO in-tree consumer: the rail
+    // topLevelPagesData / childPagesData (and the Entry-returning
+    // topLevelPages()) have NO in-tree consumer: the rail
     // moved to SidebarRows and Breadcrumbs uses pageData / firstVisibleLeafId.
     // Retained as exported API for out-of-tree consumers, and covered by tests
     // so the serialization contract cannot rot. Same standing as

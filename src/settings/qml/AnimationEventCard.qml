@@ -358,10 +358,22 @@ Item {
         }
     }
 
+    /// Suppressed like the write path: each clearOverride emits
+    /// overrideChanged synchronously, so an unguarded loop pays one full
+    /// refresh per path (each re-reading EVERY path) and recomputes the
+    /// divergence banner against a half-cleared group, flickering it on
+    /// mid-loop.
     function _clearOverrideOnAll() {
-        const paths = root._writePaths;
-        for (var i = 0; i < paths.length; ++i)
-            settingsController.animationsPage.clearOverride(paths[i]);
+        root._committing = true;
+        try {
+            const paths = root._writePaths;
+            for (var i = 0; i < paths.length; ++i)
+                settingsController.animationsPage.clearOverride(paths[i]);
+        } finally {
+            root._committing = false;
+            root._inheritRev++;
+            root.refreshFromTree();
+        }
     }
 
     // Returns the number cleared, or -1 if ANY path refused (the
@@ -401,8 +413,13 @@ Item {
     /// missing override and an empty one compare equal. Both come back as
     /// QVariantMaps, whose JS key order is the map's own sorted order, so two
     /// paths holding the same values always stringify identically.
+    /// Prefers the _pathProfiles snapshot when it holds this path: it is
+    /// refreshed on the same pass that calls this, and rawProfile() is a
+    /// synchronous file open, so re-reading here defeated the cache's whole
+    /// purpose on every drag tick.
     function _storedStateKey(path) {
-        const profile = settingsController.animationsPage.rawProfile(path) || ({});
+        const cached = root._pathProfiles[path];
+        const profile = cached || settingsController.animationsPage.rawProfile(path) || ({});
         const shader = settingsController.animationsPage.rawShaderProfile(path) || ({});
         // Divergence is measured on exactly what this card WRITES to every
         // path, which is duration and the shader leg. Everything else a leaf
@@ -515,8 +532,9 @@ Item {
         // (_setOverrideMerged, onOverrideChanged), so the cached walk is
         // current here and a second C++ chain walk would be redundant. The two
         // that do not bump cannot move it: Component.onCompleted runs before
-        // the binding has ever evaluated, and onShaderProfileChanged moves the
-        // shader tree, which the timing chain does not read. A fifth caller
+        // the binding has ever evaluated, and both shader-side callers
+        // (onShaderProfileChanged and _setShaderOverrideOnAll's finally) move
+        // the shader tree, which the timing chain does not read. A fifth caller
         // that can move the chain MUST bump before calling.
         var resolved = root._inheritResolved;
         var hasRaw = raw && Object.keys(raw).length > 0;

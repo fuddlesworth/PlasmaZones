@@ -373,7 +373,6 @@ PhosphorUi.SettingsAppWindow {
         QFZCommon.ZoneColorDefaults.settingsSource = appSettings;
 
         // The header search supersedes the sidebar's page-tree search.
-        window.sidebar.searchEnabled = false;
 
         var geo = settingsController.loadWindowGeometry();
         if (geo.width > 0 && geo.height > 0) {
@@ -886,6 +885,9 @@ PhosphorUi.SettingsAppWindow {
         readonly property string windowAppearance: i18n("Appearance")
     }
 
+    // Constant, so declarative alongside its siblings rather than an
+    // imperative write in Component.onCompleted.
+    sidebar.searchEnabled: false
     sidebar.flattenTree: !settingsController.advancedMode
     sidebar.flatTitleOverrides: ({
             "window-appearance": flatTitleLabelsObject.windowAppearance
@@ -1031,7 +1033,7 @@ PhosphorUi.SettingsAppWindow {
                     if (trailingRow.isCollapsibleHeader && trailingRow.isCollapsibleExpanded)
                         return false;
 
-                    trailingRow._dirtyTick; // re-evaluate when dirty state changes
+                    void trailingRow._dirtyTick; // deliberate dependency registration
                     return settingsController.isPageDirty(trailingRow.entry.pageId);
                 }
 

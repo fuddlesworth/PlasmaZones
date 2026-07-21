@@ -5,6 +5,10 @@
 
 #include "phosphorcontrol_export.h"
 
+// Full definition, not a forward declaration: firstTwoNavigableDescendants
+// returns QList<PageRegistry::Entry> by value, which needs the nested type.
+#include "PageRegistry.h"
+
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
@@ -13,8 +17,6 @@
 #include <QVariantMap>
 
 namespace PhosphorControl {
-
-class PageRegistry;
 
 /**
  * @brief Derives the sidebar's visible row list from the page registry.
@@ -110,7 +112,9 @@ public:
      *  over an empty list; or exactly ONE navigable descendant remains, which
      *  build() flattens into a direct row one level up rather than offering as
      *  a drill target, so the rail would be sitting in a scope its own rows do
-     *  not present as enterable.
+     *  not present as enterable. The node must also HAVE visible children and
+     *  must not be collapsible, matching build()'s drill test clause for
+     *  clause.
      *
      *  Lives here rather than in QML because it is the same rule build() walks,
      *  and the lib has no QML test harness, so a second copy in JS would ship
@@ -127,6 +131,11 @@ private:
     /// down first, a raw pointer would leave build() dereferencing freed
     /// memory behind a null check that still reads as non-null. QPointer makes
     /// the existing `m_registry == nullptr` guard actually true in that case.
+    /// Up to two navigable descendants of @p parentId, depth-capped. Shared by
+    /// build()'s drill-row decision and resolveDrillScope so the two cannot
+    /// disagree about what counts as an enterable category.
+    QList<PageRegistry::Entry> firstTwoNavigableDescendants(const QString& parentId) const;
+
     QPointer<PageRegistry> m_registry;
 };
 

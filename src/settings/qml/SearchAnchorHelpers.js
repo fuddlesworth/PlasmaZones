@@ -3,8 +3,10 @@
 .pragma library
 
 // Shared parent-chain walks for the search-reveal registry, used by every
-// component that registers a searchAnchor (SettingsRow, SettingsCard,
-// RuleSectionList, AnimationEventCardList).
+// component that registers a searchAnchor and by SettingsFlickable itself,
+// which owns the registry. Deliberately not enumerated: the list was wrong in
+// both directions (it named RuleSectionList, which does not import this, and
+// omitted half the real importers).
 
 // The page's reveal registry: the first ancestor exposing registerSearchAnchor
 // (a SettingsFlickable). Returns null if none is found.

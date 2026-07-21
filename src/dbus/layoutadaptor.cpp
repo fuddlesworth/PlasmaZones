@@ -695,8 +695,9 @@ void LayoutAdaptor::setAllQuickLayoutSlots(int mode, const QVariantMap& slots)
         bool ok;
         int slotNumber = it.key().toInt(&ok);
         if (!ok || slotNumber < 1 || slotNumber > PhosphorProtocol::Service::QuickLayoutSlotCount) {
-            qCWarning(lcDbusLayout) << "Invalid slot key:" << it.key() << "(must be 1-"
-                                    << PhosphorProtocol::Service::QuickLayoutSlotCount << ")";
+            qCWarning(lcDbusLayout)
+                << "Invalid slot key:" << it.key()
+                << QStringLiteral("(must be 1-%1)").arg(PhosphorProtocol::Service::QuickLayoutSlotCount);
             continue;
         }
 
