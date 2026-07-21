@@ -83,6 +83,15 @@ Item {
     property real _expandProgress: 1
     // Header enable toggle
     property bool showToggle: false
+
+    /// Whether the master toggle also gates the card BODY. True for an
+    /// ordinary enable/disable card, where the rows configure the thing the
+    /// toggle turns on. Set false when the card hosts controls that are
+    /// deliberately independent of the toggle: the body gate disables AND
+    /// hides every row (SettingsRow's `visible` leads with `enabled`), so
+    /// leaving it on makes those controls unreachable until the user flips a
+    /// toggle that has nothing to do with them.
+    property bool gateBodyOnToggle: true
     property bool toggleChecked: false
     /// Deep-link reveal anchor id for this card (section-level target). Empty
     /// = not addressable. See SettingsFlickable.revealAnchor.
@@ -446,7 +455,7 @@ Item {
             // layout's implicit height. That re-measure is asynchronous, which is
             // why _bodyLive is set on the way OPEN before the ramp starts and
             // dropped on the way SHUT only once the ramp has finished.
-            enabled: (root.showToggle ? root.toggleChecked : true) && root._bodyLive
+            enabled: (root.showToggle && root.gateBodyOnToggle ? root.toggleChecked : true) && root._bodyLive
 
             Item {
                 id: contentColumn

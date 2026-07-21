@@ -759,6 +759,13 @@ Item {
         headerText: root.eventLabel
         showToggle: true
         toggleChecked: root.overrideEnabled
+        // The toggle owns the TIMING override only. Gating the body on it
+        // would disable and hide every row including the shader picker, so a
+        // user could not drop a shader on an event without first creating a
+        // timing override they did not want — and toggling back off would then
+        // write the blocking sentinel and wipe the shader again. The timing
+        // half is gated on its own, by showTimingSection below.
+        gateBodyOnToggle: false
         collapsible: root.collapsible
         onToggleClicked: function (checked) {
             if (checked) {
