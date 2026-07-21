@@ -8,7 +8,6 @@
 #include <PhosphorEngine/IWindowRegistry.h>
 
 #include <QHash>
-#include <QJsonObject>
 #include <QObject>
 #include <QRect>
 #include <QSet>

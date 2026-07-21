@@ -3,8 +3,6 @@
 
 #include <PhosphorSnapEngine/SnapState.h>
 
-#include <QJsonArray>
-
 namespace PhosphorSnapEngine {
 
 SnapState::SnapState(const QString& screenId, QObject* parent)

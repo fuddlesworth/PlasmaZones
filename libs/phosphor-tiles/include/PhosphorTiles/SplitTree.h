@@ -7,7 +7,6 @@
 
 #include "AutotileConstants.h"
 
-#include <QJsonObject>
 #include <QRect>
 #include <QString>
 #include <QStringList>
