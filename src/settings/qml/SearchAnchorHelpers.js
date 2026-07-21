@@ -31,3 +31,19 @@ function cardFor(item) {
     }
     return null;
 }
+
+// Every SettingsCard ancestor, nearest first. A reveal must expand ALL of them:
+// expanding only the nearest leaves the row invisible when an outer card is
+// also collapsed, and the reveal then falls back to the top of the page for a
+// reason nothing on screen explains.
+function cardChainFor(item) {
+    var chain = [];
+    var p = item ? item.parent : null;
+    while (p) {
+        if (p.isSettingsCard === true)
+            chain.push(p);
+
+        p = p.parent;
+    }
+    return chain;
+}

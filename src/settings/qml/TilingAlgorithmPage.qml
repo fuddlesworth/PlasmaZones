@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import "AlgorithmCapabilities.js" as AlgoCaps
 
 SettingsFlickable {
     id: root
@@ -38,18 +39,10 @@ SettingsFlickable {
 
     onEffectiveAlgorithmChanged: root.selectedAlgorithm = root.effectiveAlgorithm
     // Data-driven algorithm capabilities (lookup from cached availableAlgorithms by ID)
-    readonly property var algoCapabilities: {
-        const algos = root._cachedAlgos;
-        const algoId = root.selectedAlgorithm;
-        for (let i = 0; i < algos.length; i++) {
-            if (algos[i].id === algoId)
-                return algos[i];
-        }
-        return null;
-    }
-    readonly property bool algoSupportsSplitRatio: algoCapabilities ? (algoCapabilities.supportsSplitRatio === true) : false
-    readonly property bool algoSupportsMasterCount: algoCapabilities ? (algoCapabilities.supportsMasterCount === true) : false
-    readonly property bool algoSupportsCustomParams: algoCapabilities ? (algoCapabilities.supportsCustomParams === true) : false
+    readonly property var algoCapabilities: AlgoCaps.capabilitiesFor(root._cachedAlgos, root.selectedAlgorithm)
+    readonly property bool algoSupportsSplitRatio: AlgoCaps.supportsSplitRatio(algoCapabilities)
+    readonly property bool algoSupportsMasterCount: AlgoCaps.supportsMasterCount(algoCapabilities)
+    readonly property bool algoSupportsCustomParams: AlgoCaps.supportsCustomParams(algoCapabilities)
     // Custom param definitions for the selected algorithm.  The binding only
     // depends on algoSupportsCustomParams / selectedAlgorithm.  Because
     // customParamsForAlgorithm() is a Q_INVOKABLE (not a Q_PROPERTY with
@@ -119,10 +112,12 @@ SettingsFlickable {
         _seedLiveAlgoSettings();
     }
 
-    // Whether the algorithm uses a center layout (ratio/count labels say "Center" instead of "Master").
-    // Check capabilities map first (for future extensibility via scripted algorithm metadata),
-    // falling back to hardcoded IDs for built-in algorithms. See PR #256 / M13.
-    readonly property bool algoCenterLayout: algoCapabilities ? (algoCapabilities.centerLayout === true) : (root.selectedAlgorithm === "three-column" || root.selectedAlgorithm === "centered-master")
+    // Whether the algorithm uses a center layout (ratio/count labels say
+    // "Center" instead of "Master"). Read straight from the catalog — the
+    // hardcoded "three-column || centered-master" fallback this used to carry
+    // was both duplicated on the simple page and unreachable, since
+    // algorithmservice.cpp sets centerLayout unconditionally.
+    readonly property bool algoCenterLayout: AlgoCaps.centerLayout(algoCapabilities)
 
     function settingValue(key, globalValue) {
         return psHelper.settingValue(key, globalValue);

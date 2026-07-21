@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import "AlgorithmCapabilities.js" as AlgoCaps
 
 /**
  * @brief The simple-mode tiling surface (SimpleOnly counterpart of the
@@ -52,17 +53,9 @@ SettingsFlickable {
     // transiently resets while its model rebuilds after a Save.
     property string selectedAlgorithm: root.appSettingsObj.defaultAutotileAlgorithm
 
-    readonly property var algoCapabilities: {
-        const algos = root._cachedAlgos;
-        const algoId = root.selectedAlgorithm;
-        for (let i = 0; i < algos.length; i++) {
-            if (algos[i].id === algoId)
-                return algos[i];
-        }
-        return null;
-    }
-    readonly property bool algoSupportsSplitRatio: algoCapabilities ? (algoCapabilities.supportsSplitRatio === true) : false
-    readonly property bool algoCenterLayout: algoCapabilities ? (algoCapabilities.centerLayout === true) : (root.selectedAlgorithm === "three-column" || root.selectedAlgorithm === "centered-master")
+    readonly property var algoCapabilities: AlgoCaps.capabilitiesFor(root._cachedAlgos, root.selectedAlgorithm)
+    readonly property bool algoSupportsSplitRatio: AlgoCaps.supportsSplitRatio(algoCapabilities)
+    readonly property bool algoCenterLayout: AlgoCaps.centerLayout(algoCapabilities)
     // Saved per-algorithm tuning (split ratio, master count, max windows) for
     // the selected algorithm — feeds the preview and re-seeds the ratio
     // slider on algorithm change. Custom params are read once per algorithm

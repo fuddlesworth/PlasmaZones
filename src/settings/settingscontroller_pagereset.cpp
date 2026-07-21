@@ -18,6 +18,7 @@
 
 #include "animationpagescope.h"
 #include "decorationpagescope.h"
+#include "dbusutils.h"
 #include "settingscontroller_pagekeys.h"
 
 #include "../core/logging.h"
@@ -259,9 +260,25 @@ void SettingsController::resetPage(const QString& page)
     // clears. quickLayoutSlotsChanged refreshes the slot cards.
     if (isShortcutsPage(page)) {
         const bool snapping = (page == QLatin1String("snapping-shortcuts"));
+        // Fetch the whole map in ONE D-Bus call. The per-slot accessors fall
+        // through to the daemon for any slot with no staged value, so the
+        // loop below used to block the GUI thread on up to nine sequential
+        // round-trips — and an all-default page paid all nine to stage nothing.
+        const QVariantMap allSlots =
+            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                   QStringLiteral("getAllQuickLayoutSlots"), {snapping ? 0 : 1})
+                .arguments()
+                .value(0)
+                .toMap();
         bool staged = false;
         for (int slot = 1; slot <= kQuickLayoutSlotCount; ++slot) {
-            const QString current = snapping ? getQuickLayoutSlot(slot) : getTilingQuickLayoutSlot(slot);
+            // Staged value wins over the daemon's, matching the per-slot
+            // accessors' precedence.
+            QString current;
+            const bool haveStaged = snapping ? m_staging.stagedSnappingQuickSlot(slot, current)
+                                             : m_staging.stagedTilingQuickSlot(slot, current);
+            if (!haveStaged)
+                current = allSlots.value(QString::number(slot)).toString();
             if (current.isEmpty())
                 continue;
             if (snapping)
@@ -409,11 +426,17 @@ void SettingsController::discardPage(const QString& page)
                 m_settings.discardKeys(animationGeneralConfigKeys());
             }
         } else if (scope.kind == AnimationPageScope::EventSubtree) {
+            // LoadingScope opened BEFORE the file revert, matching resetPage.
+            // The revert provokes settings NOTIFYs, and without suppression
+            // they reach onSettingsPropertyChanged and can re-dirty the active
+            // page in the middle of the discard that is clearing it.
+            const LoadingScope loadingScope(m_loading);
             if (m_animationsPage != nullptr)
                 m_animationsPage->revertPendingUnder(animationScopedBuiltInPaths(scope));
             // Shader tree: restore only this scope's paths to their baseline value
-            // (re-add / change / remove), leaving the other surfaces' staged edits.
-            const LoadingScope loadingScope(m_loading);
+            // (re-add / change / remove), leaving the other surfaces' staged
+            // edits. Covered by the scope opened above, which now brackets the
+            // file revert as well.
             PhosphorAnimationShaders::ShaderProfileTree current = m_settings.shaderProfileTree();
             const PhosphorAnimationShaders::ShaderProfileTree baseline = m_settings.committedShaderProfileTree();
             QSet<QString> paths;
@@ -442,10 +465,11 @@ void SettingsController::discardPage(const QString& page)
             if (scope.includeGeneralKeys)
                 m_settings.discardKeys(animationGeneralConfigKeys());
         } else {
-            // WholeTree library leaf.
+            // WholeTree library leaf. Scope opened before the revert for the
+            // same reason as the subtree branch above.
+            const LoadingScope loadingScope(m_loading);
             if (m_animationsPage != nullptr)
                 m_animationsPage->revertPending();
-            const LoadingScope loadingScope(m_loading);
             m_settings.discardKeys(animationConfigKeys());
         }
         // Reconcile every animation leaf against the value-based truth (this

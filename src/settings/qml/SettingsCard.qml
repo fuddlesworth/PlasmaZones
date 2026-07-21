@@ -445,7 +445,11 @@ Item {
                 id: contentColumn
 
                 width: parent.width
-                implicitHeight: root.contentItem ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
+                // Padding only when there is a body to pad. A card whose rows
+                // are all hidden (every row advancedOnly in simple mode, or
+                // gated off by a master toggle) would otherwise reserve a dead
+                // strip under its header.
+                implicitHeight: root.contentItem && root.contentItem.implicitHeight > 0 ? root.contentItem.implicitHeight + Kirigami.Units.largeSpacing * 2 : 0
             }
 
             // Only the progress is animated. Height and opacity are both bound to

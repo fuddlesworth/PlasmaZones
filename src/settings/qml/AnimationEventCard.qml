@@ -483,6 +483,16 @@ Item {
     implicitHeight: card.implicitHeight
     Layout.fillWidth: true
     Component.onCompleted: {
+        // Validate declared mirrors once. A misspelled path is rejected by
+        // every writer, so the mirror silently never receives an edit and its
+        // stored state can never match the primary's — which latches the
+        // divergence banner on with no edit able to clear it. Failing loudly
+        // here turns a permanent mystery banner into a one-line console
+        // message naming the bad path.
+        for (var i = 0; i < root.mirrorPaths.length; ++i) {
+            if (!settingsController.animationsPage.isValidEventPath(root.mirrorPaths[i]))
+                console.warn("AnimationEventCard(" + root.eventPath + "): mirrorPaths entry '" + root.mirrorPaths[i] + "' is not a valid event path; writes to it will be silently rejected");
+        }
         refreshFromTree();
         refreshShaderFromTree();
     }

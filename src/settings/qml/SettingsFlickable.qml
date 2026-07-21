@@ -3,6 +3,7 @@
 
 import QtQuick
 import org.kde.kirigami as Kirigami
+import "SearchAnchorHelpers.js" as SearchAnchors
 
 /**
  * @brief Settings-page root Flickable with Plasma-aware wheel scroll.
@@ -91,9 +92,9 @@ Flickable {
     property var _searchAnchors: ({})
     // Item awaiting reveal once its containing card finishes expanding.
     property var _revealPendingItem: null
-    // The card that reveal speculatively expanded, so a reveal that turns out
-    // invisible anyway can put it back instead of leaving it open.
-    property var _revealPendingCard: null
+    // Cards reveal speculatively expanded, so a reveal that turns out invisible
+    // anyway can put them back instead of leaving them open.
+    property var _revealPendingCards: []
     // A revealAnchor() for an id that isn't registered yet — children register
     // via Qt.callLater after the page builds, so a deep link can arrive first.
     // Retained here and retried from registerSearchAnchor (consume-once).
@@ -111,6 +112,7 @@ Flickable {
         // Satisfy a deep link that arrived before this anchor registered.
         if (settingsFlickable._pendingRevealAnchor === anchorId) {
             settingsFlickable._pendingRevealAnchor = "";
+            pendingRevealExpiry.stop();
             settingsFlickable.revealAnchor(anchorId);
         }
     }
@@ -133,11 +135,17 @@ Flickable {
             // Not registered yet — retain and retry once it registers, so the
             // reveal isn't lost to the page-build / deferred-registration race.
             settingsFlickable._pendingRevealAnchor = anchorId;
+            // Expire it: without this a bogus or wrong-page anchor stays armed
+            // for the page's lifetime, and a Repeater that later rebuilds and
+            // registers that id fires an unexplained scroll and highlight long
+            // after the search that asked for it.
+            pendingRevealExpiry.restart();
             return;
         }
 
         // This reveal wins over any anchor still awaiting registration.
         settingsFlickable._pendingRevealAnchor = "";
+        pendingRevealExpiry.stop();
 
         var card = entry.card;
 
@@ -152,17 +160,25 @@ Flickable {
         // initiallyCollapsed), not the tier disagreement the guard was written
         // for. Effective visibility is only meaningful once the card is open,
         // so the bail moves after the expand.
-        if (card && card.collapsible === true && card.collapsed === true) {
+        // Every collapsed card on the chain, not just the nearest — a row in a
+        // card nested inside another collapsed card stays invisible if only the
+        // inner one opens.
+        var collapsedChain = SearchAnchors.cardChainFor(entry.item).filter(function (c) {
+            return c.collapsible === true && c.collapsed === true;
+        });
+        if (collapsedChain.length > 0) {
             // Expand, then settle: drive the post-expand scroll off a one-shot
             // timer (≈ the expand duration) rather than an expand-finished signal —
             // a signal would leak / never fire if the card is re-collapsed
             // mid-animation. _scrollToReveal still defers a frame for final layout.
             settingsFlickable._revealPendingItem = entry.item;
-            // Remember what we opened, so a reveal that turns out invisible
-            // anyway can put the card back rather than leaving a card the user
-            // deliberately shut yanked open with the page scrolled elsewhere.
-            settingsFlickable._revealPendingCard = card;
-            card.collapsed = false;
+            // Remember everything we opened, so a reveal that turns out
+            // invisible anyway can put them back rather than leaving cards the
+            // user deliberately shut yanked open with the page scrolled
+            // somewhere unrelated.
+            settingsFlickable._revealPendingCards = collapsedChain;
+            for (var ci = 0; ci < collapsedChain.length; ++ci)
+                collapsedChain[ci].collapsed = false;
             revealSettleTimer.restart();
         } else if (!entry.item.visible) {
             // Genuinely invisible with no collapsed card to blame: the row is
@@ -186,7 +202,7 @@ Flickable {
     /// target, whichever branch the new one takes.
     function _cancelPendingReveal() {
         settingsFlickable._revealPendingItem = null;
-        settingsFlickable._revealPendingCard = null;
+        settingsFlickable._revealPendingCards = [];
         revealSettleTimer.stop();
     }
 
@@ -220,9 +236,9 @@ Flickable {
         interval: Kirigami.Units.shortDuration + Kirigami.Units.veryShortDuration
         onTriggered: {
             var pending = settingsFlickable._revealPendingItem;
-            var pendingCard = settingsFlickable._revealPendingCard;
+            var pendingCards = settingsFlickable._revealPendingCards;
             settingsFlickable._revealPendingItem = null;
-            settingsFlickable._revealPendingCard = null;
+            settingsFlickable._revealPendingCards = [];
             if (!pending)
                 return;
             // Effective visibility is only final now that the card has finished
@@ -236,14 +252,24 @@ Flickable {
                 // condition, not by the card. Put the card back: we opened it
                 // speculatively, it bought nothing, and leaving it open is a
                 // visible side effect of a reveal that failed.
-                if (pendingCard)
-                    pendingCard.collapsed = true;
+                for (var ri = 0; ri < pendingCards.length; ++ri)
+                    pendingCards[ri].collapsed = true;
                 revealScrollAnim.to = 0;
                 revealScrollAnim.restart();
                 return;
             }
             settingsFlickable._scrollToReveal(pending);
         }
+    }
+
+    // Drops a deep link whose anchor never registered. The window only has to
+    // cover the deferred-registration race it exists for (children register via
+    // Qt.callLater after the page builds), not the page's lifetime.
+    Timer {
+        id: pendingRevealExpiry
+
+        interval: Kirigami.Units.longDuration * 3
+        onTriggered: settingsFlickable._pendingRevealAnchor = ""
     }
 
     NumberAnimation {

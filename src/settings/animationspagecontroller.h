@@ -493,7 +493,12 @@ private:
     /// All filesystem-touching methods reject non-member paths so a
     /// crafted `path` (e.g. `"../etc/passwd"`) cannot escape the
     /// profiles directory.
-    bool isValidEventPath(const QString& path) const;
+    ///
+    /// Q_INVOKABLE so a card can validate its declared mirrorPaths at load.
+    /// The group writers discard setOverride's bool, so a typo'd mirror path
+    /// fails silently AND latches the divergence banner permanently (the
+    /// mirror's stored state can never match the primary's).
+    Q_INVOKABLE bool isValidEventPath(const QString& path) const;
 
     /// Capture @p filePath's current content into the snapshot if not
     /// already snapshotted. Called by every file-mutating method just
