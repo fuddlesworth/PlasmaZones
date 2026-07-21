@@ -106,6 +106,24 @@ Item {
     // invalidates only when the profile chain actually changes — see
     // the Connections block below that bumps it on overrideChanged.
     property int _inheritRev: 0
+
+    // The Global timing values live on ISettings, not in a profile file, so
+    // they emit no overrideChanged. Without this the inheritance breadcrumb and
+    // every override-off card's seeded controls keep showing the previous
+    // Global until the page is rebuilt — visible on the simple page, where the
+    // Global card and the cards inheriting from it share one screen.
+    Connections {
+        function onAnimationDurationChanged() {
+            root._inheritRev = root._inheritRev + 1;
+            root.refreshFromTree();
+        }
+        function onAnimationEasingCurveChanged() {
+            root._inheritRev = root._inheritRev + 1;
+            root.refreshFromTree();
+        }
+
+        target: settingsController.settings
+    }
     readonly property var _inheritResolved: {
         _inheritRev;
         // Coerce to {} when the Q_INVOKABLE returns undefined / null
@@ -214,6 +232,23 @@ Item {
         const paths = root._writePaths;
         for (var i = 0; i < paths.length; ++i)
             settingsController.animationsPage.setOverride(paths[i], profile);
+    }
+
+    /// Like _setOverrideOnAll, but each path keeps its OWN curve: a path that
+    /// already owns one has it preserved, a path that inherits stays
+    /// inheriting. Used by simple-mode commits, where the card cannot show or
+    /// edit a curve and so must not decide one on the user's behalf.
+    function _setOverridePerPath(profile) {
+        const paths = root._writePaths;
+        for (var i = 0; i < paths.length; ++i) {
+            var raw = settingsController.animationsPage.rawProfile(paths[i]) || ({});
+            var perPath = {};
+            for (var k in profile)
+                perPath[k] = profile[k];
+            if (typeof raw.curve === "string" && raw.curve.length > 0)
+                perPath.curve = raw.curve;
+            settingsController.animationsPage.setOverride(paths[i], perPath);
+        }
     }
 
     function _clearOverrideOnAll() {
@@ -403,20 +438,23 @@ Item {
         // curve changes, and simple mode shows no control hinting that a curve
         // override exists or how to clear it. Carry the curve only when the
         // card already owns one, or when the user can actually see and edit it.
-        // Ask EVERY write path, not just the primary. `_setOverrideOnAll`
-        // writes this one object to the primary and every mirror, and the
-        // controller truncates each profile file wholesale, so deciding from
-        // the primary alone would drop a curve a mirror owns (or pin the
-        // primary's onto a mirror that inherits) — splitting a group the card
-        // presents as one. OR-ing normalises toward KEEPING an existing curve,
-        // which is the non-destructive direction.
-        var ownsCurve = root._writePaths.some(function (p) {
-            var r = settingsController.animationsPage.rawProfile(p) || ({});
-            return typeof r.curve === "string" && r.curve.length > 0;
-        });
-        if (!root.simpleTiming || ownsCurve)
+        if (!root.simpleTiming) {
+            // Advanced mode edits the curve directly, so it always travels.
+            // Short-circuited before the per-path reads below, which are
+            // synchronous file opens and would otherwise run on every tick of
+            // a duration drag for no effect.
             profile.curve = root.currentCurveString;
-        root._setOverrideOnAll(profile);
+            root._setOverrideOnAll(profile);
+            return;
+        }
+        // Simple mode: the curve is not editable here and currentCurveString
+        // was seeded from the RESOLVED profile, so writing it would pin a copy
+        // of the inherited curve as a direct override. Decide PER PATH rather
+        // than for the group: a path that already owns a curve keeps its own,
+        // and a path that inherits keeps inheriting. Deciding once for the
+        // group (either direction) writes one path's answer onto the other and
+        // splits a group the card presents as one.
+        root._setOverridePerPath(profile);
     }
 
     // Current emitters that pass empty-path: `shaderProfileChanged`

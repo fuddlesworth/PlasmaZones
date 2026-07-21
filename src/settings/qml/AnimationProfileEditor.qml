@@ -269,7 +269,7 @@ ColumnLayout {
             // tree and inherits from nothing, so "the inherited spring curve"
             // was false there. It also has to say how to get out: in simple
             // mode a stored spring makes duration genuinely unreachable.
-            text: i18n("A spring curve is set, so duration does not apply. Switch to Advanced in the sidebar to change it.")
+            text: i18n("A spring curve is set, so the duration has no effect. Switch to Advanced in the sidebar to change the curve.")
             font.italic: true
             color: Kirigami.Theme.disabledTextColor
             wrapMode: Text.WordWrap

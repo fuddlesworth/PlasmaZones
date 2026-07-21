@@ -19,8 +19,8 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  *   ├─────────────────────────┤
  *   │ SearchField  (sticky)   │
  *   ├─────────────────────────┤
- *   │ Back button (when drilled)
- *   │ ListView (scrollable)   │
+ *   │ Back button (drilled)   │  ← scrolls with the list,
+ *   │ ListView (scrollable)   │    not a sticky band
  *   │ — rows drill / toggle / │
  *   │   navigate as below     │
  *   ├─────────────────────────┤
@@ -36,6 +36,10 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  *     rows in/out via ListView add/remove Transitions.
  *   - Navigable leaves (entry has a qmlSource) — taps set
  *     controller.currentPageId.
+ *   - FLAT mode (`flattenTree`, see below) overrides all three: every
+ *     visible navigable page renders at depth 0, category headers are not
+ *     emitted, and drillInto / drillOut early-return. A reader of the three
+ *     modes above will not otherwise learn a fourth one supersedes them.
  *
  * Slots for consumers:
  *
@@ -122,6 +126,12 @@ ColumnLayout {
      *  header that no longer shows. Consulted only while `flattenTree`
      *  is true. */
     property var flatTitleOverrides: ({})
+    /** Bumped on pageRegistered / visibleSetChanged. Bindings that read the
+     *  registry through a Q_INVOKABLE (which registers no dependency of its
+     *  own) touch this so they re-evaluate when the catalogue or the visible
+     *  set changes. `_refreshModel` covers the ListModel; this covers
+     *  everything outside it. */
+    property int _registryTick: 0
 
     onFlattenTreeChanged: {
         if (root.flattenTree) {
@@ -378,6 +388,7 @@ ColumnLayout {
     // async catalog warm-up (plugin loading, dynamic registration).
     Connections {
         function onPageRegistered() {
+            root._registryTick = root._registryTick + 1;
             Qt.callLater(root._refreshModel);
         }
 
@@ -389,6 +400,7 @@ ColumnLayout {
         // in the rail while search (the other tier-filtering consumer) had
         // already rebuilt.
         function onVisibleSetChanged() {
+            root._registryTick = root._registryTick + 1;
             root._refreshModel();
         }
 
@@ -535,7 +547,15 @@ ColumnLayout {
                 compact: root.compact
                 // Show the parent category name (e.g. "‹ Snapping"); pageData()
                 // returns an empty map for an unknown/empty id, so guard to "".
-                title: root.currentParentId !== "" ? (root.controller.registry.pageData(root.currentParentId).title || "") : ""
+                // _registryTick: pageData() is a Q_INVOKABLE and registers no
+                // binding dependency, so a parent registered or re-titled after
+                // the rail drilled in would keep a stale label. _refreshModel
+                // rebuilds the ListModel but never touches this binding. Same
+                // mechanism Breadcrumbs uses, for the same reason.
+                title: {
+                    void root._registryTick;
+                    return root.currentParentId !== "" ? (root.controller.registry.pageData(root.currentParentId).title || "") : "";
+                }
                 onBackClicked: root.drillOut()
             }
 

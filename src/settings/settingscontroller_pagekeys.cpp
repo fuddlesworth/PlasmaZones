@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Page-class predicates and the shared-domain config key lists used by both
-// the dirty-tracking surface (settingscontroller_pagestate.cpp) and the
-// per-page Reset/Discard machinery (settingscontroller_pagereset.cpp).
+// Page-class predicates and shared-domain config key lists used across the
+// settings-app translation units. Each declaration in the header names its own
+// consumers; they are not all the same pair.
 //
 // These lived in an anonymous namespace inside _pagestate.cpp until that file
 // was split; internal linkage cannot span two translation units, so they are
@@ -19,6 +19,21 @@
 #include "../config/configdefaults.h"
 
 namespace PlasmaZones {
+
+// The two drag-to-reorder pages. Their state is the staged order optional, not
+// config-manifest keys, so per-page Reset/Discard dispatches to the ordering
+// helpers rather than resetKeys/discardKeys.
+bool isOrderingPage(const QString& page)
+{
+    return page == QLatin1String("snapping-ordering") || page == QLatin1String("tiling-ordering");
+}
+
+// The two Quick Shortcuts pages. Their editable state is the per-mode staged
+// quick-slot layout assignments in StagingService (daemon-backed).
+bool isShortcutsPage(const QString& page)
+{
+    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts");
+}
 
 // Every animation leaf shares the single AnimationsPageController staging domain
 // AND the single ShaderProfileTree key, but Reset/Discard/dirty are NOT

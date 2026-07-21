@@ -125,7 +125,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Overflow behavior")
             searchAnchor: "overflowBehavior"
-            description: i18n("Float excess windows beyond the max-windows cap, or Unlimited to tile every window regardless of count.")
+            description: i18n("Float leaves windows beyond the max-windows cap floating. Unlimited tiles every window regardless of count.")
 
             WideComboBox {
                 Accessible.name: i18n("Autotile overflow behavior")

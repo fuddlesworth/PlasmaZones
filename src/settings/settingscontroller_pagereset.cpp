@@ -31,28 +31,10 @@ namespace PlasmaZones {
 
 namespace {
 
-// Reset/Discard-only helpers. These live at file scope rather than in the
-// shared settingscontroller_pagekeys.h because nothing outside this TU uses
-// them — the dirty-tracking half never did, so no translation-unit boundary is
-// crossed and internal linkage is the right default.
-
-// The two drag-to-reorder pages. Their state is the staged order optional
-// (m_stagedSnappingOrder / m_stagedTilingOrder), not config-manifest keys, so
-// per-page Reset/Discard dispatches to the ordering helpers rather than
-// resetKeys/discardKeys.
-bool isOrderingPage(const QString& page)
-{
-    return page == QLatin1String("snapping-ordering") || page == QLatin1String("tiling-ordering");
-}
-
-// The two Quick Shortcuts pages. Their editable state is the per-mode staged
-// quick-slot layout assignments in StagingService (daemon-backed); the shortcut
-// keysequence is a read-only default in the standalone. Reset unassigns every
-// slot (the default), Discard drops the staged edits.
-bool isShortcutsPage(const QString& page)
-{
-    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts");
-}
+// Reset/Discard-only helpers: nothing outside this TU uses them, so internal
+// linkage is the right default. (isOrderingPage / isShortcutsPage started here
+// too, but isPageDirty open-codes the same classification, so they moved to
+// the shared header where both can read one definition.)
 
 // Raises the loading flag for the enclosing scope and restores the PREVIOUS
 // value on exit (not a hard clear), so nesting is safe. Suppresses
@@ -163,6 +145,12 @@ void SettingsController::resetPage(const QString& page)
     // and any stale m_dirtyPages entry must clear too).
     if (isAnimationPage(page)) {
         const AnimationPageScope scope = animationPageScope(page);
+        // Set when a file clear does not complete. The reconcile below runs
+        // AFTER the LoadingScope closes on every path, success or failure —
+        // reconciling while m_loading is still raised skips
+        // maybeDrainPendingExternalReload, so the two paths used to differ for
+        // no reason.
+        bool failed = false;
         {
             const LoadingScope loadingScope(m_loading);
             if (scope.kind == AnimationPageScope::ConfigOnly) {
@@ -174,13 +162,15 @@ void SettingsController::resetPage(const QString& page)
                 // than reporting a half-done reset as clean. The page toasts why.
                 if (m_animationsPage != nullptr
                     && m_animationsPage->clearOverridesUnder(animationScopedBuiltInPaths(scope)) < 0) {
-                    reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
-                    return;
+                    failed = true;
                 }
-                // Shader tree: clear only this scope's overrides (default = none).
-                PhosphorAnimationShaders::ShaderProfileTree tree = m_settings.shaderProfileTree();
+                // Shader tree: clear only this scope's overrides (default =
+                // none). Skipped on a failed file clear so a half-done reset
+                // stays visibly dirty for a retry rather than reporting clean.
+                PhosphorAnimationShaders::ShaderProfileTree tree =
+                    failed ? PhosphorAnimationShaders::ShaderProfileTree() : m_settings.shaderProfileTree();
                 bool changed = false;
-                const QStringList overridden = tree.overriddenPaths();
+                const QStringList overridden = failed ? QStringList() : tree.overriddenPaths();
                 for (const QString& path : overridden) {
                     if (animationPathInScope(path, scope) && tree.clearOverride(path))
                         changed = true;
@@ -191,15 +181,15 @@ void SettingsController::resetPage(const QString& page)
                 // keys too (the condensed simple page). Deliberately the
                 // General key list, NOT animationConfigKeys: the shader-tree
                 // key is per-event state already handled per scope above.
-                if (scope.includeGeneralKeys)
+                if (!failed && scope.includeGeneralKeys)
                     m_settings.resetKeys(animationGeneralConfigKeys());
             } else {
                 // WholeTree library leaf: files + every animation key.
                 if (m_animationsPage != nullptr && m_animationsPage->clearAllOverrides() < 0) {
-                    reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));
-                    return;
+                    failed = true;
+                } else {
+                    m_settings.resetKeys(animationConfigKeys());
                 }
-                m_settings.resetKeys(animationConfigKeys());
             }
         }
         reconcilePagesDirty(pageGroupChildren().value(QStringLiteral("animations")));

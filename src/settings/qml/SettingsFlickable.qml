@@ -91,6 +91,9 @@ Flickable {
     property var _searchAnchors: ({})
     // Item awaiting reveal once its containing card finishes expanding.
     property var _revealPendingItem: null
+    // The card that reveal speculatively expanded, so a reveal that turns out
+    // invisible anyway can put it back instead of leaving it open.
+    property var _revealPendingCard: null
     // A revealAnchor() for an id that isn't registered yet — children register
     // via Qt.callLater after the page builds, so a deep link can arrive first.
     // Retained here and retried from registerSearchAnchor (consume-once).
@@ -118,6 +121,13 @@ Flickable {
     }
 
     function revealAnchor(anchorId) {
+        // Cancel any in-flight expand-then-settle FIRST — before the registry
+        // lookup, which can early-return for a not-yet-registered id without
+        // touching the timer. A stale settle would otherwise fire against the
+        // PREVIOUS target and pulse the wrong row moments before the new
+        // anchor registers and scrolls somewhere else.
+        settingsFlickable._cancelPendingReveal();
+
         var entry = settingsFlickable._searchAnchors[anchorId];
         if (!entry || !entry.item) {
             // Not registered yet — retain and retry once it registers, so the
@@ -148,6 +158,10 @@ Flickable {
             // a signal would leak / never fire if the card is re-collapsed
             // mid-animation. _scrollToReveal still defers a frame for final layout.
             settingsFlickable._revealPendingItem = entry.item;
+            // Remember what we opened, so a reveal that turns out invisible
+            // anyway can put the card back rather than leaving a card the user
+            // deliberately shut yanked open with the page scrolled elsewhere.
+            settingsFlickable._revealPendingCard = card;
             card.collapsed = false;
             revealSettleTimer.restart();
         } else if (!entry.item.visible) {
@@ -160,17 +174,20 @@ Flickable {
             // the row disagreed — fall back to the top of the page, which is at
             // least a real destination. Tests effective `visible` rather than
             // the advancedOnly flag so every hiding condition is covered.
-            settingsFlickable._revealPendingItem = null;
-            revealSettleTimer.stop();
             revealScrollAnim.to = 0;
             revealScrollAnim.restart();
         } else {
-            // Cancel any in-flight expand-then-settle so this immediate reveal
-            // wins (latest reveal target always takes precedence).
-            settingsFlickable._revealPendingItem = null;
-            revealSettleTimer.stop();
             settingsFlickable._scrollToReveal(entry.item);
         }
+    }
+
+    /// Drops any pending expand-then-settle. Called at the top of every
+    /// revealAnchor so a superseded reveal can never fire against the old
+    /// target, whichever branch the new one takes.
+    function _cancelPendingReveal() {
+        settingsFlickable._revealPendingItem = null;
+        settingsFlickable._revealPendingCard = null;
+        revealSettleTimer.stop();
     }
 
     function _scrollToReveal(item) {
@@ -203,7 +220,9 @@ Flickable {
         interval: Kirigami.Units.shortDuration + Kirigami.Units.veryShortDuration
         onTriggered: {
             var pending = settingsFlickable._revealPendingItem;
+            var pendingCard = settingsFlickable._revealPendingCard;
             settingsFlickable._revealPendingItem = null;
+            settingsFlickable._revealPendingCard = null;
             if (!pending)
                 return;
             // Effective visibility is only final now that the card has finished
@@ -213,6 +232,12 @@ Flickable {
             // mode), so fall back to the top of the page rather than pulsing
             // the highlight over a zero-height strip.
             if (!pending.visible) {
+                // Still hidden after the expand — the row is gated by its own
+                // condition, not by the card. Put the card back: we opened it
+                // speculatively, it bought nothing, and leaving it open is a
+                // visible side effect of a reveal that failed.
+                if (pendingCard)
+                    pendingCard.collapsed = true;
                 revealScrollAnim.to = 0;
                 revealScrollAnim.restart();
                 return;

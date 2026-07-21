@@ -765,9 +765,39 @@ private:
     // entry on the simple leaf the edit was attributed to while the user was
     // in simple mode. Both syncs share one dirtyPagesChanged emit.
     void reconcilePageDirty(const QString& page);
-    /// RAII batch window for the above — see the definition in
-    /// settingscontroller_pagestate.cpp.
-    class DirtyEmitScope;
+    /// RAII batch window for the above: defers dirtyPagesChanged for the
+    /// enclosing scope so a delegated Reset/Discard that walks several backing
+    /// pages emits one NOTIFY instead of one per page. Nestable — only the
+    /// outermost scope fires, and only if something actually flipped.
+    ///
+    /// DEFINED HERE, not in a .cpp. It is constructed from BOTH
+    /// settingscontroller_pagestate.cpp and settingscontroller_pagereset.cpp,
+    /// so an out-of-line definition made the latter a non-compiling
+    /// translation unit that only linked because CMAKE_UNITY_BUILD happened to
+    /// merge the two files into one batch. Adding sources ahead of them in the
+    /// CMake list could split the batch and break the build with no source
+    /// change. Same rationale as the inline definitions in
+    /// animations_controller_detail.h.
+    class DirtyEmitScope
+    {
+    public:
+        explicit DirtyEmitScope(SettingsController& c)
+            : m_c(c)
+        {
+            ++m_c.m_dirtyEmitDepth;
+        }
+        ~DirtyEmitScope()
+        {
+            if (--m_c.m_dirtyEmitDepth == 0 && m_c.m_dirtyEmitPending) {
+                m_c.m_dirtyEmitPending = false;
+                Q_EMIT m_c.dirtyPagesChanged();
+            }
+        }
+        Q_DISABLE_COPY_MOVE(DirtyEmitScope)
+
+    private:
+        SettingsController& m_c;
+    };
     /// Emit dirtyPagesChanged, or record it as pending when a DirtyEmitScope
     /// is open.
     void emitDirtyPagesChanged();

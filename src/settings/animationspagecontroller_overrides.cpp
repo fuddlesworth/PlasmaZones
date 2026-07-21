@@ -127,6 +127,25 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
         cur = ProfilePaths::parentPath(cur);
     }
 
+    // Seed the ROOT of the chain from the user's Global animation settings,
+    // mirroring what the daemon publishes via kSettingsDrivenProfilePaths
+    // (daemon.cpp). The walk above only sees user-authored profile JSON, so
+    // without this the settings app resolves inheritance against library
+    // defaults and every card reports the built-in 200 ms while the user's
+    // Global card shows their real value — the two disagree on one screen.
+    // Lowest precedence: mergeMissingFields only fills fields no ancestor
+    // supplied, so a real override at any level still wins.
+    if (m_settings != nullptr) {
+        using P = Profile;
+        QVariantMap settingsGlobal;
+        settingsGlobal.insert(QLatin1String(P::JsonFieldDuration), m_settings->animationDuration());
+        const QString curve = m_settings->animationEasingCurve();
+        if (!curve.isEmpty()) {
+            settingsGlobal.insert(QLatin1String(P::JsonFieldCurve), curve);
+        }
+        mergeMissingFields(merged, settingsGlobal);
+    }
+
     fillLibraryDefaults(merged);
     return merged;
 }

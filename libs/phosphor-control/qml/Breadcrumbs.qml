@@ -58,7 +58,7 @@ RowLayout {
     SidebarRows {
         id: titleResolver
 
-        registry: root.controller ? root.controller.registry : null
+        registry: root.controller.registry
     }
 
     //* Ordered ancestors → current. Each entry is a page-data dict.
@@ -107,6 +107,13 @@ RowLayout {
         function onPageRegistered() {
             root._registryTick = root._registryTick + 1;
         }
+        // firstVisibleLeafId walks the TIER-FILTERED tree, so an ancestor
+        // crumb's target changes when the visible set changes, not only when a
+        // page is registered. Without this a per-entry setPageVisibility
+        // restamp leaves targetId pointing at a leaf the mode now hides.
+        function onVisibleSetChanged() {
+            root._registryTick = root._registryTick + 1;
+        }
 
         target: root.controller.registry
     }
@@ -129,6 +136,9 @@ RowLayout {
             // category has no visible leaf under it in the current mode — those
             // stay inert rather than navigating into a blank viewport.
             readonly property string targetId: {
+                // Same invalidation dependency as `segments`: firstVisibleLeafId
+                // is a Q_INVOKABLE and registers none of its own.
+                void root._registryTick;
                 if (isLast)
                     return "";
                 if (modelData.hasQmlSource)

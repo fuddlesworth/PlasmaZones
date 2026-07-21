@@ -295,8 +295,9 @@ private Q_SLOTS:
         typo.title = QStringLiteral("Ghost setting");
         sc.addEntry(typo);
 
-        QTest::ignoreMessage(QtWarningMsg,
-                             QRegularExpression(QStringLiteral("pageId .*exclusions.* is not a registered page")));
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression(QStringLiteral("pageId .*exclusions.* is not a registered, navigable page")));
         sc.setQuery(QStringLiteral("ghost"));
         for (const QVariant& v : sc.results()) {
             QVERIFY(v.toMap().value(QStringLiteral("title")).toString() != QStringLiteral("Ghost setting"));

@@ -253,7 +253,18 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
     // ── SEARCH ──────────────────────────────────────────────────────────
     // A flat match list from every scope. Dividers are suppressed: they carry
     // no match metadata and would break the result list's reading order.
-    const QString needle = SearchRanker::foldForSearch(searchText);
+    // Trimmed, matching SearchRanker::rank — otherwise a query of spaces gives
+    // zero global results but a rail full of every breadcrumb containing one.
+    const QString needle = SearchRanker::foldForSearch(searchText.trimmed());
+    // A query that is ENTIRELY combining marks (reachable via dead keys and
+    // IME input) folds to the empty string, and contains("") is true — every
+    // page in the catalogue would match. SearchRanker::score guards the same
+    // input by returning 0, so without this the rail shows everything while
+    // the global panel shows nothing, which is the exact divergence the shared
+    // fold exists to prevent.
+    if (needle.isEmpty()) {
+        return out;
+    }
     QSet<QString> seen;
     // Destinations already offered. A child's breadcrumb carries its ancestors'
     // titles, so a needle matching a CATEGORY title also matches every

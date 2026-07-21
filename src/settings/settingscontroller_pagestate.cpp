@@ -34,31 +34,6 @@
 
 namespace PlasmaZones {
 
-// Defers dirtyPagesChanged for the enclosing scope so a delegated
-// Reset/Discard that walks several backing pages emits one NOTIFY instead of
-// one per page. Nestable: only the outermost scope fires, and only if
-// something actually flipped.
-class SettingsController::DirtyEmitScope
-{
-public:
-    explicit DirtyEmitScope(SettingsController& c)
-        : m_c(c)
-    {
-        ++m_c.m_dirtyEmitDepth;
-    }
-    ~DirtyEmitScope()
-    {
-        if (--m_c.m_dirtyEmitDepth == 0 && m_c.m_dirtyEmitPending) {
-            m_c.m_dirtyEmitPending = false;
-            Q_EMIT m_c.dirtyPagesChanged();
-        }
-    }
-    Q_DISABLE_COPY_MOVE(DirtyEmitScope)
-
-private:
-    SettingsController& m_c;
-};
-
 void SettingsController::emitDirtyPagesChanged()
 {
     if (m_dirtyEmitDepth > 0) {
@@ -359,21 +334,47 @@ bool SettingsController::isPageDirty(const QString& page) const
         return false;
     }
 
+    // Condensed SimpleOnly pages own no keys — their dirty state is the
+    // value-based union of their backing advanced pages, so a revert through
+    // either surface (this page's kebab, the backing page's kebab, or a
+    // global Discard) reads the same truth. Checked BEFORE the m_dirtyPages
+    // heuristic so a stale active-page entry cannot keep a clean simple page
+    // reporting dirty.
+    //
+    // Positioned directly after the manifest to match resetPage and
+    // discardPage, which both check backing pages second. The three only agree
+    // today because no page is in both the backing map and a shared-domain
+    // group; the moment one is, a different order here would make the dirty
+    // check take the shared-domain branch while Reset and Discard delegate.
+    {
+        const auto& backing = simplePageBackingPages();
+        const auto backingIt = backing.constFind(page);
+        if (backingIt != backing.constEnd()) {
+            for (const QString& backingPage : *backingIt) {
+                if (isPageDirty(backingPage))
+                    return true;
+            }
+            return false;
+        }
+    }
+
     // Ordering pages: dirty iff a custom order is staged that differs from the
     // saved order (a staged value equal to the saved order is not a change).
-    if (page == QLatin1String("snapping-ordering")) {
-        return m_stagedSnappingOrder.has_value() && *m_stagedSnappingOrder != m_settings.snappingLayoutOrder();
-    }
-    if (page == QLatin1String("tiling-ordering")) {
+    // Gated on the SHARED classifier so adding a third ordering page cannot
+    // update Reset/Discard while silently missing the dirty check — the bodies
+    // differ per page, the classification does not.
+    if (isOrderingPage(page)) {
+        if (page == QLatin1String("snapping-ordering")) {
+            return m_stagedSnappingOrder.has_value() && *m_stagedSnappingOrder != m_settings.snappingLayoutOrder();
+        }
         return m_stagedTilingOrder.has_value() && *m_stagedTilingOrder != m_settings.tilingAlgorithmOrder();
     }
 
-    // Quick Shortcuts pages: dirty iff a quick-slot edit is staged for the mode.
-    if (page == QLatin1String("snapping-shortcuts")) {
-        return m_staging.hasStagedSnappingQuickSlots();
-    }
-    if (page == QLatin1String("tiling-shortcuts")) {
-        return m_staging.hasStagedTilingQuickSlots();
+    // Quick Shortcuts pages: dirty iff a quick-slot edit is staged for the
+    // mode. Same shared-classifier gate as the ordering pages above.
+    if (isShortcutsPage(page)) {
+        return page == QLatin1String("snapping-shortcuts") ? m_staging.hasStagedSnappingQuickSlots()
+                                                           : m_staging.hasStagedTilingQuickSlots();
     }
 
     // Virtual Screens page: dirty iff any physical screen has a staged
@@ -442,24 +443,6 @@ bool SettingsController::isPageDirty(const QString& page) const
                 return true;
         }
         return false;
-    }
-
-    // Condensed SimpleOnly pages own no keys — their dirty state is the
-    // value-based union of their backing advanced pages, so a revert through
-    // either surface (this page's kebab, the backing page's kebab, or a
-    // global Discard) reads the same truth. Checked BEFORE the m_dirtyPages
-    // heuristic so a stale active-page entry cannot keep a clean simple page
-    // reporting dirty.
-    {
-        const auto& backing = simplePageBackingPages();
-        const auto backingIt = backing.constFind(page);
-        if (backingIt != backing.constEnd()) {
-            for (const QString& backingPage : *backingIt) {
-                if (isPageDirty(backingPage))
-                    return true;
-            }
-            return false;
-        }
     }
 
     if (m_dirtyPages.contains(page))

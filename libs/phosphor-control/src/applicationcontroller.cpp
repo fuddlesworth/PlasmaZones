@@ -85,7 +85,10 @@ void ApplicationController::setCurrentPageId(const QString& id)
         m_forwardHistory.clear();
     }
     m_currentPageId = id;
-    if (canGoBack() != couldGoBack || canGoForward() != couldGoForward) {
+    // Suppressed during a history step: stepHistory brackets the whole move
+    // with its own before/after diff, and canGoBack now depends on
+    // m_currentPageId, so letting this one fire too would double-emit.
+    if (!m_navigatingHistory && (canGoBack() != couldGoBack || canGoForward() != couldGoForward)) {
         Q_EMIT historyChanged();
     }
     // Discard a stale deep-link reveal anchor when navigation moves to a
@@ -372,15 +375,19 @@ QString ApplicationController::gotoNextPage()
 
 bool ApplicationController::isUsableHistoryEntry(const QString& id) const
 {
-    // Deliberately NOT including stepHistory's `target == m_currentPageId`
-    // clause. That one is stack hygiene for the step (defensive only —
-    // setCurrentPageId's same-id early-return means recording never produces
-    // such an entry), whereas this answers a capability question: does the
-    // trail hold somewhere reachable? Folding the current page in would make
-    // canGoBack depend on m_currentPageId, so setCurrentPageId would emit
-    // historyChanged from inside stepHistory's own before/after diff and
-    // double-fire every history step.
-    return m_registry->hasPage(id) && m_registry->pageAllowedInCurrentMode(id);
+    // The COMPLETE predicate stepHistory skips on, current-page clause
+    // included. An ordinary revisit (A → B → A) leaves the current page on the
+    // back stack, so omitting that clause let canGoBack() report true while
+    // goBack() drained the stack and returned empty — the dead Back button and
+    // swallowed Alt+Left this pair exists to prevent.
+    //
+    // Including it makes canGoBack depend on m_currentPageId, which would let
+    // setCurrentPageId's own before/after diff fire a second historyChanged
+    // from inside stepHistory. That is why setCurrentPageId suppresses its
+    // diff-emit while m_navigatingHistory is set: stepHistory's outer diff
+    // already brackets the whole step (both stacks are mutated before it
+    // navigates), so one emit per step is both correct and sufficient.
+    return id != m_currentPageId && m_registry->hasPage(id) && m_registry->pageAllowedInCurrentMode(id);
 }
 
 bool ApplicationController::canGoBack() const
@@ -408,11 +415,11 @@ bool ApplicationController::canGoForward() const
     });
 }
 
-// One step along the recorded trail: pop the newest entry from @p from,
-// push the page being left onto @p to, and navigate. Shared by goBack and
-// goForward, which differ only in which stack is which. Both need the same
-// three-clause skip predicate, so the duplication
-// had already cost a maintenance edit.
+// One step along the recorded trail: pop the newest entry from @p from, push
+// the page being left onto @p to, and navigate. goBack and goForward differ
+// only in which stack is which. The skip predicate is isUsableHistoryEntry,
+// shared with canGoBack/canGoForward so the capability flags cannot promise a
+// move this loop then declines to make.
 QString ApplicationController::stepHistory(QStringList& from, QStringList& to)
 {
     const bool couldGoBack = canGoBack();
@@ -435,7 +442,7 @@ QString ApplicationController::stepHistory(QStringList& from, QStringList& to)
         // return the hidden id it "went to" while the gate silently bounced
         // the user to a third page, so the button appears to teleport and
         // the returned id no longer matches currentPageId.
-        if (target == m_currentPageId || !isUsableHistoryEntry(target)) {
+        if (!isUsableHistoryEntry(target)) {
             continue;
         }
         if (!m_currentPageId.isEmpty()) {
@@ -476,12 +483,10 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
     // refuses an entry whose parentId isn't already registered, which makes
     // registry-internal cycles structurally impossible — so this cap is purely
     // a nesting-depth limit.
-    constexpr int kMaxParentChainHops = PageRegistry::MaxParentChainHops;
-
     QStringList chain;
     QString cursor = id;
-    // Walk parent links upward; cap at kMaxParentChainHops to bound depth.
-    for (int i = 0; i < kMaxParentChainHops; ++i) {
+    // Walk parent links upward; cap at PageRegistry::MaxParentChainHops.
+    for (int i = 0; i < PageRegistry::MaxParentChainHops; ++i) {
         if (!m_registry->hasPage(cursor)) {
             // Unknown id is a legitimate query path (QML probing during
             // bootstrap before pages are registered). Return whatever
@@ -500,7 +505,7 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
     // indicates the parent chain is nested deeper than the cap allows.
     // Warn so the bug surfaces instead of silently producing a truncated
     // chain.
-    qWarning() << "ApplicationController::parentChainFor: page nested deeper than" << kMaxParentChainHops
+    qWarning() << "ApplicationController::parentChainFor: page nested deeper than" << PageRegistry::MaxParentChainHops
                << "levels walking up from id" << id;
     return chain;
 }

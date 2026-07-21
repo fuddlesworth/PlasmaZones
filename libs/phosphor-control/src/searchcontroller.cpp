@@ -238,9 +238,15 @@ QVector<SearchEntry> SearchController::buildIndex() const
         // that navigates nowhere: the app's mode gate rejects the id and
         // bounces the user to a fallback page. The static allowlist that used
         // to bound this set is gone, and nothing replaced that check.
-        if (!m_app->registry()->hasPage(e.pageId)) {
+        // Registered is NOT enough: a CATEGORY id (empty qmlSource) is
+        // registered but has no page body, so a result addressed at one
+        // navigates into an empty viewport. The page loop above already
+        // applies exactly this rule when it auto-derives entries; static and
+        // provider entries were exempt from it, which is the same dead-result
+        // class the registration check was added to close, one level down.
+        if (!m_app->registry()->hasPage(e.pageId) || m_app->registry()->entry(e.pageId).qmlSource.isEmpty()) {
             qWarning() << "SearchController: dropping search entry" << e.title << "— its pageId" << e.pageId
-                       << "is not a registered page";
+                       << "is not a registered, navigable page";
             return false;
         }
         if (!m_app->registry()->pageAllowedInCurrentMode(e.pageId)) {

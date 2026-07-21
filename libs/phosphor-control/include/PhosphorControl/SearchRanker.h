@@ -37,7 +37,8 @@ public:
     /// order preserved on ties). `limit < 0` = no cap.
     static QVector<SearchEntry> rank(const QString& query, const QVector<SearchEntry>& entries, int limit = -1);
 
-    /// Classic Levenshtein edit distance (case-insensitive).
+    /// Classic Levenshtein edit distance over foldForSearch-normalised
+    /// inputs, so it is case-, accent- and ß-insensitive.
     static int editDistance(const QString& a, const QString& b);
 
     /// Title of the entry whose title is the closest edit-distance match to
@@ -49,6 +50,16 @@ public:
     /** Normalise a string for search comparison: decompose, drop combining
      *  marks, then full case-fold. So "Café" matches "cafe" and "Größe"
      *  matches "grosse".
+     *
+     *  LOSSY BY DESIGN where a combining mark carries meaning: Vietnamese tone
+     *  marks collapse, so má / mà / mả all fold to "ma" and such a query
+     *  matches more titles than it names. The error direction is deliberate —
+     *  both sides fold identically, so this only ever WIDENS the result set
+     *  rather than hiding a match, and the user still reads the real titles.
+     *
+     *  Returns an EMPTY string for input that is entirely combining marks.
+     *  Callers matching with contains() must guard that case: contains("") is
+     *  true, which would match everything.
      *
      *  Exposed rather than kept file-local because the sidebar rail
      *  (SidebarRows) matches its own breadcrumbs while this class matches the

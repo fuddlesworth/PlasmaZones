@@ -9,16 +9,27 @@
 //
 // Internal to the settings app: not installed, not part of any public API.
 // These were an anonymous namespace in _pagestate.cpp before that file was
-// split at the 1150-line ceiling; internal linkage cannot span two translation
-// units, so they are promoted here rather than duplicated. One definition of
-// "which pages are animation pages" is what keeps the dirty check and the
-// reset from ever disagreeing about a page's class.
+// split at the 1150-line ceiling. Internal linkage cannot span translation
+// units, so anything more than one settings-app TU needs lives here rather
+// than being duplicated. One definition of "which pages are animation pages"
+// is what keeps the dirty check and the reset from ever disagreeing about a
+// page's class. Consumers vary per entity — each declaration below names its
+// own, rather than the file claiming a single pair.
 
 #include "../config/settings.h"
 
 #include <QString>
 
 namespace PlasmaZones {
+
+/// The two drag-to-reorder pages. Shared so the dirty check and Reset/Discard
+/// classify a page the same way — isPageDirty used to open-code these string
+/// comparisons, which meant adding a third ordering page updated one site and
+/// silently missed the other.
+bool isOrderingPage(const QString& page);
+
+/// The two Quick Shortcuts pages. Same shared-classification rationale.
+bool isShortcutsPage(const QString& page);
 
 /// Quick-layout slots are numbered 1..kQuickLayoutSlotCount. Shared by the
 /// slot accessors' bounds checks (settingscontroller_session.cpp) and the

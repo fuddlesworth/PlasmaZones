@@ -312,15 +312,30 @@ private Q_SLOTS:
         QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
         QVERIFY2(!topology.isEmpty(), "settingscontroller_pagetopology.cpp unreadable");
 
-        // validPageNames() is the app's own list of navigable leaves, so a
-        // catalogue id present there is registered by construction. Match the
-        // ids out of it rather than re-deriving the registry.
+        // Slice to validPageNames()'s BODY before matching. Scanning the whole
+        // file also picks up the category-id tables and reveal-target maps, so
+        // non-navigable ids (placement, snapping, animations, the *-cat
+        // headers) would count as known — and a catalogue entry addressed at a
+        // category also passes hasPage() at runtime, then navigates into an
+        // empty page body. That is the exact dead-result class this catches.
+        const int bodyStart = topology.indexOf(QStringLiteral("SettingsController::validPageNames()"));
+        QVERIFY2(bodyStart >= 0, "validPageNames() definition not found in pagetopology");
+        const int braceStart = topology.indexOf(QLatin1Char('{'), bodyStart);
+        const int bodyEnd = topology.indexOf(QStringLiteral("};"), braceStart);
+        QVERIFY2(braceStart >= 0 && bodyEnd > braceStart, "could not slice validPageNames() body");
+        const QString validBody = topology.mid(braceStart, bodyEnd - braceStart);
+
         QSet<QString> known;
         static const QRegularExpression kValid(QStringLiteral("QStringLiteral\\(\"([a-z0-9-]+)\"\\)"));
-        auto vit = kValid.globalMatch(topology);
+        auto vit = kValid.globalMatch(validBody);
         while (vit.hasNext()) {
             known.insert(vit.next().captured(1));
         }
+        // Guard against the slice silently collapsing: validPageNames has ~41
+        // entries, so a near-zero count means the parse broke, not that the
+        // catalogue is clean.
+        QVERIFY2(known.size() > 20,
+                 qPrintable(QStringLiteral("validPageNames slice yielded only %1 ids").arg(known.size())));
 
         static const QRegularExpression kCall(
             QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));

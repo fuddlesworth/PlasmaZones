@@ -18,13 +18,15 @@ QString SearchRanker::foldForSearch(const QString& s)
     // marks, then case-fold. Without this "cafe" misses "Café", which a user
     // reads as the search being broken rather than as a folding rule.
     //
-    // ß is handled explicitly: Qt's toCaseFolded() is a SIMPLE fold and leaves
-    // ß alone, so "grosse" would miss "Größe". Deliberately the only
-    // special-case — a full Unicode special-casing table is not warranted for
-    // a settings search, and every other mapping this could grow is rarer than
-    // the false-confidence of a half-built one.
-    const QString decomposed =
-        QString(s).replace(QChar(0x00DF), QLatin1String("ss")).normalized(QString::NormalizationForm_D);
+    // ß is mapped explicitly, and AFTER the fold: Qt's toCaseFolded() is a
+    // SIMPLE fold, so it maps ẞ (U+1E9E) down to ß but never to "ss".
+    // Replacing before the fold would therefore miss the capital form and
+    // leave "GRÖẞE" as "große", unmatched by the "grosse" query this
+    // special-case exists to serve. Deliberately the only special-case — a
+    // full Unicode special-casing table is not warranted for a settings
+    // search, and every other mapping this could grow is rarer than the
+    // false-confidence of a half-built one.
+    const QString decomposed = s.normalized(QString::NormalizationForm_D);
     QString stripped;
     stripped.reserve(decomposed.size());
     for (const QChar c : decomposed) {
@@ -32,7 +34,7 @@ QString SearchRanker::foldForSearch(const QString& s)
             stripped.append(c);
         }
     }
-    return stripped.toCaseFolded();
+    return stripped.toCaseFolded().replace(QChar(0x00DF), QLatin1String("ss"));
 }
 
 namespace {
@@ -110,9 +112,12 @@ int fieldScore(const QString& field, const QString& needle)
 
 } // namespace
 
-int SearchRanker::score(const QString& query, const SearchEntry& entry)
+namespace {
+// Scores against an ALREADY-folded needle. rank() folds the query once and
+// reuses it across every entry; folding per entry meant one full Unicode NFD
+// walk per entry per keystroke, which is the dominant cost at catalogue scale.
+int scoreWithFoldedNeedle(const QString& needle, const SearchEntry& entry)
 {
-    const QString needle = SearchRanker::foldForSearch(query.trimmed());
     if (needle.isEmpty()) {
         return 0;
     }
@@ -126,6 +131,12 @@ int SearchRanker::score(const QString& query, const SearchEntry& entry)
     best = std::max(best, fieldScore(entry.subtitle, needle) * 60 / 100);
     return best;
 }
+} // namespace
+
+int SearchRanker::score(const QString& query, const SearchEntry& entry)
+{
+    return scoreWithFoldedNeedle(SearchRanker::foldForSearch(query.trimmed()), entry);
+}
 
 QVector<SearchEntry> SearchRanker::rank(const QString& query, const QVector<SearchEntry>& entries, int limit)
 {
@@ -136,10 +147,12 @@ QVector<SearchEntry> SearchRanker::rank(const QString& query, const QVector<Sear
         int score;
         int index;
     };
+    // Folded ONCE for the whole ranking pass, not once per entry.
+    const QString needle = SearchRanker::foldForSearch(query.trimmed());
     QVector<Scored> scored;
     scored.reserve(entries.size());
     for (int i = 0; i < entries.size(); ++i) {
-        const int s = SearchRanker::score(query, entries.at(i));
+        const int s = scoreWithFoldedNeedle(needle, entries.at(i));
         if (s > 0) {
             scored.push_back({s, i});
         }
@@ -193,7 +206,10 @@ int SearchRanker::editDistance(const QString& a, const QString& b)
 
 QString SearchRanker::closestTitle(const QString& query, const QVector<SearchEntry>& entries, int maxDistance)
 {
-    const QString needle = query.trimmed();
+    // Folded, so the tolerance is derived from the SAME length editDistance
+    // measures. Sizing it from the raw query while measuring folded strings
+    // made the two disagree for ß-bearing input, where folding changes length.
+    const QString needle = foldForSearch(query.trimmed());
     if (needle.isEmpty()) {
         return QString();
     }

@@ -31,8 +31,8 @@
 #include "../core/utils.h"
 #include "../phosphor_i18n.h"
 #include "dbusutils.h"
-#include "settingscontroller_pagekeys.h"
 #include "kzonesimporter.h"
+#include "settingscontroller_pagekeys.h"
 #include "virtualscreenutils.h"
 
 #include <PhosphorLayoutApi/LayoutId.h>

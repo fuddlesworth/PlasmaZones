@@ -200,8 +200,9 @@ bool PageRegistry::allowedInMode(const QString& id, bool advanced) const
     // unguarded warning would repeat for the life of the session.
     if (!m_depthWarned.contains(id)) {
         m_depthWarned.insert(id);
-        qWarning() << "PageRegistry: could not resolve the ancestor chain for" << id << "within" << MaxParentChainHops
-                   << "hops — treating it as hidden";
+        qWarning() << "PageRegistry: could not resolve the ancestor chain for" << id
+                   << (hops >= MaxParentChainHops ? "— nested deeper than the hop cap" : "— a parentId did not resolve")
+                   << "— treating it as hidden";
     }
     return false;
 }
@@ -237,7 +238,16 @@ bool PageRegistry::validateCounterparts() const
             qWarning() << "PageRegistry: page" << e.id << "and its counterpart" << e.counterpartId
                        << "share a visibility tier — the counterpart cannot be the other mode's face of this page";
             ok = false;
-        } else if (e.visibility != PageVisibility::Always) {
+        }
+        // A counterpart with no QML of its own is a category: the mode gate
+        // would redirect onto a page with no body, the same silent degradation
+        // this validator exists to catch, one level down.
+        if (other.qmlSource.isEmpty()) {
+            qWarning() << "PageRegistry: page" << e.id << "declares counterpart" << e.counterpartId
+                       << "which is not navigable (no QML of its own) — a redirect would land on an empty page";
+            ok = false;
+        }
+        {
             // Opposite tiers are necessary but NOT sufficient. The gate this
             // validator protects asks pageAllowedInCurrentMode(counterpart),
             // which walks ANCESTORS too, so a counterpart whose own tier is
@@ -246,7 +256,13 @@ bool PageRegistry::validateCounterparts() const
             // catch. Check reachability in the mode that hides `e`: a
             // SimpleOnly page is hidden when advanced, and vice versa. Skipped
             // for Always, which is never hidden and so never redirects.
-            const bool modeThatHidesThis = (e.visibility == PageVisibility::SimpleOnly);
+            // Which mode hides `e`. For a tiered entry that is its own tier;
+            // for an Always entry (never hidden by its OWN tier, but hideable
+            // by a filtered ancestor) fall back to the counterpart's tier,
+            // which names the mode the pair exists to bridge.
+            const bool modeThatHidesThis = e.visibility != PageVisibility::Always
+                ? (e.visibility == PageVisibility::SimpleOnly)
+                : (other.visibility == PageVisibility::AdvancedOnly);
             if (!allowedInMode(e.counterpartId, modeThatHidesThis)) {
                 qWarning() << "PageRegistry: page" << e.id << "declares counterpart" << e.counterpartId
                            << "which is itself unreachable in the mode that hides" << e.id
@@ -339,9 +355,11 @@ QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) con
 QList<PageRegistry::Entry> PageRegistry::visibleChildPages(const QString& parentId) const
 {
     QList<Entry> out;
-    // Same worst-case upper bound as topLevelPages / childPages above. This is
-    // the accessor SidebarRows calls most, including inside its walks.
-    out.reserve(m_pages.size());
+    // Deliberately NOT reserving m_pages.size() the way topLevelPages and
+    // childPages do. Those are called once each; this one is called dozens of
+    // times per sidebar rebuild (SidebarRows walks it per node) and typically
+    // returns 1-5 entries, so a worst-case reserve allocates room for the whole
+    // catalogue repeatedly to hold a handful of results.
     for (const Entry& e : m_pages) {
         if (e.parentId == parentId && isEntryVisible(e)) {
             out.append(e);
