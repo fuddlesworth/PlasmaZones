@@ -313,8 +313,14 @@ QtObject {
     /// parsed. Per-component salvage (`isFinite(w) ? w : default`) is wrong
     /// here: for a hand-edited "spring:14,abc" it would report omega=14 while
     /// the engine actually plays omega=12, so one card would describe an
-    /// inherited spring differently from another and from what animates. A
-    /// non-spring or unparseable string yields the engine defaults too.
+    /// inherited spring differently from another. A non-spring or unparseable
+    /// string yields the engine defaults too.
+    ///
+    /// Finite but out-of-range halves (e.g. "spring:500,0.8") are returned
+    /// as-is, NOT clamped to the engine's play-time qBound. That is deliberate
+    /// and matches the documented validity boundary (animationspagecontroller.h,
+    /// springBounds_areUsableSubsetOfEngineClamp): the engine clamp, not this
+    /// parse, is where an out-of-band hand-edit is normalised.
     function parseSpring(curve) {
         if (typeof curve !== "string" || curve.indexOf("spring:") !== 0)
             return ({

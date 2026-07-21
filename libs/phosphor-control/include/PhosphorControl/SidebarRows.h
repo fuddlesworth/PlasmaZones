@@ -5,8 +5,8 @@
 
 #include "phosphorcontrol_export.h"
 
-// Full definition, not a forward declaration: firstTwoNavigableDescendants
-// returns QList<PageRegistry::Entry> by value, which needs the nested type.
+// Full definition, not a forward declaration: build()/resolveDrillScope return
+// QList<PageRegistry::Entry> rows by value, which needs the nested type.
 #include "PageRegistry.h"
 
 #include <QObject>
@@ -125,11 +125,6 @@ Q_SIGNALS:
     void registryChanged();
 
 private:
-    /// Up to two navigable descendants of @p parentId, depth-capped. Shared by
-    /// build()'s drill-row decision and resolveDrillScope so the two cannot
-    /// disagree about what counts as an enterable category.
-    QList<PageRegistry::Entry> firstTwoNavigableDescendants(const QString& parentId) const;
-
     /// QPointer, not a raw pointer: the registry is set from QML
     /// (`registry: root.controller.registry`) and is owned by the
     /// ApplicationController, not by this object. If that controller is torn

@@ -573,12 +573,6 @@ PhosphorUi.SettingsAppWindow {
     // overlays that don't change the window's active state. Without the
     // combined guard the user could navigate the underlying page state
     // while interacting with any of these prompts.
-    //
-    // Page-level modals are surfaced via an optional `anyModalOpen`
-    // property on the active page item — the active page lives inside
-    // the framework-owned PageHost Loader, so we read it via the
-    // settingsApp activeFocusItem chain. Pages that haven't opted into
-    // the property contribute false; the guard stays correct.
     /// Cross-cutting flag that pages opt into by writing through
     /// `window._pageOwnedModalOpen` when they open / close their own
     /// modal stack. RulesPage publishes its

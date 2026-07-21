@@ -82,10 +82,21 @@ bool isExpanded(const QVariantMap& expandedCategories, const QString& id)
     return it.value() != QVariant(false);
 }
 
-// The descendant walk behind SidebarRows::firstTwoNavigableDescendants, taking
-// the scope's visible children as a parameter so a caller that has already
-// fetched them does not pay for the subtree-descending visibility test twice.
-// See the member function for what the count means to each caller.
+// The single shared "up to two navigable descendants" walk, taking the scope's
+// already-fetched visible children so neither caller pays for the
+// subtree-descending visibility test twice. Both real callers — build()'s
+// drill-row decision and resolveDrillScope — reach it directly, so there is one
+// implementation and they cannot disagree about what "enterable" means. It
+// stops at TWO because both only need zero / exactly-one / more-than-one:
+//   0  -> the drill leads nowhere (a row whose only content would be a Back
+//         button), so build() does not offer it and resolveDrillScope evicts
+//         the rail out of it,
+//   1  -> the drill step is pure friction, so build() flattens the row to that
+//         descendant and it is NOT a drill target,
+//   2+ -> a real drill target.
+// (The lib has no QML test harness, so two copies of this walk would ship green
+// the moment they diverged, which is exactly what happened when resolveDrillScope
+// was first written with its own copy that counted to one.)
 QList<PageRegistry::Entry> firstTwoNavigableUnder(const PageRegistry* registry, const QList<PageRegistry::Entry>& kids)
 {
     QList<PageRegistry::Entry> found;
@@ -155,30 +166,6 @@ void SidebarRows::setRegistry(PageRegistry* registry)
         m_registryDestroyed = connect(registry, &QObject::destroyed, this, &SidebarRows::registryChanged);
     }
     Q_EMIT registryChanged();
-}
-
-QList<PageRegistry::Entry> SidebarRows::firstTwoNavigableDescendants(const QString& parentId) const
-{
-    // Stops at TWO because both callers only need to distinguish
-    // zero / exactly-one / more-than-one:
-    //   0 -> the drill leads nowhere (a row whose only content would be a
-    //        Back button), so build() does not offer it and resolveDrillScope
-    //        evicts the rail out of it,
-    //   1 -> the drill step is pure friction, so build() flattens the row to
-    //        that descendant and it is NOT a drill target,
-    //   2+ -> a real drill target.
-    //
-    // ONE implementation on purpose. build() and resolveDrillScope have to
-    // agree about what "enterable" means, and the lib has no QML test harness,
-    // so two copies of this walk would ship green the moment they diverged —
-    // which is exactly what happened when resolveDrillScope was first written
-    // with its own copy that counted to one. resolveDrillScope reaches the walk
-    // through firstTwoNavigableUnder directly, because it has already fetched
-    // the scope's children; the walk itself is still the single shared one.
-    if (!m_registry) {
-        return {};
-    }
-    return firstTwoNavigableUnder(m_registry, m_registry->visibleChildPages(parentId));
 }
 
 QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, const QString& currentParentId,
@@ -284,9 +271,10 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
                         // would be a Back button), exactly one means the drill
                         // step is pure friction and the row should navigate
                         // straight there, keeping the category's title/icon.
-                        // Reuse childKids rather than firstTwoNavigableDescendants,
-                        // whose wrapper would re-fetch the identical child list
-                        // (a subtree-descending visibility walk) a second time.
+                        // Pass childKids straight in: it is exactly the visible
+                        // child list the walk needs, already fetched above, so
+                        // this does not repeat the subtree-descending visibility
+                        // walk to re-derive it.
                         const QList<PageRegistry::Entry> found = firstTwoNavigableUnder(m_registry, childKids);
 
                         if (found.isEmpty()) {
